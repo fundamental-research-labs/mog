@@ -2,13 +2,19 @@
 
 Workbook/Worksheet APIs use three main shapes. This document defines the categories, the rules for choosing between them, and the infrastructure that supports disposable handles.
 
+## Status and Package Boundary
+
+This is an internal design guide for maintaining the public API surface. The shipped public contract package is `@mog-sdk/contracts`; Workbook and Worksheet types are exported from `@mog-sdk/contracts/api` and related subpaths. Their source definitions currently live in workspace-internal type shards such as `types/api/src/api/*` and are re-exported by `contracts/src/api/*` shims.
+
+Implementation examples below come from workspace-internal packages such as `@mog-sdk/kernel`, `@mog/types-*`, and `@mog/spreadsheet-utils`. Do not document those packages as public setup paths. Public runtime users should enter through shipped public packages such as `@mog-sdk/node`, `@mog-sdk/sheet-view`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`.
+
 ---
 
 ## The Three Categories
 
 ### 1. Stateless -- Methods
 
-Each call is self-contained. Input in, output out. No caller-owned resource or cleanup. Any consumer (agent, headless, render loop, LLM code) can call these freely.
+Each call is self-contained. Input in, output out. No caller-owned resource or cleanup. Any consumer with the relevant workbook or worksheet object can call these according to the sync/async contract.
 
 ```typescript
 await ws.setCell("A1", 42);                    // fire-and-forget mutation
@@ -33,7 +39,9 @@ ws.viewport.getCellData(row, col);             // sync read from binary viewport
 
 ### 3. Consumer-Scoped -- Handles
 
-The consumer creates a resource that the kernel holds on its behalf. The resource has a lifecycle shorter than or equal to the workbook. The creation method returns a handle object, and that handle is the API for the resource. New lifecycle APIs should use disposable handles; existing change trackers use `close()` and some subscriptions return unsubscribe functions, but they still keep identity on the returned object rather than a string ID.
+The consumer creates a resource that the kernel holds on its behalf. The resource has a lifecycle shorter than or equal to the workbook. The creation method returns a handle object, and that handle is the API for the resource.
+
+New lifecycle APIs should prefer `IDisposable` handles with `dispose()` and `Symbol.dispose`. Existing shipped exceptions remain part of the API surface: change trackers use `close()`, `wb.on()`/`ws.on()` and some service subscriptions return `CallableDisposable`, and `wb.viewport.subscribe()` returns a plain unsubscribe function. Those are still caller-owned handles; they are just not all disposable handles.
 
 ```typescript
 // Create returns a handle
@@ -41,7 +49,7 @@ const region = wb.viewport.createRegion(sheetId, bounds);
 
 // All operations on that resource are methods on the handle
 region.updateBounds(newBounds);
-region.refresh();
+await region.refresh();
 
 // Cleanup -- explicit or automatic via TC39 using declaration
 region.dispose();
@@ -54,18 +62,23 @@ region.dispose();
 ## The Three Rules
 
 1. **Stateless operations are methods.** No handle, no cleanup.
-2. **Consumer-scoped state returns handles.** The handle IS the API surface. Prefer `dispose()` as the cleanup path for new lifecycle APIs. Never use string IDs for lifecycle management -- if you are passing an ID to `unregister(id)`, you have lost the handle pattern.
-3. **Disposable handles compose into a tree.** Every disposable handle is tracked by its parent. Disposing a parent disposes all tracked children. The workbook is the root for workbook-level handles.
+2. **Consumer-scoped state returns typed handles.** The handle IS the API surface. Prefer `dispose()` as the cleanup path for new lifecycle APIs. Do not expose public lifecycle APIs that require callers to pass a string ID back to `unregister(id)` or `stop(id)`; internal bridge IDs are fine behind a typed handle.
+3. **Disposable handles compose when they are explicitly tracked.** A parent disposes children that were registered in its `DisposableStore`. In the current workbook implementation this includes viewport region handles and specific workbook-owned internal registrations; it does not automatically include arbitrary user subscriptions or `close()`-based change trackers.
 
 ```
 Workbook.dispose()
-  |-- all ViewportRegion handles -> auto-disposed
-  |-- all Worksheet instances -> auto-disposed
-  |-- tracked event subscriptions -> auto-unsubscribed
-  |-- FloatingObjectManager -> disposed
-  |-- CheckpointManager -> auto-cleared
-  |-- CodeExecutor -> auto-disposed
-  +-- FormControlManager -> auto-cleared if created
+  |-- tracked ViewportRegion handles -> dispose()
+  |-- cached WorksheetImpl instances -> dispose()
+  |-- workbook-owned internal registrations -> dispose()
+  |-- CodeExecutor -> dispose() if created
+  |-- FloatingObjectManager -> dispose()
+  |-- CheckpointManager -> clear()
+  +-- FormControlManager -> clear() if created
+
+WorksheetImpl.dispose()
+  |-- CellMetadataCache -> destroy()/dispose() if created
+  |-- WorksheetInternal caches such as cfCache -> destroy()/dispose() if created
+  +-- ViewportReader reference -> cleared
 ```
 
 ---
@@ -86,7 +99,9 @@ Does the operation create a caller-owned resource that lives after the call?
          |
          +-- YES --> Readonly property on Workbook/Worksheet.
          |           Consumer reads but never creates or destroys.
-         |           Examples: wb.history, ws.cellMetadata
+         |           Examples: wb.history, ws.cellMetadata, ws.viewport
+         |           If that property exposes a factory, classify the
+         |           returned object separately.
          |
          +-- NO
               |
@@ -95,7 +110,10 @@ Does the operation create a caller-owned resource that lives after the call?
                 +-- YES --> Consumer-scoped handle.
                 |           Factory method returns a typed handle.
                 |           All operations are methods on the handle.
-                |           For disposable handles, track in the parent's DisposableStore.
+                |           For disposable handles, track in the parent's
+                |           DisposableStore when the parent owns cleanup.
+                |           For existing close()/unsubscribe handles,
+                |           document caller cleanup.
                 |           Example: wb.viewport.createRegion()
                 |
                 +-- NO --> Re-examine. It is probably stateless.
@@ -103,16 +121,16 @@ Does the operation create a caller-owned resource that lives after the call?
 
 ---
 
-## Why Handles, Not IDs
+## Why Handles, Not Public IDs
 
-| ID-based (wrong) | Handle-based (right) |
+| Public ID-based lifecycle (avoid) | Handle-based lifecycle |
 |---|---|
 | `registerRegion("main", ...)` | `createRegion(...) -> handle` |
 | `updateRegionBounds("main", ...)` | `handle.updateBounds(...)` |
 | `unregisterRegion("main")` | `handle.dispose()` |
 | Caller tracks string ID | Caller holds typed object |
-| Can call update on non-existent ID (silent fail) | Cannot -- handle IS the identity |
-| Must remember to unregister (leak risk) | `using` keyword auto-disposes |
+| Can accidentally target a missing or wrong ID | Handle carries the resource identity |
+| Separate unregister path | `using` works when the handle implements `IDisposable` |
 | No type safety on the ID | Full method autocomplete on handle |
 
 ---
@@ -124,7 +142,7 @@ Does the operation create a caller-owned resource that lives after the call?
 | LLM-generated code | All | Rarely | Rarely (short-lived scripts) |
 | Headless agent | All | Some (if rendering) | Some (viewport regions) |
 | Render loop | Rarely (perf) | All (sync reads) | All (viewport regions) |
-| OS apps | All | All | All |
+| Full app hosts | All | All | All |
 
 All three categories are available to all consumers. The distinction is about the nature of the operation, not who is calling.
 
@@ -132,11 +150,13 @@ All three categories are available to all consumers. The distinction is about th
 
 ## Infrastructure
 
-The disposable handle pattern is supported by `IDisposable` in `types/core/src/disposable.ts` (re-exported by `contracts/src/core/disposable.ts`) and runtime primitives in `spreadsheet-utils/src/disposable.ts`.
+The public lifecycle contract is `IDisposable` from `@mog-sdk/contracts/core`. Its source currently lives in `types/core/src/disposable.ts` and is re-exported by `contracts/src/core/disposable.ts`.
+
+Runtime helpers live in workspace-internal `spreadsheet-utils/src/disposable.ts`. Kernel and app code use that file for `DisposableBase`, `DisposableStore`, `toDisposable`, `DisposableNone`, `MutableDisposable`, and `DisposableGroup`.
 
 ### IDisposable
 
-Interface for any resource with explicit lifecycle. Implements TC39 `Symbol.dispose` for use with `using` declarations.
+Interface for any resource with explicit lifecycle. Includes TC39 `Symbol.dispose` for use with `using` declarations.
 
 ```typescript
 interface IDisposable {
@@ -159,14 +179,16 @@ Subclass and override `_dispose()` for cleanup logic:
 ```typescript
 class ViewportRegionImpl extends DisposableBase {
   protected _dispose(): void {
-    void this.computeBridge.unregisterViewportRegion(this.id);
+    void this.registrationSucceeded.then((registered) => {
+      if (registered) return this.computeBridge.unregisterViewportRegion(this.id);
+    });
   }
 }
 ```
 
 ### DisposableStore
 
-Tracks child disposables. Disposing the store disposes all children. Used by `WorkbookImpl` to auto-cleanup all created handles.
+Tracks child disposables. Disposing the store disposes all tracked children. `WorkbookImpl` currently uses it for viewport region handles and workbook-owned internal registrations.
 
 ```typescript
 class DisposableStore implements IDisposable {
@@ -182,8 +204,8 @@ class DisposableStore implements IDisposable {
 class WorkbookViewportImpl {
   constructor(private computeBridge, private disposables: DisposableStore) {}
 
-  createRegion(sheetId, bounds) {
-    const region = new ViewportRegionImpl(sheetId, bounds, this.computeBridge);
+  createRegion(sheetId, bounds, viewportId) {
+    const region = new ViewportRegionImpl(sheetId, bounds, this.computeBridge, viewportId);
     this.disposables.track(region);
     return region;
   }
@@ -194,7 +216,7 @@ class WorkbookViewportImpl {
 
 ## TC39 Explicit Resource Management
 
-Disposable handles implement `Symbol.dispose`, enabling the TC39 `using` declaration (TypeScript 5.2+). This provides automatic cleanup at block exit, similar to RAII in C++ or `with` in Python:
+Disposable handles that implement `Symbol.dispose` enable the TC39 `using` declaration (TypeScript 5.2+). `ViewportRegion` is the current workbook API example:
 
 ```typescript
 {
@@ -204,11 +226,13 @@ Disposable handles implement `Symbol.dispose`, enabling the TC39 `using` declara
 } // region.dispose() called automatically here
 ```
 
-This is especially useful in test code and short-lived scopes where manual `dispose()` calls are easy to forget.
+This is especially useful in test code and short-lived scopes where manual `dispose()` calls are easy to forget. It does not apply to shipped `close()`-based change trackers or plain unsubscribe functions unless they are wrapped in an `IDisposable`/`CallableDisposable`.
 
 ---
 
 ## Real Examples from the Codebase
+
+Public consumers import these contracts from `@mog-sdk/contracts/api` or through SDK package re-exports such as `@mog-sdk/node`. The source paths below are workspace-internal files that back those public exports.
 
 ### Stateless: Workbook methods
 
@@ -235,7 +259,21 @@ readonly sheets: WorkbookSheets;                 // always-on sub-API
 readonly history: WorkbookHistory;               // always-on sub-API
 readonly viewport: WorkbookViewport;             // sub-API (contains both stateless + handle methods)
 readonly changes: WorkbookChanges;               // always-on sub-API for tracker creation
+readonly security: WorkbookSecurity;             // always-on sub-API
+readonly diagnostics: WorkbookDiagnostics;       // always-on sub-API
 readonly links: WorkbookLinks;                   // always-on sub-API
+```
+
+These properties are workbook-scoped. Resources returned by their methods, such as `wb.viewport.createRegion()` or `wb.changes.track()`, are classified independently as consumer-scoped handles.
+
+From `types/api/src/api/worksheet.ts`:
+
+```typescript
+readonly cellMetadata: CellMetadataCache;        // sync metadata cache
+readonly viewport: ViewportReader;               // sync viewport reader
+readonly changes: WorksheetChanges;              // sub-API for tracker creation
+readonly formats: WorksheetFormats;              // domain sub-API
+readonly tables: WorksheetTables;                // domain sub-API
 ```
 
 Infrastructure-only properties live on `WorkbookInternal`:
@@ -251,7 +289,7 @@ readonly charts: IChartBridge;                    // internal bridge
 From `types/api/src/api/workbook/viewport.ts`:
 
 ```typescript
-// ViewportRegion extends IDisposable
+// ViewportRegion extends IDisposable, so it has dispose() and Symbol.dispose.
 interface ViewportRegion extends IDisposable {
   readonly id: string;
   readonly sheetId: string;
@@ -264,12 +302,12 @@ interface WorkbookViewport {
   createRegion(sheetId: string, bounds: ViewportBounds, viewportId?: string): ViewportRegion; // handle
   resetSheetRegions(sheetId: string): void;                                          // stateless
   setRenderScheduler(scheduler: RenderScheduler | null): void;                      // stateless
-  subscribe(cb: (event: ViewportChangeEvent) => void): () => void;                  // subscription
+  subscribe(cb: (event: ViewportChangeEvent) => void): () => void;                  // caller-owned unsubscribe
   setShowFormulas(value: boolean): void;                                            // stateless
 }
 ```
 
-The render system creates regions on mount, updates bounds on scroll, and disposes on unmount or sheet switch:
+`@mog-sdk/sheet-view` creates regions when viewport layout changes, updates bounds on scroll/resize, and disposes regions on pane removal, sheet switch, and view disposal:
 
 ```typescript
 // Create
@@ -282,6 +320,24 @@ region.updateBounds(newBounds);
 region.dispose();
 ```
 
+### Consumer-Scoped: Existing close()-based trackers
+
+From `types/api/src/api/workbook/changes.ts` and `types/api/src/api/worksheet/changes.ts`:
+
+```typescript
+const workbookTracker = wb.changes.track({ limit: 1000 });
+await ws.setCell("A1", 42);
+const workbookChanges = await workbookTracker.collectAsync();
+workbookTracker.close();
+
+const sheetTracker = ws.changes.track({ scope: "A1:B10" });
+await ws.setCell("B1", 99);
+const sheetChanges = sheetTracker.collect();
+sheetTracker.close();
+```
+
+These trackers are shipped handles, but they do not implement `IDisposable` today and are not automatically disposed by `Workbook.dispose()`. New lifecycle APIs should prefer the disposable handle pattern unless compatibility requires otherwise.
+
 ---
 
 ## Adding a New API -- Checklist
@@ -290,18 +346,24 @@ region.dispose();
 2. **Stateless?** Add a method. Done.
 3. **Workbook-scoped?** Add a `readonly` property. Initialize lazily in the owning implementation. Done.
 4. **Consumer-scoped?**
-   - Define a handle interface in the public contract source; prefer extending `IDisposable` for new lifecycle APIs.
-   - For disposable handles, implement it extending `DisposableBase` in the kernel.
+   - Define a handle interface in the contract source and export it through `@mog-sdk/contracts`; prefer extending `IDisposable` for new lifecycle APIs.
+   - For disposable handles, implement it with `DisposableBase` or `toDisposable` in the workspace-internal implementation package.
    - Add a factory method (`createXxx()`) to the appropriate sub-API.
-   - For disposable handles, track the handle in the owning `DisposableStore` before returning.
+   - For disposable handles owned by a workbook/worksheet parent, track the handle in the owning `DisposableStore` before returning.
    - Call `throwIfDisposed()` at the top of every disposable handle method.
    - Document TC39 `using` support in the JSDoc when the handle implements `Symbol.dispose`.
+   - Keep bridge IDs internal; do not make consumers pass IDs back to public `unregister(id)` methods.
 
 ---
 
 ## References
 
+- Public contracts package: [`contracts/src/api/index.ts`](../../../contracts/src/api/index.ts)
+- Workbook contract shim: [`contracts/src/api/workbook.ts`](../../../contracts/src/api/workbook.ts)
 - Disposable interface: [`types/core/src/disposable.ts`](../../../types/core/src/disposable.ts)
 - Disposable runtime helpers: [`spreadsheet-utils/src/disposable.ts`](../../../spreadsheet-utils/src/disposable.ts)
 - ViewportRegion contract: [`types/api/src/api/workbook/viewport.ts`](../../../types/api/src/api/workbook/viewport.ts)
 - Workbook interface: [`types/api/src/api/workbook.ts`](../../../types/api/src/api/workbook.ts)
+- Workbook implementation lifecycle: [`kernel/src/api/workbook/workbook-impl.ts`](../../../kernel/src/api/workbook/workbook-impl.ts)
+- Workbook viewport implementation: [`kernel/src/api/workbook/viewport.ts`](../../../kernel/src/api/workbook/viewport.ts)
+- Generated API spec source: [`runtime/sdk/scripts/generate-api-spec.ts`](../../../runtime/sdk/scripts/generate-api-spec.ts)

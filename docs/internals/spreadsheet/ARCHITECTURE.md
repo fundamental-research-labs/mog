@@ -25,71 +25,79 @@
 
 ## Key Packages
 
-The system spans pnpm workspaces and Rust workspace crates declared in `pnpm-workspace.yaml` and `Cargo.toml`. The most important source packages are listed here; see [packages.md](packages.md) for the broader package map.
+The system spans pnpm workspaces and Rust workspace crates declared in
+`pnpm-workspace.yaml` and `Cargo.toml`. The most important source packages are
+listed here; see [packages.md](packages.md) for the broader package map and
+publication status.
+
+**Status vocabulary:** shipped public packages are external setup paths today;
+public-experimental exports exist but may change; workspace-internal packages
+are source-visible monorepo implementation details; reserved surfaces are not
+shipped public setup paths.
 
 **Base & Types**
 
-| Package | Purpose | Key File |
-|---------|---------|----------|
-| `contracts` | Shared TypeScript interfaces | `contracts/src/index.ts` |
+| Package | Status | Purpose | Key File |
+|---------|--------|---------|----------|
+| `@mog-sdk/contracts` (`contracts`) | shipped public; many subpaths public-experimental | Public contract barrel and shared TypeScript interfaces | `contracts/src/index.ts` |
 
 **Compute**
 
-| Package | Purpose | Key File |
-|---------|---------|----------|
-| `compute-core` | Rust compute engine and workspace facade: formula evaluation, dependency graph, recalc, tables, pivots, conditional formatting, storage, security, import/export | `compute/core/src/lib.rs` |
-| `@mog-sdk/wasm` (`compute-core-wasm` crate) | WASM bindings for browser runtimes | `compute/wasm/src/lib.rs` |
-| `compute-core-napi` | Node native bindings for the compute engine | `compute/napi/src/lib.rs` |
-| `cell-types`, `value-types`, `formula-types`, `workbook-types`, `snapshot-types` | Rust foundation types for identities, values, formulas, workbook settings, and snapshots | `compute/core/crates/types/` |
-| `compute-parser` | Formula parser (winnow): formula string → AST | `compute/core/crates/compute-parser/src/lib.rs` |
-| `compute-functions` | 512+ Excel-compatible pure functions | `compute/core/crates/compute-functions/src/lib.rs` |
-| `compute-formats` | Number format engine: locale, color, currency patterns | `compute/core/crates/compute-formats/src/lib.rs` |
-| `compute-table` | Table engine: filters, sort, slicers, structured refs | `compute/core/crates/compute-table/src/lib.rs` |
-| `compute-pivot` | Pivot table engine: aggregation, grouping, show-values-as | `compute/core/crates/compute-pivot/src/lib.rs` |
-| `compute-cf` | Conditional formatting evaluation | `compute/core/crates/compute-cf/src/lib.rs` |
-| `compute-stats` | Shared analytics: aggregation, sorting, value semantics, statistics, regression, KDE | `compute/core/crates/compute-stats/src/lib.rs` |
-| `compute-wire` | Binary wire format for viewport and mutation transfer | `compute/core/crates/compute-wire/src/lib.rs` |
-| `table-engine` | TS table filtering/sorting (bridges to kernel) | `table-engine/src/` |
+| Package | Status | Purpose | Key File |
+|---------|--------|---------|----------|
+| `compute-core` | workspace-internal Rust crate | Rust compute engine and workspace facade: formula evaluation, dependency graph, recalc, tables, pivots, conditional formatting, storage, security, import/export | `compute/core/src/lib.rs` |
+| `@mog-sdk/wasm` (`compute-core-wasm` crate) | shipped public binary-wrapper | WASM bindings for browser runtimes | `compute/wasm/src/lib.rs` |
+| `@mog/compute-core-napi` (`compute-core-napi` crate) | workspace-internal package/crate; platform binaries are shipped public wrappers | Node native bindings for the compute engine | `compute/napi/src/lib.rs` |
+| `cell-types`, `value-types`, `formula-types`, `workbook-types`, `snapshot-types` | workspace-internal Rust crates | Rust foundation types for identities, values, formulas, workbook settings, and snapshots | `compute/core/crates/types/` |
+| `compute-parser` | workspace-internal Rust crate | Formula parser (winnow): formula string -> AST | `compute/core/crates/compute-parser/src/lib.rs` |
+| `compute-functions` | workspace-internal Rust crate | 512+ Excel-compatible pure functions | `compute/core/crates/compute-functions/src/lib.rs` |
+| `compute-formats` | workspace-internal Rust crate | Number format engine: locale, color, currency patterns | `compute/core/crates/compute-formats/src/lib.rs` |
+| `compute-table` | workspace-internal Rust crate | Table engine: filters, sort, slicers, structured refs | `compute/core/crates/compute-table/src/lib.rs` |
+| `compute-pivot` | workspace-internal Rust crate | Pivot table engine: aggregation, grouping, show-values-as | `compute/core/crates/compute-pivot/src/lib.rs` |
+| `compute-cf` | workspace-internal Rust crate | Conditional formatting evaluation | `compute/core/crates/compute-cf/src/lib.rs` |
+| `compute-stats` | workspace-internal Rust crate | Shared analytics: aggregation, sorting, value semantics, statistics, regression, KDE | `compute/core/crates/compute-stats/src/lib.rs` |
+| `compute-wire` | workspace-internal Rust crate | Binary wire format for viewport and mutation transfer | `compute/core/crates/compute-wire/src/lib.rs` |
+| `@mog/table-engine` (`table-engine`) | workspace-internal package | TS table filtering/sorting helpers used by kernel/app layers | `table-engine/src/` |
 
 **Graphics & Rendering**
 
-| Package | Location | Purpose | Key File |
-|---------|----------|---------|----------|
-| `charts` | `charts/` | Chart rendering engine | `charts/src/core/chart-engine.ts` |
-| `spatial` | `canvas/spatial/` | Spatial indexing and hit testing for canvas objects | `canvas/spatial/src/` |
-| `math-engine` | `typeset/math-engine/` | Equation/math rendering (LaTeX/OMML) | `typeset/math-engine/src/` |
+| Package | Location | Status | Purpose | Key File |
+|---------|----------|--------|---------|----------|
+| `@mog/charts` | `charts/` | workspace-internal package | Chart rendering engine | `charts/src/core/chart-engine.ts` |
+| `@mog/spatial` | `canvas/spatial/` | workspace-internal package | Spatial indexing and hit testing for canvas objects | `canvas/spatial/src/` |
+| `@mog/math-engine` | `typeset/math-engine/` | workspace-internal package | Equation/math rendering (LaTeX/OMML) | `typeset/math-engine/src/` |
 
 **Canvas packages** (5-package architecture under `canvas/` + composition facade):
 
-| Package | Location | Purpose | Key File |
-|---------|----------|---------|----------|
-| `canvas-engine` | `canvas/engine/` | Generic multi-canvas render loop, priority scheduler, input capture | `canvas/engine/src/` |
-| `grid-renderer` | `canvas/grid-renderer/` | Cell, background, selection, and header layers + viewports, coordinates, features | `canvas/grid-renderer/src/` |
-| `drawing-canvas` | `canvas/drawing-canvas/` | Floating object scene graph and renderers | `canvas/drawing-canvas/src/` |
-| `canvas-overlay` | `canvas/overlay/` | Screen-space UX chrome (handles, guides, ink) | `canvas/overlay/src/` |
-| `grid-canvas` | `canvas/grid-canvas/` | Thin composition facade: GridRenderer + viewport layout + cell-style-bridge + CSS variables | `canvas/grid-canvas/src/` |
+| Package | Location | Status | Purpose | Key File |
+|---------|----------|--------|---------|----------|
+| `@mog/canvas-engine` | `canvas/engine/` | workspace-internal package | Generic multi-canvas render loop, priority scheduler, input capture | `canvas/engine/src/` |
+| `@mog/grid-renderer` | `canvas/grid-renderer/` | workspace-internal package | Cell, background, selection, and header layers + viewports, coordinates, features | `canvas/grid-renderer/src/` |
+| `@mog/drawing-canvas` | `canvas/drawing-canvas/` | workspace-internal package | Floating object scene graph and renderers | `canvas/drawing-canvas/src/` |
+| `@mog/canvas-overlay` | `canvas/overlay/` | workspace-internal package | Screen-space UX chrome (handles, guides, ink) | `canvas/overlay/src/` |
+| `@mog/grid-canvas` | `canvas/grid-canvas/` | workspace-internal package | Thin composition facade: GridRenderer + viewport layout + cell-style-bridge + CSS variables | `canvas/grid-canvas/src/` |
 
 **Drawing packages** (all under `canvas/drawing/`):
 
-| Package | Location | Purpose | Key File |
-|---------|----------|---------|----------|
-| `drawing-engine` | `canvas/drawing/engine/` | Drawing/rendering operations | `canvas/drawing/engine/src/` |
-| `shape-engine` | `canvas/drawing/shapes/` | 2D shape manipulation | `canvas/drawing/shapes/src/` |
-| `ink-engine` | `canvas/drawing/ink/` | Pen/ink input and rendering | `canvas/drawing/ink/src/` |
-| `diagram` | `canvas/drawing/diagram/` | Diagram engine | `canvas/drawing/diagram/src/` |
-| `text-effects-engine` | `canvas/drawing/text-effects/` | Text-effects styling/rendering | `canvas/drawing/text-effects/src/` |
-| `geometry` | `canvas/drawing/geometry/` | Geometric calculations | `canvas/drawing/geometry/src/` |
+| Package | Location | Status | Purpose | Key File |
+|---------|----------|--------|---------|----------|
+| `@mog/drawing-engine` | `canvas/drawing/engine/` | workspace-internal package | Drawing/rendering operations | `canvas/drawing/engine/src/` |
+| `@mog/shape-engine` | `canvas/drawing/shapes/` | workspace-internal package | 2D shape manipulation | `canvas/drawing/shapes/src/` |
+| `@mog/ink-engine` | `canvas/drawing/ink/` | workspace-internal package | Pen/ink input and rendering | `canvas/drawing/ink/src/` |
+| `@mog/diagram-engine` | `canvas/drawing/diagram/` | workspace-internal package | Diagram engine | `canvas/drawing/diagram/src/` |
+| `@mog/text-effects-engine` | `canvas/drawing/text-effects/` | workspace-internal package | Text-effects styling/rendering | `canvas/drawing/text-effects/src/` |
+| `@mog/geometry` | `canvas/drawing/geometry/` | workspace-internal package | Geometric calculations | `canvas/drawing/geometry/src/` |
 
 **File I/O**
 
-| Package | Purpose | Key File |
-|---------|---------|----------|
-| `xlsx/parser` | Rust/WASM high-perf XLSX parser (read + write) | `file-io/xlsx/parser/src/lib.rs` |
-| `xlsx/bridge` | TS types, progress/cancellation helpers, and worker orchestration for XLSX workflows | `file-io/xlsx/bridge/src/index.ts` |
-| `xlsx-api` | Rust XLSX bridge/API layer used by compute import/export | `file-io/xlsx-api/src/lib.rs` |
-| `csv-parser` | Rust CSV parser feeding the same import hydration path | `file-io/csv-parser/src/lib.rs` |
-| `ooxml-types` | Shared OOXML vocabulary (enums, structs) — zero-dep Rust leaf crate | `file-io/ooxml/types/src/lib.rs` |
-| `print-export` | Print & PDF | `file-io/print-export/src/html/table-generator.ts` |
+| Package | Status | Purpose | Key File |
+|---------|--------|---------|----------|
+| `@mog/xlsx-parser-wasm` / `xlsx-parser` | workspace-internal package/crate | Rust/WASM high-perf XLSX parser (read + write) | `file-io/xlsx/parser/src/lib.rs` |
+| `@mog/xlsx-parser` (`xlsx/bridge`) | workspace-internal package | TS types, progress/cancellation helpers, and worker orchestration for XLSX workflows | `file-io/xlsx/bridge/src/index.ts` |
+| `xlsx-api` | workspace-internal Rust crate | Rust XLSX bridge/API layer used by compute import/export | `file-io/xlsx-api/src/lib.rs` |
+| `csv-parser` | workspace-internal Rust crate | Rust CSV parser feeding the same import hydration path | `file-io/csv-parser/src/lib.rs` |
+| `ooxml-types` | workspace-internal Rust crate | Shared OOXML vocabulary (enums, structs) -- zero-dep Rust leaf crate | `file-io/ooxml/types/src/lib.rs` |
+| `@mog/print-export` | workspace-internal package | Print and PDF export helpers | `file-io/print-export/src/html/table-generator.ts` |
 
 **Bridges** (kernel/src/bridges/)
 
@@ -101,23 +109,23 @@ The system spans pnpm workspaces and Rust workspace crates declared in `pnpm-wor
 
 **Runtime & Application**
 
-| Package | Purpose | Key File |
-|---------|---------|----------|
-| `kernel` | Core runtime, domain modules, unified Workbook/Worksheet API | `kernel/src/api/workbook/workbook-impl.ts` |
-| `shell` | Shell host, app launcher, platform services, and React integration | `shell/src/` |
-| `apps/spreadsheet` | Spreadsheet app (coordination, actions, systems, UI store) | `apps/spreadsheet/src/coordinator/sheet-coordinator.ts` |
-| `runtime/sdk` | Node/headless SDK entry points and boot lifecycle | `runtime/sdk/src/boot.ts` |
-| `runtime/embed` | Public embed/Web Component package | `runtime/embed/src/index.ts` |
-| `runtime/spreadsheet-app` | Full spreadsheet app runtime package | `runtime/spreadsheet-app/src/index.tsx` |
+| Package | Status | Purpose | Key File |
+|---------|--------|---------|----------|
+| `@mog-sdk/kernel` (`kernel`) | workspace-internal package (`private: true`) | Core runtime, domain modules, unified Workbook/Worksheet implementation | `kernel/src/api/workbook/workbook-impl.ts` |
+| `@mog/shell` (`shell`) | reserved private package | Shell host, app launcher, platform services, and React integration | `shell/src/` |
+| `@mog/app-spreadsheet` (`apps/spreadsheet`) | private workspace app | Spreadsheet app coordination, actions, systems, and UI store | `apps/spreadsheet/src/coordinator/sheet-coordinator.ts` |
+| `@mog-sdk/node` (`runtime/sdk`) | shipped public package | Node/headless SDK entry points and boot lifecycle | `runtime/sdk/src/boot.ts` |
+| `@mog-sdk/embed` (`runtime/embed`) | shipped public package; React/Web Component exports public-experimental | Embed package | `runtime/embed/src/index.ts` |
+| `@mog-sdk/spreadsheet-app` (`runtime/spreadsheet-app`) | shipped public package | Full spreadsheet app embed for trusted same-origin hosts; bundle-composition facade over private app/shell/kernel code | `runtime/spreadsheet-app/src/index.tsx` |
 
 **Supporting Areas**
 
-| Area | Purpose | Key File |
-|------|---------|----------|
-| `kernel/src/services/checkpoint` | Workbook checkpoints and restore orchestration | `kernel/src/services/checkpoint/index.ts` |
-| `kernel/src/services/undo` | Undo/redo service backed by Rust history | `kernel/src/services/undo/index.ts` |
-| `runtime/spreadsheet-testing` | Spreadsheet assertion and test-runner framework | `runtime/spreadsheet-testing/src/testing-framework.ts` |
-| `types/connections` / `contracts/src/connections` | Public connection/query contracts | `types/connections/src/index.ts`, `contracts/src/connections/index.ts` |
+| Area | Status | Purpose | Key File |
+|------|--------|---------|----------|
+| `kernel/src/services/checkpoint` | workspace-internal | Workbook checkpoints and restore orchestration | `kernel/src/services/checkpoint/index.ts` |
+| `kernel/src/services/undo` | workspace-internal | Undo/redo service backed by Rust history | `kernel/src/services/undo/index.ts` |
+| `runtime/spreadsheet-testing` | workspace-internal | Spreadsheet assertion and test-runner framework | `runtime/spreadsheet-testing/src/testing-framework.ts` |
+| `types/connections` / `contracts/src/connections` | workspace-internal source plus public-experimental contract re-export | Connection/query contracts | `types/connections/src/index.ts`, `contracts/src/connections/index.ts` |
 
 
 ## State Architecture
@@ -152,19 +160,27 @@ Rust owns persistent workbook state. The TypeScript side wraps it with document 
 
 ## Data Model
 
-Persistent workbook state lives in Rust compute-core and is accessed through `ComputeBridge` transports (WASM in browser embeds, N-API/headless transports in Node, and bridge transports in hosted environments). The Rust engine owns cell storage, formula evaluation, dependency tracking, recalculation, workbook settings, sheet state, objects, tables, pivots, comments, filters, protection, and import/export state.
+Persistent workbook state lives in Rust compute-core and is accessed through
+`ComputeBridge` transports (WASM in browser embeds, N-API/headless transports in
+Node, and bridge transports in hosted environments). The Rust engine owns Yrs
+document storage, cell identity indexes, formula evaluation, dependency
+tracking, recalculation, workbook settings, sheet state, objects, tables,
+pivots, comments, filters, protection/security state, undo origins, CRDT sync
+bytes, and import/export state. TypeScript owns document lifecycle, semantic
+event fanout, services, public APIs, and UI state.
 
 ```
 Rust compute-core (storage engine)
-├── workbook: sheet order, styles, settings, properties, theme, named ranges
+├── workbook: sheet order, settings, identity/link maps, theme, named ranges
 ├── sheets: per-sheet storage
 │   └── {sheetId}:
-│       ├── cells (values, formulas, positions)
-│       ├── formats, metadata, validation, schemas
-│       ├── row/column dimensions, merges, filters, tables
+│       ├── cells (values and formulas keyed by CellId)
+│       ├── cellProperties, ranges, rangePayloads, rangeFormats
+│       ├── gridIndex plus row/column identity order and dimensions
+│       ├── validation, schemas, merges, filters, tables
 │       ├── charts, drawings, comments, sparklines, pivots
 │       └── sheet metadata (name, visibility, settings, print)
-├── undo history, checkpoints, collaboration/provider sync state
+├── undo history/origins, security state, CRDT/provider sync bytes
 └── XLSX/CSV import-export hydration and serialization paths
 ```
 
@@ -175,8 +191,8 @@ See: [data-model.md](data-model.md) for full schema.
 | Foundation    | Purpose                 | Enables                                  |
 | ------------- | ----------------------- | ---------------------------------------- |
 | Cell Metadata | Per-cell key-value data | Provenance, validation errors, staleness |
-| Event Bus     | Pub/sub for changes     | Reactive UI, self-healing, webhooks      |
-| Type System   | Schema validation       | Typed cells, API generation, Monte Carlo |
+| Event Bus     | Pub/sub for semantic changes | Reactive UI, invalidation, SDK event relays |
+| Type System   | Schema validation       | Typed cells, validation, distribution metadata |
 | Undo / Checkpoints | Rust-backed history and checkpoint restore | Undo/redo, restore points, selection recovery |
 | Testing       | Cell assertions         | Spreadsheet unit tests, CI/CD            |
 | Connections   | Connection and query contracts | External data integration surfaces       |
@@ -184,22 +200,36 @@ See: [data-model.md](data-model.md) for full schema.
 ## Data Flow
 
 ```
-User Edit → dispatch() → Workbook/Worksheet API → ComputeBridge → Rust
-                                    │
-                                    ├─▶ MutationResultHandler → EventBus events
-                                    │       │
-                                    │       ├─▶ ComputeBridge → Rust (recalc)
-                                    │       ├─▶ SchemaBridge (validate)
-                                    │       └─▶ Viewport binary buffers → Canvas
-                                    │
-                                    └─▶ Collaboration sync → Other clients
+User Edit -> dispatch() -> Workbook/Worksheet API -> ComputeBridge/ComputeCore
+                                                        │
+                                                        v
+                                      Rust apply_mutation + recalc + storage
+                                                        │
+                                                        v
+                                 MutationResult + binary viewport patches
+                                                        │
+                 ┌──────────────────────────────────────┴────────────────────┐
+                 v                                                           v
+        MutationResultHandler -> EventBus events                 viewport caches -> Canvas
+                 │
+                 ├─▶ Schema/validation, CF, geometry, and subscribers refresh
+                 └─▶ RustDocument drains CRDT updates -> attached providers
 ```
 
-App data writes flow through the unified `Workbook`/`Worksheet` API, which enforces write gates, protection checks, undo grouping, recalculation, and event emission. Render paths use explicit synchronous read surfaces such as `Worksheet.viewport`; kernel internals and domain bridges may call `ComputeBridge` directly.
+Ordinary app and SDK data writes flow through the unified `Workbook`/`Worksheet`
+API. The TypeScript side performs write-gate/protection preflight, undo grouping,
+and semantic event fanout; Rust applies the mutation, updates storage, runs
+recalculation, and returns mutation/viewport results. Render paths use explicit
+synchronous read surfaces such as `Worksheet.viewport`; kernel internals and
+domain bridges may call `ComputeBridge` directly.
 
 ## Unified Spreadsheet API
 
-All programmatic access to the spreadsheet engine — from headless agents, LLM-generated code, shell-hosted apps, and the browser app — goes through the unified `Workbook`/`Worksheet` API.
+The primary consumer-facing programming model is the unified
+`Workbook`/`Worksheet` API. Shipped public callers reach it through
+`@mog-sdk/node`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`. The
+implementation lives in workspace-internal `@mog-sdk/kernel`; infrastructure
+exceptions are listed below.
 
 **Location**: `kernel/src/api/`
 
@@ -211,7 +241,7 @@ kernel/src/api/
 ├── namespaces/               # Namespace helpers (cells, records, sheets)
 ├── workbook/                 # Workbook implementation and sub-APIs
 │   ├── workbook-impl.ts      #   WorkbookImpl — the one Workbook implementation
-│   ├── create-workbook.ts    #   Public async createWorkbook() dispatcher
+│   ├── create-workbook.ts    #   Workspace-internal async dispatcher
 │   ├── sheets.ts, names.ts, history.ts, scenarios.ts
 │   ├── protection.ts, security.ts, properties.ts
 │   ├── table-styles.ts, cell-styles.ts, pivot-styles.ts
@@ -235,10 +265,22 @@ kernel/src/api/
 │   ├── handles/              #   Floating object handle implementations
 │   ├── operations/           #   Shared worksheet operation modules
 │   └── index.ts              #   Barrel export
-└── index.ts                  # Public exports: createWorkbook, types, namespace APIs
+└── index.ts                  # Kernel barrel: createWorkbook, types, namespace APIs
 ```
 
-**Factory**:
+**Factory surfaces**:
+
+Shipped public Node/headless code imports from `@mog-sdk/node`:
+
+```typescript
+import { createWorkbook } from '@mog-sdk/node';
+
+const wb = await createWorkbook({ userTimezone: "UTC" });
+const ws = wb.activeSheet;
+```
+
+Workspace-internal callers that already own a kernel context can use the
+`WorkbookConfig` path:
 
 ```typescript
 import { createWorkbook, type WorkbookConfig } from '@mog-sdk/kernel/api';
@@ -248,7 +290,7 @@ const wb = await createWorkbook({
   stateProvider,
   eventBus,
 } satisfies WorkbookConfig);
-const ws = wb.getActiveSheet();
+const ws = wb.activeSheet;
 ```
 
 **Address overload pattern**: Cell/range methods that accept addresses support A1 strings and numeric row/col overloads. The `address-resolver.ts` utility discriminates at runtime:
@@ -268,7 +310,7 @@ ws.formats.set("A1", { bold: true });
 ws.structure.insertRows(0, 5);
 ws.charts.add(config);
 ws.tables.list();
-ws.filters.apply(range, criteria);
+ws.filters.setAutoFilter("A1:C20");
 ws.protection.protect("password");
 ws.view.freezeRows(2);
 ws.comments.add(0, 0, { text: "Note" });
@@ -282,9 +324,9 @@ ws.shapes.add(config);
 ws.pictures.add(config);
 ws.pivots.add(config);
 ws.slicers.add(config);
-ws.sparklines.addGroup(config);
+ws.sparklines.add("B1", "A1:A10", "line");
 ws.print.setSettings(config);
-ws.settings.getSheetSettings();
+ws.settings.get();
 ws.bindings.isProjectedPosition(row, col);
 ws.formControls.add(config);
 ws.diagrams.add(config);
@@ -311,9 +353,15 @@ wb.links.list();
 wb.records.query(tableId);
 ```
 
-Sub-API objects are lazy — created on first property access via `get`. Zero cost if unused. Each sub-API class delegates to operation modules or directly to `ComputeBridge`/kernel services as appropriate; the namespaces are an organizational layer over the same Rust-owned state.
+Sub-API objects are lazy -- created on first property access via `get`. Zero cost
+if unused. Each sub-API class delegates to operation modules or directly to
+`ComputeBridge`/kernel services as appropriate; the namespaces are an
+organizational layer over the same Rust-owned state.
 
-**Interfaces** are re-exported from `contracts/src/api/worksheet/` and `contracts/src/api/workbook/`; source interface definitions live in `types/api/src/api/`. **Implementations** are in `kernel/src/api/worksheet/` and `kernel/src/api/workbook/`.
+**Interfaces** are re-exported from `contracts/src/api/worksheet/` and
+`contracts/src/api/workbook/`; source interface definitions live in
+`types/api/src/api/`. **Implementations** are in `kernel/src/api/worksheet/`
+and `kernel/src/api/workbook/`.
 
 **Delegation pattern**: Sub-API impl classes delegate to shared operation modules in `kernel/src/api/worksheet/operations/` and `kernel/src/api/workbook/operations/`, or to focused kernel services. Operation modules are kernel-internal — consumers never import them directly.
 
@@ -324,7 +372,7 @@ Sub-API objects are lazy — created on first property access via `get`. Zero co
 | Errors throw, not `OperationResult` | Simpler for LLM code generation (`try/catch` beats `.success` checks) |
 | `getSheetById()` is sync; `getSheet()`/`getSheetByIndex()` are async | ID-based callers get referentially stable worksheet instances; name/index lookups read Rust-backed sheet metadata |
 | `undoGroup()` groups undo | Wraps operations in `beginUndoGroup/endUndoGroup` |
-| No `OperationResult` at API boundary | Public methods throw mapped SDK errors instead of returning success envelopes |
+| No `OperationResult` at API boundary | API methods throw mapped SDK errors instead of returning success envelopes |
 
 ### Consumer Access Patterns
 
@@ -333,11 +381,12 @@ Sub-API objects are lazy — created on first property access via `get`. Zero co
 ```typescript
 // Action handlers receive workbook via deps
 const deps = useActionDependencies();
-const ws = deps.workbook.getActiveSheet();
+const ws = deps.workbook.activeSheet;
 await ws.setCell(0, 0, "Hello");
 
 // Group multi-step operations into one undo entry
-await deps.workbook.undoGroup(async () => {
+await deps.workbook.undoGroup(async (wb) => {
+  const ws = wb.activeSheet;
   await ws.setCell(0, 0, "Header");
   await ws.formats.set(0, 0, { bold: true });
 });
@@ -348,10 +397,10 @@ await deps.workbook.undoGroup(async () => {
 **In headless Node contexts**:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/kernel/api';
+import { createWorkbook } from '@mog-sdk/node';
 
 const wb = await createWorkbook({ userTimezone: "UTC" });
-const ws = wb.getActiveSheet();
+const ws = wb.activeSheet;
 await ws.setRange(0, 0, [["Name", "Score"], ["Alice", 100]]);
 ```
 
@@ -383,7 +432,7 @@ New canvas-hosted apps can provide their own `IPositionResolver` and object stor
 ## Adding Features
 
 **New Excel function:** `compute/core/crates/compute-functions/src/{category}/` (Rust)
-**New event type:** `contracts/src/events.ts`
+**New event type:** `types/events/src/` first, with public re-export through `contracts/src/events.ts` / `contracts/src/events/`
 **New persistent spreadsheet feature:** add Rust storage/commands, expose through `ComputeBridge`, then surface it through kernel API namespaces or services.
 
 ## Detailed Documentation
@@ -393,6 +442,4 @@ New canvas-hosted apps can provide their own `IPositionResolver` and object stor
 - [state.md](state.md) - State management
 - [data-model.md](data-model.md) - Data model structure
 - [foundations.md](foundations.md) - Foundation surfaces
-- [renderer/binary-wire-pipeline.md](renderer/binary-wire-pipeline.md) - Binary wire: Rust → IPC → TS → canvas
-
-## Related Docs
+- [renderer/binary-wire-pipeline.md](renderer/binary-wire-pipeline.md) - Binary wire: Rust -> IPC -> TS -> canvas

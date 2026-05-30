@@ -2,23 +2,27 @@
 
 A data operating system built on spreadsheet primitives.
 
+> Status: public architecture orientation. Package manifests, `tools/package-inventory.jsonc`, `pnpm-workspace.yaml`, root `Cargo.toml`, and source-level boundary checks are the source of truth for shipped/public vs workspace-internal surfaces.
+
 ## System Layers
 
 ```
-Apps            TypeScript/React — own their chrome, import kernel + shell + views
-Shell           Session, workspace, multi-doc, focus management, global clipboard, app launcher
-Views           Reusable view components — projections of a dataset (SheetView shipped; Kanban, Timeline, Calendar, Gallery, Chart planned)
-Kernel          Data layer: unified API, storage, events, recalc, services
-Compute         Rust compute/storage, binary wire, and bridge targets
+Runtime         Public facades and host setup (@mog-sdk/node, @mog-sdk/embed, @mog-sdk/spreadsheet-app)
+Apps            Workspace React apps own product chrome and workflows
+Shell/UI        Workspace chrome, focus, session/app composition, and shared UI
+Views           Reusable view packages (SheetView shipped; other view packages reserved)
+Kernel          Workspace-internal document lifecycle, Workbook/Worksheet API, services, bridges
+Hardware        Rust compute/storage, transport, canvas, charts, table/file engines, binary wire
+Types           Public contracts plus workspace type shards
 ```
 
-Primary dependency flow: `contracts -> compute -> kernel -> views -> apps` (shell is parallel to views; apps import both).
+Allowed imports point downward through types/contracts -> hardware -> kernel -> views -> shell/UI -> apps. Runtime facades sit above that stack and choose host adapters. Lower layers must not import higher layers. `@mog-sdk/spreadsheet-app` is a public bundle-composition package: it uses app/shell/kernel code internally, and `runtime/spreadsheet-app/scripts/check-boundary.mjs` checks that those internals do not leak from public declarations.
 
-**Views layer.** Reusable view components. Each view is a *projection of a dataset*: SheetView projects cells-as-grid, Kanban projects records-as-cards-grouped-by-column, Timeline projects records-as-events-on-time-axis, etc. Views observe shared data (the yrs CRDT substrate) — edits flow through data, not across views, so multiple views of the same workbook stay in sync for free. UIKit/AppKit-analog. Depends on kernel-facing data APIs and lower-level compute/canvas packages where the abstraction boundary requires it; consumed by Apps.
+**Views layer.** Reusable view components. `@mog-sdk/sheet-view` is the shipped public low-level grid view package. It mounts the canvas/grid stack and binds through a `SheetViewDataSource`, with `createSheetViewDataSourceFromWorkbook()` as the current adapter for Workbook-backed data. The public view boundary does not expose Yrs directly, and it avoids making the canonical kernel Workbook type part of the SheetView package contract.
 
-Round 1 ships `@mog-sdk/sheet-view` (binds to `Workbook`). Planned future views: Kanban, Timeline, Calendar, Gallery, Chart (will bind to a more general `Dataset` abstraction — reserved but not yet defined; `Workbook` will implement it). Form is record-level (input surface, not a dataset projection) — home TBD — likely Views, possibly a distinct input-surface layer.
+Kanban, Timeline, Calendar, Gallery, and Chart views exist as workspace app/UI experiments or reserved directions, not as shipped public view packages. A future general `Dataset` abstraction is reserved but not defined; introduce it only when a second public view pressures the boundary. Form-like record input is an input surface, not currently a public dataset projection package.
 
-**Dataset (reserved).** Views bind to datasets. Round 1 binds SheetView directly to Workbook; a general Dataset abstraction will be introduced when a second view lands and can pressure-test it. Do not define Dataset prematurely.
+**Dataset (reserved).** SheetView currently binds through its data-source interface. A general Dataset abstraction will be introduced only when another public view can validate it. Do not define Dataset prematurely.
 
 In practice, apps may also import lower-level compute or canvas packages directly (e.g., the spreadsheet app imports canvas and drawing packages) when the views/shell layers don't provide a sufficient abstraction.
 
@@ -32,17 +36,17 @@ Details: [OS Overview](os/README.md)
 
 Cells are keyed by **stable UUIDs (CellId)**, not positions. Position is a mutable property.
 
-- Insert/delete rows/cols = O(1) position updates, no formula rewriting
-- Formulas stored as `{ template: "SUM({0})+{1}*2", refs: [CellId, CellId] }`
+- Insert/delete rows/cols update identity/order indexes instead of rewriting formula text across all cells
+- Formulas are stored in identity-aware form (template plus references), with A1 display regenerated from current positions
 - Display (A1 notation) is derived at render time, not stored
 - Concurrent structure changes compose correctly under CRDT
-- Range expansion is free: insert row inside `=SUM(A1:A10)` -> `=SUM(A1:A11)` automatically
+- Range expansion is resolved from the current identity/position state, so inserting inside `=SUM(A1:A10)` displays as the expanded range after positions are derived
 
 Details: [Cell Identity](../internals/spreadsheet/cell-identity.md) | [Data Model](../internals/spreadsheet/data-model.md)
 
-### 1b. Range Storage (Round 13)
+### 1b. Range Storage
 
-Bulk-imported data lives as typed Range payloads in Yrs, not as N per-cell Y.Map entries. The compute engine already speaks Range fluently — Ranges feed it faster data through the existing `get_column_slice` seam.
+Bulk imported or deferred data can live as typed Range payloads in Yrs, not as N per-cell Y.Map entries. The compute engine already speaks Range fluently: ranges feed it faster data through the existing `get_column_slice` path.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -85,7 +89,7 @@ Details: [Cell Identity — Virtual Identity](../internals/spreadsheet/cell-iden
 
 ### 2. Rust as Single Source of Truth
 
-All persistent state and computation lives in Rust `compute-core`. TypeScript never owns cell data.
+Canonical persistent spreadsheet state and computation live in Rust `compute-core` and `compute-document`. TypeScript owns API/lifecycle adapters, event routing, view caches, and UI/session state; it does not own canonical persisted cell data.
 
 ```
 Cell Edit (TS) -> ComputeBridge -> Rust compute-core
@@ -95,7 +99,7 @@ Cell Edit (TS) -> ComputeBridge -> Rust compute-core
                                     -> Evaluator (512+ pure functions)
                                     -> RecalcResult
                                     -> Binary wire (compute-wire)
-                                  -> TypeScript (zero-copy DataView reads) -> Canvas
+                                  -> TypeScript (DataView reads) -> Canvas
 ```
 
 **31 compute-core workspace crates** organized in four architectural layers:
@@ -151,7 +155,7 @@ Details: [Compute-Core](../../compute/core/README.md) | [Compute Wire](../../com
 
 ### 3. Rust-to-TypeScript Bridge
 
-The `rust-bridge` proc-macro framework generates bindings for **three platforms** from Rust `#[bridge::api]` surfaces:
+The `rust-bridge` proc-macro framework generates bridge descriptors and bindings for WASM, Tauri, N-API, and PyO3 targets from Rust `#[bridge::api]` surfaces. This page focuses on the TypeScript transports:
 
 | Annotation | Purpose |
 |------------|---------|
@@ -163,11 +167,11 @@ The `rust-bridge` proc-macro framework generates bindings for **three platforms*
 | `#[bridge::lifecycle]` | Init/destroy |
 
 Transport implementations live in `infra/transport/` (`@mog/transport`, private workspace package). The factory auto-detects platform at startup:
-- **Desktop**: `TauriTransport` — Tauri IPC invoke, Rust runs natively in a sidecar process
-- **Web**: `WasmTransport` — single `@mog-sdk/wasm` module loaded by the transport factory, with direct WASM function calls
-- **Server**: `NapiTransport` — N-API bindings for Node.js, used by the headless runtime
+- **Desktop**: `createTauriTransport()` — Tauri IPC via `@tauri-apps/api/core` `invoke()`
+- **Web**: `createWasmTransport()` — `@mog-sdk/wasm` loaded by the transport factory, with direct WASM function calls
+- **Server/headless**: `createNapiTransport()` and lazy/headless variants — N-API bindings for Node.js
 
-The transport is created once via `createTransport(config?)` and injected into the `ComputeBridge`. All callers use the same async API regardless of platform — the bridge abstraction hides whether the call crosses IPC, calls into WASM, or invokes N-API. Middleware transports handle platform-specific concerns: `TimeInjectingTransport` (WASM clock injection) and `BytesTupleNormalizingTransport` (Tauri binary format).
+The transport is created once via `createTransport(config?)` and injected into the `ComputeBridge`. Auto-detection prefers N-API, then Tauri, then WASM; callers can also request an explicit runtime. All callers use the same async API regardless of platform. Middleware functions handle platform-specific concerns, including `createTimeInjectingTransport()`, `createNapiTimeInjectingTransport()`, `createBytesTupleNormalizingTransport()`, and `createCaseNormalizingTransport()`.
 
 **Type generation**: The `bridge-ts` crate (in `infra/rust-bridge/bridge-ts/`) parses Rust structs/enums with serde attributes (`#[serde(rename_all = "camelCase")]`, `#[serde(tag = "type")]`, etc.) and emits TypeScript interfaces. Generated types live in `kernel/src/bridges/compute/compute-types.gen.ts`. Culture data is also codegen'd: `bridge-ts/tests/generate_culture_data.rs` serializes the 10 `CultureInfo` structs from `compute-formats` into `infra/culture/src/cultures.gen.ts`. This is the single source of truth for cross-language type and data safety — types and data are defined once in Rust and consumed in both languages.
 
@@ -179,35 +183,33 @@ Communication between Rust and TypeScript uses two protocols:
 
 | Protocol | Format | Used For |
 |----------|--------|----------|
-| **Control plane** | JSON | RPC commands: `set_cell`, `undo`, `get_schema` |
+| **Control plane** | JSON | RPC commands such as `compute_batch_set_cells_by_position`, `compute_undo`, and schema queries |
 | **Data plane** | Binary (`Uint8Array`) | Viewport data, mutation results |
 
 The binary data plane enables 60 FPS rendering:
-- **Viewport**: 36B header + N x 32B cell records (dense row-major) + UTF-8 string pool + format palette
-- **Mutations**: Structural viewport patches produced synchronously by Rust (`produce_structural_viewport_patches()`)
-- **Zero allocations** per cell in the hot render path — `DataView` reads directly from the blob
-- **Format palette**: Append-only interning deduplicates `CellFormat` to `u16` indices
-- **ViewportCoordinator**: Single owner per viewport region. Both mutation and viewport-fetch pipelines write through the coordinator, which uses an epoch-based overlay model: mutation patches are stored as overlays with an epoch stamp, and when a fresh viewport fetch arrives, the coordinator filters overlays — keeping only entries newer than the fetch epoch and re-applying them on top of the new buffer. This eliminates stale-detection/retry logic entirely; the epoch model guarantees consistency.
+- **Viewport**: 36B header + N x 32B cell records (dense row-major) + UTF-8 string pool + merge/dimension sections + binary format palette + conditional-format extras + row/column position arrays
+- **Mutations**: Compact mutation buffers carry patch records and optional spill/palette sections; structural changes trigger the viewport refresh/overlay pipeline
+- **Hot path**: `DataView` reads directly from the blob without per-cell object deserialization
+- **Format palette**: Append-only interning deduplicates `CellFormat` to `u16` indices in a binary palette section
+- **ViewportCoordinator**: Single owner per viewport region. Both mutation and viewport-fetch pipelines write through the coordinator, which uses an epoch-based overlay model: mutation patches are stored as overlays with an epoch stamp, and when a fresh viewport fetch arrives, the coordinator filters overlays, keeps only entries newer than the fetch epoch, and re-applies them on top of the new buffer. This keeps stale-detection/retry logic out of callers.
 
 Details: [Binary Wire Pipeline](../internals/spreadsheet/renderer/binary-wire-pipeline.md) | [Compute Wire Spec](../../compute/core/crates/compute-wire/README.md) | [Compute Bridge](compute-bridge.md)
 
 
 ### 5. Document Lifecycle & Three-Tier State
 
-Documents are created through `DocumentFactory`, which encapsulates all kernel bootstrap (ComputeBridge, RustDocument, context wiring) and returns a `DocumentHandle`:
+Public Node consumers create workbooks through `@mog-sdk/node`, which wraps kernel bootstrap and host/runtime setup:
 
 ```ts
-import { DocumentFactory } from '@mog-sdk/kernel';
+import { createWorkbook } from '@mog-sdk/node';
 
-const handle = await DocumentFactory.create({ documentId });
-// handle.initialSheetId: SheetId — first sheet, available synchronously
-// handle.eventBus: SpreadsheetEventBus — public event stream
-// handle.dispose() — MUST call when done
-
-const workbook = await handle.workbook();
+const wb = await createWorkbook({ userTimezone: 'UTC' });
+const ws = wb.activeSheet;
+await ws.setCell('A1', 'Hello');
+await wb.close('skipSave');
 ```
 
-Apps never instantiate `RustDocument` or call `createDocumentContext` directly — those are kernel internals hidden by the factory.
+`@mog-sdk/kernel` is a workspace-internal package. Inside the monorepo, the kernel provides a zero-ceremony async `createWorkbook()` and a document-first `DocumentFactory` for advanced integration. `DocumentFactory` encapsulates kernel bootstrap (ComputeBridge, RustDocument, context wiring) and returns a `DocumentHandle`; it is not the primary public package setup path. Apps never instantiate `RustDocument` or call `createDocumentContext` directly.
 
 **Four-tier context architecture** controls what each layer can access:
 
@@ -220,7 +222,7 @@ DocumentContext             (Tier 4)  + computeBridge, viewport buffer      — 
 
 All generic interfaces default to `SpreadsheetEvent`, so existing code works unchanged. Future app types (CRM, kanban, docs) extend `IKernelContext<CustomEvent>` with their own bridges.
 
-The public `DocumentHandle` exposes `eventBus`, `undoService`, provider registration, and `workbook()`. Raw `DocumentHandleInternal.context` access is Tier 3 and kernel-internal only; internal kernel code casts when engine access is needed.
+`DocumentHandle` exposes `eventBus`, `undoService`, provider registration, lifecycle methods, and `workbook()`. Raw `DocumentHandleInternal.context` access is Tier 3 and kernel-internal only; internal kernel code casts when engine access is needed.
 
 **Three-tier state** flows downward:
 
@@ -239,7 +241,7 @@ Details: [State Management](../internals/spreadsheet/state.md)
 
 ### 6. XState Machines + Coordinator Pattern
 
-Every complex user interaction is an **explicit XState state machine** — pure TypeScript, testable without React/DOM, visualizable in Stately Inspector.
+Complex app interactions are modeled as **explicit XState state machines** where the workflow benefits from inspectable, testable state transitions.
 
 **21+ machines**: selection, editor, clipboard, renderer, input, focus, pane-focus, chart, find-replace, object-interaction, slicer, comment, draw-border, page-break, diagram, ink, calendar, gallery, kanban, timeline, document-lifecycle.
 
@@ -265,14 +267,17 @@ Details: [XState Patterns](../internals/spreadsheet/renderer/xstate.md) | [State
 All programmatic access — browser, headless, LLM-generated code, OS apps — goes through `Workbook`/`Worksheet`:
 
 ```typescript
-const wb = createWorkbook({ ctx, getActiveSheetId, setActiveSheetId, eventBus });
-const ws = wb.getActiveSheet();
-await ws.setCell("A1", "Hello");          // A1 or numeric addressing
-await ws.formats.set("A1", { bold: true });         // 29 namespaced sub-APIs
-await wb.history.undo();                  // 8 workbook sub-APIs (12 with bridge accessors)
+import { createWorkbook } from '@mog-sdk/node';
+
+const wb = await createWorkbook();
+const ws = wb.activeSheet;
+await ws.setCell('A1', 'Hello');          // A1 addressing
+await ws.setCell(0, 1, 42);               // numeric row/column addressing
+await ws.formats.set('A1', { bold: true });
+await wb.history.undo();
 ```
 
-Sub-APIs are lazy (zero cost if unused). Errors throw (simpler for LLM code generation). `batch()` groups operations into a single undo step.
+Sub-APIs are typed namespace properties on `Workbook` and `Worksheet` (formats, layout, charts, tables, history, sheets, and others). They are lazy where implemented, errors throw, and `batch()` groups operations into a single undo step. The workspace-internal kernel power-user path accepts `{ ctx, eventBus, stateProvider? }`; public SDK consumers should prefer the runtime package for their host.
 
 Details: [Spreadsheet Architecture](../internals/spreadsheet/ARCHITECTURE.md)
 
@@ -283,12 +288,12 @@ Every method on the Workbook/Worksheet API falls into exactly one of three categ
 | Category | Pattern | Lifecycle | Example |
 |----------|---------|-----------|---------|
 | **Stateless** | Method call | None | `ws.setCell("A1", 42)`, `wb.indexToAddress(0, 0)` |
-| **Workbook-scoped** | `readonly` property | Bound to `wb.dispose()` | `wb.history`, `wb.sheets` |
+| **Workbook-scoped** | `readonly` property | Bound to workbook lifecycle | `wb.history`, `wb.sheets` |
 | **Consumer-scoped** | Handle via factory | `handle.dispose()` or `using` | `wb.viewport.createRegion(sheetId, bounds)` |
 
-Three rules: (1) stateless operations are methods, (2) consumer-scoped state returns handles with `dispose()` as the only cleanup path, (3) handles compose into a tree rooted at the workbook -- `wb.dispose()` cleans up everything.
+Three rules: (1) stateless operations are methods, (2) consumer-scoped state returns handles with an explicit cleanup path, (3) handles compose into a tree rooted at the workbook lifecycle. Public examples prefer `await wb.close()` or `await using`; `wb.dispose()` is synchronous local cleanup.
 
-All handles implement TC39 `Symbol.dispose` for automatic cleanup via `using` declarations. Infrastructure: `IDisposable` interface in `contracts/src/core/disposable.ts`; runtime classes `DisposableBase` and `DisposableStore` in `spreadsheet-utils/src/disposable.ts`.
+Infrastructure: `IDisposable` in `contracts/src/core/disposable.ts`; `DisposableBase` and `DisposableStore` in `spreadsheet-utils/src/disposable.ts` support idempotent `dispose()` plus TC39 `Symbol.dispose` for compatible handles. `Workbook` also exposes `close()` and `Symbol.asyncDispose`.
 
 Details: [API Design Philosophy](../internals/spreadsheet/API-DESIGN-PHILOSOPHY.md)
 
@@ -300,13 +305,13 @@ Core per-sheet storage includes:
 
 | Map | Key | Value | Purpose |
 |-----|-----|-------|---------|
-| `cells` | `CellId` | `SerializedCellData` | Primary storage: raw value, computed value, identity formula, notes, hyperlinks, array formula metadata |
+| `cells` | `CellId` | Compact nested cell map | Primary storage: raw value, computed value, identity formula, notes, hyperlinks, array formula metadata |
 | `cellProperties` | `CellId` | `CellProperties` | Sparse formatting, provenance (modifiedBy/At), validation errors, live data connections |
 | `gridIndex.posToId` / `gridIndex.idToPos` | position / `CellId` | `CellId` / position | Authoritative Yrs-side identity index |
 | `rowOrder` / `colOrder` | ordered IDs | `RowId` / `ColId` | CRDT-safe row/column order |
 | `ranges` / `rangePayloads` / `rangeFormats` / `rangeBindings` | `RangeId` | metadata/bytes/format/binding | Bulk range storage |
 
-Additional sheet-level maps: schemas, row/column dimensions and formats, merges, filters, slicers, comments, sparklines, conditional formatting, bindings, grouping/sorting, and floating objects — all keyed by CellId, range, object ID, or position as appropriate.
+Additional sheet-level maps: `properties`, schemas, row/column dimensions and formats, merges, filters, slicers, comments, sparklines, conditional formatting, bindings, grouping/sorting, and floating objects — all keyed by CellId, range, object ID, or position as appropriate. TypeScript `SerializedCellData` shapes are compatibility/store views; the literal persisted Yrs cell map uses compact Rust schema keys.
 
 **Undo scope** is per-sheet and collaborative: user edits and structural changes are undoable via the Yrs UndoManager. UI state (selection, scroll, editor buffer), formula recalculation, and remote sync are not undoable. **Structural undo** (insert/delete rows/cols) is observed through `rowOrder`, `colOrder`, and `gridIndex` changes, then GridIndex, CellMirror, and compute state are rebuilt or refreshed from the CRDT source of truth. This approach is collaboration-safe — interleaved structural changes from multiple users are resolved by the CRDT, and derived caches follow the merged state.
 
@@ -318,17 +323,16 @@ Details: [Data Model](../internals/spreadsheet/data-model.md) | [Cell Identity](
 
 ## Key Subsystems
 
-### Canvas Rendering (8 packages)
+### Canvas Rendering (12 workspace packages)
 
 ```
 canvas-engine       Generic multi-canvas render loop, priority scheduler, input capture
 grid-renderer       Cell, background, selection, header layers + viewports
 drawing-canvas      Floating object scene graph
-canvas-overlay      Screen-space UX chrome (handles, guides, ink)
+overlay             Screen-space UX chrome (handles, guides, ink)
 grid-canvas         Composition facade
 spatial             Spatial indexing + hit-test pipeline (`@mog/spatial` private package)
-drawing             Drawing primitives: engine, shapes, ink, diagrams, text effects, geometry
-lab                 Canvas experimentation sandbox
+drawing/*           Six drawing subpackages: engine, shapes, geometry, ink, diagram, text-effects
 ```
 
 Details: [Renderer](../internals/spreadsheet/renderer/README.md) | [Binary Wire Pipeline](../internals/spreadsheet/renderer/binary-wire-pipeline.md) | [Canvas](../internals/spreadsheet/renderer/canvas.md)
@@ -365,8 +369,9 @@ Engine, shapes, ink, diagrams, text effects, geometry.
 - **xlsx-parser** (`file-io/xlsx/parser/`): Rust parser for OOXML ZIP structure.
 - **xlsx-api** (`file-io/xlsx-api/`): Ergonomic Rust API and bridge surface included in the shared WASM/N-API bridge targets.
 - **xlsx-bridge** (`file-io/xlsx/bridge/`): TypeScript package managing parser lifecycle and consumer-facing API.
-- **ooxml-types** (`file-io/ooxml/`): Shared OOXML vocabulary — Rust crate with `from_ooxml()`/`to_ooxml()` enum conversions. Zero deps; serde behind feature flag.
-- Additional file-io packages: `file-io/pdf/` (PDF export), `file-io/print-export/`.
+- **csv-parser** (`file-io/csv-parser/`): Rust CSV parser that outputs the same import payload shape for compute hydration.
+- **ooxml-types** (`file-io/ooxml/types/`): Shared OOXML vocabulary — Rust crate with `from_ooxml()`/`to_ooxml()` enum conversions. Zero deps; serde behind feature flag.
+- Additional file-io packages: `file-io/pdf/core/`, `file-io/pdf/graphics/`, `file-io/pdf/layout/`, and `file-io/print-export/`.
 
 ### Table Engine (`table-engine/`)
 
@@ -374,7 +379,7 @@ Standalone TypeScript package for table computation: filtering, sorting, slicers
 
 ### Collaboration
 
-Yrs (Rust port of Yjs) for collaboration transport. Cell Identity Model ensures concurrent structure changes compose correctly — two users inserting columns simultaneously both apply correctly because position numbers (not formula strings) are what merge under CRDT.
+Yrs (Rust port of Yjs) provides the collaborative document substrate. Cell Identity Model ensures concurrent structure changes compose correctly: two users inserting columns simultaneously both apply because row/column identity order and grid indexes merge under CRDT, while formula display is derived from the merged identity/position state.
 
 ### Floating Objects
 
@@ -414,12 +419,17 @@ Details: [Foundations](../internals/spreadsheet/foundations.md)
 ### Runtime
 
 - **sdk** (`runtime/sdk/`): Published as `@mog-sdk/node` — public Node.js SDK wrapping the headless engine.
+- **embed** (`runtime/embed/`): Published as `@mog-sdk/embed` — public embed facade with React, web component, and config entry points.
+- **spreadsheet-app** (`runtime/spreadsheet-app/`): Published as `@mog-sdk/spreadsheet-app` — public full-app composition package; its internal use of app/shell/kernel code is declaration-boundary checked.
+- **wasm** (`compute/wasm/npm/`): Published as `@mog-sdk/wasm` — public WebAssembly binary wrapper used by browser transports.
+
+`kernel/`, `shell/`, and `apps/spreadsheet/` are workspace-internal implementation packages, even when runtime packages compose them into public bundles.
 
 ---
 
 ## Performance
 
-Performance-sensitive paths are covered by targeted benches and regression suites (`compute/core/benches/`, `compute/core/tests/range_*`, renderer binary-wire docs). Current architectural targets:
+Performance-sensitive paths are covered by targeted benches and regression suites under `compute/core/`, compute-wire benches/tests, and renderer binary-wire docs. Current architectural targets:
 
 | Area | Target |
 |------|--------|

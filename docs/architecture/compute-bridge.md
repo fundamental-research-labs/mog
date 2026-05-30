@@ -2,12 +2,14 @@
 
 ## Overview
 
-The compute bridge is the communication boundary between the Rust `compute-core` engine and the TypeScript UI layer. It uses two protocols:
+The compute bridge is the workspace-internal communication boundary between the Rust `compute-core` engine and the TypeScript kernel/rendering layer. It uses two protocols:
 
 - **JSON control plane** -- Structured RPC for commands like `compute_set_cell`, `compute_undo`, `compute_get_column_schema`. Handled by the `rust-bridge` framework with proc-macro code generation.
 - **Binary data plane** -- Compact `Uint8Array` blobs for high-frequency viewport and mutation data. Defined in the `compute-wire` crate and consumed zero-copy via `DataView` on the TS side.
 
 The binary data plane exists because the viewport (visible cell grid) is repainted every frame and mutation results (recalc deltas) arrive on every edit. JSON parsing at these frequencies would be too slow.
+
+**Status:** shipped, workspace-internal. The implementation lives in private workspace packages such as `@mog-sdk/kernel`, `@mog/transport`, and `@rust-bridge/client`. Public consumers should use public SDK packages such as `@mog-sdk/node` and `@mog-sdk/contracts` rather than importing the bridge, wire readers, or transport package directly.
 
 ## Architecture Diagram
 
@@ -45,7 +47,7 @@ compute-core                                               ComputeBridge
 
 ## The rust-bridge Framework
 
-The `rust-bridge` crate (`infra/rust-bridge/bridge-core/src/lib.rs`) provides proc-macro annotations that generate both Rust command handlers and TypeScript client stubs from a single source.
+The `rust-bridge` workspace is the source-of-truth bridge generator. `bridge-core` (`infra/rust-bridge/bridge-core/src/lib.rs`) provides proc-macro annotations and emits target-neutral descriptors from Rust `impl` blocks. Target crates (`bridge-wasm`, `bridge-tauri`, `bridge-napi`, `bridge-pyo3`, and `bridge-delegate`) consume those descriptors for Rust binding code. `bridge-ts` reads the same `#[bridge::api]` source blocks to generate the TypeScript client/types/manifest checked in under `kernel/src/bridges/compute/`.
 
 **Key annotations:**
 
@@ -55,23 +57,29 @@ The `rust-bridge` crate (`infra/rust-bridge/bridge-core/src/lib.rs`) provides pr
 | `#[bridge::api]` | Parses an `impl` block and emits an API descriptor |
 | `#[bridge::api(service = "Engine", key = "doc_id")]` | Stateful service with instance key |
 | `#[bridge::pure]` | Stateless function (no `&self`) |
-| `#[bridge::read]` | Read-only method (`&self`) |
+| `#[bridge::read(scope = "...")]` | Read-only method with an access-control scope |
+| `#[bridge::write(scope = "...")]` | Mutating method with an access-control scope |
+| `#[bridge::structural(scope = "...")]` | Structural sheet/workbook mutation |
+| `#[bridge::session]` | Interior-mutable session method on `ComputeService` |
 | `#[bridge::lifecycle(create)]` | Instance lifecycle (create/destroy) |
+| `#[bridge::skip(...)]` | Excludes a method from selected targets such as `napi`, `wasm`, `tauri`, or `ts_bridge` |
+| `#[bridge::parse]` | Marks string parameters that target bindings parse into Rust wrapper types |
 
-The generated code handles serialization (JSON via `serde`), error mapping, and transport dispatch. On the TS side, the generated client calls through a `BridgeTransport` interface.
+Generated Rust binding code handles per-target serialization and bridge error envelopes. On the TS side, `compute-bridge.gen.ts` calls through a `BridgeTransport` interface and `ComputeCore` wraps write calls with the mutation pipeline.
 
-**Transport layer** (`infra/transport/` — `@mog/transport`):
+**Transport layer** (`infra/transport/` — private `@mog/transport` package):
 
-Transport implementations live in their own package `infra/transport/` — the kernel is transport-agnostic and receives a pre-configured `BridgeTransport` via dependency injection.
+Transport implementations live in `infra/transport/`. `ComputeCore` consumes a `BridgeTransport`; `createComputeBridge()` uses the transport factory, while `createComputeBridgeFromTransport()` accepts a host-supplied transport. The transport package has no kernel dependency, but the kernel imports its factory/errors at composition and recovery points.
 
-- `createTransport(config?)` -- Factory in `transport/factory.ts`. Auto-detects N-API, Tauri, then WASM, and returns a composed `BridgeTransport`.
+- `createTransport(config?)` -- Factory in `transport/factory.ts`. Auto-detects N-API, Tauri, then WASM unless `explicitRuntime`/`forbidAutoDetect` are supplied, and returns a composed `BridgeTransport`.
 - `createTauriTransport()` -- Wraps `@tauri-apps/api/core invoke()` for desktop. Lazy-loads the Tauri module.
 - `createWasmTransport()` -- Calls WASM module functions directly. Converts named args to positional via `Object.values()`.
-- `createTimeInjectingTransport()` / `createNapiTimeInjectingTransport()` -- Middleware that injects `compute_set_current_time()` before recalc-triggering commands in WASM and N-API runtimes.
+- `createTimeInjectingTransport()` / `createNapiTimeInjectingTransport()` -- Middleware that injects `compute_set_current_time()` before recalc-triggering commands in WASM and N-API runtimes, using the session timezone callback when provided.
+- `createCaseNormalizingTransport()` -- Middleware used on the WASM path so Rust `snake_case` results match the N-API/TS `camelCase` shape.
 - `createBytesTupleNormalizingTransport()` -- Middleware that normalizes packed binary tuple return format from Tauri and N-API.
 - `createNapiTransport()` / `createLazyNapiTransport()` / `createHeadlessNapiTransport()` -- N-API bindings for Node.js and headless runtimes.
 - `isTauri()` -- Consolidated environment detection from `infra/transport/src/detection.ts`.
-- `TransportError` -- Platform-level error class (no kernel dependency). Kernel's `BridgeError.fromCommand()` wraps it as `cause`.
+- `TransportError` / `TrapError` -- Platform-level errors. `TrapError` marks a dead WASM instance so `ComputeCore` can enter trap recovery and reset the WASM module.
 - `WasmInitFn[]` callbacks -- WASM loader accepts init callbacks (e.g., `initTableWasm`, `initChartWasm`) instead of hardcoding cross-bridge dependencies.
 
 ## Binary Data Plane
@@ -103,7 +111,7 @@ Serialized by `serialize_viewport_binary()` (`compute-wire/src/viewport/mod.rs`)
 | 26 | 2 | `row_dim_count` | Number of row dimension records |
 | 28 | 2 | `col_dim_count` | Number of column dimension records |
 | 30 | 1 | `flags` | Bit 0: is_delta; bits 4-7: wire protocol version |
-| 31 | 1 | `generation` | Mutation/fetch generation byte carried on the wire |
+| 31 | 1 | `generation` | Caller-supplied generation byte; production viewport emitters currently pass `0` |
 | 32 | 2 | `data_bar_count` | Number of data bar CF entries |
 | 34 | 2 | `icon_count` | Number of icon CF entries |
 
@@ -149,7 +157,7 @@ Serialized by `serialize_mutation_result()` / `serialize_mutation_result_for_vie
 | 4 | 4 | `string_bytes` | Total bytes in string pool |
 | 8 | 2 | `sheet_id_len` | Length of sheet_id UTF-8 string |
 | 10 | 1 | `flags` | Bit 0: `has_projection_changes`, Bit 1: `has_errors`, Bit 2: `has_palette` |
-| 11 | 1 | `generation` | Mutation generation counter |
+| 11 | 1 | `generation` | Caller-supplied generation byte; production mutation patch emitters currently pass `0` |
 | 12 | 4 | `reserved` | Reserved for future use |
 
 **Cell Patch (40 bytes):**
@@ -165,6 +173,18 @@ The 32-byte cell record within each patch is identical to the viewport cell reco
 **Spill Section** (present when header `flags` bit 0 is set): `proj_count:u32` followed by `proj_count * 40` bytes of spill/projection cell patches (same patch format, with `IS_SPILL_MEMBER` flag set).
 
 **Palette Section** (present when header `flags` bit 2 is set): `palette_start_idx:u16`, `palette_bytes_len:u32`, followed by binary palette bytes.
+
+### Multi-Viewport Patch Wrapper
+
+Mutation methods return a tuple of packed viewport bytes plus `MutationResult`. The first item is a multi-viewport wrapper produced by `serialize_multi_viewport_patches()`:
+
+```
+[u16 viewport_count]
+for each viewport:
+  [u8 id_len] [id_bytes UTF-8] [u32 patch_len] [patch_bytes...]
+```
+
+`patch_bytes` is usually a mutation blob. For broad visual or geometry effects, Rust can put a full viewport binary in the same wrapper; `ViewportCoordinatorRegistry.applyMultiViewportPatches()` detects Rust-emitted full viewport binaries by the `WIRE_VERSION` bits in byte 30 and commits them through the full-fetch path.
 
 ### Shared Constants
 
@@ -199,9 +219,11 @@ All wire format constants are defined once in Rust and generated to TypeScript:
 | `DATA_BAR_ENTRY_STRIDE` | 24 | Bytes per data bar entry |
 | `ICON_ENTRY_STRIDE` | 8 | Bytes per icon entry |
 | `POSITION_ENTRY_SIZE` | 8 | Bytes per row/column position entry |
+| `PALETTE_HEADER_SIZE` | 8 | Binary palette header bytes |
+| `PALETTE_STR_REF_SIZE` | 6 | Binary palette string reference bytes |
 | `NO_STRING` | `0xFFFFFFFF` | Sentinel for "no string" |
 
-The TS file `constants.gen.ts` is produced by `generate_ts.rs` and must not be edited by hand.
+The TS file `constants.gen.ts` is produced by `generate_ts.rs` and must not be edited by hand. It also includes generated icon-set names and Rust `CellFormat` field names used by TS drift tests.
 
 ## TypeScript Consumption
 
@@ -215,7 +237,7 @@ The TS file `constants.gen.ts` is produced by `generate_ts.rs` and must not be e
 - **CellAccessor flyweight.** A single reusable object is repositioned to different cell offsets. The renderer calls `cellAt(row, col)` which computes `HEADER_SIZE + (row * cols + col) * CELL_STRIDE` and returns the accessor pointing at that offset.
 - **In-place mutation patching.** Mutation patches write directly into the viewport buffer's cell record area. `ViewportCoordinator` separately stores decoded overlay entries only so mutations that arrive during an async fetch can be re-applied after fetch commit.
 - **Overflow string pool.** Mutation patches may reference new strings not in the original viewport's string pool. These are appended to a growable overflow pool. `display_off >= mainPoolSize` means read from overflow. Cleared on next full viewport fetch.
-- **Delta merging.** `getViewportBinaryDelta()` fetches only the changed strip (e.g., new rows after scroll). The delta is merged into the existing buffer, including string-pool and binary palette rebasing.
+- **Delta merging.** `getViewportBinaryDelta()` fetches only the changed strip (e.g., new rows after scroll). The delta is merged into the existing buffer with string-pool, overflow-pool, merge/dimension, and binary palette rebasing. Current TS delta merge synthesizes a local cache buffer and does not preserve CF extras or position arrays; use full fetch/force-refresh when callers need a complete Rust-emitted viewport binary.
 - **String decode cache.** `TextDecoder.decode()` results are cached by byte offset. Invalidated per-cell on patch.
 
 ### BinaryMutationReader
@@ -270,7 +292,9 @@ User scrolls / resize / sheet switch
 ### 2. Scroll Delta
 
 ```
-User scrolls within prefetch bounds
+User scrolls outside the current prefetch bounds, but the new prefetch rectangle overlaps the existing buffer
+  → ViewportFetchManager.refresh() computes the new prefetch rectangle
+  → compute_register_viewport(viewportId, newPrefetchBounds)
   → BridgeTransport.call("compute_get_viewport_binary_delta", ...)
     → Rust: serialize_viewport_binary(is_delta=true, palette_start_index=N)
     ← Uint8Array (only new strip + new palette entries)
@@ -283,7 +307,8 @@ User scrolls within prefetch bounds
 
 ```
 User edits a cell
-  → ComputeBridge.setCell(...) delegates to ComputeCore.mutateCore(...)
+  → ComputeBridge.setCell(...) delegates to ComputeCore.mutate(...)
+    → ComputeCore.mutateCore(...)
     → BridgeTransport.call("compute_set_cell", ...)
       → Rust: set_cell → recalc → produce_viewport_patches()
       → Rust: serialize_mutation_result_for_viewport(...) per registered viewport
@@ -312,6 +337,9 @@ User edits a cell
 | `compute/core/crates/compute-wire/src/palette.rs` | `FormatPalette` -- format deduplication |
 | `compute/core/crates/compute-wire/src/palette_binary/` | Binary palette encoder/decoder |
 | `compute/core/crates/compute-wire/src/types.rs` | `ViewportRenderData`, `ViewportRenderCell`, etc. |
+| `compute/core/src/storage/engine/viewport/mod.rs` | Bridge methods for full/delta viewport binary fetches |
+| `compute/core/src/storage/engine/viewport/patches.rs` | Multi-viewport patch production after mutations |
+| `compute/api/src/bridge_service.rs` | `ComputeService` delegate surface consumed by FFI binding crates |
 | `compute/core/crates/compute-wire/src/bin/generate_ts.rs` | TS constant generator binary |
 
 ### TypeScript (Consumers)
@@ -333,7 +361,8 @@ User edits a cell
 
 | File | Role |
 |------|------|
-| `infra/rust-bridge/bridge-core/src/lib.rs` | `#[bridge::api]` proc-macro for JSON control plane |
+| `infra/rust-bridge/bridge-core/src/lib.rs` | `#[bridge::api]` proc-macro and descriptor emitter |
+| `infra/rust-bridge/bridge-ts/tests/generate_compute_bridge.rs` | Generator for `compute-bridge.gen.ts`, `compute-types.gen.ts`, and `manifest.gen.ts` |
 
 ## Two-Pipeline Viewport Architecture
 
@@ -343,7 +372,7 @@ The viewport buffer is written by two primary paths with different triggers and 
 
 2. **Viewport movement pipeline (asynchronous, TS-driven).** When the user scrolls, resizes, or switches sheets, `ViewportFetchManager.refresh()` registers the viewport bounds, captures the coordinator's fetch epoch, and fetches a fresh viewport blob from Rust. Superseded movement fetches are discarded with per-viewport sequence tokens.
 
-**Coordinator epochs are the seam between the two pipelines.** A mutation applied during an async fetch receives an overlay epoch greater than the fetch epoch. When the fetch response commits, `ViewportCoordinator` replaces the base buffer, drops overlay entries already covered by the fetch, and re-applies entries with `epoch > fetchEpoch`.
+**Coordinator epochs are the consistency boundary between the two pipelines.** A mutation applied during an async fetch receives an overlay epoch greater than the fetch epoch. When the fetch response commits, `ViewportCoordinator` replaces the base buffer, drops overlay entries already covered by the fetch, and re-applies entries with `epoch > fetchEpoch`.
 
 This epoch contract is the consistency boundary: mutation responses are authoritative immediately, while viewport fetches can replace buffered data without losing mutations that landed during their round trip.
 
@@ -356,3 +385,11 @@ cargo run -p compute-wire --bin generate-ts > kernel/src/bridges/wire/constants.
 ```
 
 The generated file (`constants.gen.ts`) is checked into version control so that TS builds do not require Rust tooling. The header comment in the generated file identifies the source and regeneration command.
+
+If the binary protocol changes, also regenerate the Rust-produced TS roundtrip fixtures:
+
+```bash
+cargo run -p compute-wire --bin generate-test-fixtures
+```
+
+This writes fixture pairs under `kernel/src/bridges/wire/__tests__/fixtures/`; those files are consumed by `cross-language-roundtrip.test.ts`.

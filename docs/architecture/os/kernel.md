@@ -1,6 +1,18 @@
 # Kernel
 
-The kernel is Mog's TypeScript data and API layer. It owns document lifecycle wiring, the public Workbook/Worksheet API, low-level namespace APIs, app-facing API wrappers, system services, and the EventBus. Spreadsheet mutation and formula recalculation run in Rust compute-core through the `ComputeBridge`; the kernel adapts those results into TypeScript APIs, caches, services, and semantic events.
+> **Status: architecture reference.** The `kernel` workspace package is
+> `@mog-sdk/kernel`, but its package manifest is `private: true` and the package
+> inventory classifies the root package as workspace-internal. Public headless
+> Node consumers should use the shipped `@mog-sdk/node` facade; browser hosts
+> should use shipped public packages such as `@mog-sdk/embed`,
+> `@mog-sdk/spreadsheet-app`, or `@mog-sdk/sheet-view`.
+
+The kernel is Mog's TypeScript data and API implementation layer. It owns
+document lifecycle wiring, the Workbook/Worksheet implementation, low-level
+namespace APIs, workspace-internal app-facing API wrappers, system services, and
+the EventBus. Spreadsheet mutation and formula recalculation run in Rust
+compute-core through the `ComputeBridge`; the kernel adapts those results into
+TypeScript APIs, caches, services, and semantic events.
 
 ## Overview
 
@@ -17,9 +29,9 @@ kernel/
 |   |-- keyboard/             # Keyboard shortcut processing
 |   |-- errors/               # Error types and codes
 |   |-- floating-objects/     # Document-scoped floating object management
-|   |-- storage/              # Public storage subpath
-|   `-- security/             # Public security/capability subpath
-|-- host-internal/            # Host-only integration surface
+|   |-- storage/              # Public-experimental storage subpath
+|   `-- security/             # Public-experimental security/capability subpath
+|-- host-internal/            # Workspace-internal trusted host adapter surface
 `-- __tests__/                # Test suites
 ```
 
@@ -27,28 +39,55 @@ kernel/
 
 ### Unified Workbook/Worksheet API
 
-`createWorkbook()` is the stable, recommended entry point. It can bootstrap a blank workbook or XLSX source, or bind to an existing kernel context. `WorkbookImpl` and `WorksheetImpl` are implementation details; consumers use the contract interfaces returned by the factory.
+`createWorkbook()` is the stable implementation entry point used by public
+facades and monorepo integrations. In the current public package set, the
+copy-paste supported headless entry point is `@mog-sdk/node`, not a direct
+runtime dependency on `@mog-sdk/kernel`.
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/kernel';
+import { createWorkbook } from '@mog-sdk/node';
 
-const wb = await createWorkbook({ userTimezone: 'America/Los_Angeles' });
+const wb = await createWorkbook({ userTimezone: 'UTC' });
 const ws = wb.activeSheet;
 
 await ws.setCell('A1', 42);
-await ws.setCell(0, 1, '=A1*2');
-const value = await ws.getCell('B1');
+await ws.setCell(1, 0, '=A1*2'); // A2 by zero-based row/column
+const value = await ws.getValue('A2');
 
 await wb.history.undo();
+wb.dispose();
 ```
 
-Workbook sub-APIs include sheet management, history, names, scenarios, styles, protection, notifications, theme/style catalogs, workbook links, and viewport regions. Worksheet sub-APIs cover cells/ranges plus charts, comments, filters, formatting, tables, validation, structure, layout, outline, pivots, slicers, sparklines, floating objects, print, view, settings, and related worksheet features.
+`kernel/src/api/workbook/create-workbook.ts` can also bootstrap from XLSX bytes
+or bind to an existing kernel context. The public Node facade adds file-path and
+native N-API setup around that implementation. `WorkbookImpl` and
+`WorksheetImpl` are implementation details; callers should use the contract
+interfaces returned by the factory.
 
-All modern write operations are async because they call through `ComputeBridge` into Rust and return after mutation/recalculation results have been processed.
+Workbook sub-APIs currently exposed by the contract include `sheets`,
+`history`, `names`, `scenarios`, `tableStyles`, `cellStyles`, `slicerStyles`,
+`timelineStyles`, `pivotTableStyles`, `functions`, `properties`, `protection`,
+`security`, `notifications`, `theme`, `viewport`, `changes`, `diagnostics`,
+`links`, `slicers`, and `records`.
+
+Worksheet sub-APIs currently exposed by the contract include `cells`, `changes`,
+`formats`, `layout`, `view`, `structure`, `charts`, `objects`, typed floating
+object collections (`shapes`, `pictures`, `textBoxes`, `drawings`, `equations`,
+`textEffects`, `connectors`), `filters`, `formControls`,
+`conditionalFormats`, `validations`, `tables`, `pivots`, `slicers`,
+`sparklines`, `comments`, `customProperties`, `hyperlinks`, `outline`,
+`protection`, `print`, `settings`, `bindings`, `names`, `styles`, `diagrams`,
+and `whatIf`.
+
+Cell/range writes and most workbook/worksheet mutations are async because they
+call through `ComputeBridge` into Rust and return after mutation/recalculation
+results have been processed. A small number of cached state accessors and
+infrastructure helpers remain synchronous where the contract declares them so.
 
 ### Namespace API
 
-`kernel/src/api/namespaces/` exposes experimental low-level functions for callers that need explicit context passing:
+`kernel/src/api/namespaces/` exposes experimental low-level functions for
+monorepo callers that already own an explicit `IKernelContext`:
 
 ```typescript
 import { Cells, Records, Sheets } from '@mog-sdk/kernel/api';
@@ -63,10 +102,22 @@ These functions take an `IKernelContext`. `Sheets` is primarily metadata and vie
 
 ### Document Lifecycle
 
-`DocumentFactory` creates document handles and contexts for monorepo lifecycle code. Public SDK consumers should normally use `createWorkbook()`; document-first integrations can use the document APIs when they need explicit handle disposal.
+`DocumentFactory` creates document handles and contexts for monorepo lifecycle
+code. In the kernel API barrel it is documented as internal; the root barrel
+exports a narrowed facade that omits the host-context bypass. Public SDK
+consumers should normally use `@mog-sdk/node` `createWorkbook()` or the public
+`MogDocumentFactory` facade from `@mog-sdk/node`. Direct `DocumentFactory` usage
+is an advanced workspace integration path, not the primary published npm
+contract.
 
 ```typescript
-const handle = await DocumentFactory.create({ documentId });
+import { DocumentFactory } from '@mog-sdk/kernel/api';
+
+const handle = await DocumentFactory.create({
+  documentId: 'doc-example',
+  environment: 'headless',
+  userTimezone: 'UTC',
+});
 const workbook = await handle.workbook();
 
 await handle.dispose();
@@ -77,13 +128,19 @@ The context model has four tiers:
 | Tier | Interface | Audience |
 | ---- | --------- | -------- |
 | 1 | `IDomainContext` | Domain modules: event bus and undo labeling |
-| 2 | `IKernelContext` | General app code: services, session metadata, lifecycle |
-| 3 | `ISpreadsheetKernelContext` | Spreadsheet shell/app: spreadsheet bridges and mirror |
-| 4 | `DocumentContext` | Engine internals: compute bridge and viewport buffers |
+| 2 | `IKernelContext` | General kernel code: services, session metadata, security principal resolver, lifecycle |
+| 3 | `ISpreadsheetKernelContext` | Spreadsheet shell/app: spreadsheet bridges, object manager, mirror |
+| 4 | `DocumentContext` | Engine internals: write/operation gates, workbook links, compute bridge, selection checkpoints |
 
 ### Capability-Gated App API
 
-`kernel/src/api/app/` provides infrastructure for future third-party apps. It exposes database-like table, column, record, relation, event, clipboard, undo, and binding APIs over the spreadsheet kernel, then wraps them in capability-gated scoped APIs. The spreadsheet app itself uses the unified Workbook/Worksheet API directly as trusted OS-level code.
+`kernel/src/api/app/` is workspace-internal infrastructure for a future
+third-party app platform. It exposes database-like table, column, record,
+relation, event, clipboard, undo, network, connection, and binding APIs over the
+spreadsheet kernel, then wraps them in capability-gated scoped APIs. The module
+README marks this path as forward-looking with no active third-party app
+consumers. The spreadsheet app itself uses the unified Workbook/Worksheet API
+directly as trusted OS-level code.
 
 App-facing records use opaque IDs (`AppTableId`, `AppColumnId`, `RecordId`) and map internally to spreadsheet table IDs, `ColId`, and row identities or row indices as needed.
 
@@ -130,6 +187,8 @@ interface IUndoService {
   getState(): UndoServiceState;
   canUndo(): boolean;
   canRedo(): boolean;
+  getNextUndoDescription(): string | null;
+  getNextRedoDescription(): string | null;
   undo(): Promise<Result<void, UndoError>>;
   redo(): Promise<Result<void, UndoError>>;
   clear(): void;

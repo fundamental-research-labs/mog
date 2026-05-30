@@ -1,601 +1,436 @@
 # API Layer Architecture
 
-The API layer spans four areas that together form the full pipeline from Rust computation to TypeScript consumption:
+> **Status: architecture reference.** Public consumers should start with
+> `@mog-sdk/node` for headless Node.js usage and the embed packages for browser
+> usage. `@mog-sdk/kernel`, `@mog/transport`, and `infra/rust-bridge/*` are
+> workspace-internal implementation packages in the current manifests, even
+> though they define most of the API-layer mechanics described here.
+
+The API layer connects public SDK calls to the Rust spreadsheet engine through a
+TypeScript kernel, generated bridge methods, and platform-specific transports.
 
 ```
-Rust compute-core/api          infra/rust-bridge           infra/transport              kernel/src/api/
-(engine + bridge facade)       (codegen framework)         (platform transport)         (TypeScript API surface)
+Public SDK / runtime facade        Workspace TS kernel              Bridge + transport                Rust engine
+@mog-sdk/node                      @mog-sdk/kernel (private)        @mog/transport (private)          compute-api / compute-core
+runtime/sdk/src/boot.ts      ->    kernel/src/api/            ->    BridgeTransport.call(...)   ->    ComputeService
+createWorkbook()                   Workbook / Worksheet             N-API / Tauri / WASM              YrsComputeEngine
 
-#[bridge::api]          -->    Proc macros emit            createTransport() -->        Workbook / Worksheet
-impl YrsComputeEngine {        descriptors for:                                         (high-level OOP)
-  #[bridge::read]              - Tauri commands             TauriTransport
-  fn get(...)                  - WASM bindings              WasmTransport               Cells / Sheets / Records
-  #[bridge::write]             - N-API bindings             NapiTransport               (low-level namespace)
-  fn set(...)                  - PyO3 bindings
-}                              - TS client + types
-                               ComputeService facade
-                                                                                        DocumentFactory
-                                                                                        (lifecycle)
+Contracts and generated metadata:
+@mog-sdk/contracts                 runtime/sdk/src/generated/api-spec.json
+types/api/src/api/*                kernel/src/bridges/compute/*.gen.ts
 ```
 
----
+## Package Disposition
 
-## 1. Kernel API (`kernel/src/api/`)
+| Package or path | Current status | Role |
+| --- | --- | --- |
+| `runtime/sdk` (`@mog-sdk/node`) | public shipped | Headless Node.js SDK. Exports `createWorkbook`, contract types, SDK errors/events, `MogDocumentFactory`, and API introspection metadata. |
+| `contracts` (`@mog-sdk/contracts`) | public shipped | Public type and small runtime-value barrel for workbook, worksheet, events, core cell types, document, SDK, and app contracts. |
+| `runtime/embed` (`@mog-sdk/embed`) | public shipped | Read-only sheet/view embed package. |
+| `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) | public shipped | Full spreadsheet app embed for trusted same-origin hosts. |
+| `views/sheet-view` (`@mog-sdk/sheet-view`) | public shipped | Reusable sheet view package. It binds through a SheetView data-source boundary rather than re-exporting kernel internals. |
+| `kernel` (`@mog-sdk/kernel`) | workspace-internal | Canonical TypeScript implementation of document lifecycle, `createWorkbook`, `WorkbookImpl`, `WorksheetImpl`, app-scoped APIs, and compute bridge wiring. The package manifest is `private: true`. |
+| `infra/transport` (`@mog/transport`) | workspace-internal | `BridgeTransport` implementations for N-API, Tauri, and WASM. The package manifest is `private: true`. |
+| `infra/rust-bridge/*` | workspace-internal | Rust proc macros, bridge IR, target generators, and the TypeScript bridge client interface. |
+| `compute/pyo3` (`mog-sdk`, import `mog`) | public-experimental source | Native Python SDK source exists and is marked alpha in `pyproject.toml`; release status should be confirmed before documenting it as shipped. |
 
-The TypeScript API surface that apps, LLM-generated code, and the headless runtime all consume.
+## Public Node Path
 
-### Three API Styles
-
-| Style | Location | Audience | Pattern |
-|-------|----------|----------|---------|
-| **Unified API** | `workbook/`, `worksheet/` | Apps, LLM, browser UI | OOP with sub-APIs |
-| **Namespace API** | `namespaces/` | Headless, backend | Stateless functions |
-| **Document Factory** | `document/` | Lifecycle management | Factory returning handles |
-
-### Unified API (Primary)
+The current copy-paste public API path is `@mog-sdk/node`:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/kernel/api';
+import { createWorkbook } from '@mog-sdk/node';
+
+const wb = await createWorkbook({ userTimezone: 'UTC' });
+const ws = wb.activeSheet;
+
+await ws.setCell('A1', 42);
+await ws.setCell(1, 0, '=A1*2'); // A2 by zero-based row/column
+
+console.log(await ws.getValue('A2')); // 84
+
+wb.dispose();
+```
+
+The Node SDK accepts blank workbooks, `Uint8Array` XLSX bytes, file paths, and
+an options object. Internally it creates a host-backed headless document,
+loads the N-API addon through the optional platform packages, registers the
+Node chart exporter, asks the document handle for its cached workbook, and
+chains workbook disposal to document and host disposal.
+
+External SDK users should prefer this public facade. Direct imports from
+`@mog-sdk/kernel` are monorepo/workspace integration points, not a published npm
+contract in the current package manifest.
+
+## API Sources of Truth
+
+The high-level workbook/worksheet contract is defined in TypeScript contract
+files. Generated SDK metadata is derived from those contracts; this document is
+not a contract source.
+
+| Source | Purpose |
+| --- | --- |
+| `types/api/src/api/workbook.ts` | `Workbook` root contract and workbook sub-API accessors. |
+| `types/api/src/api/worksheet.ts` | `Worksheet` root contract and worksheet sub-API accessors. |
+| `types/api/src/api/workbook/*` | Workbook sub-API interfaces. |
+| `types/api/src/api/worksheet/*` | Worksheet sub-API interfaces. |
+| `kernel/src/api/workbook/workbook-impl.ts` | Canonical workbook implementation. |
+| `kernel/src/api/worksheet/worksheet-impl.ts` | Canonical worksheet implementation. |
+| `runtime/sdk/src/generated/api-spec.json` | Generated public SDK metadata used for API introspection. |
+| `runtime/sdk/src/api-describe.ts` | Programmatic SDK API discovery over the generated spec. |
+
+Generated API metadata currently lists these workbook sub-APIs:
+
+```
+cellStyles, changes, diagnostics, functions, history, links, names,
+notifications, pivotTableStyles, properties, protection, scenarios, security,
+sheets, slicerStyles, slicers, tableStyles, theme, timelineStyles, viewport
+```
+
+And these worksheet sub-APIs:
+
+```
+bindings, cells, changes, charts, comments, conditionalFormats, connectors,
+customProperties, diagrams, drawings, equations, filters, formControls,
+formats, hyperlinks, layout, names, objects, outline, pictures, pivots, print,
+protection, settings, shapes, slicers, sparklines, structure, styles, tables,
+textBoxes, textEffects, validations, view, whatIf
+```
+
+Those lists should be regenerated from `runtime/sdk/src/generated/api-spec.json`
+or the `types/api` contracts when they drift.
+
+## Kernel API
+
+`kernel/src/api/index.ts` documents three API styles with explicit stability
+labels:
+
+| Style | Status in kernel source | Audience |
+| --- | --- | --- |
+| Unified API, `createWorkbook()` | stable implementation surface | Public facades and monorepo integrations. |
+| Namespace APIs, `Cells`, `Sheets`, `Records` | experimental | Low-level function-oriented calls that take an explicit `IKernelContext`. |
+| `DocumentFactory` lifecycle | internal in the kernel API barrel | Document-first monorepo paths and SDK facades. Public root-barrel access is narrowed separately. |
+
+The primary implementation path is the unified API:
+
+```typescript
+import { createWorkbook } from '@mog-sdk/node';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
 
-// Cell operations — A1 string or numeric (row, col) addressing
 await ws.setCell('A1', 42);
-await ws.setCell(0, 0, 42);        // equivalent
+await ws.setRange('B1:C2', [
+  [1, 2],
+  [3, 4],
+]);
 
-// Worksheet sub-APIs via lazy readonly properties
-await ws.formats.set('A1', { bold: true });
-await ws.charts.add({ type: 'bar', range: 'A1:D10' });
-await ws.structure.insertRows(5, 3);
-await ws.validations.set('B1:B100', { type: 'list', values: ['Yes', 'No'] });
+const value = await ws.getValue('A1');
+const cell = await ws.getCell('A1');
+const range = await ws.getRange('B1:C2');
 
-// Workbook sub-APIs
-await wb.history.undo();
-await wb.sheets.add('New Sheet');
+await wb.batch('bulk update', async (workbook) => {
+  await workbook.activeSheet.setCell('D1', '=SUM(B1:C2)');
+});
+
+wb.dispose();
 ```
 
-**Design rules:**
-- Single authoritative implementation (`WorkbookImpl`, `WorksheetImpl`), exposed at the top-level API through factories and interfaces
-- Compute-backed mutations are async (await Rust compute via ComputeBridge)
-- Errors throw directly (no `OperationResult` wrappers in modern code)
-- `batch()` groups operations into a single undo step
-- Sub-APIs are lazy-initialized (zero cost if unused)
+Important contract details:
 
-### Command Flow
+- `Workbook.activeSheet`, `Workbook.sheetCount`, `Worksheet.sheetId`,
+  `Worksheet.name`, and `Worksheet.index` are synchronous contract members.
+- Cell and range mutations are async because they call the Rust compute engine
+  and may trigger recalculation.
+- `Worksheet.setCell`, `getCell`, `getValue`, `setRange`, and `getRange`
+  support A1 strings and numeric row/column overloads where declared by the
+  `Worksheet` contract.
+- Errors throw directly from the API surface. The modern workbook/worksheet API
+  does not expose `OperationResult` wrappers.
+- `Workbook.batch(label, fn)` groups operations into one undo step. The older
+  `undoGroup(fn)` helper is still present in the generated metadata.
+- Sub-APIs are exposed as readonly properties and are lazily initialized by the
+  implementation.
+
+### Cell Write Flow
+
+Current `ws.setCell('A1', 42)` flow:
 
 ```
-ws.setCell("A1", value)
-  → address-resolver.ts: resolveCell("A1") → { row: 0, col: 0 }
-  → cell-operations.ts: CellOps.setCell(ctx, sheetId, 0, 0, value)
-  → ctx.computeBridge.setCellsByPosition(sheetId, [{ row: 0, col: 0, input }])
-  → BridgeTransport.call("compute_batch_set_cells_by_position", ...)
-  → Rust: batch_set_cells_by_position → recalc → mutation result
-  → EventBus emits change events
+WorksheetImpl.setCell(...)
+  -> address-resolver.ts resolves "A1" to { row: 0, col: 0 }
+  -> CellOps.setCell(ctx, sheetId, 0, 0, 42)
+  -> prepareExternalFormulaWrite(...) and toCellInput(...)
+  -> ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }])
+  -> ComputeBridge batches as [sheetId, row, col, input]
+  -> BridgeTransport.call("compute_batch_set_cells_by_position", ...)
+  -> generated N-API / Tauri / WASM binding
+  -> compute_api::ComputeService / compute-core mutation and recalculation
+  -> [Uint8Array, MutationResult] return
+  -> ComputeCore.mutate(...) applies mutation data and emits events
 ```
 
-### Workbook Sub-APIs (Selected)
+The binary `Uint8Array` in mutation results is the high-frequency data plane
+used by viewport buffers and render-path consumers. Structured metadata remains
+available through the JSON control plane.
 
-| Sub-API | Scope | Key Methods |
-|---------|-------|-------------|
-| `wb.sheets` | Workbook | `add()`, `remove()`, `move()`, `rename()`, `copy()`, `hide()`, `show()` |
-| `wb.history` | Workbook | `undo()`, `redo()`, `canUndo()`, `canRedo()` |
-| `wb.names` | Workbook | `add()`, `remove()`, `get()`, `list()`, `update()` |
-| `wb.scenarios` | Workbook | `add()`, `remove()`, `list()`, `apply()`, `restore()` |
-| `wb.cellStyles`, `wb.tableStyles`, `wb.pivotTableStyles` | Workbook | style add/get/update/default operations |
-| `wb.functions` | Workbook | programmatic function invocation |
-| `wb.properties` | Workbook | document properties and custom properties |
-| `wb.protection` | Workbook | `protect()`, `unprotect()`, `isProtected()` |
-| `wb.security` | Workbook | access-control policy operations |
-| `wb.notifications` | Workbook | `notify()`, `info()`, `success()`, `warning()`, `error()` |
-| `wb.viewport` | Consumer | `createRegion()` → disposable handle |
-| `wb.changes`, `wb.diagnostics`, `wb.links`, `wb.records` | Workbook | change tracking, audit/status, links, table record access |
+### Namespace APIs
 
-### Worksheet Sub-APIs (Selected)
-
-| Sub-API | Key Methods |
-|---------|-------------|
-| `ws.charts` | `add()`, `get()`, `list()`, `remove()`, `update()` |
-| `ws.comments` | `addNote()`, `getNote()`, `removeNote()`, `add()` (threaded) |
-| `ws.conditionalFormats` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.filters` | `setAutoFilter()`, `clearAutoFilter()`, `getAutoFilter()` |
-| `ws.formats` | `get()`, `set()`, `setRange()`, `clearRange()` |
-| `ws.hyperlinks` | `set()`, `get()`, `has()`, `remove()`, `list()` |
-| `ws.tables` | `add()`, `remove()`, `get()`, `list()`, `rename()`, `update()` |
-| `ws.validations` | `set()`, `get()`, `remove()` |
-| `ws.structure` | `insertRows()`, `deleteRows()`, `insertColumns()`, `deleteColumns()`, `merge()`, `unmerge()` |
-| `ws.layout` | Row/column dimensions, visibility, pixel positions |
-| `ws.outline` | `groupRows()`, `groupColumns()`, `toggleCollapsed()`, `getLevel()` |
-| `ws.pivots` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.slicers` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.sparklines` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.pictures` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.shapes` | `add()`, `remove()`, `get()`, `list()` |
-| `ws.objects`, `ws.connectors`, `ws.drawings`, `ws.equations`, `ws.textBoxes`, `ws.textEffects` | Floating object collections |
-| `ws.formControls` | Checkbox, button, combo box controls |
-| `ws.protection` | `protect()`, `unprotect()`, `isProtected()` |
-| `ws.view` | `freezePanes()`, `getFrozenPanes()`, `setSplitConfig()` |
-| `ws.bindings` | Named range bindings |
-| `ws.print` | Print area and settings |
-| `ws.settings` | Sheet visibility, tab color, etc. |
-| `ws.changes`, `ws.customProperties`, `ws.names`, `ws.styles`, `ws.whatIf` | Change tracking, metadata, sheet names/styles, analysis |
-
-### Worksheet Core Methods
-
-```typescript
-// Cell I/O
-await ws.setCell('A1', 42);
-await ws.getCell('A1');                    // → CellData
-
-// Range I/O
-await ws.setRange('A1:C3', [[1,2,3],[4,5,6],[7,8,9]]);
-await ws.getRange('A1:C3');                // → CellData[][]
-await ws.clear('A1:C3');
-
-// Metadata
-await ws.getName();
-ws.getIndex();
-ws.getSheetId();
-await ws.getVisibility();
-await ws.getUsedRange();                   // → CellRange | null
-
-// Search
-await ws.findInRange('A1:D20', 'pattern', options);
-await ws.regexSearch(['pattern'], options);
-```
-
-### Namespace API (Low-Level)
-
-Stateless functions taking explicit context — used by headless/backend systems:
+The namespace APIs are real, but they are explicitly experimental and require a
+kernel context:
 
 ```typescript
 import { Cells, Sheets, Records } from '@mog-sdk/kernel/api';
 
-const data = await Cells.getData(ctx, sheetId, row, col);
+const value = await Cells.getValue(ctx, sheetId, 0, 0);
 const name = await Sheets.getName(ctx, sheetId);
-const records = await Records.query(ctx, tableId, filter);
+const rows = await Records.query(ctx, tableId, { field: 'Status', equals: 'Open' });
 ```
+
+Use these for monorepo/headless implementation work that already owns an
+`IKernelContext`. Public SDK examples should use `createWorkbook()` and the
+workbook/worksheet object model instead.
 
 ### Document Lifecycle
 
-```typescript
-import { DocumentFactory, createWorkbook } from '@mog-sdk/kernel/api';
-
-// High-level path: createWorkbook bootstraps the document handle internally.
-const wb = await createWorkbook({ documentId });
-
-// Document-first path: creates a handle and asks the handle for its workbook.
-const handle = await DocumentFactory.create({ documentId });
-// handle.initialSheetId: SheetId
-
-const handledWorkbook = await handle.workbook();
-
-// Use workbook...
-const ws = handledWorkbook.getSheetById(handle.initialSheetId);
-
-// Dispose (MUST call for document handles)
-handledWorkbook.dispose();  // also disposes the owning handle for handle-created workbooks
-await handle.dispose();     // idempotent; flushes persistence and releases the document
-```
-
-### Handle-Based Resource Management
-
-Consumer-scoped resources return disposable handles:
+`DocumentFactory` creates document handles. The direct document-first path is
+an internal or advanced integration path; `createWorkbook()` is the stable
+application-facing path.
 
 ```typescript
-// Manual disposal
-const region = wb.viewport.createRegion(sheetId, bounds);
-region.updateBounds(newBounds);
-region.dispose();
+import { DocumentFactory } from '@mog-sdk/kernel/api';
 
-// TC39 Explicit Resource Management
-using region = wb.viewport.createRegion(sheetId, bounds);
-// auto-disposed at block exit
+const handle = await DocumentFactory.create({
+  documentId: 'doc-example',
+  environment: 'headless',
+  userTimezone: 'UTC',
+});
+
+const workbook = await handle.workbook();
+
+await workbook.activeSheet.setCell('A1', 'created through a handle');
+
+workbook.dispose();
+await handle.dispose(); // idempotent
 ```
 
-All handles implement `Symbol.dispose`. `wb.dispose()` cascades to all tracked handles.
+The public `DocumentHandle` exposes handle methods such as `workbook()`,
+`eventBus`, provider registration helpers, storage-state accessors, and
+`dispose()`. Raw `context` access is on `DocumentHandleInternal` for trusted
+kernel/monorepo code.
 
-### Four-Tier Context Architecture
+## Context Tiers
+
+Context types are defined in `types/api/src/kernel/kernel-context.ts`; the
+engine-internal extension is in `kernel/src/context/types.ts`.
 
 ```
-IDomainContext              (Tier 1)  eventBus + undo labeling              — domain modules
-IKernelContext              (Tier 2)  + services, destroy()                 — any app type
-ISpreadsheetKernelContext   (Tier 3)  + all spreadsheet bridges             — spreadsheet app, shell
-DocumentContext             (Tier 4)  + computeBridge, viewport buffer      — engine internals only
+IDomainContext              eventBus + undo labeling
+IKernelContext              + services, security principal resolver, userTimezone, destroy()
+ISpreadsheetKernelContext   + spreadsheet bridges, object manager, state mirror
+DocumentContext             + write/operation gates, workbook links, ComputeBridge, selection checkpoints
 ```
 
-`DocumentHandleInternal.context` returns Tier 3 for trusted monorepo code. Public `DocumentHandle` exposes handle methods such as `workbook()`, `eventBus`, and `dispose()` instead of raw context access. Internal kernel code casts to Tier 4 where engine access is needed.
+Domain modules should request the narrowest context type they need. Kernel
+internals cast to `DocumentContext` only where direct compute bridge or
+engine-internal services are required.
 
-### App API (Capability-Gated)
+## App API
 
-`kernel/src/api/app/` provides a capability-gated wrapper for third-party apps:
+`kernel/src/api/app/` is a monorepo-internal bridge from spreadsheet documents
+to app-facing APIs. `createAppKernelAPIFromHandle()` requires a trusted
+`DocumentHandleInternal` with raw context access. `runtime/spreadsheet-app`
+uses this path while composing the public full-app embed runtime.
+
+The capability-gated layer returns only interfaces granted to an app:
 
 ```typescript
-// Apps get scoped access — undefined for denied capabilities
-const api = createCapabilityGatedApi({ fullApi, appId, registry });
-api.tables?.add(...);    // only available if a tables capability is granted
-api.records?.query(...); // only available if the app has scoped table access
+const gated = createCapabilityGatedApi({ fullApi, appId, registry });
+
+gated.tables?.add(...);
+gated.records?.query(...);
+gated.network?.fetch(...);
 ```
 
-### Directory Structure
+Missing capabilities usually mean the corresponding sub-API property is absent,
+not that callers receive a late "permission denied" error from that property.
 
-```
-kernel/src/api/
-├── index.ts                    # Public barrel export
-├── namespaces/                 # Low-level function-oriented APIs
-│   ├── cells.ts
-│   ├── sheets.ts
-│   └── records.ts
-├── workbook/                   # Workbook implementation + sub-APIs
-│   ├── workbook-impl.ts        # THE implementation
-│   ├── history.ts, sheets.ts, names.ts, scenarios.ts, protection.ts,
-│   │   notifications.ts, viewport.ts, theme.ts, cell-styles.ts,
-│   │   table-styles.ts, pivot-styles.ts, slicers.ts, slicer-styles.ts,
-│   │   timeline-styles.ts, functions.ts, security.ts, properties.ts,
-│   │   changes.ts, diagnostics.ts, styles.ts
-│   └── operations/             # Sheet CRUD, scenario ops
-├── worksheet/                  # Worksheet implementation + sub-APIs
-│   ├── worksheet-impl.ts       # THE implementation
-│   ├── charts.ts, comments.ts, conditional-formats.ts, filters.ts,
-│   │   formats.ts, hyperlinks.ts, tables.ts, validation.ts,
-│   │   structure.ts, layout.ts, outline.ts, pivots.ts, slicers.ts,
-│   │   sparklines.ts, protection.ts, view.ts, bindings.ts, print.ts,
-│   │   settings.ts, objects.ts, diagrams.ts, form-controls.ts,
-│   │   changes.ts, custom-properties.ts, names.ts, styles.ts, what-if.ts
-│   ├── handles/                # Floating object handle types
-│   ├── collections/            # Floating object collection implementations
-│   └── operations/             # Mutation/query operation modules
-├── document/                   # DocumentFactory
-├── internal/                   # Address resolver, utilities, introspection
-├── app/                        # Capability-gated app API
-│   └── capability-gated/       # Permission enforcement
-└── __tests__/                  # Integration tests
-```
+## Rust Bridge Framework
 
----
+`infra/rust-bridge/` is the workspace-internal code generation framework. It is
+not UniFFI or raw `wasm-bindgen` hand-written glue. It parses Rust bridge
+annotations, emits descriptors, and lets target-specific generators produce
+N-API, WASM, Tauri, PyO3, TypeScript client, and metadata artifacts.
 
-## 2. rust-bridge Framework (`infra/rust-bridge/`)
+### Core Annotation Shape
 
-A custom multi-target bridge framework that generates bindings for Tauri, WASM, N-API, and PyO3 from a single Rust trait annotation. This is not uniffi or wasm-bindgen — it's a purpose-built codegen system.
-
-### How It Works
-
-```
-Phase 1: bridge-core (proc macro)
-  #[bridge::api] on Rust impl block
-    → Parses method signatures, parameter types, return types
-    → Classifies params: str, prim, bytes, serde, parse
-    → Emits descriptor macro (__bridge_descriptor_Engine_0!)
-
-Phase 2: Target-specific generators (each has generate!() macro)
-  bridge-tauri/  → #[tauri::command] functions + TauriRegistry<T>
-  bridge-napi/   → #[napi] functions + DashMap registries
-  bridge-wasm/   → #[wasm_bindgen] functions + thread-local registries
-  bridge-pyo3/   → #[pyclass]/#[pymethods] Python bindings
-
-Phase 3: bridge-ts (TypeScript generation)
-  → Parses Rust source for #[bridge::api] blocks
-  → Parses #[derive(Serialize)] structs/enums with serde attributes
-  → Emits TypeScript bridge methods + type definitions
-```
-
-### Rust Annotations
-
-**Stateless functions:**
 ```rust
-#[bridge::api]
-impl Utilities {
-    #[bridge::pure]
-    pub fn validate(input: &str) -> bool { ... }
-}
-```
-
-**Stateful services:**
-```rust
-#[bridge::api(service = "Engine", key = "doc_id")]
-impl Engine {
+#[bridge::api(service = "ComputeService", key = "doc_id", fn_prefix = "compute")]
+impl ComputeService {
     #[bridge::lifecycle(create)]
-    pub fn new(config: Config) -> Result<Self, MyError> { ... }
+    pub fn init(snapshot: WorkbookSnapshot) -> Result<(Self, RecalcResult), ComputeError> {
+        // ...
+    }
 
     #[bridge::read]
-    pub fn get(&self, key: &str) -> Result<String, MyError> { ... }
+    pub fn active_principal(&self) -> Option<Vec<String>> {
+        // ...
+    }
 
     #[bridge::write]
-    pub fn set(&mut self, key: &str, value: String) -> Result<(), MyError> { ... }
+    pub fn full_recalc(&mut self, options: RecalcOptions) -> Result<RecalcResult, ComputeError> {
+        // ...
+    }
 }
 ```
 
-### Annotation Reference
+Stateless bridge functions use `#[bridge::api]` plus `#[bridge::pure]` on
+plain associated functions. Compute also uses access-attribute metadata such as
+`scope = "cell" | "range" | "sheet" | "workbook"`, `needs_principal`, and
+`kind = "subscribe"` for downstream metadata and gated delegate generation.
 
-**Impl-level attributes:**
+Current bridge-core supports these public annotation categories in source:
 
-| Attribute | Purpose |
-|-----------|---------|
-| `#[bridge::api]` | Parse impl block, emit API descriptor |
-| `service = "TypeName"` | Marks as stateful service |
-| `key = "param_name"` | Instance key parameter (e.g., `doc_id`) |
-| `group = "name"` | Group multiple impl blocks into same service |
-| `fn_prefix = "prefix"` | Override command name prefix |
-| `crate_path = "crate_name"` | Rewrite `crate::` paths for self-contained descriptors |
+| Annotation | Purpose |
+| --- | --- |
+| `#[bridge::api(...)]` | Parses an impl block and emits an API descriptor macro. |
+| `#[bridge::pure]` | Stateless function. |
+| `#[bridge::read]` | Read query. |
+| `#[bridge::write]` | Mutation. |
+| `#[bridge::structural]` | Structural mutation, with stricter scope validation in delegate codegen. |
+| `#[bridge::lifecycle(create)]` / `create_from = "..."` | Service constructor paths. |
+| `#[bridge::async_read]` / `#[bridge::async_write]` | Async target method classification. |
+| `#[bridge::skip(...)]` | Exclude a method from selected targets. |
+| `#[bridge::parse]` | Parse a string-wire parameter through `BridgeParse`. |
 
-**Method-level attributes:**
+### Generated Artifacts
 
-| Attribute | Access | Description |
-|-----------|--------|-------------|
-| `#[bridge::pure]` | No self | Stateless function |
-| `#[bridge::read]` | `&self` | Read-only query |
-| `#[bridge::write]` | `&mut self` | Mutation |
-| `#[bridge::structural]` | `&mut self` | Structural mutation |
-| `#[bridge::async_read]` | `&self` | Async read |
-| `#[bridge::async_write]` | `&mut self` | Async mutation |
-| `#[bridge::lifecycle(create)]` | Constructor | Instance creation |
-| `#[bridge::skip(wasm, tauri, napi)]` | — | Exclude from specific targets |
-| `#[bridge::parse]` | Parameter | String-wire param, parsed in Rust via `BridgeParse` |
+| File | Current purpose |
+| --- | --- |
+| `kernel/src/bridges/compute/compute-bridge.gen.ts` | Generated TypeScript bridge methods that call `BridgeTransport`. |
+| `kernel/src/bridges/compute/compute-types.gen.ts` | Generated wire interfaces and unions from Rust/serde shapes. |
+| `kernel/src/bridges/compute/manifest.gen.ts` | Generated read/write/lifecycle method-kind metadata. |
+| `infra/transport/src/command-metadata.gen.ts` | Generated command metadata for recalc and binary tuple normalization. |
+| `infra/rust-bridge/bridge-ts/generated/xlsx-types.ts` | Generated XLSX parser TypeScript types. |
+| `infra/rust-bridge/bridge-ts/generated/ooxml-types.ts` | Generated OOXML vocabulary TypeScript types. |
+| `infra/culture/src/cultures.gen.ts` | Generated culture registry data. |
 
-**Parameter classification (auto-detected):**
-
-| Tag | Rust Type | Wire Format |
-|-----|-----------|-------------|
-| `[str]` | `&str`, `String` | String |
-| `[prim]` | `u32`, `f64`, `bool`, etc. | Primitive |
-| `[bytes]` | `&[u8]`, `Vec<u8>` | `Uint8Array` |
-| `[serde]` | Complex types | JSON |
-| `[parse]` | Explicit via `#[bridge::parse]` | String → `BridgeParse::bridge_parse()` |
-
-### Type Mapping (Rust → TypeScript)
-
-| Rust | TypeScript |
-|------|-----------|
-| `&str`, `String` | `string` |
-| `bool` | `boolean` |
-| `u8`..`u64`, `i8`..`i64`, `f32`, `f64` | `number` |
-| `&[u8]`, `Vec<u8>` | `Uint8Array` |
-| `Vec<T>`, `&[T]` | `T[]` |
-| `Option<T>` | `T \| null` |
-| `Result<T, E>` | `T` (error → Promise rejection) |
-| `HashMap<K, V>`, `BTreeMap<K, V>` | `Record<K, V>` |
-| `(T1, T2, ...)` | `[T1, T2, ...]` |
-| Custom named type | `TypeName` (named reference) |
-| `serde_json::Value` | `unknown` |
-
-### Generated TypeScript
-
-**Bridge method interface + implementation** (from `bridge-ts`):
+Generated bridge methods look like this in `compute-bridge.gen.ts`:
 
 ```typescript
-// Generated: kernel/src/bridges/compute/compute-bridge.gen.ts
-export interface GeneratedBridgeMethods {
-  getViewportBinary(
-    sheetId: SheetId,
-    startRow: number,
-    startCol: number,
-    endRow: number,
-    endCol: number,
-    showFormulas: boolean,
-  ): Promise<Uint8Array>;
-  batchSetCellsByPosition(
-    edits: [SheetId, number, number, CellInput][],
-    skipCycleCheck: boolean,
-  ): Promise<MutationResult>;
-}
-
-export class GeneratedBridgeBase implements GeneratedBridgeMethods {
-  batchSetCellsByPosition(
-    edits: [SheetId, number, number, CellInput][],
-    skipCycleCheck: boolean,
-  ): Promise<MutationResult> {
-    return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>(
+batchSetCellsByPosition(
+  edits: [SheetId, number, number, CellInput][],
+  skipCycleCheck: boolean,
+): Promise<MutationResult> {
+  return this.core.mutate(
+    this.core.transport.call<[Uint8Array, MutationResult]>(
       'compute_batch_set_cells_by_position',
       { docId: this.core.docId, edits, skipCycleCheck },
-    ));
-  }
+    ),
+  );
 }
 ```
 
-**Type definitions** (from Rust structs with `#[derive(Serialize)]`):
+The hand-written `ComputeBridge` wraps generated methods when it needs higher
+level behavior such as direct-edit tracking, mutation handling, date/format
+compatibility, viewport coordination, trap recovery, or chart/table adapters.
+
+## Transport Layer
+
+The `BridgeTransport` interface is deliberately small:
 
 ```typescript
-// Generated: kernel/src/bridges/compute/compute-types.gen.ts
-export interface ActiveCellData {
-  cellId: string;
-  value: CellValue;
-  formula?: string;
-  isFormulaHidden: boolean;
-}
-
-export type AggregateFunction = 'sum' | 'count' | 'average' | 'min' | 'max';
-
-export interface AggregateOp {
-  op: AggregateOpKind;
-  field?: string;
-  as: string;
-}
-```
-
-Serde attributes (`rename_all`, `tag`, `content`, `untagged`, `skip`) are fully respected in the generated TypeScript, matching the exact JSON serialization format.
-
-### Generated Output Files
-
-| File | Source | Contents |
-|------|--------|----------|
-| `kernel/src/bridges/compute/compute-types.gen.ts` | Rust compute structs/enums | TypeScript wire interfaces and string unions |
-| `kernel/src/bridges/compute/compute-bridge.gen.ts` | `ComputeService` and pure bridge descriptors | Generated bridge methods |
-| `kernel/src/bridges/compute/manifest.gen.ts` | Bridge descriptors | Method access/kind metadata |
-| `infra/transport/src/command-metadata.gen.ts` | Bridge descriptors | Recalc, bytes-tuple, serde, and scope metadata |
-| `infra/rust-bridge/bridge-ts/generated/xlsx-types.ts` | `xlsx-parser` structs | XLSX format types |
-| `infra/rust-bridge/bridge-ts/generated/ooxml-types.ts` | `ooxml-types` structs | OOXML vocabulary types |
-| `infra/culture/src/cultures.gen.ts` | `compute-formats` CultureInfo | Locale/culture data |
-
-### Runtime Traits (`bridge-types`)
-
-```rust
-// Parse types from wire strings (blanket impl on FromStr)
-pub trait BridgeParse: Sized {
-    fn bridge_parse(s: &str) -> Result<Self, String>;
-}
-
-// Error types crossing the bridge boundary
-pub trait BridgeError: Display + Send + 'static {}
-
-// Structured error data to TypeScript (JSON-serializable)
-pub trait BridgeStructuredError: BridgeError {
-    fn to_bridge_value(&self) -> serde_json::Value;
-}
-```
-
-### Crate Structure
-
-```
-infra/rust-bridge/
-├── bridge-core/        # Proc macro: #[bridge::api] → descriptor macros
-├── bridge-ir/          # Shared parsed bridge representation
-├── bridge-delegate/    # ComputeService delegate generation
-├── bridge-types/       # Runtime traits: BridgeParse, BridgeError
-├── bridge-describe/    # Descriptor/introspection helpers
-├── bridge-derive/      # Derive macros: #[derive(BridgeError)]
-├── bridge-tauri/       # Tauri command generator (parking_lot::RwLock registries)
-│   └── macros/
-├── bridge-napi/        # N-API binding generator (DashMap registries)
-│   └── macros/
-├── bridge-wasm/        # WASM binding generator (thread-local registries)
-│   └── macros/
-├── bridge-pyo3/        # PyO3 binding generator
-│   └── macros/
-├── bridge-ts/          # TypeScript client + type generator
-│   ├── src/            # Rust code that parses and emits TS
-│   └── generated/      # Generated .ts output files
-└── client/             # @rust-bridge/client — BridgeTransport interface (TS)
-```
-
----
-
-## 3. Transport Layer (`infra/transport/`)
-
-Platform-specific implementations of `BridgeTransport` that carry commands between TypeScript and Rust. Published as `@mog/transport`.
-
-### BridgeTransport Interface
-
-```typescript
-// From @rust-bridge/client
 interface BridgeTransport {
   call<T = unknown>(command: string, args: Record<string, unknown>): Promise<T>;
 }
 ```
 
-All callers use this single async interface regardless of platform.
+`infra/transport/src/factory.ts` auto-detects backends in this order when no
+explicit runtime is provided:
 
-### Transports
+1. N-API in Node.js if the native addon can be loaded.
+2. Tauri when running in a Tauri desktop host.
+3. WASM as the browser/web fallback.
 
-| Transport | Platform | Mechanism |
-|-----------|----------|-----------|
-| `TauriTransport` | Desktop | `@tauri-apps/api/core invoke()` — Tauri IPC |
-| `WasmTransport` | Web | Direct WASM module function calls |
-| `NapiTransport` | Server | N-API native addon for Node.js |
-
-### Transport Factory
-
-```typescript
-import { createTransport } from '@mog/transport';
-
-const transport = await createTransport(config?);
-// Auto-detects: NAPI (Node.js) → Tauri (desktop) → WASM (web fallback)
-```
-
-**Wrapper pipeline per platform:**
+Explicit runtime configuration can force `napi`, `tauri`, or `wasm`. The
+current wrapper pipelines are:
 
 ```
-NAPI:   LazyNapiTransport → NapiTimeInjectingTransport → BytesTupleNormalizingTransport
-Tauri:  TauriTransport → BytesTupleNormalizingTransport
-WASM:   WasmTransport → TimeInjectingTransport → CaseNormalizingTransport
+N-API:  LazyNapiTransport -> NapiTimeInjectingTransport -> BytesTupleNormalizingTransport
+Tauri:  TauriTransport -> BytesTupleNormalizingTransport
+WASM:   WasmTransport -> TimeInjectingTransport -> CaseNormalizingTransport
 ```
 
-### Middleware
+Important middleware:
 
 | Middleware | Purpose |
-|------------|---------|
-| `TimeInjectingTransport` / `NapiTimeInjectingTransport` | Injects `compute_set_current_time()` before recalc commands |
-| `BytesTupleNormalizingTransport` | Normalizes binary tuple returns (Tauri packs as `[4B length][bytes][JSON]`) |
-| `CaseNormalizingTransport` | Converts snake_case WASM serde results to camelCase TypeScript shapes |
+| --- | --- |
+| `TimeInjectingTransport` / `NapiTimeInjectingTransport` | Sends the current workbook-session time before recalc-triggering commands. |
+| `BytesTupleNormalizingTransport` | Normalizes `[Uint8Array, MutationResult]` binary tuple returns from N-API and Tauri. |
+| `CaseNormalizingTransport` | Normalizes WASM serde `snake_case` results to the camelCase shapes consumed by TypeScript. |
 
-### Key Files
+## IPC Protocols
 
-```
-infra/transport/src/
-├── factory.ts                  # createTransport() — platform auto-detection
-├── factory.browser.ts          # Browser-specific factory entry
-├── types.ts                    # Transport interfaces
-├── tauri-transport.ts          # Desktop: Tauri IPC
-├── wasm-transport.ts           # Web: direct WASM calls
-├── napi-transport.ts           # Server: N-API native addon
-├── bytes-tuple.ts              # Binary return normalization
-├── case-normalize.ts           # snake_case → camelCase normalization
-├── time-injection.ts           # Clock injection for WASM/NAPI
-├── detection.ts                # Runtime detection helpers
-├── napi-loader.ts              # Native addon discovery
-├── wasm-loader.ts              # Singleton WASM module loader
-├── command-metadata.gen.ts     # Generated: RECALC_COMMANDS, BYTES_TUPLE_COMMANDS
-├── bridge-error.ts             # Tagged bridge-error parsing
-└── errors.ts                   # TransportError, TrapError
-```
+Mog uses two bridge protocols:
 
----
+| Protocol | Format | Used for |
+| --- | --- | --- |
+| Control plane | JSON over generated bridge calls | RPC commands, metadata, query responses, import/export coordination. |
+| Data plane | Binary `Uint8Array` | Viewport payloads and mutation patches on render-sensitive paths. |
 
-## 4. Two-Protocol IPC
+The control plane is generated by the rust-bridge framework. The data plane is
+defined by the Rust `compute-wire` crate and consumed in TypeScript by wire
+readers and viewport buffers. See [compute-bridge.md](compute-bridge.md) for
+binary layout details.
 
-Communication uses two protocols optimized for their respective use cases:
-
-| Protocol | Format | Used For | Why |
-|----------|--------|----------|-----|
-| **Control plane** | JSON | RPC: `set_cell`, `undo`, `get_schema` | Flexibility, debuggability |
-| **Data plane** | Binary (`Uint8Array`) | Viewport data, mutation results | 60 FPS rendering, zero-copy |
-
-The control plane is handled by the `rust-bridge` framework. The data plane is defined in the `compute-wire` crate — see [compute-bridge.md](compute-bridge.md) for wire format details.
-
----
-
-## 5. End-to-End Example
-
-Here's how a cell edit flows through all layers:
+## End-to-End Cell Edit
 
 ```
-1. App code:           await ws.setCell('A1', 42)
+1. Public code
+   await ws.setCell('A1', 42)
 
-2. Kernel API:         WorksheetImpl.setCell()
-                         → address-resolver resolves "A1" → { row: 0, col: 0 }
-                         → CellOps.setCell(ctx, sheetId, 0, 0, 42)
+2. Kernel API
+   WorksheetImpl.setCell()
+     -> resolveCell('A1')
+     -> CellOps.setCell(ctx, sheetId, row, col, value)
 
-3. ComputeBridge:      ctx.computeBridge.setCellsByPosition(sheetId, [{ row: 0, col: 0, input }])
+3. Compute bridge
+   ComputeBridge.setCellsByPosition(...)
+     -> GeneratedBridgeBase.batchSetCellsByPosition(...)
+     -> BridgeTransport.call('compute_batch_set_cells_by_position', ...)
 
-4. Generated Client:   transport.call('compute_batch_set_cells_by_position', { docId, edits, skipCycleCheck: true })
+4. Platform backend
+   N-API ComputeEngine method
+   or Tauri command
+   or WASM exported function
 
-5. Transport:          TauriTransport.call() → Tauri invoke('compute_batch_set_cells_by_position', args)
-                    OR  WasmTransport.call()  → wasmModule.compute_batch_set_cells_by_position(...)
-                    OR  NapiTransport.call()  → napiEngine.compute_batch_set_cells_by_position(...)
+5. Rust
+   generated binding
+     -> compute_api::ComputeService
+     -> compute-core YrsComputeEngine mutation
+     -> recalculation
+     -> MutationResult + binary mutation bytes
 
-6. Rust (generated):   #[tauri::command] / #[wasm_bindgen] / #[napi]
-                         → Deserialize args
-                         → ComputeService.batch_set_cells_by_position(...)
-
-7. Rust (compute-core): batch_set_cells_by_position → typed CellInput write → recalc dependency graph
-                         → serialize_mutation_result() → Uint8Array
-
-8. Return path:        Uint8Array → BinaryMutationReader → BinaryViewportBuffer.applyBinaryMutation()
-                         → Canvas re-renders
-                         → EventBus emits cell:changed
+6. TypeScript return path
+   ComputeCore.mutate(...)
+     -> MutationResultHandler / state mirror / event bus
+     -> BinaryViewportBuffer applies relevant binary patches
+     -> renderers observe invalidation and repaint
 ```
 
----
+## Principles That Match Current Code
 
-## 6. Key Principles
-
-1. **Rust is the single source of truth.** All persistent state and computation lives in `compute-core`. TypeScript never owns cell data.
-
-2. **Wire types are generated from Rust.** The `bridge-ts` crate parses Rust structs and emits TypeScript interfaces; public contract types can wrap or narrow those wire shapes.
-
-3. **Transport is injected, not hardcoded.** The kernel receives a `BridgeTransport` and doesn't know whether it's talking over Tauri IPC, WASM, or N-API.
-
-4. **Three API styles for three audiences.** Unified API for apps/LLM, namespace API for headless/backend, Document Factory for lifecycle.
-
-5. **Handle-based resource management.** All consumer-scoped resources are disposable handles, composing into a tree rooted at the workbook.
-
-6. **Async mutations, sync render reads.** Mutations await Rust; render-path viewport reads use binary buffers for low-latency access.
+1. The Rust compute engine is the source of truth for spreadsheet state,
+   formula evaluation, recalculation, identity-aware structural edits, and
+   workbook serialization.
+2. Public JavaScript consumers should enter through public runtime facades such
+   as `@mog-sdk/node`, not private workspace packages.
+3. The TypeScript kernel owns the workbook/worksheet object model, lifecycle
+   wrappers, event surfaces, state mirror, services, and bridge composition.
+4. Generated bridge artifacts keep Rust wire methods and TypeScript transport
+   calls aligned; hand-written kernel code wraps those artifacts for higher
+   level API semantics.
+5. Transport choice is injected/detected at runtime. Kernel code calls the same
+   async `BridgeTransport` interface for N-API, Tauri, and WASM.
+6. Render-sensitive state uses binary viewport/mutation payloads; ordinary
+   command and query data uses structured JSON.

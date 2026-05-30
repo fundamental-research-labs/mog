@@ -1,22 +1,44 @@
 # Apps
 
-Apps are TypeScript/React packages loaded by the shell. The current first-party app package under `apps/` is **spreadsheet**.
+Mog has two app-related surfaces:
+
+- **Workspace-internal shell apps** are TypeScript/React packages under `apps/`
+  that are loaded by the private `@mog/shell` host.
+- **Public app embeds** are runtime facades such as `@mog-sdk/spreadsheet-app`
+  that package the shipped spreadsheet app for trusted same-origin hosts.
+
+External host code should use `@mog-sdk/spreadsheet-app` for the full
+spreadsheet application or `@mog-sdk/embed` for lower-level sheet/view embeds.
+Do not import `@mog/app-spreadsheet`, `@mog/shell`, or `@mog/ui` from external
+applications.
 
 ## Current Apps
 
-| App                | Purpose                                                              |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/spreadsheet` | Spreadsheet app with workbook chrome, grid integration, and formulas |
+| Surface | Package | Status | Purpose |
+| --- | --- | --- | --- |
+| `apps/spreadsheet` | `@mog/app-spreadsheet` | workspace-internal | Shipped first-party spreadsheet app. Owns the workbook chrome, formula bar, sheet tabs, dialogs, panels, grid integration, and document UI state. |
+| `runtime/spreadsheet-app` | `@mog-sdk/spreadsheet-app` | public | Full spreadsheet app embed facade. Exports `createSpreadsheetRuntime`, `MogSpreadsheetApp`, `mountSpreadsheetApp`, public types, and CSS assets while hiding private shell/app/kernel implementation types from declarations. |
+| `runtime/embed` | `@mog-sdk/embed` | public-experimental | Lower-level sheet/view embed package. It is not a shell app and does not expose the full spreadsheet chrome. |
+| Third-party shell apps/plugins | n/a | reserved / not shipped | The repository has workspace-internal app/plugin platform scaffolding, but public third-party app authoring, marketplace distribution, and sandboxed app hosts are not shipped. |
 
 ## Spreadsheet App Structure
 
 ```
 apps/spreadsheet/
-├── index.tsx               # Package entry point
-├── register.ts             # Side-effect app registration
-├── manifest.ts             # App manifest
+├── index.tsx               # Package entry point; re-exports the app and ShellProvider
+├── register.ts             # Side-effect registration into @mog/shell/host/app-registry
+├── manifest.ts             # Legacy capability manifest consumed by AppSlot
+├── package.json            # Private @mog/app-spreadsheet workspace package
+├── tsup.config.ts          # Bundle entries for app, manifest, register, chrome, hooks
+├── tsconfig.json
+├── jest.config.cjs
+├── jest.setup.cjs
+├── __mocks__/              # Test mocks
 ├── src/
 │   ├── index.tsx           # Main app component and app-owned chrome
+│   ├── canonical-manifest.ts # Product-neutral platform manifest
+│   ├── exports.ts          # Workspace-internal app surface
+│   ├── internal-api.ts     # Cycle-safe internal source barrel
 │   ├── actions/            # User actions
 │   ├── adapters/           # Integration adapters
 │   ├── app/                # App-level setup
@@ -40,35 +62,68 @@ apps/spreadsheet/
 │   ├── ux/                 # Interaction helpers
 │   ├── utils/              # Utilities
 │   └── views/              # App-contributed views
-├── __mocks__/              # Test mocks
-├── package.json
-├── tsconfig.json
-└── jest.config.cjs
 ```
 
 ## Kernel API Usage
 
-Shell-hosted apps receive a capability-gated kernel API as an `AppProps.kernel` prop. The full app kernel interface is defined in `@mog-sdk/contracts/apps`; the gated interface exposes only the sub-APIs granted to the app, plus capability introspection.
+Workspace-internal shell apps receive `AppProps` from `@mog/shell/apps`.
+`AppProps.kernel` is the capability-gated `IGatedAppKernelAPI` from
+`@mog-sdk/contracts/capabilities`. The ungated `IAppKernelAPI` contract lives in
+`@mog-sdk/contracts/apps`.
+
+The gated API always includes capability introspection. Domain sub-APIs such as
+`tables`, `records`, `cells`, and `filesystem` are optional, and methods inside
+partial sub-APIs may also be absent when a capability is not granted.
 
 ```typescript
 import type { AppProps } from '@mog/shell/apps';
 
-async function loadTables({ kernel }: AppProps) {
-  if (!kernel.tables?.list) return [];
+export async function loadTables({ kernel }: AppProps) {
+  if (!kernel.capabilities.has('tables:read') || !kernel.tables?.list) return [];
 
-  return kernel.tables.list();
+  return await kernel.tables.list();
 }
 ```
 
+The spreadsheet app is the important exception: `apps/spreadsheet/src/index.tsx`
+accepts `AppProps`, but intentionally ignores the `kernel` and `manifest` props.
+It uses the shell `DocumentManager` subscription (`useDocument`) to obtain a
+trusted document handle, then creates its workbook-facing runtime from that
+handle.
+
 ## App Registration
 
-Apps register with the shell by calling `registerApps()` from `@mog/shell/host/app-registry`. The spreadsheet package does this in `apps/spreadsheet/register.ts`, and runtime entry points import that module for its side effect. `AppSlot` launches apps through the capability flow and `AppLoader` renders the registered component.
+The current shipped app uses the legacy mutable registry in
+`shell/src/host/app-registry.ts`:
+
+1. `apps/spreadsheet/register.ts` calls `registerApps()` from
+   `@mog/shell/host/app-registry` with the spreadsheet manifest and lazy app
+   loader.
+2. `runtime/spreadsheet-app/src/index.tsx` imports
+   `@mog/app-spreadsheet/register` for that side effect before exporting the
+   public full-app embed facade.
+3. `AppSlot` looks up the manifest, runs the capability launch flow, and builds
+   a gated app API for the app component. First-party apps can be auto-granted;
+   legacy/no-capability-context fallback paths use an ungated adapter.
+4. `AppLoader` resolves the registered component and renders it with the gated
+   `kernel`, `manifest`, optional `bindings`, feature gates, and appearance
+   callbacks.
+
+`apps/spreadsheet/src/canonical-manifest.ts` also defines a product-neutral
+platform manifest for package-registry and contribution-resolution code. That
+platform path is workspace-internal today. Current app launching supports
+`same-realm-first-party`; sandbox modes such as iframe or worker app hosts are
+reserved and not shipped.
 
 ## UI Primitives
 
-Apps can use the shared `@mog/ui` package for kernel-agnostic UI and data-view components:
+Workspace-internal apps can use the shared `@mog/ui` package for
+kernel-agnostic UI and data-view components:
 
 ```typescript
 import { KanbanBoard } from '@mog/ui';
 import type { ColumnInfo } from '@mog/ui';
 ```
+
+`@mog/ui` is a private, reserved workspace package. It is useful inside the
+monorepo, but it is not a public app-builder dependency.

@@ -74,6 +74,7 @@ import { parseCellRange, cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { getValue } from '../cells/cell-reads';
 import * as Charts from './chart-crud';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
+import type { ThemeData } from '../../bridges/compute/compute-types.gen';
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import {
   wireToAxisConfig,
@@ -332,6 +333,150 @@ type ChartRenderData = {
   data: ChartData;
 };
 
+type ThemeColorReference = {
+  theme: string;
+  tintShade?: number;
+  tint_shade?: number;
+};
+
+type WorkbookThemeColorPalette = Record<string, string>;
+
+function normalizeHexColor(value: string): string | undefined {
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) return `#${hex.toUpperCase()}`;
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    return `#${hex
+      .split('')
+      .map((ch) => ch + ch)
+      .join('')
+      .toUpperCase()}`;
+  }
+  return undefined;
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+
+  const delta = max - min;
+  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  let h = 0;
+  if (max === r) {
+    h = (g - b) / delta + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / delta + 2;
+  } else {
+    h = (r - g) / delta + 4;
+  }
+  return [h / 6, s, l];
+}
+
+function hueToRgb(p: number, q: number, t: number): number {
+  let hue = t;
+  if (hue < 0) hue += 1;
+  if (hue > 1) hue -= 1;
+  if (hue < 1 / 6) return p + (q - p) * 6 * hue;
+  if (hue < 1 / 2) return q;
+  if (hue < 2 / 3) return p + (q - p) * (2 / 3 - hue) * 6;
+  return p;
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  if (s === 0) return [l, l, l];
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3)];
+}
+
+function applyTintShade(hexColor: string, tintShade: number | undefined): string {
+  if (tintShade === undefined || tintShade === 0) return hexColor;
+  const tintAmount =
+    tintShade > 0 && tintShade <= 1 ? (tintShade > 0.5 ? 1 - tintShade : tintShade) : tintShade;
+  const normalized = normalizeHexColor(hexColor);
+  if (!normalized) return hexColor;
+  const hex = normalized.slice(1);
+  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const adjustedL =
+    tintAmount > 0 ? l * (1 - tintAmount) + tintAmount : l * Math.max(0, 1 + tintAmount);
+  const [outR, outG, outB] = hslToRgb(h, s, Math.max(0, Math.min(1, adjustedL)));
+  const channels = [outR, outG, outB].map((channel) =>
+    Math.max(0, Math.min(255, Math.round(channel * 255))),
+  );
+  return `#${channels
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
+}
+
+function themeSlotKey(theme: string): string {
+  switch (theme.toLowerCase()) {
+    case 'tx1':
+      return 'dk1';
+    case 'bg1':
+      return 'lt1';
+    case 'tx2':
+      return 'dk2';
+    case 'bg2':
+      return 'lt2';
+    case 'folhlink':
+      return 'folhlink';
+    default:
+      return theme.toLowerCase();
+  }
+}
+
+function isThemeColorReference(value: unknown): value is ThemeColorReference {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { theme?: unknown }).theme === 'string'
+  );
+}
+
+function resolveThemeColorReference(
+  color: ThemeColorReference,
+  palette: WorkbookThemeColorPalette,
+): string | ThemeColorReference {
+  const base = palette[themeSlotKey(color.theme)];
+  if (!base) return color;
+  return applyTintShade(base, color.tintShade ?? color.tint_shade);
+}
+
+function resolveThemeColorsInValue(value: unknown, palette: WorkbookThemeColorPalette): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveThemeColorsInValue(item, palette));
+  }
+  if (isThemeColorReference(value)) {
+    return resolveThemeColorReference(value, palette);
+  }
+  if (typeof value === 'object' && value !== null) {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      output[key] = resolveThemeColorsInValue(item, palette);
+    }
+    return output;
+  }
+  return value;
+}
+
+function workbookThemeColorPalette(
+  theme: ThemeData | null | undefined,
+): WorkbookThemeColorPalette | null {
+  const colors = theme?.colors;
+  if (!Array.isArray(colors) || colors.length === 0) return null;
+
+  const palette: WorkbookThemeColorPalette = {};
+  for (const color of colors) {
+    const normalized = normalizeHexColor(color.color);
+    if (normalized) palette[themeSlotKey(color.name)] = normalized;
+  }
+  return Object.keys(palette).length > 0 ? palette : null;
+}
+
 function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
   const categoryLabelFormat = config.series?.find(
     (series) => series.categoryLabelFormat,
@@ -419,9 +564,10 @@ function importedCategoryCacheValue(
 }
 
 function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): ChartData {
-  const seriesConfig = config.series?.find(
-    (series) => Boolean(series.categories) || importedCategoryCache(series),
-  );
+  const categorySeriesIndex =
+    config.series?.findIndex((series) => Boolean(series.categories) || importedCategoryCache(series)) ??
+    -1;
+  const seriesConfig = categorySeriesIndex >= 0 ? config.series?.[categorySeriesIndex] : undefined;
   if (!seriesConfig) return data;
 
   const categoryCache = importedCategoryCache(seriesConfig);
@@ -447,10 +593,14 @@ function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): Ch
       categoryPointCount !== undefined &&
       pointIndex >= categoryPointCount &&
       data.series.every((series) => isBlankChartPoint(series.data[pointIndex]));
-    const current =
+    const configuredSeriesCategory = data.series[categorySeriesIndex]?.data[pointIndex]?.x;
+    const fallbackCategory =
       data.categories[pointIndex] ??
       data.series.find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
       '';
+    const current = seriesConfig.categories
+      ? (configuredSeriesCategory ?? fallbackCategory)
+      : fallbackCategory;
     const next = cached ?? (isOmittedCachedPoint || isBeyondCachedDomain ? '' : current);
     categories.push(next);
     if (next !== data.categories[pointIndex]) changed = true;
@@ -979,6 +1129,9 @@ export class ChartBridge implements IChartBridge {
   /** Whether the bridge has been started */
   private started = false;
 
+  /** Workbook theme color palette used to resolve imported chart scheme colors. */
+  private workbookThemeColorPalettePromise: Promise<WorkbookThemeColorPalette | null> | null = null;
+
   constructor(private ctx: DocumentContext) {}
 
   private cacheKey(chartId: string, sheetId?: SheetId): string {
@@ -1031,6 +1184,7 @@ export class ChartBridge implements IChartBridge {
     this.dirtyCharts.clear();
     this.pendingCompilations.clear();
     this.chartSheetIndex.clear();
+    this.workbookThemeColorPalettePromise = null;
     // In-place clear, NOT reassignment — onCacheUpdate's unsubscribe closures
     // capture `this.cacheUpdateListeners` by reference and call indexOf/splice
     // at unsubscribe time. Reassigning would orphan those closures onto a
@@ -1076,6 +1230,12 @@ export class ChartBridge implements IChartBridge {
       this.invalidateChart(event.chartId);
     });
     this.cleanups.push(unsubChart);
+
+    const unsubTheme = this.ctx.eventBus.on('workbook:theme-changed', () => {
+      this.workbookThemeColorPalettePromise = null;
+      this.clearAllCaches();
+    });
+    this.cleanups.push(unsubTheme);
 
     // Subscribe to floating object events for chart-type objects.
     // This handles the live mutation path: when charts are created or updated
@@ -1980,9 +2140,10 @@ export class ChartBridge implements IChartBridge {
         hiddenVisibility,
       });
       const data = extractChartData(accessor, renderConfig);
+      const themedConfig = await this.withWorkbookThemeColors(renderConfig);
       return {
-        config: renderConfig,
-        data: normalizeChartDataForRendering(data, renderConfig),
+        config: themedConfig,
+        data: normalizeChartDataForRendering(data, themedConfig),
       };
     }
 
@@ -2009,10 +2170,35 @@ export class ChartBridge implements IChartBridge {
       seriesRange: resolvedRanges.seriesRange?.range,
       seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
     });
+    const themedConfig = await this.withWorkbookThemeColors(config);
     return {
-      config,
-      data: normalizeChartDataForRendering(data, config),
+      config: themedConfig,
+      data: normalizeChartDataForRendering(data, themedConfig),
     };
+  }
+
+  private async withWorkbookThemeColors(config: ChartConfig): Promise<ChartConfig> {
+    const palette = await this.getWorkbookThemeColorPalette();
+    if (!palette) return config;
+    return resolveThemeColorsInValue(config, palette) as ChartConfig;
+  }
+
+  private async getWorkbookThemeColorPalette(): Promise<WorkbookThemeColorPalette | null> {
+    this.workbookThemeColorPalettePromise ??= this.loadWorkbookThemeColorPalette();
+    return this.workbookThemeColorPalettePromise;
+  }
+
+  private async loadWorkbookThemeColorPalette(): Promise<WorkbookThemeColorPalette | null> {
+    const bridge = this.ctx.computeBridge as {
+      getWorkbookTheme?: () => Promise<ThemeData | null | undefined>;
+    };
+    if (!bridge.getWorkbookTheme) return null;
+
+    try {
+      return workbookThemeColorPalette(await bridge.getWorkbookTheme());
+    } catch {
+      return null;
+    }
   }
 
   private async loadHiddenVisibility(
@@ -2369,6 +2555,7 @@ export class ChartBridge implements IChartBridge {
     this.layoutCache.clear();
     this.errorCache.clear();
     this.chartImportRenderStatus.clear();
+    this.workbookThemeColorPalettePromise = null;
     this.dirtyCharts.clear();
     this.pendingCompilations.clear();
     this.fireCacheUpdate('*');

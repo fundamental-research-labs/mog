@@ -343,7 +343,7 @@ export interface LegendSpec {
   /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
   reverse?: boolean;
   symbolSize?: number;
-  symbolType?: 'circle' | 'square' | 'cross' | 'diamond' | 'triangle-up' | 'triangle-down';
+  symbolType?: 'circle' | 'square' | 'line' | 'cross' | 'diamond' | 'triangle-up' | 'triangle-down';
   offset?: number;
   padding?: number;
 }

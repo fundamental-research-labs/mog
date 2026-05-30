@@ -20,6 +20,7 @@ import type {
   EncodingSpec,
   LayerSpec,
   LegendOrient,
+  LegendSpec,
   MarkSpec,
   MarkType,
   ScaleSpec,
@@ -43,7 +44,7 @@ import type {
   SingleAxisConfig,
   TrendlineConfig,
 } from '../types';
-import { formatTickValue } from '../grammar/axis-generator';
+import { formatExcelSerialDateTick, formatTickValue } from '../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../primitives/scales/linear';
 
 // =============================================================================
@@ -305,10 +306,10 @@ function normalizeAxisLabelAngle(
   const raw = axisConf.textOrientation ?? axisConf.format?.textRotation;
   if (raw === undefined) return undefined;
   if (raw === 0) return 0;
-  if (Math.abs(raw) > 360 && Math.abs(raw) < 60000) return raw < 0 ? -45 : 45;
-  const degrees = Math.abs(raw) > 360 ? raw / 60000 : raw;
+  const degrees = Math.abs(raw) >= 60000 ? raw / 60000 : raw;
+  if (Math.abs(degrees) >= 999) return degrees < 0 ? -90 : 90;
   if (Math.abs(degrees) <= 90) return degrees;
-  return degrees < 0 ? -45 : 45;
+  return degrees < 0 ? -90 : 90;
 }
 
 function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
@@ -725,10 +726,12 @@ function buildAxisScaleSpec(
 
   const scaleDomain = buildAxisScaleDomain(axisConf);
   const scaleType = useDateSerialCategoryAxis ? 'linear' : axisTypeToScaleType(axisConf.type);
+  const hasExplicitDomain = Boolean(scaleDomain?.domain?.some((bound) => bound !== undefined));
   const scaleSpec: ScaleSpec = {
     ...(scaleDomain ?? {}),
     ...(scaleType ? { type: scaleType } : {}),
-    ...(useDateSerialCategoryAxis ? { zero: false, nice: false } : {}),
+    ...(useDateSerialCategoryAxis ? { zero: false } : {}),
+    ...(useDateSerialCategoryAxis || hasExplicitDomain ? { nice: false } : {}),
   };
 
   return Object.keys(scaleSpec).length > 0 ? scaleSpec : undefined;
@@ -843,6 +846,7 @@ function buildColorEncoding(
   colors?: string[],
   reverseLegend?: boolean,
   legendDomain?: string[],
+  symbolType?: LegendSpec['symbolType'],
 ): ChannelSpec | undefined {
   if (!hasMultipleSeries) return undefined;
   const channel: ChannelSpec = {
@@ -865,6 +869,7 @@ function buildColorEncoding(
         orient: legendPositionToOrient(legend.position),
         title: null,
         ...(reverseLegend ? { reverse: true } : {}),
+        ...(symbolType ? { symbolType } : {}),
         ...(legendFont?.size !== undefined
           ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
           : {}),
@@ -888,6 +893,24 @@ function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | u
   }
 
   return names.length > 0 ? names : undefined;
+}
+
+function legendSymbolType(
+  config: ChartConfig,
+  data: ChartData,
+): LegendSpec['symbolType'] | undefined {
+  const markTypes = data.series
+    .map((series, index) => {
+      const seriesConfig = config.series?.[index];
+      if (isNoFillNoLineSeries(seriesConfig)) return undefined;
+      const seriesType = (seriesConfig?.type ?? series.type ?? config.type) as ChartType;
+      return MARK_TYPE_MAP[seriesType];
+    })
+    .filter(Boolean);
+
+  return markTypes.length > 0 && markTypes.every((markType) => markType === 'line')
+    ? 'line'
+    : undefined;
 }
 
 /**
@@ -1008,6 +1031,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     resolvedCategoryColors(config),
     Boolean(resolveStackMode(config)) && !legendDomain,
     legendDomain,
+    legendSymbolType(config, data),
   );
   if (colorChannel) {
     encoding.color = colorChannel;
@@ -1425,18 +1449,30 @@ function estimateYAxisLabelWidth(encoding: EncodingSpec | undefined): number | u
   const maxMagnitude = Math.max(Math.abs(domain[0]), Math.abs(domain[1]));
   const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
   const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);
-  return Math.max(36, Math.min(90, estimatedWidth));
+  return Math.max(36, Math.min(320, estimatedWidth));
 }
 
 function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number | undefined {
   const x = encoding?.x;
   const y = encoding?.y;
+  if (!x || x.axis === null || x.axis?.labels === false) return undefined;
+
+  const labelAngle = x.axis?.labelAngle ?? 0;
+  const fontSize = x.axis?.labelFontSize ?? 11;
+  const labelPadding = x.axis?.labelPadding ?? (labelAngle ? 2 : 3);
+  const tickExtent = x.axis?.ticks === false ? 0 : (x.axis?.tickSize ?? 6);
+
+  if (Math.abs(labelAngle) > 1) {
+    const labelWidth = estimateXAxisMaxLabelWidth(x, fontSize);
+    const radians = (Math.abs(labelAngle) * Math.PI) / 180;
+    const rotatedHeight =
+      Math.sin(radians) * labelWidth + Math.cos(radians) * fontSize;
+    return Math.max(40, Math.ceil(tickExtent + labelPadding + rotatedHeight + 8));
+  }
+
   if (
-    !x ||
     !y ||
     y.type !== 'quantitative' ||
-    x.axis === null ||
-    x.axis?.labels === false ||
     x.axis?.crossesAt !== 'automatic'
   ) {
     return undefined;
@@ -1447,9 +1483,27 @@ function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number |
   const max = explicitDomainBound(scaleDomain, 1);
   if (min === undefined || max === undefined || min >= 0 || max <= 0) return undefined;
 
-  const fontSize = x.axis?.labelFontSize ?? 11;
-  const labelPadding = x.axis?.labelPadding ?? 3;
   return Math.max(24, Math.ceil(fontSize + labelPadding + 3));
+}
+
+function estimateXAxisMaxLabelWidth(x: ChannelSpec, fontSize: number): number {
+  const axis = x.axis;
+  const format = x.format ?? axis?.format;
+  const scaleDomain = Array.isArray(x.scale?.domain) ? x.scale.domain : undefined;
+  const candidates = scaleDomain?.filter((value) => value !== undefined) ?? [];
+  if (candidates.length === 0) return fontSize * 8;
+
+  const maxLabelLength = Math.max(
+    1,
+    ...candidates.map((value) => {
+      const text =
+        axis?.formatType === 'time'
+          ? formatExcelSerialDateTick(value, format)
+          : formatTickValue(value, format);
+      return text.length;
+    }),
+  );
+  return Math.ceil(maxLabelLength * fontSize * 0.52);
 }
 
 // =============================================================================

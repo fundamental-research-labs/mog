@@ -1016,6 +1016,117 @@ describe('resolveChartData imported visibility semantics', () => {
     expect(laterMark?.style.fill).toBe('#A5A5A5');
   });
 
+  it('resolves imported chart scheme colors against the workbook theme', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'line',
+      dataRange: '',
+      legend: { show: true, position: 'bottom' },
+      series: [
+        {
+          name: 'Theme accent 3',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A3:B3',
+          format: { line: { color: { theme: 'accent3' }, width: 2.25 } },
+        },
+        {
+          name: 'Theme accent 2',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!A3:B3',
+          format: { line: { color: { theme: 'accent2' }, width: 2.25 } },
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartCrudMock = jest.requireMock('../chart-crud') as {
+      get: jest.Mock;
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartCrudMock.get.mockResolvedValue(chart);
+    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: { ref: 'Sheet1!A3:B3', range: range(2) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: { ref: 'Sheet1!A3:B3', range: range(2) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20][col]
+          : row === 1
+            ? [30, 15][col]
+            : row === 2
+              ? ['Jan', 'Feb'][col]
+              : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getWorkbookTheme: jest.fn(async () => ({
+        colors: [
+          { name: 'accent2', color: '#C0504D' },
+          { name: 'accent3', color: '#9BBB59' },
+        ],
+        majorFont: null,
+        minorFont: null,
+      })),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20][col]
+            : row === 1
+              ? [30, 15][col]
+              : row === 2
+                ? ['Jan', 'Feb'][col]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const marks = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect(Array.isArray(marks)).toBe(true);
+    if (!Array.isArray(marks)) return;
+    const lineMarks = marks.filter(
+      (mark) => mark.type === 'path' && Array.isArray((mark as any).datum),
+    ) as any[];
+    const legendLineMarks = marks.filter(
+      (mark) => mark.type === 'path' && (mark as any).datum?.entryIndex !== undefined,
+    ) as any[];
+
+    expect(lineMarks.map((mark) => mark.style.stroke)).toEqual(['#9BBB59', '#C0504D']);
+    expect(legendLineMarks.map((mark) => mark.style.stroke)).toEqual(['#9BBB59', '#C0504D']);
+  });
+
   it('snapshots explicit per-series categories from point x values', async () => {
     const { ctx } = createTestCtx();
     const chart: ChartFloatingObject = {

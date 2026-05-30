@@ -6,7 +6,7 @@
  * Extracted from compiler.ts - no logic changes.
  */
 
-import type { AnyMark, RectMark, TextMark } from '../primitives/types';
+import type { AnyMark, PathMark, RectMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { ChannelSpec, EncodingSpec, Layout } from './spec';
 
@@ -69,7 +69,8 @@ export function generateColorLegend(
   const domain: unknown[] = typeof scale.domain === 'function' ? scale.domain() : [];
   const legendValues = legendSpec.reverse ? [...domain].reverse() : domain;
 
-  const symbolSize = legendSpec.symbolSize ?? 10;
+  const symbolType = legendSpec.symbolType ?? 'square';
+  const symbolSize = legendSpec.symbolSize ?? (symbolType === 'line' ? 28 : 10);
   const itemY = y + (title ? 20 : 0);
   const itemSpacing = 18;
   const labelFontSize = legendSpec.labelFontSize ?? 11;
@@ -100,20 +101,35 @@ export function generateColorLegend(
       ? y + (layout.legend.height - symbolSize) / 2
       : itemY + i * itemSpacing;
 
-    // Symbol
-    marks.push({
-      type: 'rect',
-      x: entryX,
-      y: entryY,
-      width: symbolSize,
-      height: symbolSize,
-      datum: { entryIndex: i },
-      style: {
-        fill: color,
-        stroke: '#000',
-        strokeWidth: 0.5,
-      },
-    } as RectMark);
+    if (symbolType === 'line') {
+      const yMid = entryY + symbolSize / 2;
+      marks.push({
+        type: 'path',
+        x: 0,
+        y: 0,
+        path: `M${entryX},${yMid} L${entryX + symbolSize},${yMid}`,
+        datum: { entryIndex: i },
+        style: {
+          stroke: color,
+          strokeWidth: 2.25,
+          fill: undefined,
+        },
+      } as PathMark);
+    } else {
+      marks.push({
+        type: 'rect',
+        x: entryX,
+        y: entryY,
+        width: symbolSize,
+        height: symbolSize,
+        datum: { entryIndex: i },
+        style: {
+          fill: color,
+          stroke: '#000',
+          strokeWidth: 0.5,
+        },
+      } as RectMark);
+    }
 
     // Label
     marks.push({

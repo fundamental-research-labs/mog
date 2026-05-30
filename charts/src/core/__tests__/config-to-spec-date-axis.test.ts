@@ -146,6 +146,50 @@ describe('configToSpec imported Excel date category axes', () => {
     );
   });
 
+  it('maps imported vertical chart text orientation and reserves bottom label space', () => {
+    const config = makeDateAxisConfig('line');
+    config.height = 16;
+    config.axis = {
+      ...config.axis,
+      categoryAxis: {
+        ...config.axis?.categoryAxis,
+        textOrientation: -1000,
+        format: { font: { size: 20 } },
+      },
+    };
+
+    const spec = asUnitSpec(configToSpec(config, makeData()));
+    const result = compile(spec);
+    const xAxisLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+      return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
+    });
+
+    expect(spec.encoding?.x?.axis).toMatchObject({ labelAngle: -90 });
+    expect(xAxisLabels.every((mark) => mark.rotation === -Math.PI / 2)).toBe(true);
+    expect(result.layout.margin.bottom).toBeGreaterThanOrEqual(160);
+  });
+
+  it('reserves enough left margin for large imported currency axis labels', () => {
+    const config = makeDateAxisConfig('line');
+    config.axis = {
+      ...config.axis,
+      valueAxis: {
+        visible: true,
+        min: 0,
+        max: 50_000_000,
+        numberFormat: '"$"#,##0',
+        tickMarks: 'none',
+        format: { font: { size: 20 } },
+      },
+    };
+
+    const spec = asUnitSpec(configToSpec(config, makeData()));
+    const result = compile(spec);
+
+    expect(result.layout.margin.left).toBeGreaterThanOrEqual(300);
+  });
+
   it('uses independent y scales for combo series bound to a secondary axis', () => {
     const data: ChartData = {
       categories: DATE_SERIALS,
@@ -168,6 +212,7 @@ describe('configToSpec imported Excel date category axes', () => {
       ],
     };
     const config = makeDateAxisConfig('combo', 2);
+    config.height = 20;
     config.axis = {
       ...config.axis,
       valueAxis: {
@@ -195,6 +240,7 @@ describe('configToSpec imported Excel date category axes', () => {
     });
     expect(spec.layer[1].encoding?.y?.scale).toMatchObject({
       domain: [-0.2, 0.3],
+      nice: false,
     });
 
     const result = compile(spec);
@@ -205,6 +251,16 @@ describe('configToSpec imported Excel date category axes', () => {
 
     expect(secondaryBars.length).toBeGreaterThan(0);
     expect(Math.max(...secondaryBars.map((mark) => mark.height))).toBeGreaterThanOrEqual(20);
+
+    const rightAxisLabels = result.axes
+      .filter((mark): mark is TextMark => {
+        const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+        return mark.type === 'text' && datum?.role === 'y-axis-right' && datum.axisPart === 'label';
+      })
+      .map((mark) => mark.text);
+    expect(rightAxisLabels).toContain('30%');
+    expect(rightAxisLabels).toContain('-20%');
+    expect(rightAxisLabels).not.toContain('35%');
   });
 
   it('uses layered right-axis rendering for non-combo charts with secondary series', () => {
@@ -273,6 +329,9 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(spec.layer[0].encoding?.color?.scale).toMatchObject({
       range: ['#A5A5A5', '#ED7D31'],
     });
+    expect(spec.layer[0].encoding?.color?.legend).toMatchObject({
+      symbolType: 'line',
+    });
 
     const result = compile(spec);
     const rightAxisLabels = result.axes.filter((mark): mark is TextMark => {
@@ -284,9 +343,11 @@ describe('configToSpec imported Excel date category axes', () => {
       return mark.type === 'path' && Array.isArray(datum) && Boolean(datum[0]?.series);
     });
     const legendLabels = result.legends.filter((mark): mark is TextMark => mark.type === 'text');
+    const legendSymbols = result.legends.filter((mark): mark is PathMark => mark.type === 'path');
 
     expect(rightAxisLabels.length).toBeGreaterThan(0);
     expect(lineMarks.map((mark) => mark.style.stroke)).toEqual(['#A5A5A5', '#ED7D31']);
+    expect(legendSymbols.map((mark) => mark.style.stroke)).toEqual(['#A5A5A5', '#ED7D31']);
     expect(legendLabels.map((mark) => mark.text)).toEqual(['Primary', 'Secondary']);
     expect(new Set(legendLabels.map((mark) => mark.y)).size).toBe(1);
     expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(

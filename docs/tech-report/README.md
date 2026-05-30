@@ -1,119 +1,119 @@
 # Mog: A Spreadsheet Engine Built for Correctness
 
-Mog is an open-source spreadsheet engine with a Rust compute core and TypeScript rendering layer. It runs the same engine on web (WASM), desktop (Tauri), and server (N-API), and ships as `@mog-sdk/node` for headless use.
+Mog is an open-source spreadsheet engine, app runtime, and SDK stack with a Rust compute/storage core and TypeScript kernel, rendering, and SDK layers. The same Rust bridge surfaces target web (WASM), desktop (Tauri), and server/headless use (N-API through `@mog-sdk/node`).
 
-This report covers what the engine does today, how we verify it, and where it falls short. No roadmap, no vision — just what exists and what we can prove.
+This report covers what the public repository implements today, how the implementation is structured, and where the current evidence is. It does not publish roadmap claims or fixed benchmark numbers.
 
 ---
 
 ## Formula Engine
 
-The formula engine is the core of any spreadsheet. If the formulas are wrong, nothing else matters.
+The formula engine lives in `compute-core` and its extracted crates. The `compute-functions` crate documents a library of **512+ Excel-compatible pure functions** across math, statistical, financial, text, logical, lookup/reference, date/time, engineering, database, information, web, and related modules. The parser is built on [winnow](https://github.com/winnow-rs/winnow) and covers A1/R1C1 references, nested expressions, structured references, cross-sheet and external-workbook references, array literals, and LAMBDA call syntax.
 
-Mog implements **454 Excel-compatible functions** across 13 categories in Rust: math, statistical, financial, text, logical, lookup/reference, date/time, engineering, database, information, and more. The parser (built on [winnow](https://github.com/winnow-rs/winnow)) handles the full Excel formula grammar — nested functions, structured references, cross-sheet references, array literals, and LAMBDA expressions.
+**How we verify correctness.** The repository contains focused formula accuracy tests such as `compute/core/tests/formula_accuracy_*.rs`, structured-reference and lookup suites, numeric repeatability tests, and optional corpus lanes (`corpus-tests`) for real workbook coverage. These tests use the current Rust engine as the execution path rather than a separate compatibility shim.
 
-**How we verify correctness.** We test against real-world Excel files — financial models, reporting templates, analytical workbooks — not synthetic test cases. The engine opens each file, recalculates every formula from scratch, and compares results against Excel's cached values.
+**Numerical precision.** Numeric cell values use `FiniteF64`, a wrapper over `f64` that rejects NaN and infinity at construction time. Aggregation code uses Kahan compensated summation and Welford-style variance/standard-deviation accumulation where those algorithms apply. The `dd-precision` feature in `value-types` adds a double-double error term for higher-precision intermediate arithmetic when that lane is enabled.
 
-For numeric results, we track accuracy at ULP (Units in Last Place) granularity — the finest meaningful unit of floating-point comparison. Every mismatch is classified by root cause: wrong numeric result, wrong type, engine error, or cascade from an upstream failure. This separates real bugs from inherited errors.
-
-**Numerical precision.** Numbers are stored as `FiniteF64` — a newtype over IEEE 754 `f64` that statically excludes NaN and infinity at the type level. Summation uses Kahan compensated accumulation to minimize floating-point drift in large ranges. Where our results diverge from Excel's, the cause is typically Excel's use of 80-bit x87 extended precision for intermediate calculations — a platform-specific behavior that cannot be replicated with strict IEEE 754 f64 arithmetic. These cases are individually documented with root cause analysis and explicit accept/reject decisions.
-
-**What we don't support.** VBA macros, XLL add-in functions, and external data connections are inherently unknowable to any standalone engine. Array formulas and volatile functions (NOW, RAND) are evaluated but excluded from accuracy metrics since their cached values are non-deterministic.
+**What we do not execute.** Embedded VBA/macros, active-content parts, and XLL-style add-ins are not interpreted as workbook code. External workbook references and external-link metadata are parsed or preserved where supported, and local-sheet external references can be rewritten during import, but live external data refresh is a host/integration concern rather than Excel automation inside the formula engine.
 
 ---
 
-## Performance
+## Performance Architecture
 
-| Metric | Measured |
-|--------|----------|
-| Edit-to-render latency | 0.04 ms |
-| Recalc 10,000 formulas | 7.8 ms |
-| Memory, 500K cells | 221 MB |
-| Render frame rate | 60 fps |
+The public repository includes benchmark and performance-gate infrastructure, but this report does not claim stable wall-clock timings. Current performance-sensitive implementation details are:
 
-These numbers come from the engine running on commodity hardware (Apple M-series). Edit latency measures the time from `setCellValue` to the render buffer being complete — not to screen, but to the point where the canvas can paint.
+| Area | Current implementation |
+|------|------------------------|
+| Viewport data | Binary `compute-wire` blobs read from TypeScript with `DataView` |
+| Cell records | 32-byte dense, row-major viewport records |
+| Mutation records | 40-byte patches: row/column prefix plus the 32-byte cell record |
+| Strings | Packed UTF-8 string pools referenced by offset and length |
+| Formats | Deduplicated binary format palette with delta support |
+| Recalc | Native builds can use `rayon`; WASM builds use the single-threaded path |
 
-**Why it's fast.** The rendering pipeline uses a binary wire protocol instead of JSON. Each cell occupies exactly 32 bytes in a dense, row-major buffer. TypeScript reads cells via `DataView` directly from the binary blob — zero object allocation, zero JSON parsing in the hot path. Display strings are packed in a contiguous UTF-8 pool referenced by offset and length. Cell formats are deduplicated into an append-only palette (typically 5–20 unique formats across thousands of cells), and each cell carries a 2-byte palette index rather than a full format object.
+The binary data plane is documented in `docs/architecture/compute-bridge.md` and implemented in `compute/core/crates/compute-wire`. TypeScript consumption lives under `kernel/src/bridges/wire`, including `BinaryViewportBuffer`, `BinaryMutationReader`, and the viewport coordinator.
 
-Mutations (cell edits, recalc results) produce binary patches in the same 32-byte-per-cell format. The rendering layer splices patches directly into the viewport buffer — no intermediate JavaScript objects, no GC pressure.
-
-**XLSX import performance.** Parsing is handled by a Rust-native XLSX parser compiled to WASM. Large workbooks (millions of cells) open in under 16 seconds including full recalculation. Files under 1 MB parse in under 100ms.
+XLSX parsing is Rust-native and has native, parallel, lazy, and WASM-facing paths in `file-io/xlsx/parser` and `file-io/xlsx-api`. The repo also contains XLSX performance budgets and tooling under `file-io/xlsx/parser/testing/budgets` and `file-io/xlsx/tooling`.
 
 ---
 
 ## XLSX Compatibility
 
-Round-trip fidelity — open an Excel file, modify it, save it, reopen in Excel — is the real compatibility test. Mog's pipeline:
+Round-trip fidelity - open an Excel file, model it, write it back, and re-open it - is covered by both parser-level and engine-level tests. The main data path is:
 
+```text
+.xlsx -> xlsx-parser / xlsx-api -> ParseOutput -> Yrs-backed engine state -> XLSX writer -> .xlsx
 ```
-.xlsx → Rust parser (WASM) → ParsedWorkbook → Yrs CRDT document → serialize → .xlsx
-```
 
-We verify round-trip fidelity by performing semantic diffs at the XML part level. Differences are classified by severity: cosmetic (attribute order, whitespace), semantic (value changes), and structural (missing parts).
+Coverage in the current repository includes tests for cell values, formulas, styles, comments, hyperlinks, conditional formatting, data validations, tables, print settings, page breaks, sparklines, protection, themes, sheet metadata, row/column structural changes, merges, sorts, auto filters, and parse-output round trips. Relevant paths include `file-io/xlsx/parser/tests`, `compute/core/tests/roundtrip_parse_output`, and the `compute/core/tests/xlsx_*_roundtrip.rs` suites.
 
-**What round-trips correctly:** cell values, formulas, number formats, fonts, fills, borders, alignment, conditional formatting rules, table definitions, named ranges, sheet structure, merged cells, column widths, row heights, freeze panes.
-
-**What doesn't yet:** some chart subtypes, pivot table cache records, VBA projects, external links, threaded comments (classic comments are supported).
+Some OOXML parts are authoritative workbook state, while others are Excel caches. For example, Mog intentionally does not export `xl/calcChain.xml`; Excel can rebuild that calculation cache. Imported active content is not executed, and feature-specific OOXML details such as complex chart variants, external links, and workbook connections should be checked against their dedicated parser/writer tests before treating them as full Excel behavioral parity.
 
 ---
 
 ## Cross-Platform Runtime
 
-A single Rust crate (`compute-core`, 21 sub-crates) contains all computation logic. It is compiled to three targets from the same source:
+The compute workspace centers on the `compute-core` root crate plus extracted crates under `compute/core/crates`. Bindings are generated from `#[bridge::api]` and related annotations, then consumed by target-specific bridge crates.
 
 | Target | Binding | Use Case |
 |--------|---------|----------|
-| `wasm32-unknown-unknown` | WASM | Browser — runs in a Web Worker |
-| Native (via Tauri) | Tauri IPC | Desktop app |
-| Native (via N-API) | `@mog-sdk/node` | Server, CLI, AI agents |
+| `wasm32-unknown-unknown` | WASM | Browser runtime and worker-backed compute |
+| Native desktop | Tauri IPC | Desktop app |
+| Native server | N-API | Node.js SDK and headless automation |
 
-The bindings are generated by a custom proc-macro framework. Annotate a Rust `impl` block with `#[bridge::api]`, and the framework emits platform-specific glue for all three targets plus TypeScript type definitions. No hand-maintained bindings, no type drift between Rust and TypeScript.
+The transport factory in `infra/transport` auto-detects N-API, Tauri, then WASM unless an explicit runtime is supplied. The TypeScript side consumes a common async `BridgeTransport` interface, with middleware for platform-specific details such as time injection and packed binary return normalization.
 
-The transport layer auto-detects the platform at startup and selects the appropriate backend. All callers — browser, desktop, server — use the same async API.
+The bridge stack also includes TypeScript type generation through `bridge-ts`, which emits generated bridge clients and wire interfaces under `kernel/src/bridges/compute`.
 
 ---
 
 ## SDK
 
-`@mog-sdk/node` is the headless SDK, published with prebuilt native binaries for 7 platforms (macOS arm64/x64, Linux x64/arm64 glibc/musl, Windows x64).
+`@mog-sdk/node` is the headless Node SDK. It publishes optional native binary packages for seven platform triples: macOS arm64/x64, Linux x64/arm64 glibc/musl, and Windows x64.
 
 ```typescript
 import { createWorkbook } from '@mog-sdk/node';
 
 const wb = await createWorkbook('financial-model.xlsx');
-const ws = wb.getActiveSheet();
+const ws = wb.activeSheet;
 
 await ws.setCell('B2', 150000);
-const revenue = await ws.getValue('B10');   // recalculated
+const revenue = await ws.getValue('B10');
 
-await wb.toXlsx('updated-model.xlsx');
-wb.dispose();
+await wb.save('updated-model.xlsx');
+await wb.dispose();
 ```
 
-The API surface includes 60+ sub-APIs across Workbook and Worksheet: formatting, structure (insert/delete rows/cols), charts, tables, filters, conditional formatting, comments, named ranges, and more. Operations are async (Rust compute happens in a native thread) and errors throw directly.
+The SDK package root exposes `createWorkbook`, document factory types, workbook and worksheet contracts, utility functions, and API introspection helpers. The generated SDK API spec covers workbook and worksheet sub-APIs for sheets, names, history, security, formatting, structure, charts, tables, filters, conditional formatting, comments, validations, pivots, print, view state, and related worksheet features.
 
-For LLM integration, `describe()` and `summarize()` return structured, natural-language descriptions of sheet contents — designed for AI agents that need to understand a workbook without reading every cell.
+For LLM-facing workflows, worksheet methods such as `describe()`, `describeRange()`, and `summarize()` produce compact textual presentations of cell and range contents. Separately, `api.describe()` exposes programmatic API introspection from the generated SDK spec.
 
 ---
 
 ## Collaboration
 
-Persistent state lives in a [Yrs](https://github.com/y-crdt/y-crdt) CRDT document (the Rust port of Yjs). The key design decision that makes collaboration correct is the **Cell Identity Model**: cells are keyed by stable UUIDs, not by position. When two users simultaneously insert columns, the position updates compose correctly under CRDT because formulas reference cell IDs, not A1 strings. No formula rewriting is needed on structural changes.
+Persistent workbook state is stored in a Yrs CRDT document. The core design decision is the identity model: cells, rows, and columns have stable identities (`CellId`, `RowId`, `ColId`), and position is derived from identity-to-position state.
 
-We test collaboration with **216 scenarios** across 6 categories (convergence, edge cases, formula sync, locking, network partitions, structural operations). Current pass rate: **100%**.
+Users still type and see A1 formulas. Internally, formulas can carry a template plus identity references; persisted A1 text is used for compatibility, display, search, and export. Structural operations update identity-position state and regenerate derived A1 views where needed, while identity references remain the source of truth.
+
+Collaboration evidence in the repo includes the `compute-collab` Yrs sync protocol tests, `compute-document` identity tests, `compute/core/tests/range_collab_convergence.rs`, and `compute/core/tests/collab_structural_formula_sync.rs`.
 
 ---
 
 ## Testing
 
-| Suite | Scenarios | Pass Rate |
-|-------|-----------|-----------|
-| Collaboration | 216 | 100% |
-| API correctness | 572 | 99.3% |
-| UI end-to-end | 451 | 100% |
-| Rust unit tests | 12,264 | — |
+The current repository has verification surfaces across Rust and TypeScript. This report does not claim a single aggregate pass rate.
 
-The API suite exercises the full `Workbook`/`Worksheet` API surface — cells, formatting, charts, tables, filters, batch operations, export, and edge cases. The UI suite drives a real browser instance through editing, formatting, keyboard navigation, multi-sheet operations, scrolling, selection, and stress tests.
+| Area | Evidence paths |
+|------|----------------|
+| Formula accuracy | `compute/core/tests/formula_accuracy_*.rs`, `compute/core/tests/formula_contracts.rs` |
+| Numeric behavior | `compute/core/tests/numeric_repeatability`, `compute/core/crates/compute-stats/tests` |
+| XLSX import/export | `file-io/xlsx/parser/tests`, `compute/core/tests/xlsx_*_roundtrip.rs`, `compute/core/tests/roundtrip_parse_output` |
+| Binary wire | `compute/core/crates/compute-wire`, `kernel/src/bridges/wire/__tests__` |
+| SDK surface | `runtime/sdk/src/generated/api-spec.json`, `tools/api-snapshots` |
+| Collaboration | `compute/core/crates/compute-collab/tests`, `compute/core/crates/compute-document/src/identity/tests`, `compute/core/tests/range_collab_convergence.rs` |
+
+Common verification gates are documented at the repo root and in development docs. For this report, the important point is that the evidence is source-path specific rather than a static test-count table.
 
 ---
 
@@ -121,26 +121,24 @@ The API suite exercises the full `Workbook`/`Worksheet` API surface — cells, f
 
 We'd rather you know these upfront than discover them in production.
 
-- **VBA/macros**: Not supported. Files with VBA open fine but macros don't execute.
-- **Some chart types**: Basic chart types (bar, line, area, pie, scatter) are supported. Treemap, sunburst, waterfall, and some combo variants are in progress.
-- **Pivot table caching**: Pivot tables render from source data but don't round-trip the pivot cache XML, which may cause Excel to prompt for refresh on reopen.
-- **External references**: Cross-workbook links (`[Book2.xlsx]Sheet1!A1`) are parsed but not resolved.
-- **Print layout**: Page breaks and print areas are stored but print preview is not yet implemented.
-- **Conditional formatting icons/data bars**: Rules are stored and evaluated; rendering of icon sets and data bars is partial.
+- **VBA/macros and active content**: Imported workbook scripts are not executed. Active-content parts may be detected, preserved, disabled, or quarantined depending on the import/export path.
+- **External data refresh**: External workbook references, workbook links, and connection metadata are modeled in several places, but live refresh requires an integration/resolver and is not the same as Excel automation.
+- **OOXML feature depth**: Broad parser/writer coverage exists, but complex chart variants, active content, external links, workbook connections, and other specialized OOXML parts need feature-specific verification before claiming full behavioral parity.
+- **Calculation chain**: `xl/calcChain.xml` is not exported because it is an Excel cache, not authoritative workbook state.
+- **Volatile/time functions**: Transports include clock-injection support for WASM/N-API, but deterministic comparison of volatile functions requires a fixed clock.
+- **Published benchmark numbers**: Benchmark infrastructure exists, but fixed latency/memory/frame-rate numbers are not claimed in this document.
 
 ---
 
 ## Project Scale
 
-| Metric | Count |
-|--------|-------|
-| Rust compute crates | 21 |
-| TypeScript packages | 47 |
-| Excel-compatible functions | 454 |
-| Rust unit tests | 12,264 |
-| Collaboration test scenarios | 216 |
-| API test scenarios | 572 |
-| UI test assertions | 451 |
-| SDK platform binaries | 7 |
+| Metric | Current evidence |
+|--------|------------------|
+| Compute workspace shape | `compute-core` root crate plus 30 extracted crates under `compute/core/crates` |
+| Function library | `compute-functions` documents 512+ pure Excel-compatible functions |
+| SDK platform binaries | 7 optional `@mog-sdk/*` native platform packages |
+| Bridge targets | WASM, Tauri, N-API, plus bridge infrastructure for TypeScript generation |
+| Binary viewport format | 36-byte header, 32-byte cell records, 40-byte mutation patches |
+| Public SDK API metadata | Generated spec in `runtime/sdk/src/generated/api-spec.json` |
 
-The engine is actively developed. Formula accuracy, XLSX fidelity, and performance benchmarks are re-evaluated on every release, ensuring no regressions.
+Mog is actively developed. Treat source code, generated API metadata, and focused verification paths as authoritative for current capabilities.

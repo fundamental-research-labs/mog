@@ -5969,6 +5969,16 @@
       "definition": "(() => void) & IDisposable",
       "docstring": "A disposable that can also be called as a function (shorthand for dispose).\nThis type alias stays in contracts since it's used in service interface signatures."
     },
+    "CategoryLabelFormat": {
+      "name": "CategoryLabelFormat",
+      "definition": "{\n  formatCode?: string;\n  points?: CategoryPointLabelFormat[];\n}",
+      "docstring": "Category-axis label formatting captured from imported chart category caches.\nThe base format applies to all category values; point overrides replace it by\ncategory index."
+    },
+    "CategoryPointLabelFormat": {
+      "name": "CategoryPointLabelFormat",
+      "definition": "{\n  idx: number;\n  formatCode?: string;\n}",
+      "docstring": "Per-category label number-format override."
+    },
     "CellAnchor": {
       "name": "CellAnchor",
       "definition": "{\n  /** Stable cell reference that survives row/col insert/delete.\nResolve to current position via CellPositionLookup.getPosition(). */\n  cellId: CellId;\n  /** Horizontal offset from cell top-left in pixels */\n  xOffset: number;\n  /** Vertical offset from cell top-left in pixels */\n  yOffset: number;\n}",
@@ -6678,9 +6688,14 @@
       "definition": "{\n  /** Filter ID */\n  id: string;\n  /** Filter kind. */\n  filterKind: FilterKind;\n  /** Resolved numeric range of the filter */\n  range: { startRow: number; startCol: number; endRow: number; endCol: number };\n  /** Per-column filter criteria, keyed by header cell ID */\n  columnFilters: Record<string, ColumnFilterCriteria>;\n  /** Table ID if this filter is associated with a table. */\n  tableId?: string;\n  /** Advanced Filter metadata, present for advanced filters. */\n  advancedFilter?: AdvancedFilterDetailInfo;\n}",
       "docstring": "Detailed filter information including resolved numeric range and column filters."
     },
+    "FilterDropdownColumnType": {
+      "name": "FilterDropdownColumnType",
+      "definition": "'number' | 'text' | 'date' | 'mixed'",
+      "docstring": ""
+    },
     "FilterDropdownData": {
       "name": "FilterDropdownData",
-      "definition": "{\n  items: readonly FilterDropdownItem[];\n  hasBlank: boolean;\n  blankCount: number;\n  blankSelected: boolean;\n  totalRowCount: number;\n}",
+      "definition": "{\n  items: readonly FilterDropdownItem[];\n  hasBlank: boolean;\n  blankCount: number;\n  blankSelected: boolean;\n  totalRowCount: number;\n  /** Predominant value type for this filter column, derived from both cell\nvalues and resolved number formats. Numeric Excel serials are only\nclassified as dates when their cells carry a date/time number format. */\n  columnType?: FilterDropdownColumnType;\n}",
       "docstring": ""
     },
     "FilterDropdownItem": {
@@ -7826,7 +7841,7 @@
     },
     "SeriesConfig": {
       "name": "SeriesConfig",
-      "definition": "{\n  name?: string;\n  type?: string;\n  color?: string;\n  values?: string;\n  categories?: string;\n  bubbleSize?: string;\n  smooth?: boolean;\n  explosion?: number;\n  invertIfNegative?: boolean;\n  yAxisIndex?: number;\n  showMarkers?: boolean;\n  markerSize?: number;\n  markerStyle?: string;\n  lineWidth?: number;\n  points?: PointFormat[];\n  dataLabels?: DataLabelConfig;\n  trendlines?: TrendlineConfig[];\n  errorBars?: ErrorBarConfig;\n  xErrorBars?: ErrorBarConfig;\n  yErrorBars?: ErrorBarConfig;\n  idx?: number;\n  order?: number;\n  format?: ChartFormat;\n  barShape?: string;\n  /** Color to use when a data point is inverted (negative) */\n  invertColor?: ChartColor;\n  /** Marker fill color. */\n  markerBackgroundColor?: ChartColor;\n  /** Marker border color. */\n  markerForegroundColor?: ChartColor;\n  /** Whether this series is hidden/filtered from the chart. */\n  filtered?: boolean;\n  /** Show drop shadow on series. */\n  showShadow?: boolean;\n  /** Show connector lines between pie slices (bar-of-pie, pie-of-pie). */\n  showConnectorLines?: boolean;\n  /** Gap width between bars/columns as percentage (per-series override) */\n  gapWidth?: number;\n  /** Overlap between bars/columns (-100 to 100, per-series override) */\n  overlap?: number;\n  /** Hole size for doughnut charts as percentage (per-series override) */\n  doughnutHoleSize?: number;\n  /** First slice angle for pie/doughnut charts in degrees (per-series override) */\n  firstSliceAngle?: number;\n  /** Split type for of-pie charts (per-series override) */\n  splitType?: string;\n  /** Split value threshold for of-pie charts (per-series override) */\n  splitValue?: number;\n  /** Bubble scale as percentage (per-series override) */\n  bubbleScale?: number;\n  leaderLineFormat?: ChartFormat;\n  showLeaderLines?: boolean;\n  /** Per-series histogram bin options (overrides chart-level histogram config) */\n  binOptions?: HistogramConfig;\n  /** Per-series box/whisker options (overrides chart-level boxplot config) */\n  boxwhiskerOptions?: BoxplotConfig;\n  /** @deprecated Use trendlines[] instead */\n  trendline?: TrendlineConfig;\n}",
+      "definition": "{\n  name?: string;\n  type?: string;\n  color?: string;\n  values?: string;\n  categories?: string;\n  categoryLabelFormat?: CategoryLabelFormat;\n  bubbleSize?: string;\n  smooth?: boolean;\n  explosion?: number;\n  invertIfNegative?: boolean;\n  yAxisIndex?: number;\n  showMarkers?: boolean;\n  markerSize?: number;\n  markerStyle?: string;\n  lineWidth?: number;\n  points?: PointFormat[];\n  dataLabels?: DataLabelConfig;\n  trendlines?: TrendlineConfig[];\n  errorBars?: ErrorBarConfig;\n  xErrorBars?: ErrorBarConfig;\n  yErrorBars?: ErrorBarConfig;\n  idx?: number;\n  order?: number;\n  format?: ChartFormat;\n  barShape?: string;\n  /** Color to use when a data point is inverted (negative) */\n  invertColor?: ChartColor;\n  /** Marker fill color. */\n  markerBackgroundColor?: ChartColor;\n  /** Marker border color. */\n  markerForegroundColor?: ChartColor;\n  /** Whether this series is hidden/filtered from the chart. */\n  filtered?: boolean;\n  /** Show drop shadow on series. */\n  showShadow?: boolean;\n  /** Show connector lines between pie slices (bar-of-pie, pie-of-pie). */\n  showConnectorLines?: boolean;\n  /** Gap width between bars/columns as percentage (per-series override) */\n  gapWidth?: number;\n  /** Overlap between bars/columns (-100 to 100, per-series override) */\n  overlap?: number;\n  /** Hole size for doughnut charts as percentage (per-series override) */\n  doughnutHoleSize?: number;\n  /** First slice angle for pie/doughnut charts in degrees (per-series override) */\n  firstSliceAngle?: number;\n  /** Split type for of-pie charts (per-series override) */\n  splitType?: string;\n  /** Split value threshold for of-pie charts (per-series override) */\n  splitValue?: number;\n  /** Bubble scale as percentage (per-series override) */\n  bubbleScale?: number;\n  leaderLineFormat?: ChartFormat;\n  showLeaderLines?: boolean;\n  /** Per-series histogram bin options (overrides chart-level histogram config) */\n  binOptions?: HistogramConfig;\n  /** Per-series box/whisker options (overrides chart-level boxplot config) */\n  boxwhiskerOptions?: BoxplotConfig;\n  /** @deprecated Use trendlines[] instead */\n  trendline?: TrendlineConfig;\n}",
       "docstring": "Individual series configuration (matches ChartSeriesData wire type)"
     },
     "SeriesOrientation": {

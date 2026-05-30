@@ -415,6 +415,41 @@ describe('Legend Generation', () => {
 
     expect(result.legends).toHaveLength(0);
   });
+
+  test('right-aligns right legend content inside the reserved legend area', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 10, series: 'Staffing' },
+          { category: 'A', value: 20, series: 'Adjustment' },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative' },
+        color: {
+          field: 'series',
+          type: 'nominal',
+          legend: { orient: 'right', title: null, labelFontSize: 12 },
+        },
+      },
+      width: 796,
+      height: 436,
+    };
+
+    const result = compile(spec);
+    const symbols = result.legends.filter((mark) => mark.type === 'rect') as Array<{
+      x: number;
+      width: number;
+    }>;
+
+    expect(symbols.length).toBeGreaterThan(0);
+    expect(symbols[0].x).toBeGreaterThan(result.layout.legend!.x);
+    expect(symbols[0].x + symbols[0].width).toBeLessThanOrEqual(
+      result.layout.legend!.x + result.layout.legend!.width,
+    );
+  });
 });
 
 // =============================================================================

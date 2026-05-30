@@ -72,6 +72,17 @@ export function generateColorLegend(
   const symbolSize = legendSpec.symbolSize ?? 10;
   const itemY = y + (title ? 20 : 0);
   const itemSpacing = 18;
+  const labelFontSize = legendSpec.labelFontSize ?? 11;
+  const isRightLegend =
+    legendSpec.orient === 'right' ||
+    legendSpec.orient === 'top-right' ||
+    legendSpec.orient === 'bottom-right';
+  const maxLabelWidth = legendValues.reduce<number>(
+    (max, value) => Math.max(max, estimateLegendLabelWidth(String(value), labelFontSize)),
+    0,
+  );
+  const contentWidth = symbolSize + 5 + maxLabelWidth;
+  const contentX = isRightLegend ? x + layout.legend.width - contentWidth : x;
 
   for (let i = 0; i < legendValues.length; i++) {
     const value = legendValues[i];
@@ -80,7 +91,7 @@ export function generateColorLegend(
     // Symbol
     marks.push({
       type: 'rect',
-      x,
+      x: contentX,
       y: itemY + i * itemSpacing,
       width: symbolSize,
       height: symbolSize,
@@ -95,11 +106,11 @@ export function generateColorLegend(
     // Label
     marks.push({
       type: 'text',
-      x: x + symbolSize + 5,
+      x: contentX + symbolSize + 5,
       y: itemY + i * itemSpacing + symbolSize / 2,
       text: String(value),
       datum: { entryIndex: i },
-      fontSize: legendSpec.labelFontSize ?? 11,
+      fontSize: labelFontSize,
       fontFamily: legendSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: 'left',
       textBaseline: 'middle',
@@ -110,4 +121,8 @@ export function generateColorLegend(
   }
 
   return marks;
+}
+
+function estimateLegendLabelWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.7;
 }

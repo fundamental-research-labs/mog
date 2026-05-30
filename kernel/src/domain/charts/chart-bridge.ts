@@ -512,7 +512,12 @@ function snapshotSeries(
   const configured = config.series?.[index];
   const values: Array<number | null> = [];
   const blankMask: boolean[] = [];
-  const seriesCategories = configured?.categories || !hasExplicitSeriesReferences ? categories : [];
+  const seriesCategories = snapshotCategoriesForSeries(
+    series,
+    configured,
+    categories,
+    hasExplicitSeriesReferences,
+  );
   const length = Math.max(seriesCategories.length, series.data.length);
   for (let pointIndex = 0; pointIndex < length; pointIndex += 1) {
     const value = numericPointValue(series.data[pointIndex]);
@@ -547,6 +552,18 @@ function snapshotSeries(
   };
 }
 
+function snapshotCategoriesForSeries(
+  series: ChartDataSeries,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  categories: Array<string | number | null>,
+  hasExplicitSeriesReferences: boolean,
+): Array<string | number | null> {
+  if (configured?.categories) {
+    return series.data.map((point) => snapshotScalar(point?.x));
+  }
+  return !hasExplicitSeriesReferences ? categories : [];
+}
+
 function snapshotRange(reference: Charts.ResolvedChartRangeReference | null): RangeSnapshot | null {
   if (!reference) return null;
   return {
@@ -579,6 +596,7 @@ function groupingFor(config: ChartConfig): ResolvedChartSpecSnapshot['resolved']
 }
 
 function numericPointValue(point: ChartDataPoint | undefined): number | null {
+  if (point?.valueState && point.valueState !== 'value') return null;
   if (!point || typeof point.y !== 'number' || !Number.isFinite(point.y)) return null;
   return point.y;
 }

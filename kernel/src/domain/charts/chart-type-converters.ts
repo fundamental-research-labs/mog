@@ -298,16 +298,23 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
 
 /** Convert a wire ChartSeriesData to the contract SeriesConfig. */
 export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
-  return {
+  const config: SeriesConfig & {
+    valueCache?: ChartSeriesData['valueCache'];
+    categoryCache?: ChartSeriesData['categoryCache'];
+    bubbleSizeCache?: ChartSeriesData['bubbleSizeCache'];
+  } = {
     name: w.name,
     // SeriesConfig.type is an unrestricted string on the contract side —
     // chart-type strings are validated at the chart level, not here.
     type: w.type,
     color: w.color,
     values: w.values,
+    valueCache: w.valueCache,
     categories: w.categories,
+    categoryCache: w.categoryCache,
     categoryLabelFormat: w.categoryLabelFormat,
     bubbleSize: w.bubbleSize,
+    bubbleSizeCache: w.bubbleSizeCache,
     smooth: w.smooth,
     explosion: w.explosion,
     invertIfNegative: w.invertIfNegative,
@@ -337,6 +344,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     leaderLineFormat: w.leaderLineFormat,
     showLeaderLines: w.showLeaderLines,
   };
+  return config;
 }
 
 /** Convert an array of wire ChartSeriesData to SeriesConfig[]. */
@@ -416,7 +424,7 @@ export function legendConfigToWire(c: LegendConfig): LegendData {
   return {
     show: c.show,
     position: c.position,
-    visible: c.visible,
+    visible: c.visible ?? c.show,
     overlay: c.overlay,
     format: c.format,
     entries: c.entries,
@@ -448,7 +456,7 @@ export function leaderLinesFormatToWire(c: ChartLeaderLinesFormat): ChartLineDat
 /** Convert contract DataLabelConfig to wire DataLabelData. */
 export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
   return {
-    show: c.show,
+    show: c.show ?? c.visible ?? false,
     position: c.position,
     format: c.format,
     showValue: c.showValue,
@@ -493,14 +501,22 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
 
 /** Convert contract SeriesConfig to wire ChartSeriesData. */
 export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
+  const cached = c as SeriesConfig & {
+    valueCache?: ChartSeriesData['valueCache'];
+    categoryCache?: ChartSeriesData['categoryCache'];
+    bubbleSizeCache?: ChartSeriesData['bubbleSizeCache'];
+  };
   return {
     name: c.name,
     type: c.type,
     color: c.color,
     values: c.values,
+    valueCache: cached.valueCache,
     categories: c.categories,
+    categoryCache: cached.categoryCache,
     categoryLabelFormat: c.categoryLabelFormat,
     bubbleSize: c.bubbleSize,
+    bubbleSizeCache: cached.bubbleSizeCache,
     smooth: c.smooth,
     explosion: c.explosion,
     invertIfNegative: c.invertIfNegative,

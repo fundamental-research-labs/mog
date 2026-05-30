@@ -50,13 +50,17 @@ pub(super) fn extract_single_series(
 
     // Values range: val (standard) or y_val (scatter/bubble)
     let values = extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));
+    let value_cache = extract_num_point_cache(&s.val).or_else(|| extract_num_point_cache(&s.y_val));
 
     // Categories range: cat (standard) or x_val (scatter/bubble)
     let categories = extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
+    let category_cache =
+        extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
     let category_label_format =
         extract_category_label_format(&s.cat).or_else(|| extract_category_label_format(&s.x_val));
 
     let bubble_size = extract_num_ref_formula(&s.bubble_size);
+    let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
 
     // Markers
     let (show_markers, marker_size, marker_style) = extract_marker_config(&s.marker);
@@ -150,9 +154,12 @@ pub(super) fn extract_single_series(
         r#type: series_type,
         color,
         values,
+        value_cache,
         categories,
+        category_cache,
         category_label_format,
         bubble_size,
+        bubble_size_cache,
         smooth: s.smooth,
         explosion: s.explosion,
         invert_if_negative: s.invert_if_negative,
@@ -185,6 +192,72 @@ pub(super) fn extract_single_series(
 fn default_series_name(idx: u32, order: u32) -> String {
     let ordinal = if idx > 0 { idx } else { order + 1 };
     format!("Series {ordinal}")
+}
+
+fn extract_num_point_cache(
+    src: &Option<ooxml_types::charts::NumDataSource>,
+) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
+    use ooxml_types::charts::NumDataSource;
+
+    let data = match src.as_ref()? {
+        NumDataSource::Ref(num_ref) => num_ref.num_cache.as_ref()?,
+        NumDataSource::Lit(num_data) => num_data,
+    };
+    Some(num_data_to_point_cache(data))
+}
+
+fn extract_cat_point_cache(
+    src: &Option<ooxml_types::charts::CatDataSource>,
+) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
+    use ooxml_types::charts::CatDataSource;
+
+    match src.as_ref()? {
+        CatDataSource::NumRef(num_ref) => num_ref.num_cache.as_ref().map(num_data_to_point_cache),
+        CatDataSource::NumLit(num_data) => Some(num_data_to_point_cache(num_data)),
+        CatDataSource::StrRef(str_ref) => str_ref.str_cache.as_ref().map(str_data_to_point_cache),
+        CatDataSource::StrLit(str_data) => Some(str_data_to_point_cache(str_data)),
+        CatDataSource::MultiLvlStrRef(_) => None,
+    }
+}
+
+fn num_data_to_point_cache(
+    data: &ooxml_types::charts::NumData,
+) -> domain_types::chart::ChartSeriesPointCacheData {
+    domain_types::chart::ChartSeriesPointCacheData {
+        point_count: data.pt_count,
+        format_code: data.format_code.clone(),
+        points: data
+            .pts
+            .iter()
+            .map(
+                |point| domain_types::chart::ChartSeriesPointCachePointData {
+                    idx: point.idx,
+                    value: point.v.clone(),
+                    format_code: point.format_code.clone(),
+                },
+            )
+            .collect(),
+    }
+}
+
+fn str_data_to_point_cache(
+    data: &ooxml_types::charts::StrData,
+) -> domain_types::chart::ChartSeriesPointCacheData {
+    domain_types::chart::ChartSeriesPointCacheData {
+        point_count: data.pt_count,
+        format_code: None,
+        points: data
+            .pts
+            .iter()
+            .map(
+                |point| domain_types::chart::ChartSeriesPointCachePointData {
+                    idx: point.idx,
+                    value: point.v.clone(),
+                    format_code: None,
+                },
+            )
+            .collect(),
+    }
 }
 
 fn extract_category_label_format(
@@ -265,7 +338,7 @@ fn extract_error_bars_new(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ooxml_types::charts::{CatDataSource, NumData, NumPoint, NumRef};
+    use ooxml_types::charts::{CatDataSource, NumData, NumDataSource, NumPoint, NumRef};
 
     #[test]
     fn extracts_category_cache_format_and_point_overrides() {
@@ -301,6 +374,44 @@ mod tests {
                 format_code: Some("\"FY3/\"0\"E\"".to_string()),
             }),
         );
+    }
+
+    #[test]
+    fn preserves_value_cache_point_indices_and_explicit_zeroes() {
+        let series = ooxml_types::charts::ChartSeries {
+            val: Some(NumDataSource::Ref(NumRef {
+                f: "Sheet1!$B$2:$B$5".to_string(),
+                num_cache: Some(NumData {
+                    format_code: Some("General".to_string()),
+                    pt_count: Some(4),
+                    pts: vec![
+                        NumPoint {
+                            idx: 2,
+                            v: "0".to_string(),
+                            format_code: Some("0%".to_string()),
+                        },
+                        NumPoint {
+                            idx: 3,
+                            v: "4.5".to_string(),
+                            format_code: None,
+                        },
+                    ],
+                    extensions: vec![],
+                }),
+                extensions: vec![],
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None);
+        let cache = extracted.value_cache.expect("value cache");
+
+        assert_eq!(cache.point_count, Some(4));
+        assert_eq!(cache.format_code.as_deref(), Some("General"));
+        assert_eq!(cache.points.len(), 2);
+        assert_eq!(cache.points[0].idx, 2);
+        assert_eq!(cache.points[0].value, "0");
+        assert_eq!(cache.points[0].format_code.as_deref(), Some("0%"));
     }
 
     #[test]

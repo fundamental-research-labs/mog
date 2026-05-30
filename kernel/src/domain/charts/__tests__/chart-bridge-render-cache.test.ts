@@ -1015,6 +1015,111 @@ describe('resolveChartData imported visibility semantics', () => {
     expect(visibleMark?.style.fill).toBe('#4472C4');
     expect(laterMark?.style.fill).toBe('#A5A5A5');
   });
+
+  it('snapshots explicit per-series categories from point x values', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'line',
+      dataRange: '',
+      series: [
+        {
+          name: 'Generated categories',
+          values: 'Sheet1!A1:B1',
+          idx: 0,
+        },
+        {
+          name: 'Date categories',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!O1:P1',
+          idx: 1,
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number, startCol = 0, endCol = 1) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol,
+      endCol,
+    });
+    const chartCrudMock = jest.requireMock('../chart-crud') as {
+      get: jest.Mock;
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartCrudMock.get.mockResolvedValue(chart);
+    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          index: 0,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: null,
+        },
+        {
+          index: 1,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: {
+            kind: 'seriesCategories',
+            source: 'series',
+            ref: 'Sheet1!O1:P1',
+            range: range(0, 14, 15),
+          },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      if (row === 0 && col <= 1) return [10, 20][col];
+      if (row === 1) return [null, 40][col];
+      if (row === 0 && col >= 14) return [43952, 43983][col - 14];
+      return null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0 && col <= 1
+            ? [10, 20][col]
+            : row === 1
+              ? [null, 40][col]
+              : row === 0 && col >= 14
+                ? [43952, 43983][col - 14]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const snapshot = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      format: 'png',
+      width: 600,
+      height: 400,
+      pixelRatio: 1,
+      physicalWidth: 600,
+      physicalHeight: 400,
+      backgroundColor: '#ffffff',
+    });
+
+    expect('code' in snapshot).toBe(false);
+    if ('code' in snapshot) return;
+    expect(snapshot.resolvedChartSpec.resolved.series[0]?.categories).toEqual([]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.categories).toEqual([43952, 43983]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.values).toEqual([null, 40]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.blankMask).toEqual([true, false]);
+  });
 });
 
 describe('getLayout sheet-scoped cache contract', () => {

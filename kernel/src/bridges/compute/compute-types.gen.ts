@@ -1025,14 +1025,29 @@ export interface ChartRelationshipData {
   targetMode?: string;
 }
 
+export interface ChartSeriesPointCachePointData {
+  idx: number;
+  value: string;
+  formatCode?: string;
+}
+
+export interface ChartSeriesPointCacheData {
+  pointCount?: number;
+  formatCode?: string;
+  points: ChartSeriesPointCachePointData[];
+}
+
 export interface ChartSeriesData {
   name?: string;
   type?: string;
   color?: string;
   values?: string;
+  valueCache?: ChartSeriesPointCacheData;
   categories?: string;
+  categoryCache?: ChartSeriesPointCacheData;
   categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
+  bubbleSizeCache?: ChartSeriesPointCacheData;
   smooth?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;

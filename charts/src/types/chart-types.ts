@@ -296,11 +296,48 @@ export type CreateChartInput = Omit<StoredChartConfig, 'id'> & { id?: string };
 // =============================================================================
 
 /**
+ * Provenance for a chart point's numeric value before render fallback normalization.
+ *
+ * Chart rendering keeps `y` as a finite number for compatibility. When source
+ * data cannot produce a real finite value, extracted chart data preserves why
+ * the point was rendered with a fallback value.
+ */
+export type ChartDataPointValueState = 'value' | 'blank' | 'nonFinite' | 'nonNumeric';
+
+/**
+ * Imported point cache for a chart data dimension.
+ *
+ * OOXML chart caches store sparse points by index, so an omitted index is a
+ * meaningful blank/missing point while an explicit "0" value is a real zero.
+ */
+export interface ChartSeriesPointCache {
+  pointCount?: number;
+  formatCode?: string;
+  points?: ChartSeriesPointCachePoint[];
+}
+
+export interface ChartSeriesPointCachePoint {
+  idx: number;
+  value: string;
+  formatCode?: string;
+}
+
+/**
  * Chart data point
  */
 export interface ChartDataPoint {
   x: string | number;
+  /**
+   * Finite numeric value used by renderers. Blank, non-finite, or non-numeric
+   * source values may be represented as `0` here for existing chart behavior.
+   */
   y: number;
+  /**
+   * Source value state for points whose rendered `y` may not match the source.
+   * Undefined means the point has no explicit provenance, which legacy callers
+   * can treat as a normal value.
+   */
+  valueState?: ChartDataPointValueState;
   name?: string;
   value?: number; // For pie charts
   open?: number; // OHLC fields for stock charts

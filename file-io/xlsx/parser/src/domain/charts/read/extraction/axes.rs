@@ -6,13 +6,14 @@ pub(super) fn extract_axes_from_chart_space(
 ) -> Option<domain_types::chart::AxisData> {
     use ooxml_types::charts::AxisType;
 
-    let axes = &cs.chart.plot_area.axes;
+    let plot_area = &cs.chart.plot_area;
+    let axes = &plot_area.axes;
     if axes.is_empty() {
         return None;
     }
 
-    // Collect axes by type. For multi-axis charts, we pick the first of each type
-    // as primary and subsequent as secondary.
+    // Collect axes by type. The chart-group-aware pass below handles combo
+    // charts; these buckets preserve the previous ordered fallback behavior.
     let mut cat_axes: Vec<&ooxml_types::charts::ChartAxis> = Vec::new();
     let mut val_axes: Vec<&ooxml_types::charts::ChartAxis> = Vec::new();
     let mut date_axes: Vec<&ooxml_types::charts::ChartAxis> = Vec::new();
@@ -27,21 +28,49 @@ pub(super) fn extract_axes_from_chart_space(
         }
     }
 
-    // Category axis: first catAx or first dateAx as fallback
-    let primary_cat = cat_axes
+    let combo_axis_ids = if plot_area.chart_groups.len() > 1 {
+        resolve_combo_axis_role_ids(axes, &plot_area.chart_groups)
+    } else {
+        ComboAxisRoleIds::default()
+    };
+
+    // Category axis: first catAx or first dateAx as fallback.
+    let fallback_primary_cat = cat_axes
         .first()
         .copied()
         .or_else(|| date_axes.first().copied());
-    let secondary_cat = cat_axes.get(1).copied().or_else(|| {
+    let primary_cat = combo_axis_ids
+        .primary_category
+        .and_then(|id| find_category_axis_by_id(axes, id))
+        .or(fallback_primary_cat);
+
+    let fallback_secondary_cat = cat_axes.get(1).copied().or_else(|| {
         if cat_axes.is_empty() {
             date_axes.get(1).copied()
         } else {
             date_axes.first().copied()
         }
     });
+    let secondary_cat = combo_axis_ids
+        .secondary_category
+        .and_then(|id| find_category_axis_by_id(axes, id))
+        .or(fallback_secondary_cat)
+        .filter(|ax| !same_axis(Some(*ax), primary_cat));
 
-    let primary_val = val_axes.first().copied();
-    let secondary_val = val_axes.get(1).copied();
+    let primary_val = combo_axis_ids
+        .primary_value
+        .and_then(|id| find_axis_by_id_and_type(axes, id, AxisType::Value))
+        .or_else(|| val_axes.first().copied());
+    let secondary_val = combo_axis_ids
+        .secondary_value
+        .and_then(|id| find_axis_by_id_and_type(axes, id, AxisType::Value))
+        .or_else(|| {
+            val_axes
+                .iter()
+                .copied()
+                .find(|ax| !same_axis(Some(*ax), primary_val))
+        });
+
     let series_axis = ser_axes.first().copied();
 
     let category_axis = primary_cat.map(|ax| extract_single_axis(ax));
@@ -57,6 +86,295 @@ pub(super) fn extract_axes_from_chart_space(
         secondary_value_axis,
         series_axis,
     })
+}
+
+#[derive(Default)]
+struct ComboAxisRoleIds {
+    primary_category: Option<u32>,
+    secondary_category: Option<u32>,
+    primary_value: Option<u32>,
+    secondary_value: Option<u32>,
+}
+
+#[derive(Default)]
+struct GroupAxisRoleIds {
+    category: Option<u32>,
+    value: Option<u32>,
+}
+
+fn resolve_combo_axis_role_ids(
+    axes: &[ooxml_types::charts::ChartAxis],
+    groups: &[ooxml_types::charts::ChartGroup],
+) -> ComboAxisRoleIds {
+    let mut role_ids = ComboAxisRoleIds::default();
+
+    for group in groups {
+        let group_ids = resolve_group_axis_role_ids(axes, group);
+        if let Some(id) = group_ids.category {
+            record_distinct_axis_id(
+                &mut role_ids.primary_category,
+                &mut role_ids.secondary_category,
+                id,
+            );
+        }
+        if let Some(id) = group_ids.value {
+            record_distinct_axis_id(
+                &mut role_ids.primary_value,
+                &mut role_ids.secondary_value,
+                id,
+            );
+        }
+    }
+
+    (role_ids.primary_category, role_ids.secondary_category) = normalize_axis_role_ids_by_position(
+        axes,
+        role_ids.primary_category,
+        role_ids.secondary_category,
+    );
+    (role_ids.primary_value, role_ids.secondary_value) =
+        normalize_axis_role_ids_by_position(axes, role_ids.primary_value, role_ids.secondary_value);
+
+    role_ids
+}
+
+fn resolve_group_axis_role_ids(
+    axes: &[ooxml_types::charts::ChartAxis],
+    group: &ooxml_types::charts::ChartGroup,
+) -> GroupAxisRoleIds {
+    use ooxml_types::charts::AxisType;
+
+    let mut category_ids = Vec::new();
+    let mut value_ids = Vec::new();
+
+    for id in &group.ax_id {
+        let Some(axis) = find_axis_by_id(axes, *id) else {
+            continue;
+        };
+
+        match axis.axis_type {
+            AxisType::Category | AxisType::Date => category_ids.push(*id),
+            AxisType::Value => value_ids.push(*id),
+            AxisType::Series => {}
+        }
+    }
+
+    GroupAxisRoleIds {
+        category: category_ids.first().copied(),
+        // OOXML chart type groups list the category/X axis before the value/Y
+        // axis. For scatter/bubble both are valAx, so the final value axis is
+        // still the Y axis binding that a later yAxisIndex mapper needs.
+        value: value_ids.last().copied(),
+    }
+}
+
+fn record_distinct_axis_id(primary: &mut Option<u32>, secondary: &mut Option<u32>, id: u32) {
+    if *primary == Some(id) || *secondary == Some(id) {
+        return;
+    }
+    if primary.is_none() {
+        *primary = Some(id);
+    } else if secondary.is_none() {
+        *secondary = Some(id);
+    }
+}
+
+fn normalize_axis_role_ids_by_position(
+    axes: &[ooxml_types::charts::ChartAxis],
+    primary: Option<u32>,
+    secondary: Option<u32>,
+) -> (Option<u32>, Option<u32>) {
+    let (Some(primary_id), Some(secondary_id)) = (primary, secondary) else {
+        return (primary, secondary);
+    };
+
+    let Some(primary_axis) = find_axis_by_id(axes, primary_id) else {
+        return (primary, secondary);
+    };
+    let Some(secondary_axis) = find_axis_by_id(axes, secondary_id) else {
+        return (primary, secondary);
+    };
+
+    if is_secondary_axis_position(primary_axis.ax_pos)
+        && is_primary_axis_position(secondary_axis.ax_pos)
+    {
+        (secondary, primary)
+    } else {
+        (primary, secondary)
+    }
+}
+
+fn is_primary_axis_position(position: ooxml_types::charts::ChartAxisPosition) -> bool {
+    use ooxml_types::charts::ChartAxisPosition;
+    matches!(
+        position,
+        ChartAxisPosition::Bottom | ChartAxisPosition::Left
+    )
+}
+
+fn is_secondary_axis_position(position: ooxml_types::charts::ChartAxisPosition) -> bool {
+    use ooxml_types::charts::ChartAxisPosition;
+    matches!(position, ChartAxisPosition::Top | ChartAxisPosition::Right)
+}
+
+fn find_axis_by_id(
+    axes: &[ooxml_types::charts::ChartAxis],
+    id: u32,
+) -> Option<&ooxml_types::charts::ChartAxis> {
+    axes.iter().find(|axis| axis.ax_id == id)
+}
+
+fn find_axis_by_id_and_type(
+    axes: &[ooxml_types::charts::ChartAxis],
+    id: u32,
+    axis_type: ooxml_types::charts::AxisType,
+) -> Option<&ooxml_types::charts::ChartAxis> {
+    axes.iter()
+        .find(|axis| axis.ax_id == id && axis.axis_type == axis_type)
+}
+
+fn find_category_axis_by_id(
+    axes: &[ooxml_types::charts::ChartAxis],
+    id: u32,
+) -> Option<&ooxml_types::charts::ChartAxis> {
+    use ooxml_types::charts::AxisType;
+
+    axes.iter().find(|axis| {
+        axis.ax_id == id && matches!(axis.axis_type, AxisType::Category | AxisType::Date)
+    })
+}
+
+fn same_axis(
+    a: Option<&ooxml_types::charts::ChartAxis>,
+    b: Option<&ooxml_types::charts::ChartAxis>,
+) -> bool {
+    matches!((a, b), (Some(a), Some(b)) if a.ax_id == b.ax_id && a.axis_type == b.axis_type)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::charts::{
+        AxisType, BarChartConfig, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace,
+        ChartType, ChartTypeConfig, LineChartConfig, PlotArea, Scaling,
+    };
+
+    fn axis(
+        axis_type: AxisType,
+        ax_id: u32,
+        cross_ax: u32,
+        ax_pos: ChartAxisPosition,
+        min: f64,
+    ) -> ChartAxis {
+        ChartAxis {
+            axis_type,
+            ax_id,
+            cross_ax,
+            ax_pos,
+            scaling: Scaling {
+                min: Some(min),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn group(chart_type: ChartType, config: ChartTypeConfig, ax_id: Vec<u32>) -> ChartGroup {
+        ChartGroup {
+            chart_type,
+            config,
+            series: Vec::new(),
+            d_lbls: None,
+            ax_id,
+            raw_chart_type_attr: None,
+        }
+    }
+
+    #[test]
+    fn combo_axes_use_chart_group_axis_ids_not_axis_encounter_order() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    chart_groups: vec![
+                        group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig::default()),
+                            vec![10, 30],
+                        ),
+                        group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                            vec![10, 20],
+                        ),
+                    ],
+                    axes: vec![
+                        axis(AxisType::Category, 10, 30, ChartAxisPosition::Bottom, 1.0),
+                        axis(AxisType::Value, 20, 10, ChartAxisPosition::Right, 20.0),
+                        axis(AxisType::Value, 30, 10, ChartAxisPosition::Left, 30.0),
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+
+        assert_eq!(
+            axes.category_axis.as_ref().and_then(|axis| axis.min),
+            Some(1.0)
+        );
+        assert!(axes.secondary_category_axis.is_none());
+        assert_eq!(
+            axes.value_axis.as_ref().and_then(|axis| axis.min),
+            Some(30.0)
+        );
+        assert_eq!(
+            axes.secondary_value_axis.as_ref().and_then(|axis| axis.min),
+            Some(20.0)
+        );
+    }
+
+    #[test]
+    fn combo_axis_roles_are_normalized_by_axis_position() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    chart_groups: vec![
+                        group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                            vec![10, 20],
+                        ),
+                        group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig::default()),
+                            vec![10, 30],
+                        ),
+                    ],
+                    axes: vec![
+                        axis(AxisType::Category, 10, 30, ChartAxisPosition::Bottom, 1.0),
+                        axis(AxisType::Value, 20, 10, ChartAxisPosition::Right, 20.0),
+                        axis(AxisType::Value, 30, 10, ChartAxisPosition::Left, 30.0),
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+
+        assert_eq!(
+            axes.value_axis.as_ref().and_then(|axis| axis.min),
+            Some(30.0)
+        );
+        assert_eq!(
+            axes.secondary_value_axis.as_ref().and_then(|axis| axis.min),
+            Some(20.0)
+        );
+    }
 }
 
 /// Extract a single axis to SingleAxisData.

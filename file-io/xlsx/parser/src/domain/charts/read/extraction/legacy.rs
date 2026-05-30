@@ -121,9 +121,12 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 r#type: None, // follow-up: derive per-series type for combo charts
                 color,
                 values,
+                value_cache: None,
                 categories,
+                category_cache: None,
                 category_label_format: None,
                 bubble_size,
+                bubble_size_cache: None,
                 smooth: s.smooth,
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,

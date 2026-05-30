@@ -5,7 +5,9 @@ import type {
   ChartConfig,
   ChartData,
   ChartDataPoint,
+  ChartDataPointValueState,
   ChartDataSeries,
+  ChartSeriesPointCache,
   SeriesConfig,
   SeriesOrientation,
 } from '../types';
@@ -27,6 +29,12 @@ export type { CellAddress, CellRange };
  * @see `@mog-sdk/contracts/core` for the canonical `CellValue` type.
  */
 export type ChartCellValue = string | number | boolean | null | undefined;
+
+type SeriesConfigWithImportedCaches = SeriesConfig & {
+  valueCache?: ChartSeriesPointCache;
+  categoryCache?: ChartSeriesPointCache;
+  bubbleSizeCache?: ChartSeriesPointCache;
+};
 
 /**
  * Generic cell data accessor interface
@@ -97,6 +105,78 @@ function isNumericLike(value: ChartCellValue): boolean {
   return !Number.isNaN(toNumber(value));
 }
 
+function getValueState(
+  rawValue: ChartCellValue,
+  numericValue: number,
+): ChartDataPointValueState | undefined {
+  if (rawValue === null || rawValue === undefined || rawValue === '') {
+    return 'blank';
+  }
+
+  if (Number.isFinite(numericValue)) {
+    return undefined;
+  }
+
+  if (
+    typeof rawValue === 'number' ||
+    (typeof rawValue === 'string' && rawValue.trim() !== '' && !Number.isNaN(numericValue))
+  ) {
+    return 'nonFinite';
+  }
+
+  return 'nonNumeric';
+}
+
+function createDataPoint(
+  x: string | number,
+  rawValue: ChartCellValue,
+  name: string,
+): ChartDataPoint {
+  const numericValue = toNumber(rawValue);
+  const valueState = getValueState(rawValue, numericValue);
+  const point: ChartDataPoint = {
+    x,
+    y: Number.isFinite(numericValue) ? numericValue : 0,
+    name,
+  };
+  if (valueState) {
+    point.valueState = valueState;
+  }
+  return point;
+}
+
+function isBlankChartCellValue(value: ChartCellValue): boolean {
+  return value === null || value === undefined || value === '';
+}
+
+function cachedPointValueAt(
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): ChartCellValue {
+  const point = cache?.points?.find((candidate) => candidate.idx === pointIndex);
+  return point ? point.value : undefined;
+}
+
+function cachedLabelValueAt(
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): string | number | undefined {
+  const value = cachedPointValueAt(cache, pointIndex);
+  if (value === undefined || value === null || value === '') return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : String(value);
+}
+
+function valueWithImportedCacheFallback(
+  rawValue: ChartCellValue,
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): ChartCellValue {
+  if (!isBlankChartCellValue(rawValue)) return rawValue;
+  const cached = cachedPointValueAt(cache, pointIndex);
+  return cached === undefined ? rawValue : cached;
+}
+
 function labelValue(value: ChartCellValue, fallback: string | number): string | number {
   if (value === null || value === undefined || value === '') {
     return fallback;
@@ -153,13 +233,9 @@ function extractExcelTableData(accessor: CellDataAccessor, range: CellRange): Ch
 
     for (let row = range.startRow + 1; row <= range.endRow; row++) {
       const catIndex = row - range.startRow - 1;
-      const value = toNumber(getRangeValue(accessor, range, row, col));
+      const rawValue = getRangeValue(accessor, range, row, col);
       const category = categories[catIndex] ?? catIndex;
-      data.push({
-        x: category,
-        y: isNaN(value) ? 0 : value,
-        name: String(category),
-      });
+      data.push(createDataPoint(category, rawValue, String(category)));
     }
 
     series.push({ name, data });
@@ -241,25 +317,17 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
       // Single column: iterate rows, each row is a data point
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const index = row - dataRange.startRow + 1; // 1-based index
-        const value = toNumber(getRangeValue(accessor, dataRange, row, dataRange.startCol));
+        const rawValue = getRangeValue(accessor, dataRange, row, dataRange.startCol);
         categories.push(index);
-        data.push({
-          x: index,
-          y: isNaN(value) ? 0 : value,
-          name: String(index),
-        });
+        data.push(createDataPoint(index, rawValue, String(index)));
       }
     } else {
       // Single row: iterate columns, each column is a data point
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const index = col - dataRange.startCol + 1; // 1-based index
-        const value = toNumber(getRangeValue(accessor, dataRange, dataRange.startRow, col));
+        const rawValue = getRangeValue(accessor, dataRange, dataRange.startRow, col);
         categories.push(index);
-        data.push({
-          x: index,
-          y: isNaN(value) ? 0 : value,
-          name: String(index),
-        });
+        data.push(createDataPoint(index, rawValue, String(index)));
       }
     }
 
@@ -315,12 +383,9 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
 
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const catIndex = col - dataRange.startCol;
-        const value = toNumber(getRangeValue(accessor, dataRange, row, col));
-        data.push({
-          x: categories[catIndex] ?? catIndex,
-          y: isNaN(value) ? 0 : value,
-          name: String(categories[catIndex] ?? catIndex),
-        });
+        const category = categories[catIndex] ?? catIndex;
+        const rawValue = getRangeValue(accessor, dataRange, row, col);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
 
       series.push({ name, data });
@@ -335,12 +400,9 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
 
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const catIndex = row - dataRange.startRow;
-        const value = toNumber(getRangeValue(accessor, dataRange, row, col));
-        data.push({
-          x: categories[catIndex] ?? catIndex,
-          y: isNaN(value) ? 0 : value,
-          name: String(categories[catIndex] ?? catIndex),
-        });
+        const category = categories[catIndex] ?? catIndex;
+        const rawValue = getRangeValue(accessor, dataRange, row, col);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
 
       series.push({ name, data });
@@ -415,13 +477,15 @@ function extractChartDataFromSeriesRefs(
     }
 
     const data: ChartDataPoint[] = valueItems.map((rawValue, pointIndex) => {
-      const y = toNumber(rawValue);
-      const category = categoryItems[pointIndex] ?? categories[pointIndex] ?? pointIndex + 1;
-      return {
-        x: category,
-        y: isNaN(y) ? 0 : y,
-        name: String(category),
-      };
+      const importedCaches = seriesConfig as SeriesConfigWithImportedCaches;
+      const liveCategory = categoryItems[pointIndex];
+      const cachedCategory = cachedLabelValueAt(importedCaches.categoryCache, pointIndex);
+      const category =
+        liveCategory !== undefined && liveCategory !== ''
+          ? liveCategory
+          : (cachedCategory ?? categories[pointIndex] ?? pointIndex + 1);
+      const value = valueWithImportedCacheFallback(rawValue, importedCaches.valueCache, pointIndex);
+      return createDataPoint(category, value, String(category));
     });
 
     if (categories.length === 0) {
@@ -484,25 +548,17 @@ export function extractChartDataFromRange(
       // Single column: iterate rows, each row is a data point
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const index = row - dataRange.startRow + 1; // 1-based index
-        const value = toNumber(getRangeValue(accessor, dataRange, row, dataRange.startCol));
+        const rawValue = getRangeValue(accessor, dataRange, row, dataRange.startCol);
         categories.push(index);
-        data.push({
-          x: index,
-          y: isNaN(value) ? 0 : value,
-          name: String(index),
-        });
+        data.push(createDataPoint(index, rawValue, String(index)));
       }
     } else {
       // Single row: iterate columns, each column is a data point
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const index = col - dataRange.startCol + 1; // 1-based index
-        const value = toNumber(getRangeValue(accessor, dataRange, dataRange.startRow, col));
+        const rawValue = getRangeValue(accessor, dataRange, dataRange.startRow, col);
         categories.push(index);
-        data.push({
-          x: index,
-          y: isNaN(value) ? 0 : value,
-          name: String(index),
-        });
+        data.push(createDataPoint(index, rawValue, String(index)));
       }
     }
 
@@ -558,12 +614,9 @@ export function extractChartDataFromRange(
 
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const catIndex = col - dataRange.startCol;
-        const value = toNumber(getRangeValue(accessor, dataRange, row, col));
-        data.push({
-          x: categories[catIndex] ?? catIndex,
-          y: isNaN(value) ? 0 : value,
-          name: String(categories[catIndex] ?? catIndex),
-        });
+        const category = categories[catIndex] ?? catIndex;
+        const rawValue = getRangeValue(accessor, dataRange, row, col);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
 
       series.push({ name, data });
@@ -578,12 +631,9 @@ export function extractChartDataFromRange(
 
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const catIndex = row - dataRange.startRow;
-        const value = toNumber(getRangeValue(accessor, dataRange, row, col));
-        data.push({
-          x: categories[catIndex] ?? catIndex,
-          y: isNaN(value) ? 0 : value,
-          name: String(categories[catIndex] ?? catIndex),
-        });
+        const category = categories[catIndex] ?? catIndex;
+        const rawValue = getRangeValue(accessor, dataRange, row, col);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
 
       series.push({ name, data });

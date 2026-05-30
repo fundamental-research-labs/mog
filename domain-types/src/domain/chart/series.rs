@@ -22,15 +22,28 @@ pub struct ChartSeriesData {
     /// Values range: c:val (bar/line/pie) or c:yVal (scatter/bubble)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub values: Option<String>,
+    /// Imported cached values from the source chart data reference.
+    ///
+    /// OOXML caches preserve omitted point indices separately from explicit
+    /// zero values. Runtime renderers can use this as a source fallback when
+    /// live cell resolution cannot provide a point.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value_cache: Option<ChartSeriesPointCacheData>,
     /// Categories range: c:cat (bar/line/pie) or c:xVal (scatter/bubble)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categories: Option<String>,
+    /// Imported cached category/x values from the source chart data reference.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_cache: Option<ChartSeriesPointCacheData>,
     /// Cached category number format metadata, including per-point overrides.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_label_format: Option<CategoryLabelFormatData>,
     /// Bubble sizes range: c:bubbleSize (bubble only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bubble_size: Option<String>,
+    /// Imported cached bubble sizes from the source chart data reference.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bubble_size_cache: Option<ChartSeriesPointCacheData>,
 
     // -- Visual properties --
     /// Smooth line (line, scatter)
@@ -110,6 +123,29 @@ pub struct ChartSeriesData {
     pub leader_line_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_leader_lines: Option<bool>,
+}
+
+/// Imported per-point cache for one chart data dimension.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesPointCacheData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format_code: Option<String>,
+    #[serde(default)]
+    pub points: Vec<ChartSeriesPointCachePointData>,
+}
+
+/// Imported cached chart point value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesPointCachePointData {
+    #[serde(default)]
+    pub idx: u32,
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format_code: Option<String>,
 }
 
 /// Category-axis label formatting captured from the series category cache.

@@ -1,6 +1,6 @@
 # Pivot Tables
 
-Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet engine. The pivot table system implements an Excel-compatible pivot table model with a fully-ported Rust computation engine, TypeScript kernel bridges, and React UI integration.
+Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet engine. The pivot table system uses Rust-backed storage and computation, TypeScript kernel bridges, and React UI integration.
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet e
 - [Show Values As](#show-values-as)
 - [Calculated Fields](#calculated-fields)
 - [Key Design Decisions](#key-design-decisions)
-- [Migration Status](#migration-status)
+- [Current Status](#current-status)
 - [File Reference](#file-reference)
 
 ---
@@ -24,18 +24,18 @@ Comprehensive documentation for the Pivot Table feature in the Mog spreadsheet e
 
 Pivot tables summarize large datasets by grouping, filtering, and aggregating data along configurable row and column axes. Users select source data, define field placements (rows, columns, values, filters), and the engine produces a materialized result table with headers, aggregated values, subtotals, and grand totals.
 
-The implementation is Excel-compatible: field areas, aggregation functions, date/number grouping, Show Values As transforms, expand/collapse hierarchies, drill-down, and layout modes all follow Excel semantics.
+The implementation tracks Excel pivot-table concepts across field areas, aggregation functions, date/number grouping, Show Values As transforms, expand/collapse hierarchies, drill-down, and layout modes. UI support varies by command; see [Current Status](#current-status).
 
-### Scale
+### Source Layout
 
-| Component | Lines | Tests |
-|-----------|-------|-------|
-| Rust `compute-pivot` crate (source) | ~12,400 | 666 |
-| Rust `compute-pivot` crate (total incl. tests) | ~41,800 | - |
-| TypeScript `pivot-bridge.ts` | ~546 | - |
-| TypeScript `pivot-event-bridge.ts` | ~305 | - |
-| Contracts (`pivot.ts`, bridge interfaces) | ~630 | - |
-| UI hooks (3 files) | ~870 | - |
+| Area | Primary paths |
+|------|---------------|
+| Pivot facade, presenter, Show Values As | `compute/core/crates/compute-pivot/` |
+| Relational filter/group/aggregate engine | `compute/core/crates/compute-relational/` |
+| Rust pivot data types | `domain-types/src/domain/pivot/`, `compute/core/crates/types/pivot-types/` |
+| TypeScript pivot contracts | `types/data/src/data/pivot.ts`, `types/bridges/src/pivot-bridge.ts`, `types/events/src/pivot-events.ts` |
+| Kernel bridge and worksheet API | `kernel/src/bridges/pivot-bridge.ts`, `kernel/src/api/worksheet/pivots.ts` |
+| Spreadsheet UI | `apps/spreadsheet/src/components/pivot/`, `apps/spreadsheet/src/hooks/data/` |
 
 ---
 
@@ -75,17 +75,16 @@ The implementation is Excel-compatible: field areas, aggregation functions, date
 |  +-------------------------------------------------------------+ |
 +------------------------------------------------------------------+
          |
-         | Tauri IPC (desktop) / WASM (web)
+         | ComputeBridge transport
          |
 +------------------------------------------------------------------+
 |                    Rust Compute Layer                             |
 |  +-------------------------------------------------------------+|
 |  | compute-pivot crate                                          ||
 |  |                                                              ||
-|  |  engine/                                                     ||
-|  |    validate -> filter -> group(row) -> group(col)            ||
-|  |    -> aggregate -> calc_fields -> sort -> grand_totals       ||
-|  |    -> show_values_as                                         ||
+|  |  compute-pivot facade                                        ||
+|  |    validate -> query mapping -> compute-relational::execute  ||
+|  |    -> presenter projection -> show_values_as                 ||
 |  |                                                              ||
 |  |  +----------+ +----------+ +---------+ +-------------------+ ||
 |  |  | grouper  | | filter   | | engine/ | | show_values_as    | ||
@@ -95,30 +94,26 @@ The implementation is Excel-compatible: field areas, aggregation functions, date
 |  |  | - expand | | - top/N  | | - agg   | +-------------------+ ||
 |  |  +----------+ +----------+ +---------+                       ||
 |  |                                                              ||
-|  |  Depends on: value-types, compute-stats                      ||
+|  |  Depends on: value-types, cell-types, pivot-types,           ||
+|  |  domain-types, compute-relational, compute-stats             ||
 |  +-------------------------------------------------------------+||
 +------------------------------------------------------------------+
 ```
 
 ### Communication Flow
 
-1. **Desktop (Tauri)**: TypeScript calls Rust via Tauri IPC commands (`pivot_compute`, `pivot_detect_fields`, `pivot_drill_down`, `pivot_validate_config`).
-2. **Web (WASM)**: TypeScript calls Rust via WASM module exports (same function signatures, loaded lazily from `@mog-sdk/wasm`).
-3. **Auto-detection**: `PivotBridge.callRustPivot()` checks `isTauriEnvironment()` and routes accordingly.
+1. `PivotBridge` delegates pivot reads, writes, and materialization to `ComputeBridge`.
+2. Generated `ComputeBridge` methods call transport keys such as `compute_pivot_create`, `compute_pivot_get_all`, `compute_pivot_compute_from_source`, `compute_pivot_materialize`, `pivot_detect_fields`, and `pivot_drill_down`.
+3. The `ComputeBridge` transport layer owns runtime routing for desktop/native and web runtimes; `PivotBridge` does not perform its own Tauri/WASM dispatch.
 
 ### Data Marshaling
 
-CellValue representations differ between TypeScript and Rust:
+`kernel/src/bridges/pivot-bridge.ts` maps between public TypeScript pivot contracts and generated compute DTOs:
 
-| TypeScript | Rust Wire Format |
-|------------|-----------------|
-| `42` (number) | `{ type: "Number", value: 42 }` |
-| `"hello"` (string) | `{ type: "Text", value: "hello" }` |
-| `true` (boolean) | `{ type: "Boolean", value: true }` |
-| `null` | `{ type: "Null" }` |
-| `{ type: "error", value: "#DIV/0!" }` | `{ type: "Error", value: "Div0" }` |
-
-Conversion functions: `toComputeCellValue()`, `fromComputeCellValue()`, `convertDataToRust()`, `convertPivotResultFromRust()` (all in `pivot-bridge.ts`).
+- Config mapping: `toComputePivotConfig()`, `toPublicPivotConfig()`
+- Field/placement mapping: `toComputePivotField()`, `toPublicPivotField()`, `toComputePivotPlacement()`, `toPublicPivotPlacement()`
+- Result mapping: `toPublicPivotTableResult()`, `toPublicPivotRow()`, `toPublicPivotHeader()`
+- Source data reads: `getDataFromRange()` calls `queryRange()` and normalizes cell values with `normalizeCellValue()`
 
 ---
 
@@ -126,36 +121,30 @@ Conversion functions: `toComputeCellValue()`, `fromComputeCellValue()`, `convert
 
 **Path**: [`compute/core/crates/compute-pivot/`](../../../compute/core/crates/compute-pivot/)
 
-**Dependencies**: `value-types` (CellValue, CellError, date_serial), `compute-stats` (aggregation, sorting, filtering primitives), `chrono` (date grouping), `serde`/`serde_json`.
+**Dependencies**: `value-types` (CellValue, CellError, date_serial), `cell-types` (ranges/sheet IDs), `pivot-types` (which re-exports canonical domain pivot contracts), `compute-relational` (query execution), `compute-stats` (aggregation, sorting, value semantics), `snapshot-types` (PivotTableDef conversion), `chrono` (date grouping), `serde`/`serde_json`.
 
-The crate is a pure-function engine: `(config, data, expansion_state) -> result`. No document state, no side effects.
+The crate exposes pure computation entry points: `(config, data, expansion_state) -> result`. Document state, persistence, and materialization live in `compute/core/src/storage` and are reached through `ComputeBridge`.
 
 ### Module Map
 
 | Module | Purpose | Key Types/Functions |
 |--------|---------|-------------------|
-| `types/` | All pivot-specific types | `PivotTableConfig`, `PivotField`, `PivotFieldPlacement`, `PivotFilter`, `PivotTableResult`, `ShowValuesAs` |
-| `types/field.rs` | Field definition | `PivotField { id, name, source_column, data_type }` |
-| `types/placement.rs` | Type-safe placement enum | `PivotFieldPlacement::Row(AxisPlacement)`, `::Column(AxisPlacement)`, `::Value(ValuePlacement)`, `::Filter(FilterPlacement)` |
-| `types/config.rs` | Top-level config | `PivotTableConfig`, `PivotTableLayout`, `CalculatedField`, `CellRange`, `OutputLocation` |
-| `types/result.rs` | Computation output | `PivotTableResult`, `PivotRow`, `PivotHeader`, `PivotColumnHeader`, `PivotGrandTotals` |
-| `types/show_values_as.rs` | Show Values As types | `ShowValuesAs` (13 variants), `ShowValuesAsConfig`, `ShowValuesAsBaseItem`, `SortByValueConfig` |
-| `types/filter_types.rs` | Filter types | `PivotFilter`, `PivotFilterCondition`, `PivotTopBottomFilter`, `TopBottomType`, `TopBottomBy` |
-| `types/expansion.rs` | Expand/collapse state | `PivotExpansionState` |
+| `types/` | Re-export shim over `pivot-types` / `domain-types` | `PivotTableConfig`, `PivotField`, `PivotFieldPlacement`, `PivotFilter`, `PivotTableResult`, `ShowValuesAs` |
+| `compute/core/crates/types/pivot-types/` | Dependency-light Rust pivot type facade | config, placement, result, filter, expansion re-exports |
+| `domain-types/src/domain/pivot/` | Canonical Rust pivot domain types | `PivotTableConfig`, `PlacementId`, `ShowValuesAs`, placement/config/filter structs |
 | `resolved.rs` | Validated config | `ResolvedPivotConfig` -- constructed only via `validate_and_resolve()` |
 | `engine/` | Pipeline orchestrator | `compute()`, `detect_fields()`, `drill_down()`, `validate_config()` |
-| `engine/compute.rs` | Core computation | Orchestrates the 9-stage pipeline |
+| `engine/compute.rs` | Core computation | Validates config, maps to relational query, runs presenter projection |
 | `engine/validation.rs` | Config validation | `validate_and_resolve()` -- produces `ResolvedPivotConfig` |
 | `engine/type_detection.rs` | Field detection | `detect_fields()` -- scans source data to infer field names and types |
-| `engine/row_computation.rs` | Row building | `compute_pivot_rows()`, `apply_calc_fields_to_values()` |
-| `engine/value_sorting.rs` | Value-based sort | `sort_rows_by_value()` -- sort rows by aggregated values |
-| `engine/grand_totals.rs` | Grand total computation | `compute_grand_totals()` |
+| `engine/row_computation.rs` | Calculated-field helpers | `apply_calc_fields_to_values()` |
 | `engine/drill_down.rs` | Drill-down | `drill_down()`, `drill_down_resolved()` -- source row lookup |
-| `grouper.rs` | Hierarchical grouping | `create_group_hierarchy()`, `flatten_group_hierarchy()`, `apply_date_grouping()`, `apply_number_grouping()` |
-| `filter.rs` | Index-based filtering | `apply_filters()` -- include/exclude, conditions, top/bottom N |
-| `show_values_as.rs` | Post-aggregation transforms | `apply_show_values_as_with_hierarchy()` |
-| `hierarchy.rs` | Group hierarchy index | `GroupHierarchy`, `build_group_hierarchy()` -- O(1) parent lookup, group-scoped iteration |
-| `calc_field.rs` | Calculated fields | `parse_calc_field()`, `evaluate_calc_field()`, `CalcFieldExpr` |
+| `presenter/` | Relational result projection | `pivot_config_to_query()`, `query_result_to_pivot()` |
+| `grouper.rs` | Grouping helpers | `apply_date_grouping()`, `apply_number_grouping()`, `normalize_to_key()` |
+| `filter.rs` | Index-based filtering helpers | `apply_filters_resolved()` -- used by drill-down and item extraction |
+| `show_values_as/` | Post-aggregation transforms | `apply_show_values_as_to_result()`, `apply_show_values_as_with_hierarchy()` |
+| `hierarchy.rs` + `hierarchy/` | Group hierarchy index | `GroupHierarchy`, `build_group_hierarchy_from_aggregated_tree()` |
+| `calc_field/` | Calculated fields | `parse_calc_field()`, `evaluate_calc_field()`, `CalcFieldExpr` |
 
 ### Re-exports from compute-stats
 
@@ -163,14 +152,14 @@ The crate re-exports key primitives from `compute-stats`:
 
 - **Aggregator** (`compute_stats::aggregate`): `aggregate()` function supporting 12 aggregate functions
 - **Sorter** (`compute_stats::sort`): `sort_by_in_place()`, `sort_by_custom_order_in_place()`, `SortConfig`
-- **Values** (`compute_stats::values`): `cell_value_to_key()`, `cell_value_eq()`, `cell_value_is_blank()`, `kahan_sum()`
+- **Values** (`compute_stats::values`): `cell_value_to_key()`, `cell_value_filter_keys()`, `cell_value_eq()`, `cell_value_is_numeric()`, `cell_value_to_sort_key()`, `cell_value_to_display_key()`, `kahan_sum()`
 
 ### Type System: "Parse, Don't Validate"
 
 The types module follows a parse-don't-validate philosophy:
 
 1. **Wire types** (`PivotFieldPlacementFlat`, `PivotFilterConditionFlat`) match the TypeScript JSON format for serde compatibility.
-2. **Type-safe enums** (`PivotFieldPlacement`, `PivotFilterCondition`) make invalid states unrepresentable. Area-specific fields only exist on the correct variant.
+2. **Type-safe enums** (`PivotFieldPlacement`, `PivotFilterCondition`) live in the Rust domain types and make invalid area-specific states unrepresentable after conversion.
 3. **Resolved types** (`ResolvedPivotConfig`, `ResolvedAxisPlacement`, etc.) can only be constructed through validation. The engine accepts only resolved types -- zero fallback defaults.
 
 `From` implementations convert between flat and type-safe representations at the boundary.
@@ -183,7 +172,7 @@ The architectural boundary is:
 
 | Concern | Owner |
 | --- | --- |
-| Persistent pivot config, placement identity, calculated-field identity, expansion keys, result measure provenance | Rust domain/compute/storage |
+| Persistent pivot config, placement identity, calculated-field identity, expansion keys, typed result metadata contracts | Rust domain/compute/storage |
 | Public mutation API and kernel mutation receipts | Kernel worksheet pivot API / `PivotBridge` |
 | User mutation entry | Spreadsheet action handlers via `dispatch(PIVOT_*)` |
 | UI sessions, semantic targets, dialog drafts, range-pick drafts, command readiness receipts | `apps/spreadsheet/src/systems/pivot` |
@@ -207,11 +196,14 @@ App-eval keeps real UI input paths. Only readback changes: assertions should rea
 
 ## Computation Pipeline
 
-The engine processes pivot computations through a 9-stage linear pipeline:
+The current compute path validates the pivot config, translates it into a relational query, executes that query, then projects the query result back into pivot layout structures:
 
 ```
-validate -> filter -> group(row) -> group(col) -> aggregate
-         -> calc_fields -> sort -> grand_totals -> show_values_as
+validate_and_resolve
+  -> pivot_config_to_query
+  -> compute_relational::execute
+  -> query_result_to_pivot
+  -> apply_show_values_as_to_result (when configured)
 ```
 
 ### Stage 1: Validate (`validate_and_resolve`)
@@ -224,43 +216,41 @@ Converts wire-format `PivotTableConfig` into `ResolvedPivotConfig`:
 - Pre-parses calculated field formulas
 - Returns `Result<ResolvedPivotConfig, PivotError>` -- engine never touches raw config
 
-### Stage 2: Filter (`apply_filters_resolved`)
+### Stage 2: Query Mapping (`pivot_config_to_query`)
 
-Narrows source data to surviving row indices (AND logic, O(N * F)):
-1. **Include list** -- allowlist via `HashSet` membership
-2. **Exclude list** -- denylist via `HashSet` membership
-3. **Condition** -- per-row predicate (equals, contains, between, above/below average, etc.)
-4. **showItemsWithNoData** -- removes blank rows unless explicitly included
-5. **Top/Bottom N** -- ranking filter (requires aggregation, applied last)
+`presenter/query_mapping.rs` converts the resolved pivot config into `compute-relational`'s `RelationalQuery`:
+- Row and column placements become `GroupField`s with identity, date, or number grouping.
+- Value placements become measures.
+- Pivot filters become query filters.
+- Calculated fields become relational calculated measures.
+- Subtotal and grand-total options become relational config.
 
-No data is cloned -- only indices are tracked.
+### Stage 3: Relational Execution (`compute_relational::execute`)
 
-### Stage 3: Group Rows (`create_group_hierarchy`)
+The relational engine owns the core data pipeline:
 
-Builds the row axis hierarchy tree from surviving data:
-- **Text grouping**: exact match (case-insensitive via `cell_value_to_key`)
-- **Date grouping**: buckets serial dates into Year, Quarter, Month, Week, Day, Hour, Minute, Second
-- **Number grouping**: equal-width bins with precision-aware labels
-- **Expand/collapse**: respects `PivotExpansionState` with default-expanded flag
+```
+validate(query)
+  -> filter(data, query.filters)
+  -> group_rows(data, query.row_fields)
+  -> group_columns(data, query.column_fields)
+  -> aggregate(row_tree, col_tree, query.measures)
+  -> sort_trees(row_tree, col_tree, query)
+  -> calc_measures(tree, query.calculated_measures)
+  -> grand_totals(tree, query.grand_totals)
+  -> QueryResult
+```
 
-Week grouping uses Excel conventions: Sunday start, Week 1 contains January 1.
+Filtering and grouping operate on source row indices. Date grouping supports Year, Quarter, Month, Week, Day, Hour, Minute, and Second; number grouping uses equal-width bins.
 
-Each `GroupNode` contains: key, display value, field ID, depth, children, row indices, expansion state.
+### Stage 4: Aggregate Functions
 
-Safety: `MAX_GROUP_NODES = 100,000` prevents runaway grouping.
-
-### Stage 4: Group Columns (`create_group_hierarchy`)
-
-Same algorithm as row grouping, but builds the column axis tree.
-
-### Stage 5: Aggregate (`compute_pivot_rows`)
-
-Intersects row and column groups, then aggregates values for each cell:
+The public contract exposes 12 aggregation names:
 
 | Function | Description |
 |----------|-------------|
 | `Sum` | Sum of numeric values |
-| `Count` | Count of all values (including blanks) |
+| `Count` | Count of numeric values |
 | `CountA` | Count of non-blank values |
 | `CountUnique` | Count of distinct values |
 | `Average` | Arithmetic mean of numeric values |
@@ -272,31 +262,29 @@ Intersects row and column groups, then aggregates values for each cell:
 | `Var` | Sample variance |
 | `VarP` | Population variance |
 
-All aggregation uses Welford's algorithm (variance) and Kahan compensated summation for numerical stability.
+`compute-stats` implements the full aggregate set with Welford's algorithm for variance/standard deviation and Kahan compensated summation for sums. The current `compute-pivot` relational mapping forwards most aggregate functions directly; `CountA` maps to the relational `CountNums` variant, and `CountUnique` currently maps to `Count` in `presenter/query_mapping.rs`.
 
-### Stage 6: Calculated Fields (`apply_calc_fields_to_values`)
+### Stage 5: Calculated Fields
 
-Evaluates post-aggregation formulas on the aggregated values. Expression language:
+Calculated fields are parsed during validation and mapped into relational calculated measures. Grand-total paths also use `apply_calc_fields_to_values()` where needed. Expression language:
 - Field references: `Revenue`, `'Cost of Goods'`
 - Arithmetic: `+`, `-`, `*`, `/` with standard precedence
 - Parentheses: `(Revenue - Cost) / Revenue`
 - Numeric literals: `100`, `3.14`
 - Unary negation: `-Revenue`
 
-### Stage 7: Sort (`sort_rows_by_value`)
+### Stage 6: Result Projection (`query_result_to_pivot`)
 
-If any row/column placement has `sort_by_value` configured, rows are sorted by their aggregated values (not labels). Children sort within their parent group (hierarchy preserved).
+`presenter/result_projection.rs` converts `QueryResult` to `PivotTableResult`:
+- Builds multi-level column headers
+- Flattens the row tree according to expansion state and layout form
+- Emits subtotal rows when configured
+- Builds row, column, and corner grand totals
+- Computes `rendered_bounds` for materialization
 
-### Stage 8: Grand Totals (`compute_grand_totals`)
+### Stage 7: Show Values As (`apply_show_values_as_to_result`)
 
-Computes three types of grand totals:
-- **Row grand totals** (`grand_totals.row`): bottom row, one value per column-leaf x value-field
-- **Column grand totals** (`grand_totals.column`): rightmost column, `column[row_idx][value_idx]`
-- **Corner grand total** (`grand_totals.grand`): overall total, one value per value field
-
-### Stage 9: Show Values As (`apply_show_values_as_with_hierarchy`)
-
-Post-aggregation transforms applied to the final values. See [Show Values As](#show-values-as) for full details.
+When value placements include Show Values As configs, `compute_with_show_values_as_resolved()` builds a `GroupHierarchy` from the relational row tree and applies transforms to rows and grand totals. See [Show Values As](#show-values-as) for full details.
 
 ### Pipeline Output: `PivotTableResult`
 
@@ -306,6 +294,9 @@ pub struct PivotTableResult {
     pub rows: Vec<PivotRow>,                     // Data rows + subtotals
     pub grand_totals: PivotGrandTotals,          // Row, column, corner totals
     pub source_row_count: usize,                 // Source data size
+    pub rendered_bounds: PivotRenderedBounds,    // Materialization geometry
+    pub measure_descriptors: Vec<PivotMeasureDescriptor>,
+    pub value_records: Vec<PivotValueRecord>,
     pub errors: Option<Vec<String>>,             // Non-fatal errors
 }
 ```
@@ -322,30 +313,33 @@ The `PivotBridge` is the single entry point connecting the UI layer to the Rust 
 
 **Key responsibilities**:
 - **CRUD**: `createPivot()`, `getPivot()`, `getAllPivots()`, `updatePivot()`, `deletePivot()`, `createPivotWithSheet()` -- all delegate to ComputeBridge methods (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`, `pivotCreateWithSheet`)
-- **Computation**: `compute()`, `computeAll()`, `refresh()`, `refreshDependentPivots()`
+- **Placement mutations**: `addPlacement()`, `updatePlacement()`, `removePlacement()`, `movePlacement()`, `setAggregateFunction()`, `setShowValuesAs()`, `setSortOrder()`, `setSortByValue()`
+- **Computation/materialization**: `compute()` calls `pivotComputeFromSource()` for read-only results; `refresh()` calls `pivotMaterialize()` for the production write path
 - **Field detection**: `detectFields()` -- analyzes source data to infer field names/types
 - **Drill-down**: `drillDown()`, `getDrillDownData()` -- retrieve source rows for a pivot cell
 - **Caching**: Result cache with version-based invalidation (config version + data version)
 - **Subscriptions**: `subscribe(pivotId, callback)` for reactive UI updates
 
 **Cache invalidation strategy**:
-- Config version increments on any pivot config change (via EventBus `pivot:created/updated/deleted` events)
-- Data version increments on any cell change in the source sheet (via `refreshDependentPivots`)
-- Cached result is valid only when both config and data versions match
+- `invalidateCache()` clears a pivot result and bumps its config version; PivotBridge calls it for pivot lifecycle events and explicit refreshes.
+- `refreshDependentPivots(sourceSheetId)` increments the source sheet data version and recomputes pivots that use that sheet.
+- Cached read results are reused only when both config and data versions match.
 
 **ComputeBridge methods used**:
 
 | Method | Purpose |
 |--------|---------|
-| `pivotCreate(sheetId, config)` | Create a pivot table |
+| `pivotCreate(config)` | Create a pivot table on `config.outputSheetName` |
 | `pivotGet(sheetId, pivotId)` | Get a single pivot config |
 | `pivotGetAll(sheetId)` | Get all pivots on a sheet |
 | `pivotUpdate(sheetId, pivotId, config)` | Update a pivot config |
 | `pivotDelete(sheetId, pivotId)` | Delete a pivot table |
 | `pivotCreateWithSheet(sheetName, config)` | Atomically create sheet + pivot |
-| `pivotCompute(config, data, expansionState)` | Full pivot computation |
+| `pivotComputeFromSource(sheetId, pivotId, expansionState)` | Read-only compute from stored config and source data |
+| `pivotMaterialize(sheetId, pivotId, expansionState)` | Compute and write materialized pivot output |
 | `pivotDetectFields(data)` | Detect fields from source data |
 | `pivotDrillDown(config, data, rowKey, colKey)` | Get source row indices for a pivot cell |
+| `pivotGetAllItems(sheetId, pivotId, expansionState)` | Extract placed pivot items for UI filtering |
 
 ### PivotEventBridge
 
@@ -382,7 +376,7 @@ The `createPivotEventBridge()` factory supports dynamic sheet ID tracking -- cal
 
 ## Contracts
 
-**Path**: [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts)
+**Path**: [`types/data/src/data/pivot.ts`](../../../types/data/src/data/pivot.ts) (re-exported from [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts))
 
 The contracts define the shared type interface between kernel, UI, and engine.
 
@@ -390,34 +384,34 @@ The contracts define the shared type interface between kernel, UI, and engine.
 
 | Type | Location | Purpose |
 |------|----------|---------|
-| `PivotField` | `data/pivot.ts` | Field definition (id, name, sourceColumn, dataType) |
-| `PivotFieldPlacement` | `data/pivot.ts` | Field placed in an area with config |
-| `PivotFieldArea` | `data/pivot.ts` | `'row' \| 'column' \| 'value' \| 'filter'` |
-| `AggregateFunction` | `data/pivot.ts` | 12 aggregation types |
-| `PivotFilter` | `data/pivot.ts` | Include/exclude/condition/topBottom per field |
-| `PivotTableConfig` | `data/pivot.ts` | Complete pivot definition |
-| `PivotTableResult` | `data/pivot.ts` | Computed output |
-| `PivotRow`, `PivotHeader` | `data/pivot.ts` | Row/header structures in results |
-| `ShowValuesAs` | `data/pivot.ts` | 13 post-aggregation calculation types |
-| `ShowValuesAsConfig` | `data/pivot.ts` | Calculation type + base field + base item |
-| `SortByValueConfig` | `data/pivot.ts` | Sort by aggregated values |
+| `PivotField` | `types/data/src/data/pivot.ts` | Field definition (id, name, sourceColumn, dataType) |
+| `PivotFieldPlacementFlat` / `PivotFieldPlacement` | `types/data/src/data/pivot.ts` | Field placed in an area with config |
+| `PivotFieldArea` | `types/data/src/data/pivot.ts` | `'row' \| 'column' \| 'value' \| 'filter'` |
+| `AggregateFunction` | `types/data/src/data/pivot.ts` | 12 aggregation names |
+| `PivotFilter` | `types/data/src/data/pivot.ts` | Include/exclude/condition/topBottom per field |
+| `PivotTableConfig` | `types/data/src/data/pivot.ts` | Complete pivot definition |
+| `PivotTableResult` | `types/data/src/data/pivot.ts` | Computed output |
+| `PivotRow`, `PivotHeader` | `types/data/src/data/pivot.ts` | Row/header structures in results |
+| `ShowValuesAs` | `types/data/src/data/pivot.ts` | 13 post-aggregation calculation names |
+| `ShowValuesAsConfig` | `types/data/src/data/pivot.ts` | Calculation type + base field + base item |
+| `SortByValueConfig` | `types/data/src/data/pivot.ts` | Sort by aggregated values |
 
 ### Bridge Interfaces
 
 | Interface | Location | Purpose |
 |-----------|----------|---------|
-| `IPivotBridge` | `bridges/pivot-bridge.ts` | CRUD + computation + caching + subscription |
-| `PivotResultCallback` | `bridges/pivot-bridge.ts` | Subscription callback type |
-| `PivotCacheStats` | `bridges/pivot-bridge.ts` | Cache debugging info |
+| `IPivotBridge` | `types/bridges/src/pivot-bridge.ts` | CRUD + computation + caching + subscription |
+| `PivotResultCallback` | `types/bridges/src/pivot-bridge.ts` | Subscription callback type |
+| `PivotCacheStats` | `types/bridges/src/pivot-bridge.ts` | Cache debugging info |
 
 ### Event Types
 
 | Event | Location | Fields |
 |-------|----------|--------|
-| `PivotCreatedEvent` | `events/pivot-events.ts` | outputSheetId, sourceSheetId, pivotId, config |
-| `PivotUpdatedEvent` | `events/pivot-events.ts` | outputSheetId, sourceSheetId, pivotId, oldConfig, newConfig |
-| `PivotDeletedEvent` | `events/pivot-events.ts` | outputSheetId, sourceSheetId, pivotId |
-| `PivotExpansionChangedEvent` | `events/pivot-events.ts` | sheetId, pivotId, headerKey, isExpanded, axis |
+| `PivotCreatedEvent` | `types/events/src/pivot-events.ts` | outputSheetId, sourceSheetId, deprecated sheetId, pivotId, kernelReceipt, config, source |
+| `PivotUpdatedEvent` | `types/events/src/pivot-events.ts` | outputSheetId, sourceSheetId, deprecated sheetId, pivotId, placementIds, oldConfig, newConfig, update, receipts, source |
+| `PivotDeletedEvent` | `types/events/src/pivot-events.ts` | outputSheetId, sourceSheetId, deprecated sheetId, pivotId, removedPlacementIds, source |
+| `PivotExpansionChangedEvent` | `types/events/src/pivot-events.ts` | sheetId, pivotId, expansionKey, deprecated headerKey, isExpanded, axis, axisPlacementId |
 
 ---
 
@@ -448,8 +442,8 @@ The `PivotDialogSlice` manages UI state for pivot table creation and editing:
 1. User opens pivot dialog (via menu or ribbon)
 2. Dialog shows source range (auto-detected from selection) and location options
 3. On create, `usePivotTables.createPivotTable()`:
-   - Calls `pivotBridge.detectFields()` to analyze source data
-   - **New Worksheet mode**: Creates a new sheet in a single Yjs transaction (atomic undo), then creates pivot on it
+   - Calls `ws.pivots.detectFields()` to analyze source data
+   - **New Worksheet mode**: Calls `ws.pivots.addWithSheet()` so sheet creation and pivot creation share the production mutation path
    - **Existing Worksheet mode**: Creates pivot on the specified sheet at the specified cell
 4. Returns `{ config, outputSheetId }` so the caller can navigate to the output sheet
 
@@ -461,11 +455,13 @@ The `PivotDialogSlice` manages UI state for pivot table creation and editing:
 
 ```
 PivotTableConfig
+  schemaVersion: number           -- Persisted config schema version
   id: string                      -- Unique identifier
   name: string                    -- Display name
-  sourceSheetId: string           -- Sheet containing source data
+  sourceSheetId?: string          -- Stable source sheet ID when available
+  sourceSheetName: string         -- Source sheet display name / legacy identity
   sourceRange: CellRange          -- { startRow, startCol, endRow, endCol }
-  outputSheetId: string           -- Sheet where pivot is rendered
+  outputSheetName: string         -- Sheet where pivot is rendered
   outputLocation: { row, col }    -- Anchor cell (top-left corner)
   fields: PivotField[]            -- Detected fields from source header row
   placements: PivotFieldPlacement[] -- Where fields are placed
@@ -474,6 +470,15 @@ PivotTableConfig
   style?: PivotTableStyle         -- Theme, stripes
   dataOptions?: PivotTableDataOptions -- Empty/error value display
   calculatedFields?: CalculatedField[] -- Post-aggregation formulas
+  allowMultipleFiltersPerField?: boolean
+  autoFormat?: boolean
+  preserveFormatting?: boolean
+  cacheId?: number                -- OOXML pivot cache ID
+  refRange?: string               -- OOXML rendered pivot range
+  firstDataRow?: number
+  firstDataCol?: number
+  rowItems?: PivotRowColItem[]    -- OOXML layout reconstruction
+  colItems?: PivotRowColItem[]    -- OOXML layout reconstruction
   createdAt?: number              -- Unix milliseconds
   updatedAt?: number              -- Unix milliseconds
 ```
@@ -484,11 +489,11 @@ PivotTableConfig
 PivotFieldPlacement
   ::Row(AxisPlacement)     -- sortOrder, dateGrouping, numberGrouping, showSubtotals, sortByValue
   ::Column(AxisPlacement)  -- same as Row
-  ::Value(ValuePlacement)  -- aggregateFunction (required), numberFormat, showValuesAs
+  ::Value(ValuePlacement)  -- source, aggregateFunction (required), numberFormat, showValuesAs
   ::Filter(FilterPlacement) -- just identity
 ```
 
-All variants share `PlacementBase { field_id, position, display_name }`.
+All variants share `PlacementBase { field_id, placement_id, position, display_name }`. Value placements also carry a `PivotValueSource`, so calculated-field measures can live beside source-field measures.
 
 ### Storage (Rust-Backed)
 
@@ -510,27 +515,29 @@ The Show Values As system transforms aggregated values into derived metrics. It 
 
 ### Entry Point
 
-`apply_show_values_as_with_hierarchy(rows, value_configs, grand_totals, hierarchy)`
+`apply_show_values_as_to_result(result, value_configs, hierarchy)`
 
-The single public entry point. Receives a `GroupHierarchy` that provides O(1) parent lookup, group-scoped iteration, and group boundary detection.
+The compute path uses this whole-result wrapper so body rows, row grand totals, column grand totals, and corner totals are transformed together. The lower-level `apply_show_values_as_with_hierarchy(rows, value_configs, grand_totals, hierarchy)` helper applies the row transforms. Both receive a `GroupHierarchy` that provides O(1) parent lookup, group-scoped iteration, and group boundary detection.
 
 ### Calculation Types
 
 | Type | Description | Requires |
 |------|-------------|----------|
 | `NoCalculation` | Raw aggregated value (default) | - |
-| `PercentOfGrandTotal` | `value / grand_total * 100` | - |
-| `PercentOfColumnTotal` | `value / column_total * 100` | - |
-| `PercentOfRowTotal` | `value / row_total * 100` | - |
-| `PercentOfParentRowTotal` | `value / parent_row_total * 100` | `base_field` (optional) |
-| `PercentOfParentColumnTotal` | `value / parent_column_total * 100` | `base_field` (optional) |
+| `PercentOfGrandTotal` | `value / grand_total` | - |
+| `PercentOfColumnTotal` | `value / column_total` | - |
+| `PercentOfRowTotal` | `value / row_total` | - |
+| `PercentOfParentRowTotal` | `value / parent_row_total` | `base_field` (optional) |
+| `PercentOfParentColumnTotal` | `value / parent_column_total` | `base_field` (optional) |
 | `Difference` | `value - base_value` | `base_field` + `base_item` |
-| `PercentDifference` | `(value - base) / base * 100` | `base_field` + `base_item` |
+| `PercentDifference` | `(value - base) / base` | `base_field` + `base_item` |
 | `RunningTotal` | Cumulative sum, resets at group boundaries | `base_field` |
-| `PercentRunningTotal` | `running_total / grand_total * 100` | `base_field` |
+| `PercentRunningTotal` | `running_total / grand_total` | `base_field` |
 | `RankAscending` | Rank where 1 = smallest, scoped within group | `base_field` |
 | `RankDescending` | Rank where 1 = largest, scoped within group | `base_field` |
 | `Index` | `(value * grand_total) / (row_total * column_total)` | - |
+
+Percentage-style transforms return fractions; display formatting is responsible for showing percent notation.
 
 ### Base Field and Base Item
 
@@ -544,9 +551,9 @@ The single public entry point. Receives a `GroupHierarchy` that provides O(1) pa
 
 ### GroupHierarchy
 
-Built in O(R) time (one pass over flattened rows). Provides:
+Built in O(R) time from either flattened rows or the relational `AggregatedNode` tree. Provides:
 - **O(1) parent lookup**: `row_group_paths[i]` gives the group path for row i
-- **Group-scoped iteration**: `children_at_depth[depth][parent_key]` lists child row indices
+- **Group-scoped iteration**: `children_by_parent[(depth, parent_key)]` lists child row indices
 - **Group boundary detection**: Check if a row is first/last in its group
 - **Field depth resolution**: `depth_for_field("Region")` returns the hierarchy depth
 
@@ -585,7 +592,7 @@ let result = evaluate_calc_field(&expr, &fields); // Some(100.0)
 
 ### Evaluation
 
-Calculated fields are evaluated at pipeline Stage 6 (after aggregation, before sorting). Each calculated field produces one additional value column per column leaf in the pivot table.
+Calculated fields are parsed during pivot validation and mapped into the relational query as calculated measures. Each calculated field produces one additional value column per column leaf in the pivot table, with grand-total paths applying the same formula logic to aggregated totals.
 
 ---
 
@@ -594,14 +601,13 @@ Calculated fields are evaluated at pipeline Stage 6 (after aggregation, before s
 ### 1. Pure-Function Engine
 
 The Rust engine is completely stateless: `(config, data, expansion_state) -> result`. No `CellMirror`, no document references. This enables:
-- Easy testing (666 unit tests)
 - Deterministic results
 - No shared mutable state between calls
 - Simple WASM compilation
 
 ### 2. Index-Based Filtering
 
-Filtering operates on row indices, never on cloned data rows. This keeps memory usage proportional to the number of rows, not the data size.
+Filtering operates on row indices in both the relational execution path and the drill-down helper path. This keeps memory usage proportional to the number of rows, not the data size.
 
 ### 3. Resolved Config Pattern
 
@@ -617,22 +623,23 @@ Pivots are stored by output sheet (where displayed), not source sheet (where dat
 
 ---
 
-## Migration Status
+## Current Status
 
-The pivot table engine was fully ported from TypeScript to Rust.
+The pivot table engine is Rust-backed for computation, storage, and materialization.
 
 ### Completed
 
-- Rust `compute-pivot` crate: all core modules (types, engine, grouper, filter, show_values_as, hierarchy, calc_field)
-- 666 tests passing
+- Rust `compute-pivot` facade with presenter, Show Values As, hierarchy, drill-down, field detection, and calculated-field support
+- `compute-relational` engine for filtering, grouping, aggregation, sorting, calculated measures, and grand totals
 - `PivotBridge` updated to call Rust via ComputeBridge
 - `PivotStore` deleted (Phase 4) -- all config state now lives in Rust
-- ComputeBridge pivot CRUD for persistence (pivotCreate, pivotGet, pivotGetAll, pivotUpdate, pivotDelete, pivotCreateWithSheet)
+- ComputeBridge pivot CRUD and materialization paths (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`, `pivotCreateWithSheet`, `pivotComputeFromSource`, `pivotMaterialize`)
+- Show Values As UI dispatch persists via `PIVOT_SET_SHOW_VALUES_AS` / `WorksheetPivots.setShowValuesAs()`
 
 ### Known Limitations
 
-- Show Values As UI wiring is a placeholder (context menu logs to console, does not persist)
-- Group/Ungroup UI is a placeholder (context menu logs to console)
+- Group/Ungroup UI is not enabled in the context-menu hook (`canGroup = false`, `canUngroup = false`)
+- Some imported OOXML layout metadata (`rowItems`, `colItems`, `refRange`, page counts) is preserved for reconstruction but is not part of the simple API creation flow
 
 ---
 
@@ -644,8 +651,12 @@ The pivot table engine was fully ported from TypeScript to Rust.
 |------|------|
 | Crate root | [`compute/core/crates/compute-pivot/Cargo.toml`](../../../compute/core/crates/compute-pivot/Cargo.toml) |
 | lib.rs | [`compute/core/crates/compute-pivot/src/lib.rs`](../../../compute/core/crates/compute-pivot/src/lib.rs) |
-| types/ | [`compute/core/crates/compute-pivot/src/types/`](../../../compute/core/crates/compute-pivot/src/types/) |
+| type re-exports | [`compute/core/crates/compute-pivot/src/types/`](../../../compute/core/crates/compute-pivot/src/types/) |
+| pivot-types | [`compute/core/crates/types/pivot-types/src/`](../../../compute/core/crates/types/pivot-types/src/) |
+| domain pivot types | [`domain-types/src/domain/pivot/`](../../../domain-types/src/domain/pivot/) |
 | engine/ | [`compute/core/crates/compute-pivot/src/engine/`](../../../compute/core/crates/compute-pivot/src/engine/) |
+| presenter/ | [`compute/core/crates/compute-pivot/src/presenter/`](../../../compute/core/crates/compute-pivot/src/presenter/) |
+| compute-relational | [`compute/core/crates/compute-relational/src/`](../../../compute/core/crates/compute-relational/src/) |
 | grouper.rs | [`compute/core/crates/compute-pivot/src/grouper.rs`](../../../compute/core/crates/compute-pivot/src/grouper.rs) |
 | filter.rs | [`compute/core/crates/compute-pivot/src/filter.rs`](../../../compute/core/crates/compute-pivot/src/filter.rs) |
 | show_values_as module | [`compute/core/crates/compute-pivot/src/show_values_as/mod.rs`](../../../compute/core/crates/compute-pivot/src/show_values_as/mod.rs) |
@@ -664,9 +675,10 @@ The pivot table engine was fully ported from TypeScript to Rust.
 
 | File | Path |
 |------|------|
-| Pivot types | [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts) |
-| Bridge interface | [`contracts/src/bridges/pivot-bridge.ts`](../../../contracts/src/bridges/pivot-bridge.ts) |
-| Events | [`contracts/src/events/pivot-events.ts`](../../../contracts/src/events/pivot-events.ts) |
+| Pivot types | [`types/data/src/data/pivot.ts`](../../../types/data/src/data/pivot.ts) |
+| Bridge interface | [`types/bridges/src/pivot-bridge.ts`](../../../types/bridges/src/pivot-bridge.ts) |
+| Events | [`types/events/src/pivot-events.ts`](../../../types/events/src/pivot-events.ts) |
+| Contracts shims | [`contracts/src/data/pivot.ts`](../../../contracts/src/data/pivot.ts), [`contracts/src/bridges/pivot-bridge.ts`](../../../contracts/src/bridges/pivot-bridge.ts), [`contracts/src/events/pivot-events.ts`](../../../contracts/src/events/pivot-events.ts) |
 
 ### UI
 

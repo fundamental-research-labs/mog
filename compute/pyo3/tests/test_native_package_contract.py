@@ -6,7 +6,7 @@ import pytest
 import mog
 from mog._generated.api_surface import API_SURFACE
 from mog._native import ComputeEngine  # noqa: F401
-from mog.errors import UnsupportedApiError
+from mog.errors import NativeApiError, UnsupportedApiError
 
 
 def _disposition(api_path: str) -> dict:
@@ -95,8 +95,64 @@ def test_comments_address_paths_use_native_position_bridge() -> None:
 
         ws.comments.add_note("C3", "note text")
         assert ws.comments.get_note("C3") == "note text"
+
+        ws.comments.set_note("C3", "replacement", author="Alice")
+        by_cell = ws.comments.get_for_cell("C3")
+        assert len(by_cell) == 1
+        assert by_cell[0]["author"] == "Alice"
+        assert ws.comments.get_note("C3") == "replacement"
+        ws.comments.remove_note("C3")
+        assert ws.comments.get_note("C3") is None
+        with pytest.raises(ValueError, match="No note found"):
+            ws.comments.remove_note("C3")
     finally:
         wb.dispose()
+
+
+def test_layout_queries_are_native_backed_and_do_not_swallow_failures() -> None:
+    from mog.sub_apis.layout import LayoutAPI
+
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        ws.layout.set_row_height(2, 33.0)
+        ws.layout.set_column_width(1, 12.5)
+        ws.layout.hide_rows([4])
+        ws.layout.hide_columns([3])
+
+        assert ws.layout.get_row_height(2) == pytest.approx(33.0)
+        assert ws.layout.get_column_width(1) == pytest.approx(12.5)
+        assert ws.layout.get_column_width_px(1) > 0
+        assert ws.layout.get_row_heights_batch(2, 2) == [(2, pytest.approx(33.0))]
+        assert ws.layout.get_col_widths_batch(1, 1) == [(1, pytest.approx(12.5))]
+        assert ws.layout.get_col_widths_batch_px(1, 1)[0][1] > 0
+        assert ws.layout.is_row_hidden(4) is True
+        assert ws.layout.is_column_hidden(3) is True
+        assert 4 in ws.layout.get_hidden_rows_bitmap()
+        assert 3 in ws.layout.get_hidden_columns_bitmap()
+    finally:
+        wb.dispose()
+
+    class FailingBridge:
+        def call_json(self, *_args: object) -> object:
+            raise NativeApiError("native failure")
+
+    failing_layout = LayoutAPI(FailingBridge(), '"sheet"')  # type: ignore[arg-type]
+    failing_calls = [
+        lambda: failing_layout.get_row_height(0),
+        lambda: failing_layout.get_column_width(0),
+        lambda: failing_layout.get_column_width_px(0),
+        lambda: failing_layout.get_row_heights_batch(0, 1),
+        lambda: failing_layout.get_col_widths_batch(0, 1),
+        lambda: failing_layout.get_col_widths_batch_px(0, 1),
+        lambda: failing_layout.is_row_hidden(0),
+        lambda: failing_layout.is_column_hidden(0),
+        lambda: failing_layout.get_hidden_rows_bitmap(),
+        lambda: failing_layout.get_hidden_columns_bitmap(),
+    ]
+    for call in failing_calls:
+        with pytest.raises(NativeApiError, match="native failure"):
+            call()
 
 
 def test_mutation_helpers_do_not_report_success_for_missing_native_targets() -> None:

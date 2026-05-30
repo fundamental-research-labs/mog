@@ -8698,22 +8698,24 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": null,
-      "aliases": [],
+      "aliasOf": "ws.comments.setNote",
+      "aliases": [
+        "ws.comments.setNote"
+      ],
       "apiPath": "ws.comments.setNote",
       "interface": "WorksheetComments",
-      "nameTransform": "none",
+      "nameTransform": "snake_case",
       "notes": null,
-      "ownerModule": "mog",
+      "ownerModule": "mog.sub_apis.comments",
       "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
+      "pythonName": "set_note",
+      "pythonPath": "ws.comments.set_note",
+      "reason": null,
       "stableId": "WorksheetComments.setNote",
-      "status": "omitted",
+      "status": "renamed",
       "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
+      "targetPath": "ws.comments.set_note",
+      "unsupportedUntil": null
     },
     {
       "aliasOf": null,

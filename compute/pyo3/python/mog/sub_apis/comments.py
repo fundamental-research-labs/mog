@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result, parse_a1
+from mog.errors import NativeApiError
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -327,7 +328,13 @@ class CommentsAPI:
     # Notes (simplified comments -- single comment per cell, no threading)
     # ------------------------------------------------------------------
 
-    def add_note(self, address: str, text: str) -> MutationResult:
+    def add_note(
+        self,
+        address: str,
+        text: Any,
+        author: str = "User",
+        author_id: Optional[str] = None,
+    ) -> MutationResult:
         """Add a simple note to a cell.
 
         Notes are implemented as comments without threading.
@@ -337,19 +344,39 @@ class CommentsAPI:
         address:
             A1-style address.
         text:
-            Note text.
+            Note text, or an options dict with ``text`` and optional
+            ``author`` / ``authorId`` fields.
         """
+        if isinstance(text, dict):
+            options = text
+            text = str(options.get("text", ""))
+            author = str(options.get("author", author))
+            author_id = options.get("authorId", options.get("author_id", author_id))
+
         row, col = parse_a1(address)
         raw = self._add_by_position(
             row,
             col,
-            text,
-            "Note",
-            None,
+            str(text),
+            author,
+            author_id,
             None,
             _COMMENT_TYPE_NOTE,
         )
         return deserialize_mutation_result(self._mutation_dict(raw))
+
+    def set_note(
+        self,
+        address: str,
+        text: str,
+        author: str = "User",
+    ) -> MutationResult:
+        """Set or replace the note text for a cell."""
+        try:
+            self.remove_note(address)
+        except ValueError:
+            pass
+        return self.add_note(address, text, author=author)
 
     def get_note(self, address: str) -> Optional[str]:
         """Get the note text for a cell, or ``None`` if no note.
@@ -379,8 +406,25 @@ class CommentsAPI:
             A1-style address.
         """
         row, col = parse_a1(address)
-        raw = self._bridge.call_json(
-            "compute_delete_comments_for_cell_by_position",
-            self._sheet_id_json, row, col,
+        comments = self._bridge.call_json(
+            "compute_get_comments_for_cell_by_position",
+            self._sheet_id_json,
+            row,
+            col,
         )
-        return deserialize_mutation_result(raw)
+        if not isinstance(comments, list):
+            raise NativeApiError(
+                "compute_get_comments_for_cell_by_position returned a non-list response"
+            )
+
+        raw: Any = None
+        for comment in comments:
+            if isinstance(comment, dict) and self._is_note(comment):
+                raw = self._bridge.call_json(
+                    "compute_delete_comment",
+                    self._sheet_id_json,
+                    comment.get("id", ""),
+                )
+        if raw is None:
+            raise ValueError(f"No note found at {address!r}")
+        return deserialize_mutation_result(self._mutation_dict(raw))

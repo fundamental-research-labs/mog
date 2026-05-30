@@ -80,3 +80,39 @@ def test_generated_artifacts_are_packaged_in_source_tree() -> None:
     assert any(pkg.glob("*.pyi"))
     assert (pkg / "_generated" / "api_surface.json").is_file()
     assert API_SURFACE["counts"]["dispositions"] >= API_SURFACE["counts"]["functions"]
+
+
+def test_comments_address_paths_use_native_position_bridge() -> None:
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        created = ws.comments.add("B2", "hello", author="Tester")
+        assert created["text"] == "hello"
+
+        by_cell = ws.comments.get_for_cell("B2")
+        assert [comment["text"] for comment in by_cell] == ["hello"]
+        assert ws.comments.get("B2")["text"] == "hello"
+
+        ws.comments.add_note("C3", "note text")
+        assert ws.comments.get_note("C3") == "note text"
+    finally:
+        wb.dispose()
+
+
+def test_pivot_detect_fields_preserves_duplicate_header_identity() -> None:
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        ws.set_cell("A1", "Region")
+        ws.set_cell("B1", "Region")
+        ws.set_cell("A2", "East")
+        ws.set_cell("B2", 10)
+
+        fields = ws.pivots.detect_fields(
+            ws.sheet_id,
+            {"startRow": 0, "startCol": 0, "endRow": 1, "endCol": 1},
+        )
+        assert [field["id"] for field in fields] == ["field_0", "field_1"]
+        assert [field["name"] for field in fields] == ["Region", "Region"]
+    finally:
+        wb.dispose()

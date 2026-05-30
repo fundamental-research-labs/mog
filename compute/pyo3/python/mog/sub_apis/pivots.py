@@ -148,81 +148,42 @@ class PivotsAPI:
 
         fields: List[Dict[str, Any]] = []
         if source_sheet_id_json:
-            sr = source_range["startRow"]
-            sc = source_range["startCol"]
-            ec = source_range["endCol"]
-            # Read header row
-            header_values = self._bridge.call_json(
-                "compute_get_range_values_2d",
-                source_sheet_id_json,
-                sr, sc, sr, ec,
+            fields = self._detect_fields_from_source_range(
+                source_sheet_id_json, source_range
             )
-            # Read first data row for type inference
-            data_values = None
-            if source_range["endRow"] > sr:
-                data_values = self._bridge.call_json(
-                    "compute_get_range_values_2d",
-                    source_sheet_id_json,
-                    sr + 1, sc, sr + 1, ec,
-                )
-
-            if isinstance(header_values, list) and len(header_values) > 0:
-                header_row = header_values[0] if isinstance(header_values[0], list) else header_values
-                data_row = None
-                if isinstance(data_values, list) and len(data_values) > 0:
-                    data_row = data_values[0] if isinstance(data_values[0], list) else data_values
-
-                for i, hval in enumerate(header_row):
-                    # Extract header name
-                    if isinstance(hval, dict):
-                        name = str(hval.get("value", hval.get("formattedValue", f"Column{i}")))
-                    elif hval is not None:
-                        name = str(hval)
-                    else:
-                        name = f"Column{i}"
-
-                    # Infer data type from first data row
-                    data_type = "string"
-                    if data_row and i < len(data_row):
-                        dval = data_row[i]
-                        if isinstance(dval, dict):
-                            dval = dval.get("value")
-                        data_type = _infer_data_type(dval)
-
-                    fields.append({
-                        "id": name,
-                        "name": name,
-                        "sourceColumn": i,
-                        "dataType": data_type,
-                    })
 
         # Build placements from rowFields, columnFields, valueFields, filterFields
         placements: List[Dict[str, Any]] = []
         position_counters: Dict[str, int] = {"row": 0, "column": 0, "value": 0, "filter": 0}
 
         for field_name in config.get("rowFields", []):
+            field_id = self._field_id_for_ref(field_name, fields)
             placements.append({
                 "area": "row",
-                "fieldId": field_name,
+                "fieldId": field_id,
                 "position": position_counters["row"],
             })
             position_counters["row"] += 1
 
         for field_name in config.get("columnFields", []):
+            field_id = self._field_id_for_ref(field_name, fields)
             placements.append({
                 "area": "column",
-                "fieldId": field_name,
+                "fieldId": field_id,
                 "position": position_counters["column"],
             })
             position_counters["column"] += 1
 
         for vf in config.get("valueFields", []):
             if isinstance(vf, dict):
-                field_name = vf.get("field", vf.get("fieldId", ""))
+                field_name = vf.get(
+                    "fieldId", vf.get("field", vf.get("id", vf.get("name", "")))
+                )
+                field_id = self._field_id_for_ref(field_name, fields)
                 agg = vf.get("aggregation", vf.get("aggregateFunction", "sum"))
                 p = {
                     "area": "value",
-                    "fieldId": field_name,
+                    "fieldId": field_id,
                     "position": position_counters["value"],
                     "aggregateFunction": agg,
                 }
@@ -231,18 +192,20 @@ class PivotsAPI:
                     p["displayName"] = label
                 placements.append(p)
             elif isinstance(vf, str):
+                field_id = self._field_id_for_ref(vf, fields)
                 placements.append({
                     "area": "value",
-                    "fieldId": vf,
+                    "fieldId": field_id,
                     "position": position_counters["value"],
                     "aggregateFunction": "sum",
                 })
             position_counters["value"] += 1
 
         for field_name in config.get("filterFields", []):
+            field_id = self._field_id_for_ref(field_name, fields)
             placements.append({
                 "area": "filter",
-                "fieldId": field_name,
+                "fieldId": field_id,
                 "position": position_counters["filter"],
             })
             position_counters["filter"] += 1
@@ -263,6 +226,112 @@ class PivotsAPI:
             "layout": config.get("layout"),
             "style": config.get("style"),
         }
+
+    def _detect_fields_from_source_range(
+        self, sheet_id_json: str, source_range: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Detect pivot field metadata for a source range using native logic when available."""
+        sr = source_range.get("startRow", 0)
+        sc = source_range.get("startCol", 0)
+        er = source_range.get("endRow", sr)
+        ec = source_range.get("endCol", sc)
+        values = self._bridge.call_json(
+            "compute_get_range_values_2d", sheet_id_json, sr, sc, er, ec
+        )
+        if not isinstance(values, list):
+            values = []
+        return self._detect_fields_from_values(values)
+
+    @staticmethod
+    def _detect_fields_from_values(values: List[Any]) -> List[Dict[str, Any]]:
+        """Return PivotField-shaped dicts, preserving duplicate names with stable IDs."""
+        from mog import _native
+
+        detect = getattr(_native, "pivot_detect_fields", None)
+        if detect is not None:
+            native = detect(json.dumps(values))
+            if isinstance(native, str):
+                native = json.loads(native)
+            fields = PivotsAPI._normalize_detected_fields(native)
+            if fields:
+                return fields
+        return PivotsAPI._fallback_detect_fields_from_values(values)
+
+    @staticmethod
+    def _normalize_detected_fields(raw: Any) -> List[Dict[str, Any]]:
+        if not isinstance(raw, list):
+            return []
+        fields: List[Dict[str, Any]] = []
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if name is None or name == "":
+                name = f"Column {i + 1}"
+            source_column = item.get("sourceColumn", item.get("source_column", i))
+            field_id = item.get("id") or f"field_{source_column}"
+            data_type = item.get("dataType", item.get("data_type", "string"))
+            fields.append({
+                "id": str(field_id),
+                "name": str(name),
+                "sourceColumn": int(source_column),
+                "dataType": str(data_type),
+            })
+        return fields
+
+    @staticmethod
+    def _fallback_detect_fields_from_values(values: List[Any]) -> List[Dict[str, Any]]:
+        if not values:
+            return []
+        header_row = values[0] if isinstance(values[0], list) else values
+        data_rows = values[1:] if isinstance(values[0], list) else []
+        fields: List[Dict[str, Any]] = []
+        for i, hval in enumerate(header_row):
+            name = PivotsAPI._cell_scalar(hval)
+            if name is None or name == "":
+                name = f"Column {i + 1}"
+
+            data_type = "string"
+            for row in data_rows:
+                if isinstance(row, list) and i < len(row):
+                    dval = PivotsAPI._cell_scalar(row[i])
+                    if dval is not None and dval != "":
+                        data_type = _infer_data_type(dval)
+                        break
+
+            fields.append({
+                "id": f"field_{i}",
+                "name": str(name),
+                "sourceColumn": i,
+                "dataType": data_type,
+            })
+        return fields
+
+    @staticmethod
+    def _cell_scalar(value: Any) -> Any:
+        if isinstance(value, dict):
+            if "value" in value:
+                return value.get("value")
+            if "formattedValue" in value:
+                return value.get("formattedValue")
+            return ""
+        return value
+
+    @staticmethod
+    def _field_id_for_ref(field_ref: Any, fields: List[Dict[str, Any]]) -> str:
+        if isinstance(field_ref, dict):
+            field_ref = field_ref.get(
+                "fieldId",
+                field_ref.get("id", field_ref.get("field", field_ref.get("name", ""))),
+            )
+        field_ref_str = str(field_ref)
+        for field in fields:
+            if isinstance(field, dict) and field.get("id") == field_ref_str:
+                return field_ref_str
+        for field in fields:
+            if isinstance(field, dict) and field.get("name") == field_ref_str:
+                return str(field.get("id", field_ref_str))
+        return field_ref_str
 
     # ------------------------------------------------------------------
     # CRUD
@@ -630,31 +699,13 @@ class PivotsAPI:
     ) -> Any:
         """Auto-detect pivot fields from source data headers.
 
-        Reads the first row of the source range to get header names.
-        Returns a list of field name strings.
+        Reads the source range and returns PivotField metadata dicts. Duplicate
+        header names keep distinct stable field IDs (``field_0``, ``field_1``, ...).
         """
         from mog._bridge import _ensure_json_quoted
-        sid_json = _ensure_json_quoted(sheet_id)
-        sr = source_range.get("startRow", 0)
-        sc = source_range.get("startCol", 0)
-        ec = source_range.get("endCol", sc)
 
-        values = self._bridge.call_json(
-            "compute_get_range_values_2d", sid_json, sr, sc, sr, ec
-        )
-        fields = []
-        if isinstance(values, list) and len(values) > 0:
-            row = values[0] if isinstance(values[0], list) else values
-            for v in row:
-                if isinstance(v, dict):
-                    name = v.get("value", v.get("formattedValue", ""))
-                elif v is not None:
-                    name = str(v)
-                else:
-                    name = ""
-                if name:
-                    fields.append(str(name))
-        return fields
+        sid_json = _ensure_json_quoted(sheet_id)
+        return self._detect_fields_from_source_range(sid_json, source_range)
 
     # ------------------------------------------------------------------
     # Calculated fields

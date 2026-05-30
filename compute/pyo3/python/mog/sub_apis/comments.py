@@ -292,7 +292,7 @@ class CommentsAPI:
             if isinstance(comments, list) and len(comments) > 0:
                 comment_id = comments[0]["id"]
             else:
-                return deserialize_mutation_result({})
+                raise ValueError(f"No comment found at {address_or_id!r}")
 
         raw = self._bridge.call_json(
             "compute_update_comment", self._sheet_id_json, comment_id, text

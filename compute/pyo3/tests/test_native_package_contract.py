@@ -99,6 +99,28 @@ def test_comments_address_paths_use_native_position_bridge() -> None:
         wb.dispose()
 
 
+def test_mutation_helpers_do_not_report_success_for_missing_native_targets() -> None:
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        with pytest.raises(ValueError, match="No comment found"):
+            ws.comments.update("D4", "missing")
+
+        with pytest.raises(ValueError, match="No sparkline found"):
+            ws.sparklines.update(9, 9, {"type": "column"})
+
+        with pytest.raises(ValueError, match="No auto-filter exists"):
+            ws.filters.set_column_filter(0, {"type": "values", "values": ["x"]})
+
+        with pytest.raises(ValueError, match="No auto-filter exists"):
+            ws.filters.clear_column_filter(0)
+
+        with pytest.raises(ValueError, match="No auto-filter exists"):
+            ws.filters.get_unique_values(0)
+    finally:
+        wb.dispose()
+
+
 def test_pivot_detect_fields_preserves_duplicate_header_identity() -> None:
     wb = mog.create_workbook()
     try:

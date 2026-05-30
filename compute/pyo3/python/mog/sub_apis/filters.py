@@ -324,8 +324,7 @@ class FiltersAPI:
         """
         filter_id = self._find_first_filter_id()
         if not filter_id:
-            # No filter exists; cannot set column filter
-            return MutationResult()
+            raise ValueError("No auto-filter exists on this worksheet")
         normalized = self._normalize_criteria(criteria)
         raw = self._bridge.call_json(
             "compute_set_column_filter",
@@ -343,7 +342,7 @@ class FiltersAPI:
         """
         filter_id = self._find_first_filter_id()
         if not filter_id:
-            return MutationResult()
+            raise ValueError("No auto-filter exists on this worksheet")
         raw = self._bridge.call_json(
             "compute_clear_column_filter",
             self._sheet_id_json,
@@ -411,7 +410,7 @@ class FiltersAPI:
         filter_id = self._find_first_filter_id()
         if filter_id:
             return self.get_filter_unique_values(filter_id, col)
-        return []
+        raise ValueError("No auto-filter exists on this worksheet")
 
     def get_filter_unique_values(self, filter_id: str, col: int) -> Any:
         """Get the unique values for a column in a specific filter.

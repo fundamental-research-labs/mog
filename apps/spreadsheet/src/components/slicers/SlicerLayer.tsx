@@ -18,7 +18,11 @@
 import React, { useCallback } from 'react';
 
 import type { CellValue } from '@mog-sdk/contracts/core';
-import type { SlicerDefinition, SlicerPositionRect } from '../../hooks/data/use-slicers';
+import type {
+  SlicerDefinition,
+  SlicerPositionRect,
+  SlicerSelectOptions,
+} from '../../hooks/data/use-slicers';
 import SlicerControl from './SlicerControl';
 
 // =============================================================================
@@ -30,8 +34,10 @@ export interface SlicerLayerProps {
   slicers: SlicerDefinition[];
   /** Currently selected slicer ID */
   selectedSlicerId: string | null;
+  /** Currently selected slicer IDs */
+  selectedSlicerIds?: string[];
   /** Handle slicer selection */
-  onSlicerSelect: (slicerId: string | null) => void;
+  onSlicerSelect: (slicerId: string | null, options?: SlicerSelectOptions) => void;
   /** Handle item click (exclusive selection) */
   onItemClick: (slicerId: string, value: CellValue) => void;
   /** Handle item toggle (multi-select) */
@@ -51,7 +57,7 @@ export interface SlicerLayerProps {
 interface SlicerWrapperProps {
   definition: SlicerDefinition;
   isSelected: boolean;
-  onSelect: (slicerId: string) => void;
+  onSelect: (slicerId: string, options?: SlicerSelectOptions) => void;
   onItemClick: (slicerId: string, value: CellValue) => void;
   onItemToggle: (slicerId: string, value: CellValue) => void;
   onClearAll: (slicerId: string) => void;
@@ -76,9 +82,12 @@ const SlicerWrapper = React.memo(
     const { config, items, isConnected, hasActiveFilter } = definition;
 
     // Bound handlers for this specific slicer
-    const handleSelect = useCallback(() => {
-      onSelect(config.id);
-    }, [onSelect, config.id]);
+    const handleSelect = useCallback(
+      (options?: SlicerSelectOptions) => {
+        onSelect(config.id, options);
+      },
+      [onSelect, config.id],
+    );
 
     const handleItemClick = useCallback(
       (value: CellValue) => {
@@ -140,6 +149,7 @@ const SlicerWrapper = React.memo(
 export function SlicerLayer({
   slicers,
   selectedSlicerId,
+  selectedSlicerIds,
   onSlicerSelect,
   onItemClick,
   onItemToggle,
@@ -189,7 +199,7 @@ export function SlicerLayer({
           <div style={{ pointerEvents: 'auto' }}>
             <SlicerWrapper
               definition={definition}
-              isSelected={selectedSlicerId === definition.config.id}
+              isSelected={(selectedSlicerIds ?? [selectedSlicerId]).includes(definition.config.id)}
               onSelect={onSlicerSelect}
               onItemClick={onItemClick}
               onItemToggle={onItemToggle}

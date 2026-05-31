@@ -923,23 +923,6 @@ export interface ChartDataTableData {
   visible?: boolean;
 }
 
-export type LayoutTarget = "inner" | "outer";
-
-export type LayoutMode = "edge" | "factor";
-
-export interface ManualLayout {
-  layoutTarget?: LayoutTarget;
-  xMode?: LayoutMode;
-  yMode?: LayoutMode;
-  wMode?: LayoutMode;
-  hMode?: LayoutMode;
-  x?: number;
-  y?: number;
-  w?: number;
-  h?: number;
-  extLst?: string;
-}
-
 export type ChartDefinition =
   | { _kind: "chart" } & unknown
   | { _kind: "chartEx" } & unknown;
@@ -2594,6 +2577,10 @@ export interface InputMessage {
 
 export type LayoutForm = "compact" | "outline" | "tabular";
 
+export type LayoutMode = "edge" | "factor";
+
+export type LayoutTarget = "inner" | "outer";
+
 export interface LegendData {
   show: boolean;
   position: string;
@@ -2634,6 +2621,19 @@ export type LineEndSize = "sm" | "med" | "lg";
 export type LineEndType = "none" | "triangle" | "stealth" | "diamond" | "oval" | "arrow";
 
 export type LineJoin = "bevel" | "miter" | "round";
+
+export interface ManualLayout {
+  layoutTarget?: LayoutTarget;
+  xMode?: LayoutMode;
+  yMode?: LayoutMode;
+  wMode?: LayoutMode;
+  hMode?: LayoutMode;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  extLst?: string;
+}
 
 export type MaterialPreset = "dkEdge" | "flat" | "legacyMatte" | "legacyMetal" | "legacyPlastic" | "legacyWireframe" | "matte" | "metal" | "plastic" | "powder" | "softEdge" | "softmetal" | "translucentPowder" | "warmMatte";
 

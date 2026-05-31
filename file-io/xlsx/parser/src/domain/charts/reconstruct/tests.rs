@@ -1,7 +1,9 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartSpec, ChartType as DomainChartType, ObjectSize, SingleAxisData,
+    AnchorPosition, AxisData, ChartSpec, ChartType as DomainChartType, DataLabelData, LegendData,
+    ObjectSize, SingleAxisData,
 };
+use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
 use domain_types::ChartDefinition;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
@@ -226,6 +228,88 @@ fn data_range_preserves_quoted_sheet_names_and_escaped_quotes() {
     assert_eq!(xml.matches("<c:ser>").count(), 1);
     assert!(xml.contains("<c:f>'Bob''s Data'!A2:A3</c:f>"));
     assert!(xml.contains("<c:f>'Bob''s Data'!B2:B3</c:f>"));
+}
+
+#[test]
+fn manual_layouts_reconstruct_for_chart_level_surfaces() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:B3"));
+    spec.plot_layout = Some(ManualLayout {
+        layout_target: Some(LayoutTarget::Inner),
+        x: Some(0.125),
+        y: Some(0.25),
+        w: Some(0.75),
+        h: Some(0.5),
+        ..Default::default()
+    });
+    spec.title_layout = Some(ManualLayout {
+        x_mode: Some(LayoutMode::Edge),
+        x: Some(0.375),
+        y: Some(0.0625),
+        ..Default::default()
+    });
+    spec.legend = Some(LegendData {
+        show: true,
+        position: "right".to_string(),
+        visible: true,
+        overlay: None,
+        format: None,
+        entries: None,
+        custom_x: None,
+        custom_y: None,
+        layout: Some(ManualLayout {
+            layout_target: Some(LayoutTarget::Outer),
+            x: Some(0.875),
+            y: Some(0.125),
+            ..Default::default()
+        }),
+        shadow: None,
+        show_shadow: None,
+    });
+    spec.data_labels = Some(DataLabelData {
+        show: true,
+        delete: None,
+        position: None,
+        format: None,
+        show_value: Some(true),
+        show_category_name: None,
+        show_series_name: None,
+        show_percentage: None,
+        show_bubble_size: None,
+        show_legend_key: None,
+        separator: None,
+        show_leader_lines: None,
+        text: None,
+        visual_format: None,
+        number_format: None,
+        text_orientation: None,
+        rich_text: None,
+        auto_text: None,
+        horizontal_alignment: None,
+        vertical_alignment: None,
+        link_number_format: None,
+        geometric_shape_type: None,
+        formula: None,
+        leader_lines_format: None,
+        layout: Some(ManualLayout {
+            y_mode: Some(LayoutMode::Edge),
+            x: Some(0.3125),
+            y: Some(0.4375),
+            ..Default::default()
+        }),
+    });
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:layout>").count(), 4);
+    assert!(xml.contains("<c:layoutTarget val=\"inner\"/>"));
+    assert!(xml.contains("<c:layoutTarget val=\"outer\"/>"));
+    assert!(xml.contains("<c:xMode val=\"edge\"/>"));
+    assert!(xml.contains("<c:yMode val=\"edge\"/>"));
+    assert!(xml.contains("<c:x val=\"0.125\"/>"));
+    assert!(xml.contains("<c:x val=\"0.375\"/>"));
+    assert!(xml.contains("<c:x val=\"0.3125\"/>"));
+    assert!(xml.contains("<c:x val=\"0.875\"/>"));
+    assert!(xml.contains("<c:showVal val=\"1\"/>"));
 }
 
 #[test]

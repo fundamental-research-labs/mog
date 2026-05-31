@@ -3,7 +3,7 @@
 //! Reads real Rust source files from compute/core/crates/types/snapshot-types/
 //! and generates TypeScript interfaces, string unions, and tagged unions.
 
-use bridge_ts::{ImportConfig, ImportGroup, TypeGenConfig, TypeImport, generate_types_from_source};
+use bridge_ts::{generate_types_from_source, ImportConfig, ImportGroup, TypeGenConfig, TypeImport};
 use std::collections::HashMap;
 
 fn compute_config() -> TypeGenConfig {
@@ -202,7 +202,6 @@ fn compute_config() -> TypeGenConfig {
         "DrawingAnchorMetadata",
         "ExtensionEntry",
         "ExternalData",
-        "ManualLayout",
         "OpcRelationship",
         "PivotFmt",
         "PivotSource",
@@ -743,6 +742,9 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/schema_types.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/result.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/grouping.rs"),
+        // Shared chart/drawing manual layout DTO used by chart title, plot,
+        // legend, data-label, and floating chart object surfaces.
+        format!("{manifest_dir}/../../../domain-types/src/domain/drawings/manual_layout.rs"),
         // chart module — split from chart.rs into chart/ directory (pass 1 refactor)
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/mod.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/axis.rs"),

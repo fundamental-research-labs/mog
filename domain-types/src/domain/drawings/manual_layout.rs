@@ -10,6 +10,7 @@
 //! chart plot-area layout and `TrendlineLabelData.layout` when
 //! they are migrated.
 
+use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
 // ===========================================================================
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Mirror of `ooxml_types::charts::ManualLayout`. All attributes are optional;
 /// `Default` emits no keys.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct ManualLayout {

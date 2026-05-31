@@ -19,7 +19,7 @@
     "check:publish-readiness": "pnpm check:ci:format && pnpm check:ci:public-boundaries && pnpm build:public-artifacts && pnpm check:release-readiness-naming && pnpm check:binary-wrapper-surfaces && pnpm check:contracts-declaration-identity && pnpm check:declaration-rollups && pnpm check:api-snapshots && pnpm check:external-fixtures -- --skip-build",
     "check:publish-readiness:fast": "pnpm check:ci:public-boundaries && pnpm check:release-readiness-naming",
     "check:publish-readiness:public": "pnpm check:ci:public-boundaries",
-    "check:publish-readiness:sdk": "pnpm check:declaration-rollups && pnpm check:api-snapshots && pnpm check:external-fixtures -- --skip-build",
+    "check:publish-readiness:sdk": "pnpm check:private-leaks && pnpm check:declaration-rollups && pnpm check:api-snapshots && pnpm check:external-fixtures -- --skip-build",
     "check:python-sdk": "bash compute/pyo3/scripts/check_python_sdk.sh",
     "inventory:contracts": "node tools/contracts-shim-inventory.mjs",
     "check-cycles": "madge --circular --extensions ts --exclude '(dist|\\.claude/worktrees)' .",

@@ -6,7 +6,6 @@ mod data_tables;
 mod fast_parse;
 mod format_import;
 mod helpers;
-mod manual_real_file;
 mod recovery;
 
 use crate::domain::cells::CellData;

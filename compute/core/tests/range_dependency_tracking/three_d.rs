@@ -108,8 +108,8 @@ pub(crate) fn class_ii_3d_family() {
     }
     // v4 = sheet-rename-between-ops, v5 = sheet-reorder-between-ops.
     // Both structural ops → structural-op scope.
-    s.skip(CoverageReason::Round2Scope);
-    s.skip(CoverageReason::Round2Scope);
+    s.skip(CoverageReason::StructuralOpsDeferred);
+    s.skip(CoverageReason::StructuralOpsDeferred);
     s.emit();
     assert_eq!(
         s.failed, 0,

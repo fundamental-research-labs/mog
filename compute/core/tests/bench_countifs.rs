@@ -88,9 +88,9 @@ fn build_snapshot(data_rows: u32, formula_count: u32) -> WorkbookSnapshot {
         });
     }
 
-    // Formula cells: COUNTIFS with 4 full-column criteria pairs
+    // Formula cells: COUNTIFS with 4 full-column criteria pairs.
     // Pattern: COUNTIFS(A:A,">="&<lo>,A:A,"<="&<hi>,C:C,"cat<n>",D:D,0)
-    // This mimics the real workbook's COUNTIFS($AH:$AH,">="&$CY324,...)
+    // Representative full-column workload with multiple criteria pairs.
     for i in 0..formula_count {
         let lo = (i as f64 / formula_count as f64 * data_rows as f64) as u32 + 1;
         let hi = lo + data_rows / 10; // ~10% window

@@ -43,10 +43,10 @@ pub(crate) fn class_ii_total_summary() {
         totals.record(&format!("3d__v{}", v), run_3d_case(v as u8));
     }
     // 3d__v4/v5 (sheet rename/reorder) → structural-op scope.
-    totals.skip(CoverageReason::Round2Scope);
-    totals.skip(CoverageReason::Round2Scope);
+    totals.skip(CoverageReason::StructuralOpsDeferred);
+    totals.skip(CoverageReason::StructuralOpsDeferred);
     for _ in table_ref_case_names() {
-        totals.skip(CoverageReason::Round2Scope);
+        totals.skip(CoverageReason::StructuralOpsDeferred);
     }
 
     let elapsed = start.elapsed();

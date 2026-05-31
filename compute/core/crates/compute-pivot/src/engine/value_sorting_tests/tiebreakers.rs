@@ -400,100 +400,94 @@ fn sort_by_value_custom_sort_list_as_tiebreaker() {
     );
 }
 /// Verify that sort-by-value with many tied items produces deterministic,
-/// correctly-aligned output: each location's aggregated values must appear
-/// at that location's row position regardless of input data order.
+/// correctly-aligned output: each item's aggregated values must appear
+/// at that item's row position regardless of input data order.
 #[test]
 fn sort_by_value_tiebreak_alignment() {
-    // Simplified model of the 81vtSE pivot: Location → Sum(InvValue), Sum(Variance)
-    // Sort by Variance descending. Most locations have Variance=0.
+    // Sort by a metric descending. Most items have SortMetric=0.
     let data: Vec<Vec<CellValue>> = vec![
         vec![
-            cv_text("Location"),
-            cv_text("InvValue"),
-            cv_text("ReportedInv"),
-            cv_text("Variance"),
+            cv_text("Item"),
+            cv_text("MetricA"),
+            cv_text("ReportedMetricA"),
+            cv_text("SortMetric"),
         ],
-        // Non-zero variance
+        // Non-zero sort metrics.
         vec![
-            cv_text("Nazareth"),
+            cv_text("Item 01"),
             cv_num(5265.0),
             cv_num(68445.0),
             cv_num(63180.0),
         ],
         vec![
-            cv_text("Shelby"),
+            cv_text("Item 07"),
             cv_num(100.0),
             cv_num(100.0),
             cv_num(-4862.0),
         ],
         vec![
-            cv_text("Austin"),
+            cv_text("Item 08"),
             cv_num(500.0),
             cv_num(500.0),
             cv_num(-18119.25),
         ],
-        // Zero variance — different InvValue each (this is what makes misalignment visible)
+        // Zero metric — different MetricA values make misalignment visible.
         vec![
-            cv_text("Perrysburg"),
+            cv_text("Item 02"),
             cv_num(1772.16),
             cv_num(1772.16),
             cv_num(0.0),
         ],
         vec![
-            cv_text("Springfield"),
+            cv_text("Item 03"),
             cv_num(11692.80),
             cv_num(11692.80),
             cv_num(0.0),
         ],
         vec![
-            cv_text("Dripping Springs"),
+            cv_text("Item 04"),
             cv_num(127682.25),
             cv_num(127682.25),
             cv_num(0.0),
         ],
-        vec![cv_text("Boxborough"), cv_num(0.0), cv_num(0.0), cv_num(0.0)],
-        vec![
-            cv_text("Consignment"),
-            cv_num(0.0),
-            cv_num(0.0),
-            cv_num(0.0),
-        ],
+        vec![cv_text("Item 05"), cv_num(0.0), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item 06"), cv_num(0.0), cv_num(0.0), cv_num(0.0)],
     ];
 
     let fields = vec![
         PivotField {
-            id: FieldId::from("location"),
-            name: "Location".into(),
+            id: FieldId::from("item"),
+            name: "Item".into(),
             source_column: 0,
             data_type: DetectedDataType::String,
             ..Default::default()
         },
         PivotField {
-            id: FieldId::from("inv_value"),
-            name: "InvValue".into(),
+            id: FieldId::from("metric_a"),
+            name: "MetricA".into(),
             source_column: 1,
             data_type: DetectedDataType::Number,
             ..Default::default()
         },
         PivotField {
-            id: FieldId::from("reported_inv"),
-            name: "ReportedInv".into(),
+            id: FieldId::from("reported_metric_a"),
+            name: "ReportedMetricA".into(),
             source_column: 2,
             data_type: DetectedDataType::Number,
             ..Default::default()
         },
         PivotField {
-            id: FieldId::from("variance"),
-            name: "Variance".into(),
+            id: FieldId::from("sort_metric"),
+            name: "SortMetric".into(),
             source_column: 3,
             data_type: DetectedDataType::Number,
             ..Default::default()
         },
     ];
 
-    let mut axis = make_row_axis("location", 0);
+    let mut axis = make_row_axis("item", 0);
     axis.sort_by_value = Some(SortByValueConfig {
-        value_field_id: FieldId::from("variance"),
+        value_field_id: FieldId::from("sort_metric"),
         order: SortDirection::Desc,
         column_key: None,
     });
@@ -503,19 +497,19 @@ fn sort_by_value_tiebreak_alignment() {
         vec![
             PivotFieldPlacement::Row(axis),
             make_placement(
-                "inv_value",
+                "metric_a",
                 PivotFieldArea::Value,
                 0,
                 Some(AggregateFunction::Sum),
             ),
             make_placement(
-                "reported_inv",
+                "reported_metric_a",
                 PivotFieldArea::Value,
                 1,
                 Some(AggregateFunction::Sum),
             ),
             make_placement(
-                "variance",
+                "sort_metric",
                 PivotFieldArea::Value,
                 2,
                 Some(AggregateFunction::Sum),
@@ -528,12 +522,12 @@ fn sort_by_value_tiebreak_alignment() {
     assert!(result.errors.is_none(), "errors: {:?}", result.errors);
     assert_eq!(result.rows.len(), 8);
 
-    // Row 0: Nazareth (highest variance: 63180)
-    assert_eq!(result.rows[0].headers[0].value, cv_text("Nazareth"));
-    assert_approx(&result.rows[0].values[0], 5265.0, "Nazareth InvValue");
-    assert_approx(&result.rows[0].values[2], 63180.0, "Nazareth Variance");
+    // Row 0: highest sort metric.
+    assert_eq!(result.rows[0].headers[0].value, cv_text("Item 01"));
+    assert_approx(&result.rows[0].values[0], 5265.0, "Item 01 MetricA");
+    assert_approx(&result.rows[0].values[2], 63180.0, "Item 01 SortMetric");
 
-    // Rows 1-5: zero-variance items in alphabetical order
+    // Rows 1-5: zero-metric items in alphabetical order.
     let zero_labels: Vec<String> = result.rows[1..=5]
         .iter()
         .map(|r| match &r.headers[0].value {
@@ -543,41 +537,23 @@ fn sort_by_value_tiebreak_alignment() {
         .collect();
     assert_eq!(
         zero_labels,
-        vec![
-            "Boxborough",
-            "Consignment",
-            "Dripping Springs",
-            "Perrysburg",
-            "Springfield"
-        ],
-        "zero-variance items alphabetically ordered"
+        vec!["Item 02", "Item 03", "Item 04", "Item 05", "Item 06"],
+        "zero-metric items alphabetically ordered"
     );
 
-    // Critically: each location's InvValue must match its own data, not be shifted
-    let perrysburg = find_row_by_key(&result.rows, "Perrysburg").unwrap();
-    assert_approx(
-        &perrysburg.values[0],
-        1772.16,
-        "Perrysburg InvValue aligned",
-    );
+    // Critically: each item's MetricA must match its own data, not be shifted.
+    let item_02 = find_row_by_key(&result.rows, "Item 02").unwrap();
+    assert_approx(&item_02.values[0], 1772.16, "Item 02 MetricA aligned");
 
-    let dripping = find_row_by_key(&result.rows, "Dripping Springs").unwrap();
-    assert_approx(
-        &dripping.values[0],
-        127682.25,
-        "Dripping Springs InvValue aligned",
-    );
+    let item_04 = find_row_by_key(&result.rows, "Item 04").unwrap();
+    assert_approx(&item_04.values[0], 127682.25, "Item 04 MetricA aligned");
 
-    let springfield = find_row_by_key(&result.rows, "Springfield").unwrap();
-    assert_approx(
-        &springfield.values[0],
-        11692.80,
-        "Springfield InvValue aligned",
-    );
+    let item_03 = find_row_by_key(&result.rows, "Item 03").unwrap();
+    assert_approx(&item_03.values[0], 11692.80, "Item 03 MetricA aligned");
 
-    // Rows 6-7: negative variance, descending (Shelby > Austin)
-    assert_eq!(result.rows[6].headers[0].value, cv_text("Shelby"));
-    assert_eq!(result.rows[7].headers[0].value, cv_text("Austin"));
+    // Rows 6-7: negative sort metrics, descending.
+    assert_eq!(result.rows[6].headers[0].value, cv_text("Item 07"));
+    assert_eq!(result.rows[7].headers[0].value, cv_text("Item 08"));
 }
 /// Verify that the sort-by-value result is identical regardless of input data order.
 /// This catches non-determinism from HashMap seeds or unstable sorts.

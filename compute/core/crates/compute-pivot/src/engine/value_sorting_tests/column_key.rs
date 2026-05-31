@@ -226,7 +226,7 @@ fn sort_by_value_with_column_key_multi_level() {
 }
 #[test]
 fn sort_by_value_column_key_multi_level_compact() {
-    // Mimics mWzMdU: 5-level compact pivot with sort-by-value using column_key.
+    // Compact 5-level pivot with sort-by-value using column_key.
     // Row fields: Group > Segment > BU > Channel > Product
     // Column field: Year (2022, 2023, 2024)
     // Value: Sum of Amount

@@ -1,89 +1,79 @@
 use super::*;
 
-/// Regression test reproducing the 81vtSE corpus mismatch.
+/// Regression test for a pivot with many tied values.
 ///
-/// Models a pivot table with many locations sorted descending by a "variance" field.
-/// Most locations have variance=0, so tiebreaking determines their order.
+/// Models a pivot table with many items sorted descending by a metric field.
+/// Most items have metric=0, so tiebreaking determines their order.
 /// The sort-by-value sort must produce deterministic, alphabetical tiebreaking
 /// among items with equal aggregated values.
-///
-/// Bug: formula-eval corpus mode showed 31 mismatches because the standalone
-/// pivot computation (from OOXML cache records) produced a different row order
-/// than Excel's cached output. The engine's alphabetical tiebreaker among tied
-/// values is deterministic but may differ from Excel's order.
 #[test]
 fn sort_by_value_many_ties_deterministic_order() {
-    // 20 locations, most with variance=0, sorted by variance descending.
-    // This models the 81vtSE "Variances by Location" pivot table.
+    // 15 items, most with metric=0, sorted by metric descending.
     let data: Vec<Vec<CellValue>> = vec![
-        vec![
-            cv_text("Location"),
-            cv_text("InvValue"),
-            cv_text("Variance"),
-        ],
-        // Locations with nonzero variance
-        vec![cv_text("Nazareth"), cv_num(5265.0), cv_num(63180.0)],
-        vec![cv_text("Shelby"), cv_num(100.0), cv_num(-4862.0)],
-        vec![cv_text("Austin"), cv_num(500.0), cv_num(-18119.25)],
-        vec![cv_text("Rialto"), cv_num(200.0), cv_num(-194907.75)],
-        // Locations with variance=0 (ties)
-        vec![cv_text("Perrysburg"), cv_num(1772.16), cv_num(0.0)],
-        vec![cv_text("Litchfield Park"), cv_num(0.0), cv_num(0.0)],
-        vec![cv_text("Boxborough"), cv_num(0.0), cv_num(0.0)],
-        vec![cv_text("Springfield"), cv_num(11692.80), cv_num(0.0)],
-        vec![cv_text("Consignment"), cv_num(0.0), cv_num(0.0)],
-        vec![cv_text("Millstone"), cv_num(125488.0), cv_num(0.0)],
-        vec![cv_text("Dripping Springs"), cv_num(127682.25), cv_num(0.0)],
-        vec![cv_text("North Brunswick"), cv_num(3852.0), cv_num(0.0)],
-        vec![cv_text("Eastvale"), cv_num(0.0), cv_num(0.0)],
-        vec![cv_text("Elizabeth"), cv_num(3852.0), cv_num(0.0)],
-        vec![cv_text("Fontana"), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item"), cv_text("MetricA"), cv_text("SortMetric")],
+        // Items with nonzero sort metrics.
+        vec![cv_text("Item 01"), cv_num(5265.0), cv_num(63180.0)],
+        vec![cv_text("Item 14"), cv_num(100.0), cv_num(-4862.0)],
+        vec![cv_text("Item 15"), cv_num(500.0), cv_num(-18119.25)],
+        vec![cv_text("Item 16"), cv_num(200.0), cv_num(-194907.75)],
+        // Items with sort metric=0 (ties).
+        vec![cv_text("Item 02"), cv_num(1772.16), cv_num(0.0)],
+        vec![cv_text("Item 03"), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item 04"), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item 05"), cv_num(11692.80), cv_num(0.0)],
+        vec![cv_text("Item 06"), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item 07"), cv_num(125488.0), cv_num(0.0)],
+        vec![cv_text("Item 08"), cv_num(127682.25), cv_num(0.0)],
+        vec![cv_text("Item 09"), cv_num(3852.0), cv_num(0.0)],
+        vec![cv_text("Item 10"), cv_num(0.0), cv_num(0.0)],
+        vec![cv_text("Item 11"), cv_num(3852.0), cv_num(0.0)],
+        vec![cv_text("Item 12"), cv_num(0.0), cv_num(0.0)],
     ];
 
     let fields = vec![
         PivotField {
-            id: FieldId::from("location"),
-            name: "Location".to_string(),
+            id: FieldId::from("item"),
+            name: "Item".to_string(),
             source_column: 0,
             data_type: DetectedDataType::String,
             ..Default::default()
         },
         PivotField {
-            id: FieldId::from("inv_value"),
-            name: "InvValue".to_string(),
+            id: FieldId::from("metric_a"),
+            name: "MetricA".to_string(),
             source_column: 1,
             data_type: DetectedDataType::Number,
             ..Default::default()
         },
         PivotField {
-            id: FieldId::from("variance"),
-            name: "Variance".to_string(),
+            id: FieldId::from("sort_metric"),
+            name: "SortMetric".to_string(),
             source_column: 2,
             data_type: DetectedDataType::Number,
             ..Default::default()
         },
     ];
 
-    let mut axis = make_row_axis("location", 0);
+    let mut axis = make_row_axis("item", 0);
     axis.sort_by_value = Some(SortByValueConfig {
-        value_field_id: FieldId::from("variance"),
+        value_field_id: FieldId::from("sort_metric"),
         order: SortDirection::Desc,
         column_key: None,
     });
-    let placement_loc = PivotFieldPlacement::Row(axis);
+    let placement_item = PivotFieldPlacement::Row(axis);
 
     let config = make_base_config(
         fields,
         vec![
-            placement_loc,
+            placement_item,
             make_placement(
-                "inv_value",
+                "metric_a",
                 PivotFieldArea::Value,
                 0,
                 Some(AggregateFunction::Sum),
             ),
             make_placement(
-                "variance",
+                "sort_metric",
                 PivotFieldArea::Value,
                 1,
                 Some(AggregateFunction::Sum),
@@ -96,12 +86,12 @@ fn sort_by_value_many_ties_deterministic_order() {
     assert!(result.errors.is_none());
     assert_eq!(result.rows.len(), 15);
 
-    // Verify primary sort by variance descending
-    assert_eq!(result.rows[0].headers[0].value, cv_text("Nazareth"));
-    assert_approx(&result.rows[0].values[1], 63180.0, "Nazareth variance");
+    // Verify primary sort by metric descending.
+    assert_eq!(result.rows[0].headers[0].value, cv_text("Item 01"));
+    assert_approx(&result.rows[0].values[1], 63180.0, "Item 01 sort metric");
 
-    // All zero-variance locations should come next, in alphabetical order (stable tiebreaker)
-    let zero_variance_rows: Vec<&str> = result
+    // All zero-metric items should come next, in alphabetical order (stable tiebreaker).
+    let zero_metric_rows: Vec<&str> = result
         .rows
         .iter()
         .filter(|r| r.values[1] == cv_num(0.0))
@@ -112,33 +102,24 @@ fn sort_by_value_many_ties_deterministic_order() {
         .collect();
 
     assert_eq!(
-        zero_variance_rows,
+        zero_metric_rows,
         vec![
-            "Boxborough",
-            "Consignment",
-            "Dripping Springs",
-            "Eastvale",
-            "Elizabeth",
-            "Fontana",
-            "Litchfield Park",
-            "Millstone",
-            "North Brunswick",
-            "Perrysburg",
-            "Springfield",
+            "Item 02", "Item 03", "Item 04", "Item 05", "Item 06", "Item 07", "Item 08", "Item 09",
+            "Item 10", "Item 11", "Item 12",
         ],
-        "Zero-variance locations must be in alphabetical order (stable tiebreaker)"
+        "Zero-metric items must be in alphabetical order (stable tiebreaker)"
     );
 
-    // Verify each zero-variance location has correct InvValue (not shifted by wrong sort)
-    let perrysburg = find_row_by_key(&result.rows, "Perrysburg").unwrap();
-    assert_approx(&perrysburg.values[0], 1772.16, "Perrysburg InvValue");
-    assert_approx(&perrysburg.values[1], 0.0, "Perrysburg Variance");
+    // Verify each zero-metric item has the correct MetricA value (not shifted by wrong sort).
+    let item_02 = find_row_by_key(&result.rows, "Item 02").unwrap();
+    assert_approx(&item_02.values[0], 1772.16, "Item 02 MetricA");
+    assert_approx(&item_02.values[1], 0.0, "Item 02 SortMetric");
 
-    let dripping = find_row_by_key(&result.rows, "Dripping Springs").unwrap();
-    assert_approx(&dripping.values[0], 127682.25, "Dripping Springs InvValue");
+    let item_08 = find_row_by_key(&result.rows, "Item 08").unwrap();
+    assert_approx(&item_08.values[0], 127682.25, "Item 08 MetricA");
 
-    // Negative variance locations should come last, in descending order
+    // Negative metric items should come last, in descending order.
     let last_row = &result.rows[14];
-    assert_eq!(last_row.headers[0].value, cv_text("Rialto"));
-    assert_approx(&last_row.values[1], -194907.75, "Rialto variance");
+    assert_eq!(last_row.headers[0].value, cv_text("Item 16"));
+    assert_approx(&last_row.values[1], -194907.75, "Item 16 sort metric");
 }

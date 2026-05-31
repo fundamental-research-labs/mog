@@ -11,8 +11,8 @@
 //! R1.1/R1.2/R1.3 stand up the Rust equivalents.
 
 use compute_security::{
-    AccessLevel, NON_OWNER_TAG, OWNER_TAG, Principal, PrincipalPool, PrincipalTag, TagMatcher,
-    TagSpecificity,
+    AccessLevel, Principal, PrincipalPool, PrincipalTag, TagMatcher, TagSpecificity, NON_OWNER_TAG,
+    OWNER_TAG,
 };
 
 fn m(pattern: &str) -> TagMatcher {
@@ -189,7 +189,7 @@ mod access_level_ordering {
     }
 
     #[test]
-    fn discriminants_match_round1_contract() {
+    fn discriminants_match_legacy_contract() {
         // Legacy TS encoded these as string literals; Rust uses
         // repr(u8) with the same serialised names. Lock down both.
         assert_eq!(AccessLevel::None.as_u8(), 0);

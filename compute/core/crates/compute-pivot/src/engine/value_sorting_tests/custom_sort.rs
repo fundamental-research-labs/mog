@@ -247,5 +247,5 @@ fn custom_sort_list_not_reversed_by_desc_direction() {
 // ============================================================================
 // sort_by_value with column_key targets a specific column
 // ============================================================================
-// Corpus file mWzMdU: autoSortScope specifies sort by FY2024 column.
+// Regression: autoSortScope specifies sort by the FY2024 column.
 // Data is designed so FY2022 and FY2024 have opposite sort orders.

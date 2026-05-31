@@ -797,17 +797,17 @@ impl AxisSlug for AggregatorShape {
 /// readers of the test report see what *isn't* exercised yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CoverageReason {
-    /// Feature requires structural ops that are structural-op scope. Class II
-    /// only exercises cell-edit invariants; the structural-mutation
-    /// invariants are the same shape but needed a separate round.
-    Round2Scope,
+    /// Feature requires structural ops. Class II only exercises cell-edit
+    /// invariants; the structural-mutation invariants are the same shape but
+    /// need a separate structural-op lane.
+    StructuralOpsDeferred,
 }
 
 impl CoverageReason {
     #[must_use]
     pub const fn as_slug(self) -> &'static str {
         match self {
-            CoverageReason::Round2Scope => "round2_scope",
+            CoverageReason::StructuralOpsDeferred => "structural_ops_deferred",
         }
     }
 }

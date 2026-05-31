@@ -35,10 +35,12 @@ const SKIP_DIR_PARTS = new Set([
 ]);
 
 const DATA_EXTENSIONS = new Set([
+  '.bin',
   '.csv',
   '.duckdb',
   '.parquet',
   '.sqlite',
+  '.wasm',
   '.xls',
   '.xlsm',
   '.xlsx',
@@ -47,6 +49,8 @@ const DATA_EXTENSIONS = new Set([
 
 const ALLOWED_DATA_PATHS = [
   /^file-io\/xlsx\/parser\/test-corpus\//,
+  /^infra\/transport\/test-fixtures\/synthetic-trap\/synthetic-trap\.wasm$/,
+  /^kernel\/src\/bridges\/wire\/__tests__\/fixtures\/(?:mutation|viewport)\.bin$/,
   /^runtime\/embed\/public\/showcase\.xlsx$/,
 ];
 
@@ -79,8 +83,14 @@ const HARD_PATTERNS = [
   },
   {
     name: 'private-finding-reference',
-    regex: /\b(?:FINDINGS\.md|feedback_no_ignored_tests|MOG_USER_FEEDBACK[A-Z0-9_]*|shortcut_mono)\b/i,
+    regex:
+      /\b(?:FINDINGS\.md|feedback_no_ignored_tests|MOG_USER_FEEDBACK[A-Z0-9_]*|MOG_\d+(?:_\d+)+|shortcut_mono)\b/i,
     hint: 'Do not reference private findings, feedback fixture dirs, or private environment names.',
+  },
+  {
+    name: 'internal-round-handle',
+    regex: /\bround\d+[_-][a-z0-9_-]+/i,
+    hint: 'Rename internal remediation-round handles to behavior-focused names.',
   },
   {
     name: 'private-fixture-filename',
@@ -95,8 +105,13 @@ const CONTEXT_KEYWORDS =
 const CONTEXTUAL_PATTERNS = [
   {
     name: 'private-turn-reference',
-    regex: /\b(?:[a-z][a-z0-9]{2,}_turn\d+|turn\d+|run-\d{2,})\b/i,
+    regex: /\b(?:[a-z][a-z0-9]{2,}_turn\d+|turn\d+|run-\d{2,}|round\d+[_-][a-z0-9_-]+)\b/i,
     hint: 'Do not commit private run or agent-turn handles.',
+  },
+  {
+    name: 'opaque-corpus-file-token',
+    regex: /\b(?:corpus file|mimics)\s+[A-Za-z0-9]{5,12}\b/i,
+    hint: 'Replace private corpus file tokens with behavior-focused descriptions.',
   },
   {
     name: 'business-specific-gaap-sheet',
@@ -117,8 +132,13 @@ const CONTEXTUAL_PATTERNS = [
   {
     name: 'private-derived-coordinate-note',
     regex:
-      /\b(?:captured|copied|derived|mirrors|ported|reduced|from the|exact(?: formula)?(?: pattern)? from)\b.{0,80}\b(?:private|internal corpus|workspace-internal|real-world corpus|corpus (?:failures|that|pattern)|run-\d{2,}|turn\d+)\b/i,
+      /\b(?:captured|copied|derived|mimics|mirrors|ported|reduced|from the|exact(?: formula)?(?: pattern)? from)\b.{0,80}\b(?:private|internal corpus|workspace-internal|real-world corpus|real workbook|corpus (?:failures|that|pattern)|run-\d{2,}|turn\d+)\b/i,
     hint: 'State the behavior under test without naming private provenance.',
+  },
+  {
+    name: 'named-workbook-provenance',
+    regex: /\b(?:different|external|source)\s+workbook\b.{0,100}["'`][^"'`]+\.xlsx["'`]/i,
+    hint: 'Use synthetic workbook names or describe the external-workbook behavior generically.',
   },
 ];
 
@@ -135,11 +155,15 @@ function normalizePath(path) {
 }
 
 function collectFiles() {
-  const result = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const result = spawnSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
 
   if (result.status !== 0) {
     throw new Error(`git ls-files failed:\n${result.stderr || result.stdout}`);
@@ -257,8 +281,7 @@ function scanPath(path, externalPatterns) {
       category: 'unapproved-data-fixture',
       target: 'path',
       line: path,
-      hint:
-        'Move private data files out of the public repo, or add a narrow public fixture allowlist entry with provenance.',
+      hint: 'Move private data files out of the public repo, or add a narrow public fixture allowlist entry with provenance.',
     });
   }
 
@@ -313,11 +336,7 @@ function scanRepository() {
 
 function formatFinding(finding) {
   const loc = finding.lineNumber > 0 ? `${finding.path}:${finding.lineNumber}` : finding.path;
-  return [
-    `${loc} [${finding.category}]`,
-    `  ${finding.line}`,
-    `  ${finding.hint}`,
-  ].join('\n');
+  return [`${loc} [${finding.category}]`, `  ${finding.line}`, `  ${finding.hint}`].join('\n');
 }
 
 function runSelfTest() {
@@ -326,25 +345,38 @@ function runSelfTest() {
     ['test.rs', '// From source_turn6 benchmark.'],
     ['test.rs', 'let locals = make_local_sheets(&["SOURCE-GAAP"]);'],
     ['test.rs', 'fn regression_ib6cymnt() {} // corpus reducer'],
+    ['test.rs', '// Corpus file aB12Cd: autoSortScope specifies a column.'],
+    ['test.rs', '// This mimics the real workbook formula pattern.'],
+    ['test.rs', '// Regression for MOG_99_1.'],
+    ['tests/round9_cleanup.rs', 'fn scans_sources() {}'],
+    ['test.rs', '// External workbook ("Example.xlsx") has the same sheet name.'],
     ['test.ts', 'const p = "/Users/name/Code/mog-all/mog-data/corpus/model.xlsx";'],
     ['test.ts', '// derived from customer workbook row 12'],
   ];
   const allowed = [
     ['test.rs', '// Gated by corpus-tests; set MOG_XLSX_CORPUS_DIR externally.'],
     ['test.rs', 'fn regression_fullcol_bbox_extent_miss() {}'],
+    ['test.rs', '// Compact pivot with sort-by-value using column_key.'],
+    ['test.rs', '// Representative full-column workload with multiple criteria pairs.'],
     ['test.rs', 'let sheets = ["SourceData", "Dest"];'],
     ['test.ts', 'const label = "external XLSX fixture path";'],
   ];
 
   for (const [path, line] of blocked) {
-    const findings = [...scanPath(path, externalPatterns), ...scanText(path, line, externalPatterns)];
+    const findings = [
+      ...scanPath(path, externalPatterns),
+      ...scanText(path, line, externalPatterns),
+    ];
     if (findings.length === 0) {
       throw new Error(`self-test expected blocked line to fail: ${line}`);
     }
   }
 
   for (const [path, line] of allowed) {
-    const findings = [...scanPath(path, externalPatterns), ...scanText(path, line, externalPatterns)];
+    const findings = [
+      ...scanPath(path, externalPatterns),
+      ...scanText(path, line, externalPatterns),
+    ];
     if (findings.length !== 0) {
       throw new Error(`self-test expected allowed line to pass: ${line}`);
     }

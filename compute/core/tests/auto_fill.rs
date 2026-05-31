@@ -616,12 +616,10 @@ fn merged_cells_non_origin_skipped() {
     // (3, 0) is origin → filled
     assert!(rows.contains(&3));
     // Should have warning about merges in target
-    assert!(
-        result
-            .warnings
-            .iter()
-            .any(|w| matches!(w.kind, FillWarningKind::MergedCellsInTarget))
-    );
+    assert!(result
+        .warnings
+        .iter()
+        .any(|w| matches!(w.kind, FillWarningKind::MergedCellsInTarget)));
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -728,7 +726,7 @@ fn single_cell_source_copies_constant() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 17b. Single cell zero — must NOT increment (regression for MOG_14_1)
+// 17b. Single cell zero — must NOT increment.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #[test]

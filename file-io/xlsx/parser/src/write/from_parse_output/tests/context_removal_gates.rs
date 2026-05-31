@@ -102,7 +102,7 @@ fn collect_term_matches(dir: &Path, terms: &[String], matches: &mut Vec<String>)
 }
 
 fn is_scanned_rust_source(path: &Path) -> bool {
-    if path.file_name().and_then(|name| name.to_str()) == Some("round7_search_gates.rs") {
+    if path.file_name().and_then(|name| name.to_str()) == Some("context_removal_gates.rs") {
         return false;
     }
     let relative = display_path(path);

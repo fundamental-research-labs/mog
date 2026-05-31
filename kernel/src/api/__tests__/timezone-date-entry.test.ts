@@ -4,8 +4,8 @@
  * Pinning bug: prior to,
  * `setDateValue(Date)` and `setCells({value: Date})` decomposed Date instants via
  * `getFullYear/getMonth/getDate` — host-local getters. On any host whose process
- * timezone differs from the user's session timezone (a Modal worker is the
- * canonical example), this stored the wrong calendar day.
+ * timezone differs from the user's session timezone (for example, a CI worker
+ * in a different host timezone), this stored the wrong calendar day.
  *
  * The fix routes every Date → calendar-parts conversion through
  * `Intl.DateTimeFormat(session.userTimezone)`. This test pins down that

@@ -22,10 +22,10 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
 }
 
 mod charts;
+mod context_removal_gates;
 mod data_tables;
 mod package_graph_ownership;
 mod pivot_package;
-mod round7_search_gates;
 mod smoke_and_formulas;
 mod sparklines;
 mod styles;
@@ -257,11 +257,9 @@ fn webextension_cluster_round_trips_through_production_zip_writer() {
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
 
     assert!(archive.read_file("xl/webextensions/taskpanes.xml").is_ok());
-    assert!(
-        archive
-            .read_file("xl/webextensions/webextension1.xml")
-            .is_ok()
-    );
+    assert!(archive
+        .read_file("xl/webextensions/webextension1.xml")
+        .is_ok());
     let root_rels = String::from_utf8(archive.read_file("_rels/.rels").unwrap()).unwrap();
     let taskpane_rels = String::from_utf8(
         archive
@@ -414,11 +412,9 @@ fn drawing_export_preserves_distinct_image_relationships_to_same_media_part() {
     assert_eq!(image_rels.len(), 2);
     assert!(image_rels.iter().any(|rel| rel.id == "rId1"));
     assert!(image_rels.iter().any(|rel| rel.id == "rId2"));
-    assert!(
-        image_rels
-            .iter()
-            .all(|rel| rel.target == "../media/image1.png")
-    );
+    assert!(image_rels
+        .iter()
+        .all(|rel| rel.target == "../media/image1.png"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

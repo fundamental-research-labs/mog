@@ -502,7 +502,7 @@ export async function setCells(
     // date serial + applies a default date format when the cell is unformatted.
     // Calendar parts are resolved in the session's userTimezone (never host-local)
     // so the same Date instant produces the same calendar serial regardless of
-    // whether the kernel is running in a browser, on a Modal worker, or in a
+    // whether the kernel is running in a browser, on a remote worker, or in a
     // headless test.
     for (const d of dates) {
       const parts = calendarPartsInTz(d.date, ctx.userTimezone);

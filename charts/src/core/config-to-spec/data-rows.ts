@@ -9,6 +9,7 @@ import {
   toFiniteNumber,
 } from './category-axis';
 import {
+  BLANK_VALUE_FIELD,
   BUBBLE_SIZE_FIELD,
   CATEGORY_FIELD,
   CATEGORY_FORMAT_CODE_FIELD,
@@ -55,6 +56,7 @@ import {
   SCATTER_X_FIELD,
   SERIES_FIELD,
   SERIES_INDEX_FIELD,
+  LINE_SEGMENT_FIELD,
   SERIES_ORDER_FIELD,
   SERIES_OPACITY_FIELD,
   STOCK_CLOSE_FIELD,
@@ -98,6 +100,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
   const totalsBySeries = data.series.map((series) => seriesTotal(series.data));
   const pieLabelGeometries = buildPieLabelGeometries(data, config);
+  const gapSegmentsBySeries = data.series.map(() => 0);
   let waterfallRunningTotal = 0;
   const waterfallTotalIndices = new Set([
     ...(config?.waterfall?.totalIndices ?? []),
@@ -112,17 +115,36 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
       const series = data.series[seriesIndex];
       const point = series.data[i];
+      if (shouldEmitBlankRow(point, config)) {
+        const row = buildBaseRow({
+          rawCategory,
+          rowCategory,
+          seriesName: series.name,
+          pointIndex: i,
+          seriesIndex,
+          seriesOrder: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
+        });
+        row[BLANK_VALUE_FIELD] = true;
+        applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
+        rows.push(row);
+        if (config?.displayBlanksAs === 'gap') {
+          gapSegmentsBySeries[seriesIndex] += 1;
+        }
+        continue;
+      }
       if (point && shouldIncludePointInRows(point, config)) {
-        const row: DataRow = {
-          [CATEGORY_FIELD]: rowCategory,
-          [VALUE_FIELD]: point.y,
-          [SERIES_FIELD]: series.name,
-          [POINT_INDEX_FIELD]: i,
-          [SERIES_INDEX_FIELD]: seriesIndex,
-          [SERIES_ORDER_FIELD]: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
-          [RAW_CATEGORY_FIELD]: rawCategory,
-          [RAW_VALUE_FIELD]: point.y,
-        };
+        const row = buildBaseRow({
+          rawCategory,
+          rowCategory,
+          seriesName: series.name,
+          pointIndex: i,
+          seriesIndex,
+          seriesOrder: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
+          value: point.y,
+        });
+        if (config?.displayBlanksAs === 'gap') {
+          row[LINE_SEGMENT_FIELD] = gapSegmentsBySeries[seriesIndex];
+        }
         if (isScatterLikeChart(config)) {
           row[SCATTER_X_FIELD] = scatterXValue(point);
         }
@@ -155,8 +177,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
             waterfallRunningTotal = end;
           }
         }
-        const categoryFormatCode = data.categoryFormatCodes?.[i];
-        if (categoryFormatCode) row[CATEGORY_FORMAT_CODE_FIELD] = categoryFormatCode;
+        applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
         // Propagate OHLC fields if present (for stock charts)
         if (point[STOCK_OPEN_FIELD] !== undefined) row[STOCK_OPEN_FIELD] = point[STOCK_OPEN_FIELD];
         if (point[STOCK_HIGH_FIELD] !== undefined) row[STOCK_HIGH_FIELD] = point[STOCK_HIGH_FIELD];
@@ -172,6 +193,34 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     }
   }
   return rows;
+}
+
+function buildBaseRow(input: {
+  rawCategory: string | number;
+  rowCategory: string | number;
+  seriesName: string;
+  pointIndex: number;
+  seriesIndex: number;
+  seriesOrder: number;
+  value?: number;
+}): DataRow {
+  const row: DataRow = {
+    [CATEGORY_FIELD]: input.rowCategory,
+    [SERIES_FIELD]: input.seriesName,
+    [POINT_INDEX_FIELD]: input.pointIndex,
+    [SERIES_INDEX_FIELD]: input.seriesIndex,
+    [SERIES_ORDER_FIELD]: input.seriesOrder,
+    [RAW_CATEGORY_FIELD]: input.rawCategory,
+  };
+  if (input.value !== undefined) {
+    row[VALUE_FIELD] = input.value;
+    row[RAW_VALUE_FIELD] = input.value;
+  }
+  return row;
+}
+
+function applyCategoryFormat(row: DataRow, categoryFormatCode: string | null | undefined): void {
+  if (categoryFormatCode) row[CATEGORY_FORMAT_CODE_FIELD] = categoryFormatCode;
 }
 
 function applyPointAnnotations(
@@ -619,6 +668,16 @@ function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): 
     return config?.displayBlanksAs === 'zero';
   }
   return false;
+}
+
+function shouldEmitBlankRow(
+  point: ChartDataPoint | undefined,
+  config?: ChartConfig,
+): boolean {
+  if (isScatterLikeChart(config)) return false;
+  if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
+  if (!point) return true;
+  return point.valueState === 'blank';
 }
 
 function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {

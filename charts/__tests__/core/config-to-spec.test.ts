@@ -22,12 +22,15 @@ import {
 } from '../../src/core/config-to-spec';
 import { collectMarks } from '../../src/core/chart-engine';
 import {
+  BLANK_VALUE_FIELD,
   DATA_LABEL_BASELINE_FIELD,
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_TEXT_FIELD,
+  LINE_SEGMENT_FIELD,
 } from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
+import type { PathMark, SymbolMark } from '../../src/primitives/types';
 import type { EncodingSpec, MarkSpec } from '../../src/grammar/spec';
 import type { ChartConfig, ChartData, ChartType, StoredChartConfig } from '../../src/types';
 
@@ -138,6 +141,57 @@ describe('chartDataToRows', () => {
     expectRowContaining(rows[0], { category: 'A', value: 10, series: 'Sparse' });
   });
 
+  it('preserves explicit gap/span blanks as domain rows without renderable values', () => {
+    const data: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 0, valueState: 'blank' },
+            { x: 'C', y: 3 },
+          ],
+        },
+      ],
+    };
+
+    const gapRows = chartDataToRows(data, makeConfig({ type: 'line', displayBlanksAs: 'gap' }));
+    expect(gapRows.map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(gapRows.map((row) => row.value)).toEqual([1, undefined, 3]);
+    expect(gapRows[1][BLANK_VALUE_FIELD]).toBe(true);
+    expect(gapRows.map((row) => row[LINE_SEGMENT_FIELD])).toEqual([0, undefined, 1]);
+
+    const spanRows = chartDataToRows(data, makeConfig({ type: 'line', displayBlanksAs: 'span' }));
+    expect(spanRows.map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(spanRows.map((row) => row.value)).toEqual([1, undefined, 3]);
+    expect(spanRows[1][BLANK_VALUE_FIELD]).toBe(true);
+    expect(spanRows.every((row) => row[LINE_SEGMENT_FIELD] === undefined)).toBe(true);
+
+    const zeroRows = chartDataToRows(data, makeConfig({ type: 'line', displayBlanksAs: 'zero' }));
+    expect(zeroRows.map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(zeroRows.map((row) => row.value)).toEqual([1, 0, 3]);
+    expect(zeroRows.some((row) => row[BLANK_VALUE_FIELD] === true)).toBe(false);
+  });
+
+  it('treats sparse cache holes as gap/span blanks when the mode preserves blank domains', () => {
+    const data: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Sparse',
+          data: [{ x: 'A', y: 10 }],
+        },
+      ],
+    };
+
+    const rows = chartDataToRows(data, makeConfig({ type: 'line', displayBlanksAs: 'gap' }));
+
+    expect(rows.map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(rows.map((row) => row.value)).toEqual([10, undefined, undefined]);
+    expect(rows.slice(1).every((row) => row[BLANK_VALUE_FIELD] === true)).toBe(true);
+  });
+
   it('should preserve imported per-category format codes separately from category identity', () => {
     const rows = chartDataToRows({
       categories: [26, 27],
@@ -243,6 +297,71 @@ describe('chartDataToRows', () => {
     expectRowsContaining(rows, [
       { category: '1', x: 1, value: 10, series: 'Bubbles', size: 4 },
       { category: '2', x: 2, value: 20, series: 'Bubbles', size: 12 },
+    ]);
+  });
+});
+
+describe('displayBlanksAs renderability', () => {
+  const data: ChartData = {
+    categories: ['A', 'B', 'C'],
+    series: [
+      {
+        name: 'Series 1',
+        data: [
+          { x: 'A', y: 1 },
+          { x: 'B', y: 0, valueState: 'blank' },
+          { x: 'C', y: 3 },
+        ],
+      },
+    ],
+  };
+
+  function dataPaths(config: StoredChartConfig): PathMark[] {
+    const result = compile(configToSpec(config, data), undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    return result.marks.filter((mark): mark is PathMark => mark.type === 'path');
+  }
+
+  it('splits line paths for gap blanks while preserving the blank category domain', () => {
+    const spec = configToSpec(makeConfig({ type: 'line', displayBlanksAs: 'gap' }), data);
+    const result = compile(spec, undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+
+    expect(result.scales.x?.domain?.()).toEqual(['A', 'B', 'C']);
+    expect(result.marks.filter((mark): mark is PathMark => mark.type === 'path')).toHaveLength(2);
+  });
+
+  it('spans line paths across blank rows without drawing a blank marker', () => {
+    const paths = dataPaths(makeConfig({ type: 'line', displayBlanksAs: 'span' }));
+
+    expect(paths).toHaveLength(1);
+    const pathDatum = paths[0].datum as Array<Record<string, unknown>>;
+    expect(pathDatum).toHaveLength(2);
+    expect(paths[0].path.split('L')).toHaveLength(2);
+  });
+
+  it('keeps line marker layers off gap/span blank rows', () => {
+    const result = compile(
+      configToSpec(makeConfig({ type: 'lineMarkers', displayBlanksAs: 'span' }), data),
+      undefined,
+      {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      },
+    );
+    const symbols = result.marks.filter((mark): mark is SymbolMark => mark.type === 'symbol');
+
+    expect(symbols).toHaveLength(2);
+    expect(symbols.map((mark) => (mark.datum as Record<string, unknown>).category)).toEqual([
+      'A',
+      'C',
     ]);
   });
 });

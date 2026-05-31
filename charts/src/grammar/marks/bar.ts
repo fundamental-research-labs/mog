@@ -13,7 +13,7 @@ import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
-import { definedStyle } from './helpers';
+import { definedStyle, renderableDataRows } from './helpers';
 
 type BarSlotGeometry = {
   offset: number;
@@ -92,6 +92,9 @@ export function generateBarMarks(
 
   if (!xScale || !yScale) return marks;
 
+  const renderData = renderableDataRows(data);
+  if (renderData.length === 0) return marks;
+
   // Determine orientation
   const isHorizontal = encoding?.x?.type === 'quantitative' && encoding?.y?.type !== 'quantitative';
 
@@ -110,7 +113,7 @@ export function generateBarMarks(
   // For grouped bars, compute group info (unique groups and their order)
   let uniqueGroups: string[] = [];
   if (isGrouped && colorField) {
-    uniqueGroups = uniqueValues(data, colorField);
+    uniqueGroups = uniqueValues(renderData, colorField);
   }
 
   // Detect duplicate categories: when multiple data rows share the same category
@@ -124,7 +127,7 @@ export function generateBarMarks(
   if (catField && !isStacked) {
     if (!isGrouped || colorMatchesCat) {
       const catCounts = new Map<string, number>();
-      for (const d of data) {
+      for (const d of renderData) {
         const cat = String(d[catField] ?? '');
         catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
       }
@@ -145,16 +148,16 @@ export function generateBarMarks(
       : 1;
 
   // For percent-stacked mode, normalize values per category group
-  let normalizedData = data;
+  let normalizedData = renderData;
   if (isPercentStacked) {
     if (catField && valField) {
       const totals = new Map<string, number>();
-      for (const d of data) {
+      for (const d of renderData) {
         const cat = String(d[catField]);
         const val = typeof d[valField] === 'number' ? Math.abs(d[valField] as number) : 0;
         totals.set(cat, (totals.get(cat) || 0) + val);
       }
-      normalizedData = data.map((d) => {
+      normalizedData = renderData.map((d) => {
         const cat = String(d[catField]);
         const total = totals.get(cat) || 1;
         const val = typeof d[valField] === 'number' ? (d[valField] as number) : 0;
@@ -222,7 +225,7 @@ export function generateBarMarks(
 
   for (const i of processOrder) {
     const normalizedDatum = normalizedData[i];
-    const datum = data[i]; // Keep original datum for mark.datum
+    const datum = renderData[i]; // Keep original datum for mark.datum
     const xValue = encodings.x?.accessor(normalizedDatum);
     const yValue = encodings.y?.accessor(normalizedDatum);
     const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);

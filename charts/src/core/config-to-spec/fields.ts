@@ -10,6 +10,8 @@ export const SERIES_ORDER_FIELD = '__mogSeriesOrder';
 export const RAW_CATEGORY_FIELD = '__mogRawCategory';
 export const RAW_VALUE_FIELD = '__mogRawValue';
 
+export { BLANK_VALUE_FIELD, LINE_SEGMENT_FIELD } from '../../grammar/internal-fields';
+
 export const DATA_LABEL_TEXT_FIELD = '__mogDataLabelText';
 export const DATA_LABEL_VISIBLE_FIELD = '__mogDataLabelVisible';
 export const DATA_LABEL_X_FIELD = '__mogDataLabelX';

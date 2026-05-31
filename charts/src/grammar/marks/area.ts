@@ -12,7 +12,12 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
-import { definedStyle, groupDataByEncoding } from './helpers';
+import {
+  definedStyle,
+  groupDataByEncoding,
+  isBlankValueDatum,
+  splitDataByLineSegment,
+} from './helpers';
 
 /**
  * Generate area marks.
@@ -146,173 +151,180 @@ export function generateAreaMarks(
   }
 
   for (const [_groupKey, groupData] of groups) {
-    const topPoints: Array<{ x: number; y: number; xKey: string }> = [];
+    for (const segmentData of splitDataByLineSegment(groupData)) {
+      const topPoints: Array<{ x: number; y: number; xKey: string }> = [];
+      const plottedData: DataRow[] = [];
 
-    const xField = _encoding?.x?.field;
-    const yField = _encoding?.y?.field;
+      const xField = _encoding?.x?.field;
+      const yField = _encoding?.y?.field;
 
-    for (const datum of groupData) {
-      const x = xScale(encodings.x?.accessor(datum)) as number;
+      for (const datum of segmentData) {
+        if (isBlankValueDatum(datum)) continue;
+        const x = xScale(encodings.x?.accessor(datum)) as number;
 
-      if (isNaN(x)) continue;
+        if (isNaN(x)) continue;
 
-      if (isStacked && xField && yField) {
-        // For stacked areas, compute cumulative values and map through effectiveYScale
-        const cat = String(datum[xField] ?? '');
-        const rawVal =
-          typeof datum[yField] === 'number' && isFinite(datum[yField] as number)
-            ? (datum[yField] as number)
-            : 0;
+        if (isStacked && xField && yField) {
+          // For stacked areas, compute cumulative values and map through effectiveYScale
+          const cat = String(datum[xField] ?? '');
+          const rawVal =
+            typeof datum[yField] === 'number' && isFinite(datum[yField] as number)
+              ? (datum[yField] as number)
+              : 0;
 
-        if (isPercentStacked) {
-          // Normalize to percentage
-          const total = categoryTotals.get(cat) || 1;
-          const pctVal = (Math.abs(rawVal) / total) * 100;
-          const cumStart = categoryCumulative.get(cat) || 0;
-          const cumEnd = cumStart + pctVal;
-          categoryCumulative.set(cat, cumEnd);
+          if (isPercentStacked) {
+            // Normalize to percentage
+            const total = categoryTotals.get(cat) || 1;
+            const pctVal = (Math.abs(rawVal) / total) * 100;
+            const cumStart = categoryCumulative.get(cat) || 0;
+            const cumEnd = cumStart + pctVal;
+            categoryCumulative.set(cat, cumEnd);
 
-          const y = effectiveYScale(cumEnd) as number;
-          if (isNaN(y)) continue;
-          topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
-        } else {
-          // stack: 'zero' — accumulate raw values, separated by sign
-          let cumVal: number;
-          if (rawVal >= 0) {
-            const prev = posStackValues.get(cat) || 0;
-            cumVal = prev + rawVal;
-            posStackValues.set(cat, cumVal);
+            const y = effectiveYScale(cumEnd) as number;
+            if (isNaN(y)) continue;
+            topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
+            plottedData.push(datum);
           } else {
-            const prev = negStackValues.get(cat) || 0;
-            cumVal = prev + rawVal;
-            negStackValues.set(cat, cumVal);
+            // stack: 'zero' — accumulate raw values, separated by sign
+            let cumVal: number;
+            if (rawVal >= 0) {
+              const prev = posStackValues.get(cat) || 0;
+              cumVal = prev + rawVal;
+              posStackValues.set(cat, cumVal);
+            } else {
+              const prev = negStackValues.get(cat) || 0;
+              cumVal = prev + rawVal;
+              negStackValues.set(cat, cumVal);
+            }
+            const y = effectiveYScale(cumVal) as number;
+            if (isNaN(y)) continue;
+            topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
+            plottedData.push(datum);
           }
-          const y = effectiveYScale(cumVal) as number;
+        } else {
+          // Non-stacked: use original scale directly
+          const y = yScale(encodings.y?.accessor(datum)) as number;
           if (isNaN(y)) continue;
-          topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
+          topPoints.push({ x, y: clampYToPlot(y), xKey: '' });
+          plottedData.push(datum);
         }
+      }
+
+      // Sort by x to ensure monotonic order
+      topPoints.sort((a, b) => a.x - b.x);
+
+      // Allow single-point areas (degenerate but should produce a mark)
+      if (topPoints.length === 0) continue;
+
+      // For single-point areas, duplicate the point to form a thin sliver
+      if (topPoints.length === 1) {
+        const pt = topPoints[0];
+        topPoints.push({ x: pt.x + 1, y: pt.y, xKey: pt.xKey });
+      }
+
+      if (isStacked) {
+        // Build stacked area path using cumulative value-based positioning.
+        // Bottom edge = previous series' cumulative top (from baseline tracker) or chart baseline.
+        // Top edge = current cumulative position (already computed above via effectiveYScale).
+        const bottomLine: Array<{ x: number; y: number }> = [];
+
+        // Use a baseline tracker keyed by x pixel position (rounded).
+        // When a data point is missing for a series (gap), the baseline tracker
+        // retains the last series' top at that x, so subsequent series don't
+        // reset to zero -- they carry forward the previous baseline.
+        for (const pt of topPoints) {
+          const xKey = Math.round(pt.x * 100) / 100;
+          const prevBaseline = stackBaselineTracker.get(xKey) ?? chartBaseline;
+          bottomLine.push({ x: pt.x, y: prevBaseline });
+
+          // Update the baseline tracker for the next series
+          stackBaselineTracker.set(xKey, pt.y);
+        }
+
+        // Build area path: top line left-to-right, then bottom line right-to-left.
+        // This correctly encloses the stacked band between the previous series
+        // and the current one.
+        let path = `M${topPoints[0].x},${topPoints[0].y}`;
+
+        for (let i = 1; i < topPoints.length; i++) {
+          path += ` L${topPoints[i].x},${topPoints[i].y}`;
+        }
+
+        // Return along bottom edge right-to-left
+        for (let i = bottomLine.length - 1; i >= 0; i--) {
+          path += ` L${bottomLine[i].x},${bottomLine[i].y}`;
+        }
+        path += ' Z';
+
+        const colorValue = encodings.color?.accessor(plottedData[0]);
+        const color = resolveColor({
+          colorScale: scales.color,
+          colorValue,
+          markColor: markSpec.color,
+          markFill: markSpec.fill,
+          index: marks.length,
+        });
+
+        marks.push({
+          type: 'path',
+          x: 0,
+          y: 0,
+          path,
+          datum: plottedData,
+          style: {
+            fill: color,
+            stroke: markSpec.stroke ?? color,
+            strokeWidth: markSpec.strokeWidth ?? 1,
+            opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
+            ...definedStyle({
+              fillPaint: markSpec.fillPaint,
+              strokePaint: markSpec.strokePaint,
+              line: markSpec.line,
+              effects: markSpec.effects,
+            }),
+          },
+        });
       } else {
-        // Non-stacked: use original scale directly
-        const y = yScale(encodings.y?.accessor(datum)) as number;
-        if (isNaN(y)) continue;
-        topPoints.push({ x, y: clampYToPlot(y), xKey: '' });
+        // Non-stacked area: baseline is the chart bottom
+        let path = `M${topPoints[0].x},${chartBaseline}`;
+        path += ` L${topPoints[0].x},${topPoints[0].y}`;
+
+        for (let i = 1; i < topPoints.length; i++) {
+          path += ` L${topPoints[i].x},${topPoints[i].y}`;
+        }
+
+        path += ` L${topPoints[topPoints.length - 1].x},${chartBaseline}`;
+        path += ' Z';
+
+        const colorValue = encodings.color?.accessor(plottedData[0]);
+        const color = resolveColor({
+          colorScale: scales.color,
+          colorValue,
+          markColor: markSpec.color,
+          markFill: markSpec.fill,
+          index: marks.length,
+        });
+
+        marks.push({
+          type: 'path',
+          x: 0,
+          y: 0,
+          path,
+          datum: plottedData,
+          style: {
+            fill: color,
+            stroke: markSpec.stroke ?? color,
+            strokeWidth: markSpec.strokeWidth ?? 1,
+            opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
+            ...definedStyle({
+              fillPaint: markSpec.fillPaint,
+              strokePaint: markSpec.strokePaint,
+              line: markSpec.line,
+              effects: markSpec.effects,
+            }),
+          },
+        });
       }
-    }
-
-    // Sort by x to ensure monotonic order
-    topPoints.sort((a, b) => a.x - b.x);
-
-    // Allow single-point areas (degenerate but should produce a mark)
-    if (topPoints.length === 0) continue;
-
-    // For single-point areas, duplicate the point to form a thin sliver
-    if (topPoints.length === 1) {
-      const pt = topPoints[0];
-      topPoints.push({ x: pt.x + 1, y: pt.y, xKey: pt.xKey });
-    }
-
-    if (isStacked) {
-      // Build stacked area path using cumulative value-based positioning.
-      // Bottom edge = previous series' cumulative top (from baseline tracker) or chart baseline.
-      // Top edge = current cumulative position (already computed above via effectiveYScale).
-      const bottomLine: Array<{ x: number; y: number }> = [];
-
-      // Use a baseline tracker keyed by x pixel position (rounded).
-      // When a data point is missing for a series (gap), the baseline tracker
-      // retains the last series' top at that x, so subsequent series don't
-      // reset to zero -- they carry forward the previous baseline.
-      for (const pt of topPoints) {
-        const xKey = Math.round(pt.x * 100) / 100;
-        const prevBaseline = stackBaselineTracker.get(xKey) ?? chartBaseline;
-        bottomLine.push({ x: pt.x, y: prevBaseline });
-
-        // Update the baseline tracker for the next series
-        stackBaselineTracker.set(xKey, pt.y);
-      }
-
-      // Build area path: top line left-to-right, then bottom line right-to-left.
-      // This correctly encloses the stacked band between the previous series
-      // and the current one.
-      let path = `M${topPoints[0].x},${topPoints[0].y}`;
-
-      for (let i = 1; i < topPoints.length; i++) {
-        path += ` L${topPoints[i].x},${topPoints[i].y}`;
-      }
-
-      // Return along bottom edge right-to-left
-      for (let i = bottomLine.length - 1; i >= 0; i--) {
-        path += ` L${bottomLine[i].x},${bottomLine[i].y}`;
-      }
-      path += ' Z';
-
-      const colorValue = encodings.color?.accessor(groupData[0]);
-      const color = resolveColor({
-        colorScale: scales.color,
-        colorValue,
-        markColor: markSpec.color,
-        markFill: markSpec.fill,
-        index: marks.length,
-      });
-
-      marks.push({
-        type: 'path',
-        x: 0,
-        y: 0,
-        path,
-        datum: groupData,
-        style: {
-          fill: color,
-          stroke: markSpec.stroke ?? color,
-          strokeWidth: markSpec.strokeWidth ?? 1,
-          opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
-          ...definedStyle({
-            fillPaint: markSpec.fillPaint,
-            strokePaint: markSpec.strokePaint,
-            line: markSpec.line,
-            effects: markSpec.effects,
-          }),
-        },
-      });
-    } else {
-      // Non-stacked area: baseline is the chart bottom
-      let path = `M${topPoints[0].x},${chartBaseline}`;
-      path += ` L${topPoints[0].x},${topPoints[0].y}`;
-
-      for (let i = 1; i < topPoints.length; i++) {
-        path += ` L${topPoints[i].x},${topPoints[i].y}`;
-      }
-
-      path += ` L${topPoints[topPoints.length - 1].x},${chartBaseline}`;
-      path += ' Z';
-
-      const colorValue = encodings.color?.accessor(groupData[0]);
-      const color = resolveColor({
-        colorScale: scales.color,
-        colorValue,
-        markColor: markSpec.color,
-        markFill: markSpec.fill,
-        index: marks.length,
-      });
-
-      marks.push({
-        type: 'path',
-        x: 0,
-        y: 0,
-        path,
-        datum: groupData,
-        style: {
-          fill: color,
-          stroke: markSpec.stroke ?? color,
-          strokeWidth: markSpec.strokeWidth ?? 1,
-          opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
-          ...definedStyle({
-            fillPaint: markSpec.fillPaint,
-            strokePaint: markSpec.strokePaint,
-            line: markSpec.line,
-            effects: markSpec.effects,
-          }),
-        },
-      });
     }
   }
 

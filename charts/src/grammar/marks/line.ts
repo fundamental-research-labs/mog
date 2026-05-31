@@ -12,7 +12,12 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
-import { definedStyle, groupDataByEncoding } from './helpers';
+import {
+  definedStyle,
+  groupDataByEncoding,
+  isBlankValueDatum,
+  splitDataByLineSegment,
+} from './helpers';
 import { buildInterpolatedPath } from './path-interpolation';
 
 /**
@@ -40,55 +45,60 @@ export function generateLineMarks(
   const interpolate = markSpec.interpolate;
 
   for (const [_groupKey, groupData] of groups) {
-    // Collect valid coordinate points
-    const pts: Array<{ x: number; y: number }> = [];
+    for (const segmentData of splitDataByLineSegment(groupData)) {
+      // Collect valid coordinate points
+      const pts: Array<{ x: number; y: number }> = [];
+      const plottedData: DataRow[] = [];
 
-    for (let i = 0; i < groupData.length; i++) {
-      const datum = groupData[i];
-      const x = xScale(encodings.x?.accessor(datum)) as number;
-      const y = yScale(encodings.y?.accessor(datum)) as number;
+      for (let i = 0; i < segmentData.length; i++) {
+        const datum = segmentData[i];
+        if (isBlankValueDatum(datum)) continue;
+        const x = xScale(encodings.x?.accessor(datum)) as number;
+        const y = yScale(encodings.y?.accessor(datum)) as number;
 
-      if (isNaN(x) || isNaN(y)) continue;
-      pts.push({ x, y });
+        if (isNaN(x) || isNaN(y)) continue;
+        pts.push({ x, y });
+        plottedData.push(datum);
+      }
+
+      // Skip empty groups, but allow single-point groups (degenerate path)
+      if (pts.length === 0) continue;
+
+      // Sort by x-coordinate to ensure monotonic left-to-right path
+      pts.sort((a, b) => a.x - b.x);
+
+      // Build SVG path string based on interpolation mode
+      const pathStr = buildInterpolatedPath(pts, interpolate);
+
+      // Get color
+      const colorValue = encodings.color?.accessor(plottedData[0]);
+      const color = resolveStrokeColor(
+        scales.color,
+        colorValue,
+        markSpec.color,
+        markSpec.stroke,
+        marks.length,
+      );
+
+      marks.push({
+        type: 'path',
+        x: 0,
+        y: 0,
+        path: pathStr,
+        datum: plottedData,
+        style: {
+          stroke: color,
+          strokeWidth: markSpec.strokeWidth ?? 2,
+          fill: undefined,
+          opacity: markSpec.opacity ?? 1,
+          ...definedStyle({
+            strokePaint: markSpec.strokePaint,
+            line: markSpec.line,
+            effects: markSpec.effects,
+          }),
+        },
+      });
     }
-
-    // Skip empty groups, but allow single-point groups (degenerate path)
-    if (pts.length === 0) continue;
-
-    // Sort by x-coordinate to ensure monotonic left-to-right path
-    pts.sort((a, b) => a.x - b.x);
-
-    // Build SVG path string based on interpolation mode
-    const pathStr = buildInterpolatedPath(pts, interpolate);
-
-    // Get color
-    const colorValue = encodings.color?.accessor(groupData[0]);
-    const color = resolveStrokeColor(
-      scales.color,
-      colorValue,
-      markSpec.color,
-      markSpec.stroke,
-      marks.length,
-    );
-
-    marks.push({
-      type: 'path',
-      x: 0,
-      y: 0,
-      path: pathStr,
-      datum: groupData,
-      style: {
-        stroke: color,
-        strokeWidth: markSpec.strokeWidth ?? 2,
-        fill: undefined,
-        opacity: markSpec.opacity ?? 1,
-        ...definedStyle({
-          strokePaint: markSpec.strokePaint,
-          line: markSpec.line,
-          effects: markSpec.effects,
-        }),
-      },
-    });
   }
 
   return marks;

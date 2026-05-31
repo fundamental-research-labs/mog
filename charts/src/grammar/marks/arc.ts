@@ -11,7 +11,7 @@ import type { ArcMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { definedStyle } from './helpers';
+import { definedStyle, renderableDataRows } from './helpers';
 
 const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
 
@@ -38,6 +38,7 @@ export function generateArcMarks(
   layout: Layout,
 ): ArcMark[] {
   const marks: ArcMark[] = [];
+  const renderData = renderableDataRows(data);
 
   // Calculate center
   const cx = layout.plotArea.x + layout.plotArea.width / 2;
@@ -56,7 +57,7 @@ export function generateArcMarks(
   let total = 0;
   const values: number[] = [];
 
-  for (const datum of data) {
+  for (const datum of renderData) {
     const value = encodings.theta?.accessor(datum) ?? encodings.size?.accessor(datum);
     const numValue = typeof value === 'number' && isFinite(value) ? Math.abs(value) : 0;
     values.push(numValue);
@@ -74,10 +75,10 @@ export function generateArcMarks(
     for (const v of values) {
       angles.push((v / total) * TWO_PI);
     }
-  } else if (data.length > 0) {
+  } else if (renderData.length > 0) {
     // Equal distribution when all values are zero/null/NaN
-    const equalAngle = TWO_PI / data.length;
-    for (let i = 0; i < data.length; i++) {
+    const equalAngle = TWO_PI / renderData.length;
+    for (let i = 0; i < renderData.length; i++) {
       angles.push(equalAngle);
     }
   }
@@ -116,8 +117,8 @@ export function generateArcMarks(
 
   let startAngle = -Math.PI / 2; // Start at 12 o'clock
 
-  for (let i = 0; i < data.length; i++) {
-    const datum = data[i];
+  for (let i = 0; i < renderData.length; i++) {
+    const datum = renderData[i];
     const angle = angles[i];
     const endAngle = startAngle + angle;
 

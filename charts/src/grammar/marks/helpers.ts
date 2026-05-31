@@ -7,6 +7,7 @@
 import { groupByAccessor } from '../../algebra/group-by';
 import type { MarkStyle } from '../../primitives/types';
 import type { AnyScale, ResolvedEncodings } from '../encoding-resolver';
+import { BLANK_VALUE_FIELD, LINE_SEGMENT_FIELD } from '../internal-fields';
 import type { DataRow } from '../spec';
 
 /**
@@ -34,6 +35,30 @@ export function groupDataByEncoding(
   }
 
   return groupByAccessor(data, encoding.accessor);
+}
+
+export function isBlankValueDatum(datum: DataRow): boolean {
+  return datum[BLANK_VALUE_FIELD] === true;
+}
+
+export function renderableDataRows(data: DataRow[]): DataRow[] {
+  return data.filter((datum) => !isBlankValueDatum(datum));
+}
+
+export function splitDataByLineSegment(data: DataRow[]): DataRow[][] {
+  if (!data.some((datum) => datum[LINE_SEGMENT_FIELD] !== undefined)) return [data];
+
+  const groups = new Map<string, DataRow[]>();
+  for (const datum of data) {
+    const key = String(datum[LINE_SEGMENT_FIELD] ?? '__blank__');
+    const group = groups.get(key);
+    if (group) {
+      group.push(datum);
+    } else {
+      groups.set(key, [datum]);
+    }
+  }
+  return [...groups.values()];
 }
 
 /**

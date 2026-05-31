@@ -594,7 +594,7 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(compile(spec).scales.x?.bandwidth).toEqual(expect.any(Function));
   });
 
-  it('omits blank points from grammar rows when imported charts use gap blanks', () => {
+  it('preserves blank category rows when imported charts use gap blanks', () => {
     const data: ChartData = {
       categories: ['A', 'B', 'C'],
       series: [
@@ -622,7 +622,9 @@ describe('configToSpec imported Excel date category axes', () => {
       ),
     );
 
-    expect(inlineRows(gapSpec).map((row) => row.category)).toEqual(['A', 'C']);
+    expect(inlineRows(gapSpec).map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(inlineRows(gapSpec).map((row) => row.value)).toEqual([1, undefined, 2]);
     expect(inlineRows(zeroSpec).map((row) => row.category)).toEqual(['A', 'B', 'C']);
+    expect(inlineRows(zeroSpec).map((row) => row.value)).toEqual([1, 0, 2]);
   });
 });

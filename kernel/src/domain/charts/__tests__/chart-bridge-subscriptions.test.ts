@@ -84,7 +84,7 @@ function createMockRenderCache(): jest.Mocked<ChartBridgeSubscriptionRenderCache
     getSheetId: jest.fn(),
     setSheetId: jest.fn(),
     deleteSheetId: jest.fn(),
-    chartIdsForSheet: jest.fn(() => []),
+    deleteSheet: jest.fn(() => []),
     deleteChartCaches: jest.fn(),
     syncImportRenderStatus: jest.fn(() => false),
   };
@@ -345,6 +345,21 @@ describe('setupChartBridgeSubscriptions', () => {
     expect(deps.renderCache.deleteChartCaches).toHaveBeenCalledWith(CHART_1, SHEET_A);
   });
 
+  it('routes sheet deletion through the render-cache sheet lifecycle API', () => {
+    const deps = createDeps();
+    setupChartBridgeSubscriptions(deps);
+
+    deps.ctx.eventBus.emit({
+      type: 'sheet:deleted',
+      sheetId: SHEET_A as unknown as string,
+      source: 'local',
+    } as never);
+
+    expect(deps.renderCache.deleteSheet).toHaveBeenCalledWith(SHEET_A);
+    expect(deps.renderCache.deleteSheetId).not.toHaveBeenCalled();
+    expect(deps.renderCache.deleteChartCaches).not.toHaveBeenCalled();
+  });
+
   it('preserves terminal import-status and position-only update precedence', () => {
     const deps = createDeps();
     deps.renderCache.syncImportRenderStatus.mockReturnValueOnce(true);
@@ -392,7 +407,13 @@ describe('chart bridge subscription range helpers', () => {
           getAllCharts: jest.fn(async (sheetId: SheetId) =>
             sheetId === SHEET_A
               ? [chart({ id: CHART_1, dataRange: 'B5:F11', sheetId: SHEET_A as unknown as string })]
-              : [chart({ id: CHART_2, dataRange: 'B5:F11', sheetId: SHEET_B as unknown as string })],
+              : [
+                  chart({
+                    id: CHART_2,
+                    dataRange: 'B5:F11',
+                    sheetId: SHEET_B as unknown as string,
+                  }),
+                ],
           ),
         } as never,
       },

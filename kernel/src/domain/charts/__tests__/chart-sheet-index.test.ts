@@ -111,4 +111,20 @@ describe('ChartSheetIndex', () => {
     expect(index.chartIdsForSheet(SHEET_A)).toEqual([CHART_1, CHART_3]);
     expect(index.chartIdsForSheet(SHEET_B)).toEqual([CHART_2, CHART_1]);
   });
+
+  it('deletes a whole sheet context while preserving duplicate chart ids on other sheets', () => {
+    const index = new ChartSheetIndex();
+    index.set(CHART_1, SHEET_A);
+    index.set(CHART_2, SHEET_A);
+    index.set(CHART_1, SHEET_B);
+
+    expect(index.deleteSheet(SHEET_A)).toEqual([CHART_1, CHART_2]);
+
+    expect(index.chartIdsForSheet(SHEET_A)).toEqual([]);
+    expect(index.has(CHART_1, SHEET_A)).toBe(false);
+    expect(index.has(CHART_2)).toBe(false);
+    expect(index.has(CHART_1, SHEET_B)).toBe(true);
+    expect(index.resolveSheetId(CHART_1)).toBe(SHEET_B);
+    expect(index.deleteSheet(SHEET_A)).toEqual([]);
+  });
 });

@@ -47,6 +47,14 @@ export class ChartSheetIndex {
     return this.deleteContext(chartId, onlySheetId);
   }
 
+  deleteSheet(sheetId: SheetId): string[] {
+    const deletedChartIds = this.chartIdsForSheet(sheetId);
+    for (const chartId of deletedChartIds) {
+      this.deleteContext(chartId, sheetId);
+    }
+    return deletedChartIds;
+  }
+
   clear(): void {
     this.sheetIdsByChartId.clear();
     this.chartIdsBySheetId.clear();

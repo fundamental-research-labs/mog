@@ -26,7 +26,7 @@ export interface ChartBridgeSubscriptionRenderCache {
   getSheetId(chartId: string): SheetId | undefined;
   setSheetId(chartId: string, sheetId: SheetId): void;
   deleteSheetId(chartId: string, sheetId?: SheetId): boolean;
-  chartIdsForSheet(sheetId: SheetId): string[];
+  deleteSheet(sheetId: SheetId): string[];
   deleteChartCaches(chartId: string, sheetId?: SheetId): void;
   syncImportRenderStatus(chartId: string, payload: unknown, sheetId?: SheetId): boolean;
 }
@@ -173,11 +173,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
     deps.ctx.eventBus.on<SheetDeletedEvent>('sheet:deleted', (event) => {
       if (!liveDeps.isLive()) return;
       const deletedSheetId = toSheetId(event.sheetId);
-      const orphanedChartIds = deps.renderCache.chartIdsForSheet(deletedSheetId);
-      for (const chartId of orphanedChartIds) {
-        deps.renderCache.deleteSheetId(chartId, deletedSheetId);
-        deps.renderCache.deleteChartCaches(chartId, deletedSheetId);
-      }
+      deps.renderCache.deleteSheet(deletedSheetId);
     }),
   );
 
@@ -274,9 +270,7 @@ export async function handleCellsBatchChange(
   }
 }
 
-export async function getAllChartsInWorkbook(
-  ctx: DocumentContext,
-): Promise<ChartFloatingObject[]> {
+export async function getAllChartsInWorkbook(ctx: DocumentContext): Promise<ChartFloatingObject[]> {
   const sheetIds = await ctx.computeBridge.getSheetOrder();
   const perSheet = await Promise.all(sheetIds.map((id) => getAllCharts(ctx, toSheetId(id))));
   return perSheet.flat();
@@ -556,9 +550,9 @@ export async function getChartsAffectedByRange(
   range: CellRange,
   options: MaybeLive = {},
 ): Promise<string[]> {
-  return (
-    await getChartInvalidationsAffectedByRange(ctx, sheetId, range, options)
-  ).map((chart) => chart.chartId);
+  return (await getChartInvalidationsAffectedByRange(ctx, sheetId, range, options)).map(
+    (chart) => chart.chartId,
+  );
 }
 
 async function getChartInvalidationsAffectedByRange(

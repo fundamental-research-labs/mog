@@ -1,8 +1,4 @@
-import type {
-  ChartError,
-  ChartLayoutSnapshot,
-  ChartMark,
-} from '@mog-sdk/contracts/bridges';
+import type { ChartError, ChartLayoutSnapshot, ChartMark } from '@mog-sdk/contracts/bridges';
 import type { SheetId } from '@mog-sdk/contracts/core';
 
 import {
@@ -11,10 +7,7 @@ import {
   type ImportedChartRenderStatus,
 } from './import-render-status';
 import { ChartSheetIndex } from './chart-sheet-index';
-import {
-  chartRenderFrameCacheSuffix,
-  type NormalizedChartRenderFrame,
-} from './chart-render-frame';
+import { chartRenderFrameCacheSuffix, type NormalizedChartRenderFrame } from './chart-render-frame';
 
 type CacheUpdateListener = (chartId: string) => void;
 
@@ -113,6 +106,14 @@ export class ChartRenderCache {
     return this.chartSheetIndex.delete(chartId, sheetId);
   }
 
+  deleteSheet(sheetId: SheetId): string[] {
+    const deletedChartIds = this.chartSheetIndex.deleteSheet(sheetId);
+    for (const chartId of deletedChartIds) {
+      this.deleteChartCaches(chartId, sheetId);
+    }
+    return deletedChartIds;
+  }
+
   chartIdsForSheet(sheetId: SheetId): string[] {
     return this.chartSheetIndex.chartIdsForSheet(sheetId);
   }
@@ -139,20 +140,12 @@ export class ChartRenderCache {
     }
   }
 
-  isChartDirty(
-    chartId: string,
-    sheetId?: SheetId,
-    frame?: NormalizedChartRenderFrame,
-  ): boolean {
+  isChartDirty(chartId: string, sheetId?: SheetId, frame?: NormalizedChartRenderFrame): boolean {
     const key = this.cacheKey(chartId, sheetId, frame);
     return this.dirtyCharts.has(key) || !this.markCache.has(key);
   }
 
-  clearDirtyFlag(
-    chartId: string,
-    sheetId?: SheetId,
-    frame?: NormalizedChartRenderFrame,
-  ): void {
+  clearDirtyFlag(chartId: string, sheetId?: SheetId, frame?: NormalizedChartRenderFrame): void {
     this.dirtyCharts.delete(this.cacheKey(chartId, sheetId, frame));
   }
 

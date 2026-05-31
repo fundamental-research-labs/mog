@@ -891,8 +891,8 @@ export interface ChartData {
   titleFormat?: ChartFormatData;
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
-  plotLayout?: unknown;
-  titleLayout?: unknown;
+  plotLayout?: ManualLayout;
+  titleLayout?: ManualLayout;
   dataTable?: ChartDataTableData;
   dropLines?: ChartLineSettingsData;
   highLowLines?: ChartLineSettingsData;
@@ -921,6 +921,23 @@ export interface ChartDataTableData {
   format?: ChartFormatData;
   showLegendKey?: boolean;
   visible?: boolean;
+}
+
+export type LayoutTarget = "inner" | "outer";
+
+export type LayoutMode = "edge" | "factor";
+
+export interface ManualLayout {
+  layoutTarget?: LayoutTarget;
+  xMode?: LayoutMode;
+  yMode?: LayoutMode;
+  wMode?: LayoutMode;
+  hMode?: LayoutMode;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  extLst?: string;
 }
 
 export type ChartDefinition =
@@ -1143,8 +1160,8 @@ export interface ChartSpec {
   titleFormat?: ChartFormatData;
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
-  plotLayout?: unknown;
-  titleLayout?: unknown;
+  plotLayout?: ManualLayout;
+  titleLayout?: ManualLayout;
   dataTable?: ChartDataTableData;
   dropLines?: ChartLineSettingsData;
   highLowLines?: ChartLineSettingsData;
@@ -1542,7 +1559,7 @@ export interface DataLabelData {
   geometricShapeType?: string;
   formula?: string;
   leaderLinesFormat?: ChartLineData;
-  layout?: unknown;
+  layout?: ManualLayout;
 }
 
 export interface DataTableOoxmlFlags {
@@ -2586,7 +2603,7 @@ export interface LegendData {
   entries?: LegendEntryData[];
   customX?: number;
   customY?: number;
-  layout?: unknown;
+  layout?: ManualLayout;
   shadow?: ChartShadowData;
   showShadow?: boolean;
 }
@@ -5395,7 +5412,7 @@ export interface TrendlineLabelData {
   text?: string;
   format?: ChartFormatData;
   numberFormat?: string;
-  layout?: unknown;
+  layout?: ManualLayout;
 }
 
 export type UnaryFilterOp = "Equals" | "NotEquals" | "GreaterThan" | "LessThan" | "GreaterThanOrEqual" | "LessThanOrEqual" | "Contains" | "NotContains" | "StartsWith" | "EndsWith";

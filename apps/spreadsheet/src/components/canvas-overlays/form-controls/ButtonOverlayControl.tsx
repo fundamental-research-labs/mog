@@ -120,6 +120,7 @@ export const ButtonOverlayControl = memo(function ButtonOverlayControl({
         // Prevent focus from leaving the grid
         e.preventDefault();
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-button-${control.id}`}
       aria-label={control.label}
     >

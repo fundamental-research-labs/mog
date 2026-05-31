@@ -204,6 +204,7 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
           }}
           aria-label={`Filter ${columnLabel}${metadata.hasActiveFilter ? ' (filtered)' : ''}`}
           aria-haspopup="dialog"
+          data-no-grid-pointer="true"
           data-testid={columnIndex !== null ? `column-filter-${columnIndex}` : undefined}
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
         />
@@ -221,6 +222,7 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
         }}
         avoidCollisions={false}
         disableScrollConstraints
+        data-no-grid-pointer="true"
         data-testid="filter-dropdown-popover"
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {

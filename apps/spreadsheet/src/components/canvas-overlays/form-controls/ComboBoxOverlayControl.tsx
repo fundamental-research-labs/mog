@@ -89,6 +89,7 @@ export const ComboBoxOverlayControl = memo(function ComboBoxOverlayControl({
         height,
         pointerEvents: 'auto',
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-combobox-${control.id}`}
       onBlur={handleBlur}
     >

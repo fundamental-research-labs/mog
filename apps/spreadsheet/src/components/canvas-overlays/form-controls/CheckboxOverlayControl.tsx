@@ -98,6 +98,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
         overflow: 'hidden',
         backgroundColor: hasLabel ? undefined : 'var(--color-ss-bg, #fff)',
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-checkbox-${control.id}`}
     >
       <input

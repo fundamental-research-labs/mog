@@ -238,6 +238,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
             margin: 0,
           }}
           aria-label={`Outline ${btn.axis} level ${btn.level}`}
+          data-no-grid-pointer="true"
           data-testid={`outline-${btn.axis}-level-${btn.level}`}
           onClick={() => handleLevelClick(btn.axis, btn.level)}
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
@@ -263,6 +264,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
           }}
           aria-label={`Outline ${tgl.axis} group ${tgl.collapsed ? 'expand' : 'collapse'}`}
           aria-expanded={!tgl.collapsed}
+          data-no-grid-pointer="true"
           data-testid={`outline-${tgl.axis}-toggle-${tgl.index}`}
           onClick={() => handleToggleClick(tgl.groupId)}
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"

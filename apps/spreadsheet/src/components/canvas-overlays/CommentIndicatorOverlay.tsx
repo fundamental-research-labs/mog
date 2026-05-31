@@ -104,6 +104,7 @@ export const CommentIndicatorOverlay = memo(function CommentIndicatorOverlay({
       }}
       aria-label={`Comment on cell at row ${metadata.row + 1}, column ${metadata.col + 1}`}
       aria-haspopup="dialog"
+      data-no-grid-pointer="true"
       className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
     />
   );

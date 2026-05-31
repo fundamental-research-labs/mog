@@ -57,6 +57,7 @@ export const ListBoxOverlayControl = memo(function ListBoxOverlayControl({
         padding: 1,
         overflowY: 'auto',
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-listbox-${control.id}`}
       aria-label={control.name ?? 'List box'}
     >

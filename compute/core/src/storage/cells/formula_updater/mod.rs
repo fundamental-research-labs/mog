@@ -14,7 +14,9 @@ mod storage_scan;
 pub use named_range_rename::{
     update_formula_templates_on_named_range_rename, update_mirror_formulas_on_named_range_rename,
 };
+pub(crate) use sheet_refs::replace_sheet_name_in_a1_formula;
 pub use sheet_rename::update_formula_templates_on_sheet_rename;
+pub(crate) use sheet_rename::update_formula_templates_on_sheet_rename_in_txn;
 
 #[cfg(test)]
 mod tests;

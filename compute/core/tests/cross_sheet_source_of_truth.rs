@@ -112,6 +112,13 @@ fn formula_text_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col:
     engine.to_a1_display(sheet_id, formula)
 }
 
+fn formula_info_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> String {
+    engine
+        .get_cell_info(sheet_id, row, col)
+        .and_then(|info| info.formula)
+        .unwrap_or_else(|| panic!("no formula info for cell at ({},{})", row, col))
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 1. Cross-sheet `set_cell` round-trip
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -316,6 +323,73 @@ fn sheet_rename_to_quoted_form_uses_quotes() {
         formula_text_at(&engine, &sheet1, 0, 0),
         "='My Quarterly Sheet'!A1",
         "rename to a name needing quoting must emit quoted form"
+    );
+}
+
+#[test]
+fn sheet_rename_preserves_explicit_same_sheet_formula_text() {
+    let snapshot =
+        make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(42.0))]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet2, 0, 2, "=Sheet2!A1+1")
+        .unwrap();
+
+    engine.rename_compute_sheet(&sheet2, "Data Sheet").unwrap();
+
+    let renamed_sheet = engine.mirror().sheet_by_name("Data Sheet").unwrap();
+    assert_eq!(
+        formula_info_at(&engine, &renamed_sheet, 0, 2),
+        "='Data Sheet'!A1+1",
+        "formula readback must preserve the explicit self-sheet reference after rename"
+    );
+    assert_eq!(
+        engine.get_value_for_editing(&renamed_sheet, 0, 2),
+        "='Data Sheet'!A1+1",
+        "formula-bar edit text must use the renamed sheet reference"
+    );
+}
+
+#[test]
+fn sheet_rename_formula_text_undo_redo_round_trips() {
+    let snapshot =
+        make_two_sheet_snapshot(vec![], vec![make_cell(1, 0, 0, CellValue::number(42.0))]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
+        .unwrap();
+    engine
+        .set_cell_value_parsed(&sheet2, 0, 2, "=Sheet2!A1+1")
+        .unwrap();
+
+    engine.rename_compute_sheet(&sheet2, "Data Sheet").unwrap();
+
+    let renamed_sheet = engine.mirror().sheet_by_name("Data Sheet").unwrap();
+    assert_eq!(formula_info_at(&engine, &sheet1, 0, 0), "='Data Sheet'!A1");
+    assert_eq!(
+        formula_info_at(&engine, &renamed_sheet, 0, 2),
+        "='Data Sheet'!A1+1"
+    );
+
+    engine.undo().unwrap();
+    let restored_sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+    assert_eq!(formula_info_at(&engine, &sheet1, 0, 0), "=Sheet2!A1");
+    assert_eq!(
+        formula_info_at(&engine, &restored_sheet2, 0, 2),
+        "=Sheet2!A1+1"
+    );
+
+    engine.redo().unwrap();
+    let renamed_sheet = engine.mirror().sheet_by_name("Data Sheet").unwrap();
+    assert_eq!(formula_info_at(&engine, &sheet1, 0, 0), "='Data Sheet'!A1");
+    assert_eq!(
+        formula_info_at(&engine, &renamed_sheet, 0, 2),
+        "='Data Sheet'!A1+1"
     );
 }
 

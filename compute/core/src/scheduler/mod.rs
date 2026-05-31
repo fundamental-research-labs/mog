@@ -52,6 +52,7 @@ use crate::snapshot::{
     CalcMode, CellChange, CellEdit, CellErrorInfo, ProjectionCellData, ProjectionChange,
     RecalcMetrics, RecalcResult, SheetSnapshot, WorkbookSnapshot,
 };
+use crate::storage::cells::formula_updater::replace_sheet_name_in_a1_formula;
 use cell_types::RangePos;
 use cell_types::{CellId, ColId, IdAllocator, RowId, SheetId, SheetPos};
 use compute_functions::helpers::sumifs_result_cache::{
@@ -546,11 +547,27 @@ impl ComputeCore {
 
     /// Rename a sheet. May need to reparse formulas that reference the old name.
     pub fn rename_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId, name: &str) {
+        let old_name = mirror.get_sheet(sheet_id).map(|sheet| sheet.name.clone());
+        let authored_formula_text = self.cell_formula_text.clone();
+
         mirror.rename_sheet(sheet_id, name);
         // Formulas use resolved SheetIds internally, so no reparsing needed.
         // But formula_strings (A1 display cache) contain sheet names, so we
         // must regenerate them to reflect the new name.
         self.regenerate_formula_strings(mirror);
+
+        let Some(old_name) = old_name else {
+            return;
+        };
+        if old_name == name {
+            return;
+        }
+
+        for (cell_id, formula) in authored_formula_text {
+            let updated = replace_sheet_name_in_a1_formula(&formula, &old_name, name);
+            self.cell_formula_text.insert(cell_id, updated.clone());
+            self.formula_strings.insert(cell_id, updated);
+        }
     }
 
     // -----------------------------------------------------------------------

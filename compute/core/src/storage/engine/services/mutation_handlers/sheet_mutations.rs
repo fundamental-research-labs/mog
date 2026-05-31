@@ -1,6 +1,6 @@
 use cell_types::SheetId;
 use value_types::ComputeError;
-use yrs::Origin;
+use yrs::{Origin, Transact};
 
 use crate::mirror::CellMirror;
 use crate::range_manager::RangeSpatialIndex;
@@ -245,30 +245,37 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
         sheet_id,
     );
 
-    // 1. Rename in yrs Doc
-    crate::storage::sheet::properties::rename_sheet(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        name,
-    );
-
-    // 2. Rename in mirror
-    mirror.rename_sheet(sheet_id, name);
-
-    // 4. Rename in ComputeCore
-    stores.compute.rename_sheet(mirror, sheet_id, name);
-
-    // 5. Update formula templates
+    // 1. Rename sheet metadata and persisted formula text atomically so one
+    // undo/redo step keeps the tab name and formulas in sync.
     if let Some(ref old) = old_name {
-        crate::storage::cells::formula_updater::update_formula_templates_on_sheet_rename(
-            stores.storage.doc(),
+        let mut txn = stores
+            .storage
+            .doc()
+            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+        crate::storage::sheet::properties::rename_sheet_in_txn(
+            &mut txn,
+            stores.storage.sheets(),
+            sheet_id,
+            name,
+        );
+        crate::storage::cells::formula_updater::update_formula_templates_on_sheet_rename_in_txn(
+            &mut txn,
             stores.storage.workbook_map(),
             stores.storage.sheets(),
             old,
             name,
         );
+    } else {
+        crate::storage::sheet::properties::rename_sheet(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            name,
+        );
     }
+
+    // 2. Rename in ComputeCore, which updates the mirror and authored formula text.
+    stores.compute.rename_sheet(mirror, sheet_id, name);
 
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {

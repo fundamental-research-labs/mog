@@ -22,8 +22,17 @@ use super::yrs_helpers::{
 /// Rename a sheet.
 pub(crate) fn rename_sheet(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, name: &str) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
-        meta.insert(&mut txn, KEY_NAME, Any::String(Arc::from(name)));
+    rename_sheet_in_txn(&mut txn, sheets, sheet_id, name);
+}
+
+pub(crate) fn rename_sheet_in_txn(
+    txn: &mut yrs::TransactionMut<'_>,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    name: &str,
+) {
+    if let Some(meta) = get_meta_map(&*txn, sheets, sheet_id) {
+        meta.insert(txn, KEY_NAME, Any::String(Arc::from(name)));
     }
 }
 

@@ -384,6 +384,22 @@ impl YrsComputeEngine {
         sheet_ids
     }
 
+    fn sync_sheet_names_from_yrs(&mut self, doc_changes: &DocumentChanges) {
+        let mut seen = HashSet::new();
+        for change in &doc_changes.sheet_meta {
+            if change.field.as_deref() != Some("name") || !seen.insert(change.sheet_id) {
+                continue;
+            }
+            if let Some(name) = crate::storage::sheet::properties::get_sheet_name(
+                self.stores.storage.doc(),
+                self.stores.storage.sheets(),
+                &change.sheet_id,
+            ) {
+                self.mirror.rename_sheet(&change.sheet_id, &name);
+            }
+        }
+    }
+
     pub(crate) fn sync_runtime_calculation_settings(
         &mut self,
         pre: &CalculationSettings,
@@ -554,6 +570,8 @@ impl YrsComputeEngine {
             self.init_cf_caches();
             return Ok((recalc, doc_changes));
         }
+
+        self.sync_sheet_names_from_yrs(&doc_changes);
 
         // --- Identity: mirror gridIndex/posToId entries into in-memory GridIndex ---
         // The yrs `gridIndex/posToId` sub-map is the CRDT-synchronised source of

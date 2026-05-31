@@ -13,13 +13,15 @@
 
 import { jest } from '@jest/globals';
 
-// Mock Charts.get / getChartDataRange so the bridge doesn't try to talk to
-// the real ComputeBridge. The bridge uses `import * as Charts from
-// './chart-crud'` so a module-level mock intercepts everything.
-jest.mock('../chart-crud', () => ({
+// Mock chart store / range reference modules so the bridge doesn't try to talk
+// to the real ComputeBridge in tests that exercise the production compile path.
+jest.mock('../chart-store', () => ({
   get: jest.fn(),
   getAll: jest.fn(async () => [] as unknown[]),
-  getChartDataRange: jest.fn(),
+  update: jest.fn(),
+}));
+
+jest.mock('../chart-range-references', () => ({
   resolveChartRangeReferences: jest.fn(),
 }));
 
@@ -824,12 +826,14 @@ describe('resolveChartData imported visibility semantics', () => {
       startCol: 0,
       endCol: 2,
     });
-    const chartCrudMock = jest.requireMock('../chart-crud') as {
+    const chartStoreMock = jest.requireMock('../chart-store') as {
       get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
       resolveChartRangeReferences: jest.Mock;
     };
-    chartCrudMock.get.mockResolvedValue(chart);
-    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
       dataRange: null,
       categoryRange: null,
       seriesRange: null,
@@ -932,12 +936,14 @@ describe('resolveChartData imported visibility semantics', () => {
       startCol: 0,
       endCol: 1,
     });
-    const chartCrudMock = jest.requireMock('../chart-crud') as {
+    const chartStoreMock = jest.requireMock('../chart-store') as {
       get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
       resolveChartRangeReferences: jest.Mock;
     };
-    chartCrudMock.get.mockResolvedValue(chart);
-    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
       dataRange: null,
       categoryRange: null,
       seriesRange: null,
@@ -1047,12 +1053,14 @@ describe('resolveChartData imported visibility semantics', () => {
       startCol: 0,
       endCol: 1,
     });
-    const chartCrudMock = jest.requireMock('../chart-crud') as {
+    const chartStoreMock = jest.requireMock('../chart-store') as {
       get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
       resolveChartRangeReferences: jest.Mock;
     };
-    chartCrudMock.get.mockResolvedValue(chart);
-    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
       dataRange: null,
       categoryRange: null,
       seriesRange: null,
@@ -1156,12 +1164,14 @@ describe('resolveChartData imported visibility semantics', () => {
       startCol,
       endCol,
     });
-    const chartCrudMock = jest.requireMock('../chart-crud') as {
+    const chartStoreMock = jest.requireMock('../chart-store') as {
       get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
       resolveChartRangeReferences: jest.Mock;
     };
-    chartCrudMock.get.mockResolvedValue(chart);
-    chartCrudMock.resolveChartRangeReferences.mockResolvedValue({
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
       dataRange: null,
       categoryRange: null,
       seriesRange: null,

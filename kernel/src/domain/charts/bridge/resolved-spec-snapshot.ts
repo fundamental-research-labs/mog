@@ -6,7 +6,10 @@ import type {
 } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
-import type { ResolvedChartRangeReference, ResolvedChartRangeReferences } from '../chart-crud';
+import type {
+  ResolvedChartRangeReference,
+  ResolvedChartRangeReferences,
+} from '../chart-range-references';
 import { isNoFillNoLineSeriesConfig } from './chart-render-data-normalizer';
 
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];

@@ -3,7 +3,7 @@ import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
-import { resolveChartRangeReferences } from '../chart-crud';
+import { resolveChartRangeReferences } from '../chart-range-references';
 
 const DASHBOARD: SheetId = toSheetId('sheet-dashboard');
 const FORMULAS: SheetId = toSheetId('sheet-formulas');

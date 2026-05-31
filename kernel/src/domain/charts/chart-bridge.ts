@@ -73,7 +73,11 @@ import type {
 } from '@mog-sdk/contracts/events';
 import { parseCellRange, cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { getValue } from '../cells/cell-reads';
-import * as Charts from './chart-crud';
+import { get as getChart, getAll as getAllCharts, update as updateChart } from './chart-store';
+import {
+  resolveChartRangeReferences,
+  type ResolvedChartRangeReferences,
+} from './chart-range-references';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { ThemeData } from '../../bridges/compute/compute-types.gen';
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
@@ -366,7 +370,7 @@ export class ChartBridge implements IChartBridge {
    *
    * Populated by the floating-object event handlers (`:created`, `:updated`,
    * `:deleted`). The sync paint path (`renderCached`) uses this for an O(1)
-   * sheet lookup instead of awaiting `getAllSheetIds` + a `Charts.get` per
+   * sheet lookup instead of awaiting `getAllSheetIds` + a chart get per
    * sheet — the await chain is what made the old async `render()` paint in
    * the wrong canvas frame.
    */
@@ -657,7 +661,7 @@ export class ChartBridge implements IChartBridge {
   private async getAllChartsInWorkbook(): Promise<ChartFloatingObject[]> {
     const sheetIds = await this.ctx.computeBridge.getSheetOrder();
     const perSheet = await Promise.all(
-      sheetIds.map((id) => Charts.getAll(this.ctx, toSheetId(id))),
+      sheetIds.map((id) => getAllCharts(this.ctx, toSheetId(id))),
     );
     return perSheet.flat();
   }
@@ -671,7 +675,7 @@ export class ChartBridge implements IChartBridge {
     row: number,
     col: number,
   ): Promise<boolean> {
-    const resolved = await Charts.resolveChartRangeReferences(this.ctx, chart);
+    const resolved = await resolveChartRangeReferences(this.ctx, chart);
     const ranges = [
       resolved.dataRange,
       resolved.categoryRange,
@@ -706,7 +710,7 @@ export class ChartBridge implements IChartBridge {
     count: number,
   ): Promise<void> {
     if (!this.started) return;
-    const charts = await Charts.getAll(this.ctx, sheetId);
+    const charts = await getAllCharts(this.ctx, sheetId);
     for (const chart of charts) {
       if (chart.dataRangeIdentity || !chart.dataRange) continue;
       const range = parseCellRange(chart.dataRange);
@@ -719,12 +723,12 @@ export class ChartBridge implements IChartBridge {
           startRow: range.startRow + count,
           endRow: range.endRow + count,
         };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       } else if (startRow > range.startRow && startRow <= range.endRow) {
         // Insertion strictly inside range — expand endRow
         const newRange = { ...range, endRow: range.endRow + count };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       }
       // Insertion at startRow or after endRow: no change
@@ -745,7 +749,7 @@ export class ChartBridge implements IChartBridge {
     count: number,
   ): Promise<void> {
     if (!this.started) return;
-    const charts = await Charts.getAll(this.ctx, sheetId);
+    const charts = await getAllCharts(this.ctx, sheetId);
     for (const chart of charts) {
       if (chart.dataRangeIdentity || !chart.dataRange) continue;
       const range = parseCellRange(chart.dataRange);
@@ -760,7 +764,7 @@ export class ChartBridge implements IChartBridge {
           startRow: range.startRow - count,
           endRow: range.endRow - count,
         };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       } else if (startRow > range.endRow) {
         // Deletion entirely after range — no change
@@ -780,7 +784,7 @@ export class ChartBridge implements IChartBridge {
         }
 
         const newRange = { ...range, startRow: newStartRow, endRow: newEndRow };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       }
     }
@@ -796,7 +800,7 @@ export class ChartBridge implements IChartBridge {
     count: number,
   ): Promise<void> {
     if (!this.started) return;
-    const charts = await Charts.getAll(this.ctx, sheetId);
+    const charts = await getAllCharts(this.ctx, sheetId);
     for (const chart of charts) {
       if (chart.dataRangeIdentity || !chart.dataRange) continue;
       const range = parseCellRange(chart.dataRange);
@@ -809,12 +813,12 @@ export class ChartBridge implements IChartBridge {
           startCol: range.startCol + count,
           endCol: range.endCol + count,
         };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       } else if (startCol > range.startCol && startCol <= range.endCol) {
         // Insertion strictly inside range — expand endCol
         const newRange = { ...range, endCol: range.endCol + count };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       }
     }
@@ -830,7 +834,7 @@ export class ChartBridge implements IChartBridge {
     count: number,
   ): Promise<void> {
     if (!this.started) return;
-    const charts = await Charts.getAll(this.ctx, sheetId);
+    const charts = await getAllCharts(this.ctx, sheetId);
     for (const chart of charts) {
       if (chart.dataRangeIdentity || !chart.dataRange) continue;
       const range = parseCellRange(chart.dataRange);
@@ -845,7 +849,7 @@ export class ChartBridge implements IChartBridge {
           startCol: range.startCol - count,
           endCol: range.endCol - count,
         };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       } else if (startCol > range.endCol) {
         // Deletion entirely after range — no change
@@ -864,7 +868,7 @@ export class ChartBridge implements IChartBridge {
         }
 
         const newRange = { ...range, startCol: newStartCol, endCol: newEndCol };
-        await Charts.update(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
+        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
         this.invalidateChart(chart.id);
       }
     }
@@ -915,7 +919,7 @@ export class ChartBridge implements IChartBridge {
    * @returns Resolved data or error
    */
   async resolveChartData(sheetId: SheetId, chartId: string): Promise<ChartDataResult> {
-    const chart = await Charts.get(this.ctx, sheetId, chartId);
+    const chart = await getChart(this.ctx, sheetId, chartId);
     if (!chart) {
       return {
         success: false,
@@ -927,7 +931,7 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
+    const resolvedRanges = await resolveChartRangeReferences(this.ctx, chart);
     const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
@@ -1029,7 +1033,7 @@ export class ChartBridge implements IChartBridge {
     this.pendingCompilations.add(key);
 
     // Get chart spec
-    const chart = await Charts.get(this.ctx, sheetId, chartId);
+    const chart = await getChart(this.ctx, sheetId, chartId);
     if (!chart) {
       const error: ChartError = {
         code: 'CHART_NOT_FOUND',
@@ -1040,7 +1044,7 @@ export class ChartBridge implements IChartBridge {
       return error;
     }
 
-    const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
+    const resolvedRanges = await resolveChartRangeReferences(this.ctx, chart);
     const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
@@ -1235,7 +1239,7 @@ export class ChartBridge implements IChartBridge {
     height: number,
     exportOptions: ChartExportOptionsSnapshot,
   ): Promise<ChartRenderSnapshot | ChartError> {
-    const chart = await Charts.get(this.ctx, sheetId, chartId);
+    const chart = await getChart(this.ctx, sheetId, chartId);
     if (!chart) {
       return {
         code: 'CHART_NOT_FOUND',
@@ -1244,7 +1248,7 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const resolvedRanges = await Charts.resolveChartRangeReferences(this.ctx, chart);
+    const resolvedRanges = await resolveChartRangeReferences(this.ctx, chart);
     const chartRenderDataOrError = await this.resolveChartDataForRendering(
       chart,
       resolvedRanges,
@@ -1357,7 +1361,7 @@ export class ChartBridge implements IChartBridge {
 
   private async resolveChartDataForRendering(
     chart: ChartFloatingObject,
-    resolvedRanges: Charts.ResolvedChartRangeReferences,
+    resolvedRanges: ResolvedChartRangeReferences,
     chartId: string,
   ): Promise<ChartRenderData | ChartError> {
     const config = toChartConfig(chart);
@@ -1485,7 +1489,7 @@ export class ChartBridge implements IChartBridge {
 
   private withHiddenSeriesFiltered(
     config: ChartConfig,
-    resolvedRanges: Charts.ResolvedChartRangeReferences,
+    resolvedRanges: ResolvedChartRangeReferences,
     hiddenVisibility: HiddenCellVisibility,
   ): ChartConfig {
     if (!config.series?.length) return config;
@@ -1497,7 +1501,7 @@ export class ChartBridge implements IChartBridge {
   }
 
   private seriesSheetAliases(
-    resolvedRanges: Charts.ResolvedChartRangeReferences,
+    resolvedRanges: ResolvedChartRangeReferences,
   ): Map<string, string> {
     const aliases = new Map<string, string>();
     for (const series of resolvedRanges.seriesReferences) {
@@ -1675,7 +1679,7 @@ export class ChartBridge implements IChartBridge {
     const affected: string[] = [];
 
     for (const chart of charts) {
-      const resolved = await Charts.resolveChartRangeReferences(this.ctx, chart);
+      const resolved = await resolveChartRangeReferences(this.ctx, chart);
       const ranges = [resolved.dataRange, resolved.categoryRange, resolved.seriesRange];
       const overlaps = ranges.some((entry) => {
         const chartRange = entry?.range;

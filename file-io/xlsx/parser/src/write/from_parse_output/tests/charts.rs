@@ -903,6 +903,199 @@ fn modeled_chart_export_reconstructs_literal_and_fallback_cache_sources() {
 }
 
 #[test]
+fn modeled_chart_export_reconstructs_multilevel_and_bubble_fallback_caches() {
+    use domain_types::chart::{
+        ChartSeriesCategoryLevelCacheData, ChartSeriesCategoryLevelsCacheData,
+        ChartSeriesDimensionSourceKindData as SourceKind, ChartSeriesPointCacheData,
+        ChartSeriesPointCachePointData,
+    };
+
+    let mut level_chart = make_chart(ChartType::Column, "Data!A1:C4");
+    level_chart.data_range = None;
+    level_chart.title = Some("Fallback Multi-Level Categories".to_string());
+    let mut level_series = chart_ex_projected_series();
+    level_series.r#type = None;
+    level_series.values = Some("Missing!C2:C4".to_string());
+    level_series.value_source_kind = Some(SourceKind::CacheFallback);
+    level_series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "100".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 2,
+                value: "300".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    level_series.categories = Some("Missing!A2:B4".to_string());
+    level_series.category_source_kind = Some(SourceKind::CacheFallback);
+    level_series.category_cache = None;
+    level_series.category_levels = Some(ChartSeriesCategoryLevelsCacheData {
+        point_count: Some(3),
+        levels: vec![
+            ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "North".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 2,
+                        value: "South".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+            ChartSeriesCategoryLevelCacheData {
+                level: 1,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "Q1".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 1,
+                        value: "Q2".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+        ],
+    });
+    level_chart.series = vec![level_series];
+
+    let mut bubble_chart = make_chart(ChartType::Bubble, "Data!D1:F4");
+    bubble_chart.data_range = None;
+    bubble_chart.title = Some("Fallback Bubbles".to_string());
+    let mut bubble_series = chart_ex_projected_series();
+    bubble_series.r#type = None;
+    bubble_series.name = Some("Bubbles".to_string());
+    bubble_series.values = Some("Missing!E2:E4".to_string());
+    bubble_series.value_source_kind = Some(SourceKind::CacheFallback);
+    bubble_series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: Some("General".to_string()),
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 1,
+            value: "202".to_string(),
+            format_code: None,
+        }],
+    });
+    bubble_series.categories = Some("Missing!D2:D4".to_string());
+    bubble_series.x_role = Some(domain_types::chart::ChartSeriesXRoleData::Quantitative);
+    bubble_series.category_source_kind = Some(SourceKind::CacheFallback);
+    bubble_series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "101".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 2,
+                value: "103".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    bubble_series.bubble_size = Some("Missing!F2:F4".to_string());
+    bubble_series.bubble_size_source_kind = Some(SourceKind::CacheFallback);
+    bubble_series.bubble_size_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "301".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 2,
+                value: "303".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    bubble_chart.series = vec![bubble_series];
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![],
+        charts: vec![level_chart, bubble_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let level_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let bubble_xml = String::from_utf8(archive.read_file("xl/charts/chart2.xml").unwrap()).unwrap();
+
+    assert!(level_xml.contains("<c:multiLvlStrRef>"), "{level_xml}");
+    assert!(
+        level_xml.contains("<c:f>Missing!A2:B4</c:f>"),
+        "{level_xml}"
+    );
+    assert!(level_xml.contains("<c:multiLvlStrCache>"), "{level_xml}");
+    assert_eq!(level_xml.matches("<c:lvl>").count(), 2, "{level_xml}");
+    let multi_level_cache_xml = level_xml
+        .split("<c:multiLvlStrCache>")
+        .nth(1)
+        .and_then(|tail| tail.split("</c:multiLvlStrCache>").next())
+        .expect("multi-level category cache should be present");
+    assert_eq!(
+        multi_level_cache_xml
+            .matches("<c:ptCount val=\"3\"/>")
+            .count(),
+        3,
+        "{level_xml}"
+    );
+    assert!(
+        level_xml.contains("<c:pt idx=\"2\"><c:v>South</c:v></c:pt>"),
+        "{level_xml}"
+    );
+    assert!(
+        level_xml.contains("<c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>"),
+        "{level_xml}"
+    );
+    assert!(
+        !level_xml.contains("<c:pt idx=\"1\"><c:v>0</c:v></c:pt>"),
+        "{level_xml}"
+    );
+
+    assert!(bubble_xml.contains("<c:bubbleSize>"), "{bubble_xml}");
+    assert!(
+        bubble_xml.contains("<c:f>Missing!F2:F4</c:f>"),
+        "{bubble_xml}"
+    );
+    assert!(
+        bubble_xml.contains("<c:pt idx=\"0\"><c:v>301</c:v></c:pt>"),
+        "{bubble_xml}"
+    );
+    assert!(
+        bubble_xml.contains("<c:pt idx=\"2\"><c:v>303</c:v></c:pt>"),
+        "{bubble_xml}"
+    );
+    assert!(
+        !bubble_xml.contains("<c:pt idx=\"1\"><c:v>0</c:v></c:pt>"),
+        "{bubble_xml}"
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
     let mut level_chart = make_chart(ChartType::Column, "Data!A1:C3");
     level_chart.data_range = None;

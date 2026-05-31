@@ -947,6 +947,106 @@ fn chart_ex_no_edit_round_trip_preserves_all_family_replay_parts() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+const IMPORTED_CHART_EX_TITLE: &str = "Imported ChartEx Title";
+
+fn chart_ex_with_imported_title(original_number: usize, family_marker: &str) -> ChartSpec {
+    let mut chart_ex =
+        chart_ex_family_with_replay(ChartType::Waterfall, family_marker, original_number);
+    if let Some(domain_types::ChartDefinition::ChartEx(chart_space)) = chart_ex.definition.as_mut()
+    {
+        chart_space.chart.title = Some(ooxml_types::chart_ex::ChartExTitle {
+            tx: Some(ooxml_types::chart_ex::ChartExText {
+                tx_data: Some(ooxml_types::chart_ex::ChartExTxData {
+                    value: Some(IMPORTED_CHART_EX_TITLE.to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+    }
+    chart_ex.title = Some(IMPORTED_CHART_EX_TITLE.to_string());
+    chart_ex
+}
+
+fn chart_ex_test_legend(position: &str, overlay: Option<bool>) -> domain_types::chart::LegendData {
+    domain_types::chart::LegendData {
+        show: true,
+        position: position.to_string(),
+        visible: true,
+        overlay,
+        format: None,
+        entries: None,
+        custom_x: None,
+        custom_y: None,
+        layout: None,
+        shadow: None,
+        show_shadow: None,
+    }
+}
+
+#[test]
+fn chart_ex_title_only_edit_disables_replay_and_serializes_modeled_title() {
+    let mut chart_ex = chart_ex_with_imported_title(41, "title-edit");
+    chart_ex.title = Some("Edited ChartEx Title".to_string());
+    assert!(!chart_replay::chart_ex_allows_opaque_replay(
+        &chart_ex,
+        "xl/charts/chartEx41.xml"
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml =
+        String::from_utf8(archive.read_file("xl/charts/chartEx1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/charts/chartEx41.xml"));
+    assert!(!chart_xml.contains("CHARTEX-FAMILY-title-edit"));
+    assert!(!chart_xml.contains("PRINT-title-edit"));
+    assert!(chart_xml.contains("Edited ChartEx Title"));
+    assert!(!chart_xml.contains(IMPORTED_CHART_EX_TITLE));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn chart_ex_legend_only_edit_disables_replay_and_serializes_modeled_legend() {
+    let mut chart_ex = chart_ex_with_imported_title(42, "legend-edit");
+    if let Some(domain_types::ChartDefinition::ChartEx(chart_space)) = chart_ex.definition.as_mut()
+    {
+        chart_space.chart.legend = Some(ooxml_types::chart_ex::ChartExLegend {
+            pos: Some("r".to_string()),
+            overlay: Some(false),
+            ..Default::default()
+        });
+    }
+    chart_ex.legend = Some(chart_ex_test_legend("bottom", Some(true)));
+    assert!(!chart_replay::chart_ex_allows_opaque_replay(
+        &chart_ex,
+        "xl/charts/chartEx42.xml"
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml =
+        String::from_utf8(archive.read_file("xl/charts/chartEx1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/charts/chartEx42.xml"));
+    assert!(!chart_xml.contains("CHARTEX-FAMILY-legend-edit"));
+    assert!(!chart_xml.contains("PRINT-legend-edit"));
+    assert!(chart_xml.contains(IMPORTED_CHART_EX_TITLE));
+    assert!(chart_xml.contains(r#"<cx:legend pos="b" overlay="1"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 #[test]
 fn chart_ex_raw_anchor_replays_only_when_frame_is_current() {
     let chart_ex = chart_ex_with_raw_anchor(7);

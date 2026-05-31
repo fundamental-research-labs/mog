@@ -410,9 +410,11 @@ pub(super) fn build_sheet_parts(
                         .chart_ex_replay
                         .as_ref()
                         .map(|replay| replay.original_xml.clone())
-                        .unwrap_or_else(|| serialize_chart_ex_space(chart_ex_space))
+                        .unwrap_or_else(|| {
+                            serialize_current_chart_ex_space(chart_spec, chart_ex_space)
+                        })
                 } else {
-                    serialize_chart_ex_space(chart_ex_space)
+                    serialize_current_chart_ex_space(chart_spec, chart_ex_space)
                 };
             chart_ex_entries_for_sheet.push(ChartExEntry {
                 global_idx: idx,
@@ -521,5 +523,69 @@ pub(super) fn build_sheet_parts(
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
+    }
+}
+
+fn serialize_current_chart_ex_space(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &ooxml_types::chart_ex::ChartExSpace,
+) -> Vec<u8> {
+    let mut current = chart_ex_space.clone();
+    apply_chart_ex_title_state(chart_spec, &mut current);
+    apply_chart_ex_legend_state(chart_spec, &mut current);
+    serialize_chart_ex_space(&current)
+}
+
+fn apply_chart_ex_title_state(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+) {
+    let Some(title_text) = chart_spec.title.as_deref() else {
+        chart_ex_space.chart.title = None;
+        return;
+    };
+    if title_text.is_empty() {
+        chart_ex_space.chart.title = None;
+        return;
+    }
+
+    let mut title = chart_ex_space.chart.title.take().unwrap_or_default();
+    let mut text = title.tx.take().unwrap_or_default();
+    let mut tx_data = text.tx_data.take().unwrap_or_default();
+    tx_data.formula = chart_spec.title_formula.clone();
+    tx_data.value = Some(title_text.to_string());
+    text.tx_data = Some(tx_data);
+    title.tx = Some(text);
+    chart_ex_space.chart.title = Some(title);
+}
+
+fn apply_chart_ex_legend_state(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+) {
+    let Some(legend) = chart_spec.legend.as_ref() else {
+        return;
+    };
+    if !legend.show || !legend.visible {
+        chart_ex_space.chart.legend = None;
+        return;
+    }
+
+    let mut chart_ex_legend = chart_ex_space.chart.legend.take().unwrap_or_default();
+    if let Some(pos) = legend_position_to_chart_ex(&legend.position) {
+        chart_ex_legend.pos = Some(pos.to_string());
+    }
+    chart_ex_legend.overlay = legend.overlay;
+    chart_ex_space.chart.legend = Some(chart_ex_legend);
+}
+
+fn legend_position_to_chart_ex(position: &str) -> Option<&'static str> {
+    match position {
+        "top" => Some("t"),
+        "bottom" => Some("b"),
+        "left" => Some("l"),
+        "right" => Some("r"),
+        "center" => Some("ctr"),
+        _ => None,
     }
 }

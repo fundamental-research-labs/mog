@@ -507,9 +507,11 @@ describe('configToSpec imported Excel date category axes', () => {
 
     expect(bars.length).toBeGreaterThan(0);
     expect(bars.every((mark) => mark.style.fill === '#70AD47')).toBe(true);
+    expect(bars.every((mark) => mark.style.stroke === '#000000')).toBe(true);
     expect(area?.style.fill).toBe('#9DC3E6');
     expect(area?.style.opacity).toBeCloseTo(0.43);
     expect(line?.style.stroke).toBe('#000000');
+    expect(line?.style.strokeWidth).toBe(3);
 
     const areaCoordinates = (area?.path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
     const areaYCoordinates = areaCoordinates.filter((_, index) => index % 2 === 1);

@@ -1723,6 +1723,7 @@ function buildSeriesMark(
   const mark: MarkSpec = { type: markType };
   const color = seriesConf ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType) : undefined;
   if (color) mark.color = color;
+  applySeriesLineFormat(mark, seriesConf);
   const fillOpacity = resolveFormatFillOpacity(seriesConf?.format);
   if (fillOpacity !== undefined) {
     if (markType === 'area') {
@@ -1731,12 +1732,24 @@ function buildSeriesMark(
       mark.opacity = fillOpacity;
     }
   }
-  if (seriesConf?.lineWidth) mark.strokeWidth = seriesConf.lineWidth;
   if (seriesConf?.showMarkers) mark.point = true;
   if (seriesConf?.markerSize) {
     mark.point = { size: seriesConf.markerSize, filled: true };
   }
   return mark;
+}
+
+function applySeriesLineFormat(mark: MarkSpec, seriesConf: SeriesConfig | undefined): void {
+  const line = seriesConf?.format?.line;
+  if (line && hasVisibleLineStyle(line)) {
+    const stroke = resolveLineColor(line);
+    if (stroke) mark.stroke = stroke;
+    const strokeWidth = linePointsToCanvasPx(line.width);
+    if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
+  }
+
+  const lineWidth = linePointsToCanvasPx(seriesConf?.lineWidth);
+  if (lineWidth !== undefined) mark.strokeWidth = lineWidth;
 }
 
 /**

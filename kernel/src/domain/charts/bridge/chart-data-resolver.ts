@@ -1,26 +1,18 @@
-import {
-  HIDDEN_CHART_CELL,
-  extractChartData,
-  extractChartDataFromRange,
-  seriesSourceIndex,
-  seriesSourceKey,
-  type CellDataAccessor,
-  type ChartData,
-} from '@mog/charts';
+import { extractChartData, extractChartDataFromRange, type ChartData } from '@mog/charts';
 import type { ChartDataResult, ChartError } from '@mog-sdk/contracts/bridges';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { ChartConfig, ChartWorkbookThemeData } from '@mog-sdk/contracts/data/charts';
-import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
-import { getValue } from '../../cells/cell-reads';
 import { get as getChart } from '../chart-store';
 import {
   resolveChartRangeReferences,
   type ResolvedChartRangeReferences,
 } from '../chart-range-references';
+import { createCellAccessor, seriesSheetAliases } from './chart-cell-accessor';
 import { toChartConfig, unsupportedChartTypeError } from './chart-config-normalizer';
+import { chartDataToRows } from './chart-data-rows';
 import {
   isNoFillNoLineSeriesConfig,
   normalizeChartDataForRendering,
@@ -47,6 +39,13 @@ import {
 } from './import-render-status';
 import { hasRenderableChartPointCache } from '../chart-point-cache';
 
+export {
+  createCellAccessor,
+  seriesSheetAliases,
+  type CellAccessorOptions,
+} from './chart-cell-accessor';
+export { chartDataToRows } from './chart-data-rows';
+
 export type ChartRenderData = {
   config: ChartConfig;
   data: ChartData;
@@ -55,12 +54,6 @@ export type ChartRenderData = {
 export type ResolvedChartRenderData = ChartRenderData & {
   chart: ChartFloatingObject;
   resolvedRanges: ResolvedChartRangeReferences;
-};
-
-export type CellAccessorOptions = {
-  defaultSheetId?: SheetId;
-  sheetAliases?: Map<string, string>;
-  hiddenVisibility?: HiddenCellVisibility;
 };
 
 type ResolvedFormatBridge = {
@@ -159,103 +152,6 @@ function liveSourceRangesForAxisRole(
   }
 
   return ranges;
-}
-
-/**
- * Create a CellDataAccessor for the charts library.
- * Pre-fetches cell values into a map since the charts library expects sync access.
- */
-export async function createCellAccessor(
-  ctx: DocumentContext,
-  ranges: Array<CellRange | null | undefined>,
-  options?: CellAccessorOptions,
-): Promise<CellDataAccessor> {
-  const valueMap = new Map<string, ReturnType<CellDataAccessor['getValue']>>();
-  const seen = new Set<string>();
-
-  for (const range of ranges) {
-    if (!range?.sheetId) continue;
-    for (let row = range.startRow; row <= range.endRow; row++) {
-      for (let col = range.startCol; col <= range.endCol; col++) {
-        const key = `${range.sheetId},${row},${col}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        if (isCellHidden(range.sheetId, row, col, options?.hiddenVisibility)) {
-          valueMap.set(key, HIDDEN_CHART_CELL);
-          continue;
-        }
-
-        const value = await getValue(ctx, toSheetId(range.sheetId), row, col);
-        // CellError values are converted to null for chart data extraction.
-        let chartValue: ReturnType<CellDataAccessor['getValue']>;
-        if (value && typeof value === 'object' && 'type' in value) {
-          chartValue = null;
-        } else {
-          chartValue = (value ?? null) as ReturnType<CellDataAccessor['getValue']>;
-        }
-        valueMap.set(key, chartValue);
-      }
-    }
-  }
-
-  return {
-    getValue: (row: number, col: number, sheetId?: string) => {
-      const resolvedSheetId = sheetId
-        ? (options?.sheetAliases?.get(sheetId) ?? sheetId)
-        : options?.defaultSheetId;
-      if (!resolvedSheetId) return null;
-      if (isCellHidden(resolvedSheetId, row, col, options?.hiddenVisibility)) {
-        return HIDDEN_CHART_CELL;
-      }
-      return valueMap.get(`${resolvedSheetId},${row},${col}`) ?? null;
-    },
-  };
-}
-
-export function chartDataToRows(data: ChartData): Record<string, unknown>[] {
-  const rows: Record<string, unknown>[] = [];
-  for (let i = 0; i < (data.categories?.length || 0); i++) {
-    const category = data.categories[i];
-    for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
-      const series = data.series[seriesIndex];
-      const point = series.data[i];
-      if (!point) continue;
-      if (point.valueState === 'hidden') continue;
-      const row: Record<string, unknown> = {
-        category: String(category),
-        x: point.x,
-        y: point.y,
-        value: point.y,
-        series: series.name,
-        sourceSeriesIndex: seriesSourceIndex(series, seriesIndex),
-        sourceSeriesKey: seriesSourceKey(series, seriesIndex),
-      };
-      if (point.size !== undefined) row.size = point.size;
-      if (point.open !== undefined) row.open = point.open;
-      if (point.high !== undefined) row.high = point.high;
-      if (point.low !== undefined) row.low = point.low;
-      if (point.close !== undefined) row.close = point.close;
-      if (point.volume !== undefined) row.volume = point.volume;
-      rows.push(row);
-    }
-  }
-  return rows;
-}
-
-export function seriesSheetAliases(
-  resolvedRanges: ResolvedChartRangeReferences,
-): Map<string, string> {
-  const aliases = new Map<string, string>();
-  for (const series of resolvedRanges.seriesReferences) {
-    for (const reference of [series.values, series.categories, series.bubbleSizes]) {
-      const parsed = reference?.ref ? parseCellRange(reference.ref) : null;
-      if (parsed?.sheetName && reference?.range.sheetId) {
-        aliases.set(parsed.sheetName, String(reference.range.sheetId));
-      }
-    }
-  }
-  return aliases;
 }
 
 function hasRenderableSeries(series: NonNullable<ChartConfig['series']>[number]): boolean {

@@ -616,10 +616,12 @@ fn merged_cells_non_origin_skipped() {
     // (3, 0) is origin → filled
     assert!(rows.contains(&3));
     // Should have warning about merges in target
-    assert!(result
-        .warnings
-        .iter()
-        .any(|w| matches!(w.kind, FillWarningKind::MergedCellsInTarget)));
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|w| matches!(w.kind, FillWarningKind::MergedCellsInTarget))
+    );
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

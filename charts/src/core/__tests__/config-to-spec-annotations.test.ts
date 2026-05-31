@@ -2,14 +2,18 @@ import { isLayerSpec, type LayerSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
 import {
+  DATA_LABEL_ANCHOR_X_FIELD,
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
+  DATA_LABEL_X_FIELD,
   ERROR_BAR_VISIBLE_FIELD,
   ERROR_BAR_Y_MAX_FIELD,
   ERROR_BAR_Y_MIN_FIELD,
   MARKER_FILL_FIELD,
   MARKER_SHAPE_FIELD,
   MARKER_VISIBLE_FIELD,
+  POINT_EXPLOSION_FIELD,
+  POINT_FILL_FIELD,
   SCATTER_X_FIELD,
   TRENDLINE_LABEL_TEXT_FIELD,
   VALUE_FIELD,
@@ -214,5 +218,67 @@ describe('configToSpec annotation layers', () => {
     ];
     expect(labelText).toContain('y =');
     expect(labelText).toContain('R^2 = 1.00');
+  });
+
+  it('lowers pie labels, leader lines, point fill, and explosion into row geometry', () => {
+    const data: ChartData = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Share',
+          data: [
+            { x: 'A', y: 25 },
+            { x: 'B', y: 75 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'pie',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      dataLabels: {
+        show: true,
+        showCategoryName: true,
+        showPercentage: true,
+        position: 'outsideEnd',
+        showLeaderLines: true,
+      },
+      series: [
+        {
+          points: [{ idx: 1, fill: '#00ff00', explosion: 12 }],
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        [DATA_LABEL_VISIBLE_FIELD]: true,
+        [DATA_LABEL_TEXT_FIELD]: 'A, 25%',
+        [DATA_LABEL_X_FIELD]: expect.any(Number),
+        [DATA_LABEL_ANCHOR_X_FIELD]: expect.any(Number),
+      }),
+    );
+    expect(rows[1]).toEqual(
+      expect.objectContaining({
+        [POINT_FILL_FIELD]: '#00ff00',
+        [POINT_EXPLOSION_FIELD]: 12,
+      }),
+    );
+    expect(spec.layer).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mark: expect.objectContaining({ type: 'text', xField: DATA_LABEL_X_FIELD }),
+        }),
+        expect.objectContaining({
+          mark: expect.objectContaining({ type: 'rule', xField: DATA_LABEL_ANCHOR_X_FIELD }),
+        }),
+      ]),
+    );
   });
 });

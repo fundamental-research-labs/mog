@@ -13,6 +13,8 @@ import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
 import { definedStyle } from './helpers';
 
+const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
+
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
   const value = datum[field];
@@ -142,10 +144,14 @@ export function generateArcMarks(
       }
     }
 
+    const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0;
+    const midAngle = (paddedStart + paddedEnd) / 2;
+    const explosionOffset = explosion > 0 ? Math.min(outerRadius * 0.25, explosion) : 0;
+
     marks.push({
       type: 'arc',
-      x: cx,
-      y: cy,
+      x: cx + Math.cos(midAngle) * explosionOffset,
+      y: cy + Math.sin(midAngle) * explosionOffset,
       innerRadius,
       outerRadius,
       startAngle: paddedStart,

@@ -3,6 +3,8 @@ import type { DataLabelConfig } from '../../../types';
 import {
   CATEGORY_FIELD,
   DATA_LABEL_ALIGN_FIELD,
+  DATA_LABEL_ANCHOR_X_FIELD,
+  DATA_LABEL_ANCHOR_Y_FIELD,
   DATA_LABEL_BASELINE_FIELD,
   DATA_LABEL_COLOR_FIELD,
   DATA_LABEL_DX_FIELD,
@@ -15,6 +17,8 @@ import {
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VALUE_ANCHOR_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
+  DATA_LABEL_X_FIELD,
+  DATA_LABEL_Y_FIELD,
   SCATTER_X_FIELD,
   VALUE_FIELD,
 } from '../fields';
@@ -34,7 +38,6 @@ export function buildDataLabelLayer(
 
 export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
-  if (!position) return [];
 
   const mark: MarkSpec = {
     type: 'text',
@@ -45,13 +48,20 @@ export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
     colorField: DATA_LABEL_COLOR_FIELD,
     fontSizeField: DATA_LABEL_FONT_SIZE_FIELD,
     angleField: DATA_LABEL_ROTATION_FIELD,
+    ...(!position
+      ? {
+          xField: DATA_LABEL_X_FIELD,
+          yField: DATA_LABEL_Y_FIELD,
+          coordinateSystem: 'plotFraction' as const,
+        }
+      : {}),
   };
 
   return [
     {
       mark,
       encoding: {
-        ...position,
+        ...(position ?? {}),
         text: { field: DATA_LABEL_TEXT_FIELD, type: 'nominal' },
       },
       transform: [{ type: 'filter', filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } }],
@@ -61,7 +71,6 @@ export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
 
 export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
-  if (!position) return [];
 
   return [
     {
@@ -71,13 +80,24 @@ export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
         strokeWidth: 1,
         strokeField: DATA_LABEL_LEADER_STROKE_FIELD,
         strokeWidthField: DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
+        ...(!position
+          ? {
+              xField: DATA_LABEL_ANCHOR_X_FIELD,
+              yField: DATA_LABEL_ANCHOR_Y_FIELD,
+              x2Field: DATA_LABEL_X_FIELD,
+              y2Field: DATA_LABEL_Y_FIELD,
+              coordinateSystem: 'plotFraction' as const,
+            }
+          : {}),
       },
-      encoding: {
-        x: position.anchorX,
-        y: position.anchorY,
-        x2: position.labelX,
-        y2: position.labelY,
-      },
+      encoding: position
+        ? {
+            x: position.anchorX,
+            y: position.anchorY,
+            x2: position.labelX,
+            y2: position.labelY,
+          }
+        : undefined,
       transform: [
         { type: 'filter', filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } },
         { type: 'filter', filter: { field: DATA_LABEL_LEADER_VISIBLE_FIELD, equal: true } },

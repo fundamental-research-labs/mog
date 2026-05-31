@@ -182,7 +182,7 @@ export class ChartDataResolver {
       };
     }
 
-    const data = chartDataToRows(chartRenderDataOrError.data);
+    const data = chartDataToRows(chartRenderDataOrError.data, chartRenderDataOrError.config);
 
     if (data.length === 0) {
       return {

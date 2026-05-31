@@ -220,6 +220,78 @@ describe('ChartDataResolver', () => {
     });
   });
 
+  it('uses compiler row semantics in the public resolveChartData facade', async () => {
+    const getCellData = jest.fn(async () => null);
+    const resolver = new ChartDataResolver(
+      ctx({
+        getChart: jest.fn(async () =>
+          chart({
+            chartType: 'line',
+            dataRange: undefined,
+            displayBlanksAs: 'gap',
+            series: [
+              {
+                name: 'Literal gaps',
+                valueSourceKind: 'literal',
+                valueCache: {
+                  pointCount: 3,
+                  points: [
+                    { idx: 0, value: '1' },
+                    { idx: 2, value: '2' },
+                  ],
+                },
+                categorySourceKind: 'literal',
+                categoryCache: {
+                  pointCount: 3,
+                  points: [
+                    { idx: 0, value: 'A' },
+                    { idx: 1, value: 'B' },
+                    { idx: 2, value: 'C' },
+                  ],
+                },
+              },
+            ],
+          }),
+        ),
+        getCellData,
+      }),
+    );
+
+    const result = await resolver.resolveChartData(SHEET_A, CHART_ID);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(getCellData).not.toHaveBeenCalled();
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        category: 'A',
+        x: 'A',
+        value: 1,
+        y: 1,
+        series: 'Literal gaps',
+        __mogPointIndex: 0,
+        __mogLineSegment: 0,
+      }),
+      expect.objectContaining({
+        category: 'B',
+        x: 'B',
+        series: 'Literal gaps',
+        __mogPointIndex: 1,
+        __mogBlankValue: true,
+      }),
+      expect.objectContaining({
+        category: 'C',
+        x: 'C',
+        value: 2,
+        y: 2,
+        series: 'Literal gaps',
+        __mogPointIndex: 2,
+        __mogLineSegment: 1,
+      }),
+    ]);
+    expect(result.data[1]).not.toHaveProperty('value');
+  });
+
   it('resolves render-ready range data for a chart id and sheet id', async () => {
     const getCellData = jest.fn(async (_sheetId, _row: number, col: number) => ({
       value: { type: 'number', value: [10, 20, 30][col] ?? null },

@@ -21,7 +21,7 @@ export {
   type TrendlineResult,
 } from '../math/trendlines';
 export { collectMarks } from './chart-engine';
-export { configToSpec } from './config-to-spec';
+export { chartDataToRows, configToSpec } from './config-to-spec';
 export {
   DEFAULT_EXCEL_BAR_GAP_WIDTH,
   DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP,

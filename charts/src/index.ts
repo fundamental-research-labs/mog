@@ -86,6 +86,7 @@ export {
   ObjectCellAccessor,
   HIDDEN_CHART_CELL,
   chartDataSeriesIdentity,
+  chartDataToRows,
   collectMarks,
   configToSpec,
   detectSeriesOrientation,

@@ -1,6 +1,16 @@
-import { seriesSourceIndex, seriesSourceKey, type ChartData } from '@mog/charts';
+import {
+  chartDataToRows as chartDataToCoreRows,
+  seriesSourceIndex,
+  seriesSourceKey,
+  type ChartConfig,
+  type ChartData,
+} from '@mog/charts';
 
-export function chartDataToRows(data: ChartData): Record<string, unknown>[] {
+export function chartDataToRows(data: ChartData, config?: ChartConfig): Record<string, unknown>[] {
+  if (config) {
+    return chartDataToCoreRows(data, config).map(withPublicCompatibilityFields);
+  }
+
   const rows: Record<string, unknown>[] = [];
   for (let i = 0; i < (data.categories?.length || 0); i++) {
     const category = data.categories[i];
@@ -28,4 +38,11 @@ export function chartDataToRows(data: ChartData): Record<string, unknown>[] {
     }
   }
   return rows;
+}
+
+function withPublicCompatibilityFields(row: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...row };
+  if (!('x' in next) && 'category' in next) next.x = next.category;
+  if (!('y' in next) && 'value' in next) next.y = next.value;
+  return next;
 }

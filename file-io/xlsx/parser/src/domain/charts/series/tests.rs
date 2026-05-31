@@ -285,6 +285,46 @@ fn test_parse_series_with_values() {
 }
 
 #[test]
+fn test_parse_series_with_multi_level_categories() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:cat>
+                <c:multiLvlStrRef>
+                    <c:f>Sheet1!$A$2:$B$4</c:f>
+                    <c:multiLvlStrCache>
+                        <c:ptCount val="3"/>
+                        <c:lvl>
+                            <c:pt idx="0"><c:v>North</c:v></c:pt>
+                            <c:pt idx="1"><c:v>North</c:v></c:pt>
+                            <c:pt idx="2"><c:v>South</c:v></c:pt>
+                        </c:lvl>
+                        <c:lvl>
+                            <c:pt idx="0"><c:v>Q1</c:v></c:pt>
+                            <c:pt idx="1"><c:v>Q2</c:v></c:pt>
+                            <c:pt idx="2"><c:v>Q1</c:v></c:pt>
+                        </c:lvl>
+                    </c:multiLvlStrCache>
+                </c:multiLvlStrRef>
+            </c:cat>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+
+    match series.cat.unwrap() {
+        CatDataSource::MultiLvlStrRef(multi_ref) => {
+            assert_eq!(multi_ref.f, "Sheet1!$A$2:$B$4");
+            let cache = multi_ref.multi_lvl_str_cache.expect("multi-level cache");
+            assert_eq!(cache.pt_count, Some(3));
+            assert_eq!(cache.levels.len(), 2);
+            assert_eq!(cache.levels[0].pts[0].v, "North");
+            assert_eq!(cache.levels[1].pts[1].v, "Q2");
+        }
+        other => panic!("Expected CatDataSource::MultiLvlStrRef, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_smooth_series() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>

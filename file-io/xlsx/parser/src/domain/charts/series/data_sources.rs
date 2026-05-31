@@ -2,11 +2,12 @@ use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
 use crate::infra::xml::decode_xml_entities;
+use ooxml_types::charts::{MultiLvlStrData, MultiLvlStrRef};
 
 use super::xml_values::{parse_bytes_u32, parse_val_attr_u32};
 use super::{
-    CatDataSource, NumData, NumDataSource, NumPoint, NumRef, SeriesTextSource, StrData, StrPoint,
-    StrRef, parse_chart_ext_lst,
+    parse_chart_ext_lst, CatDataSource, NumData, NumDataSource, NumPoint, NumRef, SeriesTextSource,
+    StrData, StrPoint, StrRef,
 };
 
 pub fn parse_series_text(xml: &[u8]) -> Option<SeriesTextSource> {
@@ -49,6 +50,8 @@ pub struct AxisData {
     pub num_lit: Option<NumData>,
     /// String literal values
     pub str_lit: Option<StrData>,
+    /// Multi-level string reference
+    pub multi_lvl_str_ref: Option<MultiLvlStrRef>,
 }
 
 impl AxisData {
@@ -60,6 +63,8 @@ impl AxisData {
             Some(CatDataSource::StrRef(sr))
         } else if let Some(nl) = self.num_lit {
             Some(CatDataSource::NumLit(nl))
+        } else if let Some(mlsr) = self.multi_lvl_str_ref {
+            Some(CatDataSource::MultiLvlStrRef(mlsr))
         } else {
             self.str_lit.map(CatDataSource::StrLit)
         }
@@ -88,6 +93,14 @@ impl AxisData {
         if let Some(strref_start) = find_tag_simd(xml, b"strRef", 0) {
             let strref_end = find_closing_tag(xml, b"strRef", strref_start).unwrap_or(xml.len());
             data.str_ref = Some(parse_str_ref(&xml[strref_start..strref_end]));
+        }
+
+        // Parse multi-level string reference
+        if let Some(multilvl_start) = find_tag_simd(xml, b"multiLvlStrRef", 0) {
+            let multilvl_end =
+                find_closing_tag(xml, b"multiLvlStrRef", multilvl_start).unwrap_or(xml.len());
+            data.multi_lvl_str_ref =
+                Some(parse_multi_lvl_str_ref(&xml[multilvl_start..multilvl_end]));
         }
 
         // Parse numeric literal
@@ -154,6 +167,52 @@ pub fn parse_str_ref(xml: &[u8]) -> StrRef {
     }
     str_ref.extensions = parse_chart_ext_lst(xml);
     str_ref
+}
+
+/// Parse multi-level string reference element (CT_MultiLvlStrRef).
+pub fn parse_multi_lvl_str_ref(xml: &[u8]) -> MultiLvlStrRef {
+    let mut multi_ref = MultiLvlStrRef::default();
+
+    // Parse formula
+    if let Some(f_start) = find_tag_simd(xml, b"f", 0) {
+        let f_content_start = find_gt_simd(xml, f_start).map(|p| p + 1);
+        let f_end = find_closing_tag(xml, b"f", f_start);
+
+        if let (Some(start), Some(end)) = (f_content_start, f_end) {
+            if start < end {
+                multi_ref.f = decode_xml_entities(&xml[start..end]);
+            }
+        }
+    }
+
+    // Parse cached multi-level values
+    if let Some(cache_start) = find_tag_simd(xml, b"multiLvlStrCache", 0) {
+        let cache_end =
+            find_closing_tag(xml, b"multiLvlStrCache", cache_start).unwrap_or(xml.len());
+        multi_ref.multi_lvl_str_cache =
+            Some(parse_multi_lvl_str_data(&xml[cache_start..cache_end]));
+    }
+    multi_ref.extensions = parse_chart_ext_lst(xml);
+    multi_ref
+}
+
+/// Parse cached multi-level string data (CT_MultiLvlStrData).
+pub fn parse_multi_lvl_str_data(xml: &[u8]) -> MultiLvlStrData {
+    let mut data = MultiLvlStrData::default();
+
+    if let Some(ptcount_start) = find_tag_simd(xml, b"ptCount", 0) {
+        data.pt_count = Some(parse_val_attr_u32(&xml[ptcount_start..]));
+    }
+
+    let mut pos = 0;
+    while let Some(lvl_start) = find_tag_simd(xml, b"lvl", pos) {
+        let lvl_end = find_closing_tag(xml, b"lvl", lvl_start).unwrap_or(xml.len());
+        data.levels.push(parse_str_data(&xml[lvl_start..lvl_end]));
+        pos = lvl_end;
+    }
+
+    data.extensions = parse_chart_ext_lst(xml);
+    data
 }
 
 /// Parse numeric cache/data element (CT_NumData).

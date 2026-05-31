@@ -202,14 +202,14 @@ export interface EditorCommitCoordinationConfig {
     errorMessage: string,
     onEdit: () => void,
     onAcceptAsText: () => void,
+    onCancel: () => void,
     /** G.2: Optional error position for cursor placement (0-based character index) */
     errorPosition?: number,
   ) => void;
   /**
    * Optional callback for direct circular-reference warnings.
-   * Circular references are warning-only for interactive commits: the formula
-   * is committed while the host shows the warning and can optionally enable
-   * iterative calculation.
+   * Enable proceeds with commit after the host enables iterative calculation;
+   * cancel abandons the edit without mutating workbook state.
    */
   onCircularReferenceWarning?: (
     cellAddress: string,
@@ -377,6 +377,9 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
                     direction: state.context.commitDirection || 'none',
                   });
                 },
+                () => {
+                  editorActor.send({ type: 'CANCEL' });
+                },
                 // G.2: Pass error position to dialog for potential UI use
                 errorPosition,
               );
@@ -402,11 +405,15 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
               onCircularReferenceWarning(
                 circularReferenceResult.cellAddress,
                 circularReferenceResult.formula,
-                () => {},
-                () => {},
+                () => editorActor.send({ type: 'VALIDATION_SUCCESS' }),
+                () => editorActor.send({ type: 'CANCEL' }),
               );
+            } else {
+              editorActor.send({
+                type: 'VALIDATION_ERROR',
+                message: `Circular reference detected in cell ${circularReferenceResult.cellAddress}`,
+              });
             }
-            editorActor.send({ type: 'VALIDATION_SUCCESS' });
             return;
           }
         }

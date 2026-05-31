@@ -28,7 +28,63 @@ import { useUIStore, useUIStoreApi } from '../../infra/context';
 import { dispatch } from '../../actions';
 import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
 import { useSelectionActions } from '../../hooks/selection/use-selection-actions';
-import { useWorkbook } from '../../internal-api';
+import { useActiveCell, useActiveSheetId, useWorkbook } from '../../internal-api';
+import { extractFormulaRanges } from '../../domain/editor/formula-range-parser';
+import { toA1 } from '@mog/spreadsheet-utils/a1';
+
+type FormulaReferenceSeverity = 'error' | 'warning' | 'info';
+
+type FormulaReferencePanelRow = Omit<
+  FormulaReferenceDiagnostic,
+  'kind' | 'severity' | 'location' | 'formula' | 'displayValue' | 'edge'
+> & {
+  id?: string;
+  sourceKind?: string;
+  severity?: FormulaReferenceSeverity;
+  code?: string;
+  location?: {
+    sheetId?: string;
+    cellId?: string;
+    address?: string;
+    row?: number;
+    col?: number;
+    nameId?: string;
+    name?: string;
+    addressStatus?: string;
+  };
+  formula?: string;
+  displayValue?: string;
+  kind?: string;
+  edge?: {
+    edgeId: string;
+    text: string;
+    spanStart: number;
+    spanEnd: number;
+    refIndex?: number;
+    targetKind: string;
+    targetDisplay?: string;
+    status: string;
+    reason: string;
+  };
+  base?: {
+    id?: string;
+    sourceKind?: string;
+    severity?: FormulaReferenceSeverity;
+    code?: string;
+    location?: {
+      sheetId?: string;
+      cellId?: string;
+      address?: string;
+      row?: number;
+      col?: number;
+      nameId?: string;
+      name?: string;
+      addressStatus?: string;
+    };
+    formula?: string;
+    displayValue?: string;
+  };
+};
 
 function SidePanelImpl() {
   const setSidePanelVisible = useUIStore((s) => s.setSidePanelVisible);
@@ -111,11 +167,16 @@ export const SidePanel = memo(SidePanelImpl);
 
 function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) {
   const workbook = useWorkbook();
+  const activeSheetId = useActiveSheetId();
+  const { row: activeRow, col: activeCol } = useActiveCell();
   const selectionActions = useSelectionActions();
   const setFormulaBarVisible = useUIStore((s) => s.setFormulaBarVisible);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [filter, setFilter] = useState<'all' | 'error' | 'warning'>('all');
-  const [rows, setRows] = useState<readonly FormulaReferenceDiagnostic[]>([]);
+  const [rows, setRows] = useState<readonly FormulaReferencePanelRow[]>([]);
+  const [selectedFormulaRows, setSelectedFormulaRows] = useState<
+    readonly FormulaReferencePanelRow[]
+  >([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selectedId, setSelectedId] = useState<string | undefined>();
 
@@ -128,9 +189,12 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
           limit: 1000,
           cursor,
         });
-        setRows((current) => (cursor ? [...current, ...page.diagnostics] : page.diagnostics));
+        setRows((current) =>
+          cursor
+            ? [...current, ...(page.diagnostics as FormulaReferencePanelRow[])]
+            : (page.diagnostics as FormulaReferencePanelRow[]),
+        );
         setNextCursor(page.nextCursor);
-        setSelectedId((current) => current ?? page.diagnostics[0]?.id);
         setStatus('ready');
       } catch {
         setStatus('error');
@@ -143,29 +207,98 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const worksheet = workbook.getSheetById(activeSheetId);
+        const rawData = await worksheet.getRawCellData(activeRow, activeCol, true);
+        const formula = rawData?.formula;
+        if (!formula?.startsWith('=')) {
+          if (!cancelled) setSelectedFormulaRows([]);
+          return;
+        }
+
+        const sourceAddress = toA1(activeRow, activeCol);
+        const references = extractFormulaRanges(formula);
+        const resolvedRows = references.map((ref): FormulaReferencePanelRow => {
+          const targetKind =
+            ref.range.startRow === ref.range.endRow && ref.range.startCol === ref.range.endCol
+              ? 'cell'
+              : 'range';
+          return {
+            type: 'reference-edge',
+            id: `selected-${activeSheetId}-${activeRow}-${activeCol}-${ref.index}`,
+            sourceKind: 'cell-formula',
+            severity: 'info',
+            code: 'resolved-reference',
+            location: {
+              sheetId: activeSheetId,
+              row: activeRow,
+              col: activeCol,
+              address: sourceAddress,
+              addressStatus: 'resolved',
+            },
+            formula,
+            displayValue: '',
+            kind: 'resolved-reference',
+            edge: {
+              edgeId: `selected-${activeSheetId}-${activeRow}-${activeCol}-${ref.index}`,
+              text: ref.text,
+              spanStart: ref.startPos,
+              spanEnd: ref.endPos,
+              refIndex: ref.index,
+              targetKind,
+              targetDisplay: ref.text,
+              status: 'resolved',
+              reason: 'resolved',
+            },
+          } as FormulaReferencePanelRow;
+        });
+        if (!cancelled) setSelectedFormulaRows(resolvedRows);
+      } catch {
+        if (!cancelled) setSelectedFormulaRows([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCol, activeRow, activeSheetId, workbook]);
+
+  const allRows = useMemo(() => [...selectedFormulaRows, ...rows], [selectedFormulaRows, rows]);
+
   const visibleRows = useMemo(
-    () => rows.filter((row) => filter === 'all' || row.severity === filter),
-    [filter, rows],
+    () => allRows.filter((row) => filter === 'all' || getRowSeverity(row) === filter),
+    [allRows, filter],
   );
 
-  const selected = visibleRows.find((row) => row.id === selectedId);
+  useEffect(() => {
+    setSelectedId((current) =>
+      current && allRows.some((row) => getRowId(row) === current) ? current : getRowId(allRows[0]),
+    );
+  }, [allRows]);
+
+  const selected = visibleRows.find((row) => getRowId(row) === selectedId);
 
   const handleCopyFormula = useCallback(async () => {
-    if (!selected?.formula) return;
+    const formula = selected ? getRowFormula(selected) : '';
+    if (!formula) return;
     if (typeof navigator !== 'undefined') {
-      await navigator.clipboard?.writeText(selected.formula);
+      await navigator.clipboard?.writeText(formula);
     }
   }, [selected]);
 
   const jumpToSelected = useCallback(() => {
+    const location = selected ? getRowLocation(selected) : undefined;
     if (
-      selected?.sourceKind !== 'cell-formula' ||
-      selected.location.row == null ||
-      selected.location.col == null
+      !selected ||
+      getRowSourceKind(selected) !== 'cell-formula' ||
+      location?.row == null ||
+      location?.col == null
     ) {
       return false;
     }
-    const { row, col } = selected.location;
+    const { row, col } = location;
     selectionActions.setSelection([{ startRow: row, startCol: col, endRow: row, endCol: col }], {
       row,
       col,
@@ -234,9 +367,9 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
         </button>
       </div>
 
-      {status === 'loading' && rows.length === 0 ? (
+      {status === 'loading' && allRows.length === 0 ? (
         <div className="p-4 text-body-sm text-ss-text-secondary">Loading</div>
-      ) : status === 'error' ? (
+      ) : status === 'error' && allRows.length === 0 ? (
         <div className="p-4 text-body-sm text-ss-text-secondary">
           <div>Unable to load formula references</div>
           <button type="button" className="mt-2 underline" onClick={() => void load()}>
@@ -253,19 +386,19 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
                 key={row.id}
                 type="button"
                 data-testid="formula-reference-row"
-                onClick={() => setSelectedId(row.id)}
+                onClick={() => setSelectedId(getRowId(row))}
                 onDoubleClick={handleEditFormula}
                 className={`grid w-full grid-cols-[76px_90px_76px_1fr] gap-2 px-3 py-2 text-left border-b border-ss-border text-caption ${
-                  selectedId === row.id ? 'bg-ss-selection/20' : 'hover:bg-ss-surface-hover'
+                  selectedId === getRowId(row) ? 'bg-ss-selection/20' : 'hover:bg-ss-surface-hover'
                 }`}
               >
-                <span className="truncate">{row.location.address ?? row.location.name ?? '-'}</span>
                 <span className="truncate">
-                  {row.type === 'reference-edge' ? row.kind : row.kind}
+                  {getRowLocation(row).address ?? getRowLocation(row).name ?? '-'}
                 </span>
-                <span className="truncate">{row.severity}</span>
+                <span className="truncate">{getRowKind(row)}</span>
+                <span className="truncate">{getRowSeverity(row)}</span>
                 <span className="truncate">
-                  {row.type === 'reference-edge' ? row.edge.text : (row.formula ?? '')}
+                  {row.type === 'reference-edge' && row.edge ? row.edge.text : getRowFormula(row)}
                 </span>
               </button>
             ))}
@@ -280,7 +413,7 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
               <button
                 type="button"
                 data-testid="formula-reference-copy"
-                disabled={!selected?.formula}
+                disabled={!selected || !getRowFormula(selected)}
                 onClick={handleCopyFormula}
                 className="px-2 py-1 text-caption rounded border border-ss-border disabled:opacity-50"
               >
@@ -289,11 +422,11 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
               <button
                 type="button"
                 data-testid="formula-reference-jump"
-                disabled={selected?.sourceKind !== 'cell-formula'}
+                disabled={!selected || getRowSourceKind(selected) !== 'cell-formula'}
                 onClick={handleJump}
                 className="px-2 py-1 text-caption rounded border border-ss-border disabled:opacity-50"
                 title={
-                  selected?.sourceKind === 'named-range-formula'
+                  selected && getRowSourceKind(selected) === 'named-range-formula'
                     ? 'Open Name Manager unavailable'
                     : undefined
                 }
@@ -303,11 +436,11 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
               <button
                 type="button"
                 data-testid="formula-reference-edit"
-                disabled={selected?.sourceKind !== 'cell-formula'}
+                disabled={!selected || getRowSourceKind(selected) !== 'cell-formula'}
                 onClick={handleEditFormula}
                 className="px-2 py-1 text-caption rounded border border-ss-border disabled:opacity-50"
                 title={
-                  selected?.sourceKind === 'named-range-formula'
+                  selected && getRowSourceKind(selected) === 'named-range-formula'
                     ? 'Open Name Manager unavailable'
                     : undefined
                 }
@@ -332,9 +465,36 @@ function FormulaReferenceDiagnosticsPanel({ onClose }: { onClose: () => void }) 
   );
 }
 
-function FormulaPreview({ row }: { row: FormulaReferenceDiagnostic }) {
-  const formula = row.formula ?? '';
-  if (row.type !== 'reference-edge' || !formula) {
+function getRowId(row: FormulaReferencePanelRow | undefined): string | undefined {
+  if (!row) return undefined;
+  return row.id ?? row.base?.id;
+}
+
+function getRowSourceKind(row: FormulaReferencePanelRow): string | undefined {
+  return row.sourceKind ?? row.base?.sourceKind;
+}
+
+function getRowSeverity(row: FormulaReferencePanelRow): FormulaReferenceSeverity {
+  return row.severity ?? row.base?.severity ?? 'warning';
+}
+
+function getRowKind(row: FormulaReferencePanelRow): string {
+  return row.kind ?? row.code ?? row.base?.code ?? row.type;
+}
+
+function getRowLocation(
+  row: FormulaReferencePanelRow,
+): NonNullable<FormulaReferencePanelRow['location']> {
+  return row.location ?? row.base?.location ?? {};
+}
+
+function getRowFormula(row: FormulaReferencePanelRow): string {
+  return row.formula ?? row.base?.formula ?? '';
+}
+
+function FormulaPreview({ row }: { row: FormulaReferencePanelRow }) {
+  const formula = getRowFormula(row);
+  if (row.type !== 'reference-edge' || !formula || !row.edge) {
     return <div className="text-caption text-ss-text-secondary truncate">{formula}</div>;
   }
   const before = formula.slice(0, row.edge.spanStart);

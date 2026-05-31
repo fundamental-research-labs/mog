@@ -65,6 +65,12 @@ export const EditorEvents = {
     position,
   }),
 
+  setTextSelection: (cursorPosition: number, selectionAnchor: number): EditorEvent => ({
+    type: 'TEXT_SELECTION_CHANGED',
+    anchor: selectionAnchor,
+    cursorPosition,
+  }),
+
   // IME events
   imeStart: (): EditorEvent => ({
     type: 'IME_START',

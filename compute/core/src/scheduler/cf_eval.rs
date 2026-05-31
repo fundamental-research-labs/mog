@@ -248,6 +248,9 @@ impl ComputeCore {
                 .get_cell_value_at(sheet_id, SheetPos::new(row, col))
                 .cloned()
                 .unwrap_or(value_types::CellValue::Null);
+            let has_formula = mirror
+                .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+                .is_some_and(|cell_id| mirror.get_formula(&cell_id).is_some());
 
             // Sort applicable rules by priority (lower number = higher priority = first)
             applicable.sort_by_key(|(r, _, _)| r.priority);
@@ -280,7 +283,14 @@ impl ComputeCore {
                         None
                     };
 
-                cascade.apply(&value, rule, stats, formula_eval_result.as_ref(), now);
+                cascade.apply_for_cell(
+                    &value,
+                    rule,
+                    stats,
+                    formula_eval_result.as_ref(),
+                    now,
+                    has_formula,
+                );
             }
 
             if let Some(m) = cascade.finish()

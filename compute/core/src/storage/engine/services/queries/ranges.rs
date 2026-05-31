@@ -168,6 +168,23 @@ pub(in crate::storage::engine) struct CellVisit {
     pub effective_format: domain_types::CellFormat,
 }
 
+fn formula_text_for_cell(
+    engine: &crate::storage::engine::YrsComputeEngine,
+    mirror: &CellMirror,
+    cell_id: &CellId,
+) -> Option<String> {
+    engine
+        .stores
+        .compute
+        .get_formula(cell_id)
+        .map(|s| s.to_string())
+        .or_else(|| {
+            mirror
+                .get_formula(cell_id)
+                .map(|f| format!("={}", f.template))
+        })
+}
+
 /// Iterate all non-empty cells in the given range, handling merge redirects,
 /// ComputeCore-first value priority, spill values, and locale-aware formatting.
 /// This is the single source of truth for "how to walk cells correctly."
@@ -271,21 +288,11 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         });
 
                     // Actual formula text from ComputeCore, mirror identity formula fallback
-                    let formula = engine
-                        .stores
-                        .compute
-                        .get_formula(&cell_id)
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            mirror
-                                .get_formula(&cell_id)
-                                .map(|f| format!("={}", f.template))
-                        })
-                        .or_else(|| {
-                            crate::storage::engine::data_table_formula::formula_at(
-                                mirror, sheet_id, row, col,
-                            )
-                        });
+                    let formula = formula_text_for_cell(engine, mirror, &cell_id).or_else(|| {
+                        crate::storage::engine::data_table_formula::formula_at(
+                            mirror, sheet_id, row, col,
+                        )
+                    });
 
                     let cell_id_hex = id_to_hex(cell_id.as_u128());
 
@@ -375,13 +382,17 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             compute_formats::format_value(&value, format_code, locale);
                         let formatted = format_result.text;
 
+                        let formula = mirror.cse_anchor_covering(sheet_id, row, col).and_then(
+                            |(anchor_id, _)| formula_text_for_cell(engine, mirror, &anchor_id),
+                        );
+
                         visitor(CellVisit {
                             row,
                             col,
                             cell_id: None,
                             value,
                             formatted,
-                            formula: None,
+                            formula,
                             is_projection: true,
                             effective_format: effective,
                         });

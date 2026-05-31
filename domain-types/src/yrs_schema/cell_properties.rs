@@ -3,7 +3,8 @@
 //!
 //! CellFormat fields are stored using `cell_format`'s existing 2-char keys
 //! (ff, fs, fc, etc.). CellProperties metadata uses non-colliding keys.
-//! Borders and gradient_fill (complex nested types) are stored as JSON strings.
+//! Complex nested `CellFormat` fields are stored as JSON strings by
+//! `cell_format`.
 //!
 //! This flat layout avoids nested Y.Maps and gives field-level CRDT merges
 //! for all format properties.
@@ -26,8 +27,6 @@ use crate::CellProperties;
 const KEY_PROVENANCE: &str = "pv";
 const KEY_VALIDATION: &str = "vl";
 const KEY_CONNECTION_ID: &str = "ci";
-const KEY_BORDERS: &str = "bd";
-const KEY_GRADIENT_FILL: &str = "gf";
 // Round-trip bookkeeping keys (promoted from the pre-typed-OOXML-preservation `ex` bag).
 const KEY_STYLE_ID: &str = "si";
 const KEY_CM: &str = "cm";
@@ -51,18 +50,6 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
     // CellFormat fields (reuse cell_format's serialization)
     if let Some(ref fmt) = props.format {
         entries.extend(cell_format::to_yrs_prelim(fmt));
-
-        // borders and gradient_fill are not handled by cell_format — store as JSON
-        if let Some(ref borders) = fmt.borders
-            && let Ok(json) = serde_json::to_string(borders)
-        {
-            entries.push((KEY_BORDERS, Any::String(Arc::from(json.as_str()))));
-        }
-        if let Some(ref gf) = fmt.gradient_fill
-            && let Ok(json) = serde_json::to_string(gf)
-        {
-            entries.push((KEY_GRADIENT_FILL, Any::String(Arc::from(json.as_str()))));
-        }
     }
 
     // Metadata fields
@@ -125,23 +112,7 @@ pub fn to_yrs_prelim(props: &CellProperties) -> Vec<(&str, Any)> {
 /// reads metadata keys. Returns `None` only if the map is completely empty.
 pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellProperties> {
     // Read CellFormat fields from the same flat map
-    let mut format = cell_format::from_yrs_map(map, txn);
-
-    // Read borders and gradient_fill (JSON strings) into the format
-    let borders: Option<crate::CellBorders> =
-        read_string(map, txn, KEY_BORDERS).and_then(|s| serde_json::from_str(&s).ok());
-    let gradient_fill: Option<crate::GradientFillFormat> =
-        read_string(map, txn, KEY_GRADIENT_FILL).and_then(|s| serde_json::from_str(&s).ok());
-
-    if borders.is_some() || gradient_fill.is_some() {
-        let fmt = format.get_or_insert_with(Default::default);
-        if borders.is_some() {
-            fmt.borders = borders;
-        }
-        if gradient_fill.is_some() {
-            fmt.gradient_fill = gradient_fill;
-        }
-    }
+    let format = cell_format::from_yrs_map(map, txn);
 
     // Read metadata
     let provenance = read_string(map, txn, KEY_PROVENANCE);

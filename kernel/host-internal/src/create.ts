@@ -289,7 +289,6 @@ export async function importHostBackedDocument(
     options.importOptions,
   );
   await lifecycle.waitForReady();
-  await lifecycle.awaitImportDurability();
 
   const context = lifecycle.documentContext;
   return _createDocumentHandleInternal(lifecycleInput.documentId, lifecycle, context);

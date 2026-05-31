@@ -1028,17 +1028,9 @@ export class SheetCoordinator {
     // does another clear + rebuild, which is the intended self-heal.
     // =========================================================================
     if (this.uiStore) {
-      const populatedSheets = new Set<string>();
-      if (this.config.initialSheetId) populatedSheets.add(this.config.initialSheetId);
-
       const populateAndResync = async (newSheetId: string) => {
         if (projectionDisposed) return;
-        if (populatedSheets.has(newSheetId)) {
-          // Cache already populated — first switchSheet sees the right data.
-          return;
-        }
         const populateGeneration = projectionGeneration;
-        populatedSheets.add(newSheetId);
         const sheet = toSheetId(newSheetId);
         const [objects, bounds] = await Promise.all([
           floatingObjects.getObjectsInSheet(sheet),

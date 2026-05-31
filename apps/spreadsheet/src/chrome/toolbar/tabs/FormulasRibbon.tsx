@@ -53,6 +53,7 @@ import {
   ErrorCheckingIcon,
   EvaluateFormulaIcon,
   FinancialFunctionIcon,
+  FormulaReferencesIcon,
   LogicalFunctionIcon,
   LookupFunctionIcon,
   MathTrigFunctionIcon,
@@ -64,7 +65,6 @@ import {
   WatchWindowIcon,
 } from '../primitives/FormulasIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
-import { SplitButton } from '../primitives/SplitButton';
 import {
   RibbonDropdown,
   RibbonDropdownDivider,
@@ -426,6 +426,7 @@ const FUNCTION_CATEGORIES = {
   more: {
     statistical: [
       // Central Tendency
+      'AVERAGE',
       'MEDIAN',
       'MODE',
       'MODE.SNGL',
@@ -685,6 +686,8 @@ export function FormulasRibbon() {
   // Workbook API for recalculation
   const wb = useWorkbook();
   const mruFunctions = useUIStore((s) => s.mruFunctions);
+  const setSidePanelContent = useUIStore((s) => s.setSidePanelContent);
+  const setSidePanelVisible = useUIStore((s) => s.setSidePanelVisible);
 
   // AutoSum dispatch hook
   const dispatchAction = useDispatch();
@@ -796,6 +799,11 @@ export function FormulasRibbon() {
   const handleEvaluateFormula = useCallback(() => {
     dispatch('OPEN_EVALUATE_FORMULA_DIALOG', deps);
   }, [deps]);
+
+  const handleFormulaReferences = useCallback(() => {
+    setSidePanelContent('formula-references');
+    setSidePanelVisible(true);
+  }, [setSidePanelContent, setSidePanelVisible]);
 
   const handleWatchWindow = useCallback(() => {
     dispatch('OPEN_WATCH_WINDOW', deps);
@@ -1072,6 +1080,7 @@ export function FormulasRibbon() {
             open={financialOpen}
             onOpenChange={setFinancialOpen}
             menuTestId="ribbon-dropdown-menu-financial"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-financial']}
             trigger={
               <RibbonButton
                 id="formulas-financial"
@@ -1101,6 +1110,7 @@ export function FormulasRibbon() {
             open={logicalOpen}
             onOpenChange={setLogicalOpen}
             menuTestId="ribbon-dropdown-menu-logical"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-logical']}
             trigger={
               <RibbonButton
                 id="formulas-logical"
@@ -1130,6 +1140,7 @@ export function FormulasRibbon() {
             open={textOpen}
             onOpenChange={setTextOpen}
             menuTestId="ribbon-dropdown-menu-text"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-text']}
             trigger={
               <RibbonButton
                 id="formulas-text"
@@ -1159,6 +1170,7 @@ export function FormulasRibbon() {
             open={dateTimeOpen}
             onOpenChange={setDateTimeOpen}
             menuTestId="ribbon-dropdown-menu-date-time"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-date-time']}
             trigger={
               <RibbonButton
                 id="formulas-datetime"
@@ -1188,6 +1200,7 @@ export function FormulasRibbon() {
             open={lookupOpen}
             onOpenChange={setLookupOpen}
             menuTestId="ribbon-dropdown-menu-lookup"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-lookup']}
             trigger={
               <RibbonButton
                 id="formulas-lookup"
@@ -1217,6 +1230,7 @@ export function FormulasRibbon() {
             open={mathTrigOpen}
             onOpenChange={setMathTrigOpen}
             menuTestId="ribbon-dropdown-menu-math-trig"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-math-trig']}
             trigger={
               <RibbonButton
                 id="formulas-mathtrig"
@@ -1450,24 +1464,24 @@ export function FormulasRibbon() {
             onOpenChange={setRemoveArrowsOpen}
             menuTestId="ribbon-dropdown-menu-remove-arrows"
             trigger={
-              <SplitButton
-                variant="large"
+              <RibbonButton
+                layout="vertical"
+                height="full"
+                width="narrow"
+                data-testid="ribbon-dropdown-remove-arrows"
                 icon={<RemoveArrowsIcon />}
                 label="Remove"
+                hasDropdown
+                dropdownPosition="inline"
                 isOpen={removeArrowsOpen}
                 disabled={!hasArrows}
                 title="Remove Arrows - Remove trace arrows"
                 aria-label="Remove Arrows"
-                onMainClick={handleRemoveArrows}
-                onDropdownClick={() => setRemoveArrowsOpen((open) => !open)}
-                mainTestId="ribbon-dropdown-remove-arrows"
-                dropdownTestId="ribbon-dropdown-remove-arrows-options"
                 visibilityKey="removeArrows"
               />
             }
             width="auto"
             menuLabel="Remove arrows options"
-            manualTrigger
           >
             <RibbonDropdownItem dataValue="all" onClick={handleRemoveArrows}>
               Remove Arrows
@@ -1483,9 +1497,9 @@ export function FormulasRibbon() {
           <RibbonButton
             layout="vertical"
             height="full"
-            width="narrow"
+            width="normal"
             icon={<ShowFormulasIcon />}
-            label="Show"
+            label={'Show\nFormulas'}
             onClick={handleShowFormulas}
             isOpen={showFormulas}
             title={`Show Formulas (Ctrl+\`) - ${showFormulas ? 'ON' : 'OFF'}`}
@@ -1517,6 +1531,18 @@ export function FormulasRibbon() {
             title="Evaluate Formula - Step through selected formula"
             aria-label="Evaluate Formula"
             visibilityKey="evaluateFormula"
+          />
+
+          <RibbonButton
+            layout="vertical"
+            height="full"
+            width="normal"
+            icon={<FormulaReferencesIcon />}
+            label={'Formula\nReferences'}
+            onClick={handleFormulaReferences}
+            title="Formula References - Inspect formula reference links"
+            aria-label="Formula References"
+            visibilityKey="formulaReferences"
           />
 
           <RibbonButton

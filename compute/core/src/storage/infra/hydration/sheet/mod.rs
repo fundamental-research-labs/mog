@@ -403,7 +403,15 @@ pub(crate) fn hydrate_sheet(
 
     let mut all_floating_objects = sheet.floating_objects.clone();
     all_floating_objects.extend(chart_fos);
-    hydrate_floating_objects(txn, &floating_objects_map, &sheet_id, &all_floating_objects);
+    hydrate_floating_objects(
+        txn,
+        &floating_objects_map,
+        &cells_map,
+        &mut pos_map,
+        &sheet_id,
+        &all_floating_objects,
+        allocator,
+    );
 
     // --- Row/Col style overrides ---
     hydrate_row_styles(
@@ -790,8 +798,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
     hydrate_floating_objects(
         txn,
         &floating_objects_map,
+        &cells_map,
+        &mut pos_map,
         &alloc.sheet_id,
         &all_floating_objects,
+        allocator,
     );
     hydrate_row_styles(
         txn,

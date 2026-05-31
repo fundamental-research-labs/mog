@@ -356,7 +356,12 @@ export interface DevToolsConsoleAPI {
   bridge(filter?: string): void;
 
   // Viewport buffer
-  viewport(viewportId?: string): void;
+  viewport: ((viewportId?: string) => void) & {
+    getCellBounds(
+      row: number,
+      col: number,
+    ): { x: number; y: number; width: number; height: number } | null;
+  };
   cell(row: number, col: number, viewportId?: string): void;
 
   // Viewport buffer events
@@ -470,6 +475,9 @@ export interface DevToolsConsoleAPI {
 
   /** Read a single cell's format from viewport buffer */
   getCellFormat(row: number, col: number, viewportId?: string): Record<string, unknown> | null;
+
+  /** Read whether the rendered viewport accessor reports a comment marker. */
+  hasComment(row: number, col: number, viewportId?: string): boolean;
 
   /** Read the data-bar fill ratio (0..1) for a cell, or null if no data-bar CF applies */
   getDataBarRatio(row: number, col: number, viewportId?: string): number | null;
@@ -636,6 +644,7 @@ export interface DevToolsConsoleAPI {
     frozenCols: number;
     applied: boolean;
   } | null>;
+  getFrozenPanes(): { rows: number; cols: number } | null;
   freezeTopRow(): Promise<void>;
   freezeFirstColumn(): Promise<void>;
   freezePanes(rows: number, cols: number): Promise<void>;

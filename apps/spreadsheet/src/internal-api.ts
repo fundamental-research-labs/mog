@@ -326,6 +326,8 @@ export interface FormulaBarProps {
    * real cursor instead of inventing one. See
    */
   onChange: (value: string, cursorPosition: number) => void;
+  /** Callback when the text selection changes */
+  onSelectionChange?: (selectionStart: number, selectionEnd: number) => void;
   /** Callback when Enter is pressed to commit */
   onCommit?: () => void;
   /** Callback when Escape is pressed to cancel */

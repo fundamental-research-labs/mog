@@ -53,6 +53,17 @@ function isVerticalAlign(value: string): value is NonNullable<CellFormat['vertic
   return (VERTICAL_ALIGNS as readonly string[]).includes(value);
 }
 
+function refreshActiveCellFormat(
+  deps: Parameters<AsyncActionHandler>[0],
+  activeCell: { row: number; col: number },
+): void {
+  const format =
+    (deps.workbook.activeSheet.viewport.getCellData(activeCell.row, activeCell.col)?.format as
+      | CellFormat
+      | undefined) ?? null;
+  callUIStoreAction(deps, (state) => state.setActiveCellFormat(format));
+}
+
 // =============================================================================
 // Format Cells Dialog Handlers
 // =============================================================================
@@ -83,7 +94,7 @@ export const APPLY_ALIGNMENT_FORMAT: AsyncActionHandler = async (deps) => {
     const result = await applyCenterAcrossSelectionFormat(deps, pendingAlignmentFormat);
     if (result.handled && !result.error) {
       callUIStoreAction(deps, (state) => state.clearPendingAlignmentFormat());
-      if (pendingAlignmentFormat.wrapText === true) {
+      if (pendingAlignmentFormat.wrapText !== undefined) {
         await autoFitRowsForBoundedRanges(deps, ranges);
       }
       if (
@@ -106,8 +117,9 @@ export const APPLY_ALIGNMENT_FORMAT: AsyncActionHandler = async (deps) => {
   // Clear pending format
   callUIStoreAction(deps, (state) => state.clearPendingAlignmentFormat());
 
-  // Auto-fit affected rows when wrap-text is enabled (Excel behavior)
-  if (pendingAlignmentFormat.wrapText === true) {
+  // Auto-fit affected rows whenever wrap-text changes so disabling it can
+  // shrink previously wrapped rows back to their content height.
+  if (pendingAlignmentFormat.wrapText !== undefined) {
     await autoFitRowsForBoundedRanges(deps, ranges);
   }
   if (
@@ -321,6 +333,7 @@ export const INCREASE_INDENT: AsyncActionHandler = async (deps) => {
     const ws = deps.workbook.getSheetById(sheetId);
     await ws.formats.setRanges(ranges, { indent: newIndent });
   }
+  refreshActiveCellFormat(deps, activeCell);
 
   return handled();
 };
@@ -345,6 +358,7 @@ export const DECREASE_INDENT: AsyncActionHandler = async (deps) => {
     const ws = deps.workbook.getSheetById(sheetId);
     await ws.formats.setRanges(ranges, { indent: newIndent });
   }
+  refreshActiveCellFormat(deps, activeCell);
 
   return handled();
 };

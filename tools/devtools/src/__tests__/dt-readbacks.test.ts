@@ -203,6 +203,7 @@ function setupRuntime(opts: {
     },
     workbook: {
       activeSheet: {
+        sheetId: 'sheet-1',
         getSheetId: () => 'sheet-1',
         layout: {
           // No documentPixelToCell here — force fallback to coordinator's
@@ -269,7 +270,7 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     const d = drawings[0];
     expect(d.id).toBe('pic-1');
     expect(d.kind).toBe('image');
-    expect(d.boundsPx).toEqual({ x: 100, y: 24, w: 200, h: 96 });
+    expect(d.boundsPx).toEqual({ x: 150, y: 48, w: 200, h: 96 });
     expect(d.visible).toBe(true);
     expect(d.src).toBe('mog://image/abc.png');
     // anchor.from snaps (100, 24) → row 1, col 1; anchor.to snaps (300, 120) → row 5, col 3.
@@ -412,7 +413,7 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(drawings[0]).toMatchObject({
       id: 'fc-checkbox-1',
       kind: 'formControl',
-      anchor: { from: { row: 2, col: 2 } },
+      anchor: { from: { row: 1, col: 1 } },
       boundsPx: { x: 200, y: 48, w: 18, h: 18 },
       visible: true,
     });
@@ -428,6 +429,12 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     });
     const h = await runtime.api.getRenderedRowHeight(null, 3);
     expect(h).toBe(60);
+    expect(runtime.api.viewport.getCellBounds(3, 0)).toEqual({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 60,
+    });
   });
 
   test('getRenderedRowHeight returns null when the renderer cannot resolve bounds', async () => {
@@ -524,5 +531,71 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     } finally {
       delete (globalThis as any).document;
     }
+  });
+
+  test('getDisplayedFormatsForCells uses range prefetch for dense in-limit cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            return [[{ bold: true }, { italic: true }]];
+          },
+          getDisplayedCellProperties: async () => {
+            calls.cell++;
+            return null;
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(1);
+    expect(calls.cell).toBe(0);
+    expect(formats['0,0']).toEqual({ bold: true });
+    expect(formats['0,1']).toEqual({ italic: true });
+  });
+
+  test('getDisplayedFormatsForCells skips range prefetch for sparse oversized cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            throw new Error('range should not be called');
+          },
+          getDisplayedCellProperties: async (_sheetId: string, row: number, col: number) => {
+            calls.cell++;
+            return { row, col };
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 99999, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(0);
+    expect(calls.cell).toBe(2);
+    expect(formats['0,0']).toEqual({ row: 0, col: 0 });
+    expect(formats['99999,1']).toEqual({ row: 99999, col: 1 });
   });
 });

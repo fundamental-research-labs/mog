@@ -2,6 +2,7 @@
 
 use super::super::*;
 use super::helpers::*;
+use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -148,6 +149,45 @@ fn test_query_range_returns_formula_text() {
     );
     // Value should be the computed result (10 + 20 = 30)
     assert_eq!(a2.value, CellValue::Number(FiniteF64::must(30.0)));
+}
+
+#[test]
+fn test_query_range_returns_cse_formula_text_for_members() {
+    let sheet_id = sheet_id();
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+
+    engine
+        .set_array_formula(&sheet_id, 0, 3, 2, 3, "=SEQUENCE(3,1)".to_string())
+        .expect("set CSE array formula");
+
+    let range = engine.query_range(&sheet_id, 0, 3, 2, 3);
+    assert_eq!(range.cells.len(), 3);
+    for row in 0..=2 {
+        let cell = range
+            .cells
+            .iter()
+            .find(|cell| cell.row == row && cell.col == 3)
+            .expect("CSE cell should be present");
+        assert_eq!(cell.formula.as_deref(), Some("=SEQUENCE(3,1)"));
+    }
 }
 
 /// Verify that non-formula cells have formula = None.

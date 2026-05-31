@@ -277,6 +277,12 @@ export const EditingGroup = React.memo(function EditingGroup() {
             >
               Series...
             </RibbonDropdownItem>
+            <RibbonDropdownItem
+              dataValue="justify"
+              onClick={() => dispatchAction('SET_HORIZONTAL_ALIGN', { align: 'justify' })}
+            >
+              Justify
+            </RibbonDropdownItem>
           </RibbonDropdown>
 
           {/* Clear Dropdown */}

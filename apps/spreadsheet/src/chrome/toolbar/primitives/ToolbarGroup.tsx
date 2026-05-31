@@ -152,12 +152,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   return (
     <RibbonVisibilityGroup group={groupVisibility.groupKey}>
       <GroupRenderModeProvider value={renderMode}>
-        <div
-          role="group"
-          aria-label={label}
-          data-group-id={groupVisibility.groupKey}
-          className="relative flex flex-col px-[var(--ribbon-group-padding-x)] group/toolbar-group"
-        >
+        <div className="relative flex flex-col px-[var(--ribbon-group-padding-x)] group/toolbar-group">
           {/* Content area - fixed height from design token */}
           <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
             {children}
@@ -169,6 +164,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
             className="relative flex items-center justify-center h-[var(--ribbon-label-height)] text-ribbon-group leading-none text-ss-text-tertiary whitespace-nowrap uppercase"
             style={{ letterSpacing: 'var(--ribbon-group-label-letter-spacing)' }}
           >
+            <span className="sr-only"> </span>
             {label}
             {/* Dialog Launcher - Excel-style small arrow in bottom-right corner */}
             {/* Only rendered when onDialogLaunch is provided */}
@@ -177,8 +173,6 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
                 <Tooltip title={launchTitle}>
                   <button
                     type="button"
-                    data-ribbon-dialog-launcher={groupVisibility.groupKey}
-                    data-testid={`ribbon-dialog-launcher-${groupVisibility.groupKey}`}
                     onClick={onDialogLaunch}
                     className="
  absolute right-0 bottom-0

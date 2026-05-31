@@ -28,6 +28,7 @@ import type {
 } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import type { SlicerCache } from '@mog-sdk/contracts/slicers';
 import { sheetId as toSheetId, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
 
@@ -260,6 +261,9 @@ export class GridEditingSystem implements IGridEditingSystem {
   /** Edit-end callbacks */
   private readonly editEndCallbacks = new Set<() => void>();
 
+  /** Session-local rich text runs until the compute bridge has durable rich text storage. */
+  private readonly richTextRunCache = new Map<string, RichTextSegment[]>();
+
   /** State-change callbacks */
   private readonly stateChangeCallbacks = new Set<() => void>();
 
@@ -318,12 +322,27 @@ export class GridEditingSystem implements IGridEditingSystem {
               sheetId,
               isArrayFormula,
               datePickerCommit,
+              richTextSegments,
               editingCell: editorEditingCell,
               commitActiveCell,
               commitSelectionRanges,
             } = context;
             const editingCell = editorEditingCell ?? commitActiveCell;
             if (editingCell && sheetId && editorDeps?.setCellValue) {
+              if (richTextSegments && richTextSegments.length > 0) {
+                this.richTextRunCache.set(
+                  this.richTextCacheKey(toSheetId(sheetId), editingCell),
+                  richTextSegments.map((segment) => ({
+                    ...segment,
+                    format: segment.format ? { ...segment.format } : segment.format,
+                  })),
+                );
+              } else {
+                this.richTextRunCache.delete(
+                  this.richTextCacheKey(toSheetId(sheetId), editingCell),
+                );
+              }
+
               if (datePickerCommit && editorDeps.setDateValue) {
                 editorDeps.setPendingUndoDescription?.(
                   datePickerCommit.kind === 'datetime' ? 'Set date/time' : 'Set date',
@@ -422,7 +441,20 @@ export class GridEditingSystem implements IGridEditingSystem {
         return config.getGeometry?.()?.getMergeAnchor(cell.row, cell.col) ?? undefined;
       },
       getPreEditSelectionRanges: () => selectionSelectors.ranges(this.selectionActor.getSnapshot()),
+      getCachedRichTextSegments: (sheetId, cell) => {
+        const cached = this.richTextRunCache.get(this.richTextCacheKey(sheetId, cell));
+        return cached
+          ? cached.map((segment) => ({
+              ...segment,
+              format: segment.format ? { ...segment.format } : segment.format,
+            }))
+          : null;
+      },
     });
+  }
+
+  private richTextCacheKey(sheetId: SheetId, cell: CellCoord): string {
+    return `${sheetId}:${cell.row}:${cell.col}`;
   }
 
   // ===========================================================================

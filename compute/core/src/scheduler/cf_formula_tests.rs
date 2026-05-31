@@ -83,6 +83,66 @@ fn make_formula_rule(formula: &str, priority: i32) -> CFRule {
     }
 }
 
+/// Workbook: A1 is truly blank, A2 is a formula returning "", and A3 is text.
+fn make_blanks_snapshot() -> WorkbookSnapshot {
+    WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_uuid(),
+            name: "Sheet1".to_string(),
+            rows: 10,
+            cols: 5,
+            cells: vec![
+                CellData {
+                    cell_id: cell_uuid(0x30),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Null,
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_uuid(0x31),
+                    row: 1,
+                    col: 0,
+                    value: CellValue::Text("".into()),
+                    formula: Some("=\"\"".to_string()),
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_uuid(0x32),
+                    row: 2,
+                    col: 0,
+                    value: CellValue::Text("text".into()),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    }
+}
+
+fn make_blanks_rule(blanks: bool) -> CFRule {
+    CFRule {
+        priority: 1,
+        stop_if_true: false,
+        ranges: vec![make_range(0, 0, 2, 0)],
+        style: Some(test_style()),
+        kind: CFRuleKind::ContainsBlanks { blanks },
+    }
+}
+
 #[test]
 fn test_cf_formula_simple() {
     let mut core = ComputeCore::new();
@@ -95,6 +155,31 @@ fn test_cf_formula_simple() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].row, 2);
     assert!(results[0].style.is_some());
+}
+
+#[test]
+fn test_cf_blanks_rule_does_not_match_formula_empty_string() {
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    core.init_from_snapshot(&mut mirror, make_blanks_snapshot())
+        .unwrap();
+    let results = core.eval_cf(&mirror, &sheet_id(), &[make_blanks_rule(true)]);
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].row, 0);
+}
+
+#[test]
+fn test_cf_non_blanks_rule_matches_formula_empty_string() {
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    core.init_from_snapshot(&mut mirror, make_blanks_snapshot())
+        .unwrap();
+    let results = core.eval_cf(&mirror, &sheet_id(), &[make_blanks_rule(false)]);
+
+    let mut rows: Vec<u32> = results.iter().map(|r| r.row).collect();
+    rows.sort();
+    assert_eq!(rows, vec![1, 2]);
 }
 
 #[test]

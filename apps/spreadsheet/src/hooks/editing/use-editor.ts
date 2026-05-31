@@ -294,6 +294,9 @@ export interface UseEditorReturn {
   /** Set cursor position */
   setCursor: (position: number) => void;
 
+  /** Mirror a DOM text selection */
+  setTextSelection: (cursorPosition: number, selectionAnchor: number) => void;
+
   /** Commit the edit with optional direction to move selection */
   commit: (direction: Direction | 'none') => void;
 

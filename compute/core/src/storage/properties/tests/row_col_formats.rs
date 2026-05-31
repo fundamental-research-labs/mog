@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use ooxml_types::styles::BorderStyle;
 
 #[test]
 fn test_set_and_get_row_format() {
@@ -277,3 +278,50 @@ fn test_get_all_col_formats_surfaces_formats_and_xlsx_style_ids() {
 }
 
 // Reproduces the xlsx border-wipes-format bug
+
+fn thin_black_border() -> CellBorderSide {
+    CellBorderSide {
+        style: Some(BorderStyle::Thin),
+        color: Some("#000000".to_string()),
+        color_tint: None,
+    }
+}
+
+fn all_borders() -> CellBorders {
+    let border = thin_black_border();
+    CellBorders {
+        top: Some(border.clone()),
+        right: Some(border.clone()),
+        bottom: Some(border.clone()),
+        left: Some(border),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_set_and_get_col_format_preserves_borders() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    let fmt = CellFormat {
+        borders: Some(all_borders()),
+        ..Default::default()
+    };
+    set_col_format(&mut storage, &sid, 0, &fmt, Some(&gi)).unwrap();
+
+    let got = get_col_format(&storage, &sid, 0, Some(&gi)).unwrap();
+    assert_eq!(got.borders, fmt.borders);
+}
+
+#[test]
+fn test_set_and_get_row_format_preserves_borders() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    let fmt = CellFormat {
+        borders: Some(all_borders()),
+        ..Default::default()
+    };
+    set_row_format(&mut storage, &sid, 0, &fmt, Some(&gi)).unwrap();
+
+    let got = get_row_format(&storage, &sid, 0, Some(&gi)).unwrap();
+    assert_eq!(got.borders, fmt.borders);
+}

@@ -31,6 +31,7 @@ import { moveCellSkipHidden } from '../../shared/types';
 
 import type { rendererMachine } from '../../renderer/machines/grid-renderer-machine';
 import type { clipboardMachine } from '../machines/clipboard-machine';
+import { isCursorAtReferencePosition } from '../machines/editor/formula-editing';
 import type { editorMachine } from '../machines/grid-editor-machine';
 import type { selectionMachine } from '../machines/grid-selection-machine';
 
@@ -170,6 +171,9 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const suppressEnterNavigation =
+        previousState.context.entryMode === 'doubleClick' &&
+        (commitKey === 'enter' || commitKey === 'shift-enter');
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();
 
@@ -178,7 +182,7 @@ export function setupEditorToSelectionCoordination(
         return;
       }
 
-      if (direction !== 'none') {
+      if (direction !== 'none' && !suppressEnterNavigation) {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
           // Route through KEY_TAB so selection machine tracks tabOriginCol
           selectionActor.send({ type: 'KEY_TAB', shiftKey: commitKey === 'shift-tab' });
@@ -495,6 +499,15 @@ export interface EditingInputInterceptionResult {
   clearPendingSelection: () => void;
 }
 
+function canInsertFormulaReference(context: EditorState['context']): boolean {
+  const isReplacingActiveRef =
+    context.formulaRefInsertStart !== null &&
+    context.formulaRefInsertEnd !== null &&
+    context.cursorPosition === context.formulaRefInsertEnd;
+
+  return isReplacingActiveRef || isCursorAtReferencePosition(context.value, context.cursorPosition);
+}
+
 /**
  * Set up editing input interception.
  *
@@ -528,11 +541,7 @@ export interface EditingInputInterceptionResult {
 export function setupEditingInputInterception(
   config: EditingInputInterceptionConfig,
 ): EditingInputInterceptionResult {
-  const {
-    editorActor,
-    selectionActor,
-    onCommitAndMove,
-  } = config;
+  const { editorActor, selectionActor, onCommitAndMove } = config;
 
   // Pending selection target after commit completes
   let pendingSelection: { cell: CellCoord; shiftKey: boolean; ctrlKey: boolean } | null = null;
@@ -587,6 +596,11 @@ export function setupEditingInputInterception(
       const isInEnterMode = !editorState.context.isEditMode;
 
       if (isFormulaEditing && isInEnterMode) {
+        if (!canInsertFormulaReference(editorState.context)) {
+          editorActor.send({ type: 'CANCEL' });
+          return false;
+        }
+
         selectionActor.send({
           type: 'MOUSE_DOWN',
           cell,

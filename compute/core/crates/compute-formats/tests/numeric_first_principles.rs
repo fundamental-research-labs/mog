@@ -161,6 +161,17 @@ mod format_text_tests {
     }
 
     #[test]
+    fn accounting_text_section_preserves_text_without_padding() {
+        assert_eq!(
+            format_text(
+                "Label",
+                "_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)"
+            ),
+            "Label"
+        );
+    }
+
+    #[test]
     fn format_code_literal_string_no_at() {
         // A format with just literal text and no @ — text passes through unchanged
         assert_eq!(format_text("data", "\"fixed\""), "data");

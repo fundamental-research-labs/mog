@@ -85,7 +85,7 @@ export const FORMAT_GENERAL: AsyncActionHandler = async (deps) =>
 export const FORMAT_NUMBER: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '#,##0.00');
 export const FORMAT_TIME: AsyncActionHandler = async (deps) =>
-  applyNumberFormat(deps, 'h:mm:ss AM/PM');
+  applyNumberFormat(deps, 'h:mm AM/PM');
 export const FORMAT_DATE: AsyncActionHandler = async (deps) => applyNumberFormat(deps, 'd-mmm-yy');
 export const FORMAT_CURRENCY: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '$#,##0.00');
@@ -220,8 +220,10 @@ export const DECREASE_DECIMALS: AsyncActionHandler = async (deps) => {
     | undefined;
   const currentFormat = (activeCellFormat?.numberFormat as string) ?? 'General';
   const currentDecimals = getDecimalCount(currentFormat);
-  // Default to 2 decimals if current format has none (e.g., 'General')
-  const effectiveDecimals = currentDecimals || 2;
+  const isGeneralFormat = currentFormat === '' || currentFormat === 'General';
+  // Default to 2 decimals only for unformatted/General cells. Explicit
+  // zero-decimal formats such as "0" must clamp at zero.
+  const effectiveDecimals = isGeneralFormat ? 2 : currentDecimals;
   const newDecimals = Math.max(effectiveDecimals - 1, 0);
   const newFormat = formatWithDecimals(currentFormat, newDecimals);
 

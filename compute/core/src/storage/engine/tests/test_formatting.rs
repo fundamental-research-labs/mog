@@ -284,6 +284,84 @@ fn formula_edit_copies_number_format_through_formula_chain() {
 }
 
 #[test]
+fn test_set_cell_currency_string_applies_currency_format() {
+    use crate::bridge_types::CellInput;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                3u32,
+                CellInput::Parse {
+                    text: "$19.99".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    let cell_value = engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
+    match cell_value {
+        Some(CellValue::Number(value)) => assert_eq!(value.get(), 19.99),
+        other => panic!("expected Number for currency input, got {:?}", other),
+    }
+
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        Some("$#,##0.00")
+    );
+    assert_eq!(engine.format_cell_display(&sid, 0, 3), "$19.99");
+}
+
+#[test]
+fn test_set_cell_currency_string_preserves_explicit_destination_format() {
+    use crate::bridge_types::CellInput;
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 3, 0, 3)],
+            &CellFormat {
+                number_format: Some("0.00".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                3u32,
+                CellInput::Parse {
+                    text: "$19.99".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        Some("0.00")
+    );
+    assert_eq!(engine.format_cell_display(&sid, 0, 3), "19.99");
+}
+
+#[test]
 fn test_set_cell_date_formula_applies_date_format() {
     use crate::bridge_types::CellInput;
 
@@ -1162,4 +1240,37 @@ fn test_set_cell_plain_number_does_not_get_date_format() {
         "plain number 42 should not get a date format, got {:?}",
         format.number_format
     );
+}
+
+#[test]
+fn test_set_cell_percent_input_applies_percent_format() {
+    use crate::bridge_types::CellInput;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let edits = vec![(
+        sid,
+        0u32,
+        8u32,
+        CellInput::Parse {
+            text: "50%".to_string(),
+        },
+    )];
+    engine.batch_set_cells_by_position(edits, true).unwrap();
+
+    match engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 8))
+    {
+        Some(value_types::CellValue::Number(n)) => {
+            assert!((n.get() - 0.5).abs() < 1e-12, "got {}", n.get());
+        }
+        other => panic!("expected Number(0.5), got {:?}", other),
+    }
+
+    let format = stored_number_format_at(&engine, &sid, 0, 8);
+    assert_eq!(format.as_deref(), Some("0%"));
+    assert_eq!(engine.format_cell_display(&sid, 0, 8), "50%");
 }

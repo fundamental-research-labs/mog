@@ -3,6 +3,7 @@ import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { protectionError, successResult } from '@mog/spreadsheet-utils/protection';
 
@@ -31,6 +32,7 @@ export interface EditEntryServiceOptions {
   isReadOnly: () => boolean;
   getMergedRegion?: (sheetId: SheetId, cell: CellCoord) => CellRange | undefined;
   getPreEditSelectionRanges?: () => CellRange[];
+  getCachedRichTextSegments?: (sheetId: SheetId, cell: CellCoord) => RichTextSegment[] | null;
 }
 
 export interface EditEntryService {
@@ -61,6 +63,17 @@ function isCellInCutRange(
       cell.row <= range.endRow &&
       cell.col >= range.startCol &&
       cell.col <= range.endCol,
+  );
+}
+
+async function isProjectedMember(
+  ws: ReturnType<WorkbookInternal['getSheetById']>,
+  cell: CellCoord,
+) {
+  const projectionSource = await ws.bindings.getProjectionSource(cell.row, cell.col);
+  return (
+    projectionSource != null &&
+    (projectionSource.row !== cell.row || projectionSource.col !== cell.col)
   );
 }
 
@@ -112,6 +125,11 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
 
       const preEditSelectionRanges = options.getPreEditSelectionRanges?.();
       const ws = wb.getSheetById(request.sheetId);
+      if (await isProjectedMember(ws, request.cell)) {
+        if (!isCurrent(requestGeneration)) return protectionError('Edit session was superseded');
+        return protectionError('You cannot change part of an array formula.');
+      }
+
       const fastEditability = ws.protection.canEditCellFast(request.cell.row, request.cell.col);
       if (fastEditability === 'unknown') {
         const editable = await ws.protection.canEditCell(request.cell.row, request.cell.col);
@@ -154,6 +172,13 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
         openDropdown: request.openDropdown,
         preEditSelectionRanges,
       });
+      const cachedSegments = options.getCachedRichTextSegments?.(request.sheetId, request.cell);
+      if (cachedSegments) {
+        options.editorActor.send({
+          type: 'START_RICH_TEXT_EDITING',
+          segments: cachedSegments,
+        });
+      }
 
       const validationRequest = {
         sheetId: request.sheetId,

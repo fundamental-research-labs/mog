@@ -525,6 +525,11 @@ export interface EditorCommands {
   setCursor(position: number): void;
 
   /**
+   * Mirror a non-collapsed DOM text selection into the editor machine.
+   */
+  setTextSelection(cursorPosition: number, selectionAnchor: number): void;
+
+  /**
    * Commit the edit.
    * @param direction - Direction to move after commit
    * @param commitKey - Optional key that triggered the commit (for Tab/Enter routing)

@@ -7,6 +7,7 @@ import {
   COMMIT_IN_PLACE,
   EDIT_CELL,
   FILL_SELECTION,
+  INSERT_AUTO_FUNCTION,
   PICKER_COMMIT,
 } from '../editor';
 
@@ -350,5 +351,110 @@ describe('AUTO_SUM selected range placement', () => {
       entryMode: 'typing',
       initialTextHint: '=SUM(A1:A3)',
     });
+  });
+});
+
+function createInsertAutoFunctionDeps(opts: {
+  activeCell: { row: number; col: number };
+  usedRange: { startRow: number; startCol: number; endRow: number; endCol: number };
+  cells: Record<string, unknown>;
+}) {
+  const setCell = jest.fn().mockResolvedValue(undefined as never);
+  const worksheet = {
+    getUsedRange: jest.fn().mockResolvedValue(opts.usedRange as never),
+    viewport: {
+      getCellData: jest.fn((row: number, col: number) => opts.cells[`${row},${col}`] ?? null),
+    },
+    setCell,
+  };
+
+  return {
+    deps: {
+      getActiveSheetId: jest.fn().mockReturnValue('sheet1'),
+      workbook: {
+        getSheetById: jest.fn().mockReturnValue(worksheet),
+        indexToAddress: (row: number, col: number) => {
+          let n = col + 1;
+          let letters = '';
+          while (n > 0) {
+            const rem = (n - 1) % 26;
+            letters = String.fromCharCode(65 + rem) + letters;
+            n = Math.floor((n - 1) / 26);
+          }
+          return `${letters}${row + 1}`;
+        },
+      },
+      accessors: {
+        selection: {
+          getActiveCell: jest.fn().mockReturnValue(opts.activeCell),
+          getRanges: jest.fn().mockReturnValue([
+            {
+              startRow: opts.activeCell.row,
+              startCol: opts.activeCell.col,
+              endRow: opts.activeCell.row,
+              endCol: opts.activeCell.col,
+            },
+          ]),
+        },
+      },
+    } as any,
+    setCell,
+    getCellData: worksheet.viewport.getCellData,
+  };
+}
+
+describe('INSERT_AUTO_FUNCTION range inference', () => {
+  test('COUNT includes text and interior blanks in the above-column span', async () => {
+    const { deps, setCell } = createInsertAutoFunctionDeps({
+      activeCell: { row: 5, col: 0 },
+      usedRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 0 },
+      cells: {
+        '0,0': { value: 10 },
+        '1,0': { value: 'apples' },
+        '2,0': { value: 30 },
+        '4,0': { value: 50 },
+      },
+    });
+
+    await INSERT_AUTO_FUNCTION(deps, { functionName: 'COUNT' });
+
+    expect(setCell).toHaveBeenCalledWith(5, 0, '=COUNT(A1:A5)');
+  });
+
+  test('MAX beside a vertical range uses the left-column span', async () => {
+    const { deps, setCell } = createInsertAutoFunctionDeps({
+      activeCell: { row: 0, col: 1 },
+      usedRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 0 },
+      cells: {
+        '0,0': { value: 10 },
+        '1,0': { value: 20 },
+        '2,0': { value: 30 },
+        '3,0': { value: 40 },
+        '4,0': { value: 50 },
+      },
+    });
+
+    await INSERT_AUTO_FUNCTION(deps, { functionName: 'MAX' });
+
+    expect(setCell).toHaveBeenCalledWith(0, 1, '=MAX(A1:A5)');
+  });
+
+  test('MIN beside data prefers the left column over a formula above', async () => {
+    const { deps, setCell } = createInsertAutoFunctionDeps({
+      activeCell: { row: 1, col: 1 },
+      usedRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+      cells: {
+        '0,0': { value: 10 },
+        '1,0': { value: 20 },
+        '2,0': { value: 30 },
+        '3,0': { value: 40 },
+        '4,0': { value: 50 },
+        '0,1': { formula: '=MAX(A1:A5)', displayText: '50' },
+      },
+    });
+
+    await INSERT_AUTO_FUNCTION(deps, { functionName: 'MIN' });
+
+    expect(setCell).toHaveBeenCalledWith(1, 1, '=MIN(A1:A5)');
   });
 });

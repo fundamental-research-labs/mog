@@ -289,6 +289,94 @@ fn test_minimal_init_seeds_formula_readback_before_graph_build() {
 }
 
 #[test]
+fn test_minimal_init_first_formula_edit_survives_deferred_graph_build() {
+    let sheet_id = sid(1);
+    let target = cid(0x50);
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id.to_uuid_string(),
+            name: "Data".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                CellData {
+                    cell_id: cid(0x10).to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::number(10.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cid(0x11).to_uuid_string(),
+                    row: 1,
+                    col: 0,
+                    value: CellValue::number(20.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cid(0x12).to_uuid_string(),
+                    row: 2,
+                    col: 0,
+                    value: CellValue::number(30.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![formula_types::NamedRangeDef::from_expression(
+            "Region".to_string(),
+            formula_types::Scope::Sheet(sheet_id),
+            "Data!$A$1:$A$3".to_string(),
+        )],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    core.init_from_snapshot_minimal(&mut mirror, snapshot)
+        .unwrap();
+
+    let result = core
+        .set_cells(
+            &mut mirror,
+            &[(
+                sheet_id,
+                target,
+                0,
+                2,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "=SUM(Region)".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    assert!(
+        result.changed_cells.iter().any(|change| {
+            change.cell_id == target.to_uuid_string() && change.value == CellValue::number(60.0)
+        }),
+        "first formula edit after minimal init should calculate immediately: {result:?}",
+    );
+    assert_eq!(
+        core.get_cell_value(&mirror, &target),
+        Some(&CellValue::number(60.0))
+    );
+}
+
+#[test]
 fn test_viewport_only_init_seeds_materialized_formula_readback() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();

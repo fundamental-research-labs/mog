@@ -23,12 +23,14 @@ export interface FormulaErrorDialogActions {
     errorMessage: string,
     onEdit: () => void,
     onAcceptAsText: () => void,
+    onCancel?: () => void,
     errorPosition?: number,
   ) => void;
   closeFormulaError: () => void;
   getFormulaErrorCallbacks: () => {
     onEdit: () => void;
     onAcceptAsText: () => void;
+    onCancel: () => void;
   };
 }
 
@@ -45,6 +47,7 @@ export const initialFormulaErrorDialogState: FormulaErrorDialogState = {
 let _formulaErrorCallbacks = {
   onEdit: () => {},
   onAcceptAsText: () => {},
+  onCancel: () => {},
 };
 
 export const createFormulaErrorDialogSlice: StateCreator<
@@ -55,8 +58,8 @@ export const createFormulaErrorDialogSlice: StateCreator<
 > = (set) => ({
   ...initialFormulaErrorDialogState,
 
-  showFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, errorPosition) => {
-    _formulaErrorCallbacks = { onEdit, onAcceptAsText };
+  showFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition) => {
+    _formulaErrorCallbacks = { onEdit, onAcceptAsText, onCancel: onCancel ?? (() => {}) };
     set({
       formulaErrorDialog: {
         isOpen: true,

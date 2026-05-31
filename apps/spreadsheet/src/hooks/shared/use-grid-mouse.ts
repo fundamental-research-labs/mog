@@ -918,6 +918,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             // Excel opens hyperlinks on a plain click.
             if (!e.shiftKey && !e.ctrlKey && !e.metaKey && onHyperlinkClick) {
               if (onHyperlinkClick(cell)) {
+                selection.onMouseDown(cell, false, false);
                 return;
               }
             }

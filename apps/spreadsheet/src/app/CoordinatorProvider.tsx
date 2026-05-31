@@ -302,6 +302,7 @@ function KeyboardCaptureSetup({
       const isEditing =
         editorSnapshot.matches('editing') ||
         editorSnapshot.matches('formulaEditing') ||
+        editorSnapshot.matches('richTextEditing') ||
         editorSnapshot.matches('imeComposing');
 
       if (!isEditing) {
@@ -385,6 +386,24 @@ function KeyboardCaptureSetup({
       const isSheetSwitch =
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
       if (!isNavigationKey && !isSheetSwitch) {
+        const isFormattingShortcut =
+          (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());
+        const editorContext = editorSnapshot.context as {
+          hasSelection?: boolean;
+          hasCharSelection?: boolean;
+        };
+        if (
+          isFormattingShortcut &&
+          (editorContext.hasSelection || editorContext.hasCharSelection)
+        ) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
+        }
+
         const target = keyboardEventTargetElement(e);
         const isPrintableFormulaInput =
           editorSnapshot.matches({ formulaEditing: 'enterMode' }) &&
@@ -706,8 +725,8 @@ export function SpreadsheetCoordinatorProvider({
       onValidationInformation: (message, title, onProceed, onCancel) => {
         showValidationWarning(message, title, 'information', onProceed, onCancel);
       },
-      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, errorPosition) => {
-        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, errorPosition);
+      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition) => {
+        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition);
       },
       onCircularReferenceWarning: (cellAddress, formula, onEnableIterative, onCancel) => {
         showCircularReferenceDialog(

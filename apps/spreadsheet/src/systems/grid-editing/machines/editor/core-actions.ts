@@ -72,6 +72,7 @@ export const initializeEditing = assign(({ event }) => {
 
   return {
     isEditMode,
+    entryMode,
     editingCell: event.cell,
     sheetId: event.sheetId,
     mergeBounds: event.mergedRegion ?? null,
@@ -179,6 +180,14 @@ export const setCursor = assign({
   cursorPosition: ({ event }) => (event.type === 'SET_CURSOR' ? event.position : 0),
   selectionAnchor: ({ event }) => (event.type === 'SET_CURSOR' ? event.position : 0),
   hasSelection: false,
+});
+
+export const setTextSelection = assign({
+  cursorPosition: ({ event }) =>
+    event.type === 'TEXT_SELECTION_CHANGED' ? event.cursorPosition : 0,
+  selectionAnchor: ({ event }) => (event.type === 'TEXT_SELECTION_CHANGED' ? event.anchor : 0),
+  hasSelection: ({ event }) =>
+    event.type === 'TEXT_SELECTION_CHANGED' ? event.anchor !== event.cursorPosition : false,
 });
 
 /**
@@ -398,6 +407,7 @@ export const coreActions = {
   // Input
   updateValue,
   setCursor,
+  setTextSelection,
   startIMEComposition,
   updateIMEComposition,
   commitIMEComposition,

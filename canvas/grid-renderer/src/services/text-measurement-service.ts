@@ -39,8 +39,11 @@ const INDENT_WIDTH = 8;
 /** Line height multiplier for font size (standard typography) */
 const DEFAULT_LINE_HEIGHT_FACTOR = 1.2;
 
-/** Additional padding for auto-fit (prevents clipping) */
-const AUTOFIT_PADDING = 2;
+/** Additional horizontal padding for column auto-fit (prevents clipping). */
+const COLUMN_AUTOFIT_PADDING = 4;
+
+/** Additional vertical padding for row auto-fit (prevents clipping). */
+const ROW_AUTOFIT_PADDING = 2;
 
 /** Maximum number of cached text measurements */
 const MAX_TEXT_CACHE_SIZE = 10000;
@@ -516,7 +519,7 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
 
     // Add padding and indent
     const indent = (format?.indent ?? 0) * INDENT_WIDTH;
-    const totalWidth = textWidth + CELL_PADDING * 2 + indent + AUTOFIT_PADDING;
+    const totalWidth = textWidth + CELL_PADDING * 2 + indent + COLUMN_AUTOFIT_PADDING;
 
     return Math.max(totalWidth, MIN_COL_WIDTH);
   }
@@ -551,17 +554,27 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
     const font = buildCellFont(format, undefined, displayText);
     const fontSize = format?.fontSize ?? 11;
     const lineHeight = fontSize * DEFAULT_LINE_HEIGHT_FACTOR;
+    const hasHardLineBreaks = /[\r\n]/.test(displayText);
 
-    if (format?.wrapText && availableWidth > CELL_PADDING * 2) {
-      // Calculate wrapped lines
+    if ((format?.wrapText || hasHardLineBreaks) && availableWidth > CELL_PADDING * 2) {
+      // Explicit hard line breaks count as separate rendered lines even
+      // when wrapText itself is not enabled.
       const usableWidth = availableWidth - CELL_PADDING * 2;
       const lines = this.wrapTextToLines(displayText, font, usableWidth);
-      const totalHeight = lines.length * lineHeight + CELL_PADDING * 2 + AUTOFIT_PADDING;
+      const totalHeight = lines.length * lineHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING;
       return Math.max(totalHeight, MIN_ROW_HEIGHT);
     }
 
+    if (hasHardLineBreaks) {
+      const lineCount = displayText.split(/\r\n|\r|\n/).length;
+      return Math.max(
+        lineCount * lineHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING,
+        MIN_ROW_HEIGHT,
+      );
+    }
+
     // Single line height
-    return Math.max(lineHeight + CELL_PADDING * 2 + AUTOFIT_PADDING, MIN_ROW_HEIGHT);
+    return Math.max(lineHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING, MIN_ROW_HEIGHT);
   }
 
   /**
@@ -602,8 +615,8 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
     const rotation = format?.textRotation ?? 0;
     if (rotation === 0) {
       return {
-        width: Math.max(textWidth + CELL_PADDING * 2 + AUTOFIT_PADDING, MIN_COL_WIDTH),
-        height: Math.max(textHeight + CELL_PADDING * 2 + AUTOFIT_PADDING, MIN_ROW_HEIGHT),
+        width: Math.max(textWidth + CELL_PADDING * 2 + COLUMN_AUTOFIT_PADDING, MIN_COL_WIDTH),
+        height: Math.max(textHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING, MIN_ROW_HEIGHT),
       };
     }
 
@@ -626,8 +639,8 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
     const rotatedHeight = textWidth * sin + textHeight * cos;
 
     return {
-      width: Math.max(rotatedWidth + CELL_PADDING * 2 + AUTOFIT_PADDING, MIN_COL_WIDTH),
-      height: Math.max(rotatedHeight + CELL_PADDING * 2 + AUTOFIT_PADDING, MIN_ROW_HEIGHT),
+      width: Math.max(rotatedWidth + CELL_PADDING * 2 + COLUMN_AUTOFIT_PADDING, MIN_COL_WIDTH),
+      height: Math.max(rotatedHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING, MIN_ROW_HEIGHT),
     };
   }
 

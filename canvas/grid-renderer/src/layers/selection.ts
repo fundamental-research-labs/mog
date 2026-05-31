@@ -278,7 +278,7 @@ export class SelectionLayer extends BaseLayer {
     hasError: boolean,
     isEditMode: boolean,
   ): void {
-    const activeCellForHole = this.isSingleCellRange(range) ? null : activeCell;
+    const activeCellForHole = activeCell;
 
     // CRITICAL OPTIMIZATION: Full-row and full-column selections MUST avoid O(n)
     // dimension queries. Compute visible portion from region bounds.
@@ -753,6 +753,9 @@ export class SelectionLayer extends BaseLayer {
     holeRect: Rect | null,
   ): void {
     if (holeRect) {
+      if (this.rectContainsRect(holeRect, outerRect)) {
+        return;
+      }
       ctx.save();
       ctx.beginPath();
       ctx.rect(outerRect.x, outerRect.y, outerRect.width, outerRect.height);
@@ -763,6 +766,15 @@ export class SelectionLayer extends BaseLayer {
     } else {
       ctx.fillRect(outerRect.x, outerRect.y, outerRect.width, outerRect.height);
     }
+  }
+
+  private rectContainsRect(container: Rect, contained: Rect): boolean {
+    return (
+      container.x <= contained.x &&
+      container.y <= contained.y &&
+      container.x + container.width >= contained.x + contained.width &&
+      container.y + container.height >= contained.y + contained.height
+    );
   }
 
   private getActiveCellHoleRect(

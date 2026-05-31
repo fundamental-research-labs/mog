@@ -461,7 +461,57 @@ export function createConsoleAPI(
     return true;
   }
 
-  function getRenderedDomFormControls(ws: any): import('../types').DrawingDescriptor[] {
+  type DrawingAnchorDescriptor = import('../types').DrawingDescriptor['anchor'];
+
+  async function resolveModelCellAnchor(
+    ws: any,
+    anchor: { cellId?: unknown } | null | undefined,
+  ): Promise<{ row: number; col: number } | null> {
+    const cellId = typeof anchor?.cellId === 'string' ? anchor.cellId : null;
+    if (!cellId || typeof ws?._internal?.getCellPosition !== 'function') return null;
+    try {
+      const position = await ws._internal.getCellPosition(cellId);
+      if (position && typeof position.row === 'number' && typeof position.col === 'number') {
+        return { row: position.row, col: position.col };
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }
+
+  async function getFloatingObjectModelReadback(
+    ws: any,
+    id: string,
+  ): Promise<
+    | {
+        anchor: DrawingAnchorDescriptor | null;
+      }
+    | null
+    | undefined
+  > {
+    if (typeof ws?.objects?.getFullObject !== 'function') return undefined;
+    try {
+      const object = await ws.objects.getFullObject(id);
+      if (!object) return null;
+      const position = object.position;
+      const from = await resolveModelCellAnchor(ws, position?.from);
+      if (!from) return { anchor: null };
+      const to = await resolveModelCellAnchor(ws, position?.to);
+      return {
+        anchor: {
+          from,
+          ...(to ? { to } : {}),
+        },
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function getRenderedDomFormControls(
+    ws: any,
+  ): Promise<import('../types').DrawingDescriptor[]> {
     const doc =
       typeof document !== 'undefined'
         ? document
@@ -481,6 +531,9 @@ export function createConsoleAPI(
       const id = element.getAttribute?.('data-form-control-id');
       if (!id) continue;
 
+      const model = await getFloatingObjectModelReadback(ws, id);
+      if (model === null) continue;
+
       const rect = element.getBoundingClientRect!();
       const x = readCssPx(element.style?.left) ?? rect.x ?? rect.left ?? 0;
       const y = readCssPx(element.style?.top) ?? rect.y ?? rect.top ?? 0;
@@ -488,13 +541,16 @@ export function createConsoleAPI(
       const linkedCol = readIntegerAttribute(element, 'data-form-control-linked-col');
       const linkedCell =
         linkedRow !== null && linkedCol !== null ? { row: linkedRow, col: linkedCol } : null;
-      const fromCell = linkedCell ?? safeCellSnap(ws, x, y);
-      const toCell = safeCellSnap(ws, x + rect.width, y + rect.height);
+      const docX = x - DEFAULT_ROW_HEADER_WIDTH_PX;
+      const docY = y - DEFAULT_COL_HEADER_HEIGHT_PX;
+      const fromCell = linkedCell ?? safeCellSnap(ws, docX, docY);
+      const toCell = safeCellSnap(ws, docX + rect.width, docY + rect.height);
+      const modelAnchor = model?.anchor ?? null;
 
       out.push({
         id,
         kind: 'formControl',
-        anchor: {
+        anchor: modelAnchor ?? {
           from: fromCell ?? { row: 0, col: 0 },
           ...(toCell ? { to: toCell } : {}),
         },
@@ -509,6 +565,42 @@ export function createConsoleAPI(
     }
 
     return out;
+  }
+
+  const DEFAULT_ROW_HEADER_WIDTH_PX = 50;
+  const DEFAULT_COL_HEADER_HEIGHT_PX = 24;
+
+  type RenderedCellBounds = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
+  function getRenderedCellBounds(row: number, col: number): RenderedCellBounds | null {
+    try {
+      const coordinator = (window as any).__COORDINATOR__;
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      if (!geometry?.getCellPageRect) return null;
+      const bounds = geometry.getCellPageRect({ row, col });
+      if (
+        !bounds ||
+        !Number.isFinite(bounds.x) ||
+        !Number.isFinite(bounds.y) ||
+        !Number.isFinite(bounds.width) ||
+        !Number.isFinite(bounds.height)
+      ) {
+        return null;
+      }
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -597,6 +689,17 @@ export function createConsoleAPI(
     return null;
   }
 
+  const viewportCommand = Object.assign(
+    (viewportId?: string) => {
+      if (viewportId) {
+        printViewportDetail(viewportId);
+      } else {
+        printViewportSummary();
+      }
+    },
+    { getCellBounds: getRenderedCellBounds },
+  );
+
   const api: DevToolsConsoleAPI = {
     last(n = 10) {
       const entries = store.last(n);
@@ -675,13 +778,7 @@ export function createConsoleAPI(
       printBufferEvents(store.all(), filter);
     },
 
-    viewport(viewportId?: string) {
-      if (viewportId) {
-        printViewportDetail(viewportId);
-      } else {
-        printViewportSummary();
-      }
-    },
+    viewport: viewportCommand,
 
     cell(row: number, col: number, viewportId?: string) {
       printViewportCell(row, col, viewportId);
@@ -1160,6 +1257,27 @@ export function createConsoleAPI(
         }
       }
       return fmt;
+    },
+
+    hasComment(row: number, col: number, viewportId?: string): boolean {
+      const bridge = getActiveComputeBridge();
+      if (!bridge) return false;
+
+      const tryRead = (vpId: string): boolean | null => {
+        const accessor = bridge.getAccessorForViewport?.(vpId);
+        if (!accessor?.moveTo?.(row, col)) return null;
+        return accessor.hasComment === true;
+      };
+
+      if (viewportId) return tryRead(viewportId) === true;
+
+      const states: ReadonlyMap<string, unknown> | undefined = bridge.getPerViewportStates?.();
+      if (!states) return false;
+      for (const [vpId] of states) {
+        const value = tryRead(vpId);
+        if (value !== null) return value;
+      }
+      return false;
     },
 
     getMachineStates() {
@@ -1685,6 +1803,28 @@ export function createConsoleAPI(
       return { frozenRows: panes.rows, frozenCols: panes.cols, applied };
     },
 
+    getFrozenPanes(): { rows: number; cols: number } | null {
+      const wb = getActiveWorkbook();
+      const sheetId = wb?.getActiveSheetId?.() ?? wb?.activeSheet?.id ?? wb?.activeSheet?.sheetId;
+      const mirrorPanes = sheetId ? wb?.mirror?.getFrozenPanes?.(sheetId) : null;
+      if (
+        mirrorPanes &&
+        typeof mirrorPanes.rows === 'number' &&
+        typeof mirrorPanes.cols === 'number'
+      ) {
+        return { rows: mirrorPanes.rows, cols: mirrorPanes.cols };
+      }
+      const rendererPanes = (window as any).__COORDINATOR__?.renderer?.getFrozenPanes?.();
+      if (
+        rendererPanes &&
+        typeof rendererPanes.rows === 'number' &&
+        typeof rendererPanes.cols === 'number'
+      ) {
+        return { rows: rendererPanes.rows, cols: rendererPanes.cols };
+      }
+      return null;
+    },
+
     async freezeTopRow(): Promise<void> {
       const wb = getActiveWorkbook();
       if (!wb) {
@@ -1894,6 +2034,8 @@ export function createConsoleAPI(
 
         const out: import('../types').DrawingDescriptor[] = [];
         for (const obj of sceneObjects) {
+          const model = await getFloatingObjectModelReadback(ws, obj.id);
+          if (model === null) continue;
           const kind = mapSceneTypeToDrawingKind(obj.type, obj);
           // Snap document-space top-left to the nearest cell. The renderer
           // already drew the drawing at obj.bounds, so the anchor is
@@ -1908,19 +2050,20 @@ export function createConsoleAPI(
             obj.bounds.x + obj.bounds.width,
             obj.bounds.y + obj.bounds.height,
           );
+          const canvasBounds = {
+            x: obj.bounds.x + DEFAULT_ROW_HEADER_WIDTH_PX,
+            y: obj.bounds.y + DEFAULT_COL_HEADER_HEIGHT_PX,
+            w: obj.bounds.width,
+            h: obj.bounds.height,
+          };
           out.push({
             id: obj.id,
             kind,
-            anchor: {
+            anchor: model?.anchor ?? {
               from: fromCell ?? { row: 0, col: 0 },
               ...(toCell ? { to: toCell } : {}),
             },
-            boundsPx: {
-              x: obj.bounds.x,
-              y: obj.bounds.y,
-              w: obj.bounds.width,
-              h: obj.bounds.height,
-            },
+            boundsPx: canvasBounds,
             visible: !!obj.visible,
             ...(extractSrc(obj) ? { src: extractSrc(obj)! } : {}),
           });
@@ -1929,7 +2072,7 @@ export function createConsoleAPI(
         const activeSheetId =
           typeof ws?.getSheetId === 'function' ? String(ws.getSheetId()) : undefined;
         if (!sheetId || !activeSheetId || sheetId === activeSheetId) {
-          const domFormControls = getRenderedDomFormControls(ws);
+          const domFormControls = await getRenderedDomFormControls(ws);
           if (domFormControls.length > 0) {
             const domIds = new Set(domFormControls.map((drawing) => drawing.id));
             for (let index = out.length - 1; index >= 0; index--) {
@@ -1988,29 +2131,11 @@ export function createConsoleAPI(
       // SheetView geometry `getCellPageRect`. This is the same source the
       // production click-to-cell hit-tester consults, so the value here
       // matches the canvas, not whatever the kernel layout-index says.
-      try {
-        const coordinator = (window as any).__COORDINATOR__;
-        const geometry = coordinator?.renderer?.getGeometry?.();
-        if (!geometry?.getCellPageRect) return null;
-        const bounds = geometry.getCellPageRect({ row, col: 0 });
-        if (!bounds) return null;
-        return bounds.height;
-      } catch {
-        return null;
-      }
+      return getRenderedCellBounds(row, 0)?.height ?? null;
     },
 
     async getRenderedColWidth(_sheet: string | null, col: number): Promise<number | null> {
-      try {
-        const coordinator = (window as any).__COORDINATOR__;
-        const geometry = coordinator?.renderer?.getGeometry?.();
-        if (!geometry?.getCellPageRect) return null;
-        const bounds = geometry.getCellPageRect({ row: 0, col });
-        if (!bounds) return null;
-        return bounds.width;
-      } catch {
-        return null;
-      }
+      return getRenderedCellBounds(0, col)?.width ?? null;
     },
 
     getRenderedViewportStartRow(scope: string = 'main'): number | null {

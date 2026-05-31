@@ -13,7 +13,10 @@
  */
 
 import { FunctionCategory } from '@mog-sdk/contracts/utils/function-registry';
-import type { FunctionMetadata } from '@mog-sdk/contracts/utils/function-registry';
+import type {
+  FunctionArgument,
+  FunctionMetadata,
+} from '@mog-sdk/contracts/utils/function-registry';
 import { globalRegistry } from './function-registry';
 
 // =============================================================================
@@ -25,18 +28,18 @@ type FnDef = [string, FunctionCategory, string, number, number];
 
 const C = FunctionCategory;
 
-const ARGUMENT_METADATA_OVERRIDES: Record<string, FunctionMetadata['arguments']> = {
+const FUNCTION_ARGUMENTS: Record<string, FunctionArgument[]> = {
   SUM: [
     {
       name: 'number1',
       description: 'The first number, cell reference, or range to add.',
-      type: 'any',
+      type: 'number',
       optional: false,
     },
     {
       name: 'number2',
       description: 'Additional numbers, cell references, or ranges to add.',
-      type: 'any',
+      type: 'number',
       optional: true,
       repeating: true,
     },
@@ -852,7 +855,7 @@ export function ensureFunctionCatalog(): void {
       description,
       minArgs,
       maxArgs: maxArgs === -1 ? Infinity : maxArgs,
-      arguments: ARGUMENT_METADATA_OVERRIDES[name],
+      arguments: FUNCTION_ARGUMENTS[name],
     }),
   );
 

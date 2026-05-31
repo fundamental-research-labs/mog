@@ -458,6 +458,17 @@ function FormulaBarContainerImpl() {
     [editorActions],
   );
 
+  const handleSelectionChange = useCallback(
+    (selectionStart: number, selectionEnd: number) => {
+      if (selectionStart === selectionEnd) {
+        editorActions.setCursor(selectionEnd);
+      } else {
+        editorActions.setTextSelection(selectionEnd, selectionStart);
+      }
+    },
+    [editorActions],
+  );
+
   const handleCommit = useCallback(() => {
     dispatch('COMMIT_IN_PLACE', deps);
     paneFocusCommands?.resetToGrid();
@@ -640,6 +651,7 @@ function FormulaBarContainerImpl() {
         isEditing={isEditing}
         readOnly={readOnly}
         onChange={handleChange}
+        onSelectionChange={handleSelectionChange}
         onCommit={handleCommit}
         onCancel={handleCancel}
         onFocus={handleFocus}

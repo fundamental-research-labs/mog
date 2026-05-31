@@ -175,38 +175,42 @@ pub(in crate::storage::engine) fn set_date_value(
 
     let result = compute_formats::prepare_date_value(year, month, day, existing_format.as_deref());
 
-    let edits = vec![(
-        *sheet_id,
-        row,
-        col,
-        mutation::CellInput::Parse {
-            text: result.serial.to_string(),
-        },
-    )];
-    let output = engine.apply_mutation(EngineMutation::SetCellsByPosition {
-        edits,
-        skip_cycle_check: true,
+    let mutation_result = engine.with_undo_group_if(true, |engine| {
+        let edits = vec![(
+            *sheet_id,
+            row,
+            col,
+            mutation::CellInput::Parse {
+                text: result.serial.to_string(),
+            },
+        )];
+        let output = engine.apply_mutation(EngineMutation::SetCellsByPosition {
+            edits,
+            skip_cycle_check: true,
+        })?;
+
+        if let Some(ref fmt_code) = result.format_to_apply {
+            let ranges = vec![(row, col, row, col)];
+            let format = domain_types::CellFormat {
+                number_format: Some(fmt_code.clone()),
+                ..Default::default()
+            };
+            let _guard = engine.mutation.suppress_guard();
+            services::formatting::set_format_for_ranges(
+                &mut engine.stores,
+                &engine.mirror,
+                sheet_id,
+                &ranges,
+                &format,
+            )?;
+        }
+
+        Ok(match output {
+            MutationOutput::Recalc(r)
+            | MutationOutput::SheetId(_, r)
+            | MutationOutput::Plain(r) => r,
+        })
     })?;
-
-    if let Some(ref fmt_code) = result.format_to_apply {
-        let ranges = vec![(row, col, row, col)];
-        let format = domain_types::CellFormat {
-            number_format: Some(fmt_code.clone()),
-            ..Default::default()
-        };
-        let _guard = engine.mutation.suppress_guard();
-        services::formatting::set_format_for_ranges(
-            &mut engine.stores,
-            &engine.mirror,
-            sheet_id,
-            &ranges,
-            &format,
-        )?;
-    }
-
-    let mutation_result = match output {
-        MutationOutput::Recalc(r) | MutationOutput::SheetId(_, r) | MutationOutput::Plain(r) => r,
-    };
     Ok((engine.flush_viewport_patches(), mutation_result))
 }
 
@@ -242,38 +246,42 @@ pub(in crate::storage::engine) fn set_time_value(
     let result =
         compute_formats::prepare_time_value(hours, minutes, seconds, existing_format.as_deref());
 
-    let edits = vec![(
-        *sheet_id,
-        row,
-        col,
-        mutation::CellInput::Parse {
-            text: result.serial.to_string(),
-        },
-    )];
-    let output = engine.apply_mutation(EngineMutation::SetCellsByPosition {
-        edits,
-        skip_cycle_check: true,
+    let mutation_result = engine.with_undo_group_if(true, |engine| {
+        let edits = vec![(
+            *sheet_id,
+            row,
+            col,
+            mutation::CellInput::Parse {
+                text: result.serial.to_string(),
+            },
+        )];
+        let output = engine.apply_mutation(EngineMutation::SetCellsByPosition {
+            edits,
+            skip_cycle_check: true,
+        })?;
+
+        if let Some(ref fmt_code) = result.format_to_apply {
+            let ranges = vec![(row, col, row, col)];
+            let format = domain_types::CellFormat {
+                number_format: Some(fmt_code.clone()),
+                ..Default::default()
+            };
+            let _guard = engine.mutation.suppress_guard();
+            services::formatting::set_format_for_ranges(
+                &mut engine.stores,
+                &engine.mirror,
+                sheet_id,
+                &ranges,
+                &format,
+            )?;
+        }
+
+        Ok(match output {
+            MutationOutput::Recalc(r)
+            | MutationOutput::SheetId(_, r)
+            | MutationOutput::Plain(r) => r,
+        })
     })?;
-
-    if let Some(ref fmt_code) = result.format_to_apply {
-        let ranges = vec![(row, col, row, col)];
-        let format = domain_types::CellFormat {
-            number_format: Some(fmt_code.clone()),
-            ..Default::default()
-        };
-        let _guard = engine.mutation.suppress_guard();
-        services::formatting::set_format_for_ranges(
-            &mut engine.stores,
-            &engine.mirror,
-            sheet_id,
-            &ranges,
-            &format,
-        )?;
-    }
-
-    let mutation_result = match output {
-        MutationOutput::Recalc(r) | MutationOutput::SheetId(_, r) | MutationOutput::Plain(r) => r,
-    };
     Ok((engine.flush_viewport_patches(), mutation_result))
 }
 

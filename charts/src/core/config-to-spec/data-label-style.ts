@@ -11,7 +11,7 @@ import {
   DATA_LABEL_ROTATION_FIELD,
 } from './fields';
 import { lineColor } from './data-row-style';
-import { linePointsToCanvasPx } from './units';
+import { linePointsToCanvasPx, pointsToCanvasPx } from './units';
 
 export function applyDataLabelStyle(
   row: DataRow,
@@ -31,7 +31,7 @@ export function applyDataLabelStyle(
   const font = labelFormat?.font;
   const color = resolveChartTextColor(font?.color, resolverContext) ?? context.fallbackColor;
   if (color) row[DATA_LABEL_COLOR_FIELD] = color;
-  if (font?.size !== undefined) row[DATA_LABEL_FONT_SIZE_FIELD] = font.size;
+  if (font?.size !== undefined) row[DATA_LABEL_FONT_SIZE_FIELD] = pointsToCanvasPx(font.size);
   const rotation = label.textOrientation ?? labelFormat?.textRotation;
   if (rotation !== undefined) row[DATA_LABEL_ROTATION_FIELD] = rotation;
   if (label.showLeaderLines === true || label.leaderLinesFormat) {

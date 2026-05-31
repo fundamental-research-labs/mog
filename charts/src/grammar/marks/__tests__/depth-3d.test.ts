@@ -77,8 +77,8 @@ describe('depth-3d mark helpers', () => {
 
     expect(marks).toHaveLength(5);
     expect(marks.every((mark) => mark.type === 'path')).toBe(true);
-    expect(marks[0].path).toContain('A40,40 0 0 1 50,90');
-    expect(marks[4].path).toBe('M90,50 A40,40 0 0 1 50,90 L50,70 A20,20 0 0 0 70,50 Z');
+    expect(marks[0].path).toContain('A40,40 0 0 1 90,50');
+    expect(marks[4].path).toBe('M50,10 A40,40 0 0 1 90,50 L70,50 A20,20 0 0 0 50,30 Z');
   });
 
   it('can return only depth faces when includeTop is false', () => {
@@ -101,6 +101,6 @@ describe('depth-3d mark helpers', () => {
       style: { fill: '#000000' },
     });
 
-    expect(pathMark?.path).toBe('M10,20 L15,20 A5,5 0 0 1 5,20 Z');
+    expect(pathMark?.path).toBe('M10,20 L10,15 A5,5 0 0 1 10,25 Z');
   });
 });

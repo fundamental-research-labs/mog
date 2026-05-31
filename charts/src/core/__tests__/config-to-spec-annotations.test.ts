@@ -5,12 +5,14 @@ import { configToSpec } from '../config-to-spec';
 import {
   DATA_LABEL_ANCHOR_X_FIELD,
   DATA_LABEL_DX_FIELD,
+  DATA_LABEL_FONT_SIZE_FIELD,
   DATA_LABEL_LAYOUT_TARGET_FIELD,
   DATA_LABEL_LAYOUT_X_FIELD,
   DATA_LABEL_LAYOUT_Y_FIELD,
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
   DATA_LABEL_X_FIELD,
+  DATA_LABEL_Y_FIELD,
   DATA_TABLE_FILL_FIELD,
   DATA_TABLE_STROKE_WIDTH_FIELD,
   DATA_TABLE_STROKE_FIELD,
@@ -42,6 +44,16 @@ function asLayerSpec(config: ChartConfig, data: ChartData): LayerSpec {
   const spec = configToSpec(config, data);
   expect(isLayerSpec(spec)).toBe(true);
   return spec as LayerSpec;
+}
+
+function labelAngle(x: number, y: number, centerX: number, centerY: number): number {
+  const angle = Math.atan2(y - centerY, x - centerX) + Math.PI / 2;
+  return ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+}
+
+function arcMidAngle(arc: { startAngle: number; endAngle: number }): number {
+  const angle = (arc.startAngle + arc.endAngle) / 2;
+  return ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 }
 
 describe('configToSpec annotation layers', () => {
@@ -600,6 +612,90 @@ describe('configToSpec annotation layers', () => {
     expect(Math.hypot(explodedArc.x - centerX, explodedArc.y - centerY)).toBeCloseTo(
       Math.min(explodedArc.outerRadius * 0.25, 12),
     );
+  });
+
+  it('aligns imported doughnut labels with rotated slices and hole-size geometry', () => {
+    const data: ChartData = {
+      categories: ['North', 'South'],
+      series: [
+        {
+          name: 'Share',
+          data: [
+            { x: 'North', y: 10 },
+            { x: 'South', y: 10 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'doughnut',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      doughnutHoleSize: 65,
+      firstSliceAngle: 90,
+      legend: { show: true, visible: true, position: 'left' },
+      series: [
+        {
+          dataLabels: {
+            show: true,
+            showCategoryName: true,
+            showPercentage: true,
+            visualFormat: { font: { size: 9 } },
+          },
+          points: [
+            { idx: 0, fill: '#2F75B5' },
+            { idx: 1, fill: '#70AD47' },
+          ],
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const primaryMark = spec.layer[0]?.mark;
+    expect(primaryMark).toEqual(
+      expect.objectContaining({
+        type: 'arc',
+        innerRadius: 0.65,
+        startAngle: Math.PI / 2,
+      }),
+    );
+
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+    expect(spec.layer[0]?.encoding?.color?.scale?.range).toEqual(['#2F75B5', '#70AD47']);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        [DATA_LABEL_TEXT_FIELD]: 'North, 50%',
+        [DATA_LABEL_FONT_SIZE_FIELD]: 18,
+      }),
+    );
+    expect(rows[0][DATA_LABEL_X_FIELD]).toBeCloseTo(0.5, 6);
+    expect(Number(rows[0][DATA_LABEL_Y_FIELD])).toBeGreaterThan(0.5);
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 300,
+      skipAxes: true,
+      skipTitle: true,
+    });
+    const firstArc = compiled.marks.find(
+      (mark) => mark.type === 'arc' && mark.datum?.category === 'North',
+    );
+    const firstLabel = compiled.marks.find(
+      (mark) => mark.type === 'text' && mark.datum?.[DATA_LABEL_TEXT_FIELD] === 'North, 50%',
+    );
+
+    expect(firstArc?.innerRadius).toBeCloseTo(firstArc!.outerRadius * 0.65, 6);
+    expect(firstLabel?.fontSize).toBe(18);
+    expect(
+      compiled.legends.filter((mark) => mark.type === 'rect').map((mark) => mark.style.fill),
+    ).toEqual(['#2F75B5', '#70AD47']);
+    expect(
+      Math.cos(
+        labelAngle(firstLabel!.x, firstLabel!.y, firstArc!.x, firstArc!.y) - arcMidAngle(firstArc!),
+      ),
+    ).toBeGreaterThan(0.99);
   });
 
   it('renders chart and point manual data-label layouts through direct coordinates', () => {

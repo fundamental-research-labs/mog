@@ -736,6 +736,8 @@ export interface MarkSpec {
   outerRadius?: number;
   /** Pad angle between arcs */
   padAngle?: number;
+  /** First arc slice angle in radians using the arc mark convention. */
+  startAngle?: number;
   /** Tooltip enabled */
   tooltip?: boolean | { content?: 'data' | 'encoding' };
   /** Show KDE density curve overlay (histogram mark only) */

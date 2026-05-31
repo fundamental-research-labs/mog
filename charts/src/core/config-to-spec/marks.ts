@@ -101,6 +101,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     const mark: MarkSpec = {
       type: 'arc3d',
       chart3d: { family: 'pie', view3d: config.view3d },
+      startAngle: firstSliceAngleRadians(config),
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
@@ -116,6 +117,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   if (config.type === 'ofPie') {
     const mark: MarkSpec = {
       type: 'arc',
+      startAngle: firstSliceAngleRadians(config),
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
@@ -127,7 +129,8 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   if (config.type === 'doughnut') {
     const mark: MarkSpec = {
       type: 'arc',
-      innerRadius: 0.5,
+      innerRadius: doughnutInnerRadius(config),
+      startAngle: firstSliceAngleRadians(config),
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
@@ -145,6 +148,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   if (config.type === 'pie') {
     const mark: MarkSpec = {
       type: 'arc',
+      startAngle: firstSliceAngleRadians(config),
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
@@ -273,6 +277,32 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Simple mark type string
   return baseType;
+}
+
+function doughnutInnerRadius(config: ChartConfig): number {
+  const holeSize =
+    finitePercent(
+      config.series?.find((series) => series.doughnutHoleSize !== undefined)?.doughnutHoleSize,
+    ) ?? finitePercent(config.doughnutHoleSize);
+  return holeSize !== undefined ? holeSize / 100 : 0.5;
+}
+
+function finitePercent(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : undefined;
+}
+
+function firstSliceAngleRadians(config: ChartConfig): number {
+  const angle =
+    finiteDegrees(
+      config.series?.find((series) => series.firstSliceAngle !== undefined)?.firstSliceAngle,
+    ) ?? finiteDegrees(config.firstSliceAngle);
+  return angle !== undefined ? (angle * Math.PI) / 180 : 0;
+}
+
+function finiteDegrees(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function resolveBar3DShape(

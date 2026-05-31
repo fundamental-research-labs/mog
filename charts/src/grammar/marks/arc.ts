@@ -115,7 +115,7 @@ export function generateArcMarks(
     // The angle_sum invariant still holds because it adds n * padAngle back.
   }
 
-  let startAngle = -Math.PI / 2; // Start at 12 o'clock
+  let startAngle = markSpec.startAngle ?? 0;
 
   for (let i = 0; i < renderData.length; i++) {
     const datum = renderData[i];
@@ -148,11 +148,12 @@ export function generateArcMarks(
     const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0;
     const midAngle = (paddedStart + paddedEnd) / 2;
     const explosionOffset = explosion > 0 ? Math.min(outerRadius * 0.25, explosion) : 0;
+    const explosionVector = arcAngleUnitVector(midAngle);
 
     marks.push({
       type: 'arc',
-      x: cx + Math.cos(midAngle) * explosionOffset,
-      y: cy + Math.sin(midAngle) * explosionOffset,
+      x: cx + explosionVector.x * explosionOffset,
+      y: cy + explosionVector.y * explosionOffset,
       innerRadius,
       outerRadius,
       startAngle: paddedStart,
@@ -176,4 +177,9 @@ export function generateArcMarks(
   }
 
   return marks;
+}
+
+function arcAngleUnitVector(angle: number): { x: number; y: number } {
+  const canvasAngle = angle - Math.PI / 2;
+  return { x: Math.cos(canvasAngle), y: Math.sin(canvasAngle) };
 }

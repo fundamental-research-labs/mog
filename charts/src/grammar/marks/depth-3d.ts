@@ -454,9 +454,10 @@ function arcCommand(radius: number, span: number, sweep: boolean, point: Point):
 }
 
 function polarPoint(mark: ArcMark, radius: number, angle: number): Point {
+  const canvasAngle = angle - Math.PI / 2;
   return {
-    x: mark.x + Math.cos(angle) * radius,
-    y: mark.y + Math.sin(angle) * radius,
+    x: mark.x + Math.cos(canvasAngle) * radius,
+    y: mark.y + Math.sin(canvasAngle) * radius,
   };
 }
 

@@ -1,5 +1,12 @@
 import type { MarkSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartFormat, ChartType, SeriesConfig } from '../../types';
+import type {
+  ChartConfig,
+  ChartData,
+  ChartFormat,
+  ChartType,
+  PointFormat,
+  SeriesConfig,
+} from '../../types';
 import {
   chartColorTintShade,
   chartStyleRepeatThemeColor,
@@ -10,7 +17,11 @@ import {
   resolveLineColor,
 } from '../../utils/chart-colors';
 import { seriesConfigForDataSeries, seriesSourceIndex } from '../series-identity';
-import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
+import {
+  resolveChartFillColor,
+  resolveChartOwnerFormat,
+  resolverContextFromConfig,
+} from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import { linePointsToCanvasPx } from './units';
 
@@ -74,15 +85,57 @@ export function resolvedCategoryColors(
   const seriesColors = resolvedSeriesColors(config, data);
 
   if (variesColorsByCategory(config, data)) {
-    return configColors.length > 0
-      ? configColors
-      : seriesColors.length > 1
-        ? seriesColors
-        : workbookThemeCategoryColors(config);
+    const fallbackColors =
+      configColors.length > 0
+        ? configColors
+        : seriesColors.length > 0
+          ? seriesColors
+          : (workbookThemeCategoryColors(config) ?? []);
+    const pointColors = resolvedPointCategoryColors(config, data, fallbackColors);
+    if (pointColors.length > 0) return pointColors;
+    return fallbackColors.length > 0 ? fallbackColors : undefined;
   }
 
   if (seriesColors.length > 0) return seriesColors;
   return configColors.length > 0 ? configColors : undefined;
+}
+
+function resolvedPointCategoryColors(
+  config: ChartConfig,
+  data: ChartData | undefined,
+  fallbackColors: string[],
+): string[] {
+  if (!data || data.categories.length === 0) return [];
+
+  const pointColors: Array<string | undefined> = Array(data.categories.length);
+  for (let renderedIndex = 0; renderedIndex < data.series.length; renderedIndex += 1) {
+    const dataSeries = data.series[renderedIndex];
+    const series = seriesConfigForDataSeries(dataSeries, config.series ?? [], renderedIndex);
+    if (!series || isNoFillNoLineSeries(series)) continue;
+
+    const sourceIndex = seriesSourceIndex(dataSeries, renderedIndex);
+    for (const point of series.points ?? []) {
+      if (!Number.isInteger(point.idx) || point.idx < 0 || point.idx >= pointColors.length) {
+        continue;
+      }
+      pointColors[point.idx] ??= resolvePointFillColor(config, sourceIndex, point);
+    }
+  }
+
+  if (!pointColors.some(Boolean)) return [];
+  if (fallbackColors.length === 0) return pointColors.filter((color): color is string => !!color);
+  return pointColors.map((color, index) => color ?? fallbackColors[index % fallbackColors.length]);
+}
+
+function resolvePointFillColor(
+  config: ChartConfig,
+  sourceSeriesIndex: number,
+  point: PointFormat,
+): string | undefined {
+  const ownerKey = `point(seriesIdx=${sourceSeriesIndex},pointIdx=${point.idx})`;
+  const context = resolverContextFromConfig(config, ownerKey);
+  const format = resolveChartOwnerFormat(config, ownerKey, point.visualFormat);
+  return colorToCss(point.fill) ?? resolveChartFillColor(format?.fill, context);
 }
 
 function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
@@ -140,6 +193,11 @@ function resolvedConfigColors(config: ChartConfig): string[] {
   return (config.colors ?? [])
     .map((color) => resolveChartColor(color, context))
     .filter(Boolean) as string[];
+}
+
+function colorToCss(color: unknown): string | undefined {
+  if (typeof color !== 'string') return undefined;
+  return color.startsWith('#') ? color : `#${color}`;
 }
 
 export function hasVisibleLineStyle(line: unknown): boolean {

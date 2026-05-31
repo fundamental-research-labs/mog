@@ -37,7 +37,7 @@ import {
   useState,
 } from 'react';
 
-import { Popover, PopoverContent, PopoverTrigger } from '@mog/shell';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@mog/shell';
 
 // =============================================================================
 // Context for nested dropdowns
@@ -180,9 +180,7 @@ export function RibbonDropdown({
   containerClassName = '',
   menuLabel,
   menuTestId,
-  // manualTrigger is kept for backwards compatibility but no longer used.
-  // Radix Popover handles triggering via onOpenChange - callers control open state directly.
-  manualTrigger: _manualTrigger = false,
+  manualTrigger = false,
 }: RibbonDropdownProps) {
   const { side, align } = mapPositionToSideAlign(position);
 
@@ -203,9 +201,15 @@ export function RibbonDropdown({
   return (
     <RibbonDropdownContext.Provider value={contextValue}>
       <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <div className={containerClassName}>{trigger}</div>
-        </PopoverTrigger>
+        {manualTrigger ? (
+          <PopoverAnchor asChild>
+            <div className={containerClassName}>{trigger}</div>
+          </PopoverAnchor>
+        ) : (
+          <PopoverTrigger asChild>
+            <div className={containerClassName}>{trigger}</div>
+          </PopoverTrigger>
+        )}
         <PopoverContent
           side={side}
           align={align}

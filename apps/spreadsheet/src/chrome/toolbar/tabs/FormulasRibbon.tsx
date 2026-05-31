@@ -64,6 +64,7 @@ import {
   WatchWindowIcon,
 } from '../primitives/FormulasIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
+import { SplitButton } from '../primitives/SplitButton';
 import {
   RibbonDropdown,
   RibbonDropdownDivider,
@@ -1449,24 +1450,24 @@ export function FormulasRibbon() {
             onOpenChange={setRemoveArrowsOpen}
             menuTestId="ribbon-dropdown-menu-remove-arrows"
             trigger={
-              <RibbonButton
-                layout="vertical"
-                height="full"
-                width="narrow"
-                data-testid="ribbon-dropdown-remove-arrows"
+              <SplitButton
+                variant="large"
                 icon={<RemoveArrowsIcon />}
                 label="Remove"
-                hasDropdown
-                dropdownPosition="inline"
                 isOpen={removeArrowsOpen}
                 disabled={!hasArrows}
                 title="Remove Arrows - Remove trace arrows"
                 aria-label="Remove Arrows"
+                onMainClick={handleRemoveArrows}
+                onDropdownClick={() => setRemoveArrowsOpen((open) => !open)}
+                mainTestId="ribbon-dropdown-remove-arrows"
+                dropdownTestId="ribbon-dropdown-remove-arrows-options"
                 visibilityKey="removeArrows"
               />
             }
             width="auto"
             menuLabel="Remove arrows options"
+            manualTrigger
           >
             <RibbonDropdownItem dataValue="all" onClick={handleRemoveArrows}>
               Remove Arrows

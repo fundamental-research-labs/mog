@@ -155,7 +155,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
         <div
           role="group"
           aria-label={label}
-          data-ribbon-section={label}
+          data-group-id={groupVisibility.groupKey}
           className="relative flex flex-col px-[var(--ribbon-group-padding-x)] group/toolbar-group"
         >
           {/* Content area - fixed height from design token */}

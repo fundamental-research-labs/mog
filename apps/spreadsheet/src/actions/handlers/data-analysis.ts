@@ -6,10 +6,15 @@
  */
 
 import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
-import type { CellValue, CellValuePrimitive } from '@mog-sdk/contracts/core';
+import type { CellValue, CellValuePrimitive, ErrorVariant } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { parseA1, toA1 } from '@mog/spreadsheet-utils/a1';
+import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
 // Unified API: setCellValue replaced with ws.setCell in APPLY_GOAL_SEEK_RESULT
+import type {
+  FormulaError,
+  FormulaErrorType,
+} from '../../ui-store/slices/dialogs/error-checking-dialog';
 import type { SpellingError } from '../../ui-store/slices/dialogs/spelling-dialog';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import { guardBridgeMutation } from './bridge-error-guard';
@@ -441,24 +446,65 @@ export const TOGGLE_WATCH_WINDOW: ActionHandler = (deps): ActionResult => {
   return { handled: true };
 };
 
+async function getSheetDisplayName(ws: { getName?: () => Promise<string>; name?: string }) {
+  if (typeof ws.getName === 'function') {
+    const name = await ws.getName();
+    if (name) return name;
+  }
+  return ws.name || 'Sheet1';
+}
+
+function displayValueForDialog(value: unknown, formatted?: string): unknown {
+  if (formatted) return formatted;
+  if (isCellError(value as CellValue)) {
+    return errorDisplayString((value as { value: ErrorVariant }).value);
+  }
+  return value;
+}
+
 /**
  * Add a cell to the watch window
  */
-export const ADD_WATCH: ActionHandler = (deps, payload): ActionResult => {
-  if (!payload?.sheetId || payload?.row === undefined || payload?.col === undefined) {
-    return { handled: false, error: 'Missing watch entry data' };
+export const ADD_WATCH: AsyncActionHandler = async (deps, payload): Promise<ActionResult> => {
+  const explicitSheetId = payload?.sheetId as string | undefined;
+  const explicitRow = payload?.row as number | undefined;
+  const explicitCol = payload?.col as number | undefined;
+
+  if (explicitSheetId && explicitRow !== undefined && explicitCol !== undefined) {
+    getUIStore(deps)
+      .getState()
+      .addWatch({
+        sheetId: explicitSheetId,
+        sheetName: payload.sheetName || 'Sheet1',
+        cellRef: payload.cellRef || '',
+        row: explicitRow,
+        col: explicitCol,
+        value: payload.value,
+        formula: payload.formula ?? null,
+      });
+    return { handled: true };
   }
+
+  const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
+  if (!activeCell) {
+    return { handled: false, error: 'Missing active cell for watch entry' };
+  }
+
+  const activeSheetId = deps.getActiveSheetId();
+  const ws = deps.workbook.getSheetById(activeSheetId);
+  const cell = await ws.getCell(activeCell.row, activeCell.col);
+  const sheetName = await getSheetDisplayName(ws);
 
   getUIStore(deps)
     .getState()
     .addWatch({
-      sheetId: payload.sheetId,
-      sheetName: payload.sheetName || 'Sheet1',
-      cellRef: payload.cellRef || '',
-      row: payload.row,
-      col: payload.col,
-      value: payload.value,
-      formula: payload.formula ?? null,
+      sheetId: activeSheetId,
+      sheetName,
+      cellRef: toA1(activeCell.row, activeCell.col),
+      row: activeCell.row,
+      col: activeCell.col,
+      value: displayValueForDialog(cell?.value ?? null, cell?.formatted),
+      formula: cell?.formula ?? null,
     });
   return { handled: true };
 };
@@ -487,11 +533,99 @@ export const DELETE_ALL_WATCHES: ActionHandler = (deps): ActionResult => {
 // Error Checking Dialog Handlers
 // =============================================================================
 
+const ERROR_VARIANTS: ErrorVariant[] = [
+  'Null',
+  'Div0',
+  'Value',
+  'Ref',
+  'Name',
+  'Num',
+  'Na',
+  'GettingData',
+  'Spill',
+  'Calc',
+  'Circ',
+];
+
+function formulaErrorTypeFromVariant(variant: ErrorVariant): FormulaErrorType {
+  if (variant === 'GettingData') return 'Calc';
+  if (variant === 'Circ') return 'Ref';
+  return variant as FormulaErrorType;
+}
+
+function errorVariantFromValue(value: unknown): ErrorVariant | null {
+  if (isCellError(value as CellValue)) {
+    return (value as { value: ErrorVariant }).value;
+  }
+
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  return (
+    ERROR_VARIANTS.find((variant) => errorDisplayString(variant).toUpperCase() === normalized) ??
+    null
+  );
+}
+
+function formulaErrorMessage(variant: ErrorVariant, display: string): string {
+  if (variant === 'Div0') return 'The formula is trying to divide by zero or an empty cell.';
+  return `The formula evaluates to ${display}.`;
+}
+
+async function scanFormulaErrors(deps: Parameters<AsyncActionHandler>[0]): Promise<FormulaError[]> {
+  const activeSheetId = deps.getActiveSheetId();
+  const ws = deps.workbook.getSheetById(activeSheetId);
+  const usedRange = await ws.getUsedRange();
+  if (!usedRange) return [];
+
+  const sheetName = await getSheetDisplayName(ws);
+  const errors: FormulaError[] = [];
+
+  for (let row = usedRange.startRow; row <= usedRange.endRow; row += 1) {
+    for (let col = usedRange.startCol; col <= usedRange.endCol; col += 1) {
+      const cell = await ws.getCell(row, col);
+      const formula = typeof cell?.formula === 'string' ? cell.formula : '';
+      if (!formula) continue;
+
+      const variant =
+        errorVariantFromValue(cell?.value ?? null) ??
+        errorVariantFromValue(cell?.formatted ?? null);
+      if (!variant) continue;
+
+      const display = errorDisplayString(variant);
+      const errorType = formulaErrorTypeFromVariant(variant);
+      const cellRef = toA1(row, col);
+      const message = formulaErrorMessage(variant, display);
+      errors.push({
+        id: `${activeSheetId}:${row}:${col}:${errorType}`,
+        sheetId: activeSheetId,
+        sheetName,
+        row,
+        col,
+        cellRef,
+        errorType,
+        errorMessage: message,
+        explanation: message,
+        formula,
+        suggestedFixes:
+          variant === 'Div0'
+            ? ['Check that the divisor is not zero or blank.']
+            : ['Review the referenced cells and formula arguments.'],
+      });
+    }
+  }
+
+  return errors;
+}
+
 /**
  * Open Error Checking dialog
  */
-export const OPEN_ERROR_CHECKING_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().openErrorCheckingDialog();
+export const OPEN_ERROR_CHECKING_DIALOG: AsyncActionHandler = async (
+  deps,
+): Promise<ActionResult> => {
+  const state = getUIStore(deps).getState();
+  state.openErrorCheckingDialog();
+  state.setFormulaErrors(await scanFormulaErrors(deps));
   return { handled: true };
 };
 

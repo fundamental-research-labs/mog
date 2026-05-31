@@ -29,8 +29,12 @@ export function generateTextMarks(
   for (const datum of data) {
     const dx = numberField(datum, markSpec.dxField) ?? markSpec.dx ?? 0;
     const dy = numberField(datum, markSpec.dyField) ?? markSpec.dy ?? 0;
-    const x = (xScale ? (xScale(encodings.x?.accessor(datum)) as number) : layout.plotArea.x) + dx;
-    const y = (yScale ? (yScale(encodings.y?.accessor(datum)) as number) : layout.plotArea.y) + dy;
+    const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
+    const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    const x =
+      (directX ?? (xScale ? (xScale(encodings.x?.accessor(datum)) as number) : layout.plotArea.x)) + dx;
+    const y =
+      (directY ?? (yScale ? (yScale(encodings.y?.accessor(datum)) as number) : layout.plotArea.y)) + dy;
 
     const textValue = encodings.text?.accessor(datum);
     const text = textValue != null ? String(textValue) : '';
@@ -80,6 +84,21 @@ function numberField(datum: DataRow, field: string | undefined): number | undefi
   if (!field) return undefined;
   const value = datum[field];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function directPosition(
+  datum: DataRow,
+  field: string | undefined,
+  layout: Layout,
+  axis: 'x' | 'y',
+  coordinateSystem: MarkSpec['coordinateSystem'],
+): number | undefined {
+  const value = numberField(datum, field);
+  if (value === undefined) return undefined;
+  if (coordinateSystem !== 'plotFraction') return value;
+  return axis === 'x'
+    ? layout.plotArea.x + value * layout.plotArea.width
+    : layout.plotArea.y + value * layout.plotArea.height;
 }
 
 function stringField(datum: DataRow, field: string | undefined): string | undefined {

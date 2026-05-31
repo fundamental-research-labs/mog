@@ -571,6 +571,16 @@ export interface MarkSpec {
   strokeField?: string;
   /** Datum field for stroke width */
   strokeWidthField?: string;
+  /** Datum field for direct x position */
+  xField?: string;
+  /** Datum field for direct y position */
+  yField?: string;
+  /** Datum field for direct secondary x position */
+  x2Field?: string;
+  /** Datum field for direct secondary y position */
+  y2Field?: string;
+  /** Coordinate system for direct mark fields. */
+  coordinateSystem?: 'plotFraction' | 'pixel';
   /** Opacity (0-1) */
   opacity?: number;
   /** Fill opacity (0-1) */

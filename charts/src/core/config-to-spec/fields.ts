@@ -12,6 +12,10 @@ export const RAW_VALUE_FIELD = '__mogRawValue';
 
 export const DATA_LABEL_TEXT_FIELD = '__mogDataLabelText';
 export const DATA_LABEL_VISIBLE_FIELD = '__mogDataLabelVisible';
+export const DATA_LABEL_X_FIELD = '__mogDataLabelX';
+export const DATA_LABEL_Y_FIELD = '__mogDataLabelY';
+export const DATA_LABEL_ANCHOR_X_FIELD = '__mogDataLabelAnchorX';
+export const DATA_LABEL_ANCHOR_Y_FIELD = '__mogDataLabelAnchorY';
 export const DATA_LABEL_VALUE_ANCHOR_FIELD = '__mogDataLabelValueAnchor';
 export const DATA_LABEL_DX_FIELD = '__mogDataLabelDx';
 export const DATA_LABEL_DY_FIELD = '__mogDataLabelDy';

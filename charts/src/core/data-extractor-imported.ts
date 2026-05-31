@@ -70,6 +70,13 @@ type StockRolePlan = Partial<Record<StockRole, number>> & {
   low: number;
   close: number;
 };
+type StockRoleDimensions = {
+  open?: ImportedDimension;
+  high: ImportedDimension;
+  low: ImportedDimension;
+  close: ImportedDimension;
+  volume?: ImportedDimension;
+};
 
 function isStockVolumeSeriesType(chartType: string | undefined): boolean {
   return (
@@ -339,6 +346,32 @@ function finiteStockValue(value: ChartCellValue): number | undefined {
   return Number.isFinite(numeric) ? numeric : undefined;
 }
 
+function stockPointCount(
+  roleDimensions: StockRoleDimensions,
+  categoryDimension: CategoryDimension,
+): number {
+  if (roleDimensions.close.hasLiveRange) return roleDimensions.close.values.length;
+
+  const liveRoleLengths = [
+    roleDimensions.open,
+    roleDimensions.high,
+    roleDimensions.low,
+    roleDimensions.volume,
+  ]
+    .filter((dimension): dimension is ImportedDimension => Boolean(dimension?.hasLiveRange))
+    .map((dimension) => dimension.values.length);
+  if (liveRoleLengths.length > 0) return Math.max(...liveRoleLengths);
+
+  return Math.max(
+    roleDimensions.open?.values.length ?? 0,
+    roleDimensions.high.values.length,
+    roleDimensions.low.values.length,
+    roleDimensions.close.values.length,
+    roleDimensions.volume?.values.length ?? 0,
+    categoryDimension.values.length,
+  );
+}
+
 function extractStockChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
@@ -347,7 +380,7 @@ function extractStockChartDataFromSeriesRefs(
   const roles = stockRolePlan(seriesConfigs);
   if (!roles) return null;
 
-  const roleDimensions = {
+  const roleDimensions: StockRoleDimensions = {
     open:
       roles.open === undefined
         ? undefined
@@ -381,14 +414,7 @@ function extractStockChartDataFromSeriesRefs(
     selectedLevel,
     (pointIndex) => pointIndex + 1,
   );
-  const pointCount = Math.max(
-    roleDimensions.open?.values.length ?? 0,
-    roleDimensions.high.values.length,
-    roleDimensions.low.values.length,
-    roleDimensions.close.values.length,
-    roleDimensions.volume?.values.length ?? 0,
-    categoryDimension.values.length,
-  );
+  const pointCount = stockPointCount(roleDimensions, categoryDimension);
   if (pointCount === 0) return null;
   const categoryLevels = categoryDimension.categoryLevels;
 

@@ -8,6 +8,7 @@ import {
 import { configToSpec } from '../config-to-spec';
 import {
   BUBBLE_SIZE_FIELD,
+  POINT_INDEX_FIELD,
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
@@ -1015,5 +1016,75 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
     expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
+  });
+
+  it('does not append stale stock cache points beyond a resolved live close range', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [12, 15],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-live-close-cardinality-chart',
+      type: 'stock',
+      subType: 'hlc',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'High',
+          stockRole: 'high',
+          valueSourceKind: 'literal',
+          valueCache: {
+            pointCount: 3,
+            points: [
+              { idx: 0, value: '15' },
+              { idx: 1, value: '16' },
+              { idx: 2, value: '17' },
+            ],
+          },
+        },
+        {
+          name: 'Low',
+          stockRole: 'low',
+          valueSourceKind: 'literal',
+          valueCache: {
+            pointCount: 3,
+            points: [
+              { idx: 0, value: '8' },
+              { idx: 1, value: '10' },
+              { idx: 2, value: '11' },
+            ],
+          },
+        },
+        {
+          name: 'Close',
+          stockRole: 'close',
+          values: 'A1:B1',
+          categories: 'A2:C2',
+          valueSourceKind: 'ref',
+          valueCache: {
+            pointCount: 3,
+            points: [
+              { idx: 0, value: '90' },
+              { idx: 1, value: '91' },
+              { idx: 2, value: '92' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categories).toEqual(['Jan', 'Feb']);
+    expect(data.series[0].data.map((point) => point.close)).toEqual([12, 15]);
+    expect(data.series[0].data.map((point) => point.high)).toEqual([15, 16]);
+    expect(data.series[0].data).toHaveLength(2);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 15]);
+    expect(rows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 1]);
   });
 });

@@ -98,6 +98,7 @@ export function setupStructureCoordination(
     selectionActor,
     editorActor,
     clipboardActor,
+    getCurrentSheetId,
     getEditingCell,
     getEditingSheetId,
   } = config;
@@ -153,18 +154,24 @@ export function setupStructureCoordination(
    * @see ISSUE-5-REMOTE-COLLABORATION-EVENTS.md - Race Condition Analysis
    */
   const forwardStructureChange = (sheetId: string, change: StructureChange) => {
+    const affectsActiveSheet = getCurrentSheetId() === sheetId;
+
     // Determine if edit is affected BEFORE any state changes
     // This must happen before selectionActor.send() which modifies activeCell synchronously
-    const affectsEdit = structureChangeAffectsEdit(sheetId, change);
+    const affectsEdit = affectsActiveSheet && structureChangeAffectsEdit(sheetId, change);
 
-    // Always send to selection and clipboard for position adjustment
+    // Send active-sheet structural changes to selection for position adjustment.
     // NOTE: This synchronously modifies selection.activeCell!
-    selectionActor.send({
-      type: 'STRUCTURE_CHANGE',
-      sheetId,
-      change,
-    });
+    if (affectsActiveSheet) {
+      selectionActor.send({
+        type: 'STRUCTURE_CHANGE',
+        sheetId,
+        change,
+      });
+    }
 
+    // Clipboard tracks its source sheet independently, so it must see all
+    // structure events and filter against its own source range.
     clipboardActor.send({
       type: 'STRUCTURE_CHANGE',
       sheetId,

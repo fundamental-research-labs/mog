@@ -66,7 +66,7 @@ export interface ViewportPrefetchState {
 // viewport fetch commits. Keep enough row runway for visible content to stay
 // readable during sustained scrolling without leaving the production data path.
 const DEFAULT_OVERSCAN_ROWS = 1000;
-const DEFAULT_OVERSCAN_COLS = 20;
+const DEFAULT_OVERSCAN_COLS = 64;
 
 // ---------------------------------------------------------------------------
 // Per-viewport prefetch config

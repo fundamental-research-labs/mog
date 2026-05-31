@@ -607,6 +607,14 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.refreshViewportForRegion(viewportId, sheetId, bounds, scrollBehavior);
   }
 
+  updateViewportVisibleWindow(
+    viewportId: string,
+    sheetId: SheetId,
+    bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
+  ): void {
+    this.core.updateViewportVisibleWindow(viewportId, sheetId, bounds);
+  }
+
   /**
    * Set the showFormulas flag. When true, Rust writes formula strings into the
    * `formatted` field for cells with formulas. Invalidates all viewport prefetch.

@@ -117,6 +117,9 @@ export class ViewportFetchManager {
   /** Monotonic request token per viewport. Older movement fetches are discarded. */
   private perViewportFetchSeq: Map<string, number> = new Map();
 
+  /** Monotonic visible-window token per viewport. Prevents stale fetches clobbering layout. */
+  private perViewportVisibleSeq: Map<string, number> = new Map();
+
   constructor(
     private transport: BridgeTransport,
     private docId: string,
@@ -194,6 +197,33 @@ export class ViewportFetchManager {
     };
   }
 
+  private setVisibleWindow(
+    viewportId: string,
+    sheetId: string,
+    bounds: PrefetchBounds,
+  ): number {
+    const visibleSeq = (this.perViewportVisibleSeq.get(viewportId) ?? 0) + 1;
+    this.perViewportVisibleSeq.set(viewportId, visibleSeq);
+
+    this.coordinatorRegistry.get(viewportId)?.setVisibleWindow({
+      sheetId,
+      startRow: bounds.startRow,
+      startCol: bounds.startCol,
+      endRow: bounds.endRow,
+      endCol: bounds.endCol,
+    });
+
+    return visibleSeq;
+  }
+
+  private latestVisibleBoundsFor(
+    coordinator: ViewportCoordinator,
+    fallback: PrefetchBounds,
+  ): PrefetchBounds {
+    const visibleWindow = coordinator.base.getVisibleWindow();
+    return visibleWindow ? this.stripSheetId(visibleWindow) : fallback;
+  }
+
   /**
    * Force refreshes bypass refresh(), so mirror the committed coordinator
    * buffer back into the per-viewport cache that render/devtools consumers read.
@@ -246,16 +276,22 @@ export class ViewportFetchManager {
       endCol: bounds.endCol,
     };
 
+    // Keep the reader's visible-window gate in sync with the current layout
+    // before any async registration/fetch work can lag behind rapid scroll.
+    const coordinator = this.coordinatorRegistry.get(viewportId)!;
+    const visibleSeq = this.setVisibleWindow(viewportId, sheetId, visibleBounds);
+
     // Smart skip: check if this viewport can skip refetch based on scroll direction
     if (canSkipRefetch(scrollBehavior, visibleBounds, vpState.lastVisibleBounds)) {
       if (vpState.prefetchBounds) {
         await this.syncViewportRegistration(viewportId, sheetId, vpState.prefetchBounds);
       }
+      if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
+        return;
+      }
+      vpState.lastVisibleBounds = this.latestVisibleBoundsFor(coordinator, visibleBounds);
       return;
     }
-
-    // Look up coordinator from registry (single source of truth)
-    const coordinator = this.coordinatorRegistry.get(viewportId)!;
 
     // Prefetch containment check: if visible bounds within existing prefetch, skip
     if (
@@ -264,14 +300,10 @@ export class ViewportFetchManager {
       isWithinPrefetch(visibleBounds, vpState.prefetchBounds)
     ) {
       await this.syncViewportRegistration(viewportId, sheetId, vpState.prefetchBounds);
-      coordinator.setVisibleWindow({
-        sheetId,
-        startRow: bounds.startRow,
-        startCol: bounds.startCol,
-        endRow: bounds.endRow,
-        endCol: bounds.endCol,
-      });
-      vpState.lastVisibleBounds = visibleBounds;
+      if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
+        return;
+      }
+      vpState.lastVisibleBounds = this.latestVisibleBoundsFor(coordinator, visibleBounds);
       return;
     }
 
@@ -368,16 +400,25 @@ export class ViewportFetchManager {
       coordinator.commitFetch(buffer, fetchEpoch);
     }
 
-    coordinator.setVisibleWindow({
-      sheetId,
-      startRow: bounds.startRow,
-      startCol: bounds.startCol,
-      endRow: bounds.endRow,
-      endCol: bounds.endCol,
-    });
     vpState.prefetchBounds = prefetch;
-    vpState.lastVisibleBounds = visibleBounds;
+    vpState.lastVisibleBounds =
+      this.perViewportVisibleSeq.get(viewportId) === visibleSeq
+        ? visibleBounds
+        : this.latestVisibleBoundsFor(coordinator, visibleBounds);
     vpState.prefetchDirtyState = { staleCells: new Set(), dirtyRegion: null };
+  }
+
+  /**
+   * Mirror a layout-visible window into the TS viewport buffer synchronously.
+   * This does not register or fetch Rust prefetch bounds.
+   */
+  updateVisibleWindow(
+    viewportId: string,
+    sheetId: string,
+    bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
+  ): void {
+    if (!this.coordinatorRegistry.get(viewportId)) return;
+    this.setVisibleWindow(viewportId, sheetId, bounds);
   }
 
   /**
@@ -523,6 +564,7 @@ export class ViewportFetchManager {
     this.perViewportState.clear();
     this.perViewportAccessors.clear();
     this.perViewportFetchSeq.clear();
+    this.perViewportVisibleSeq.clear();
     this.coordinatorRegistry.clear();
   }
 
@@ -533,6 +575,7 @@ export class ViewportFetchManager {
     this.perViewportState.delete(viewportId);
     this.perViewportAccessors.delete(viewportId);
     this.perViewportFetchSeq.delete(viewportId);
+    this.perViewportVisibleSeq.delete(viewportId);
     this.coordinatorRegistry.unregister(viewportId);
   }
 

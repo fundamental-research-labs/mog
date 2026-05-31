@@ -91,6 +91,7 @@ export class ViewportRegionImpl extends DisposableBase implements ViewportRegion
   updateBounds(bounds: ViewportBounds): void {
     this.throwIfDisposed();
     this.bounds = bounds;
+    this.computeBridge.updateViewportVisibleWindow(this.id, this.sheetId, bounds);
   }
 
   async refresh(scrollBehavior?: unknown): Promise<void> {

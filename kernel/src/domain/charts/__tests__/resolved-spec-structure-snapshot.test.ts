@@ -219,4 +219,28 @@ describe('resolved spec structure snapshot helpers', () => {
       visibleEntries: [],
     });
   });
+
+  it('snapshots category legend entries for vary-by-category charts', () => {
+    const config = chartConfig({
+      varyByCategories: true,
+      legend: {
+        show: true,
+        visible: true,
+        position: 'right',
+        entries: [{ idx: 1, delete: true }],
+      },
+    });
+    const data: ChartData = {
+      categories: ['Vega', 'Onyx', 'Lumen'],
+      series: [{ name: 'Streams', data: [] }],
+    };
+
+    expect(snapshotLegend(config, [seriesSnapshot('Streams', 0)], data)).toEqual({
+      present: true,
+      visible: true,
+      position: 'right',
+      entries: ['Vega', 'Onyx', 'Lumen'],
+      visibleEntries: ['Vega', 'Lumen'],
+    });
+  });
 });

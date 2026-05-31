@@ -14,7 +14,7 @@ import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-res
 import { MARK_TYPE_MAP } from './constants';
 import { linePointsToCanvasPx } from './units';
 
-const EXCEL_THEME_CATEGORY_COLOR_SLOTS = [
+const WORKBOOK_THEME_CATEGORY_COLOR_SLOTS = [
   'accent1',
   'accent2',
   'accent3',
@@ -78,7 +78,7 @@ export function resolvedCategoryColors(
       ? configColors
       : seriesColors.length > 1
         ? seriesColors
-        : excelThemeCategoryColors(config);
+        : workbookThemeCategoryColors(config);
   }
 
   if (seriesColors.length > 0) return seriesColors;
@@ -127,9 +127,9 @@ function defaultsToBubbleCategoryColors(config: ChartConfig, data?: ChartData): 
   );
 }
 
-function excelThemeCategoryColors(config: ChartConfig): string[] | undefined {
+function workbookThemeCategoryColors(config: ChartConfig): string[] | undefined {
   const context = resolverContextFromConfig(config, 'chartArea');
-  const colors = EXCEL_THEME_CATEGORY_COLOR_SLOTS.map((theme) =>
+  const colors = WORKBOOK_THEME_CATEGORY_COLOR_SLOTS.map((theme) =>
     resolveChartColor({ theme }, context),
   ).filter(Boolean) as string[];
   return colors.length > 0 ? colors : undefined;

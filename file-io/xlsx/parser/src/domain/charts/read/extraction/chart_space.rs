@@ -52,7 +52,8 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (f) axes — from cs.chart.plot_area.axes
     // -------------------------------------------------------------------------
-    let axes = extract_axes_from_chart_space(cs);
+    let mut axes = extract_axes_from_chart_space(cs);
+    apply_imported_axis_label_positions(&chart_type, axes.as_mut());
 
     // -------------------------------------------------------------------------
     // (g) chart-level data_labels — from first chart group's d_lbls
@@ -326,13 +327,134 @@ fn effective_vary_by_categories(
     let [group] = plot_area.chart_groups.as_slice() else {
         return None;
     };
-    if group.series.len() != 1 {
-        return None;
-    }
+    let single_series = group.series.len() == 1;
     match &group.config {
-        ooxml_types::charts::ChartTypeConfig::Bubble(_) => Some(true),
+        ooxml_types::charts::ChartTypeConfig::Bar(_)
+        | ooxml_types::charts::ChartTypeConfig::Bar3D(_)
+            if single_series =>
+        {
+            Some(true)
+        }
+        ooxml_types::charts::ChartTypeConfig::Bubble(_) if single_series => Some(true),
         _ => None,
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum AxisOrientation {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum AxisPosition {
+    Bottom,
+    Top,
+    Left,
+    Right,
+}
+
+fn apply_imported_axis_label_positions(
+    chart_type: &domain_types::ChartType,
+    axes: Option<&mut domain_types::chart::AxisData>,
+) {
+    let Some(axes) = axes else {
+        return;
+    };
+    let Some((category_orientation, value_orientation)) = cartesian_axis_orientations(chart_type)
+    else {
+        return;
+    };
+
+    apply_axis_pair_label_position(
+        axes.category_axis.as_mut(),
+        axes.value_axis.as_mut(),
+        category_orientation,
+        value_orientation,
+    );
+    apply_axis_pair_label_position(
+        axes.secondary_category_axis.as_mut(),
+        axes.secondary_value_axis.as_mut(),
+        category_orientation,
+        value_orientation,
+    );
+}
+
+fn cartesian_axis_orientations(
+    chart_type: &domain_types::ChartType,
+) -> Option<(AxisOrientation, AxisOrientation)> {
+    use domain_types::ChartType;
+
+    match chart_type {
+        ChartType::Bar | ChartType::Bar3D => {
+            Some((AxisOrientation::Vertical, AxisOrientation::Horizontal))
+        }
+        ChartType::Column
+        | ChartType::Column3D
+        | ChartType::Line
+        | ChartType::Line3D
+        | ChartType::Area
+        | ChartType::Area3D
+        | ChartType::Stock => Some((AxisOrientation::Horizontal, AxisOrientation::Vertical)),
+        _ => None,
+    }
+}
+
+fn apply_axis_pair_label_position(
+    category_axis: Option<&mut domain_types::chart::SingleAxisData>,
+    value_axis: Option<&mut domain_types::chart::SingleAxisData>,
+    category_orientation: AxisOrientation,
+    value_orientation: AxisOrientation,
+) {
+    let category_position = category_axis
+        .as_ref()
+        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
+    let value_position = value_axis
+        .as_ref()
+        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
+    let category_compatible = is_axis_position_compatible(category_position, category_orientation);
+    let value_compatible = is_axis_position_compatible(value_position, value_orientation);
+    let shared_incompatible_position = category_position.is_some()
+        && value_position.is_some()
+        && category_position == value_position
+        && (!category_compatible || !value_compatible);
+
+    if !category_compatible || shared_incompatible_position {
+        if let Some(axis) = category_axis {
+            hide_axis_tick_labels(axis);
+        }
+    }
+    if !value_compatible || shared_incompatible_position {
+        if let Some(axis) = value_axis {
+            hide_axis_tick_labels(axis);
+        }
+    }
+}
+
+fn normalize_axis_position(position: Option<&str>) -> Option<AxisPosition> {
+    match position?.to_ascii_lowercase().as_str() {
+        "b" | "bottom" => Some(AxisPosition::Bottom),
+        "t" | "top" => Some(AxisPosition::Top),
+        "l" | "left" => Some(AxisPosition::Left),
+        "r" | "right" => Some(AxisPosition::Right),
+        _ => None,
+    }
+}
+
+fn is_axis_position_compatible(
+    position: Option<AxisPosition>,
+    orientation: AxisOrientation,
+) -> bool {
+    matches!(
+        (position, orientation),
+        (None, _)
+            | (Some(AxisPosition::Bottom | AxisPosition::Top), AxisOrientation::Horizontal)
+            | (Some(AxisPosition::Left | AxisPosition::Right), AxisOrientation::Vertical)
+    )
+}
+
+fn hide_axis_tick_labels(axis: &mut domain_types::chart::SingleAxisData) {
+    axis.tick_label_position = Some("none".to_string());
 }
 
 fn extract_analysis_fields_from_config(
@@ -904,10 +1026,11 @@ impl ScalarChartFields {
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, AxisType, BarChartConfig, BubbleChartConfig, Chart as OoxmlChart,
-        ChartAxis, ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
-        ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource, NumPoint, PlotArea,
-        RadarChartConfig, RadarStyle, SizeRepresents, StockChartConfig, SurfaceChartConfig, Title,
+        AreaChartConfig, AxisType, BarChartConfig, BarDirection, BubbleChartConfig,
+        Chart as OoxmlChart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace,
+        ChartText, ChartType, ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource,
+        NumPoint, PlotArea, RadarChartConfig, RadarStyle, SizeRepresents, StockChartConfig,
+        SurfaceChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -1000,6 +1123,38 @@ mod tests {
     }
 
     #[test]
+    fn single_series_bar_with_legend_defaults_to_vary_by_categories_when_absent() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                legend: Some(Legend::default()),
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![ChartSeries {
+                            idx: 0,
+                            order: 0,
+                            ..Default::default()
+                        }],
+                        ..group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig {
+                                vary_colors: None,
+                                ..Default::default()
+                            }),
+                        )
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.vary_by_categories, Some(true));
+    }
+
+    #[test]
     fn single_series_bubble_with_legend_defaults_to_vary_by_categories_when_absent() {
         let cs = ChartSpace {
             chart: OoxmlChart {
@@ -1029,6 +1184,99 @@ mod tests {
         let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
 
         assert_eq!(spec.vary_by_categories, Some(true));
+    }
+
+    #[test]
+    fn explicit_bar_vary_colors_setting_wins_over_legend_default() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                legend: Some(Legend::default()),
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![ChartSeries {
+                            idx: 0,
+                            order: 0,
+                            ..Default::default()
+                        }],
+                        ..group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig {
+                                vary_colors: Some(false),
+                                ..Default::default()
+                            }),
+                        )
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.vary_by_categories, Some(false));
+    }
+
+    #[test]
+    fn single_series_column_with_shared_left_axes_hides_axis_labels() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![ChartSeries {
+                            idx: 0,
+                            order: 0,
+                            ..Default::default()
+                        }],
+                        ax_id: vec![10, 20],
+                        ..group(
+                            ChartType::Bar,
+                            ChartTypeConfig::Bar(BarChartConfig {
+                                bar_dir: BarDirection::Column,
+                                ..Default::default()
+                            }),
+                        )
+                    }],
+                    axes: vec![
+                        ChartAxis {
+                            axis_type: AxisType::Category,
+                            ax_id: 10,
+                            cross_ax: 20,
+                            ax_pos: ChartAxisPosition::Left,
+                            ..Default::default()
+                        },
+                        ChartAxis {
+                            axis_type: AxisType::Value,
+                            ax_id: 20,
+                            cross_ax: 10,
+                            ax_pos: ChartAxisPosition::Left,
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+        let axes = spec.axes.expect("axes");
+
+        assert_eq!(spec.chart_type, domain_types::ChartType::Column);
+        assert_eq!(
+            axes.category_axis
+                .as_ref()
+                .and_then(|axis| axis.tick_label_position.as_deref()),
+            Some("none")
+        );
+        assert_eq!(
+            axes.value_axis
+                .as_ref()
+                .and_then(|axis| axis.tick_label_position.as_deref()),
+            Some("none")
+        );
     }
 
     fn stock_group(series_count: usize) -> ChartGroup {

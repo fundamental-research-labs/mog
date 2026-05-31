@@ -798,6 +798,155 @@ fn chart_ex_with_raw_anchor(original_number: usize) -> ChartSpec {
     chart_ex
 }
 
+fn chart_ex_family_with_replay(
+    chart_type: ChartType,
+    family_marker: &str,
+    original_number: usize,
+) -> ChartSpec {
+    let mut chart_ex = make_chart(chart_type, "");
+    chart_ex.title = None;
+    chart_ex.data_range = None;
+    chart_ex.is_chart_ex = true;
+    chart_ex.definition = Some(domain_types::ChartDefinition::ChartEx(
+        ooxml_types::chart_ex::ChartExSpace::default(),
+    ));
+    chart_ex.position.anchor_row = original_number as u32;
+    chart_ex.position.anchor_col = 2;
+    chart_ex.position.end_row = Some(original_number as u32 + 12);
+    chart_ex.position.end_col = Some(8);
+    chart_ex.cnv_pr_name = Some(format!("{family_marker} ChartEx"));
+    chart_ex.cnv_pr_id = Some(original_number as u32);
+
+    let relationship_id = format!("rIdChart{original_number}");
+    let relationship_target = format!("../charts/chartEx{original_number}.xml");
+    chart_ex.chart_frame = Some(
+        domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps {
+            relationship_id: Some(relationship_id),
+            relationship_target: Some(relationship_target),
+            ..Default::default()
+        },
+    );
+
+    let style_rel_id = format!("rIdStyle{original_number}");
+    let color_rel_id = format!("rIdColor{original_number}");
+    let style_target = format!("style{original_number}.xml");
+    let color_target = format!("color{original_number}.xml");
+    let style_path = format!("xl/charts/{style_target}");
+    let color_path = format!("xl/charts/{color_target}");
+    let relationships = vec![
+        domain_types::chart::ChartRelationshipData {
+            r_id: style_rel_id.clone(),
+            relationship_type: Some(crate::infra::opc::REL_CHART_STYLE.to_string()),
+            target: Some(style_target.clone()),
+            target_mode: None,
+        },
+        domain_types::chart::ChartRelationshipData {
+            r_id: color_rel_id.clone(),
+            relationship_type: Some(crate::infra::opc::REL_CHART_COLOR_STYLE.to_string()),
+            target: Some(color_target.clone()),
+            target_mode: None,
+        },
+    ];
+    let auxiliary_files = vec![
+        (
+            style_path,
+            format!(
+                r#"<c:styleSheet xmlns:c="http://schemas.microsoft.com/office/drawing/2012/chartStyle"><!--STYLE-{family_marker}--></c:styleSheet>"#
+            )
+            .into_bytes(),
+        ),
+        (
+            color_path,
+            format!(
+                r#"<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle"><!--COLOR-{family_marker}--></cs:colorStyle>"#
+            )
+            .into_bytes(),
+        ),
+    ];
+    chart_ex.chart_relationships = relationships.clone();
+    chart_ex.chart_auxiliary_files = auxiliary_files.clone();
+
+    let original_path = format!("xl/charts/chartEx{original_number}.xml");
+    chart_ex.chart_ex_replay = Some(domain_types::chart::ChartExReplayData {
+        original_path: original_path.clone(),
+        original_xml: format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><!--CHARTEX-FAMILY-{family_marker}--><cx:chart><cx:plotArea><cx:plotAreaRegion/></cx:plotArea></cx:chart><cx:printSettings><!--PRINT-{family_marker}--><cx:pageMargins l="0.7" r="0.7"/></cx:printSettings></cx:chartSpace>"#
+        )
+        .into_bytes(),
+        original_position: chart_ex.position.clone(),
+        rels_path: Some(format!(
+            "xl/charts/_rels/chartEx{original_number}.xml.rels"
+        )),
+        rels_xml: Some(
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="{style_rel_id}" Type="{}" Target="{style_target}"/><Relationship Id="{color_rel_id}" Type="{}" Target="{color_target}"/></Relationships>"#,
+                crate::infra::opc::REL_CHART_STYLE,
+                crate::infra::opc::REL_CHART_COLOR_STYLE
+            )
+            .into_bytes(),
+        ),
+        relationships,
+        auxiliary_files,
+    });
+
+    chart_ex
+}
+
+#[test]
+fn chart_ex_no_edit_round_trip_preserves_all_family_replay_parts() {
+    let families = [
+        (ChartType::Waterfall, "waterfall", 31),
+        (ChartType::Treemap, "treemap", 32),
+        (ChartType::Sunburst, "sunburst", 33),
+        (ChartType::Funnel, "funnel", 34),
+        (ChartType::Histogram, "histogram", 35),
+        (ChartType::Pareto, "pareto", 36),
+        (ChartType::Boxplot, "boxplot", 37),
+        (ChartType::RegionMap, "regionMap", 38),
+    ];
+    let charts = families
+        .iter()
+        .map(|(chart_type, family_marker, original_number)| {
+            chart_ex_family_with_replay(chart_type.clone(), family_marker, *original_number)
+        })
+        .collect();
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts,
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+
+    for (_, family_marker, original_number) in families {
+        let chart_path = format!("xl/charts/chartEx{original_number}.xml");
+        let rels_path = format!("xl/charts/_rels/chartEx{original_number}.xml.rels");
+        let style_path = format!("xl/charts/style{original_number}.xml");
+        let color_path = format!("xl/charts/color{original_number}.xml");
+
+        assert!(archive.contains(&chart_path), "missing {chart_path}");
+        assert!(archive.contains(&rels_path), "missing {rels_path}");
+        assert!(archive.contains(&style_path), "missing {style_path}");
+        assert!(archive.contains(&color_path), "missing {color_path}");
+
+        let chart_xml = String::from_utf8(archive.read_file(&chart_path).unwrap()).unwrap();
+        let rels_xml = String::from_utf8(archive.read_file(&rels_path).unwrap()).unwrap();
+        let style_xml = String::from_utf8(archive.read_file(&style_path).unwrap()).unwrap();
+        let color_xml = String::from_utf8(archive.read_file(&color_path).unwrap()).unwrap();
+
+        assert!(chart_xml.contains(&format!("CHARTEX-FAMILY-{family_marker}")));
+        assert!(chart_xml.contains(&format!("PRINT-{family_marker}")));
+        assert!(rels_xml.contains(&format!(r#"Id="rIdStyle{original_number}""#)));
+        assert!(rels_xml.contains(&format!(r#"Target="style{original_number}.xml""#)));
+        assert!(rels_xml.contains(&format!(r#"Id="rIdColor{original_number}""#)));
+        assert!(rels_xml.contains(&format!(r#"Target="color{original_number}.xml""#)));
+        assert!(style_xml.contains(&format!("STYLE-{family_marker}")));
+        assert!(color_xml.contains(&format!("COLOR-{family_marker}")));
+    }
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 #[test]
 fn chart_ex_raw_anchor_replays_only_when_frame_is_current() {
     let chart_ex = chart_ex_with_raw_anchor(7);

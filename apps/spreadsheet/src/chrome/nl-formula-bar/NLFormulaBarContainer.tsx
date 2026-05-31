@@ -11,6 +11,8 @@ import { toA1, cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import { NLFormulaBar } from './NLFormulaBar';
 
+const UNCONFIGURED_PROVIDER_ERROR_DELAY_MS = 150;
+
 function NLFormulaBarContainerImpl() {
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
@@ -125,7 +127,7 @@ function NLFormulaBarContainerImpl() {
       nlResponseError(
         'Natural-language formula generation is unavailable because no formula provider is configured.',
       );
-    }, 0);
+    }, UNCONFIGURED_PROVIDER_ERROR_DELAY_MS);
     return () => window.clearTimeout(timeout);
   }, [nlRequest, nlLoading, nlResponseError]);
 
@@ -135,7 +137,7 @@ function NLFormulaBarContainerImpl() {
       nlExplainResponseError(
         'Natural-language formula explanation is unavailable because no formula provider is configured.',
       );
-    }, 0);
+    }, UNCONFIGURED_PROVIDER_ERROR_DELAY_MS);
     return () => window.clearTimeout(timeout);
   }, [nlExplainRequest, nlExplainLoading, nlExplainResponseError]);
 

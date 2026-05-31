@@ -130,6 +130,17 @@ describe('NLFormulaBarSlice', () => {
       store.getState().nlResponseLoading();
       expect(store.getState().nlLoading).toBe(true);
     });
+
+    it('clears stale terminal generate state', () => {
+      const store = createTestStore();
+      store.getState().nlResponseError('API timeout');
+
+      store.getState().nlResponseLoading();
+
+      expect(store.getState().nlResult).toBeNull();
+      expect(store.getState().nlError).toBeNull();
+      expect(store.getState().nlLoading).toBe(true);
+    });
   });
 
   describe('nlResponseSuccess', () => {
@@ -145,6 +156,18 @@ describe('NLFormulaBarSlice', () => {
       expect(store.getState().nlResult).toEqual(result);
       expect(store.getState().nlLoading).toBe(false);
     });
+
+    it('clears stale generate errors', () => {
+      const store = createTestStore();
+      store.getState().nlResponseError('API timeout');
+
+      const result = { formula: '=SUM(B:B)', explanation: 'Sums column B' };
+      store.getState().nlResponseSuccess(result);
+
+      expect(store.getState().nlResult).toEqual(result);
+      expect(store.getState().nlError).toBeNull();
+      expect(store.getState().nlLoading).toBe(false);
+    });
   });
 
   describe('nlResponseError', () => {
@@ -156,6 +179,17 @@ describe('NLFormulaBarSlice', () => {
 
       store.getState().nlResponseError('API timeout');
 
+      expect(store.getState().nlError).toBe('API timeout');
+      expect(store.getState().nlLoading).toBe(false);
+    });
+
+    it('clears stale generate results', () => {
+      const store = createTestStore();
+      store.getState().nlResponseSuccess({ formula: '=SUM(B:B)', explanation: 'Sums column B' });
+
+      store.getState().nlResponseError('API timeout');
+
+      expect(store.getState().nlResult).toBeNull();
       expect(store.getState().nlError).toBe('API timeout');
       expect(store.getState().nlLoading).toBe(false);
     });
@@ -317,6 +351,22 @@ describe('NLFormulaBarSlice', () => {
       expect(store.getState().nlExplainResult).toBe('Sums column B');
       expect(store.getState().nlExplainLoading).toBe(false);
     });
+
+    it('clears stale explain errors', () => {
+      const store = createTestStore();
+      store
+        .getState()
+        .nlExplainResponseError(
+          'Natural-language formula explanation is unavailable because no formula provider is configured.',
+        );
+
+      store.getState().nlExplainResponseLoading();
+      store.getState().nlExplainResponseSuccess('Sums column B');
+
+      expect(store.getState().nlExplainResult).toBe('Sums column B');
+      expect(store.getState().nlExplainError).toBeNull();
+      expect(store.getState().nlExplainLoading).toBe(false);
+    });
   });
 
   describe('nlExplainResponseError', () => {
@@ -326,6 +376,17 @@ describe('NLFormulaBarSlice', () => {
 
       store.getState().nlExplainResponseError('API timeout');
 
+      expect(store.getState().nlExplainError).toBe('API timeout');
+      expect(store.getState().nlExplainLoading).toBe(false);
+    });
+
+    it('clears stale explain results', () => {
+      const store = createTestStore();
+      store.getState().nlExplainResponseSuccess('Sums column B');
+
+      store.getState().nlExplainResponseError('API timeout');
+
+      expect(store.getState().nlExplainResult).toBeNull();
       expect(store.getState().nlExplainError).toBe('API timeout');
       expect(store.getState().nlExplainLoading).toBe(false);
     });

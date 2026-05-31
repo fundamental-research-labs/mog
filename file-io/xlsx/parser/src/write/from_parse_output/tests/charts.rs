@@ -729,3 +729,128 @@ fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_
     assert!(!chart_rels.contains("style5.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
+
+fn chart_ex_with_raw_anchor(original_number: usize) -> ChartSpec {
+    let mut chart_ex = make_chart(ChartType::Waterfall, "");
+    chart_ex.title = None;
+    chart_ex.data_range = None;
+    chart_ex.is_chart_ex = true;
+    chart_ex.definition = Some(domain_types::ChartDefinition::ChartEx(
+        ooxml_types::chart_ex::ChartExSpace::default(),
+    ));
+    chart_ex.position = domain_types::AnchorPosition {
+        anchor_row: 1,
+        anchor_col: 2,
+        anchor_row_offset: 0,
+        anchor_col_offset: 0,
+        absolute_x: None,
+        absolute_y: None,
+        end_row: Some(12),
+        end_col: Some(8),
+        end_row_offset: Some(0),
+        end_col_offset: Some(0),
+        extent_cx: None,
+        extent_cy: None,
+    };
+    chart_ex.cnv_pr_name = Some("ChartEx Raw".to_string());
+    chart_ex.cnv_pr_id = Some(77);
+    chart_ex.anchor_edit_as = Some("twoCell".to_string());
+
+    let mut graphic_frame = ooxml_types::drawings::SpreadsheetGraphicFrame::default();
+    graphic_frame.nv_graphic_frame_pr.c_nv_pr.id =
+        ooxml_types::drawings::StDrawingElementId::new(77);
+    graphic_frame.nv_graphic_frame_pr.c_nv_pr.name = "ChartEx Raw".to_string();
+    graphic_frame.xfrm = ooxml_types::drawings::Transform2D {
+        offset: Some((0, 0)),
+        extent: Some((0, 0)),
+        rotation: None,
+        flip_h: None,
+        flip_v: None,
+    };
+    let relationship_id = "rId1".to_string();
+    let relationship_target = format!("../charts/chartEx{original_number}.xml");
+    let original_path = format!("xl/charts/chartEx{original_number}.xml");
+    let raw_anchor = format!(
+        r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><!--RAW-CHARTEX-ANCHOR--><mc:Choice Requires="cx1"><xdr:twoCellAnchor editAs="twoCell"><xdr:from><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>12</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="77" name="ChartEx Raw"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart r:id="{relationship_id}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></mc:Choice></mc:AlternateContent>"#
+    );
+
+    chart_ex.chart_frame = Some(
+        domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps {
+            graphic_frame,
+            anchor_index: Some(0),
+            edit_as: Some("twoCell".to_string()),
+            relationship_id: Some(relationship_id),
+            relationship_target: Some(relationship_target),
+            raw_alternate_content: Some(raw_anchor),
+            ..Default::default()
+        },
+    );
+    chart_ex.chart_ex_replay = Some(domain_types::chart::ChartExReplayData {
+        original_path,
+        original_xml: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:plotArea><cx:plotAreaRegion/></cx:plotArea></cx:chart></cx:chartSpace>"#
+            .to_vec(),
+        original_position: chart_ex.position.clone(),
+        rels_path: None,
+        rels_xml: None,
+        relationships: Vec::new(),
+        auxiliary_files: Vec::new(),
+    });
+    chart_ex
+}
+
+#[test]
+fn chart_ex_raw_anchor_replays_only_when_frame_is_current() {
+    let chart_ex = chart_ex_with_raw_anchor(7);
+    assert!(chart_replay::chart_ex_allows_opaque_replay(
+        &chart_ex,
+        "xl/charts/chartEx7.xml"
+    ));
+    assert!(chart_replay::chart_ex_allows_raw_anchor_replay(
+        &chart_ex,
+        "xl/charts/chartEx7.xml",
+        "rId1"
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/charts/chartEx7.xml"));
+    assert!(drawing_xml.contains("RAW-CHARTEX-ANCHOR"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn edited_chart_ex_frame_suppresses_raw_anchor_replay_and_exports_current_transform() {
+    let chart_ex = chart_ex_with_raw_anchor(7);
+    let mut floating = chart_ex.to_floating_object("sheet-1", 0);
+    floating.common.rotation = 45.0;
+    floating.common.flip_h = true;
+    floating.common.flip_v = true;
+    floating.common.printable = false;
+    let edited_chart =
+        ChartSpec::from_floating_object(&floating).expect("chart spec from edited object");
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts: vec![edited_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/charts/chartEx7.xml"));
+    assert!(!drawing_xml.contains("RAW-CHARTEX-ANCHOR"));
+    assert!(drawing_xml.contains(r#"<xdr:xfrm rot="2700000" flipH="1" flipV="1">"#));
+    assert!(drawing_xml.contains(r#"<xdr:clientData fPrintsWithSheet="0"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}

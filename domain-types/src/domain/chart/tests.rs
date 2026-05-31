@@ -348,6 +348,48 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(roundtripped.macro_name.as_deref(), Some("MyMacro"));
     assert_eq!(roundtripped.client_data_locks_with_sheet, Some(false));
     assert_eq!(roundtripped.client_data_prints_with_sheet, Some(true));
+
+    let mut edited = spec.to_floating_object("sheet-abc", 8);
+    edited.common.rotation = 12.5;
+    edited.common.flip_h = true;
+    edited.common.flip_v = true;
+    edited.common.locked = true;
+    edited.common.visible = true;
+    edited.common.printable = false;
+    if let FloatingObjectData::Chart(ref mut cd) = edited.data {
+        cd.ooxml
+            .as_mut()
+            .and_then(|ooxml| ooxml.drawing_frame.as_mut())
+            .expect("drawing frame should be preserved")
+            .raw_alternate_content = Some("<mc:AlternateContent/>".to_string());
+    }
+
+    let edited_roundtrip =
+        ChartSpec::from_floating_object(&edited).expect("chart spec from edited object");
+    let edited_frame = edited_roundtrip
+        .chart_frame
+        .as_ref()
+        .expect("edited drawing frame should be preserved");
+    assert_eq!(
+        edited_frame
+            .graphic_frame
+            .xfrm
+            .rotation
+            .map(|rot| rot.value()),
+        Some(750_000)
+    );
+    assert_eq!(edited_frame.graphic_frame.xfrm.flip_h, Some(true));
+    assert_eq!(edited_frame.graphic_frame.xfrm.flip_v, Some(true));
+    assert!(
+        !edited_frame
+            .graphic_frame
+            .nv_graphic_frame_pr
+            .c_nv_pr
+            .hidden
+    );
+    assert_eq!(edited_frame.client_data_locks_with_sheet, None);
+    assert_eq!(edited_frame.client_data_prints_with_sheet, Some(false));
+    assert_eq!(edited_frame.raw_alternate_content, None);
 }
 
 #[test]

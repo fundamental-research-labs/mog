@@ -314,6 +314,97 @@ pub struct PivotChartOptionsData {
 }
 
 impl ChartSpec {
+    fn rotation_units_from_degrees(rotation: f64) -> Option<i32> {
+        if !rotation.is_finite() {
+            return None;
+        }
+        let units = (rotation * 60_000.0).round();
+        Some(units.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
+    }
+
+    fn frame_locked_state(
+        frame: &ChartDrawingFrameOoxmlProps,
+        legacy_locks_with_sheet: Option<bool>,
+    ) -> bool {
+        let nv = &frame.graphic_frame.nv_graphic_frame_pr;
+        let locks = &nv.c_nv_graphic_frame_pr;
+        frame
+            .client_data_locks_with_sheet
+            .or(legacy_locks_with_sheet)
+            .unwrap_or(true)
+            || locks.no_grp
+            || locks.no_select
+            || locks.no_move
+            || locks.no_resize
+            || nv.no_drilldown
+    }
+
+    fn sync_drawing_frame_with_common(
+        frame: &mut ChartDrawingFrameOoxmlProps,
+        common: &FloatingObjectCommon,
+    ) {
+        let Some(common_rotation_units) = Self::rotation_units_from_degrees(common.rotation) else {
+            return;
+        };
+
+        let frame_rotation_units = frame
+            .graphic_frame
+            .xfrm
+            .rotation
+            .map(|rot| rot.value())
+            .unwrap_or(0);
+        let frame_flip_h = frame.graphic_frame.xfrm.flip_h.unwrap_or(false);
+        let frame_flip_v = frame.graphic_frame.xfrm.flip_v.unwrap_or(false);
+        let frame_visible = !frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden;
+        let frame_printable = frame.client_data_prints_with_sheet.unwrap_or(true);
+        let frame_locked = Self::frame_locked_state(frame, None);
+
+        let frame_changed = frame_rotation_units != common_rotation_units
+            || frame_flip_h != common.flip_h
+            || frame_flip_v != common.flip_v
+            || frame_visible != common.visible
+            || frame_printable != common.printable
+            || frame_locked != common.locked;
+        if frame_changed {
+            frame.raw_alternate_content = None;
+        }
+
+        if frame_rotation_units != common_rotation_units {
+            frame.graphic_frame.xfrm.rotation = (common_rotation_units != 0
+                || frame.graphic_frame.xfrm.rotation.is_some())
+            .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
+        }
+        if frame_flip_h != common.flip_h {
+            frame.graphic_frame.xfrm.flip_h = (common.flip_h
+                || frame.graphic_frame.xfrm.flip_h.is_some())
+            .then_some(common.flip_h);
+        }
+        if frame_flip_v != common.flip_v {
+            frame.graphic_frame.xfrm.flip_v = (common.flip_v
+                || frame.graphic_frame.xfrm.flip_v.is_some())
+            .then_some(common.flip_v);
+        }
+
+        frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden = !common.visible;
+        if frame_printable != common.printable {
+            frame.client_data_prints_with_sheet = (!common.printable).then_some(false);
+        }
+
+        if frame_locked != common.locked {
+            if common.locked {
+                frame.client_data_locks_with_sheet = None;
+            } else {
+                frame.client_data_locks_with_sheet = Some(false);
+                let nv = &mut frame.graphic_frame.nv_graphic_frame_pr;
+                nv.c_nv_graphic_frame_pr = Default::default();
+                nv.has_graphic_frame_locks = false;
+                nv.no_change_aspect_explicit = None;
+                nv.no_drilldown = false;
+                nv.c_nv_graphic_frame_pr_ext_lst = None;
+            }
+        }
+    }
+
     fn drawing_frame_common_state(
         frame: Option<&ChartDrawingFrameOoxmlProps>,
         legacy_hidden: bool,
@@ -399,7 +490,10 @@ impl ChartSpec {
 
         // Unpack typed OOXML preservation data.
         let ooxml = chart_data.ooxml.as_ref();
-        let chart_frame = ooxml.and_then(|o| o.drawing_frame.clone());
+        let mut chart_frame = ooxml.and_then(|o| o.drawing_frame.clone());
+        if let Some(ref mut frame) = chart_frame {
+            Self::sync_drawing_frame_with_common(frame, common);
+        }
         let chart_relationships = ooxml
             .map(|o| o.chart_relationships.clone())
             .unwrap_or_default();

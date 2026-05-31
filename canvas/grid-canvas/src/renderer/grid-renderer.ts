@@ -2481,6 +2481,22 @@ export class GridRendererImpl implements GridRenderer {
     };
   }
 
+  getCellRenderedSize(row: number, col: number): { width: number; height: number } | null {
+    // The drawn size of a cell is just its column width / row height scaled by
+    // the active zoom. It is independent of sheetId, of which viewport (main /
+    // frozen / split) contains the cell, and of whether the cell is currently
+    // scrolled into view — those only matter for *positioning* and clipping
+    // (see getCellPageBounds), not for size. Deliberately no viewport search:
+    // adding scroll-dependence here is exactly the clipping bug this method
+    // exists to avoid.
+    const zoom = this.coords.getZoom();
+    if (!Number.isFinite(zoom) || zoom <= 0) return null;
+    return {
+      width: this.positionIndex.getColWidth(col) * zoom,
+      height: this.positionIndex.getRowHeight(row) * zoom,
+    };
+  }
+
   getRangePageBounds(range: CellRange): { x: number; y: number; width: number; height: number }[] {
     const sheetId = this.currentSheetId;
     if (!sheetId) return [];

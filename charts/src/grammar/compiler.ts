@@ -19,7 +19,14 @@
 import type { AnyMark, RectMark } from '../primitives/types';
 import { createScales, resolveEncodings } from './encoding-resolver';
 import { calculateLayout } from './layout';
-import { isLayerSpec, type ChartSpec, type DataRow, type MarkSpec, type MarkType } from './spec';
+import {
+  isLayerSpec,
+  type ChartFrameSpec,
+  type ChartSpec,
+  type DataRow,
+  type MarkSpec,
+  type MarkType,
+} from './spec';
 import { applyTransforms } from './transforms';
 
 // Import from extracted modules
@@ -117,13 +124,31 @@ export function compile(
 
   // Generate title
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
-  const background = generateBackground(spec.config?.background, layout.width, layout.height);
+  const background = [
+    ...generateFrameMarks(
+      spec.config?.chartFrame ??
+        (spec.config?.background
+          ? { fill: { type: 'solid', color: spec.config.background } }
+          : undefined),
+      0,
+      0,
+      layout.width,
+      layout.height,
+    ),
+    ...generateFrameMarks(
+      spec.config?.plotFrame,
+      layout.plotArea.x,
+      layout.plotArea.y,
+      layout.plotArea.width,
+      layout.plotArea.height,
+    ),
+  ];
 
   // Dev-mode assertion: all data marks must carry their source datum
   assertDataMarksHaveDatum(clippedMarks);
 
   return {
-    background,
+    background: background.length > 0 ? background : undefined,
     marks: clippedMarks,
     axes,
     legends,
@@ -139,22 +164,40 @@ export function compile(
   };
 }
 
-function generateBackground(
-  fill: string | undefined,
+function generateFrameMarks(
+  frame: ChartFrameSpec | undefined,
+  x: number,
+  y: number,
   width: number,
   height: number,
-): AnyMark[] | undefined {
-  if (!fill) return undefined;
+): AnyMark[] {
+  if (!frame?.fill && !frame?.line && !frame?.shadow) return [];
   return [
     {
       type: 'rect',
-      x: 0,
-      y: 0,
+      x,
+      y,
       width,
       height,
-      style: { fill },
+      style: frameStyle(frame),
     } as RectMark,
   ];
+}
+
+function frameStyle(frame: ChartFrameSpec): RectMark['style'] {
+  return {
+    ...(frame.fill?.type === 'solid' && frame.fill.opacity === undefined
+      ? { fill: frame.fill.color }
+      : frame.fill
+        ? { fillPaint: frame.fill }
+        : {}),
+    ...(frame.line?.paint ? { strokePaint: frame.line.paint } : {}),
+    ...(frame.line?.width !== undefined ? { strokeWidth: frame.line.width } : {}),
+    ...(frame.line?.dash ? { strokeDash: frame.line.dash } : {}),
+    ...(frame.line ? { line: frame.line } : {}),
+    ...(frame.shadow ? { shadow: frame.shadow } : {}),
+    ...(frame.cornerRadius !== undefined ? { cornerRadius: frame.cornerRadius } : {}),
+  };
 }
 
 function isPlotClippableMark(mark: AnyMark): boolean {

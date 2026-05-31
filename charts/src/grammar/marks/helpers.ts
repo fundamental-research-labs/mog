@@ -5,6 +5,7 @@
  */
 
 import { groupByAccessor } from '../../algebra/group-by';
+import type { MarkStyle } from '../../primitives/types';
 import type { AnyScale, ResolvedEncodings } from '../encoding-resolver';
 import type { DataRow } from '../spec';
 
@@ -33,4 +34,19 @@ export function groupDataByEncoding(
   }
 
   return groupByAccessor(data, encoding.accessor);
+}
+
+/**
+ * Keep advanced optional style slots out of generated mark snapshots unless
+ * a spec actually supplied them.
+ */
+export function definedStyle(style: Partial<MarkStyle>): Partial<MarkStyle> {
+  const result: Partial<MarkStyle> = {};
+  if (style.fillPaint !== undefined) result.fillPaint = style.fillPaint;
+  if (style.strokePaint !== undefined) result.strokePaint = style.strokePaint;
+  if (style.line !== undefined) result.line = style.line;
+  if (style.strokeDash !== undefined) result.strokeDash = style.strokeDash;
+  if (style.effects !== undefined) result.effects = style.effects;
+  if (style.shadow !== undefined) result.shadow = style.shadow;
+  return result;
 }

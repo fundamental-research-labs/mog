@@ -43,7 +43,9 @@ export function buildComboLayers(
     // Per-series y-axis encoding for dual-axis support
     if (yAxisIndex === 1) {
       const secondaryAxis = secondaryYAxis;
-      const secondaryAxisSpec = secondaryAxis ? mapAxisConfigToAxisSpec(secondaryAxis) : {};
+      const secondaryAxisSpec = secondaryAxis
+        ? mapAxisConfigToAxisSpec(secondaryAxis, config, 'secondaryValueAxis')
+        : {};
       layerEncoding.y = {
         field: 'value',
         type: 'quantitative',
@@ -62,7 +64,7 @@ export function buildComboLayers(
     }
 
     const layerSpec: UnitSpec = {
-      mark: buildSeriesMark(markType, seriesConf, i, config.type),
+      mark: buildSeriesMark(markType, seriesConf, i, config.type, config),
       encoding: layerEncoding,
       transform: [
         {

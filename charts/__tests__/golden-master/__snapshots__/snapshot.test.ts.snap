@@ -547,7 +547,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
 [
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -557,7 +557,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S1",
       "value": 10,
     },
-    "height": 107.33333333333331,
+    "height": 101.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -568,11 +568,11 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
     "type": "rect",
     "width": 68.82352941176471,
     "x": 125.55212355212356,
-    "y": 234.66666666666669,
+    "y": 222.66666666666669,
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -582,7 +582,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S2",
       "value": 15,
     },
-    "height": 161,
+    "height": 152,
     "style": {
       "cornerRadius": undefined,
       "fill": "#d62728",
@@ -593,11 +593,11 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
     "type": "rect",
     "width": 68.82352941176471,
     "x": 194.37565296388829,
-    "y": 181,
+    "y": 172,
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -607,7 +607,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S1",
       "value": 20,
     },
-    "height": 214.66666666666666,
+    "height": 202.66666666666666,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -618,11 +618,11 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
     "type": "rect",
     "width": 68.82352941176471,
     "x": 261.0733590733591,
-    "y": 127.33333333333334,
+    "y": 121.33333333333334,
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -632,7 +632,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S2",
       "value": 25,
     },
-    "height": 268.3333333333333,
+    "height": 253.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#9467bd",
@@ -643,11 +643,11 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
     "type": "rect",
     "width": 68.82352941176471,
     "x": 329.8968884851238,
-    "y": 73.66666666666669,
+    "y": 70.66666666666669,
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -657,7 +657,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S1",
       "value": 30,
     },
-    "height": 322,
+    "height": 304,
     "style": {
       "cornerRadius": undefined,
       "fill": "#2ca02c",
@@ -672,7 +672,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -682,7 +682,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "series": "S2",
       "value": 5,
     },
-    "height": 53.666666666666686,
+    "height": 50.666666666666686,
     "style": {
       "cornerRadius": undefined,
       "fill": "#8c564b",
@@ -693,11 +693,11 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
     "type": "rect",
     "width": 68.82352941176471,
     "x": 465.4181240063593,
-    "y": 288.3333333333333,
+    "y": 273.3333333333333,
   },
   {
     "clip": {
-      "height": 322,
+      "height": 304,
       "width": 468,
       "x": 112,
       "y": 20,
@@ -734,7 +734,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
         "value": 5,
       },
     ],
-    "path": "M125.55212355212356,234.66666666666669 L125.55212355212356,181 L261.0733590733591,127.33333333333334 L261.0733590733591,73.66666666666669 L396.5945945945946,20 L396.5945945945946,288.3333333333333",
+    "path": "M125.55212355212356,222.66666666666669 L125.55212355212356,172 L261.0733590733591,121.33333333333334 L261.0733590733591,70.66666666666669 L396.5945945945946,20 L396.5945945945946,273.3333333333333",
     "style": {
       "fill": undefined,
       "opacity": 1,

@@ -13,6 +13,7 @@ import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
+import { definedStyle } from './helpers';
 
 type BarSlotGeometry = {
   offset: number;
@@ -390,6 +391,12 @@ export function generateBarMarks(
         strokeWidth: markSpec.strokeWidth,
         opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

@@ -192,7 +192,6 @@ describe('chartDataToRows', () => {
     expect(rows).toEqual([
       { category: 'left', x: 2.5, value: 10, series: 'Points' },
       { category: 'right', x: 7.75, value: 20, series: 'Points' },
-      { category: 'fallback', x: 3, value: 30, series: 'Points' },
     ]);
   });
 
@@ -217,7 +216,6 @@ describe('chartDataToRows', () => {
     expect(rows).toEqual([
       { category: '1', x: 1, value: 10, series: 'Bubbles', size: 4 },
       { category: '2', x: 2, value: 20, series: 'Bubbles', size: 12 },
-      { category: '3', x: 3, value: 30, series: 'Bubbles', size: 1 },
     ]);
   });
 });
@@ -2056,6 +2054,19 @@ describe('configToSpec -> compile round-trip: mark verification', () => {
 
   const richSingle = makeRichData(1);
   const richMulti = makeRichData(3);
+  const xySingle: ChartData = {
+    categories: [1, 2, 10],
+    series: [
+      {
+        name: 'Series 1',
+        data: [
+          { x: 1, y: 10, size: 5, name: '1' },
+          { x: 2, y: 20, size: 10, name: '2' },
+          { x: 10, y: 30, size: 15, name: '10' },
+        ],
+      },
+    ],
+  };
 
   // --- bar variants ---
 
@@ -2207,7 +2218,7 @@ describe('configToSpec -> compile round-trip: mark verification', () => {
 
   it('scatter: produces symbol marks', () => {
     const config = makeConfig({ type: 'scatter' });
-    const spec = configToSpec(config, richSingle);
+    const spec = configToSpec(config, xySingle);
     const result = compile(spec, undefined, { width: 600, height: 400 });
     expect(result.marks.length).toBeGreaterThan(0);
     expect(result.marks.every((m) => m.type === 'symbol')).toBe(true);
@@ -2217,7 +2228,7 @@ describe('configToSpec -> compile round-trip: mark verification', () => {
 
   it('bubble: produces symbol marks', () => {
     const config = makeConfig({ type: 'bubble' });
-    const spec = configToSpec(config, richSingle);
+    const spec = configToSpec(config, xySingle);
     const result = compile(spec, undefined, { width: 600, height: 400 });
     expect(result.marks.length).toBeGreaterThan(0);
     expect(result.marks.every((m) => m.type === 'symbol')).toBe(true);

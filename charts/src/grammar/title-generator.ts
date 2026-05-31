@@ -33,8 +33,14 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
       titleSpec.anchor === 'start' ? 'left' : titleSpec.anchor === 'end' ? 'right' : 'center',
     textBaseline: 'top',
     fontWeight: titleSpec.fontWeight ?? 'bold',
+    fontStyle: titleSpec.fontStyle,
+    richText: titleSpec.richText,
+    underline: titleSpec.underline,
+    strikethrough: titleSpec.strikethrough,
     style: {
       fill: titleSpec.color ?? '#000',
+      fillPaint: titleSpec.fill,
+      shadow: titleSpec.shadow,
     },
   } as TextMark);
 

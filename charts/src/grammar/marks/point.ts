@@ -11,7 +11,7 @@ import type { SymbolMark, SymbolShape } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { invokeScale } from './helpers';
+import { definedStyle, invokeScale } from './helpers';
 
 /**
  * Generate point/scatter marks.
@@ -90,6 +90,12 @@ export function generatePointMarks(
         stroke: markSpec.stroke,
         strokeWidth: markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

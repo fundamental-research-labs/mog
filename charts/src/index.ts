@@ -34,10 +34,14 @@ export {
   type ChartData,
   type ChartDataPoint,
   type ChartDataSeries,
+  type ChartStyleContext,
+  type ChartStyleDiagnostic,
+  type ChartStyleOwner,
   type ChartInstance,
   type ChartSeriesPointCache,
   type ChartSeriesPointCachePoint,
   type ChartType,
+  type ChartWorkbookThemeData,
   type CreateChartInput,
   type DataLabelConfig,
   type ImageExportFormat,
@@ -50,6 +54,7 @@ export {
   type SerializedChart,
   type SeriesConfig,
   type SeriesOrientation,
+  type SingleAxisConfig,
   type StockSubType,
   type StoredChartConfig,
   type SubTypeFor,
@@ -79,7 +84,6 @@ export {
   type RustChartType,
   type RustChartTypeResult,
 } from './core';
-export * from './core/style-resolver';
 
 // DOM - chart engine and instance management (requires browser environment)
 export { ChartEngine, createChart, createChartEngine } from './dom';

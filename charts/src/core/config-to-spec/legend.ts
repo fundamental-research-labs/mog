@@ -1,6 +1,7 @@
 import type { ChannelSpec, LegendOrient, LegendSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, LegendConfig } from '../../types';
 import { resolveChartTextColor } from '../../utils/chart-colors';
+import { resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import { isNoFillNoLineSeries } from './series-style';
 import { pointsToCanvasPx } from './units';
@@ -40,6 +41,7 @@ export function isLegendShown(legend: LegendConfig | undefined): legend is Legen
 
 export function buildLegendSpec(
   legend: LegendConfig,
+  config?: ChartConfig,
   options: {
     reverse?: boolean;
     symbolType?: LegendSpec['symbolType'];
@@ -48,7 +50,10 @@ export function buildLegendSpec(
   if (!isLegendShown(legend)) return null;
 
   const legendFont = legend.format?.font ?? legend.font;
-  const labelColor = resolveChartTextColor(legendFont?.color);
+  const labelColor = resolveChartTextColor(
+    legendFont?.color,
+    config ? resolverContextFromConfig(config, 'legend') : {},
+  );
   return {
     orient: legendPositionToOrient(legend.position),
     title: null,
@@ -72,6 +77,7 @@ export function buildColorEncoding(
   reverseLegend?: boolean,
   legendDomain?: string[],
   symbolType?: LegendSpec['symbolType'],
+  config?: ChartConfig,
 ): ChannelSpec | undefined {
   if (!hasMultipleSeries) return undefined;
   const channel: ChannelSpec = {
@@ -85,7 +91,7 @@ export function buildColorEncoding(
     };
   }
   if (legend) {
-    channel.legend = buildLegendSpec(legend, {
+    channel.legend = buildLegendSpec(legend, config, {
       reverse: reverseLegend,
       symbolType,
     });

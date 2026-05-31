@@ -1,13 +1,22 @@
 import type { AxisOrient, AxisSpec, ScaleSpec, ScaleType } from '../../grammar/spec';
-import type { AxisConfig, AxisType, ChartType, SingleAxisConfig } from '../../types';
+import type { AxisConfig, AxisType, ChartConfig, ChartType, SingleAxisConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { mapAxisConfigToAxisSpec as mapAxisConfigToAxisFormatSpec } from './axis-format';
 
 /**
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
  */
-export function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec {
-  return mapAxisConfigToAxisFormatSpec(axisConf, normalizeAxisOrient(axisConf.position));
+export function mapAxisConfigToAxisSpec(
+  axisConf: SingleAxisConfig,
+  config?: ChartConfig,
+  ownerKey = 'axis',
+): AxisSpec {
+  return mapAxisConfigToAxisFormatSpec(
+    axisConf,
+    normalizeAxisOrient(axisConf.position),
+    config,
+    ownerKey,
+  );
 }
 
 /**

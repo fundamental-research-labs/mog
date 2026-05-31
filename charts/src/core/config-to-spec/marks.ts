@@ -1,6 +1,7 @@
 import type { MarkSpec, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartType, SeriesConfig } from '../../types';
 import { resolveFormatFillOpacity, resolveLineColor } from '../../utils/chart-colors';
+import { resolveChartFillPaint, resolveChartLineStyle, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import {
   applySeriesLineFormat,
@@ -10,6 +11,23 @@ import {
 } from './series-style';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
+
+function applyPrimarySeriesFormat(mark: MarkSpec, config: ChartConfig): void {
+  const series = config.series?.find((item) => !isNoFillNoLineSeries(item));
+  if (!series?.format) return;
+  const context = resolverContextFromConfig(config, 'series(0)');
+  const fillPaint = resolveChartFillPaint(series.format.fill, context);
+  if (fillPaint) mark.fillPaint = fillPaint;
+  const line = resolveChartLineStyle(series.format.line, context, {
+    widthToPx: linePointsToCanvasPx,
+  });
+  if (line) {
+    mark.line = line;
+    if (line.paint?.type === 'solid') mark.stroke = line.paint.color;
+    if (line.width !== undefined) mark.strokeWidth = line.width;
+    if (line.dash) mark.strokeDash = line.dash;
+  }
+}
 
 /**
  * Attach pie slice explosion indices as metadata on the mark spec.
@@ -34,7 +52,7 @@ export function applyImportedBarOutline(mark: MarkSpec, config: ChartConfig): vo
   )?.format?.line;
   if (!line) return;
 
-  mark.stroke = resolveLineColor(line) ?? mark.stroke ?? '#000000';
+  mark.stroke = resolveLineColor(line, resolverContextFromConfig(config, 'series')) ?? mark.stroke ?? '#000000';
   const strokeWidth = linePointsToCanvasPx(line.width);
   if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
 }
@@ -53,6 +71,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       type: 'arc',
       ...(subProps || {}),
     };
+    applyPrimarySeriesFormat(mark, config);
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
     }
@@ -66,6 +85,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       type: 'arc',
       ...(subProps || {}),
     };
+    applyPrimarySeriesFormat(mark, config);
     return mark;
   }
 
@@ -76,6 +96,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       innerRadius: 0.5,
       ...(subProps || {}),
     };
+    applyPrimarySeriesFormat(mark, config);
     // Pie slice explosion
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
@@ -91,6 +112,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       type: 'arc',
       ...(subProps || {}),
     };
+    applyPrimarySeriesFormat(mark, config);
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
     }
@@ -136,14 +158,16 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       type: subProps.type ?? baseType,
       ...subProps,
     };
+    applyPrimarySeriesFormat(mark, config);
     applyImportedBarOutline(mark, config);
     return mark;
   }
 
   if (baseType === 'bar') {
     const mark: MarkSpec = { type: baseType };
+    applyPrimarySeriesFormat(mark, config);
     applyImportedBarOutline(mark, config);
-    return mark.stroke || mark.strokeWidth !== undefined ? mark : baseType;
+    return mark.stroke || mark.strokeWidth !== undefined || mark.fillPaint ? mark : baseType;
   }
 
   // Simple mark type string
@@ -159,11 +183,23 @@ export function buildSeriesMark(
   seriesConf: SeriesConfig | undefined,
   seriesIndex: number,
   fallbackType?: ChartType,
+  config?: ChartConfig,
 ): MarkSpec {
   const mark: MarkSpec = { type: markType };
-  const color = seriesConf ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType) : undefined;
+  const color = seriesConf
+    ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType, config)
+    : undefined;
   if (color) mark.color = color;
-  applySeriesLineFormat(mark, seriesConf);
+  if (seriesConf?.format && config) {
+    const context = resolverContextFromConfig(config, `series(${seriesIndex})`);
+    const fillPaint = resolveChartFillPaint(seriesConf.format.fill, context);
+    if (fillPaint) mark.fillPaint = fillPaint;
+    const line = resolveChartLineStyle(seriesConf.format.line, context, {
+      widthToPx: linePointsToCanvasPx,
+    });
+    if (line) mark.line = line;
+  }
+  applySeriesLineFormat(mark, seriesConf, config, seriesIndex);
   const fillOpacity = resolveFormatFillOpacity(seriesConf?.format);
   if (fillOpacity !== undefined) {
     if (markType === 'area') {

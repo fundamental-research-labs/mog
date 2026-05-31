@@ -11,6 +11,7 @@ import type { ArcMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { definedStyle } from './helpers';
 
 /**
  * Generate arc/pie marks.
@@ -143,6 +144,12 @@ export function generateArcMarks(
         stroke: markSpec.stroke ?? '#fff',
         strokeWidth: markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
 

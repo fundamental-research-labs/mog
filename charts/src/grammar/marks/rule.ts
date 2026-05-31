@@ -11,6 +11,7 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { definedStyle } from './helpers';
 
 /**
  * Generate rule marks (lines across the chart).
@@ -57,6 +58,11 @@ export function generateRuleMarks(
         stroke: markSpec.color ?? markSpec.stroke ?? '#888',
         strokeWidth: markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

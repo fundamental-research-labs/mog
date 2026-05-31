@@ -67,5 +67,7 @@ export function buildCanvasFontString(
   fontFamily: string,
   fontStyle: string | undefined = undefined,
 ): string {
-  return `${fontStyle ?? 'normal'} ${fontWeight ?? 'normal'} ${fontSize}px ${canvasFontFamily(fontFamily)}`;
+  const style = fontStyle && fontStyle !== 'normal' ? `${fontStyle} ` : '';
+  const weight = fontWeight && fontWeight !== 'normal' ? `${fontWeight} ` : '';
+  return `${style}${weight}${fontSize}px ${canvasFontFamily(fontFamily)}`;
 }

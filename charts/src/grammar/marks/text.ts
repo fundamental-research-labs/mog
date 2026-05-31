@@ -10,6 +10,7 @@ import type { TextMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { definedStyle } from './helpers';
 
 /**
  * Generate text marks.
@@ -49,7 +50,13 @@ export function generateTextMarks(
       datum,
       style: {
         fill: color,
+        stroke: markSpec.stroke,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

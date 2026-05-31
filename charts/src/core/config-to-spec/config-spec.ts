@@ -1,9 +1,15 @@
 import type { ConfigSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
-import { resolveFormatFillColor, resolveSolidFillColor } from '../../utils/chart-colors';
+import {
+  resolveChartFillPaint,
+  resolveChartLineStyle,
+  resolveChartShadow,
+  resolverContextFromConfig,
+} from '../style-resolver';
 import { buildLayoutHints } from './layout-hints';
 import { resolvedCategoryColors } from './series-style';
 import { resolveStackMode } from './subtypes';
+import { linePointsToCanvasPx } from './units';
 
 /**
  * Build the ConfigSpec from chart-level settings: stacking, colors, and layout hints.
@@ -39,12 +45,55 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const background =
-    resolveFormatFillColor(config.chartFormat) ??
-    resolveSolidFillColor(config.chartArea?.fill) ??
-    resolveFormatFillColor(config.chartArea?.format);
-  if (background) {
-    configSpec.background = background;
+  const chartContext = resolverContextFromConfig(config, 'chartArea');
+  const chartFill =
+    resolveChartFillPaint(config.chartFormat?.fill, chartContext) ??
+    resolveChartFillPaint(config.chartArea?.fill, chartContext) ??
+    resolveChartFillPaint(config.chartArea?.format?.fill, chartContext);
+  const chartLine =
+    resolveChartLineStyle(config.chartFormat?.line, chartContext, {
+      widthToPx: linePointsToCanvasPx,
+    }) ??
+    resolveChartLineStyle(config.chartArea?.format?.line, chartContext, {
+      widthToPx: linePointsToCanvasPx,
+    });
+  const chartShadow =
+    resolveChartShadow(config.chartFormat?.shadow, chartContext) ??
+    resolveChartShadow(config.chartArea?.format?.shadow, chartContext);
+  if (chartFill?.type === 'solid') {
+    configSpec.background = chartFill.color;
+  }
+  if (chartFill || chartLine || chartShadow || config.roundedCorners) {
+    configSpec.chartFrame = {
+      ...(chartFill ? { fill: chartFill } : {}),
+      ...(chartLine ? { line: chartLine } : {}),
+      ...(chartShadow ? { shadow: chartShadow } : {}),
+      ...(config.roundedCorners ? { cornerRadius: 12 } : {}),
+    };
+    hasConfig = true;
+  }
+
+  const plotContext = resolverContextFromConfig(config, 'plotArea');
+  const plotFill =
+    resolveChartFillPaint(config.plotFormat?.fill, plotContext) ??
+    resolveChartFillPaint(config.plotArea?.fill, plotContext) ??
+    resolveChartFillPaint(config.plotArea?.format?.fill, plotContext);
+  const plotLine =
+    resolveChartLineStyle(config.plotFormat?.line, plotContext, {
+      widthToPx: linePointsToCanvasPx,
+    }) ??
+    resolveChartLineStyle(config.plotArea?.format?.line, plotContext, {
+      widthToPx: linePointsToCanvasPx,
+    });
+  const plotShadow =
+    resolveChartShadow(config.plotFormat?.shadow, plotContext) ??
+    resolveChartShadow(config.plotArea?.format?.shadow, plotContext);
+  if (plotFill || plotLine || plotShadow) {
+    configSpec.plotFrame = {
+      ...(plotFill ? { fill: plotFill } : {}),
+      ...(plotLine ? { line: plotLine } : {}),
+      ...(plotShadow ? { shadow: plotShadow } : {}),
+    };
     hasConfig = true;
   }
 

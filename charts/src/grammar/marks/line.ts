@@ -12,7 +12,7 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
-import { groupDataByEncoding } from './helpers';
+import { definedStyle, groupDataByEncoding } from './helpers';
 import { buildInterpolatedPath } from './path-interpolation';
 
 /**
@@ -82,6 +82,11 @@ export function generateLineMarks(
         strokeWidth: markSpec.strokeWidth ?? 2,
         fill: undefined,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

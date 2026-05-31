@@ -568,9 +568,8 @@ export function resolveChartTextColor(
   color: ChartColor | undefined,
   options: ResolveChartColorOptions = {},
 ): string | undefined {
-  if (chartColorTintShade(color) !== undefined) return resolveChartColor(color, options);
-  if (chartThemeColorKey(color) === 'tx1') {
-    return resolveChartColor(color, options) ?? '#595959';
+  if (chartThemeColorKey(color) === 'tx1' && chartColorTintShade(color) === undefined) {
+    return '#595959';
   }
   return resolveChartColor(color, options);
 }

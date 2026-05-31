@@ -65,7 +65,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     }
     // Apply legend config to color channel.
     if (config.legend) {
-      encoding.color.legend = buildLegendSpec(config.legend, {
+      encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
       });
     }
@@ -129,13 +129,13 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   if (config.axis) {
     const xAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
     if (xAxis && encoding.x) {
-      encoding.x.axis = mapAxisConfigToAxisSpec(xAxis);
+      encoding.x.axis = mapAxisConfigToAxisSpec(xAxis, config, 'categoryAxis');
       const scaleSpec = buildAxisScaleSpec(xAxis, useDateSerialCategoryAxis);
       if (scaleSpec) encoding.x.scale = { ...(encoding.x.scale ?? {}), ...scaleSpec };
     }
     const yAxis = resolveAxisConfigForChannel(config.axis, 'y', isHorizontal);
     if (yAxis && encoding.y) {
-      encoding.y.axis = mapAxisConfigToAxisSpec(yAxis);
+      encoding.y.axis = mapAxisConfigToAxisSpec(yAxis, config, 'valueAxis');
       const scaleSpec = buildAxisScaleSpec(yAxis, false);
       if (scaleSpec) encoding.y.scale = { ...(encoding.y.scale ?? {}), ...scaleSpec };
     }
@@ -156,6 +156,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     Boolean(resolveStackMode(config)) && !legendDomain,
     legendDomain,
     legendSymbolType(config, data),
+    config,
   );
   if (colorChannel) {
     encoding.color = colorChannel;

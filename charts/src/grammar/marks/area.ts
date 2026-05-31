@@ -12,7 +12,7 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
-import { groupDataByEncoding } from './helpers';
+import { definedStyle, groupDataByEncoding } from './helpers';
 
 /**
  * Generate area marks.
@@ -265,6 +265,12 @@ export function generateAreaMarks(
           stroke: markSpec.stroke ?? color,
           strokeWidth: markSpec.strokeWidth ?? 1,
           opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
+          ...definedStyle({
+            fillPaint: markSpec.fillPaint,
+            strokePaint: markSpec.strokePaint,
+            line: markSpec.line,
+            effects: markSpec.effects,
+          }),
         },
       });
     } else {
@@ -299,6 +305,12 @@ export function generateAreaMarks(
           stroke: markSpec.stroke ?? color,
           strokeWidth: markSpec.strokeWidth ?? 1,
           opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
+          ...definedStyle({
+            fillPaint: markSpec.fillPaint,
+            strokePaint: markSpec.strokePaint,
+            line: markSpec.line,
+            effects: markSpec.effects,
+          }),
         },
       });
     }

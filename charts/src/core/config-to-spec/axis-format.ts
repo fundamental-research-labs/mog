@@ -1,6 +1,7 @@
 import type { AxisOrient, AxisSpec, AxisTickMark } from '../../grammar/spec';
-import type { ChartFormat, SingleAxisConfig } from '../../types';
+import type { ChartConfig, ChartFormat, SingleAxisConfig } from '../../types';
 import { resolveChartTextColor, resolveGridlineColor } from '../../utils/chart-colors';
+import { resolverContextFromConfig } from '../style-resolver';
 import { isDateAxisConfig, toFiniteNumber } from './category-axis';
 import { dashStyleToStrokeDash, hasVisibleLineStyle } from './series-style';
 import { linePointsToCanvasPx, pointsToCanvasPx } from './units';
@@ -31,8 +32,11 @@ const DISPLAY_UNIT_FACTORS: Record<string, number> = {
 export function mapAxisConfigToAxisSpec(
   axisConf: SingleAxisConfig,
   orient?: AxisOrient,
+  config?: ChartConfig,
+  ownerKey = 'axis',
 ): AxisSpec {
   const spec: AxisSpec = {};
+  const context = config ? resolverContextFromConfig(config, ownerKey) : {};
   spec.title = axisConf.title ?? null;
   if (orient) spec.orient = orient;
   if (axisConf.visible === false || axisConf.show === false) {
@@ -97,7 +101,7 @@ export function mapAxisConfigToAxisSpec(
   const labelFont = axisConf.format?.font;
   if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
   if (labelFont?.name) spec.labelFontFamily = labelFont.name;
-  const labelColor = resolveChartTextColor(labelFont?.color);
+  const labelColor = resolveChartTextColor(labelFont?.color, context);
   if (labelColor) spec.labelColor = labelColor;
 
   const labelAngle = normalizeAxisLabelAngle(axisConf);
@@ -114,7 +118,7 @@ export function mapAxisConfigToAxisSpec(
     spec.domain = false;
     spec.ticks = false;
   }
-  const axisLineColor = resolveChartTextColor(axisLine?.color);
+  const axisLineColor = resolveChartTextColor(axisLine?.color, context);
   if (axisLineColor) {
     spec.domainColor = axisLineColor;
     spec.tickColor = axisLineColor;
@@ -125,7 +129,7 @@ export function mapAxisConfigToAxisSpec(
     spec.tickWidth = lineWidth;
   }
 
-  const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
+  const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color, context);
   if (gridlineColor) spec.gridColor = gridlineColor;
   if (axisConf.gridlineFormat?.width !== undefined) {
     spec.gridWidth = linePointsToCanvasPx(axisConf.gridlineFormat.width);
@@ -141,7 +145,7 @@ export function mapAxisConfigToAxisSpec(
         ? 1
         : Math.max(0, Math.min(1, 1 - axisConf.gridlineFormat.transparency));
   }
-  const minorGridlineColor = resolveGridlineColor(axisConf.minorGridlineFormat?.color);
+  const minorGridlineColor = resolveGridlineColor(axisConf.minorGridlineFormat?.color, context);
   if (minorGridlineColor) spec.minorGridColor = minorGridlineColor;
   if (axisConf.minorGridlineFormat?.width !== undefined) {
     spec.minorGridWidth = linePointsToCanvasPx(axisConf.minorGridlineFormat.width);
@@ -161,7 +165,7 @@ export function mapAxisConfigToAxisSpec(
   const titleFont = axisConf.titleFormat?.font;
   if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);
   if (titleFont?.name) spec.titleFontFamily = titleFont.name;
-  const titleColor = resolveChartTextColor(titleFont?.color);
+  const titleColor = resolveChartTextColor(titleFont?.color, context);
   if (titleColor) spec.titleColor = titleColor;
   return spec;
 }

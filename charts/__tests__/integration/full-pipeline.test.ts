@@ -55,6 +55,20 @@ function runPipeline(config: ChartConfig, data: ChartData): CompileResult {
 describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () => {
   const SINGLE_DATA = makeData(1);
   const MULTI_DATA = makeData(3);
+  const XY_DATA: ChartData = {
+    categories: [1, 2, 3, 4],
+    series: [
+      {
+        name: 'Series 1',
+        data: [
+          { x: 1, y: 10, size: 5, name: '1' },
+          { x: 2, y: 20, size: 10, name: '2' },
+          { x: 3, y: 30, size: 15, name: '3' },
+          { x: 4, y: 40, size: 20, name: '4' },
+        ],
+      },
+    ],
+  };
 
   // --- bar ---
 
@@ -195,7 +209,7 @@ describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () =>
 
   describe('scatter chart', () => {
     it('produces symbol marks', () => {
-      const result = runPipeline(makeConfig({ type: 'scatter' }), SINGLE_DATA);
+      const result = runPipeline(makeConfig({ type: 'scatter' }), XY_DATA);
       expect(result.marks.length).toBeGreaterThan(0);
       expect(result.marks.every((m) => m.type === 'symbol')).toBe(true);
     });
@@ -205,7 +219,7 @@ describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () =>
 
   describe('bubble chart', () => {
     it('produces symbol marks', () => {
-      const result = runPipeline(makeConfig({ type: 'bubble' }), SINGLE_DATA);
+      const result = runPipeline(makeConfig({ type: 'bubble' }), XY_DATA);
       expect(result.marks.length).toBeGreaterThan(0);
       expect(result.marks.every((m) => m.type === 'symbol')).toBe(true);
     });

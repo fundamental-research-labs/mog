@@ -134,9 +134,16 @@ export function renderText(ctx: CanvasRenderingContext2D, mark: TextMark): void 
     ctx.translate(mark.x, mark.y);
     ctx.rotate(mark.rotation);
     renderTextAtOrigin(ctx, mark);
-  } else {
+  } else if (mark.richText?.length || mark.underline || mark.strikethrough) {
     ctx.translate(mark.x, mark.y);
     renderTextAtOrigin(ctx, mark);
+  } else {
+    if (hasRenderableFill(mark.style)) {
+      ctx.fillText(mark.text, mark.x, mark.y);
+    }
+    if (hasRenderableStroke(mark.style)) {
+      ctx.strokeText(mark.text, mark.x, mark.y);
+    }
   }
 
   ctx.restore();

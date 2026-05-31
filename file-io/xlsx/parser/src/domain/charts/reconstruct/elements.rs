@@ -1,6 +1,6 @@
 use domain_types::chart::{
-    ChartDataTableData, ChartFontData, ChartFormatData, ChartView3DData, DataLabelData, LegendData,
-    LegendEntryData,
+    ChartDataTableData, ChartFontData, ChartFormatData, ChartFormatStringData, ChartView3DData,
+    DataLabelData, LegendData, LegendEntryData,
 };
 use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
@@ -15,8 +15,18 @@ use super::formatting::{
 pub(super) fn build_title(
     text: Option<&str>,
     format: Option<&ChartFormatData>,
+    rich_text: Option<&[ChartFormatStringData]>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
 ) -> Option<charts::Title> {
+    let default_font = format.and_then(|f| f.font.as_ref());
+    if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
+        return Some(build_title_with_text(
+            build_chart_text_rich_runs(runs, default_font),
+            format,
+            layout,
+        ));
+    }
+
     let text = text?;
     // Guard against the literal string "undefined" leaking from JS bridge serialization.
     if text == "undefined" || text.is_empty() {
@@ -30,14 +40,22 @@ pub(super) fn build_title_element(
     format: Option<&ChartFormatData>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
 ) -> charts::Title {
-    let tx = Some(build_chart_text_rich(
-        text,
-        format.and_then(|f| f.font.as_ref()),
-    ));
+    build_title_with_text(
+        build_chart_text_rich(text, format.and_then(|f| f.font.as_ref())),
+        format,
+        layout,
+    )
+}
+
+fn build_title_with_text(
+    tx: ChartText,
+    format: Option<&ChartFormatData>,
+    layout: Option<&domain_types::domain::drawings::ManualLayout>,
+) -> charts::Title {
     let sp_pr = format.and_then(build_shape_properties);
 
     charts::Title {
-        tx,
+        tx: Some(tx),
         layout: layout.cloned().map(Into::into),
         sp_pr,
         ..Default::default()
@@ -59,6 +77,41 @@ pub(super) fn build_chart_text_rich(text: &str, font: Option<&ChartFontData>) ->
             ..Default::default()
         },
         runs: vec![run],
+        end_para_rpr: None,
+    };
+
+    ChartText::Rich(TextBody {
+        body_props: Default::default(),
+        list_style: None,
+        paragraphs: vec![para],
+    })
+}
+
+/// Build a ChartText::Rich from already segmented rich-text runs.
+pub(super) fn build_chart_text_rich_runs(
+    runs: &[ChartFormatStringData],
+    default_font: Option<&ChartFontData>,
+) -> ChartText {
+    let def_rpr = default_font.map(|f| Box::new(build_run_properties(f)));
+
+    let runs = runs
+        .iter()
+        .filter(|run| !run.text.is_empty())
+        .map(|run| {
+            let font = run.font.as_ref().or(default_font);
+            TextRunContent::Run(TextRun {
+                text: run.text.clone(),
+                props: font.map(build_run_properties).unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    let para = Paragraph {
+        props: ParagraphProperties {
+            def_run_props: def_rpr,
+            ..Default::default()
+        },
+        runs,
         end_para_rpr: None,
     };
 
@@ -250,4 +303,103 @@ pub(super) fn build_surface(format: Option<&ChartFormatData>) -> Option<ChartSur
         sp_pr: Some(sp_pr),
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn font(
+        name: Option<&str>,
+        size: Option<f64>,
+        bold: Option<bool>,
+        italic: Option<bool>,
+    ) -> ChartFontData {
+        ChartFontData {
+            name: name.map(str::to_string),
+            size,
+            bold,
+            italic,
+            color: None,
+            underline: None,
+            strikethrough: None,
+        }
+    }
+
+    fn format_with_font(font: ChartFontData) -> ChartFormatData {
+        ChartFormatData {
+            fill: None,
+            line: None,
+            font: Some(font),
+            text_rotation: None,
+            text_vertical_type: None,
+            shadow: None,
+        }
+    }
+
+    #[test]
+    fn build_title_preserves_rich_text_runs() {
+        let default_format = format_with_font(font(Some("Aptos"), Some(11.0), None, None));
+        let rich_text = vec![
+            ChartFormatStringData {
+                text: "Revenue ".to_string(),
+                font: Some(font(None, None, Some(true), None)),
+            },
+            ChartFormatStringData {
+                text: "FY26".to_string(),
+                font: Some(font(None, Some(14.0), None, Some(true))),
+            },
+        ];
+
+        let title = build_title(
+            Some("Revenue FY26"),
+            Some(&default_format),
+            Some(&rich_text),
+            None,
+        )
+        .expect("rich-text title should be reconstructed");
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        assert_eq!(body.paragraphs.len(), 1);
+        let paragraph = &body.paragraphs[0];
+        assert_eq!(
+            paragraph
+                .props
+                .def_run_props
+                .as_ref()
+                .and_then(|props| props.size)
+                .map(|size| size.value()),
+            Some(1100)
+        );
+        assert_eq!(paragraph.runs.len(), 2);
+
+        let TextRunContent::Run(first) = &paragraph.runs[0] else {
+            panic!("expected first rich-text run");
+        };
+        assert_eq!(first.text, "Revenue ");
+        assert_eq!(first.props.bold, Some(true));
+
+        let TextRunContent::Run(second) = &paragraph.runs[1] else {
+            panic!("expected second rich-text run");
+        };
+        assert_eq!(second.text, "FY26");
+        assert_eq!(second.props.italic, Some(true));
+        assert_eq!(second.props.size.map(|size| size.value()), Some(1400));
+    }
+
+    #[test]
+    fn build_title_falls_back_to_plain_text_without_rich_runs() {
+        let title = build_title(Some("Plain"), None, Some(&[]), None)
+            .expect("plain title should be reconstructed");
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        let TextRunContent::Run(run) = &body.paragraphs[0].runs[0] else {
+            panic!("expected plain title run");
+        };
+        assert_eq!(run.text, "Plain");
+    }
 }

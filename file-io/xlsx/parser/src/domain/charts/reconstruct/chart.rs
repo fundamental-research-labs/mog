@@ -1,4 +1,4 @@
-use domain_types::{ChartDefinition, chart::ChartSpec};
+use domain_types::{chart::ChartSpec, ChartDefinition};
 use ooxml_types::charts::{self, DisplayBlanksAs};
 
 use super::{
@@ -28,6 +28,7 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         title: build_title(
             spec.title.as_deref(),
             spec.title_format.as_ref(),
+            spec.title_rich_text.as_deref(),
             title_layout,
         ),
         auto_title_deleted: spec.auto_title_deleted,

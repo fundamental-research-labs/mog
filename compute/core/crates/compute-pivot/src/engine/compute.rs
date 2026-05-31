@@ -77,14 +77,18 @@ pub fn compute_with_show_values_as_resolved(
     data: &[Vec<CellValue>],
     expansion_state: Option<&PivotExpansionState>,
 ) -> PivotTableResult {
+    let data_rows = if data.len() > 1 { &data[1..] } else { &[] };
+    if data_rows.is_empty() {
+        return PivotTableResult::empty(0, None);
+    }
+
     // Use the relational engine pipeline directly
     let query = crate::presenter::pivot_config_to_query(config);
 
     let query_result = match compute_relational::execute(&query, data) {
         Ok(r) => r,
         Err(e) => {
-            let row_count = if data.len() > 1 { data.len() - 1 } else { 0 };
-            return PivotTableResult::empty(row_count, Some(vec![e.to_string()]));
+            return PivotTableResult::empty(data_rows.len(), Some(vec![e.to_string()]));
         }
     };
 

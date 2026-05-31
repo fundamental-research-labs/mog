@@ -55,7 +55,7 @@ fn validate_source_range_inverted_cols_auto_normalized() {
 }
 
 #[test]
-fn validate_source_range_too_few_rows() {
+fn validate_source_range_header_only_is_valid() {
     let mut config = make_base_config(
         sample_fields(),
         vec![
@@ -70,13 +70,11 @@ fn validate_source_range_too_few_rows() {
         vec![],
     );
     config.source_range = CellRange::new(0, 0, 0, 4); // Only 1 row (header only)
-    let err = validate_and_resolve(&config);
-    assert!(err.is_err(), "Should reject range with only 1 row");
-    let msg = err.unwrap_err().to_string();
+    let result = validate_and_resolve(&config);
     assert!(
-        msg.contains("at least 2 rows"),
-        "Error should mention at least 2 rows: {}",
-        msg
+        result.is_ok(),
+        "Header-only range should be valid and compute as empty: {:?}",
+        result
     );
 }
 

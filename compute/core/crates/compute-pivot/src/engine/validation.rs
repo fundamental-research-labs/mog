@@ -60,7 +60,8 @@ pub fn validate_and_resolve(config: &PivotTableConfig) -> Result<ResolvedPivotCo
         });
     }
 
-    // Validate source_range is not inverted and has at least 2 rows (header + 1 data row)
+    // Validate source_range is not inverted. Header-only ranges are valid and
+    // compute to an empty pivot result.
     {
         let sr = &config.source_range;
         if sr.end_row() < sr.start_row() {
@@ -79,12 +80,6 @@ pub fn validate_and_resolve(config: &PivotTableConfig) -> Result<ResolvedPivotCo
                     sr.end_col(),
                     sr.start_col()
                 ),
-            });
-        }
-        if sr.end_row() >= sr.start_row() && sr.end_row() - sr.start_row() < 1 {
-            errors.push(PivotError::ValidationError {
-                message: "source_range must contain at least 2 rows (header + 1 data row)"
-                    .to_string(),
             });
         }
     }

@@ -32,7 +32,7 @@ jest.mock('../../cells/cell-reads', () => ({
 }));
 
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
-import type { ChartMark } from '@mog-sdk/contracts/bridges';
+import type { ChartLayoutSnapshot, ChartMark } from '@mog-sdk/contracts/bridges';
 import type {
   FloatingObjectCreatedEvent,
   FloatingObjectDeletedEvent,
@@ -40,6 +40,7 @@ import type {
   IEventBus,
   SheetDeletedEvent,
 } from '@mog-sdk/contracts/events';
+import type { ChartExportOptionsSnapshot } from '@mog-sdk/contracts/data/charts';
 
 import type { DocumentContext } from '../../../context/types';
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
@@ -478,6 +479,141 @@ describe('renderCached — sync paint contract', () => {
       },
     });
     expect(rangeReferencesMock.resolveChartRangeReferences).not.toHaveBeenCalled();
+  });
+
+  it('export-sized public compiles return marks and diagnostics without mutating UI render caches', async () => {
+    const { ctx, eventBus } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'bar',
+      dataRange: '',
+      importStatus: {
+        source: 'xlsx',
+        recoverability: 'partiallySupported',
+        renderability: 'renderable',
+        diagnostics: [
+          {
+            code: 'unsupportedFeature',
+            message: 'Pivot chart formatting is preserved for export but not rendered',
+          },
+        ],
+      },
+      series: [
+        {
+          name: 'Revenue',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A2:B2',
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          index: 0,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: {
+            kind: 'seriesCategories',
+            source: 'series',
+            ref: 'Sheet1!A2:B2',
+            range: range(1),
+          },
+        },
+      ],
+      diagnostics: [],
+    });
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw = row === 0 ? [10, 20][col] : row === 1 ? ['Q1', 'Q2'][col] : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw = row === 0 ? [10, 20][col] : row === 1 ? ['Q1', 'Q2'][col] : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const renderCache = getRenderCache(bridge);
+    const cachedMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const cachedLayout: ChartLayoutSnapshot = {
+      plotArea: { left: 0.1, top: 0.2, width: 0.3, height: 0.4 },
+    };
+    renderCache.commitMarks(CHART_1, cachedMarks, { sheetId: SHEET_A, layout: cachedLayout });
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+
+    const cacheUpdates: string[] = [];
+    bridge.onCacheUpdate((chartId) => cacheUpdates.push(chartId));
+    const dirtyKeysBefore = renderCache.getDirtyChartKeys();
+    const exportOptions: ChartExportOptionsSnapshot = {
+      format: 'png',
+      width: 640,
+      height: 360,
+      physicalWidth: 640,
+      physicalHeight: 360,
+      pixelRatio: 1,
+      backgroundColor: '#ffffff',
+    };
+
+    const marksAtSize = await bridge.getMarksAtSize(SHEET_A, CHART_1, 640, 360);
+    const snapshot = await bridge.getRenderSnapshotAtSize(
+      SHEET_A,
+      CHART_1,
+      640,
+      360,
+      exportOptions,
+    );
+
+    expect(Array.isArray(marksAtSize)).toBe(true);
+    expect('code' in snapshot).toBe(false);
+    if (!Array.isArray(marksAtSize) || 'code' in snapshot) return;
+    expect(marksAtSize.length).toBeGreaterThan(0);
+    expect(snapshot.marks).toEqual(marksAtSize);
+    expect(snapshot.resolvedChartSpec.implementation).toMatchObject({
+      renderAuthority: 'chartBridge',
+      renderStatus: 'renderable',
+      compilerPathId: 'ts-grammar',
+    });
+    expect(snapshot.resolvedChartSpec.export).toEqual(exportOptions);
+    expect(snapshot.resolvedChartSpec.diagnostics.unsupportedFeatures).toContain(
+      'Pivot chart formatting is preserved for export but not rendered',
+    );
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(cachedMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(cachedLayout);
+    expect(renderCache.getDirtyChartKeys()).toEqual(dirtyKeysBefore);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(cacheUpdates).toEqual([]);
+    bridge.stop();
   });
 
   it('stale-but-show: paints existing marks AND triggers a recompile when dirty', () => {

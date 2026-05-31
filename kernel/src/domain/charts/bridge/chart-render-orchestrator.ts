@@ -13,6 +13,7 @@ import {
   compileChartRenderSnapshotAtSize as compileResolvedChartRenderSnapshotAtSize,
 } from './chart-compiler';
 import type { ChartRenderCache } from './chart-render-cache';
+import { importedChartRenderStatusToError } from './import-render-status';
 import { defaultExportOptionsForSize } from './resolved-spec-snapshot';
 
 export interface ChartRenderOrchestratorOptions {
@@ -162,6 +163,11 @@ export class ChartRenderOrchestrator {
     height: number,
     exportOptions: ChartExportOptionsSnapshot,
   ): Promise<ChartRenderSnapshot | ChartError> {
+    const knownImportStatus = this.renderCache.getImportRenderStatus(chartId, sheetId);
+    if (knownImportStatus) {
+      return importedChartRenderStatusToError(chartId, knownImportStatus);
+    }
+
     const chartRenderDataOrError = await this.dataResolver.resolveForRendering(sheetId, chartId);
     if ('code' in chartRenderDataOrError) {
       return chartRenderDataOrError;

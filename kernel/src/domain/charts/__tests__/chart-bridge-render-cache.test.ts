@@ -393,6 +393,86 @@ describe('renderCached — sync paint contract', () => {
     bridge.stop();
   });
 
+  it('getMarksAtSize returns known terminal import status without fetching chart data', async () => {
+    const { ctx, eventBus } = createTestCtx();
+    const computeBridge = {
+      getChart: jest.fn(),
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = computeBridge;
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A, {
+      ...fakeChart,
+      importStatus: {
+        state: 'non-renderable',
+        message: 'Imported chart cannot be exported',
+      },
+    });
+
+    const result = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect('code' in result).toBe(true);
+    if (!('code' in result)) return;
+    expect(result).toMatchObject({
+      code: 'RENDER_FAILED',
+      message: 'Imported chart cannot be exported',
+      chartId: CHART_1,
+      details: {
+        importStatus: {
+          state: 'non-renderable',
+          message: 'Imported chart cannot be exported',
+        },
+      },
+    });
+    expect(computeBridge.getChart).not.toHaveBeenCalled();
+    bridge.stop();
+  });
+
+  it('getRenderSnapshotAtSize returns fetched terminal import status before range resolution', async () => {
+    const { ctx } = createTestCtx();
+    const chart = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      importStatus: {
+        renderable: false,
+        message: 'ChartEx layout is preserved but not renderable',
+      },
+    } as unknown as ChartFloatingObject;
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const result = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      format: 'png',
+      width: 600,
+      height: 400,
+      pixelRatio: 1,
+      physicalWidth: 600,
+      physicalHeight: 400,
+      backgroundColor: '#ffffff',
+    });
+
+    expect('code' in result).toBe(true);
+    if (!('code' in result)) return;
+    expect(result).toMatchObject({
+      code: 'RENDER_FAILED',
+      message: 'ChartEx layout is preserved but not renderable',
+      chartId: CHART_1,
+      details: {
+        importStatus: {
+          renderable: false,
+          message: 'ChartEx layout is preserved but not renderable',
+        },
+      },
+    });
+    expect(rangeReferencesMock.resolveChartRangeReferences).not.toHaveBeenCalled();
+  });
+
   it('stale-but-show: paints existing marks AND triggers a recompile when dirty', () => {
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);

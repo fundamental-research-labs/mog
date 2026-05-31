@@ -1,3 +1,5 @@
+import type { ChartError } from '@mog-sdk/contracts/bridges';
+
 export type FloatingObjectWithImportStatus = {
   type?: unknown;
   importStatus?: unknown;
@@ -115,4 +117,16 @@ export function importStatusToTerminalRenderStatus(
     firstDiagnosticMessage(status) ??
     'Imported chart cannot be rendered';
   return { terminal: true, message, raw: status };
+}
+
+export function importedChartRenderStatusToError(
+  chartId: string,
+  status: ImportedChartRenderStatus,
+): ChartError {
+  return {
+    code: 'RENDER_FAILED',
+    message: status.message,
+    chartId,
+    details: { importStatus: status.raw },
+  };
 }

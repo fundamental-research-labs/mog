@@ -39,6 +39,10 @@ import {
   type ChartWorkbookThemeColorPalette,
   type WorkbookThemeBridge,
 } from './theme-colors';
+import {
+  importedChartRenderStatusToError,
+  importStatusToTerminalRenderStatus,
+} from './import-render-status';
 
 /**
  * Normalize wire AxisData to populate legacy aliases that the charts rendering
@@ -300,6 +304,11 @@ export class ChartDataResolver {
         message: 'Chart not found',
         chartId,
       };
+    }
+
+    const terminalImportStatus = importStatusToTerminalRenderStatus(chart.importStatus);
+    if (terminalImportStatus) {
+      return importedChartRenderStatusToError(chartId, terminalImportStatus);
     }
 
     const resolvedRanges = await resolveChartRangeReferences(this.ctx, chart);

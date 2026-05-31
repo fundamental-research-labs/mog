@@ -1,5 +1,6 @@
 import type { MarkSpec } from '../../grammar/spec';
 import type {
+  ChartColor,
   ChartConfig,
   ChartData,
   ChartFormat,
@@ -135,7 +136,7 @@ function resolvePointFillColor(
   const ownerKey = `point(seriesIdx=${sourceSeriesIndex},pointIdx=${point.idx})`;
   const context = resolverContextFromConfig(config, ownerKey);
   const format = resolveChartOwnerFormat(config, ownerKey, point.visualFormat);
-  return colorToCss(point.fill) ?? resolveChartFillColor(format?.fill, context);
+  return colorToCss(point.fill, context) ?? resolveChartFillColor(format?.fill, context);
 }
 
 function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
@@ -195,9 +196,13 @@ function resolvedConfigColors(config: ChartConfig): string[] {
     .filter(Boolean) as string[];
 }
 
-function colorToCss(color: unknown): string | undefined {
-  if (typeof color !== 'string') return undefined;
-  return color.startsWith('#') ? color : `#${color}`;
+function colorToCss(
+  color: unknown,
+  context: Parameters<typeof resolveChartColor>[1] = {},
+): string | undefined {
+  if (typeof color === 'string') return color.startsWith('#') ? color : `#${color}`;
+  if (color && typeof color === 'object') return resolveChartColor(color as ChartColor, context);
+  return undefined;
 }
 
 export function hasVisibleLineStyle(line: unknown): boolean {

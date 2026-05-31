@@ -12,6 +12,7 @@ import {
   POINT_STROKE_FIELD,
   POINT_STROKE_WIDTH_FIELD,
   SERIES_FILL_FIELD,
+  SERIES_FILL_OPACITY_FIELD,
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
 } from './fields';
@@ -22,7 +23,7 @@ import {
   resolveChartOwnerFormat,
   resolverContextFromConfig,
 } from '../style-resolver';
-import { resolveChartColor } from '../../utils/chart-colors';
+import { resolveChartColor, resolveFormatFillOpacity } from '../../utils/chart-colors';
 import { linePointsToCanvasPx } from './units';
 
 export function applyPointStyle(
@@ -131,8 +132,11 @@ export function applySeriesVisualStyle(
     : seriesConfig?.format;
   const stroke = lineColor(format?.line, resolverContext);
   const strokeWidth = linePointsToCanvasPx(format?.line?.width);
+  const fillOpacity = resolveFormatFillOpacity(format);
   if (stroke) row[SERIES_STROKE_FIELD] = stroke;
+  if (format?.line?.noFill === true) row[SERIES_STROKE_WIDTH_FIELD] = 0;
   if (strokeWidth !== undefined) row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
+  if (fillOpacity !== undefined) row[SERIES_FILL_OPACITY_FIELD] = fillOpacity;
 }
 
 function invertedNegativeFill(

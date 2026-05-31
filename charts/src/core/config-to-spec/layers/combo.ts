@@ -21,6 +21,8 @@ import {
   VALUE_FIELD,
 } from '../fields';
 import { buildSeriesMark } from '../marks';
+import { resolveStackMode } from '../subtypes';
+import { isNoFillNoLineSeries } from '../style';
 import { seriesConfigForDataSeries, seriesSourceIndex } from '../../series-identity';
 import {
   effectiveShowLines,
@@ -47,6 +49,7 @@ export function buildComboLayers(
   const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' as const };
   const yEncoding = baseEncoding.y ?? { field: VALUE_FIELD, type: 'quantitative' as const };
   const emittedBarGroups = new Set<string>();
+  const emittedAreaGroups = new Set<string>();
 
   for (let i = 0; i < data.series.length; i += 1) {
     const series = data.series[i];
@@ -88,6 +91,49 @@ export function buildComboLayers(
         }),
       );
       continue;
+    }
+
+    if (markType === 'area' && shouldGroupAsStackedAreaSeries(config, rawSeriesType)) {
+      const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
+      const xRole = isQuantitativeXSeries(seriesConf, rawSeriesType, config)
+        ? 'quantitative'
+        : 'category';
+      const memberIndices = stackedAreaGroupMemberIndices({
+        config,
+        data,
+        seriesConfigs,
+        yAxisIndex,
+        xRole,
+      });
+
+      if (memberIndices.length > 1 && memberIndices.includes(i)) {
+        const groupKey = `area:${yAxisIndex ?? 0}:${xRole}`;
+        if (memberIndices[0] === i && !emittedAreaGroups.has(groupKey)) {
+          emittedAreaGroups.add(groupKey);
+          layers.push(
+            buildAreaGroupLayer({
+              config,
+              data,
+              baseEncoding,
+              encoding,
+              memberIndices,
+            }),
+          );
+        }
+        if (showMarkers) {
+          layers.push(
+            buildMarkerLayer(
+              config,
+              seriesConf,
+              sourceSeriesIndex,
+              rawSeriesType,
+              encoding,
+              filter,
+            ),
+          );
+        }
+        continue;
+      }
     }
 
     if (markType === 'point') {
@@ -249,6 +295,36 @@ function buildMarkerLayer(
   };
 }
 
+function buildAreaGroupLayer(input: {
+  config: ChartConfig;
+  data: ChartData;
+  baseEncoding: EncodingSpec;
+  encoding: EncodingSpec;
+  memberIndices: number[];
+}): UnitSpec {
+  const encoding: EncodingSpec = {
+    ...input.encoding,
+    y: withAreaGroupValueScale(input.encoding.y, input.config, input.data, input.memberIndices),
+    detail: { field: SERIES_INDEX_FIELD, type: 'nominal', legend: null },
+    ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
+    ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
+  };
+  applyAutomaticCategoryAxisCrossing(encoding);
+
+  return {
+    mark: {
+      type: 'area',
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+    },
+    encoding,
+    transform: [
+      { type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: input.memberIndices } },
+    ],
+  };
+}
+
 function buildBarGroupLayer(input: {
   config: ChartConfig;
   data: ChartData;
@@ -291,6 +367,72 @@ function buildBarGroupLayer(input: {
   };
 }
 
+function shouldGroupAsStackedAreaSeries(config: ChartConfig, seriesType: ChartType): boolean {
+  return MARK_TYPE_MAP[seriesType] === 'area' && resolveStackMode(config) !== undefined;
+}
+
+function stackedAreaGroupMemberIndices(input: {
+  config: ChartConfig;
+  data: ChartData;
+  seriesConfigs: SeriesConfig[];
+  yAxisIndex: 0 | 1 | undefined;
+  xRole: 'category' | 'quantitative';
+}): number[] {
+  return input.data.series
+    .map((series, index) => {
+      const seriesConf = seriesConfigForDataSeries(series, input.seriesConfigs, index);
+      const rawSeriesType = resolveComboSeriesType(input.config, series, seriesConf, index);
+      const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
+      const xRole =
+        rawSeriesType && isSupportedChartType(rawSeriesType)
+          ? isQuantitativeXSeries(seriesConf, rawSeriesType, input.config)
+            ? 'quantitative'
+            : 'category'
+          : undefined;
+      return { index, rawSeriesType, seriesConf, yAxisIndex, xRole };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        index: number;
+        rawSeriesType: ChartType;
+        seriesConf: SeriesConfig | undefined;
+        yAxisIndex: 0 | 1 | undefined;
+        xRole: 'category' | 'quantitative';
+      } =>
+        isSupportedChartType(item.rawSeriesType) &&
+        shouldGroupAsStackedAreaSeries(input.config, item.rawSeriesType) &&
+        effectiveShowLines(item.seriesConf, item.rawSeriesType, input.config) &&
+        !isNoFillNoLineSeries(item.seriesConf) &&
+        (item.yAxisIndex ?? 0) === (input.yAxisIndex ?? 0) &&
+        item.xRole === input.xRole,
+    )
+    .map((item) => item.index);
+}
+
+function withAreaGroupValueScale(
+  y: EncodingSpec['y'],
+  config: ChartConfig,
+  data: ChartData,
+  memberIndices: number[],
+): EncodingSpec['y'] {
+  if (!y) return y;
+  const adjusted = { ...y };
+  if (hasExplicitScaleDomain(adjusted)) return adjusted;
+
+  if (resolveStackMode(config) === 'normalize') {
+    const domain = percentStackedMemberDomain(data, memberIndices);
+    adjusted.scale = { ...(adjusted.scale ?? {}), domain, nice: false };
+    return adjusted;
+  }
+
+  applyMogAutoValueAxisScale(adjusted, stackedMemberValues(data, memberIndices), {
+    includeZero: true,
+  });
+  return adjusted;
+}
+
 function withBarGroupValueScale(
   y: EncodingSpec['y'],
   data: ChartData,
@@ -300,6 +442,45 @@ function withBarGroupValueScale(
   const adjusted = { ...y };
   applyMogAutoValueAxisScale(adjusted, memberValues(data, memberIndices), { includeZero: true });
   return adjusted;
+}
+
+function hasExplicitScaleDomain(y: NonNullable<EncodingSpec['y']>): boolean {
+  return Array.isArray(y.scale?.domain);
+}
+
+function percentStackedMemberDomain(data: ChartData, memberIndices: number[]): [number, number] {
+  const memberSet = new Set(memberIndices);
+  let hasPositive = false;
+  let hasNegative = false;
+  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
+    for (const seriesIndex of memberSet) {
+      const value = data.series[seriesIndex]?.data[pointIndex]?.y;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) continue;
+      if (value > 0) hasPositive = true;
+      else hasNegative = true;
+    }
+  }
+
+  const min = hasNegative ? -100 : 0;
+  const max = hasPositive ? 100 : 0;
+  return min === max ? [min, min + 100] : [min, max];
+}
+
+function stackedMemberValues(data: ChartData, memberIndices: number[]): number[] {
+  const memberSet = new Set(memberIndices);
+  const values: number[] = [];
+  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
+    let positive = 0;
+    let negative = 0;
+    for (const seriesIndex of memberSet) {
+      const value = data.series[seriesIndex]?.data[pointIndex]?.y;
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      if (value >= 0) positive += value;
+      else negative += value;
+    }
+    values.push(positive, negative);
+  }
+  return values;
 }
 
 function memberValues(data: ChartData, memberIndices: number[]): number[] {

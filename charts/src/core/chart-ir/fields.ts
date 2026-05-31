@@ -10,6 +10,7 @@ export const SOURCE_SERIES_INDEX_FIELD = '__mogSourceSeriesIndex';
 export const SOURCE_SERIES_KEY_FIELD = '__mogSourceSeriesKey';
 export const SERIES_ORDER_FIELD = '__mogSeriesOrder';
 export const SERIES_FILL_FIELD = '__mogSeriesFill';
+export const SERIES_FILL_OPACITY_FIELD = '__mogSeriesFillOpacity';
 export const SERIES_STROKE_FIELD = '__mogSeriesStroke';
 export const SERIES_STROKE_WIDTH_FIELD = '__mogSeriesStrokeWidth';
 export const RAW_CATEGORY_FIELD = '__mogRawCategory';

@@ -679,6 +679,7 @@ describe('configToSpec annotation layers', () => {
       skipAxes: true,
       skipTitle: true,
     });
+    const arcs = compiled.marks.filter((mark) => mark.type === 'arc');
     const firstArc = compiled.marks.find(
       (mark) => mark.type === 'arc' && mark.datum?.category === 'North',
     );
@@ -686,6 +687,7 @@ describe('configToSpec annotation layers', () => {
       (mark) => mark.type === 'text' && mark.datum?.[DATA_LABEL_TEXT_FIELD] === 'North, 50%',
     );
 
+    expect(arcs.map((arc) => arc.style.fill)).toEqual(['#2F75B5', '#70AD47']);
     expect(firstArc?.innerRadius).toBeCloseTo(firstArc!.outerRadius * 0.65, 6);
     expect(firstLabel?.fontSize).toBe(18);
     expect(

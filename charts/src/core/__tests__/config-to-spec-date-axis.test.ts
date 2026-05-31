@@ -3,6 +3,7 @@ import { compile } from '../../grammar/compiler';
 import { isLayerSpec, type ChartSpec, type LayerSpec, type UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType } from '../../types';
 import { configToSpec } from '../config-to-spec';
+import { SERIES_INDEX_FIELD } from '../config-to-spec/fields';
 
 const DATE_SERIALS = [45292, 45322, 45352];
 type AxisWithTicks = { tickStep?: number; tickInterval?: { unit: string; step: number } };
@@ -74,6 +75,11 @@ function xAxisLabels(spec: ChartSpec): string[] {
       return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
     })
     .map((mark) => mark.text);
+}
+
+function pathYCoordinates(path: string): number[] {
+  const coordinates = (path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  return coordinates.filter((_, index) => index % 2 === 1);
 }
 
 describe('configToSpec imported Excel date category axes', () => {
@@ -521,10 +527,116 @@ describe('configToSpec imported Excel date category axes', () => {
     });
 
     expect(legendKeys.map((mark) => mark.type)).toEqual(['rect', 'path']);
-    expect((legendKeys[0] as RectMark).width).toBeGreaterThan(
-      (legendKeys[0] as RectMark).height,
-    );
+    expect((legendKeys[0] as RectMark).width).toBeGreaterThan((legendKeys[0] as RectMark).height);
     expect((legendKeys[1] as PathMark).style.stroke).toBe('#FF0000');
+  });
+
+  it('groups stacked combo area series so plot bands use the same raw colors as legend swatches', () => {
+    const data: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Layer 1',
+          data: [
+            { x: 'A', y: 2 },
+            { x: 'B', y: 3 },
+            { x: 'C', y: 4 },
+          ],
+        },
+        {
+          name: 'Layer 2',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 2 },
+            { x: 'C', y: 3 },
+          ],
+        },
+        {
+          name: 'Reference',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 2 },
+            { x: 'C', y: 2 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'combo',
+      subType: 'stacked',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      legend: { show: true, visible: true, position: 'bottom' },
+      series: [
+        {
+          name: 'Layer 1',
+          type: 'area',
+          format: {
+            fill: { type: 'solid', color: '#4472C4', transparency: 0.25 },
+            line: { color: '#4472C4' },
+          },
+        },
+        {
+          name: 'Layer 2',
+          type: 'area',
+          format: {
+            fill: { type: 'solid', color: '#ED7D31', transparency: 0.5 },
+            line: { color: '#ED7D31' },
+          },
+        },
+        {
+          name: 'Reference',
+          type: 'line',
+          format: { line: { color: '#70AD47', width: 1.5 } },
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(configToSpec(config, data));
+    const areaLayers = spec.layer.filter(
+      (layer) => layer.mark && typeof layer.mark === 'object' && layer.mark.type === 'area',
+    );
+
+    expect(areaLayers).toHaveLength(1);
+    expect(areaLayers[0].encoding?.detail).toMatchObject({
+      field: SERIES_INDEX_FIELD,
+      type: 'nominal',
+      legend: null,
+    });
+    expect(areaLayers[0].encoding?.color?.legend).toBeNull();
+    expect(areaLayers[0].transform).toEqual([
+      { type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: [0, 1] } },
+    ]);
+
+    const result = compile(spec, undefined, {
+      width: 400,
+      height: 300,
+      skipAxes: true,
+      skipTitle: true,
+    });
+    const areaMarks = result.marks.filter((mark): mark is PathMark => {
+      const datum = mark.datum as Array<{ series?: string }> | undefined;
+      return (
+        mark.type === 'path' &&
+        Array.isArray(datum) &&
+        (datum[0]?.series === 'Layer 1' || datum[0]?.series === 'Layer 2')
+      );
+    });
+
+    expect(areaMarks).toHaveLength(2);
+    expect(areaMarks.map((mark) => mark.style.fill)).toEqual(['#4472C4', '#ED7D31']);
+    expect(areaMarks.map((mark) => mark.style.opacity)).toEqual([0.75, 0.5]);
+
+    const plotBottom = result.layout.plotArea.y + result.layout.plotArea.height;
+    expect(Math.max(...pathYCoordinates(areaMarks[1].path))).toBeLessThan(plotBottom - 1);
+
+    const legendAreaSwatches = result.legends.filter((mark): mark is RectMark => {
+      const datum = mark.datum as { entryIndex?: number } | undefined;
+      return mark.type === 'rect' && datum?.entryIndex !== undefined;
+    });
+    expect(legendAreaSwatches.map((mark) => mark.style.fill)).toEqual(['#4472C4', '#ED7D31']);
   });
 
   it('clips imported combo marks and keeps per-series colors without a default legend', () => {

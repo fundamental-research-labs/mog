@@ -3,11 +3,15 @@
  *
  * Generates path marks for area charts with support for stacking,
  * percent-stacking, and color/detail grouping.
- *
- * Extracted from compiler.ts - no logic changes.
  */
 
 import { resolveColor } from '../../algebra/color';
+import {
+  SERIES_FILL_FIELD,
+  SERIES_FILL_OPACITY_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+} from '../../core/chart-ir/fields';
 import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
@@ -19,6 +23,74 @@ import {
   isBlankValueDatum,
   splitDataByLineSegment,
 } from './helpers';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resolveOpacity(value: unknown, fallback: number): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? clamp(numeric, 0, 1) : fallback;
+}
+
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function areaStyleForDatum(
+  markSpec: MarkSpec,
+  datum: DataRow,
+  scales: ScaleMap,
+  encodings: ReturnType<typeof resolveEncodings>,
+  index: number,
+): PathMark['style'] {
+  const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);
+  const opacityValue = encodings.opacity?.accessor(datum);
+  const color = resolveColor({
+    colorScale: scales.color ?? scales.fill,
+    colorValue,
+    markColor: markSpec.color,
+    markFill: markSpec.fill,
+    index,
+  });
+  const datumFill = datumString(datum, markSpec.fillField) ?? datumString(datum, SERIES_FILL_FIELD);
+  const hasDatumFill = datumFill !== undefined;
+  const fillOpacity =
+    datumNumber(datum, SERIES_FILL_OPACITY_FIELD) ??
+    markSpec.fillOpacity ??
+    markSpec.opacity ??
+    0.7;
+
+  return {
+    fill: datumFill ?? color,
+    stroke:
+      datumString(datum, markSpec.strokeField) ??
+      datumString(datum, SERIES_STROKE_FIELD) ??
+      markSpec.stroke ??
+      datumFill ??
+      color,
+    strokeWidth:
+      datumNumber(datum, markSpec.strokeWidthField) ??
+      datumNumber(datum, SERIES_STROKE_WIDTH_FIELD) ??
+      markSpec.strokeWidth ??
+      1,
+    opacity: resolveOpacity(opacityValue, fillOpacity),
+    ...definedStyle({
+      fillPaint: hasDatumFill ? undefined : markSpec.fillPaint,
+      strokePaint: markSpec.strokePaint,
+      line: markSpec.line,
+      effects: markSpec.effects,
+    }),
+  };
+}
 
 /**
  * Generate area marks.
@@ -43,8 +115,9 @@ export function generateAreaMarks(
   const clampYToPlot = (y: number): number =>
     Math.max(layout.plotArea.y, Math.min(chartBaseline, y));
 
-  // Group by color/detail
-  const groups = groupDataByEncoding(data, encodings.color ?? encodings.detail);
+  // Detail is the stable series identity for grouped/layered stacks. Color is
+  // only the visual channel and can intentionally collapse duplicate labels.
+  const groups = groupDataByEncoding(data, encodings.detail ?? encodings.color);
   const marks: PathMark[] = [];
 
   // Determine if stacking is enabled
@@ -257,33 +330,13 @@ export function generateAreaMarks(
         }
         path += ' Z';
 
-        const colorValue = encodings.color?.accessor(plottedData[0]);
-        const color = resolveColor({
-          colorScale: scales.color,
-          colorValue,
-          markColor: markSpec.color,
-          markFill: markSpec.fill,
-          index: marks.length,
-        });
-
         marks.push({
           type: 'path',
           x: 0,
           y: 0,
           path,
           datum: plottedData,
-          style: {
-            fill: color,
-            stroke: markSpec.stroke ?? color,
-            strokeWidth: markSpec.strokeWidth ?? 1,
-            opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
-            ...definedStyle({
-              fillPaint: markSpec.fillPaint,
-              strokePaint: markSpec.strokePaint,
-              line: markSpec.line,
-              effects: markSpec.effects,
-            }),
-          },
+          style: areaStyleForDatum(markSpec, plottedData[0], scales, encodings, marks.length),
         });
       } else {
         // Non-stacked area: baseline is the chart bottom
@@ -297,33 +350,13 @@ export function generateAreaMarks(
         path += ` L${topPoints[topPoints.length - 1].x},${chartBaseline}`;
         path += ' Z';
 
-        const colorValue = encodings.color?.accessor(plottedData[0]);
-        const color = resolveColor({
-          colorScale: scales.color,
-          colorValue,
-          markColor: markSpec.color,
-          markFill: markSpec.fill,
-          index: marks.length,
-        });
-
         marks.push({
           type: 'path',
           x: 0,
           y: 0,
           path,
           datum: plottedData,
-          style: {
-            fill: color,
-            stroke: markSpec.stroke ?? color,
-            strokeWidth: markSpec.strokeWidth ?? 1,
-            opacity: markSpec.fillOpacity ?? markSpec.opacity ?? 0.7,
-            ...definedStyle({
-              fillPaint: markSpec.fillPaint,
-              strokePaint: markSpec.strokePaint,
-              line: markSpec.line,
-              effects: markSpec.effects,
-            }),
-          },
+          style: areaStyleForDatum(markSpec, plottedData[0], scales, encodings, marks.length),
         });
       }
     }

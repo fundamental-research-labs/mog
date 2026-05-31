@@ -187,11 +187,12 @@ function withTrackedExternalFormula(
 ): StoreCellData {
   const formula = getTrackedExternalFormula(ctx, sheetId, row, col);
   if (!formula) return data;
+  const formulaA1 = asFormulaA1(formula);
 
   return {
     ...data,
-    formula,
-    raw: formula as CellRawValue,
+    formula: formulaA1,
+    raw: formulaA1 as CellRawValue,
     computed: data.computed ?? rawToCellValue(data.raw) ?? null,
   };
 }

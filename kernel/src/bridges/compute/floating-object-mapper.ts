@@ -46,6 +46,7 @@ import type {
   ConnectorData,
   ChartData,
   EquationData,
+  FormControlData,
   FloatingObjectAnchor,
   DiagramData,
   OleObjectData,
@@ -653,7 +654,7 @@ type WireTextbox = FloatingObjectCommon & { type: 'textbox' } & TextboxData;
 type WireConnector = FloatingObjectCommon & { type: 'connector' } & ConnectorData;
 type WireChart = FloatingObjectCommon & { type: 'chart' } & ChartData;
 type WireEquation = FloatingObjectCommon & { type: 'equation' } & EquationData;
-type WireFormControl = FloatingObjectCommon & { type: 'formControl' } & Record<string, unknown>;
+type WireFormControl = FloatingObjectCommon & { type: 'formControl' } & FormControlData;
 type WireDiagram = FloatingObjectCommon & { type: 'diagram' } & DiagramData;
 type WireDrawing = FloatingObjectCommon & { type: 'drawing' } & DrawingData;
 type WireOleObject = FloatingObjectCommon & { type: 'oleObject' } & OleObjectData;

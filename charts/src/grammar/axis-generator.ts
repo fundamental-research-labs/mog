@@ -115,7 +115,15 @@ export function generateAxes(
 
   // X-axis
   if (encoding?.x && encoding.x.axis !== null && scales.x) {
-    const axisMarks = generateXAxis(encoding.x, scales.x, layout, configAxis, scales.y);
+    const axisMarks = generateXAxis(
+      encoding.x,
+      scales.x,
+      layout,
+      configAxis,
+      scales.y,
+      undefined,
+      config?.layoutHints,
+    );
     marks.push(...axisMarks);
   }
   if (encoding?.x?.secondaryAxis && scales.x) {
@@ -126,13 +134,22 @@ export function generateAxes(
       configAxis,
       scales.y,
       encoding.x.secondaryAxis,
+      config?.layoutHints,
     );
     marks.push(...axisMarks);
   }
 
   // Y-axis
   if (encoding?.y && encoding.y.axis !== null && scales.y) {
-    const axisMarks = generateYAxis(encoding.y, scales.y, layout, configAxis, scales.x);
+    const axisMarks = generateYAxis(
+      encoding.y,
+      scales.y,
+      layout,
+      configAxis,
+      scales.x,
+      undefined,
+      config?.layoutHints,
+    );
     marks.push(...axisMarks);
   }
   if (encoding?.y?.secondaryAxis && scales.y) {
@@ -143,6 +160,7 @@ export function generateAxes(
       configAxis,
       scales.x,
       encoding.y.secondaryAxis,
+      config?.layoutHints,
     );
     marks.push(...axisMarks);
   }
@@ -160,6 +178,7 @@ export function generateXAxis(
   configAxis?: Partial<AxisSpec>,
   valueScale?: AnyScale,
   axisOverride?: AxisSpec,
+  layoutHints?: ConfigSpec['layoutHints'],
 ): AnyMark[] {
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...(axisOverride ?? channel.axis) } as AxisSpec;
@@ -366,7 +385,7 @@ export function generateXAxis(
   if (axisSpec.title !== null) {
     const title = axisSpec.title ?? channel.title;
     if (title) {
-      const titleSide = xAxisLabelSide(axisSpec, orient);
+      const titleSide = xAxisTitleSide(channel, axisSpec, orient, layoutHints);
       const titleFontSize = axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE;
       const titleY = xAxisTitleY(
         channel,
@@ -379,6 +398,7 @@ export function generateXAxis(
         layout,
         orient,
         titleFontSize,
+        layoutHints,
       );
       marks.push({
         type: 'text',
@@ -435,6 +455,30 @@ function xAxisLabelSide(
   return orient;
 }
 
+function xAxisTitleSide(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  orient: Extract<AxisOrient, 'top' | 'bottom'>,
+  layoutHints: ConfigSpec['layoutHints'] | undefined,
+): 'top' | 'bottom' {
+  if (categoryAxisLabelsInsidePlot('x', channel, axisSpec, layoutHints)) return orient;
+  return xAxisLabelSide(axisSpec, orient);
+}
+
+function categoryAxisLabelsInsidePlot(
+  channelName: 'x' | 'y',
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  layoutHints: ConfigSpec['layoutHints'] | undefined,
+): boolean {
+  if (channel.type === 'quantitative') return false;
+  if (axisSpec.labels === false) return false;
+  if (axisSpec.labelPosition && axisSpec.labelPosition !== 'nextTo') return false;
+  return channelName === 'x'
+    ? layoutHints?.xAxisLabelsInsidePlot === true
+    : layoutHints?.yAxisLabelsInsidePlot === true;
+}
+
 function xLabelLayout(
   axisSpec: AxisSpec,
   axisY: number,
@@ -469,9 +513,16 @@ function xAxisTitleY(
   layout: Layout,
   orient: Extract<AxisOrient, 'top' | 'bottom'>,
   titleFontSize: number,
+  layoutHints?: ConfigSpec['layoutHints'],
 ): number {
-  const titleSide = xAxisLabelSide(axisSpec, orient);
+  const titleSide = xAxisTitleSide(channel, axisSpec, orient, layoutHints);
   const titlePadding = axisSpec.titlePadding ?? DEFAULT_AXIS_TITLE_PADDING;
+  if (categoryAxisLabelsInsidePlot('x', channel, axisSpec, layoutHints)) {
+    const edgeY =
+      titleSide === 'top' ? layout.plotArea.y : layout.plotArea.y + layout.plotArea.height;
+    const y = titleSide === 'top' ? edgeY - titlePadding : edgeY + titlePadding;
+    return clampAxisPosition(y, titleFontSize, layout.height - titleFontSize);
+  }
   const labelOuterY = xAxisLabelOuterY(
     channel,
     axisSpec,
@@ -693,6 +744,7 @@ export function generateYAxis(
   configAxis?: Partial<AxisSpec>,
   categoryScale?: AnyScale,
   axisOverride?: AxisSpec,
+  layoutHints?: ConfigSpec['layoutHints'],
 ): AnyMark[] {
   const marks: AnyMark[] = [];
   const axisSpec = { ...configAxis, ...(axisOverride ?? channel.axis) } as AxisSpec;
@@ -893,7 +945,7 @@ export function generateYAxis(
   if (axisSpec.title !== null) {
     const title = axisSpec.title ?? channel.title;
     if (title) {
-      const titleSide = yAxisLabelSide(axisSpec, orient);
+      const titleSide = yAxisTitleSide(channel, axisSpec, orient, layoutHints);
       const titleFontSize = axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE;
       const titleX = yAxisTitleX(
         channel,
@@ -906,6 +958,7 @@ export function generateYAxis(
         layout,
         orient,
         titleFontSize,
+        layoutHints,
       );
       marks.push({
         type: 'text',
@@ -961,6 +1014,16 @@ function yAxisLabelSide(
   if (axisSpec.labelPosition === 'high') return 'right';
   if (axisSpec.labelPosition === 'low') return 'left';
   return orient;
+}
+
+function yAxisTitleSide(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  orient: Extract<AxisOrient, 'left' | 'right'>,
+  layoutHints: ConfigSpec['layoutHints'] | undefined,
+): 'left' | 'right' {
+  if (categoryAxisLabelsInsidePlot('y', channel, axisSpec, layoutHints)) return orient;
+  return yAxisLabelSide(axisSpec, orient);
 }
 
 function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout: Layout): number {
@@ -1047,10 +1110,20 @@ function yAxisTitleX(
   layout: Layout,
   orient: Extract<AxisOrient, 'left' | 'right'>,
   titleFontSize: number,
+  layoutHints?: ConfigSpec['layoutHints'],
 ): number {
-  const titleSide = yAxisLabelSide(axisSpec, orient);
+  const titleSide = yAxisTitleSide(channel, axisSpec, orient, layoutHints);
   const titleHalfWidth = titleFontSize / 2;
   const titlePadding = axisSpec.titlePadding ?? DEFAULT_AXIS_TITLE_PADDING;
+  if (categoryAxisLabelsInsidePlot('y', channel, axisSpec, layoutHints)) {
+    const edgeX =
+      titleSide === 'right' ? layout.plotArea.x + layout.plotArea.width : layout.plotArea.x;
+    const x =
+      titleSide === 'right'
+        ? edgeX + titlePadding + titleHalfWidth
+        : edgeX - titlePadding - titleHalfWidth;
+    return clampAxisPosition(x, titleHalfWidth, layout.width - titleHalfWidth);
+  }
   const labelOuterX = yAxisLabelOuterX(
     channel,
     axisSpec,

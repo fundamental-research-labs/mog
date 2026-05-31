@@ -12,6 +12,7 @@
 import type {
   ChannelSpec,
   ChartSpec,
+  ConfigSpec,
   EncodingSpec,
   Layout,
   LegendEntrySpec,
@@ -326,10 +327,11 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   const xAxes = collectChannelAxes(encodings, 'x');
   for (const { axis, channel } of xAxes) {
     const side = axis?.orient === 'top' ? 'top' : 'bottom';
-    if (axis?.labels !== false) {
+    const labelsInsidePlot = axisLabelsInsidePlot('x', channel, axis, layoutHints);
+    if (axis?.labels !== false && !labelsInsidePlot) {
       margin[side] += DEFAULT_LAYOUT.xAxisLabelSpace;
     }
-    if (axis?.title || channel.title) {
+    if ((axis?.title || channel.title) && !labelsInsidePlot) {
       margin[side] += DEFAULT_LAYOUT.axisTitleSpace;
     }
     if (axis?.labelAngle && Math.abs(axis.labelAngle) > 45) {
@@ -343,7 +345,7 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   for (const { axis, channel } of yAxes) {
     const side = axis?.orient === 'right' ? 'right' : 'left';
     yAxisSides.add(side);
-    if (axis?.title || channel.title) {
+    if ((axis?.title || channel.title) && !axisLabelsInsidePlot('y', channel, axis, layoutHints)) {
       yAxisTitles.add(side);
     }
   }
@@ -354,7 +356,8 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
       const axes = axisEntriesForChannel(encoding.y);
       return axes.some((axis) => {
         const axisSide = axis?.orient === 'right' ? 'right' : 'left';
-        return axisSide === side && axis?.labels !== false;
+        const labelsInsidePlot = axisLabelsInsidePlot('y', encoding.y!, axis, layoutHints);
+        return axisSide === side && axis?.labels !== false && !labelsInsidePlot;
       });
     });
     if (hasLabels) {
@@ -410,6 +413,20 @@ function axisEntriesForChannel(channel: ChannelSpec | undefined): Array<ChannelS
     axes.push(channel.secondaryAxis);
   }
   return axes;
+}
+
+function axisLabelsInsidePlot(
+  channelName: 'x' | 'y',
+  channel: ChannelSpec,
+  axis: ChannelSpec['axis'],
+  layoutHints: ConfigSpec['layoutHints'] | undefined,
+): boolean {
+  if (channel.type === 'quantitative') return false;
+  if (axis === null) return false;
+  if (axis?.labelPosition && axis.labelPosition !== 'nextTo') return false;
+  return channelName === 'x'
+    ? layoutHints?.xAxisLabelsInsidePlot === true
+    : layoutHints?.yAxisLabelsInsidePlot === true;
 }
 
 /**

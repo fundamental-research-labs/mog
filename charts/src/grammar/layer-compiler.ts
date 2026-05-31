@@ -145,6 +145,8 @@ export function compileLayered(
               layout,
               spec.config?.axis,
               scales.x,
+              undefined,
+              spec.config?.layoutHints,
             ),
           );
           emittedIndependentYAxes.add(orient);

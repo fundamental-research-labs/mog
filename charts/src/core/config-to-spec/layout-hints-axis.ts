@@ -15,6 +15,9 @@ export function estimateNominalYAxisLabelWidth(
   if (!y || y.type === 'quantitative' || y.axis === null || y.axis?.labels === false) {
     return undefined;
   }
+  if (categoryAxisLabelsInsidePlot('y', encoding, data)) {
+    return 0;
+  }
 
   const labels = data?.categories ?? [];
   if (labels.length === 0) return undefined;
@@ -50,7 +53,10 @@ export function estimateSecondaryYAxisLabelWidth(
   return estimateQuantitativeAxisLabelWidth(axis, scale, axis.format);
 }
 
-export function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number | undefined {
+export function estimateXAxisBottomMargin(
+  encoding: EncodingSpec | undefined,
+  data: ChartData | undefined,
+): number | undefined {
   const x = encoding?.x;
   const y = encoding?.y;
   if (!x || x.axis === null || x.axis?.labels === false) return undefined;
@@ -181,4 +187,52 @@ function xAxisLabelSideForMargin(axis: AxisSpec | null | undefined): 'top' | 'bo
   if (axis?.labelPosition === 'high') return 'top';
   if (axis?.labelPosition === 'low') return 'bottom';
   return axis?.orient === 'top' ? 'top' : 'bottom';
+}
+
+export function categoryAxisLabelsInsidePlot(
+  axis: 'x' | 'y',
+  encoding: EncodingSpec | undefined,
+  data: ChartData | undefined,
+): boolean {
+  const categoryChannel = axis === 'x' ? encoding?.x : encoding?.y;
+  const valueChannel = axis === 'x' ? encoding?.y : encoding?.x;
+  if (!categoryChannel || !valueChannel) return false;
+  if (categoryChannel.type === 'quantitative' || valueChannel.type !== 'quantitative') {
+    return false;
+  }
+  const axisSpec = categoryChannel.axis;
+  if (axisSpec === null) return false;
+  if (axisSpec?.labels === false) return false;
+  if (axisSpec?.labelPosition && axisSpec.labelPosition !== 'nextTo') return false;
+  if (axisSpec?.crossesAt !== 'automatic' && axisSpec?.crossesAt !== 'custom') return false;
+
+  const domain = valueDomain(valueChannel, data);
+  if (!domain) return false;
+  const [min, max] = domain;
+  if (axisSpec?.crossesAt === 'custom') {
+    const crossing = axisSpec.crossesAtValue;
+    return typeof crossing === 'number' && crossing > min && crossing < max;
+  }
+  return min < 0 && max > 0;
+}
+
+function valueDomain(
+  channel: ChannelSpec,
+  data: ChartData | undefined,
+): [number, number] | undefined {
+  const scaleDomain = Array.isArray(channel.scale?.domain) ? channel.scale.domain : undefined;
+  const explicitMin = explicitDomainBound(scaleDomain, 0);
+  const explicitMax = explicitDomainBound(scaleDomain, 1);
+  if (explicitMin !== undefined && explicitMax !== undefined) {
+    return [Math.min(explicitMin, explicitMax), Math.max(explicitMin, explicitMax)];
+  }
+
+  const values: number[] = [];
+  for (const series of data?.series ?? []) {
+    for (const point of series.data) {
+      if (typeof point.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
+    }
+  }
+  if (values.length === 0) return undefined;
+  return [Math.min(...values), Math.max(...values)];
 }

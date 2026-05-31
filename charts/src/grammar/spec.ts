@@ -909,6 +909,10 @@ export interface ConfigSpec {
     /** @deprecated Use side-specific y-axis label widths. */
     yAxisLabelWidth?: number;
     bottomMargin?: number;
+    /** Category tick labels are drawn next to an in-plot value-axis crossing. */
+    xAxisLabelsInsidePlot?: boolean;
+    /** Category tick labels are drawn next to an in-plot value-axis crossing. */
+    yAxisLabelsInsidePlot?: boolean;
     manualPlotArea?: ManualLayoutSpec;
     manualTitle?: ManualLayoutSpec;
     manualLegend?: ManualLayoutSpec;

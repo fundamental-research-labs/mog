@@ -29,12 +29,20 @@ function asLayerSpec(config: ChartConfig, data = makeData()): LayerSpec {
 }
 
 function axisLabelTexts(result: ReturnType<typeof compile>, role: string): string[] {
-  return result.axes
-    .filter((mark) => {
+  return axisTextMarks(result, role, 'label').map((mark) => mark.text);
+}
+
+function axisTextMarks(
+  result: ReturnType<typeof compile>,
+  role: string,
+  axisPart: string,
+): Array<Extract<(typeof result.axes)[number], { type: 'text' }>> {
+  return result.axes.filter(
+    (mark): mark is Extract<(typeof result.axes)[number], { type: 'text' }> => {
       const datum = mark.datum as Record<string, unknown> | undefined;
-      return mark.type === 'text' && datum?.role === role && datum.axisPart === 'label';
-    })
-    .map((mark) => (mark.type === 'text' ? mark.text : ''));
+      return mark.type === 'text' && datum?.role === role && datum.axisPart === axisPart;
+    },
+  );
 }
 
 describe('configToSpec axis render contracts', () => {
@@ -379,6 +387,143 @@ describe('configToSpec axis render contracts', () => {
 
     expect(result.scales.y?.domain?.()).toEqual([0, 250]);
     expect(axisLabelTexts(result, 'y-axis')).toEqual(['0', '50', '100', '150', '200', '250']);
+  });
+
+  it('keeps diverging horizontal bar category labels at zero while placing the y-axis title outside the plot', () => {
+    const categories = ['Segment A', 'Segment B', 'Segment C'];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Left',
+          data: categories.map((category, index) => ({ x: category, y: -(index + 2) })),
+        },
+        {
+          name: 'Right',
+          data: categories.map((category, index) => ({ x: category, y: index + 3 })),
+        },
+      ],
+    };
+    const spec = asUnitSpec(
+      {
+        type: 'bar',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 12,
+        height: 7,
+        axis: {
+          categoryAxis: {
+            visible: true,
+            title: 'Category Axis',
+            position: 'l',
+            crossesAt: 'automatic',
+          },
+          valueAxis: { visible: true, crossesAt: 'automatic' },
+        },
+      } as ChartConfig,
+      data,
+    );
+
+    expect(spec.config?.layoutHints?.yAxisLabelsInsidePlot).toBe(true);
+    const result = compile(spec, undefined, { width: 800, height: 480 });
+    const labels = axisTextMarks(result, 'y-axis', 'label');
+    const title = axisTextMarks(result, 'y-axis', 'title')[0];
+
+    expect(result.layout.margin.left).toBe(50);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((label) => label.x > result.layout.plotArea.x)).toBe(true);
+    expect(title).toBeDefined();
+    expect(title!.x).toBeLessThan(result.layout.plotArea.x);
+  });
+
+  it('still reserves left margin for positive horizontal bar category labels outside the plot', () => {
+    const categories = ['Segment A', 'Segment B', 'Segment C'];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Right',
+          data: categories.map((category, index) => ({ x: category, y: index + 3 })),
+        },
+      ],
+    };
+    const spec = asUnitSpec(
+      {
+        type: 'bar',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 12,
+        height: 7,
+        axis: {
+          categoryAxis: {
+            visible: true,
+            title: 'Category Axis',
+            position: 'l',
+            crossesAt: 'automatic',
+          },
+          valueAxis: { visible: true, crossesAt: 'automatic' },
+        },
+      } as ChartConfig,
+      data,
+    );
+
+    expect(spec.config?.layoutHints?.yAxisLabelsInsidePlot).toBeUndefined();
+    const result = compile(spec, undefined, { width: 800, height: 480 });
+    const labels = axisTextMarks(result, 'y-axis', 'label');
+
+    expect(result.layout.margin.left).toBeGreaterThan(100);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((label) => label.x < result.layout.plotArea.x)).toBe(true);
+  });
+
+  it('keeps mixed-sign column category labels at zero while placing the x-axis title outside the plot', () => {
+    const categories = ['Segment A', 'Segment B', 'Segment C'];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Delta',
+          data: categories.map((category, index) => ({
+            x: category,
+            y: index === 1 ? -4 : index + 2,
+          })),
+        },
+      ],
+    };
+    const spec = asUnitSpec(
+      {
+        type: 'column',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 12,
+        height: 7,
+        axis: {
+          categoryAxis: {
+            visible: true,
+            title: 'Category Axis',
+            position: 'b',
+            crossesAt: 'automatic',
+          },
+          valueAxis: { visible: true, crossesAt: 'automatic' },
+        },
+      } as ChartConfig,
+      data,
+    );
+
+    expect(spec.config?.layoutHints?.xAxisLabelsInsidePlot).toBe(true);
+    const result = compile(spec, undefined, { width: 800, height: 480 });
+    const labels = axisTextMarks(result, 'x-axis', 'label');
+    const title = axisTextMarks(result, 'x-axis', 'title')[0];
+    const plotBottom = result.layout.plotArea.y + result.layout.plotArea.height;
+
+    expect(result.layout.margin.bottom).toBeGreaterThanOrEqual(24);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((label) => label.y < plotBottom)).toBe(true);
+    expect(title).toBeDefined();
+    expect(title!.y).toBeGreaterThan(plotBottom);
   });
 
   it('honors explicit imported primary bounds in a dual-axis column-line combo', () => {

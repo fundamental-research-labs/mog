@@ -1,6 +1,7 @@
 import type { ConfigSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import {
+  categoryAxisLabelsInsidePlot,
   estimateNominalYAxisLabelWidth,
   estimateSecondaryYAxisLabelWidth,
   estimateXAxisBottomMargin,
@@ -19,7 +20,9 @@ export function buildLayoutHints(
   const leftYAxisLabelWidth =
     estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
   const rightYAxisLabelWidth = estimateSecondaryYAxisLabelWidth(config, data);
-  const bottomMargin = estimateXAxisBottomMargin(encoding);
+  const bottomMargin = estimateXAxisBottomMargin(encoding, data);
+  const xAxisLabelsInsidePlot = categoryAxisLabelsInsidePlot('x', encoding, data);
+  const yAxisLabelsInsidePlot = categoryAxisLabelsInsidePlot('y', encoding, data);
   const manualPlotArea = manualLayoutFromValue(config.plotLayout ?? config.plotArea?.layout);
   const manualTitle = manualLayoutFromValue(config.titleLayout ?? config.chartTitle?.layout);
   const manualLegend = manualLayoutFromValue(config.legend?.layout);
@@ -29,6 +32,8 @@ export function buildLayoutHints(
     leftYAxisLabelWidth === undefined &&
     rightYAxisLabelWidth === undefined &&
     bottomMargin === undefined &&
+    !xAxisLabelsInsidePlot &&
+    !yAxisLabelsInsidePlot &&
     manualPlotArea === undefined &&
     manualTitle === undefined &&
     manualLegend === undefined &&
@@ -43,6 +48,8 @@ export function buildLayoutHints(
       : {}),
     ...(rightYAxisLabelWidth !== undefined ? { rightYAxisLabelWidth } : {}),
     ...(bottomMargin !== undefined ? { bottomMargin } : {}),
+    ...(xAxisLabelsInsidePlot ? { xAxisLabelsInsidePlot } : {}),
+    ...(yAxisLabelsInsidePlot ? { yAxisLabelsInsidePlot } : {}),
     ...(manualPlotArea !== undefined ? { manualPlotArea } : {}),
     ...(manualTitle !== undefined ? { manualTitle } : {}),
     ...(manualLegend !== undefined ? { manualLegend } : {}),

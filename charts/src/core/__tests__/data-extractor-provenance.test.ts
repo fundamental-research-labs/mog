@@ -454,6 +454,124 @@ describe('chart data point value provenance', () => {
     ]);
   });
 
+  it('uses live multi-level category refs before stale imported caches', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      ['North', 'Q1', 10],
+      ['North', 'Q2', 20],
+      ['South', 'Q1', 30],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'live-category-levels-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'C1:C3',
+          categories: 'A1:B3',
+          categorySourceKind: 'ref',
+          categoryLevels: {
+            pointCount: 3,
+            levels: [
+              {
+                level: 0,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'Stale North' },
+                  { idx: 1, value: 'Stale North' },
+                  { idx: 2, value: 'Stale South' },
+                ],
+              },
+              {
+                level: 1,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'Stale Q1' },
+                  { idx: 1, value: 'Stale Q2' },
+                  { idx: 2, value: 'Stale Q1' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.categories).toEqual(['North / Q1', 'North / Q2', 'South / Q1']);
+    expect(data.categoryLevels).toEqual([
+      { level: 0, labels: ['North', 'North', 'South'] },
+      { level: 1, labels: ['Q1', 'Q2', 'Q1'] },
+    ]);
+  });
+
+  it('does not reintroduce hidden live multi-level category points from caches', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      ['North', 'Q1', 10],
+      [HIDDEN_CHART_CELL, 'Q2', 20],
+      ['South', 'Q1', 30],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'hidden-live-category-levels-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'C1:C3',
+          categories: 'A1:B3',
+          categorySourceKind: 'ref',
+          categoryLevels: {
+            pointCount: 3,
+            levels: [
+              {
+                level: 0,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'Stale North' },
+                  { idx: 1, value: 'Stale North' },
+                  { idx: 2, value: 'Stale South' },
+                ],
+              },
+              {
+                level: 1,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'Stale Q1' },
+                  { idx: 1, value: 'Stale Q2' },
+                  { idx: 2, value: 'Stale Q1' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categoryLevels).toEqual([
+      { level: 0, labels: ['North', null, 'South'] },
+      { level: 1, labels: ['Q1', 'Q2', 'Q1'] },
+    ]);
+    expect(data.series[0].data.map((point) => point.valueState)).toEqual([
+      undefined,
+      'hidden',
+      undefined,
+    ]);
+    expect(rows.map((row) => row[VALUE_FIELD])).toEqual([10, 30]);
+  });
+
   it('uses the configured multi-level category label level for imported labels', () => {
     const accessor = ObjectCellAccessor.fromArray([[10, 20, 30]]);
     const config: StoredChartConfig = {

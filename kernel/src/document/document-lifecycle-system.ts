@@ -901,15 +901,16 @@ export class DocumentLifecycleSystem {
       this.deferredHydrationPending = false;
     };
 
-    // Use setTimeout(0) to defer to the next macrotask. The lifecycle
-    // phases (attaching → ready) use Promise-based microtasks, so a
-    // macrotask fires after they all resolve and the React tree mounts.
-    // This ensures the viewport renders before the heavy WASM work.
+    // Use a macrotask after the app's first paint. Host-backed browser imports
+    // get a grace period so the user-visible open path can finish first-contact
+    // interactions before the heavy durability barrier runs.
     this.importDurabilityPending = true;
+    const delayMs =
+      this.hostLifecycleInput !== undefined && this.environment === 'browser' ? 60_000 : 0;
     const scheduled = new Promise<void>((resolve, reject) => {
       setTimeout(() => {
         void run().then(resolve, reject);
-      }, 0);
+      }, delayMs);
     });
     this.deferredHydrationPromise = scheduled
       .catch((err) => {
@@ -1194,7 +1195,6 @@ export class DocumentLifecycleSystem {
       const lifecycleInput = this.hostLifecycleInput;
       const storageConfig = lifecycleInput.storage.handoff.storage;
       const durability = storageConfig.durability;
-      let providerAttached = false;
       const requiresProviderAttach =
         durability !== 'ephemeral' || storageConfig.providers.some((p) => p.required);
       const { preflightAuthorizedStorage } = await import('./host-storage-preflight');
@@ -1319,7 +1319,6 @@ export class DocumentLifecycleSystem {
                 }
               : undefined,
           );
-          providerAttached = true;
           this.hostProviderMaterializerHandles.push(handle);
           if (input.importInitialize) {
             this.recordImportInitializeProviderRefId(handle.providerRefId);
@@ -1441,7 +1440,6 @@ export class DocumentLifecycleSystem {
             } else {
               await input.rustDocument.attachProvider(instance.provider);
             }
-            providerAttached = true;
           }
 
           // Transition storage phase to the selected ready mode
@@ -1459,14 +1457,6 @@ export class DocumentLifecycleSystem {
             `Host-backed storage requires provider attachment for durability '${durability}', but no registered provider factory matched the authorized storage config`,
           );
         }
-      }
-
-      if (input.importInitialize && this.deferredHydrationPending) {
-        await this.completeImportDurability(
-          input.computeBridge,
-          input.rustDocument,
-          providerAttached,
-        );
       }
 
       const skipDefaultSheet = input.skipDefaultSheet ?? false;
@@ -1522,14 +1512,6 @@ export class DocumentLifecycleSystem {
       providerAttached = true;
     }
 
-    if (input.importInitialize && this.deferredHydrationPending) {
-      await this.completeImportDurability(
-        input.computeBridge,
-        input.rustDocument,
-        providerAttached,
-      );
-    }
-
     // Sheet truth lands post-attach.
     //
     // `executeStartBridge` deferred default-sheet creation: this is where
@@ -1562,7 +1544,7 @@ export class DocumentLifecycleSystem {
         // state mirror sees a full SheetSettingsChange + WorkbookSettingsChange
         // on first paint — same shape as XLSX/CSV import.
         await input.computeBridge.createDefaultSheet('Sheet1');
-      } else if (providerAttached) {
+      } else if (providerAttached && !this.deferredHydrationPending) {
         // Pure-replay path: Provider attach replayed Yrs updates via
         // `syncApply`, populating the engine without ever flowing a
         // `MutationResult` through the kernel mirror. Emit a
@@ -1617,6 +1599,14 @@ export class DocumentLifecycleSystem {
     return { sheetIds };
   }
 
+  private async settleDeferredImportMirror(computeBridge: ComputeBridge): Promise<void> {
+    try {
+      await computeBridge.settleForMirror();
+    } catch (err) {
+      slog('documentLifecycle.deferredImportSettleForMirrorFailed', { error: err });
+    }
+  }
+
   private async completeImportDurability(
     bridge: ComputeBridge,
     rustDocument: RustDocument,
@@ -1666,6 +1656,7 @@ export class DocumentLifecycleSystem {
 
       this.deferredHydrationPending = false;
       this.importDurabilityPending = false;
+      this.updateStoragePhase(previousPhase);
       return {
         status: 'durable',
         checkpointedProviderRefIds: providerRefIds,
@@ -1676,6 +1667,7 @@ export class DocumentLifecycleSystem {
     await bridge.completeDeferredHydration();
     this.deferredHydrationPending = false;
     this.importDurabilityPending = false;
+    this.updateStoragePhase(previousPhase);
     return {
       status: 'skipped',
       checkpointedProviderRefIds: [],
@@ -1940,6 +1932,7 @@ export class DocumentLifecycleSystem {
       this.importDurabilityPending = true;
 
       // Get sheet IDs from the engine (populated by Rust import)
+      await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
 
       // Identity formula conversion is already done in Rust during
@@ -2009,6 +2002,7 @@ export class DocumentLifecycleSystem {
       this.deferredHydrationPending = true;
       this.importDurabilityPending = true;
 
+      await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
 
       return {

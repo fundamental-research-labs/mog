@@ -22,6 +22,7 @@ export {
 
 // Format utilities (pure string analysis)
 export { buildFormatCode, detectFormatType, getDefaultFormat } from './format-utils';
+export { formatExcelValue } from './value-format';
 export { classifyDateFormat, type DateFormatClassification } from './date-classification';
 
 // Date serial utilities

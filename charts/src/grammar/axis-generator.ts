@@ -10,6 +10,7 @@
 import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisOrient, AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
+import { formatExcelValue } from '@mog/spreadsheet-utils/number-formats';
 
 type AxisPart =
   | 'domain'
@@ -1023,56 +1024,5 @@ function normalizeExcelDateFormat(format: string | undefined): string {
  * Format a tick value.
  */
 export function formatTickValue(value: unknown, format?: string): string {
-  if (value === null || value === undefined) return '';
-
-  if (value instanceof Date) {
-    return value.toLocaleDateString();
-  }
-
-  const numericValue =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : NaN;
-
-  if (Number.isFinite(numericValue)) {
-    const valueNumber = numericValue;
-    if (format) {
-      const quotedLiteralNumber = format.match(/^"([^"]*)"\s*0(?:\s*"([^"]*)")?$/);
-      if (quotedLiteralNumber) {
-        return `${quotedLiteralNumber[1]}${Math.round(valueNumber)}${quotedLiteralNumber[2] ?? ''}`;
-      }
-      if (format.includes('#,##0')) {
-        const hasCurrency = format.includes('$');
-        if (valueNumber === 0 && /[–-]/.test(format)) return hasCurrency ? '$-' : '–';
-        const formatted = Math.round(Math.abs(valueNumber)).toLocaleString('en-US');
-        if (valueNumber < 0 && format.includes('('))
-          return hasCurrency ? `($${formatted})` : `(${formatted})`;
-        return hasCurrency ? `$${formatted}` : formatted;
-      }
-      // Handle simple format patterns
-      if (format.includes('%')) {
-        return (valueNumber * 100).toFixed(0) + '%';
-      }
-      const match = format.match(/\.(\d+)f/);
-      if (match) {
-        return valueNumber.toFixed(parseInt(match[1], 10));
-      }
-    }
-
-    // Default number formatting
-    if (Math.abs(valueNumber) >= 1000000) {
-      return (valueNumber / 1000000).toFixed(1) + 'M';
-    }
-    if (Math.abs(valueNumber) >= 1000) {
-      return (valueNumber / 1000).toFixed(1) + 'K';
-    }
-    if (Number.isInteger(valueNumber)) {
-      return valueNumber.toString();
-    }
-    return valueNumber.toFixed(2);
-  }
-
-  return String(value);
+  return formatExcelValue(value, format);
 }

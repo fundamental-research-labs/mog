@@ -97,6 +97,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
   const legendOrient = legendOrientForEncoding(legendEncoding);
   const layoutHints = spec.config?.layoutHints;
   const dataTableReservedHeight = layoutHints?.dataTable?.height ?? 0;
+  const bottomAxisReservedSpace = Math.max(0, margin.bottom - DEFAULT_LAYOUT.margin.bottom);
   const adjustedMarginBottom =
     (legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom) +
     dataTableReservedHeight;
@@ -145,7 +146,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     layoutHints?.dataTable && dataTableReservedHeight > DATA_TABLE_TOP_PADDING
       ? {
           x: plotArea.x,
-          y: plotArea.y + plotArea.height + DATA_TABLE_TOP_PADDING,
+          y: plotArea.y + plotArea.height + bottomAxisReservedSpace + DATA_TABLE_TOP_PADDING,
           width: plotArea.width,
           height: dataTableReservedHeight - DATA_TABLE_TOP_PADDING,
         }

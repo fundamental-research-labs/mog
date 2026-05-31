@@ -3,6 +3,7 @@ import type { ChartConfig, ChartData, ChartDataPoint } from '../../../types';
 import { DEFAULT_CATEGORY_COLORS } from '../../../utils/colors';
 import {
   CLIP_TO_PLOT_AREA_FIELD,
+  DATA_TABLE_ALIGN_FIELD,
   DATA_TABLE_FILL_FIELD,
   DATA_TABLE_STROKE_FIELD,
   DATA_TABLE_STROKE_WIDTH_FIELD,
@@ -16,27 +17,16 @@ import {
 const BORDER_COLOR = '#b8bec7';
 const BORDER_WIDTH = 1;
 const KEY_SIZE = 0.38;
+const KEY_LEFT_FRACTION = 0.1;
+const KEY_RIGHT_FRACTION = 0.24;
+const KEY_LABEL_FRACTION = 0.32;
 
 export function buildDataTableLayers(config: ChartConfig, data: ChartData): UnitSpec[] {
   if (!isDataTableVisible(config)) return [];
   const table = buildDataTableRows(config, data);
   if (!table) return [];
 
-  const layers: UnitSpec[] = [
-    {
-      mark: {
-        type: 'text',
-        xField: DATA_TABLE_X_FIELD,
-        yField: DATA_TABLE_Y_FIELD,
-        coordinateSystem: 'dataTableFraction',
-        align: 'center',
-        textBaseline: 'middle',
-        fontSize: 10,
-      },
-      data: { values: table.textRows },
-      encoding: { text: { field: DATA_TABLE_TEXT_FIELD, type: 'nominal' } },
-    },
-  ];
+  const layers: UnitSpec[] = [];
 
   if (table.keyRows.length > 0) {
     layers.push({
@@ -49,11 +39,27 @@ export function buildDataTableLayers(config: ChartConfig, data: ChartData): Unit
         coordinateSystem: 'dataTableFraction',
         fillField: DATA_TABLE_FILL_FIELD,
         stroke: BORDER_COLOR,
+        strokeWidthField: DATA_TABLE_STROKE_WIDTH_FIELD,
         strokeWidth: 0.5,
       },
       data: { values: table.keyRows },
     });
   }
+
+  layers.push({
+    mark: {
+      type: 'text',
+      xField: DATA_TABLE_X_FIELD,
+      yField: DATA_TABLE_Y_FIELD,
+      coordinateSystem: 'dataTableFraction',
+      alignField: DATA_TABLE_ALIGN_FIELD,
+      align: 'center',
+      textBaseline: 'middle',
+      fontSize: 10,
+    },
+    data: { values: table.textRows },
+    encoding: { text: { field: DATA_TABLE_TEXT_FIELD, type: 'nominal' } },
+  });
 
   if (table.ruleRows.length > 0) {
     layers.push({
@@ -79,7 +85,14 @@ export function isDataTableVisible(config: ChartConfig): boolean {
 }
 
 export function dataTableRowCount(config: ChartConfig, data: ChartData | undefined): number {
-  if (!data || !isDataTableVisible(config) || data.series.length === 0) return 0;
+  if (
+    !data ||
+    !isDataTableVisible(config) ||
+    data.series.length === 0 ||
+    data.categories.length === 0
+  ) {
+    return 0;
+  }
   return data.series.length + 1;
 }
 
@@ -96,16 +109,22 @@ function buildDataTableRows(
   const ruleRows: DataRow[] = [];
 
   for (let categoryIndex = 0; categoryIndex < data.categories.length; categoryIndex += 1) {
-    textRows.push(textRow(categoryIndex + 1, 0, columnCount, rowCount, data.categories[categoryIndex]));
+    textRows.push(
+      textRow(categoryIndex + 1, 0, columnCount, rowCount, data.categories[categoryIndex]),
+    );
   }
 
   for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
     const series = data.series[seriesIndex];
-    textRows.push(textRow(0, seriesIndex + 1, columnCount, rowCount, series.name));
+    const showKey = Boolean(config.dataTable?.showKeys || config.dataTable?.showLegendKey);
+    textRows.push(textRow(0, seriesIndex + 1, columnCount, rowCount, series.name, showKey));
 
-    if (config.dataTable?.showKeys || config.dataTable?.showLegendKey) {
-      const color = series.color ?? config.series?.[seriesIndex]?.color ?? DEFAULT_CATEGORY_COLORS[seriesIndex % DEFAULT_CATEGORY_COLORS.length];
-      keyRows.push(keyRow(seriesIndex + 1, rowCount, color));
+    if (showKey) {
+      const color =
+        series.color ??
+        config.series?.[seriesIndex]?.color ??
+        DEFAULT_CATEGORY_COLORS[seriesIndex % DEFAULT_CATEGORY_COLORS.length];
+      keyRows.push(keyRow(seriesIndex + 1, columnCount, rowCount, color));
     }
 
     for (let categoryIndex = 0; categoryIndex < data.categories.length; categoryIndex += 1) {
@@ -131,24 +150,27 @@ function textRow(
   columnCount: number,
   rowCount: number,
   value: unknown,
+  alignLeft = false,
 ): DataRow {
   return {
-    [DATA_TABLE_X_FIELD]: (column + 0.5) / columnCount,
+    [DATA_TABLE_X_FIELD]: (column + (alignLeft ? KEY_LABEL_FRACTION : 0.5)) / columnCount,
     [DATA_TABLE_Y_FIELD]: (row + 0.5) / rowCount,
     [DATA_TABLE_TEXT_FIELD]: value == null ? '' : String(value),
+    ...(alignLeft ? { [DATA_TABLE_ALIGN_FIELD]: 'left' } : {}),
     [CLIP_TO_PLOT_AREA_FIELD]: false,
   };
 }
 
-function keyRow(row: number, rowCount: number, color: string): DataRow {
+function keyRow(row: number, columnCount: number, rowCount: number, color: string): DataRow {
   const yCenter = (row + 0.5) / rowCount;
   const halfHeight = KEY_SIZE / rowCount / 2;
   return {
-    [DATA_TABLE_X_FIELD]: 0.025,
+    [DATA_TABLE_X_FIELD]: KEY_LEFT_FRACTION / columnCount,
     [DATA_TABLE_Y_FIELD]: yCenter - halfHeight,
-    [DATA_TABLE_X2_FIELD]: 0.055,
+    [DATA_TABLE_X2_FIELD]: KEY_RIGHT_FRACTION / columnCount,
     [DATA_TABLE_Y2_FIELD]: yCenter + halfHeight,
     [DATA_TABLE_FILL_FIELD]: color,
+    [DATA_TABLE_STROKE_WIDTH_FIELD]: 0.5,
     [CLIP_TO_PLOT_AREA_FIELD]: false,
   };
 }

@@ -83,6 +83,7 @@ export const DATA_TABLE_Y2_FIELD = '__mogDataTableY2';
 export const DATA_TABLE_FILL_FIELD = '__mogDataTableFill';
 export const DATA_TABLE_STROKE_FIELD = '__mogDataTableStroke';
 export const DATA_TABLE_STROKE_WIDTH_FIELD = '__mogDataTableStrokeWidth';
+export const DATA_TABLE_ALIGN_FIELD = '__mogDataTableAlign';
 export const CLIP_TO_PLOT_AREA_FIELD = '__mogClipToPlotArea';
 
 export const STOCK_OPEN_FIELD = 'open';

@@ -12,6 +12,7 @@ import {
   DATA_LABEL_VISIBLE_FIELD,
   DATA_LABEL_X_FIELD,
   DATA_TABLE_FILL_FIELD,
+  DATA_TABLE_STROKE_WIDTH_FIELD,
   DATA_TABLE_STROKE_FIELD,
   DATA_TABLE_TEXT_FIELD,
   ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD,
@@ -704,12 +705,77 @@ describe('configToSpec annotation layers', () => {
         (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_FILL_FIELD],
     );
     expect(key?.clip).toBeUndefined();
+    expect(key?.x).toBeLessThan(tableLabel?.x ?? 0);
+    expect((key?.x ?? 0) + (key?.width ?? 0)).toBeLessThan(tableLabel?.x ?? 0);
     const border = compiled.marks.find(
       (mark) =>
         mark.type === 'path' &&
         (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_STROKE_FIELD],
     );
     expect(border?.clip).toBeUndefined();
+    expect(border?.style.strokeWidth).toBe(1);
+  });
+
+  it('does not reserve a data table band when there are no category columns', () => {
+    const data: ChartData = {
+      categories: [],
+      series: [{ name: 'Revenue', data: [{ x: 1, y: 10 }] }],
+    };
+    const config: ChartConfig = {
+      type: 'scatter',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      dataTable: { visible: true, showKeys: true },
+    };
+
+    const spec = configToSpec(config, data);
+
+    expect(spec.config?.layoutHints?.dataTable).toBeUndefined();
+    expect(
+      isLayerSpec(spec) &&
+        spec.layer.some((layer) => layer.mark.coordinateSystem === 'dataTableFraction'),
+    ).toBe(false);
+  });
+
+  it('uses datum-driven direct rect stroke widths for table key marks', () => {
+    const data: ChartData = {
+      categories: ['Q1'],
+      series: [{ name: 'Revenue', data: [{ x: 'Q1', y: 10 }], color: '#123456' }],
+    };
+    const config: ChartConfig = {
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      dataTable: { visible: true, showKeys: true },
+    };
+    const spec = asLayerSpec(config, data);
+    const keyLayer = spec.layer.find(
+      (layer) =>
+        layer.mark.type === 'rect' &&
+        layer.mark.coordinateSystem === 'dataTableFraction',
+    );
+    expect(keyLayer).toBeDefined();
+    const keyRows = 'values' in keyLayer!.data! ? keyLayer!.data.values : [];
+    keyRows[0][DATA_TABLE_STROKE_WIDTH_FIELD] = 3;
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const key = compiled.marks.find(
+      (mark) =>
+        mark.type === 'rect' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_FILL_FIELD],
+    );
+
+    expect(key?.style.strokeWidth).toBe(3);
   });
 
   it('renders x error bars from xErrorBars defaults and preserves one-sided custom sources', () => {

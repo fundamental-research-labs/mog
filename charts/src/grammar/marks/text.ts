@@ -31,6 +31,12 @@ export function generateTextMarks(
     const dy = numberField(datum, markSpec.dyField) ?? markSpec.dy ?? 0;
     const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
     const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    if (
+      markSpec.coordinateSystem === 'dataTableFraction' &&
+      (directX === undefined || directY === undefined)
+    ) {
+      continue;
+    }
     const x =
       (directX ?? (xScale ? (xScale(encodings.x?.accessor(datum)) as number) : layout.plotArea.x)) + dx;
     const y =

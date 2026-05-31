@@ -17,6 +17,12 @@ function datumString(datum: DataRow, field: string | undefined): string | undefi
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 /**
  * Generate rect marks (heatmap, etc.).
  */
@@ -50,9 +56,13 @@ export function generateRectMarks(
         height: Math.abs(directY2 - directY),
         datum,
         style: {
-          fill: datumString(datum, markSpec.fillField) ?? markSpec.fill ?? markSpec.color ?? DEFAULT_CATEGORY_COLORS[0],
+          fill:
+            datumString(datum, markSpec.fillField) ??
+            markSpec.fill ??
+            markSpec.color ??
+            DEFAULT_CATEGORY_COLORS[0],
           stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke,
-          strokeWidth: markSpec.strokeWidth,
+          strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
           opacity: markSpec.opacity ?? 1,
         },
       });
@@ -86,7 +96,7 @@ export function generateRectMarks(
       style: {
         fill: color,
         stroke: markSpec.stroke,
-        strokeWidth: markSpec.strokeWidth,
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
         opacity: markSpec.opacity ?? 1,
       },
     });
@@ -102,9 +112,8 @@ function directPosition(
   axis: 'x' | 'y',
   coordinateSystem: MarkSpec['coordinateSystem'],
 ): number | undefined {
-  if (!field) return undefined;
-  const value = datum[field];
-  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  const value = datumNumber(datum, field);
+  if (value === undefined) return undefined;
   if (coordinateSystem === 'chartFraction') {
     return axis === 'x' ? value * layout.width : value * layout.height;
   }

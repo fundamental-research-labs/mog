@@ -331,4 +331,23 @@ describe('extractChartLayout', () => {
     expect(layout.dataTable!.top).toBeGreaterThan(layout.plotArea.top);
     expect(layout.dataTable!.width).toBeCloseTo(layout.plotArea.width, 5);
   });
+
+  it('skips data-table fraction text marks when no table band exists', () => {
+    const result = compile({
+      width: 300,
+      height: 200,
+      data: {
+        values: [{ x: 0.5, y: 0.5, text: 'Revenue' }],
+      },
+      mark: {
+        type: 'text',
+        xField: 'x',
+        yField: 'y',
+        coordinateSystem: 'dataTableFraction',
+      },
+      encoding: { text: { field: 'text', type: 'nominal' } },
+    });
+
+    expect(result.marks.some((mark) => mark.type === 'text')).toBe(false);
+  });
 });

@@ -20,7 +20,8 @@ export {
   type TrendlineCoefficients,
   type TrendlineResult,
 } from '../math/trendlines';
-export { collectMarks, configToSpec } from './chart-engine';
+export { collectMarks } from './chart-engine';
+export { configToSpec } from './config-to-spec';
 export {
   DEFAULT_EXCEL_BAR_GAP_WIDTH,
   DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP,

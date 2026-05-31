@@ -73,17 +73,60 @@ describe('ChartRenderCache', () => {
     expect(seen).toEqual([]);
   });
 
-  it('clearAllCaches fires * and leaves the sheet index intact', () => {
+  it('terminal import status after stop clears pending but does not repopulate status or error caches', () => {
+    const cache = startedCache();
+    const seen: string[] = [];
+    cache.onCacheUpdate((chartId) => seen.push(chartId));
+    cache.beginCompilation(CHART_1, SHEET_A);
+
+    cache.stop();
+    const terminal = cache.syncImportRenderStatus(
+      CHART_1,
+      {
+        importStatus: {
+          state: 'non-renderable',
+          message: 'Imported chart renderer unavailable',
+        },
+      },
+      SHEET_A,
+    );
+
+    expect(terminal).toBe(true);
+    expect(cache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(cache.getImportRenderStatus(CHART_1, SHEET_A)).toBeUndefined();
+    expect(cache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(seen).toEqual([]);
+  });
+
+  it('clearAllCaches clears render state, pending state, and terminal status while preserving sheet index', () => {
     const cache = startedCache();
     const seen: string[] = [];
     cache.setSheetId(CHART_1, SHEET_A);
     cache.commitMarks(CHART_1, marks, { sheetId: SHEET_A, layout });
+    cache.commitError(CHART_1, error, SHEET_A);
+    cache.invalidateChart(CHART_1, SHEET_A);
+    cache.beginCompilation(CHART_1, SHEET_A);
+    cache.syncImportRenderStatus(
+      CHART_1,
+      {
+        importStatus: {
+          renderable: false,
+          message: 'Imported chart renderer unavailable',
+        },
+      },
+      SHEET_A,
+    );
     cache.onCacheUpdate((chartId) => seen.push(chartId));
 
     cache.clearAllCaches();
 
     expect(seen).toEqual(['*']);
     expect(cache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(cache.getCachedLayout(CHART_1, SHEET_A)).toBeUndefined();
+    expect(cache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(cache.getImportRenderStatus(CHART_1, SHEET_A)).toBeUndefined();
+    expect(cache.getDirtyChartKeys()).toEqual([]);
+    expect(cache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
     expect(cache.getSheetId(CHART_1)).toBe(SHEET_A);
   });
 

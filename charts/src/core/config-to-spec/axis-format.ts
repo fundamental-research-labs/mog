@@ -3,7 +3,7 @@ import type { ChartConfig, ChartFormat, SingleAxisConfig } from '../../types';
 import { resolveChartTextColor, resolveGridlineColor } from '../../utils/chart-colors';
 import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { isDateAxisConfig, toFiniteNumber } from './category-axis';
-import { dashStyleToStrokeDash, hasVisibleLineStyle } from './series-style';
+import { dashStyleToStrokeDash, hasVisibleLineStyle } from './style';
 import { linePointsToCanvasPx, pointsToCanvasPx } from './units';
 
 const DISPLAY_UNIT_FACTORS: Record<string, number> = {

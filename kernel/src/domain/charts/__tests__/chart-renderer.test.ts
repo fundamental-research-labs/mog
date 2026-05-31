@@ -117,6 +117,9 @@ describe('chart renderer', () => {
       style: '#f5c6cb',
     });
     expect(ops).toContainEqual({ kind: 'fillText', text: 'A very ...', x: 50, y: 70 });
+    expect(ops[0]).toEqual({ kind: 'save' });
+    expect(ops[ops.length - 1]).toEqual({ kind: 'restore' });
+    expect(ops.filter((op) => op.kind === 'translate')).toEqual([]);
   });
 
   it('translates mark rendering to the chart origin and clips to chart bounds', () => {

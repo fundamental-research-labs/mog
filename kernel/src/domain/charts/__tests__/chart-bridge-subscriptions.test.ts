@@ -471,6 +471,82 @@ describe('chart bridge subscription range helpers', () => {
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_A);
   });
 
+  it('updates every explicit A1 range surface on row and column structural changes', async () => {
+    const deps = createDeps();
+    const computeBridge = computeBridgeMock(deps.ctx);
+    computeBridge.getAllCharts
+      .mockResolvedValueOnce([
+        chart({
+          id: CHART_1,
+          dataRange: 'B2:C4',
+          categoryRange: 'A2:A4',
+          seriesRange: 'B1:C1',
+          series: [
+            {
+              name: 'Series 1',
+              values: 'B2:B4',
+              categories: "'Sheet A'!A2:A4",
+              bubbleSize: 'D2:D4',
+            },
+          ],
+        } as never),
+      ])
+      .mockResolvedValueOnce([
+        chart({
+          id: CHART_2,
+          dataRange: 'C2:E4',
+          categoryRange: 'C2:C4',
+          seriesRange: 'C1:E1',
+          series: [
+            {
+              name: 'Series 2',
+              values: 'D2:E4',
+              categories: 'C2:C4',
+              bubbleSize: "'Sheet A'!E2:E4",
+            },
+          ],
+        } as never),
+      ]);
+
+    await handleRowsInserted(deps, SHEET_A, 2, 2);
+    await handleColumnsDeleted(deps, SHEET_A, 3, 1);
+
+    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(
+      1,
+      SHEET_A,
+      CHART_1,
+      expect.objectContaining({
+        dataRange: 'B2:C6',
+        categoryRange: 'A2:A6',
+        series: [
+          expect.objectContaining({
+            values: 'B2:B6',
+            categories: "'Sheet A'!A2:A6",
+            bubbleSize: 'D2:D6',
+          }),
+        ],
+      }),
+    );
+    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(
+      2,
+      SHEET_A,
+      CHART_2,
+      expect.objectContaining({
+        dataRange: 'C2:D4',
+        seriesRange: 'C1:D1',
+        series: [
+          expect.objectContaining({
+            values: 'D2:D4',
+            categories: 'C2:C4',
+            bubbleSize: "'Sheet A'!D2:D4",
+          }),
+        ],
+      }),
+    );
+    expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_A);
+  });
+
   it('sheet-scopes row-deletion invalidation when the deleted rows are before the chart range', async () => {
     const deps = createDeps();
     const computeBridge = computeBridgeMock(deps.ctx);

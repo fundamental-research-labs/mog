@@ -29,7 +29,7 @@ import {
   visibleLegendDomain,
 } from './legend';
 import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
-import { isNoFillNoLineSeries, resolvedCategoryColors } from './series-style';
+import { isNoFillNoLineSeries, resolvedCategoryColors } from './style';
 import { resolveStackMode } from './subtypes';
 
 /**

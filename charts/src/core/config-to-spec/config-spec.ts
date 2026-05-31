@@ -5,7 +5,7 @@ import {
   resolveChartOwnerElementStyle,
 } from '../style-resolver';
 import { buildLayoutHints } from './layout-hints';
-import { resolvedCategoryColors } from './series-style';
+import { resolvedCategoryColors } from './style';
 import { resolveStackMode } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 import { effectiveBarGeometry } from './bar-geometry';

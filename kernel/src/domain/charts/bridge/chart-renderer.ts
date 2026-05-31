@@ -36,6 +36,7 @@ export function renderChartError(
 ): void {
   const { x, y, width, height } = bounds;
 
+  ctx.save();
   ctx.fillStyle = '#f8d7da';
   ctx.fillRect(x, y, width, height);
 
@@ -55,6 +56,7 @@ export function renderChartError(
       : error.message;
 
   ctx.fillText(message, x + width / 2, y + height / 2);
+  ctx.restore();
 }
 
 export function renderChartMarks(

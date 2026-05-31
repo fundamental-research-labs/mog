@@ -117,6 +117,9 @@ describe('ChartRenderOrchestrator', () => {
 
     expect(Array.isArray(marksAtSize)).toBe(true);
     expect('code' in snapshot).toBe(false);
+    if (!('code' in snapshot)) {
+      expect(marksAtSize).toEqual(snapshot.marks);
+    }
     expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(cachedMarks);
     expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(cachedLayout);
     expect(renderCache.getDirtyChartKeys()).toEqual(dirtyKeysBefore);

@@ -84,7 +84,7 @@ import {
   WATERFALL_START_FIELD,
   WATERFALL_TYPE_FIELD,
 } from './fields';
-import { isNoFillNoLineSeries, resolveSeriesColor } from './series-style';
+import { isNoFillNoLineSeries, resolveSeriesColor } from './style';
 import {
   resolveChartFillColor,
   resolveChartLineStyle,

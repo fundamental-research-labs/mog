@@ -19,7 +19,7 @@ import {
   hasVisibleLineStyle,
   isNoFillNoLineSeries,
   resolveSeriesColor,
-} from './series-style';
+} from './style';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 

@@ -3,7 +3,7 @@ import type { ChartConfig, ChartData, ChartType, LegendConfig, SeriesConfig } fr
 import { resolveChartTextColor } from '../../utils/chart-colors';
 import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
-import { isNoFillNoLineSeries } from './series-style';
+import { isNoFillNoLineSeries } from './style';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { pointsToCanvasPx } from './units';
 

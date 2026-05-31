@@ -165,8 +165,20 @@ function applyManualLayout(
   if (!manualLayout) return baseRect;
 
   const target = manualLayout.layoutTarget === 'inner' ? innerTarget : chartBounds;
-  const x = manualCoordinate(manualLayout.x, target.x, target.width, baseRect.x);
-  const y = manualCoordinate(manualLayout.y, target.y, target.height, baseRect.y);
+  const x = manualCoordinate(
+    manualLayout.x,
+    manualLayout.xMode,
+    target.x,
+    target.width,
+    baseRect.x,
+  );
+  const y = manualCoordinate(
+    manualLayout.y,
+    manualLayout.yMode,
+    target.y,
+    target.height,
+    baseRect.y,
+  );
   const width = manualDimension(
     manualLayout.w,
     manualLayout.wMode,
@@ -194,12 +206,17 @@ function applyManualLayout(
 
 function manualCoordinate(
   value: number | undefined,
+  mode: ManualLayoutSpec['xMode'] | undefined,
   targetOrigin: number,
   targetSize: number,
   fallback: number,
 ): number {
   const finite = finiteManualValue(value);
-  return finite === undefined ? fallback : targetOrigin + finite * targetSize;
+  if (finite === undefined) return fallback;
+  if (mode === 'edge') {
+    return targetOrigin + finite * targetSize;
+  }
+  return fallback + finite * targetSize;
 }
 
 function manualDimension(

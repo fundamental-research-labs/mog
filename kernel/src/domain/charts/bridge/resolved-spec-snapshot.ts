@@ -146,7 +146,7 @@ export function buildResolvedChartSpecSnapshot(input: {
     },
     diagnostics: {
       compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
-      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config, series),
+      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config, series, input.layout ?? null),
     },
   };
 }
@@ -382,6 +382,7 @@ function snapshotScalar(value: string | number | null | undefined): string | num
 function unsupportedFeatureDiagnostics(
   config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
+  layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null,
 ): string[] {
   const unsupported: string[] = [];
   if (String(config.type).endsWith('3d'))
@@ -410,10 +411,16 @@ function unsupportedFeatureDiagnostics(
   }
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push(pivotFieldButtonDiagnostic(config));
+  if (!layout) {
+    if (hasManualPlotLayout(config))
+      unsupported.push('manual plot layout is preserved but not rendered');
+    if (hasManualTitleLayout(config))
+      unsupported.push('manual title layout is preserved but not rendered');
+    if (hasManualLegendLayout(config))
+      unsupported.push('manual legend layout is preserved but not rendered');
+  }
   if (hasManualDataLabelLayout(config))
     unsupported.push('manual data-label layout is preserved but not rendered');
-  if (hasTrendlineLabelLayout(config))
-    unsupported.push('trendline label layout is preserved but not rendered');
   if (config.dataTable)
     unsupported.push('chart data table is preserved but not rendered');
   if (hasPictureMarkers(config))
@@ -429,6 +436,18 @@ function unsupportedFeatureDiagnostics(
   unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
   unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
   return unsupported;
+}
+
+function hasManualPlotLayout(config: ChartConfig): boolean {
+  return Boolean(config.plotLayout || config.plotArea?.layout);
+}
+
+function hasManualTitleLayout(config: ChartConfig): boolean {
+  return Boolean(config.titleLayout || config.chartTitle?.layout);
+}
+
+function hasManualLegendLayout(config: ChartConfig): boolean {
+  return Boolean(config.legend?.layout);
 }
 
 function pivotFieldButtonDiagnostic(config: ChartConfig): string {
@@ -455,16 +474,6 @@ function hasManualDataLabelLayout(config: ChartConfig): boolean {
         (series) =>
           series.dataLabels?.layout ||
           series.points?.some((point) => point.dataLabel?.layout),
-      ),
-  );
-}
-
-function hasTrendlineLabelLayout(config: ChartConfig): boolean {
-  return Boolean(
-    config.trendline?.label?.layout ||
-      config.trendlines?.some((trendline) => trendline.label?.layout) ||
-      config.series?.some((series) =>
-        series.trendlines?.some((trendline) => trendline.label?.layout),
       ),
   );
 }

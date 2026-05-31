@@ -7,6 +7,8 @@ import {
   SERIES_FIELD,
   TRENDLINE_LABEL_COLOR_FIELD,
   TRENDLINE_LABEL_FONT_SIZE_FIELD,
+  TRENDLINE_LABEL_LAYOUT_X_FIELD,
+  TRENDLINE_LABEL_LAYOUT_Y_FIELD,
   TRENDLINE_LABEL_TEXT_FIELD,
   TRENDLINE_LABEL_X_FIELD,
   TRENDLINE_LABEL_Y_FIELD,
@@ -96,12 +98,18 @@ function buildTrendlineLabelLayer(
   const text = trendlineLabelText(trendline, result);
   const lastPoint = result?.points.at(-1);
   if (!text || !lastPoint) return undefined;
+  const manualLayout = trendline.label?.layout;
+  const manualX = finiteNumber(manualLayout?.x);
+  const manualY = finiteNumber(manualLayout?.y);
+  const hasManualPosition = manualX !== undefined || manualY !== undefined;
 
   const labelRow: DataRow = {
     [TRENDLINE_LABEL_X_FIELD]: lastPoint[0],
     [TRENDLINE_LABEL_Y_FIELD]: lastPoint[1],
     [TRENDLINE_LABEL_TEXT_FIELD]: text,
   };
+  if (manualX !== undefined) labelRow[TRENDLINE_LABEL_LAYOUT_X_FIELD] = manualX;
+  if (manualY !== undefined) labelRow[TRENDLINE_LABEL_LAYOUT_Y_FIELD] = manualY;
   const color = colorToCss(trendline.label?.format?.font?.color);
   if (color) labelRow[TRENDLINE_LABEL_COLOR_FIELD] = color;
   if (trendline.label?.format?.font?.size !== undefined) {
@@ -111,10 +119,18 @@ function buildTrendlineLabelLayer(
   return {
     mark: {
       type: 'text',
-      dx: 6,
-      dy: -6,
+      dx: hasManualPosition ? 0 : 6,
+      dy: hasManualPosition ? 0 : -6,
       align: 'left',
-      textBaseline: 'bottom',
+      textBaseline: hasManualPosition ? 'top' : 'bottom',
+      ...(hasManualPosition
+        ? {
+            xField: TRENDLINE_LABEL_LAYOUT_X_FIELD,
+            yField: TRENDLINE_LABEL_LAYOUT_Y_FIELD,
+            coordinateSystem:
+              manualLayout?.layoutTarget === 'inner' ? ('plotFraction' as const) : ('chartFraction' as const),
+          }
+        : {}),
       colorField: TRENDLINE_LABEL_COLOR_FIELD,
       fontSizeField: TRENDLINE_LABEL_FONT_SIZE_FIELD,
     },
@@ -212,6 +228,10 @@ function usesComputedTrendlineRows(trendline: TrendlineConfig): boolean {
 }
 
 function numeric(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 

@@ -24,6 +24,8 @@ import {
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_OPEN_FIELD,
+  TRENDLINE_LABEL_LAYOUT_X_FIELD,
+  TRENDLINE_LABEL_LAYOUT_Y_FIELD,
   TRENDLINE_LABEL_TEXT_FIELD,
   VALUE_FIELD,
 } from '../config-to-spec/fields';
@@ -334,6 +336,79 @@ describe('configToSpec annotation layers', () => {
     ];
     expect(labelText).toContain('y =');
     expect(labelText).toContain('R^2 = 1.00');
+  });
+
+  it('renders manual trendline label layout as chart-relative text coordinates', () => {
+    const data: ChartData = {
+      categories: [1, 2, 3],
+      series: [
+        {
+          name: 'Revenue',
+          data: [
+            { x: 1, y: 2 },
+            { x: 2, y: 4 },
+            { x: 3, y: 6 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'scatter',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      trendlines: [
+        {
+          show: true,
+          type: 'linear',
+          label: { text: 'Fit', layout: { x: 0.25, y: 0.3 } },
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const labelLayer = spec.layer.find(
+      (layer) => layer.encoding?.text?.field === TRENDLINE_LABEL_TEXT_FIELD,
+    );
+
+    expect(labelLayer).toBeDefined();
+    expect(labelLayer!.mark).toEqual(
+      expect.objectContaining({
+        type: 'text',
+        xField: TRENDLINE_LABEL_LAYOUT_X_FIELD,
+        yField: TRENDLINE_LABEL_LAYOUT_Y_FIELD,
+        coordinateSystem: 'chartFraction',
+        dx: 0,
+        dy: 0,
+        textBaseline: 'top',
+      }),
+    );
+    expect(labelLayer!.data).toEqual({
+      values: [
+        expect.objectContaining({
+          [TRENDLINE_LABEL_LAYOUT_X_FIELD]: 0.25,
+          [TRENDLINE_LABEL_LAYOUT_Y_FIELD]: 0.3,
+          [TRENDLINE_LABEL_TEXT_FIELD]: 'Fit',
+        }),
+      ],
+    });
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 200,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const labelMark = compiled.marks.find(
+      (mark) =>
+        mark.type === 'text' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[TRENDLINE_LABEL_TEXT_FIELD] ===
+          'Fit',
+    );
+    expect(labelMark?.x).toBeCloseTo(100, 5);
+    expect(labelMark?.y).toBeCloseTo(60, 5);
   });
 
   it('lowers pie labels, leader lines, point fill, and explosion into row geometry', () => {

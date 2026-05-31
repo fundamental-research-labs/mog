@@ -95,6 +95,9 @@ function directPosition(
 ): number | undefined {
   const value = numberField(datum, field);
   if (value === undefined) return undefined;
+  if (coordinateSystem === 'chartFraction') {
+    return axis === 'x' ? value * layout.width : value * layout.height;
+  }
   if (coordinateSystem !== 'plotFraction') return value;
   return axis === 'x'
     ? layout.plotArea.x + value * layout.plotArea.width

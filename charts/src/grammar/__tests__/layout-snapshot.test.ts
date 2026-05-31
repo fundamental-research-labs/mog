@@ -165,8 +165,8 @@ describe('extractChartLayout', () => {
         },
         config: {
           layoutHints: {
-            manualPlotArea: { x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
-            manualTitle: { x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
+            manualPlotArea: { xMode: 'edge', yMode: 'edge', x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
+            manualTitle: { xMode: 'edge', yMode: 'edge', x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
             manualLegend: {
               xMode: 'edge',
               yMode: 'edge',
@@ -200,6 +200,25 @@ describe('extractChartLayout', () => {
     expect(layout.legend!.top).toBeCloseTo(40 * PX_TO_PT, 5);
     expect(layout.legend!.width).toBeCloseTo(180 * PX_TO_PT, 5);
     expect(layout.legend!.height).toBeCloseTo(80 * PX_TO_PT, 5);
+  });
+
+  it('applies factor manual coordinates relative to the auto layout rectangle', () => {
+    const result = compile(
+      makeBarSpec({
+        title: 'Factor Layout',
+        config: {
+          layoutHints: {
+            manualTitle: { xMode: 'factor', yMode: 'factor', x: 0.1, y: 0.1 },
+          },
+        },
+      }),
+    );
+
+    const layout = extractChartLayout(result);
+
+    expect(layout.title).toBeDefined();
+    expect(layout.title!.left).toBeCloseTo(60 * PX_TO_PT, 5);
+    expect(layout.title!.top).toBeCloseTo(60 * PX_TO_PT, 5);
   });
 
   it('updates layout when chart dimensions change', () => {

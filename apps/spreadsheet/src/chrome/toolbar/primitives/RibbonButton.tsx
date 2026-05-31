@@ -161,7 +161,7 @@ const baseStyles = `
  transition-all duration-ss-fast
  outline-none
  focus-visible:ring-2 focus-visible:ring-ss-primary focus-visible:ring-offset-1
- disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none
+ disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:shadow-none
 `;
 
 /** Hover state styles (when not open) */

@@ -161,7 +161,6 @@ fn compute_config() -> TypeGenConfig {
         "ChartPivotSource",
         "ChartPivotFmt",
         "ChartPivotFormat",
-        "WaterfallOptions",
         "VmlShapeProps",
         "Shape3DSettings",
         "SceneSettings",
@@ -753,6 +752,9 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/legend.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/position.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/series.rs"),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/chart/ooxml_mirror_types/waterfall.rs"
+        ),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/spec.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/view_3d.rs"),
         format!("{manifest_dir}/../../../domain-types/src/diagnostics.rs"),

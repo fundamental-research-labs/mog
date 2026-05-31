@@ -851,7 +851,11 @@ export interface ChartData {
   smoothLines?: boolean;
   radarFilled?: boolean;
   radarMarkers?: boolean;
-  waterfall?: unknown;
+  waterfall?: WaterfallOptions;
+  histogram?: HistogramConfigData;
+  boxplot?: BoxplotConfigData;
+  hierarchy?: HierarchyChartConfigData;
+  regionMap?: RegionMapConfigData;
   displayBlanksAs?: string;
   plotVisibleOnly?: boolean;
   gapWidth?: number;
@@ -1116,6 +1120,11 @@ export interface ChartSpec {
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
   dataTable?: ChartDataTableData;
+  waterfall?: WaterfallOptions;
+  histogram?: HistogramConfigData;
+  boxplot?: BoxplotConfigData;
+  hierarchy?: HierarchyChartConfigData;
+  regionMap?: RegionMapConfigData;
   displayBlanksAs?: string;
   plotVisibleOnly?: boolean;
   gapWidth?: number;
@@ -2295,6 +2304,23 @@ export interface HeadingPair {
 }
 
 export type HfImagePosition = "leftHeader" | "centerHeader" | "rightHeader" | "leftFooter" | "centerFooter" | "rightFooter";
+
+export interface HierarchyChartConfigData {
+  rows?: HierarchyChartRowData[];
+  categoryFormulas?: string[];
+  valueFormula?: string;
+  parentLabelLayout?: string;
+}
+
+export interface HierarchyChartRowData {
+  id: string;
+  parentId?: string;
+  label: string;
+  level: number;
+  value?: number;
+  categoryFormula?: string;
+  valueFormula?: string;
+}
 
 export interface HistogramBin {
   bin0: number;
@@ -3721,6 +3747,11 @@ export interface RegexSearchOptions {
 export interface RegexSearchResult {
   matches: RegexSearchMatch[];
   errors: string[];
+}
+
+export interface RegionMapConfigData {
+  regionFormula?: string;
+  valueFormula?: string;
 }
 
 export type RegressionMethod = "linear" | "log" | "exp" | "pow" | "quad" | "poly";
@@ -5476,6 +5507,11 @@ export interface VisibilityChange {
   axis: Axis;
   index: number;
   hidden: boolean;
+}
+
+export interface WaterfallOptions {
+  subtotalIndices?: number[];
+  showConnectorLines?: boolean;
 }
 
 export interface WebConnectionProperties {

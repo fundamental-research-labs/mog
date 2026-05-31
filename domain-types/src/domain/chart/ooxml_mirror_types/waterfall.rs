@@ -1,10 +1,11 @@
+use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
 /// Waterfall-chart specific options.
 ///
 /// Mirrors the `cx:layoutPr` bits relevant to waterfall charts: subtotal
 /// indices and connector-line visibility.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct WaterfallOptions {

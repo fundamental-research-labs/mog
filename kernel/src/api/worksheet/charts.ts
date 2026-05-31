@@ -70,6 +70,23 @@ function numericField(fields: Record<string, unknown>, key: string): number | un
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function waterfallConfigToWire(
+  waterfall: NonNullable<ChartConfig['waterfall']>,
+): NonNullable<ChartFloatingObject['waterfall']> {
+  return {
+    ...(waterfall.totalIndices !== undefined ? { subtotalIndices: waterfall.totalIndices } : {}),
+  };
+}
+
+function waterfallConfigFromWire(
+  waterfall: ChartFloatingObject['waterfall'],
+): Chart['waterfall'] {
+  if (!waterfall) return undefined;
+  return {
+    ...(waterfall.subtotalIndices !== undefined ? { totalIndices: waterfall.subtotalIndices } : {}),
+  };
+}
+
 function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 'type'>>): void {
   if (config.type && UNSUPPORTED_NATIVE_XLSX_CHART_TYPES.has(config.type)) {
     throw invalidChartConfig(
@@ -481,7 +498,7 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     smoothLines: config.smoothLines,
     radarFilled: config.radarFilled,
     radarMarkers: config.radarMarkers,
-    waterfall: config.waterfall,
+    waterfall: config.waterfall ? waterfallConfigToWire(config.waterfall) : undefined,
     displayBlanksAs: config.displayBlanksAs,
     plotVisibleOnly: config.plotVisibleOnly,
     gapWidth: config.gapWidth,
@@ -605,7 +622,7 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.smoothLines !== undefined) result.smoothLines = updates.smoothLines;
   if (updates.radarFilled !== undefined) result.radarFilled = updates.radarFilled;
   if (updates.radarMarkers !== undefined) result.radarMarkers = updates.radarMarkers;
-  if (updates.waterfall !== undefined) result.waterfall = updates.waterfall;
+  if (updates.waterfall !== undefined) result.waterfall = waterfallConfigToWire(updates.waterfall);
 
   if (updates.displayBlanksAs !== undefined) result.displayBlanksAs = updates.displayBlanksAs;
   if (updates.plotVisibleOnly !== undefined) result.plotVisibleOnly = updates.plotVisibleOnly;
@@ -730,7 +747,7 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     smoothLines: chart.smoothLines,
     radarFilled: chart.radarFilled,
     radarMarkers: chart.radarMarkers,
-    waterfall: chart.waterfall as Chart['waterfall'],
+    waterfall: waterfallConfigFromWire(chart.waterfall),
     displayBlanksAs: chart.displayBlanksAs as Chart['displayBlanksAs'],
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,

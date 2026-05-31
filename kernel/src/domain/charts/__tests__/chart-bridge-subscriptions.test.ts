@@ -345,6 +345,33 @@ describe('setupChartBridgeSubscriptions', () => {
     expect(deps.renderCache.deleteChartCaches).toHaveBeenCalledWith(CHART_1, SHEET_A);
   });
 
+  it('uses floating-object container identity and evicts old chart context on sheet moves', () => {
+    const deps = createDeps();
+    deps.renderCache.getSheetId.mockReturnValue(SHEET_A);
+    setupChartBridgeSubscriptions(deps);
+    const data = { type: 'chart' };
+
+    deps.ctx.eventBus.emit({
+      type: 'floatingObject:updated',
+      sheetId: SHEET_A as unknown as string,
+      containerId: SHEET_B as unknown as string,
+      previousSheetId: SHEET_A as unknown as string,
+      previousContainerId: SHEET_A as unknown as string,
+      objectId: CHART_1,
+      data,
+      changes: {},
+      changedFields: ['anchorRow', 'anchorCol'],
+      source: 'local',
+    } as never);
+
+    expect(deps.renderCache.deleteSheetId).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(deps.renderCache.deleteChartCaches).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(deps.renderCache.setSheetId).toHaveBeenCalledWith(CHART_1, SHEET_B);
+    expect(deps.renderCache.syncImportRenderStatus).toHaveBeenCalledWith(CHART_1, data, SHEET_B);
+    expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_B);
+    expect(deps.invalidateChart).not.toHaveBeenCalledWith(CHART_1, SHEET_A);
+  });
+
   it('routes sheet deletion through the render-cache sheet lifecycle API', () => {
     const deps = createDeps();
     setupChartBridgeSubscriptions(deps);
@@ -371,6 +398,7 @@ describe('setupChartBridgeSubscriptions', () => {
     deps.ctx.eventBus.emit({
       type: 'floatingObject:created',
       sheetId: SHEET_A as unknown as string,
+      containerId: SHEET_A as unknown as string,
       objectId: CHART_1,
       objectType: 'chart',
       data: terminalStatus,
@@ -387,6 +415,7 @@ describe('setupChartBridgeSubscriptions', () => {
     deps.ctx.eventBus.emit({
       type: 'floatingObject:updated',
       sheetId: SHEET_A as unknown as string,
+      containerId: SHEET_A as unknown as string,
       objectId: CHART_1,
       data: { type: 'chart' },
       changes: {},

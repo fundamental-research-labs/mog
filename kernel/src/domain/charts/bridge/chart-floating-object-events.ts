@@ -33,6 +33,7 @@ type ChartFloatingObjectUpdatedPolicyEvent = {
   data: FloatingObjectUpdatedEvent['data'];
   changes: FloatingObjectUpdatedEvent['changes'];
   changedFields: FloatingObjectUpdatedEvent['changedFields'];
+  previousSheetId?: SheetId;
 };
 
 type ChartFloatingObjectDeletedPolicyEvent = {
@@ -60,9 +61,14 @@ export function handleChartFloatingObjectUpdated(
 ): void {
   if (!isChartPayload(event.data)) return;
 
-  if (deps.renderCache.getSheetId(event.objectId) !== sheetId) {
-    deps.renderCache.setSheetId(event.objectId, sheetId);
+  const existingSheetId = deps.renderCache.getSheetId(event.objectId);
+  const oldSheetId = event.previousSheetId ?? existingSheetId;
+  const movedSheetContext = oldSheetId !== undefined && oldSheetId !== sheetId;
+  if (movedSheetContext) {
+    deps.renderCache.deleteSheetId(event.objectId, oldSheetId);
+    deps.renderCache.deleteChartCaches(event.objectId, oldSheetId);
   }
+  deps.renderCache.setSheetId(event.objectId, sheetId);
 
   const importStatusPayload = hasImportStatus(event.changes) ? event.changes : event.data;
   const hasTerminalImportStatus = deps.renderCache.syncImportRenderStatus(
@@ -73,7 +79,7 @@ export function handleChartFloatingObjectUpdated(
   if (hasTerminalImportStatus) return;
 
   const fields = event.changedFields ?? [];
-  if (!isPositionOnlyUpdate(fields)) {
+  if (movedSheetContext || !isPositionOnlyUpdate(fields)) {
     deps.invalidateChart(event.objectId, sheetId);
   }
 }

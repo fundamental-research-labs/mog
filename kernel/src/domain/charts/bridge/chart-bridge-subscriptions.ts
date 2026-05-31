@@ -1,4 +1,4 @@
-import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import type {
   CellChangedEvent,
   CellsBatchChangedEvent,
@@ -44,6 +44,27 @@ export {
   handleRowsDeleted,
   handleRowsInserted,
 } from './chart-bridge-structural-events';
+
+type FloatingObjectSheetIdentityEvent = {
+  sheetId: string;
+  containerId?: string;
+};
+
+type FloatingObjectPreviousSheetIdentityEvent = FloatingObjectSheetIdentityEvent & {
+  previousSheetId?: string;
+  previousContainerId?: string;
+};
+
+function floatingObjectEventSheetId(event: FloatingObjectSheetIdentityEvent): SheetId {
+  return toSheetId(event.containerId ?? event.sheetId);
+}
+
+function previousFloatingObjectEventSheetId(
+  event: FloatingObjectPreviousSheetIdentityEvent,
+): SheetId | undefined {
+  const previousContainerId = event.previousContainerId ?? event.previousSheetId;
+  return previousContainerId === undefined ? undefined : toSheetId(previousContainerId);
+}
 
 /**
  * Set up EventBus subscriptions for reactive chart updates.
@@ -91,7 +112,9 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
   );
 
   // Keep the event-bus boundary here: listeners own liveness checks and raw
-  // event sheetId branding, then delegate chart-specific floating-object policy.
+  // event containerId/sheetId branding, then delegate chart-specific
+  // floating-object policy. Prefer containerId during the transition; sheetId
+  // remains the legacy fallback for older/manual events.
   cleanups.push(
     deps.ctx.eventBus.on<FloatingObjectCreatedEvent>('floatingObject:created', (event) => {
       if (!liveDeps.isLive()) return;
@@ -102,7 +125,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
           objectType: event.objectType,
           data: event.data,
         },
-        toSheetId(event.sheetId),
+        floatingObjectEventSheetId(event),
       );
     }),
   );
@@ -110,6 +133,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
   cleanups.push(
     deps.ctx.eventBus.on<FloatingObjectUpdatedEvent>('floatingObject:updated', (event) => {
       if (!liveDeps.isLive()) return;
+      const previousSheetId = previousFloatingObjectEventSheetId(event);
       handleChartFloatingObjectUpdated(
         deps,
         {
@@ -117,8 +141,9 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
           data: event.data,
           changes: event.changes,
           changedFields: event.changedFields,
+          ...(previousSheetId !== undefined ? { previousSheetId } : {}),
         },
-        toSheetId(event.sheetId),
+        floatingObjectEventSheetId(event),
       );
     }),
   );
@@ -132,7 +157,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
           objectId: event.objectId,
           objectType: event.objectType,
         },
-        toSheetId(event.sheetId),
+        floatingObjectEventSheetId(event),
       );
     }),
   );

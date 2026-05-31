@@ -970,22 +970,23 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.stop();
   });
 
-  it('cross-sheet :updated forward-looking handler records an additional sheet context', () => {
-    // Charts cannot move between sheets in the current API. If a future or
-    // imported event reports the same chartId on another sheet, keep both
-    // contexts instead of collapsing the id back to one sheet.
+  it('cross-sheet :updated moves sheet context and clears old sheet caches', () => {
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
     const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
     expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(sheetAMarks);
 
-    // Hypothetical cross-sheet event carrying the same imported chart id.
     emitChartUpdated(eventBus, CHART_1, SHEET_B, ['anchorRow', 'anchorCol']);
-    expect(renderCache.getSheetId(CHART_1)).toBeUndefined();
-    expect(renderCache.chartIdsForSheet(SHEET_A)).toEqual([CHART_1]);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.chartIdsForSheet(SHEET_A)).toEqual([]);
     expect(renderCache.chartIdsForSheet(SHEET_B)).toEqual([CHART_1]);
     bridge.stop();
   });

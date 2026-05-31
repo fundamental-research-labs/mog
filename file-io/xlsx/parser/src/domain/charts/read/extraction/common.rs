@@ -4,7 +4,7 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
     part_path: Option<&str>,
     object_name: Option<&str>,
 ) -> Option<domain_types::ImportObjectStatus> {
-    if !series.is_empty() || data_range.is_some() {
+    if has_renderable_chart_data(series, data_range) {
         return None;
     }
 
@@ -20,6 +20,31 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
             object_id: None,
         },
     ))
+}
+
+fn has_renderable_chart_data(
+    series: &[domain_types::chart::ChartSeriesData],
+    data_range: Option<&str>,
+) -> bool {
+    data_range.is_some_and(|range| !range.trim().is_empty())
+        || series.iter().any(series_has_renderable_value_dimension)
+}
+
+fn series_has_renderable_value_dimension(series: &domain_types::chart::ChartSeriesData) -> bool {
+    series
+        .values
+        .as_deref()
+        .is_some_and(|range| !range.trim().is_empty())
+        || series
+            .value_cache
+            .as_ref()
+            .is_some_and(point_cache_has_renderable_points)
+}
+
+fn point_cache_has_renderable_points(
+    cache: &domain_types::chart::ChartSeriesPointCacheData,
+) -> bool {
+    cache.point_count.is_some_and(|count| count > 0) || !cache.points.is_empty()
 }
 
 pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart_type(

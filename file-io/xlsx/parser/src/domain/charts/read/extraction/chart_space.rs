@@ -842,7 +842,8 @@ mod tests {
     use ooxml_types::charts::{
         AreaChartConfig, AxisType, BarChartConfig, Chart as OoxmlChart, ChartAxis,
         ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
-        ChartTypeConfig, Legend, LineChartConfig, PlotArea, StockChartConfig, Title,
+        ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource, NumPoint, PlotArea,
+        StockChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -1024,6 +1025,98 @@ mod tests {
         assert_eq!(
             chart_type_for_plot_area(&plot_area),
             domain_types::ChartType::Combo
+        );
+    }
+
+    #[test]
+    fn empty_placeholder_series_reports_not_renderable_import_status() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![group_with_series(
+                        ChartType::Line,
+                        ChartTypeConfig::Line(LineChartConfig::default()),
+                        1,
+                    )],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        let status = spec.import_status.expect("empty series status");
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::Placeholder
+        );
+        assert_eq!(
+            status
+                .diagnostics
+                .first()
+                .and_then(|diagnostic| diagnostic.code.clone()),
+            Some(domain_types::ImportDiagnosticCode::ChartPartEmptySeries)
+        );
+    }
+
+    #[test]
+    fn literal_value_series_is_renderable_without_data_range_or_formula() {
+        let literal_series = ChartSeries {
+            idx: 0,
+            order: 0,
+            val: Some(NumDataSource::Lit(NumData {
+                pt_count: Some(2),
+                pts: vec![
+                    NumPoint {
+                        idx: 0,
+                        v: "10".to_string(),
+                        format_code: None,
+                    },
+                    NumPoint {
+                        idx: 1,
+                        v: "20".to_string(),
+                        format_code: None,
+                    },
+                ],
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![literal_series],
+                        ..group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                        )
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert!(spec.data_range.is_none());
+        assert!(spec.import_status.is_none());
+        assert_eq!(spec.series.len(), 1);
+        assert_eq!(spec.series[0].values, None);
+        assert_eq!(
+            spec.series[0].value_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        );
+        assert_eq!(
+            spec.series[0]
+                .value_cache
+                .as_ref()
+                .and_then(|cache| cache.point_count),
+            Some(2)
         );
     }
 

@@ -1,4 +1,10 @@
-import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, ScaleSpec } from '../../grammar/spec';
+import type {
+  AxisSpec,
+  ChannelSpec,
+  ConfigSpec,
+  EncodingSpec,
+  ScaleSpec,
+} from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../../primitives/scales/linear';
@@ -9,11 +15,13 @@ import {
 } from './axis';
 import { hasSecondaryYAxis } from './secondary-axis';
 
+type LayoutHints = NonNullable<ConfigSpec['layoutHints']>;
+
 export function buildLayoutHints(
   config: ChartConfig,
   encoding: EncodingSpec | undefined,
   data: ChartData | undefined,
-): ConfigSpec['layoutHints'] | undefined {
+): LayoutHints | undefined {
   const leftYAxisLabelWidth =
     estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
   const rightYAxisLabelWidth = estimateSecondaryYAxisLabelWidth(config, data);

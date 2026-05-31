@@ -6,7 +6,7 @@ import { resolvedCategoryColors } from './series-style';
 import { resolveStackMode } from './subtypes';
 
 /**
- * Build the ConfigSpec from chart-level settings: stacking, colors, data labels.
+ * Build the ConfigSpec from chart-level settings: stacking, colors, and layout hints.
  */
 export function buildConfigSpec(
   config: ChartConfig,

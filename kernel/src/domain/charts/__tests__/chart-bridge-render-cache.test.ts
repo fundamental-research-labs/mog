@@ -972,9 +972,9 @@ describe('resolveChartData imported visibility semantics', () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data).toEqual([
-      { category: 'FY19', value: 10, series: 'Visible' },
-      { category: 'FY20', value: 20, series: 'Visible' },
-      { category: 'FY21', value: 30, series: 'Visible' },
+      { category: 'FY19', x: 'FY19', y: 10, value: 10, series: 'Visible' },
+      { category: 'FY20', x: 'FY20', y: 20, value: 20, series: 'Visible' },
+      { category: 'FY21', x: 'FY21', y: 30, value: 30, series: 'Visible' },
     ]);
   });
 
@@ -1451,8 +1451,10 @@ describe('chart invalidation event fanout', () => {
     expect(computeBridge.getSheetOrder).toHaveBeenCalledTimes(1);
     expect(computeBridge.getAllCharts).toHaveBeenCalledTimes(1);
     expect(computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_A);
-    expect(invalidateSpy).toHaveBeenCalledWith(CHART_1, undefined);
-    expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(CHART_1);
+    expect(invalidateSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(
+      getRenderCache(bridge).cacheKey(CHART_1, SHEET_A),
+    );
     bridge.stop();
   });
 });

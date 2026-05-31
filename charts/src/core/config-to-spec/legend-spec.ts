@@ -52,8 +52,11 @@ export function buildLegendSpec(
   } = {},
 ): LegendSpec | null {
   if (!isLegendShown(legend)) return null;
-  if (options.entries && options.entries.length === 0) return null;
-  if (options.values && options.values.length === 0) return null;
+  if (options.entries !== undefined) {
+    if (options.entries.length === 0) return null;
+  } else if (options.values && options.values.length === 0) {
+    return null;
+  }
 
   const legendFormat = config
     ? resolveChartOwnerFormat(config, 'legend', legend.format)
@@ -67,7 +70,7 @@ export function buildLegendSpec(
     orient: legendPositionToOrient(legend.position),
     title: null,
     ...(legend.overlay !== undefined ? { overlay: legend.overlay } : {}),
-    ...(options.values ? { values: options.values } : {}),
+    ...(options.values && options.values.length > 0 ? { values: options.values } : {}),
     ...(options.entries ? { entries: options.entries } : {}),
     ...(options.reverse ? { reverse: true } : {}),
     ...(options.symbolType ? { symbolType: options.symbolType } : {}),

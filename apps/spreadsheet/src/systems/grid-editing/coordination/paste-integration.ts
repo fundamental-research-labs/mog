@@ -38,6 +38,16 @@ function hasAnyCellFormat(data: NonNullable<ClipboardState['context']['data']>):
   );
 }
 
+async function clearSystemClipboardText(): Promise<void> {
+  const writeText = globalThis.navigator?.clipboard?.writeText;
+  if (typeof writeText !== 'function') return;
+  try {
+    await writeText.call(globalThis.navigator.clipboard, '');
+  } catch {
+    // Best effort only. Internal state still clears so cut/copy semantics hold.
+  }
+}
+
 /**
  * Size dimensions for paste data or target selection.
  */
@@ -537,6 +547,7 @@ export function setupClipboardPasteIntegration(
             pastePreviewTarget.row,
             pastePreviewTarget.col,
           );
+          await clearSystemClipboardText();
           clipboardActor.send({ type: 'PASTE_COMPLETE' });
 
           // Calculate affected range for render invalidation
@@ -619,6 +630,7 @@ export function setupClipboardPasteIntegration(
             // Callback for clearing source cell values — must await so the
             // source-clear mutation lands in the surrounding undo group.
             await onCutPasteComplete?.(toSheetId(data.sourceSheetId), sourceRanges);
+            await clearSystemClipboardText();
           }
 
           clipboardActor.send({ type: 'PASTE_COMPLETE' });

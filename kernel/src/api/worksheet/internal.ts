@@ -99,6 +99,30 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     return this.ctx.computeBridge.getTableAtCell(sheetId, row, col);
   }
 
+  private async refreshRegisteredViewportsForSheet(sheetId: SheetId): Promise<void> {
+    const vpStates = this.ctx.computeBridge.getPerViewportStates();
+    const suffix = ':' + sheetId;
+    const boundsToRefresh: Array<{
+      vpId: string;
+      bounds: { startRow: number; startCol: number; endRow: number; endCol: number };
+    }> = [];
+
+    for (const [vpId, state] of vpStates) {
+      if (vpId.endsWith(suffix) && state.prefetchBounds) {
+        boundsToRefresh.push({ vpId, bounds: state.prefetchBounds });
+      }
+    }
+
+    if (boundsToRefresh.length === 0) return;
+
+    this.ctx.computeBridge.invalidateAllViewportPrefetch();
+    await Promise.all(
+      boundsToRefresh.map(({ vpId, bounds }) =>
+        this.ctx.computeBridge.refreshViewportForRegion(vpId, sheetId, bounds),
+      ),
+    );
+  }
+
   private async getTableDefinitionsForRange(sourceRange: CellRange): Promise<CanonicalTable[]> {
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.filter(
@@ -461,6 +485,10 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       skipBlanks,
       transpose,
     );
+
+    if (copyType === 'formats') {
+      await this.refreshRegisteredViewportsForSheet(targetSheetId);
+    }
 
     if (tablesToCopy.length > 0) {
       await this.copyTableDefinitionsToTarget(

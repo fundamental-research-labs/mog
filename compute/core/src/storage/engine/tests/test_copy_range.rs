@@ -188,6 +188,45 @@ fn test_copy_range_skip_blanks() {
         .cloned();
     assert_eq!(d5_val.unwrap(), CellValue::Number(FiniteF64::must(999.0)));
 
+    // Copy a blank cell (D1, which is empty) to D5 with skip_blanks=false.
+    // Blank sources should overwrite existing target values.
+    let _output = engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sid,
+            src_start_row: 0,
+            src_start_col: 3,
+            src_end_row: 0,
+            src_end_col: 3,
+            target_sheet_id: sid,
+            target_row: 4,
+            target_col: 3,
+            copy_type: domain_types::CopyType::Values,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    let d5_val = engine
+        .mirror()
+        .get_cell_value_at(&sid, SheetPos::new(4, 3))
+        .cloned()
+        .unwrap_or(CellValue::Null);
+    assert_eq!(
+        d5_val,
+        CellValue::Null,
+        "D5 should be cleared when skip_blanks=false"
+    );
+
+    engine
+        .set_cell(
+            &sid,
+            d5_cell_id,
+            4,
+            3,
+            crate::bridge_types::CellInput::Parse { text: "999".into() },
+        )
+        .unwrap();
+
     // Now copy a blank cell (D1, which is empty) to D5 with skip_blanks=true
     let _output = engine
         .apply_mutation(EngineMutation::CopyRange {

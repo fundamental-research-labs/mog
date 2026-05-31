@@ -809,6 +809,8 @@ export const clipboardMachine = setup({
           sourceRanges: null,
           data: null,
           isCut: false,
+          suppressedTextSignature:
+            getInternalTextSignature(context) ?? context.suppressedTextSignature,
         };
       }
 

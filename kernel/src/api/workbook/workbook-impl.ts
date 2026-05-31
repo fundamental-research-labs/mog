@@ -1788,7 +1788,13 @@ export class WorkbookImpl implements WorkbookInternal {
 
   private _scenarios?: WorkbookScenariosImpl;
   get scenarios(): WorkbookScenarios {
-    return (this._scenarios ??= new WorkbookScenariosImpl(this.ctx));
+    return (this._scenarios ??= new WorkbookScenariosImpl({
+      ctx: this.ctx,
+      getActiveSheetId: () => this.getActiveSheetId(),
+      getSheetOrder: () => getOrder(this.ctx),
+      getSheetName: (id) => getName(this.ctx, id),
+      resolveSheetNameToId: (nameLower) => this._resolveSheetNameToId(nameLower),
+    }));
   }
 
   private _history?: WorkbookHistoryImpl;

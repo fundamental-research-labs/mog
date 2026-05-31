@@ -1653,6 +1653,7 @@ fn chart_ex_with_imported_title(original_number: usize, family_marker: &str) -> 
 fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
     domain_types::chart::ChartSeriesData {
         name: Some("Revenue".to_string()),
+        name_ref: None,
         r#type: Some(ChartType::Waterfall),
         color: None,
         stock_role: None,

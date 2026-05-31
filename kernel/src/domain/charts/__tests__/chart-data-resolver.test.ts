@@ -149,6 +149,12 @@ describe('chart data resolver helpers', () => {
         seriesReferences: [
           {
             index: 0,
+            name: {
+              kind: 'seriesName',
+              source: 'a1',
+              ref: 'Names!A1',
+              range: range('sheet-names', 0, 0, 0, 0),
+            },
             values: {
               kind: 'seriesValues',
               source: 'a1',
@@ -175,6 +181,7 @@ describe('chart data resolver helpers', () => {
     expect(aliases).toEqual(
       new Map([
         ['Revenue', 'sheet-revenue'],
+        ['Names', 'sheet-names'],
         ['Calendar', 'sheet-calendar'],
         ['Size Data', 'sheet-sizes'],
       ]),

@@ -1084,6 +1084,7 @@ export interface ChartSeriesCategoryLevelsCacheData {
 
 export interface ChartSeriesData {
   name?: string;
+  nameRef?: string;
   type?: string;
   color?: string;
   stockRole?: ChartSeriesStockRoleData;

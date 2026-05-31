@@ -40,6 +40,29 @@ fn test_parse_series_with_text() {
 }
 
 #[test]
+fn test_parse_series_with_text_str_ref_without_cache() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:tx>
+                <c:strRef>
+                    <c:f>'Data'!C2</c:f>
+                </c:strRef>
+            </c:tx>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(series.tx.is_some());
+    match series.tx.unwrap() {
+        SeriesTextSource::StrRef(str_ref) => {
+            assert_eq!(str_ref.f, "'Data'!C2");
+            assert!(str_ref.str_cache.is_none());
+        }
+        other => panic!("Expected SeriesTextSource::StrRef, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_series_all() {
     let xml = br#"<c:barChart>
             <c:ser>

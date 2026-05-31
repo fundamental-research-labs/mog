@@ -142,6 +142,7 @@ export class ChartDataResolver {
 
     if (hasRenderableSeriesData) {
       const seriesRanges = resolvedRanges.seriesReferences.flatMap((series) => [
+        series.name?.range,
         series.values?.range,
         series.categories?.range,
         series.bubbleSizes?.range,

@@ -109,6 +109,9 @@ pub struct ChartSeriesData {
     /// Series name (from c:tx)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Live series-name reference from c:tx/c:strRef/c:f.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_ref: Option<String>,
     /// Series-specific chart type override (for combo charts)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<ChartType>,

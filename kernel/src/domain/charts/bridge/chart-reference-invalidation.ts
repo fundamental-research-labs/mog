@@ -96,6 +96,7 @@ export function resolvedChartReferenceRanges(
     resolved.categoryRange,
     resolved.seriesRange,
     ...resolved.seriesReferences.flatMap((series) => [
+      series.name,
       series.values,
       series.categories,
       series.bubbleSizes,

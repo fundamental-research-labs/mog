@@ -58,6 +58,30 @@ function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): str
   return `Series ${seriesIndex + 1}`;
 }
 
+function liveSeriesName(
+  accessor: CellDataAccessor,
+  seriesConfig: SeriesConfig,
+): string | undefined {
+  const range = tryParseRange(seriesConfig.nameRef);
+  if (!range) return undefined;
+
+  const value = getRangeValue(accessor, range, range.startRow, range.startCol);
+  if (isHiddenChartCellValue(value) || isBlankChartCellValue(value)) return undefined;
+  return String(value);
+}
+
+function resolvedSeriesName(
+  accessor: CellDataAccessor,
+  seriesConfig: SeriesConfig,
+  seriesIndex: number,
+): string {
+  return (
+    liveSeriesName(accessor, seriesConfig) ??
+    seriesConfig.name ??
+    defaultSeriesName(seriesConfig, seriesIndex)
+  );
+}
+
 export function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boolean {
   return (
     Boolean(seriesConfig.values?.trim()) || hasRenderableCachedDimension(seriesConfig.valueCache)
@@ -467,7 +491,7 @@ function extractStockChartDataFromSeriesRefs(
     ...(categoryFormatCodes.some(Boolean) ? { categoryFormatCodes } : {}),
     series: [
       {
-        name: closeSeries.name ?? defaultSeriesName(closeSeries, roles.close),
+        name: resolvedSeriesName(accessor, closeSeries, roles.close),
         data,
         type: 'stock',
         ...chartDataSeriesIdentity(closeSeries, roles.close, 0),
@@ -561,7 +585,7 @@ export function extractChartDataFromSeriesRefs(
     }
 
     series.push({
-      name: seriesConfig.name ?? defaultSeriesName(seriesConfig, seriesIndex),
+      name: resolvedSeriesName(accessor, seriesConfig, seriesIndex),
       data,
       ...chartDataSeriesIdentity(seriesConfig, seriesIndex, series.length),
       ...(seriesConfig.type ? { type: seriesConfig.type as ChartDataSeries['type'] } : {}),

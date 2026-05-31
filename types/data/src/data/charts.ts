@@ -912,6 +912,8 @@ export interface PivotChartProjectionData {
  */
 export interface SeriesConfig {
   name?: string;
+  /** Live series-name cell reference imported from OOXML c:tx/c:strRef/c:f. */
+  nameRef?: string;
   type?: string;
   color?: string;
   stockRole?: ChartSeriesStockRole;
@@ -1383,6 +1385,7 @@ export interface ResolvedChartSpecSnapshot {
       seriesRange: ChartRangeReferenceSnapshot | null;
       seriesReferences: Array<{
         index: number;
+        name?: ChartRangeReferenceSnapshot | null;
         values: ChartRangeReferenceSnapshot | null;
         categories: ChartRangeReferenceSnapshot | null;
         bubbleSize?: ChartRangeReferenceSnapshot | null;

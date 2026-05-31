@@ -142,6 +142,41 @@ describe('chart data point value provenance', () => {
     expect(data.series.map((series) => series.name)).toEqual(['Series 1', 'Series 2', 'Series 3']);
   });
 
+  it('resolves imported live series-name references before default labels', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      ['North', 'South', 'East', 'West'],
+      [10, 20],
+      [30, 40],
+      [50, 60],
+      [70, 80],
+      ['Q1', 'Q2'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'imported-series-name-ref-chart',
+      type: 'bar3d',
+      subType: 'percentStacked',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      legend: { show: true, position: 'right' },
+      series: [
+        { name: 'Series 1', nameRef: 'A1', values: 'A2:B2', categories: 'A6:B6', idx: 0 },
+        { name: 'Series 2', nameRef: 'B1', values: 'A3:B3', categories: 'A6:B6', idx: 1 },
+        { name: 'Series 3', nameRef: 'C1', values: 'A4:B4', categories: 'A6:B6', idx: 2 },
+        { name: 'Series 4', nameRef: 'D1', values: 'A5:B5', categories: 'A6:B6', idx: 3 },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const legend = spec.encoding?.color?.legend as { values?: string[] } | undefined;
+
+    expect(data.series.map((series) => series.name)).toEqual(['North', 'South', 'East', 'West']);
+    expect(legend?.values).toEqual(['North', 'South', 'East', 'West']);
+  });
+
   it('uses live imported series values before stale caches', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [99, null, 77, 'bad'],

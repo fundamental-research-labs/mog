@@ -69,7 +69,7 @@ export function buildResolvedChartSpecSnapshot(input: {
       seriesReferencesByIndex.get(seriesSourceIndex(dataSeries, index)),
     ),
   );
-  const legend = snapshotLegend(input.config, series);
+  const legend = snapshotLegend(input.config, series, input.chartData);
   const seriesProjection = snapshotSeriesProjection(input.config, input.chartData, series);
 
   return {
@@ -136,12 +136,16 @@ export function buildResolvedChartSpecSnapshot(input: {
         dataRange: snapshotRange(input.resolvedRanges.dataRange),
         categoryRange: snapshotRange(input.resolvedRanges.categoryRange),
         seriesRange: snapshotRange(input.resolvedRanges.seriesRange),
-        seriesReferences: input.resolvedRanges.seriesReferences.map((seriesReference) => ({
-          index: seriesReference.index,
-          values: snapshotRange(seriesReference.values),
-          categories: snapshotRange(seriesReference.categories),
-          bubbleSize: snapshotRange(seriesReference.bubbleSizes ?? null),
-        })),
+        seriesReferences: input.resolvedRanges.seriesReferences.map((seriesReference) => {
+          const name = snapshotRange(seriesReference.name ?? null);
+          return {
+            index: seriesReference.index,
+            ...(name ? { name } : {}),
+            values: snapshotRange(seriesReference.values),
+            categories: snapshotRange(seriesReference.categories),
+            bubbleSize: snapshotRange(seriesReference.bubbleSizes ?? null),
+          };
+        }),
         diagnostics: input.resolvedRanges.diagnostics.map((diagnostic) => ({
           kind: diagnostic.kind,
           code: diagnostic.code,

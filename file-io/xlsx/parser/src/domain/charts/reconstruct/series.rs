@@ -35,8 +35,9 @@ pub(super) fn build_series(
         || sd.bubble_size.is_some()
         || (sd.categories.is_some() && sd.values.is_some() && uses_xy);
 
-    // Series name → SeriesTextSource
-    let tx = sd.name.as_ref().map(|n| SeriesTextSource::Value(n.clone()));
+    // Series name → SeriesTextSource. Prefer the imported live reference so
+    // round-tripping preserves c:tx/c:strRef when Excel omitted a string cache.
+    let tx = build_series_text(sd);
 
     // Value data (val or y_val)
     let val_ref = build_num_data_source(
@@ -151,6 +152,30 @@ pub(super) fn build_series(
         shape,
         ..Default::default()
     }
+}
+
+fn build_series_text(sd: &ChartSeriesData) -> Option<SeriesTextSource> {
+    if let Some(name_ref) = sd
+        .name_ref
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        return Some(SeriesTextSource::StrRef(StrRef {
+            f: name_ref.to_string(),
+            str_cache: sd.name.as_ref().map(|name| StrData {
+                pt_count: Some(1),
+                pts: vec![StrPoint {
+                    idx: 0,
+                    v: name.clone(),
+                }],
+                extensions: vec![],
+            }),
+            extensions: vec![],
+        }));
+    }
+    sd.name
+        .as_ref()
+        .map(|name| SeriesTextSource::Value(name.clone()))
 }
 
 fn build_num_data_source(

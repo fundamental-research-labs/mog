@@ -131,7 +131,7 @@ Important contract boundaries:
 
 - `types/data/src/data/charts.ts` is the canonical TypeScript chart type source. The files under `contracts/src/*` are re-export shims.
 - `ChartConfig` stores public position fields as cell coordinates (`anchorRow`, `anchorCol`, `width`, `height`) and optional point fields (`heightPt`, `widthPt`, `leftPt`, `topPt`). Chart-sheet render paths carry `layoutAuthority: 'chartSheet'`.
-- `SeriesConfig` can point at live A1 ranges (`values`, `categories`, `bubbleSize`) or imported caches (`valueCache`, `categoryCache`, `bubbleSizeCache`). Projection authority fields explain whether a series is live, literal, fallback-cache-backed, pivot-projected, or unavailable.
+- `SeriesConfig` can point at live A1 ranges (`nameRef`, `values`, `categories`, `bubbleSize`) or imported caches (`valueCache`, `categoryCache`, `bubbleSizeCache`). Projection authority fields explain whether a series is live, literal, fallback-cache-backed, pivot-projected, or unavailable.
 - `ResolvedChartSpecSnapshot` is the diagnostics/export snapshot emitted from the production compile path. It records render dimensions, source ranges, resolved series data, bar geometry, layout, compiler path, hashes, and unsupported features.
 - `ChartMark` is the render IR consumed by browser canvas and the native Node rasterizer. It is intentionally smaller than the full chart grammar and currently includes `rect`, `path`, `arc`, `text`, and `symbol` marks plus richer style fields.
 
@@ -176,7 +176,7 @@ Key responsibilities:
 - It reads charts through `chart-store`, which delegates to `ComputeBridge`.
 - It rejects terminal `importStatus` values before render and maps them to chart errors.
 - It resolves both CellId-backed ranges and A1 references. A1 references can include sheet names; unqualified references resolve against the chart's owning sheet.
-- It supports explicit per-series range references and classic rectangular `dataRange` extraction.
+- It supports explicit per-series range references, including imported live series names, and classic rectangular `dataRange` extraction.
 - It loads hidden row/column visibility when `plotVisibleOnly` is true.
 - It attaches workbook theme context so style resolution can happen in the chart package instead of pre-mutating colors.
 - It applies source-linked axis number formats and imported cache fallback where live ranges are missing but chart caches are renderable.
@@ -271,6 +271,7 @@ XLSX chart work has two related but different goals: render supported chart sema
 Read-side responsibilities:
 
 - `file-io/xlsx/parser/src/domain/charts/` parses standard chart parts, axes, series, labels, formatting, legends, data sources, chart groups, and drawing-frame metadata.
+- Standard chart series preserve both literal/cached names and live `c:tx/c:strRef/c:f` name references so legends can resolve current cell text during render and round-trip the OOXML reference.
 - ChartEx parts are parsed under `domain/charts/chart_ex/` and projected through `output/to_parse_output/features/chart_ex_projection.rs`.
 - `domain-types/src/domain/chart/` defines the durable Rust chart domain model. It includes `ChartDefinition`, `ChartType`, style context, axes, series, labels, data tables, 3D view metadata, OOXML mirror types, ChartEx replay data, standard-chart provenance, and export authority.
 - Imported drawing anchors and non-visual frame properties are stored so charts can remain ordered and round-trippable with other drawing objects.

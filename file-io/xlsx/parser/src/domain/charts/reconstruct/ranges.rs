@@ -76,6 +76,7 @@ pub(super) fn chart_series_data(
 ) -> ChartSeriesData {
     ChartSeriesData {
         name,
+        name_ref: None,
         r#type: None,
         color: None,
         stock_role: None,

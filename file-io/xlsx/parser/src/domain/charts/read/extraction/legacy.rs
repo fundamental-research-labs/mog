@@ -38,13 +38,18 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
         .series
         .iter()
         .map(|s| {
-            let name = s.tx.as_ref().and_then(|tx| match tx {
-                SeriesTextSource::Value(v) => Some(v.clone()),
-                SeriesTextSource::StrRef(sr) => sr
-                    .str_cache
-                    .as_ref()
-                    .and_then(|c| c.pts.first().map(|pt| pt.v.clone())),
-            });
+            let (name, name_ref) = match s.tx.as_ref() {
+                Some(SeriesTextSource::Value(v)) => (Some(v.clone()), None),
+                Some(SeriesTextSource::StrRef(sr)) => {
+                    let cached_name = sr
+                        .str_cache
+                        .as_ref()
+                        .and_then(|c| c.pts.first().map(|pt| pt.v.clone()));
+                    let name_ref = (!sr.f.trim().is_empty()).then(|| sr.f.clone());
+                    (cached_name, name_ref)
+                }
+                None => (None, None),
+            };
 
             let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
 
@@ -140,6 +145,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
             let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
             domain_types::chart::ChartSeriesData {
                 name,
+                name_ref,
                 r#type: None, // follow-up: derive per-series type for combo charts
                 color,
                 stock_role: None,

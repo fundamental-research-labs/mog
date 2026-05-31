@@ -973,6 +973,7 @@ fn chart_data_serde_roundtrip() {
         colors: Some(vec!["#ff0000".to_string(), "#00ff00".to_string()]),
         series: Some(vec![ChartSeriesData {
             name: Some("Revenue".to_string()),
+            name_ref: None,
             r#type: None,
             color: None,
             stock_role: None,

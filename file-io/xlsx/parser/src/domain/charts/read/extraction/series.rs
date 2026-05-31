@@ -192,19 +192,8 @@ fn extract_single_series_with_semantics(
     s: &ooxml_types::charts::ChartSeries,
     semantics: SeriesGroupSemantics,
 ) -> domain_types::chart::ChartSeriesData {
-    use ooxml_types::charts::SeriesTextSource;
-
     // Name
-    let name =
-        s.tx.as_ref()
-            .and_then(|tx| match tx {
-                SeriesTextSource::Value(v) => Some(v.clone()),
-                SeriesTextSource::StrRef(sr) => sr
-                    .str_cache
-                    .as_ref()
-                    .and_then(|c| c.pts.first().map(|pt| pt.v.clone())),
-            })
-            .or_else(|| Some(default_series_name(s.idx, s.order)));
+    let (name, name_ref) = extract_series_name(s.tx.as_ref(), s.idx, s.order);
 
     // Legacy fill color
     let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
@@ -343,6 +332,7 @@ fn extract_single_series_with_semantics(
 
     domain_types::chart::ChartSeriesData {
         name,
+        name_ref,
         r#type: semantics.series_type,
         color,
         stock_role: semantics.stock_role,
@@ -416,6 +406,27 @@ fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
 fn default_series_name(idx: u32, _order: u32) -> String {
     let ordinal = idx.saturating_add(1);
     format!("Series {ordinal}")
+}
+
+fn extract_series_name(
+    tx: Option<&ooxml_types::charts::SeriesTextSource>,
+    idx: u32,
+    order: u32,
+) -> (Option<String>, Option<String>) {
+    use ooxml_types::charts::SeriesTextSource;
+
+    match tx {
+        Some(SeriesTextSource::Value(value)) => (Some(value.clone()), None),
+        Some(SeriesTextSource::StrRef(str_ref)) => {
+            let cached_name = str_ref
+                .str_cache
+                .as_ref()
+                .and_then(|cache| cache.pts.first().map(|point| point.v.clone()));
+            let name_ref = (!str_ref.f.trim().is_empty()).then(|| str_ref.f.clone());
+            (cached_name, name_ref)
+        }
+        None => (Some(default_series_name(idx, order)), None),
+    }
 }
 
 pub(super) fn extract_num_point_cache(
@@ -657,7 +668,8 @@ mod tests {
         AxisType, BarChartConfig, CatDataSource, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
         ChartSpace, ChartText, ChartType, ChartTypeConfig, DataLabel, DataLabelOptions,
         DataLabelPosition, LineChartConfig, MultiLvlStrData, MultiLvlStrRef, NumData,
-        NumDataSource, NumPoint, NumRef, PlotArea, Scaling, StrData, StrPoint,
+        NumDataSource, NumPoint, NumRef, PlotArea, Scaling, SeriesTextSource, StrData, StrPoint,
+        StrRef,
     };
 
     fn axis(
@@ -1079,6 +1091,51 @@ mod tests {
         let extracted = extract_single_series(&series, None, None);
 
         assert_eq!(extracted.name.as_deref(), Some("Series 1"));
+    }
+
+    #[test]
+    fn preserves_live_series_name_reference_when_cache_is_missing() {
+        let series = ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 0,
+            tx: Some(SeriesTextSource::StrRef(StrRef {
+                f: "'Data'!C2".to_string(),
+                str_cache: None,
+                extensions: vec![],
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+
+        assert_eq!(extracted.name, None);
+        assert_eq!(extracted.name_ref.as_deref(), Some("'Data'!C2"));
+    }
+
+    #[test]
+    fn preserves_live_series_name_reference_alongside_cached_name() {
+        let series = ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 0,
+            tx: Some(SeriesTextSource::StrRef(StrRef {
+                f: "'Data'!C2".to_string(),
+                str_cache: Some(StrData {
+                    pt_count: Some(1),
+                    pts: vec![StrPoint {
+                        idx: 0,
+                        v: "North".to_string(),
+                    }],
+                    extensions: vec![],
+                }),
+                extensions: vec![],
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+
+        assert_eq!(extracted.name.as_deref(), Some("North"));
+        assert_eq!(extracted.name_ref.as_deref(), Some("'Data'!C2"));
     }
 }
 

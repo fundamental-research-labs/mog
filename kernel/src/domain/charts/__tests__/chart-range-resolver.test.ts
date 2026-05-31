@@ -125,6 +125,7 @@ describe('resolveChartRangeReferences', () => {
         series: [
           {
             name: 'Revenue',
+            nameRef: 'Formulas!$B$1',
             values: 'Formulas!$B$2:$D$2',
             categories: 'Formulas!$B$1:$D$1',
             bubbleSize: 'Formulas!$B$3:$D$3',
@@ -136,6 +137,13 @@ describe('resolveChartRangeReferences', () => {
     expect(resolved.diagnostics).toEqual([]);
     expect(resolved.dataRange).toBeNull();
     expect(resolved.seriesReferences).toHaveLength(1);
+    expect(resolved.seriesReferences[0].name?.range).toMatchObject({
+      sheetId: FORMULAS,
+      startRow: 0,
+      startCol: 1,
+      endRow: 0,
+      endCol: 1,
+    });
     expect(resolved.seriesReferences[0].values?.range).toMatchObject({
       sheetId: FORMULAS,
       startRow: 1,

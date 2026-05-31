@@ -586,6 +586,7 @@ fn project_chart_ex_series(
             Some(ChartSeriesData {
                 name: chart_ex_text_text(series.tx.as_ref())
                     .or_else(|| Some(format!("Series {}", idx + 1))),
+                name_ref: None,
                 r#type: Some(chart_type_from_chart_ex_layout_id(&series.layout_id)),
                 color: None,
                 stock_role: None,
@@ -1689,6 +1690,7 @@ mod tests {
     ) -> ChartSeriesData {
         ChartSeriesData {
             name: None,
+            name_ref: None,
             r#type: Some(chart_type),
             color: None,
             stock_role: None,

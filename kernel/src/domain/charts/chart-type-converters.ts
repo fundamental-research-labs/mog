@@ -122,6 +122,7 @@ export {
 export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
   const config: SeriesConfig = {
     name: w.name,
+    nameRef: w.nameRef,
     // SeriesConfig.type is an unrestricted string on the contract side —
     // chart-type strings are validated at the chart level, not here.
     type: w.type,
@@ -194,6 +195,7 @@ export function wireToSeriesConfigArray(w: ChartSeriesData[]): SeriesConfig[] {
 export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
   return {
     name: c.name,
+    nameRef: c.nameRef,
     type: c.type,
     color: c.color,
     stockRole: c.stockRole,

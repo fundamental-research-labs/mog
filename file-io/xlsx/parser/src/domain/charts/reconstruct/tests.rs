@@ -151,6 +151,22 @@ fn chart_group_xml<'a>(xml: &'a str, start_tag: &str, end_tag: &str) -> &'a str 
 }
 
 #[test]
+fn series_name_ref_reconstructs_str_ref_with_cached_name() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    let mut series = modeled_series(0, None, "North", "Data!$B$2:$B$4");
+    series.name_ref = Some("Data!$B$1".to_string());
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:tx>"), "{xml}");
+    assert!(xml.contains("<c:strRef>"), "{xml}");
+    assert!(xml.contains("<c:f>Data!$B$1</c:f>"), "{xml}");
+    assert!(xml.contains("<c:strCache>"), "{xml}");
+    assert!(xml.contains("<c:v>North</c:v>"), "{xml}");
+}
+
+#[test]
 fn data_range_chart_reconstructs_series_and_axes() {
     let spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:C4"));
     let xml = chart_xml(&spec);

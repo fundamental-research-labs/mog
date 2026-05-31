@@ -24,7 +24,6 @@ import type {
   MarkSpec,
   MarkType,
   ScaleSpec,
-  StackMode,
   TitleSpec,
   Transform,
   UnitSpec,
@@ -36,7 +35,6 @@ import type {
   ChartDataPoint,
   ChartFormat,
   ChartType,
-  DataLabelConfig,
   LegendConfig,
   SeriesConfig,
   SingleAxisConfig,
@@ -67,10 +65,19 @@ import {
   PIXELS_PER_ROW,
   SERIES_OPACITY_FIELD,
 } from './config-to-spec/constants';
+import { buildDataLabelLayer } from './config-to-spec/layers/data-labels';
 import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
+import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
 
-export { buildTrendlineTransform, buildWaterfallTransforms, hasSecondaryYAxis };
+export {
+  buildDataLabelLayer,
+  buildTrendlineTransform,
+  buildWaterfallTransforms,
+  hasSecondaryYAxis,
+  resolveStackMode,
+  resolveSubTypeMarkProps,
+};
 
 function isStrokeColoredSeries(series: SeriesConfig, fallbackType: ChartType | undefined): boolean {
   const seriesType = (series.type ?? fallbackType) as ChartType | undefined;
@@ -274,43 +281,6 @@ function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): 
     return config?.displayBlanksAs === 'zero';
   }
   return false;
-}
-
-// =============================================================================
-// Sub-Type Helpers
-// =============================================================================
-
-/**
- * Derive the StackMode from the config subType.
- * Returns undefined when no stacking applies.
- */
-export function resolveStackMode(config: ChartConfig): StackMode | undefined {
-  const sub = config.subType;
-  if (!sub) return undefined;
-  if (sub === 'stacked') return 'zero';
-  if (sub === 'percentStacked') return 'normalize';
-  // 'clustered', 'standard', 'basic', etc. => no stacking
-  return undefined;
-}
-
-/**
- * Resolve mark-level properties implied by the subType.
- * Returns partial MarkSpec overrides (e.g. interpolation for smooth/stepped lines).
- */
-export function resolveSubTypeMarkProps(config: ChartConfig): Partial<MarkSpec> | undefined {
-  const sub = config.subType;
-  if (!sub) return undefined;
-  switch (sub) {
-    case 'smooth':
-      return { interpolate: 'monotone' };
-    case 'stepped':
-      return { interpolate: 'step' };
-    case 'filled':
-      // RadarSubType 'filled' - area fill behind the line
-      return { type: 'area' };
-    default:
-      return undefined;
-  }
 }
 
 // =============================================================================
@@ -1596,50 +1566,6 @@ export function buildWaterfallLayers(
   };
 
   return [mainLayer];
-}
-
-/**
- * Build a data label text layer for overlay.
- * Maps DataLabelConfig.position and format to the text mark encoding.
- */
-export function buildDataLabelLayer(
-  dataLabels: DataLabelConfig,
-  encoding: EncodingSpec,
-): UnitSpec | undefined {
-  if (!dataLabels.show) return undefined;
-
-  const textChannel: ChannelSpec = { field: 'value', type: 'quantitative' };
-
-  // Map format string to the text channel format
-  if (dataLabels.format) {
-    textChannel.format = dataLabels.format;
-  }
-
-  // Map position to mark-level dy/align properties
-  const mark: MarkSpec = { type: 'text' };
-  if (dataLabels.position) {
-    switch (dataLabels.position) {
-      case 'top':
-      case 'outside':
-        mark.baseline = -10; // offset above
-        break;
-      case 'bottom':
-        mark.baseline = 10; // offset below
-        break;
-      case 'inside':
-        // center inside, no offset needed
-        break;
-      // 'left' and 'right' are less common for data labels; default placement
-    }
-  }
-
-  return {
-    mark,
-    encoding: {
-      ...encoding,
-      text: textChannel,
-    },
-  };
 }
 
 /**

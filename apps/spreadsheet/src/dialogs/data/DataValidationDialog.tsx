@@ -937,27 +937,25 @@ export function DataValidationDialog() {
         />
       </div>
 
-      {showInputMessage && (
-        <>
-          <FormField label="Title">
-            <Input
-              value={inputTitle}
-              onChange={(e) => setInputTitle(e.target.value)}
-              placeholder="Optional title"
-              maxLength={CHARACTER_LIMITS.inputTitle}
-            />
-          </FormField>
+      <FormField label="Title">
+        <Input
+          value={inputTitle}
+          onChange={(e) => setInputTitle(e.target.value)}
+          placeholder="Optional title"
+          maxLength={CHARACTER_LIMITS.inputTitle}
+          disabled={!showInputMessage}
+        />
+      </FormField>
 
-          <FormField label="Message">
-            <Textarea
-              value={inputMessage}
-              onChange={setInputMessage}
-              placeholder="Enter the message to display"
-              maxLength={CHARACTER_LIMITS.inputMessage}
-            />
-          </FormField>
-        </>
-      )}
+      <FormField label="Message">
+        <Textarea
+          value={inputMessage}
+          onChange={setInputMessage}
+          placeholder="Enter the message to display"
+          maxLength={CHARACTER_LIMITS.inputMessage}
+          disabled={!showInputMessage}
+        />
+      </FormField>
     </>
   );
 

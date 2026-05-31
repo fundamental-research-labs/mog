@@ -110,7 +110,8 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   const eventBus = useEventBus();
 
   // Editor state (isEditing, editingCell, value)
-  const { isEditing, editingCell, value, cursorPosition } = useEditorState();
+  const { isEditing, editingCell, value, cursorPosition, selectionAnchor, hasSelection } =
+    useEditorState();
 
   // Editor actions (input, commit, imeStart, imeUpdate, imeEnd)
   const editorActions = useEditorActions();
@@ -245,10 +246,12 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el || !isEditing || isFormulaBarFocused) return;
-    if (el.selectionStart !== cursorPosition || el.selectionEnd !== cursorPosition) {
-      el.setSelectionRange(cursorPosition, cursorPosition);
+    const selectionStart = hasSelection ? Math.min(cursorPosition, selectionAnchor) : cursorPosition;
+    const selectionEnd = hasSelection ? Math.max(cursorPosition, selectionAnchor) : cursorPosition;
+    if (el.selectionStart !== selectionStart || el.selectionEnd !== selectionEnd) {
+      el.setSelectionRange(selectionStart, selectionEnd);
     }
-  }, [cursorPosition, isFormulaBarFocused, isEditing]);
+  }, [cursorPosition, selectionAnchor, hasSelection, isFormulaBarFocused, isEditing]);
 
   // Get theme for styling
   const theme = getTheme(workbookSettings.themeId);

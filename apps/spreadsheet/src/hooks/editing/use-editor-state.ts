@@ -61,6 +61,12 @@ export interface UseEditorStateReturn {
   /** Cursor position within the value */
   cursorPosition: number;
 
+  /** Selection anchor within the value */
+  selectionAnchor: number;
+
+  /** Whether the editor currently has a text selection */
+  hasSelection: boolean;
+
   /**
    * Merge bounds if the editing cell is part of a merged region.
    * Used for positioning overlays (date picker, dropdown) at merged cell bounds.
@@ -81,6 +87,8 @@ interface EditorStateSlice {
   editorType: CellEditorType;
   isEditMode: boolean;
   cursorPosition: number;
+  selectionAnchor: number;
+  hasSelection: boolean;
   mergeBounds: CellRange | null;
 }
 
@@ -112,6 +120,8 @@ function editorStateEqual(a: EditorStateSlice, b: EditorStateSlice): boolean {
     a.editorType === b.editorType &&
     a.isEditMode === b.isEditMode &&
     a.cursorPosition === b.cursorPosition &&
+    a.selectionAnchor === b.selectionAnchor &&
+    a.hasSelection === b.hasSelection &&
     mergeBoundsEqual
   );
 }
@@ -159,6 +169,8 @@ export function useEditorState(): UseEditorStateReturn {
       editorType: editorSelectors.editorType(state),
       isEditMode: editorSelectors.editModeFlag(state),
       cursorPosition: editorSelectors.cursorPosition(state),
+      selectionAnchor: state.context.selectionAnchor,
+      hasSelection: state.context.hasSelection,
       mergeBounds: editorSelectors.mergeBounds(state),
     }),
     editorStateEqual,
@@ -182,6 +194,8 @@ export function useEditorState(): UseEditorStateReturn {
       editorType: stateSlice.editorType,
       isEditMode: stateSlice.isEditMode,
       cursorPosition: stateSlice.cursorPosition,
+      selectionAnchor: stateSlice.selectionAnchor,
+      hasSelection: stateSlice.hasSelection,
       mergeBounds: stateSlice.mergeBounds,
     }),
     [stateSlice, editingCell],

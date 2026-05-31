@@ -726,6 +726,24 @@ export const editorMachine = setup({
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode' },
         ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          { target: 'editing.enterMode', actions: 'selectCurrentValue' },
+        ],
 
         // Remote events - guards removed, coordinator filters
         // @see ISSUE-3-EDITOR-SELECTION-SYNC-INVARIANT.md
@@ -830,6 +848,24 @@ export const editorMachine = setup({
           { guard: 'isInEditMode', target: 'editing.editMode', actions: 'clearError' },
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode', actions: 'clearError' },
+        ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          { target: 'editing.enterMode', actions: ['clearError', 'selectCurrentValue'] },
         ],
         CANCEL: { target: 'inactive', actions: 'resetContext' },
         INPUT: [

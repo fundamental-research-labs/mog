@@ -356,6 +356,7 @@ export type EditorEvent =
   | { type: 'COMMIT_COMPLETE' }
   | { type: 'COMMIT_REJECTED'; reason: string }
   | { type: 'RETRY' }
+  | { type: 'RETRY_SELECT_ALL' }
   | { type: 'REMOTE_CELL_CHANGED'; cell: CellCoord; newValue: unknown }
   | { type: 'REMOTE_CELL_DELETED'; cell: CellCoord }
   | { type: 'REMOTE_SHEET_DELETED'; sheetId: string }

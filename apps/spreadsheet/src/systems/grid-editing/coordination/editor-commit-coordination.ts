@@ -448,7 +448,7 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
               onValidationError(
                 errorMessage,
                 errorTitle,
-                () => editorActor.send({ type: 'RETRY' }), // User chose "Retry" - return to edit mode
+                () => editorActor.send({ type: 'RETRY_SELECT_ALL' }), // Retry selects rejected text
                 () => editorActor.send({ type: 'CANCEL' }), // User chose "Cancel" - discard edit
               );
             }
@@ -463,7 +463,7 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
                 errorTitle,
                 () => editorActor.send({ type: 'VALIDATION_SUCCESS' }), // User chose "Yes" - proceed with invalid value
                 () => editorActor.send({ type: 'CANCEL' }), // User chose "Cancel" - exit editing, revert to original
-                () => editorActor.send({ type: 'RETRY' }), // User chose "No" - return to edit mode to correct
+                () => editorActor.send({ type: 'RETRY_SELECT_ALL' }), // No selects rejected text
               );
             } else {
               // No warning handler - treat as info (allow)

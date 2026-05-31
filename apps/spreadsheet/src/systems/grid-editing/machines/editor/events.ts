@@ -143,6 +143,10 @@ export const EditorEvents = {
     type: 'RETRY',
   }),
 
+  retrySelectAll: (): EditorEvent => ({
+    type: 'RETRY_SELECT_ALL',
+  }),
+
   // Remote collaboration events
   remoteCellChanged: (cell: CellCoord, newValue: unknown): EditorEvent => ({
     type: 'REMOTE_CELL_CHANGED',

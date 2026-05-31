@@ -84,6 +84,43 @@ describe('Editor INPUT — cursor mirrors DOM selectionStart', () => {
     actor.stop();
   });
 
+  it('Retry-select-all restores rejected text as a replaceable selection', () => {
+    const actor = startEditing('99');
+
+    actor.send(EditorEvents.commit('none'));
+    actor.send(EditorEvents.validationError('Invalid value'));
+    actor.send(EditorEvents.retrySelectAll());
+
+    const ctx = actor.getSnapshot().context;
+    expect(ctx.value).toBe('99');
+    expect(ctx.cursorPosition).toBe(2);
+    expect(ctx.selectionAnchor).toBe(0);
+    expect(ctx.hasSelection).toBe(true);
+    actor.stop();
+  });
+
+  it('INPUT and SET_CURSOR clear stale retry selections', () => {
+    const actor = startEditing('99');
+
+    actor.send(EditorEvents.commit('none'));
+    actor.send(EditorEvents.validationError('Invalid value'));
+    actor.send(EditorEvents.retrySelectAll());
+    actor.send(EditorEvents.input('7', 1));
+
+    let ctx = actor.getSnapshot().context;
+    expect(ctx.value).toBe('7');
+    expect(ctx.cursorPosition).toBe(1);
+    expect(ctx.selectionAnchor).toBe(1);
+    expect(ctx.hasSelection).toBe(false);
+
+    actor.send(EditorEvents.setCursor(0));
+    ctx = actor.getSnapshot().context;
+    expect(ctx.cursorPosition).toBe(0);
+    expect(ctx.selectionAnchor).toBe(0);
+    expect(ctx.hasSelection).toBe(false);
+    actor.stop();
+  });
+
   // ---------------------------------------------------------------------------
   // IME composition end after mid-string caret
   //

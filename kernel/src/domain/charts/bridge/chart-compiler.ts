@@ -8,6 +8,7 @@ import {
   type DataRow,
 } from '@mog/charts';
 import type {
+  ChartError,
   ChartLayoutSnapshot,
   ChartMark,
   ChartRenderSnapshot,
@@ -76,6 +77,24 @@ export interface CompileChartRenderSnapshotAtSizeInput {
   renderFrame?: ChartRenderFrameSnapshot;
 }
 
+export type ChartCompileStage = 'configToSpec' | 'compile' | 'collectMarks' | 'layout';
+
+type CompileChartMarksOutcome =
+  | { ok: true; result: CompileChartMarksResult }
+  | { ok: false; stage: ChartCompileStage; cause: unknown };
+
+class ChartCompileException extends Error {
+  stage: ChartCompileStage;
+  cause: unknown;
+
+  constructor(stage: ChartCompileStage, cause: unknown) {
+    super(normalizeCaughtError(cause).message || 'Chart compilation failed');
+    this.name = 'ChartCompileException';
+    this.stage = stage;
+    this.cause = cause;
+  }
+}
+
 let chartWasmExports: ChartWasmExports | null = null;
 
 /**
@@ -94,30 +113,122 @@ export function initChartWasm(exports: ChartWasmExports): void {
  * bridge cache lifecycle, pending compilations, listeners, or data resolution.
  */
 export function compileChartMarks(input: CompileChartMarksInput): CompileChartMarksResult {
-  const spec = configToSpec(input.config, input.chartData);
-  const compileInput = buildCompileInput(spec);
-  const compileResult = input.size
-    ? compile(compileInput.spec, undefined, {
-        width: input.size.width,
-        height: input.size.height,
-      })
-    : compile(compileInput.spec);
+  const outcome = compileChartMarksOutcome(input);
+  if (!outcome.ok) throw new ChartCompileException(outcome.stage, outcome.cause);
+  return outcome.result;
+}
+
+export function compileChartMarksOrError(
+  chartId: string,
+  input: CompileChartMarksInput,
+): CompileChartMarksResult | ChartError {
+  const outcome = compileChartMarksOutcome(input);
+  if (!outcome.ok) return chartCompileError(chartId, outcome.cause, outcome.stage);
+  return outcome.result;
+}
+
+export function chartCompileError(
+  chartId: string,
+  cause: unknown,
+  stage: ChartCompileStage = 'compile',
+): ChartError {
+  const failure = normalizeCompileFailure(cause, stage);
+  return {
+    code: 'COMPILE_FAILED',
+    message: failure.normalized.message
+      ? `Chart compilation failed: ${failure.normalized.message}`
+      : 'Chart compilation failed',
+    chartId,
+    details: {
+      stage: failure.stage,
+      ...failure.normalized.details,
+    },
+  };
+}
+
+function normalizeCompileFailure(
+  cause: unknown,
+  fallbackStage: ChartCompileStage,
+): { stage: ChartCompileStage; normalized: ReturnType<typeof normalizeCaughtError> } {
+  if (cause instanceof ChartCompileException) {
+    return {
+      stage: cause.stage,
+      normalized: normalizeCaughtError(cause.cause),
+    };
+  }
 
   return {
-    marks: collectMarks(compileResult) as ChartMark[],
-    layout: extractLayoutSnapshot(compileResult),
-    chartArea: {
-      width: compileResult.layout.width,
-      height: compileResult.layout.height,
-    },
-    plotArea: compileResult.layout.plotArea
-      ? {
-          width: compileResult.layout.plotArea.width,
-          height: compileResult.layout.plotArea.height,
-        }
-      : null,
-    compilerPathId: compileInput.compilerPathId,
-    compileInput: compileInput.spec,
+    stage: fallbackStage,
+    normalized: normalizeCaughtError(cause),
+  };
+}
+
+function compileChartMarksOutcome(input: CompileChartMarksInput): CompileChartMarksOutcome {
+  let stage: ChartCompileStage = 'configToSpec';
+  try {
+    const spec = configToSpec(input.config, input.chartData);
+    stage = 'compile';
+    const compileInput = buildCompileInput(spec);
+    const compileResult = input.size
+      ? compile(compileInput.spec, undefined, {
+          width: input.size.width,
+          height: input.size.height,
+        })
+      : compile(compileInput.spec);
+
+    stage = 'collectMarks';
+    const marks = collectMarks(compileResult) as ChartMark[];
+    stage = 'layout';
+    const layout = extractLayoutSnapshot(compileResult);
+
+    return {
+      ok: true,
+      result: {
+        marks,
+        layout,
+        chartArea: {
+          width: compileResult.layout.width,
+          height: compileResult.layout.height,
+        },
+        plotArea: compileResult.layout.plotArea
+          ? {
+              width: compileResult.layout.plotArea.width,
+              height: compileResult.layout.plotArea.height,
+            }
+          : null,
+        compilerPathId: compileInput.compilerPathId,
+        compileInput: compileInput.spec,
+      },
+    };
+  } catch (cause) {
+    return { ok: false, stage, cause };
+  }
+}
+
+function normalizeCaughtError(cause: unknown): {
+  message: string;
+  details: Record<string, unknown>;
+} {
+  if (cause instanceof Error) {
+    return {
+      message: cause.message,
+      details: {
+        errorName: cause.name,
+        errorMessage: cause.message,
+      },
+    };
+  }
+
+  if (typeof cause === 'string') {
+    return {
+      message: cause,
+      details: { errorMessage: cause },
+    };
+  }
+
+  return {
+    message: String(cause),
+    details: { errorValue: cause },
   };
 }
 

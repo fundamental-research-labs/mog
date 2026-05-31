@@ -9,7 +9,8 @@ import type { ChartExportOptionsSnapshot } from '@mog-sdk/contracts/data/charts'
 
 import type { ChartDataResolver } from './chart-data-resolver';
 import {
-  compileChartMarks,
+  chartCompileError,
+  compileChartMarksOrError,
   compileChartRenderSnapshotAtSize as compileResolvedChartRenderSnapshotAtSize,
 } from './chart-compiler';
 import type { ChartRenderCache } from './chart-render-cache';
@@ -95,11 +96,16 @@ export class ChartRenderOrchestrator {
       return error;
     }
 
-    const { marks, layout } = compileChartMarks({
+    const compiled = compileChartMarksOrError(chartId, {
       config,
       chartData,
       size: frame ? { width: frame.width, height: frame.height } : undefined,
     });
+    if ('code' in compiled) {
+      this.commitError(chartId, compiled, sheetId, frame);
+      return compiled;
+    }
+    const { marks, layout } = compiled;
 
     // Real cache commit: fires listeners so the renderer dirties the drawing
     // layer and the next frame paints from cache instead of the placeholder.
@@ -196,17 +202,21 @@ export class ChartRenderOrchestrator {
       return emptyDataError(chartId);
     }
 
-    return compileResolvedChartRenderSnapshotAtSize({
-      chart,
-      sheetId,
-      chartId,
-      config,
-      chartData,
-      resolvedRanges,
-      exportOptions,
-      width,
-      height,
-    });
+    try {
+      return compileResolvedChartRenderSnapshotAtSize({
+        chart,
+        sheetId,
+        chartId,
+        config,
+        chartData,
+        resolvedRanges,
+        exportOptions,
+        width,
+        height,
+      });
+    } catch (error) {
+      return chartCompileError(chartId, error);
+    }
   }
 
   /**

@@ -284,7 +284,8 @@ describe('Full pipeline export: support matrix', () => {
    * bar, column, line, area, pie, doughnut, scatter, bubble
    *
    * Chart types that are layered and may NOT be directly exportable:
-   * combo, stock, waterfall (these produce LayerSpec which canExportToOOXML returns false)
+   * combo, waterfall, and non-native custom layers.
+   * Native stock LayerSpecs are exported as OOXML stock charts.
    */
 
   const supportedSimpleTypes: Array<{
@@ -349,6 +350,33 @@ describe('Full pipeline export: support matrix', () => {
     const result = toOOXML(spec, data);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:bubbleChart>');
+  });
+
+  it('volume stock chart exports natively from the production LayerSpec path', () => {
+    const config = makeConfig({ type: 'stock', subType: 'volume-ohlc' as any });
+    const chartData: ChartData = {
+      categories: ['Jan', 'Feb'],
+      series: [
+        {
+          name: 'Stock',
+          data: [
+            { x: 'Jan', y: 105, volume: 1000, open: 95, high: 110, low: 90, close: 105 },
+            { x: 'Feb', y: 115, volume: 1500, open: 105, high: 120, low: 95, close: 115 },
+          ],
+        },
+      ],
+    };
+    const spec = configToSpec(config, chartData);
+    const data = chartDataToRows(chartData, config);
+
+    expect(canExportToOOXML(spec)).toBe(true);
+    const result = toOOXML(spec, data);
+    assertXmlWellFormed(result.chartXml);
+    expect(result.chartXml).toContain('<c:barChart>');
+    expect(result.chartXml).toContain('<c:stockChart>');
+    expect(result.chartXml).toContain('<c:v>Volume</c:v>');
+    expect(result.chartXml).toContain('<c:v>Open</c:v>');
+    expect(result.chartXml).toContain('<c:v>Close</c:v>');
   });
 
   // Layered chart types with <= 2 layers pass canExportToOOXML

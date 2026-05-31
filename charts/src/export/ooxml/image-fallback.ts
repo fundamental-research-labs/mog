@@ -9,6 +9,7 @@
 
 import { isLayerSpec, type ChartSpec, type DataRow, type MarkType } from '../../grammar/spec';
 import type { ExportOptions, ImageFallbackResult } from '../ooxml-types';
+import { isNativeStockLayerSpec } from './stock-layer-detection';
 
 // =============================================================================
 // Unsupported Chart Types
@@ -37,7 +38,7 @@ const CONDITIONAL_FALLBACK_TYPES: MarkType[] = ['rect']; // Heatmap may or may n
 export function shouldUseImageFallback(spec: ChartSpec): boolean {
   // Check for complex layered charts (more than 2 layers is risky)
   // This check comes first because layered charts may not have a direct mark
-  if (isLayerSpec(spec) && spec.layer.length > 2) {
+  if (isLayerSpec(spec) && spec.layer.length > 2 && !isNativeStockLayerSpec(spec)) {
     return true;
   }
 
@@ -93,7 +94,7 @@ export function getImageFallbackReason(spec: ChartSpec): string | null {
     return 'Violin plots have no Excel equivalent';
   }
 
-  if (isLayerSpec(spec) && spec.layer.length > 2) {
+  if (isLayerSpec(spec) && spec.layer.length > 2 && !isNativeStockLayerSpec(spec)) {
     return 'Complex layered charts cannot be represented in Excel';
   }
 

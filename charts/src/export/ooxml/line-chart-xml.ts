@@ -21,6 +21,7 @@ import { columnLetter } from './column-util';
 import { extractSeriesData } from './data-util';
 import { quoteSheetName } from '@mog/spreadsheet-utils';
 import { generateCategoryValueSeriesXML, sanitizeNumericValue } from './shared-xml';
+import { stockLayerEncoding, stockLayerUsesOpenClose } from './stock-layer-detection';
 import { escapeXml, generateDataLabelsXML, generateMarkerXML, getDefaultColor } from './style-xml';
 
 // =============================================================================
@@ -222,13 +223,17 @@ export function generateStockChartXML(
   data: DataRow[],
   options?: ExportOptions,
 ): OOXMLExportResult {
-  const encoding = spec.encoding!;
+  const encoding = spec.encoding ?? stockLayerEncoding(spec);
+  if (!encoding) {
+    throw new Error('Stock chart export requires an x/category encoding');
+  }
   const sheetName = options?.sheetName ?? 'Sheet1';
 
   const dateField = encoding.x?.field ?? 'category';
 
-  // Detect OHLC vs HLC: check if any data row has an 'open' field
-  const hasOpen = data.some((row) => row.open !== undefined);
+  // Detect volume/HLC/OHLC shape from the modeled stock rows.
+  const hasVolume = data.some((row) => row.volume !== undefined);
+  const hasOpen = stockLayerUsesOpenClose(spec) ?? data.some((row) => row.open !== undefined);
   const seriesFields = hasOpen ? ['open', 'high', 'low', 'close'] : ['high', 'low', 'close'];
   const seriesNames = hasOpen ? ['Open', 'High', 'Low', 'Close'] : ['High', 'Low', 'Close'];
 
@@ -241,26 +246,155 @@ export function generateStockChartXML(
   const catEndRow = catStartRow + catCount - 1;
   const catRef = `${quotedSheet}!$A$${catStartRow}:$A$${catEndRow}`;
 
-  const seriesXMLParts = seriesFields.map((field, idx) => {
-    const values = data.map((row) => Number(row[field]) || 0);
-    const valCol = columnLetter(idx + 1);
-    const valRef = `${quotedSheet}!$${valCol}$${catStartRow}:$${valCol}$${catEndRow}`;
+  const stockStartIndex = hasVolume ? 1 : 0;
+  const stockStartColumn = hasVolume ? 2 : 1;
+  const seriesXMLParts = seriesFields.map((field, idx) =>
+    generateStockSeriesXML({
+      data,
+      categories,
+      field,
+      name: seriesNames[idx],
+      index: stockStartIndex + idx,
+      valueColumnIndex: stockStartColumn + idx,
+      chartKind: 'stock',
+      catRef,
+      catStartRow,
+      catEndRow,
+      sheetName: quotedSheet,
+    }),
+  );
 
-    return `<c:ser>
-      <c:idx val="${idx}"/>
-      <c:order val="${idx}"/>
-      <c:tx><c:v>${seriesNames[idx]}</c:v></c:tx>
-      <c:spPr>
+  const stockCategoryAxisId = hasVolume ? AXIS_IDS.SECONDARY_CATEGORY : AXIS_IDS.CATEGORY;
+  const stockValueAxisId = hasVolume ? AXIS_IDS.SECONDARY_VALUE : AXIS_IDS.VALUE;
+  const volumeChartContent = hasVolume
+    ? `${generateVolumeBarChartXML({
+        data,
+        categories,
+        catRef,
+        catStartRow,
+        catEndRow,
+        sheetName: quotedSheet,
+      })}
+    `
+    : '';
+
+  const chartContent = `${volumeChartContent}<c:stockChart>
+    ${seriesXMLParts.join('\n    ')}
+    <c:axId val="${stockCategoryAxisId}"/>
+    <c:axId val="${stockValueAxisId}"/>
+  </c:stockChart>`;
+
+  // Generate axes
+  const axes = hasVolume
+    ? [
+        generateCategoryAxisXML(encoding.x, AXIS_IDS.CATEGORY, AXIS_IDS.VALUE),
+        generateValueAxisXML(undefined, AXIS_IDS.VALUE, AXIS_IDS.CATEGORY, {
+          position: 'r',
+          showGrid: false,
+        }),
+        generateCategoryAxisXML(encoding.x, AXIS_IDS.SECONDARY_CATEGORY, AXIS_IDS.SECONDARY_VALUE),
+        generateValueAxisXML(encoding.y, AXIS_IDS.SECONDARY_VALUE, AXIS_IDS.SECONDARY_CATEGORY),
+      ]
+    : [
+        generateCategoryAxisXML(encoding.x, AXIS_IDS.CATEGORY, AXIS_IDS.VALUE),
+        generateValueAxisXML(encoding.y, AXIS_IDS.VALUE, AXIS_IDS.CATEGORY),
+      ];
+
+  // Get title (preserves subtitle from TitleSpec)
+  const title = extractChartTitle(spec);
+
+  // Wrap in chartSpace
+  const chartXml = wrapChartXML(chartContent, {
+    title,
+    axes,
+    legend: { position: 'r' },
+  });
+
+  return { chartXml };
+}
+
+function generateVolumeBarChartXML(params: {
+  data: DataRow[];
+  categories: unknown[];
+  catRef: string;
+  catStartRow: number;
+  catEndRow: number;
+  sheetName: string;
+}): string {
+  const volumeSeries = generateStockSeriesXML({
+    ...params,
+    field: 'volume',
+    name: 'Volume',
+    index: 0,
+    valueColumnIndex: 1,
+    chartKind: 'bar',
+  });
+
+  return `<c:barChart>
+    <c:barDir val="col"/>
+    <c:grouping val="clustered"/>
+    <c:varyColors val="0"/>
+    ${volumeSeries}
+    ${generateDataLabelsXML()}
+    <c:gapWidth val="150"/>
+    <c:overlap val="0"/>
+    <c:axId val="${AXIS_IDS.CATEGORY}"/>
+    <c:axId val="${AXIS_IDS.VALUE}"/>
+  </c:barChart>`;
+}
+
+function generateStockSeriesXML(params: {
+  data: DataRow[];
+  categories: unknown[];
+  field: string;
+  name: string;
+  index: number;
+  valueColumnIndex: number;
+  chartKind: 'bar' | 'stock';
+  catRef: string;
+  catStartRow: number;
+  catEndRow: number;
+  sheetName: string;
+}): string {
+  const {
+    data,
+    categories,
+    field,
+    name,
+    index,
+    valueColumnIndex,
+    chartKind,
+    catRef,
+    catStartRow,
+    catEndRow,
+    sheetName,
+  } = params;
+  const values = data.map((row) => Number(row[field]) || 0);
+  const valCol = columnLetter(valueColumnIndex);
+  const valRef = `${sheetName}!$${valCol}$${catStartRow}:$${valCol}$${catEndRow}`;
+  const shapePropertiesXML =
+    chartKind === 'bar'
+      ? `<c:spPr>
+        <a:solidFill><a:srgbClr val="${getDefaultColor(index)}"/></a:solidFill>
+        <a:ln><a:noFill/></a:ln>
+      </c:spPr>`
+      : `<c:spPr>
         <a:ln w="28575">
-          <a:solidFill><a:srgbClr val="${getDefaultColor(idx)}"/></a:solidFill>
+          <a:solidFill><a:srgbClr val="${getDefaultColor(index)}"/></a:solidFill>
         </a:ln>
       </c:spPr>
-      <c:marker><c:symbol val="none"/></c:marker>
+      <c:marker><c:symbol val="none"/></c:marker>`;
+
+  return `<c:ser>
+      <c:idx val="${index}"/>
+      <c:order val="${index}"/>
+      <c:tx><c:v>${escapeXml(name)}</c:v></c:tx>
+      ${shapePropertiesXML}
       <c:cat>
         <c:strRef>
           <c:f>${catRef}</c:f>
           <c:strCache>
-            <c:ptCount val="${catCount}"/>
+            <c:ptCount val="${categories.length}"/>
             ${categories.map((cat, i) => `<c:pt idx="${i}"><c:v>${escapeXml(String(cat))}</c:v></c:pt>`).join('\n            ')}
           </c:strCache>
         </c:strRef>
@@ -276,29 +410,4 @@ export function generateStockChartXML(
         </c:numRef>
       </c:val>
     </c:ser>`;
-  });
-
-  const chartContent = `<c:stockChart>
-    ${seriesXMLParts.join('\n    ')}
-    <c:axId val="${AXIS_IDS.CATEGORY}"/>
-    <c:axId val="${AXIS_IDS.VALUE}"/>
-  </c:stockChart>`;
-
-  // Generate axes
-  const axes = [
-    generateCategoryAxisXML(encoding.x, AXIS_IDS.CATEGORY, AXIS_IDS.VALUE),
-    generateValueAxisXML(encoding.y, AXIS_IDS.VALUE, AXIS_IDS.CATEGORY),
-  ];
-
-  // Get title (preserves subtitle from TitleSpec)
-  const title = extractChartTitle(spec);
-
-  // Wrap in chartSpace
-  const chartXml = wrapChartXML(chartContent, {
-    title,
-    axes,
-    legend: { position: 'r' },
-  });
-
-  return { chartXml };
 }

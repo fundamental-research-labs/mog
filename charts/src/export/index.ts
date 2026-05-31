@@ -25,6 +25,7 @@ import { ImageFallbackError, shouldUseImageFallback } from './ooxml/image-fallba
 import { generateLineChartXML, generateStockChartXML } from './ooxml/line-chart-xml';
 import { generateDoughnutChartXML, generatePieChartXML } from './ooxml/pie-chart-xml';
 import { generateBubbleChartXML, generateScatterChartXML } from './ooxml/scatter-chart-xml';
+import { isNativeStockLayerSpec } from './ooxml/stock-layer-detection';
 
 // =============================================================================
 // Main Export Function
@@ -75,6 +76,10 @@ export function toOOXML(
   data: DataRow[],
   options?: ExportOptions,
 ): OOXMLExportResult {
+  if (isNativeStockLayerSpec(spec)) {
+    return generateStockChartXML(spec, data, options);
+  }
+
   // Check if image fallback is required
   if (shouldUseImageFallback(spec)) {
     throw new ImageFallbackError(`Chart type requires image fallback for Excel export`, spec);
@@ -208,6 +213,10 @@ export function canExportToOOXML(spec: ChartSpec): boolean {
  * @returns The OOXML element name (e.g., 'barChart', 'lineChart')
  */
 export function getOOXMLChartElement(spec: ChartSpec): string | null {
+  if (isNativeStockLayerSpec(spec)) {
+    return 'stockChart';
+  }
+
   const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;
 
   // Check for radar (linear-closed interpolation)

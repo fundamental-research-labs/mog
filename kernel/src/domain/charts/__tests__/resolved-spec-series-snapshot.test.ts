@@ -4,6 +4,7 @@ import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { ResolvedChartRangeReference } from '../chart-range-references';
 import {
   hasRenderableChartExData,
+  renderAuthorityDiagnostics,
   snapshotSeries,
   snapshotSeriesProjection,
 } from '../bridge/resolved-spec-series-snapshot';
@@ -169,5 +170,33 @@ describe('resolved spec series snapshot helpers', () => {
         },
       ],
     });
+  });
+
+  it('reports literal and fallback render authority diagnostics', () => {
+    const rendered = snapshotSeries(
+      { name: 'Cached', data: [{ x: 'A', y: 1 }] },
+      0,
+      ['A'],
+      {
+        type: 'column',
+        series: [
+          {
+            name: 'Cached',
+            values: 'Missing!B1:B1',
+            valueSourceKind: 'cacheFallback',
+            valueCache: { pointCount: 1, points: [{ idx: 0, value: '1' }] },
+            categorySourceKind: 'literal',
+            categoryCache: { pointCount: 1, points: [{ idx: 0, value: 'A' }] },
+          },
+        ],
+      } as ChartConfig,
+      true,
+      undefined,
+    );
+
+    expect(renderAuthorityDiagnostics([rendered])).toEqual([
+      'Series 1 values rendered from fallback cache because live source "Missing!B1:B1" is unavailable.',
+      'Series 1 categories rendered from literal chart data.',
+    ]);
   });
 });

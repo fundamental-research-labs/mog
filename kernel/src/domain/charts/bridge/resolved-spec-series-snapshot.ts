@@ -35,6 +35,51 @@ export function hasRenderableChartExData(config: ChartConfig): boolean {
   );
 }
 
+export function renderAuthorityDiagnostics(
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): string[] {
+  return series.flatMap((item) => {
+    const seriesNumber = item.index + 1;
+    return [
+      renderAuthorityDiagnostic({
+        seriesNumber,
+        dimension: 'values',
+        ref: item.source.values,
+        authority: item.renderAuthority.values,
+      }),
+      renderAuthorityDiagnostic({
+        seriesNumber,
+        dimension: 'categories',
+        ref: item.source.categories,
+        authority: item.renderAuthority.categories,
+      }),
+      renderAuthorityDiagnostic({
+        seriesNumber,
+        dimension: 'bubbleSize',
+        ref: item.source.bubbleSize,
+        authority: item.renderAuthority.bubbleSize,
+      }),
+    ].filter((message): message is string => message !== undefined);
+  });
+}
+
+function renderAuthorityDiagnostic(input: {
+  seriesNumber: number;
+  dimension: 'values' | 'categories' | 'bubbleSize';
+  ref: string | undefined;
+  authority: ChartSeriesDimensionRenderAuthority;
+}): string | undefined {
+  if (input.authority === 'literal') {
+    return `Series ${input.seriesNumber} ${input.dimension} rendered from literal chart data.`;
+  }
+  if (input.authority === 'fallbackCache') {
+    return input.ref?.trim()
+      ? `Series ${input.seriesNumber} ${input.dimension} rendered from fallback cache because live source "${input.ref}" is unavailable.`
+      : `Series ${input.seriesNumber} ${input.dimension} rendered from fallback cache without a live source.`;
+  }
+  return undefined;
+}
+
 export function snapshotSeries(
   series: ChartDataSeries,
   index: number,

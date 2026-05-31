@@ -300,6 +300,7 @@ describe('ChartDataResolver', () => {
           chart({
             chartType: 'bubble',
             dataRange: undefined,
+            showNegBubbles: true,
             sizeRepresents: 'w',
             series: [
               {
@@ -324,7 +325,7 @@ describe('ChartDataResolver', () => {
                 bubbleSizeCache: {
                   pointCount: 2,
                   points: [
-                    { idx: 0, value: '10' },
+                    { idx: 0, value: '-10' },
                     { idx: 1, value: '20' },
                   ],
                 },
@@ -348,7 +349,7 @@ describe('ChartDataResolver', () => {
         value: 10,
         y: 10,
         size: 5,
-        __mogRawBubbleSize: 10,
+        __mogRawBubbleSize: -10,
         series: 'Bubbles',
         __mogPointIndex: 0,
       }),

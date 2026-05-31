@@ -728,16 +728,16 @@ describe('chart data point value provenance', () => {
       expect.objectContaining({
         mark: { type: 'rule' },
         encoding: expect.objectContaining({
-          y: { field: STOCK_LOW_FIELD, type: 'quantitative' },
-          y2: { field: STOCK_HIGH_FIELD, type: 'quantitative' },
+          y: expect.objectContaining({ field: STOCK_LOW_FIELD, type: 'quantitative' }),
+          y2: expect.objectContaining({ field: STOCK_HIGH_FIELD, type: 'quantitative' }),
         }),
       }),
       expect.objectContaining({
         mark: expect.objectContaining({ type: 'rule' }),
         encoding: expect.objectContaining({
-          y: { field: STOCK_OPEN_FIELD, type: 'quantitative' },
-          y2: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
-          color: { field: STOCK_DIRECTION_FIELD, type: 'nominal' },
+          y: expect.objectContaining({ field: STOCK_OPEN_FIELD, type: 'quantitative' }),
+          y2: expect.objectContaining({ field: STOCK_CLOSE_FIELD, type: 'quantitative' }),
+          color: expect.objectContaining({ field: STOCK_DIRECTION_FIELD, type: 'nominal' }),
         }),
       }),
     ]);

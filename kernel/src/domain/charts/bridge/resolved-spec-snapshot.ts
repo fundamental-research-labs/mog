@@ -127,7 +127,7 @@ export function buildResolvedChartSpecSnapshot(input: {
     },
     diagnostics: {
       compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
-      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config),
+      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config, series),
     },
   };
 }
@@ -315,7 +315,10 @@ function snapshotScalar(value: string | number | null | undefined): string | num
   return null;
 }
 
-function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
+function unsupportedFeatureDiagnostics(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): string[] {
   const unsupported: string[] = [];
   if (String(config.type).endsWith('3d'))
     unsupported.push('3d chart rendering is approximated by the 2d chart backend');
@@ -344,17 +347,21 @@ function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push('pivot chart field buttons are not rendered');
   unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
-  unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis));
+  unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis, series));
   return unsupported;
 }
 
-function axisUnsupportedFeatureDiagnostics(axis: ChartConfig['axis']): string[] {
+function axisUnsupportedFeatureDiagnostics(
+  axis: ChartConfig['axis'],
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): string[] {
   if (!axis) return [];
   const diagnostics = new Set<string>();
   const entries: Array<[string, NonNullable<ChartConfig['axis']>['categoryAxis']]> = [
     ['category', axis.categoryAxis ?? axis.xAxis],
     ['value', axis.valueAxis ?? axis.yAxis],
     ['secondary category', axis.secondaryCategoryAxis],
+    ['secondary value', axis.secondaryValueAxis ?? axis.secondaryYAxis],
     ['series/depth', axis.seriesAxis],
   ];
 
@@ -369,9 +376,63 @@ function axisUnsupportedFeatureDiagnostics(axis: ChartConfig['axis']): string[] 
     ) {
       diagnostics.add(`${label} axis category crossing policy is approximate`);
     }
+    for (const diagnostic of logAxisDiagnostics(label, axisConfig, series)) {
+      diagnostics.add(diagnostic);
+    }
   }
 
   return Array.from(diagnostics);
+}
+
+function logAxisDiagnostics(
+  label: string,
+  axisConfig: NonNullable<NonNullable<ChartConfig['axis']>['categoryAxis']>,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): string[] {
+  const isLogAxis = axisConfig.scaleType === 'logarithmic' || axisConfig.logBase !== undefined;
+  if (!isLogAxis) return [];
+
+  const diagnostics: string[] = [];
+  const logBase = axisConfig.logBase ?? 10;
+  if (!Number.isFinite(logBase) || logBase <= 1) {
+    diagnostics.push(`${label} axis logarithmic scale has invalid base`);
+  }
+
+  const invalidDomainFields = [
+    axisConfig.min !== undefined && axisConfig.min <= 0 ? 'min' : undefined,
+    axisConfig.max !== undefined && axisConfig.max <= 0 ? 'max' : undefined,
+  ].filter(Boolean);
+  if (invalidDomainFields.length > 0) {
+    diagnostics.push(
+      `${label} axis logarithmic scale has non-positive ${invalidDomainFields.join('/')} domain`,
+    );
+  }
+
+  const values = positiveDomainCandidateValues(label, series);
+  if (values.length > 0 && values.every((value) => value <= 0)) {
+    diagnostics.push(`${label} axis logarithmic scale has no positive bound data values`);
+  }
+
+  return diagnostics;
+}
+
+function positiveDomainCandidateValues(
+  label: string,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): number[] {
+  if (label === 'value') {
+    return series
+      .filter((item) => item.axisGroup !== 'secondary')
+      .flatMap((item) => item.values)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  }
+  if (label === 'secondary value') {
+    return series
+      .filter((item) => item.axisGroup === 'secondary')
+      .flatMap((item) => item.values)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  }
+  return [];
 }
 
 export function hashJson(value: unknown): string {

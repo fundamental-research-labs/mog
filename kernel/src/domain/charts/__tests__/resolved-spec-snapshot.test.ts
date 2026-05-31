@@ -376,4 +376,77 @@ describe('resolved spec snapshot helpers', () => {
 
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
   });
+
+  it('reports logarithmic axis base, domain, and bound-data diagnostics', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'combo',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        axis: {
+          valueAxis: {
+            visible: true,
+            scaleType: 'logarithmic',
+            logBase: 1,
+            min: 0,
+          },
+          secondaryValueAxis: {
+            visible: true,
+            scaleType: 'logarithmic',
+          },
+        },
+        series: [
+          { name: 'Primary', valueCache: { points: [] } },
+          { name: 'Secondary', yAxisIndex: 1, valueCache: { points: [] } },
+        ],
+      } as ChartConfig,
+      chartData: {
+        categories: ['A', 'B'],
+        series: [
+          {
+            name: 'Primary',
+            data: [
+              { x: 'A', y: -5 },
+              { x: 'B', y: 0 },
+            ],
+          },
+          {
+            name: 'Secondary',
+            yAxisIndex: 1,
+            data: [
+              { x: 'A', y: 4 },
+              { x: 'B', y: 8 },
+            ],
+          },
+        ],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'value axis logarithmic scale has invalid base',
+      'value axis logarithmic scale has non-positive min domain',
+      'value axis logarithmic scale has no positive bound data values',
+    ]);
+  });
 });

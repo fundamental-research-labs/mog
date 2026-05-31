@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use domain_types::{FormulaCacheState, ParseOutput};
+use domain_types::{ChartDefinition, ChartSpec, FormulaCacheState, ParseOutput};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +15,15 @@ pub enum ExportDiagnosticCode {
     CalcIdCanonicalized,
     FormulaRecalcIntentPreserved,
     ConsumerRecalcRequired,
+    ChartSpaceReplaySuppressed,
+    ChartAuxiliaryReplaySuppressed,
+    ChartAuxiliaryPartDropped,
+    ChartExternalDataRelationshipDropped,
+    ChartUserShapesRelationshipDropped,
+    ChartRelationshipRawXmlDropped,
+    ChartExOpaqueReplaySuppressed,
+    ChartExRawAnchorReplaySuppressed,
+    ChartPrintSettingsDropped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +31,7 @@ pub enum ExportDiagnosticCode {
 pub enum ExportSemanticImpact {
     None,
     RequiresConsumerRecalc,
+    PackagePreservationDropped,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +99,8 @@ pub(super) fn build_export_report(output: &ParseOutput) -> ExportReport {
         });
     }
 
+    append_chart_export_diagnostics(output, &mut diagnostics);
+
     ExportReport { diagnostics }
 }
 
@@ -103,4 +115,272 @@ pub(super) fn requires_consumer_recalc(output: &ParseOutput) -> bool {
 
 fn a1_ref(row: u32, col: u32) -> String {
     format!("{}{}", crate::write::sheet::col_to_letter(col), row + 1)
+}
+
+fn append_chart_export_diagnostics(output: &ParseOutput, diagnostics: &mut Vec<ExportDiagnostic>) {
+    let mut standard_chart_idx = 0usize;
+    let mut chart_ex_idx = 0usize;
+
+    for sheet in &output.sheets {
+        for chart in &sheet.charts {
+            if chart.is_chart_ex || !matches!(chart.definition, Some(ChartDefinition::Chart(_))) {
+                continue;
+            }
+
+            let original_idx =
+                super::chart_replay::standard_chart_original_number_with_current_auxiliary_replay(
+                    chart,
+                );
+            let idx = match original_idx {
+                Some(original) => {
+                    standard_chart_idx = standard_chart_idx.max(original);
+                    original
+                }
+                None => {
+                    standard_chart_idx += 1;
+                    standard_chart_idx
+                }
+            };
+            let chart_path = format!("xl/charts/chart{idx}.xml");
+            append_standard_chart_export_diagnostics(chart, &chart_path, diagnostics);
+        }
+
+        for chart in &sheet.charts {
+            if !chart.is_chart_ex || !matches!(chart.definition, Some(ChartDefinition::ChartEx(_)))
+            {
+                continue;
+            }
+
+            let original_idx =
+                super::chart_replay::chart_ex_original_number_with_current_replay(chart);
+            let idx = match original_idx {
+                Some(original) => {
+                    chart_ex_idx = chart_ex_idx.max(original);
+                    original
+                }
+                None => {
+                    chart_ex_idx += 1;
+                    chart_ex_idx
+                }
+            };
+            let chart_path = format!("xl/charts/chartEx{idx}.xml");
+            append_chart_ex_export_diagnostics(chart, &chart_path, diagnostics);
+        }
+    }
+}
+
+fn append_standard_chart_export_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    if (chart.standard_chart_provenance.is_some()
+        || chart.standard_chart_export_authority.is_some())
+        && super::chart_replay::should_reconstruct_chart_space(chart)
+    {
+        let reason = chart
+            .standard_chart_export_authority
+            .as_ref()
+            .and_then(|authority| authority.stale_reason.as_deref())
+            .unwrap_or("standard chart-space authority is not current");
+        push_chart_diagnostic(
+            diagnostics,
+            ExportDiagnosticCode::ChartSpaceReplaySuppressed,
+            "chartSpace",
+            Some(chart_path),
+            ExportSemanticImpact::None,
+            format!("Imported chart XML replay was suppressed: {reason}."),
+        );
+    }
+
+    if let Some(aux) = super::chart_auxiliary::chart_auxiliary_data(chart) {
+        if !super::chart_replay::chart_allows_current_auxiliary_replay(chart, &aux.original_path) {
+            push_chart_diagnostic(
+                diagnostics,
+                ExportDiagnosticCode::ChartAuxiliaryReplaySuppressed,
+                "chartAuxiliary",
+                Some(&aux.original_path),
+                ExportSemanticImpact::PackagePreservationDropped,
+                "Imported chart auxiliary package replay was suppressed because authority is not current."
+                    .to_string(),
+            );
+        }
+
+        let supported_paths =
+            super::chart_auxiliary::supported_auxiliary_file_paths(&aux, &aux.original_path);
+        for (path, _) in aux.auxiliary_files {
+            let normalized = path.trim_start_matches('/');
+            if !supported_paths.contains(normalized) {
+                push_chart_diagnostic(
+                    diagnostics,
+                    ExportDiagnosticCode::ChartAuxiliaryPartDropped,
+                    "chartAuxiliaryPart",
+                    Some(normalized),
+                    ExportSemanticImpact::PackagePreservationDropped,
+                    format!(
+                        "Imported chart auxiliary part `{normalized}` was not exported because no current supported chart relationship references it."
+                    ),
+                );
+            }
+        }
+    }
+
+    append_standard_chart_relationship_diagnostics(chart, chart_path, diagnostics);
+    append_standard_chart_raw_xml_drop_diagnostics(chart, chart_path, diagnostics);
+}
+
+fn append_standard_chart_relationship_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    let Some(ChartDefinition::Chart(chart_space)) = chart.definition.as_ref() else {
+        return;
+    };
+
+    if let Some(external_data) = chart_space.external_data.as_ref() {
+        let relationship = chart
+            .chart_relationships
+            .iter()
+            .find(|rel| rel.r_id == external_data.r_id);
+        if !relationship
+            .is_some_and(super::chart_auxiliary::chart_external_data_relationship_is_supported)
+        {
+            push_chart_diagnostic(
+                diagnostics,
+                ExportDiagnosticCode::ChartExternalDataRelationshipDropped,
+                "chartExternalData",
+                Some(chart_path),
+                ExportSemanticImpact::PackagePreservationDropped,
+                format!(
+                    "Imported chart externalData relationship `{}` was not exported because the relationship target policy is unsupported or missing.",
+                    external_data.r_id
+                ),
+            );
+        }
+    }
+
+    if let Some(r_id) = chart_space.user_shapes.as_deref()
+        && super::chart_auxiliary::chart_user_shapes_data(chart, chart_path).is_none()
+    {
+        push_chart_diagnostic(
+            diagnostics,
+            ExportDiagnosticCode::ChartUserShapesRelationshipDropped,
+            "chartUserShapes",
+            Some(chart_path),
+            ExportSemanticImpact::PackagePreservationDropped,
+            format!(
+                "Imported chart userShapes relationship `{r_id}` was not exported because the target part is unsupported or missing."
+            ),
+        );
+    }
+}
+
+fn append_standard_chart_raw_xml_drop_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    let Some(ChartDefinition::Chart(chart_space)) = chart.definition.as_ref() else {
+        return;
+    };
+
+    if chart_space
+        .extensions
+        .iter()
+        .chain(chart_space.chart.extensions.iter())
+        .chain(chart_space.chart.plot_area.extensions.iter())
+        .any(|extension| crate::infra::xml::raw_xml_contains_relationship_attr(&extension.xml))
+    {
+        push_chart_diagnostic(
+            diagnostics,
+            ExportDiagnosticCode::ChartRelationshipRawXmlDropped,
+            "chartRawExtension",
+            Some(chart_path),
+            ExportSemanticImpact::PackagePreservationDropped,
+            "Imported chart raw extension XML containing relationship attributes was not exported."
+                .to_string(),
+        );
+    }
+}
+
+fn append_chart_ex_export_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    if let Some(replay) = chart.chart_ex_replay.as_ref() {
+        let original_path = replay.original_path.trim_start_matches('/');
+        if !super::chart_replay::chart_ex_allows_opaque_replay(chart, original_path) {
+            push_chart_diagnostic(
+                diagnostics,
+                ExportDiagnosticCode::ChartExOpaqueReplaySuppressed,
+                "chartExSpace",
+                Some(original_path),
+                ExportSemanticImpact::PackagePreservationDropped,
+                "Imported ChartEx opaque XML replay was suppressed because authority is not current."
+                    .to_string(),
+            );
+        }
+
+        if let Some(frame) = chart.chart_frame.as_ref()
+            && frame.raw_alternate_content.is_some()
+        {
+            let relationship_id = frame.relationship_id.as_deref().unwrap_or_default();
+            if !super::chart_replay::chart_ex_allows_raw_anchor_replay(
+                chart,
+                chart_path,
+                relationship_id,
+            ) {
+                push_chart_diagnostic(
+                    diagnostics,
+                    ExportDiagnosticCode::ChartExRawAnchorReplaySuppressed,
+                    "chartExAnchor",
+                    Some(chart_path),
+                    ExportSemanticImpact::PackagePreservationDropped,
+                    "Imported ChartEx raw drawing anchor replay was suppressed because frame authority is not current."
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    let Some(ChartDefinition::ChartEx(chart_ex_space)) = chart.definition.as_ref() else {
+        return;
+    };
+    if !super::chart_replay::chart_ex_allows_opaque_replay(chart, chart_path)
+        && chart_ex_space
+            .print_settings
+            .as_ref()
+            .and_then(|print_settings| print_settings.raw_xml.as_deref())
+            .is_some_and(crate::infra::xml::raw_xml_contains_relationship_attr)
+    {
+        push_chart_diagnostic(
+            diagnostics,
+            ExportDiagnosticCode::ChartPrintSettingsDropped,
+            "chartPrintSettings",
+            Some(chart_path),
+            ExportSemanticImpact::PackagePreservationDropped,
+            "Imported ChartEx printSettings XML was not exported because it contains unresolved relationship attributes."
+                .to_string(),
+        );
+    }
+}
+
+fn push_chart_diagnostic(
+    diagnostics: &mut Vec<ExportDiagnostic>,
+    code: ExportDiagnosticCode,
+    artifact: &str,
+    part: Option<&str>,
+    semantic_impact: ExportSemanticImpact,
+    message: String,
+) {
+    diagnostics.push(ExportDiagnostic {
+        code,
+        artifact: artifact.to_string(),
+        part: part.map(ToString::to_string),
+        cell: None,
+        semantic_impact,
+        message,
+    });
 }

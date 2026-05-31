@@ -1,5 +1,18 @@
 use super::*;
 
+fn assert_export_report_contains(report: &ExportReport, code: ExportDiagnosticCode, message: &str) {
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == code && diagnostic.message.contains(message)),
+        "missing export diagnostic {:?} containing {:?}; report diagnostics: {:?}",
+        code,
+        message,
+        report.diagnostics
+    );
+}
+
 #[test]
 fn generated_chart_does_not_inherit_stale_auxiliary_parts_by_local_index() {
     let output = make_parse_output(vec![SheetData {
@@ -185,13 +198,18 @@ fn reconstructed_external_data_requires_supported_relationship_policy() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
 
     assert!(!chart_xml.contains("<c:externalData"));
     assert!(!chart_xml.contains("rIdExternalData"));
     assert!(!archive.contains("xl/charts/_rels/chart1.xml.rels"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartExternalDataRelationshipDropped,
+        "externalData relationship `rIdExternalData`",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -226,13 +244,18 @@ fn reconstructed_user_shapes_requires_supported_auxiliary_target() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
 
     assert!(!chart_xml.contains("<c:userShapes"));
     assert!(!chart_xml.contains("rIdUserShapes"));
     assert!(!archive.contains("xl/charts/_rels/chart1.xml.rels"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartUserShapesRelationshipDropped,
+        "userShapes relationship `rIdUserShapes`",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -284,7 +307,7 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
 
@@ -298,6 +321,11 @@ fn reconstructed_chart_drops_relationship_bearing_raw_extensions() {
     assert!(!chart_xml.contains("rIdStaleEmbed"));
     assert!(!chart_xml.contains("rIdStaleLink"));
     assert!(!chart_xml.contains("rIdStaleRelId"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartRelationshipRawXmlDropped,
+        "raw extension XML containing relationship attributes",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -326,13 +354,18 @@ fn chart_ex_print_settings_drop_unresolved_relationship_attrs() {
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let chart_ex_xml =
         String::from_utf8(archive.read_file("xl/charts/chartEx1.xml").unwrap()).unwrap();
 
     assert!(!chart_ex_xml.contains("rIdStalePrintSettings"));
     assert!(!chart_ex_xml.contains("<cx:printSettings"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartPrintSettingsDropped,
+        "printSettings XML",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -560,7 +593,7 @@ fn stale_standard_chart_authority_suppresses_auxiliary_numbering_and_relationshi
         ..Default::default()
     }]);
 
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let drawing_rels_bytes = archive
         .read_file("xl/drawings/_rels/drawing1.xml.rels")
@@ -577,6 +610,16 @@ fn stale_standard_chart_authority_suppresses_auxiliary_numbering_and_relationshi
     assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
     assert_eq!(chart_rel.target, "../charts/chart1.xml");
     assert_ne!(chart_rel.id, "rId9");
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartSpaceReplaySuppressed,
+        "modeled chart changed",
+    );
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartAuxiliaryReplaySuppressed,
+        "auxiliary package replay was suppressed",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -638,7 +681,7 @@ fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
         charts: vec![imported_chart],
         ..Default::default()
     }]);
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let content_types =
         String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
@@ -647,6 +690,11 @@ fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
     assert!(!archive.contains("xl/charts/style9.xml"));
     assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
     assert!(!content_types.contains("/xl/charts/style9.xml"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartAuxiliaryPartDropped,
+        "chart auxiliary part `xl/charts/style9.xml`",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -1072,6 +1120,36 @@ fn chart_ex_raw_anchor_replays_only_when_frame_is_current() {
 
     assert!(archive.contains("xl/charts/chartEx7.xml"));
     assert!(drawing_xml.contains("RAW-CHARTEX-ANCHOR"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn chart_ex_raw_anchor_export_report_names_suppressed_stale_anchor_replay() {
+    let mut chart_ex = chart_ex_with_raw_anchor(7);
+    chart_ex.title = Some("Edited ChartEx".to_string());
+    chart_ex
+        .chart_frame
+        .as_mut()
+        .expect("test fixture has chart frame")
+        .relationship_id = Some("rIdStale".to_string());
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+
+    assert!(!drawing_xml.contains("RAW-CHARTEX-ANCHOR"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartExRawAnchorReplaySuppressed,
+        "raw drawing anchor replay was suppressed",
+    );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

@@ -376,7 +376,7 @@ pub(in crate::domain::charts::read) fn map_chart_type_to_ts(
 pub(in crate::domain::charts::read) fn extract_sub_type(
     chart: &crate::domain::charts::Chart,
 ) -> Option<String> {
-    use ooxml_types::charts::ChartTypeConfig;
+    use ooxml_types::charts::{ChartTypeConfig, RadarStyle};
 
     match &chart.chart_type_config {
         Some(ChartTypeConfig::Bar(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
@@ -385,6 +385,11 @@ pub(in crate::domain::charts::read) fn extract_sub_type(
         Some(ChartTypeConfig::Line3D(c)) => grouping_to_sub_type(&c.grouping),
         Some(ChartTypeConfig::Area(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
         Some(ChartTypeConfig::Area3D(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
+        Some(ChartTypeConfig::Radar(c)) => match c.radar_style {
+            RadarStyle::Filled => Some("filled".to_string()),
+            RadarStyle::Marker => Some("markers".to_string()),
+            RadarStyle::Standard => None,
+        },
         _ => None,
     }
 }

@@ -41,7 +41,7 @@ export const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
   scatter: 'point',
   bubble: 'point',
   combo: 'bar', // default layer mark; combo uses layers
-  radar: 'line',
+  radar: 'radar',
   stock: 'rule', // stock uses rule marks for OHLC ranges
   funnel: 'bar',
   waterfall: 'bar',

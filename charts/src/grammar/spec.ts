@@ -533,6 +533,7 @@ export type MarkType =
   | 'histogram'
   | 'violin'
   | 'contour'
+  | 'radar'
   | 'surface3d';
 
 /**

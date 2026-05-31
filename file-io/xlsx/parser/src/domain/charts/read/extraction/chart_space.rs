@@ -654,7 +654,15 @@ fn push_style_owner(
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
 ) -> Option<domain_types::chart::ChartSubType> {
-    use ooxml_types::charts::{ChartTypeConfig as CTC, Grouping};
+    use ooxml_types::charts::{ChartTypeConfig as CTC, Grouping, RadarStyle};
+
+    if let CTC::Radar(c) = config {
+        return match c.radar_style {
+            RadarStyle::Filled => Some(domain_types::chart::ChartSubType::Filled),
+            RadarStyle::Marker => Some(domain_types::chart::ChartSubType::Markers),
+            RadarStyle::Standard => None,
+        };
+    }
 
     let grouping = match config {
         CTC::Bar(c) => c.grouping.as_ref(),
@@ -873,7 +881,7 @@ mod tests {
         AreaChartConfig, AxisType, BarChartConfig, BubbleChartConfig, Chart as OoxmlChart,
         ChartAxis, ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
         ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource, NumPoint, PlotArea,
-        SizeRepresents, StockChartConfig, SurfaceChartConfig, Title,
+        RadarChartConfig, RadarStyle, SizeRepresents, StockChartConfig, SurfaceChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -1117,6 +1125,39 @@ mod tests {
         assert_eq!(spec.show_neg_bubbles, Some(true));
         assert_eq!(spec.size_represents.as_deref(), Some("w"));
         assert_eq!(spec.bubble_3d_effect, Some(true));
+    }
+
+    #[test]
+    fn radar_style_sets_renderable_subtype() {
+        use domain_types::chart::ChartSubType;
+
+        for (radar_style, expected) in [
+            (RadarStyle::Standard, None),
+            (RadarStyle::Marker, Some(ChartSubType::Markers)),
+            (RadarStyle::Filled, Some(ChartSubType::Filled)),
+        ] {
+            let cs = ChartSpace {
+                chart: OoxmlChart {
+                    plot_area: PlotArea {
+                        chart_groups: vec![group(
+                            ChartType::Radar,
+                            ChartTypeConfig::Radar(RadarChartConfig {
+                                radar_style,
+                                ..Default::default()
+                            }),
+                        )],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+            assert_eq!(spec.chart_type, domain_types::ChartType::Radar);
+            assert_eq!(spec.sub_type, expected);
+        }
     }
 
     #[test]

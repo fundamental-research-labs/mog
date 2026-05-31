@@ -169,7 +169,7 @@ function detectRadarStyle(spec: ChartSpec): 'standard' | 'marker' | 'filled' {
     // Marker radar
     if (mark.point) return 'marker';
   }
-  return 'marker'; // default to marker for radar charts
+  return 'standard';
 }
 
 /**

@@ -102,6 +102,41 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     return encoding;
   }
 
+  if (chartType === 'radar') {
+    const valueAxis = config.axis ? resolveAxisConfigForChannel(config.axis, 'y', false) : undefined;
+    const valueAxisSpec = valueAxis
+      ? mapAxisConfigToAxisSpec(valueAxis, config, 'valueAxis')
+      : undefined;
+    const valueScaleSpec = valueAxis ? buildAxisScaleSpec(valueAxis, false) : undefined;
+    encoding.x = {
+      field: 'category',
+      type: 'nominal',
+      axis: null,
+      scale: data.categories.length > 0 ? { domain: data.categories } : undefined,
+    };
+    encoding.y = {
+      field: VALUE_FIELD,
+      type: 'quantitative',
+      axis: null,
+      format: valueAxisSpec?.format,
+      scale: { zero: true, nice: true, ...(valueScaleSpec ?? {}) },
+    };
+    const seriesLegendDomain = buildSeriesLegendDomain(config, data);
+    const colorChannel = buildColorEncoding(
+      hasMultipleSeries,
+      config.legend,
+      resolvedCategoryColors(config, data),
+      false,
+      visibleLegendDomain(config, data),
+      legendSymbolType(config, data),
+      config,
+      seriesLegendDomain?.forceColorEncoding,
+      seriesLegendDomain?.values,
+    );
+    if (colorChannel) encoding.color = colorChannel;
+    return encoding;
+  }
+
   // --- X/Y encoding for all other chart types ---
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);

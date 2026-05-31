@@ -844,6 +844,8 @@ impl ChartSpec {
             display_name: None,
             import_status: self.import_status.clone(),
         };
+        let (radar_filled, radar_markers) =
+            radar_flags_from_sub_type(&self.chart_type, self.sub_type.as_ref());
 
         let chart_data = ChartData {
             chart_type: self.chart_type.clone(),
@@ -870,8 +872,8 @@ impl ChartSpec {
             trendline: None,
             show_lines: None,
             smooth_lines: None,
-            radar_filled: None,
-            radar_markers: None,
+            radar_filled,
+            radar_markers,
             waterfall: self.waterfall.clone(),
             histogram: self.histogram.clone(),
             boxplot: self.boxplot.clone(),
@@ -952,5 +954,20 @@ impl ChartSpec {
             common,
             data: FloatingObjectData::Chart(chart_data),
         }
+    }
+}
+
+fn radar_flags_from_sub_type(
+    chart_type: &ChartType,
+    sub_type: Option<&ChartSubType>,
+) -> (Option<bool>, Option<bool>) {
+    if !matches!(chart_type, ChartType::Radar) {
+        return (None, None);
+    }
+
+    match sub_type {
+        Some(ChartSubType::Filled) => (Some(true), None),
+        Some(ChartSubType::Markers) => (None, Some(true)),
+        _ => (None, None),
     }
 }

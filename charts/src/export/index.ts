@@ -94,9 +94,10 @@ export function toOOXML(
 
   // Check for radar chart: line mark with linear-closed interpolation
   if (
-    markType === 'line' &&
-    typeof spec.mark === 'object' &&
-    spec.mark.interpolate === 'linear-closed'
+    markType === 'radar' ||
+    (markType === 'line' &&
+      typeof spec.mark === 'object' &&
+      spec.mark.interpolate === 'linear-closed')
   ) {
     return generateRadarChartXML(spec, data, options);
   }
@@ -221,9 +222,10 @@ export function getOOXMLChartElement(spec: ChartSpec): string | null {
 
   // Check for radar (linear-closed interpolation)
   if (
-    (markType === 'line' || markType === 'area') &&
-    typeof spec.mark === 'object' &&
-    spec.mark.interpolate === 'linear-closed'
+    markType === 'radar' ||
+    ((markType === 'line' || markType === 'area') &&
+      typeof spec.mark === 'object' &&
+      spec.mark.interpolate === 'linear-closed')
   ) {
     return 'radarChart';
   }

@@ -6,7 +6,7 @@
  *
  * Pure function - no DOM dependencies.
  */
-import type { ChartSpec, Transform } from '../../grammar/spec';
+import type { ChartFrameSpec, ChartSpec, ConfigSpec, Transform } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { buildAnnotationLayers } from './annotation-layers';
 import { buildConfigSpec } from './config-spec';
@@ -102,6 +102,18 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       data,
       dimensions,
       title,
+    });
+  }
+
+  if (renderConfig.type === 'radar') {
+    return buildUnitSpec({
+      dimensions,
+      rows,
+      mark,
+      encoding,
+      title,
+      config: withRadarDefaultChartBackground(configSpec),
+      transforms,
     });
   }
 
@@ -239,4 +251,20 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 
 function isPreservedOnlyChartExFamily(type: ChartConfig['type']): boolean {
   return type === 'treemap' || type === 'sunburst' || type === 'regionMap';
+}
+
+function withRadarDefaultChartBackground(config: ConfigSpec | undefined): ConfigSpec {
+  const defaultFill: ChartFrameSpec['fill'] = { type: 'solid', color: '#ffffff' };
+  const chartFrame = config?.chartFrame
+    ? {
+        ...config.chartFrame,
+        fill: config.chartFrame.fill ?? defaultFill,
+      }
+    : { fill: defaultFill };
+
+  return {
+    ...(config ?? {}),
+    background: config?.background ?? '#ffffff',
+    chartFrame,
+  };
 }

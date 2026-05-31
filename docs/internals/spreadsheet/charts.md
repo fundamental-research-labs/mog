@@ -244,6 +244,8 @@ ChartConfig + ChartData
   -> ChartMark[]
 ```
 
+Unit specs cover the standard single-mark families plus specialized mark generators for histogram, boxplot, violin, surface/contour, and radar charts. Radar charts compile to a polar `radar` mark that draws radial grid rings, spokes, category labels, value labels, closed series polygons, optional fills, and optional markers.
+
 Layered specs cover combo charts, stock charts, waterfall, funnel, Pareto, data labels, data tables, markers, trendlines, error bars, and annotation lines. Some imported ChartEx families such as treemap, sunburst, and region maps currently preserve typed/imported state while rendering as empty/preserved-only specs.
 
 ## UI Integration

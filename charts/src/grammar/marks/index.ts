@@ -19,6 +19,7 @@ import { generateContourMarks } from './contour';
 import { generateHistogramMarks } from './histogram';
 import { generateLineMarks } from './line';
 import { generatePointMarks } from './point';
+import { generateRadarMarks } from './radar';
 import { generateRectMarks } from './rect';
 import { generateRuleMarks } from './rule';
 import { generateSurface3DMarks } from './surface-3d';
@@ -68,6 +69,8 @@ export function generateMarks(
       return generateViolinMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'contour':
       return generateContourMarks(markSpec, data, layout);
+    case 'radar':
+      return generateRadarMarks(markSpec, data, scales, encodings, layout, encoding);
     case 'surface3d':
       return generateSurface3DMarks(markSpec, data, layout);
     default:
@@ -84,6 +87,7 @@ export { generateContourMarks } from './contour';
 export { generateHistogramMarks } from './histogram';
 export { generateLineMarks } from './line';
 export { generatePointMarks } from './point';
+export { generateRadarMarks } from './radar';
 export { generateRectMarks } from './rect';
 export { generateRuleMarks } from './rule';
 export { generateSurface3DMarks } from './surface-3d';

@@ -108,11 +108,16 @@ fn chart_type_unknown_fold_round_trips() {
 
 #[test]
 fn chart_sub_type_known_roundtrip() {
-    let st = ChartSubType::PercentStacked;
-    let json = serde_json::to_string(&st).unwrap();
-    assert_eq!(json, r#""percentStacked""#);
-    let back: ChartSubType = serde_json::from_str(&json).unwrap();
-    assert_eq!(back, ChartSubType::PercentStacked);
+    for (st, wire) in [
+        (ChartSubType::PercentStacked, "percentStacked"),
+        (ChartSubType::Filled, "filled"),
+        (ChartSubType::Markers, "markers"),
+    ] {
+        let json = serde_json::to_string(&st).unwrap();
+        assert_eq!(json, format!(r#""{wire}""#));
+        let back: ChartSubType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, st);
+    }
 }
 
 #[test]

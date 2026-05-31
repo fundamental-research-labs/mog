@@ -118,7 +118,7 @@ export type StockSubType = 'hlc' | 'ohlc' | 'volume-hlc' | 'volume-ohlc';
 /**
  * Radar chart sub-types
  */
-export type RadarSubType = 'basic' | 'filled';
+export type RadarSubType = 'basic' | 'markers' | 'filled';
 
 /**
  * Data series orientation

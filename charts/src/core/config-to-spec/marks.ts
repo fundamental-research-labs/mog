@@ -136,11 +136,20 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     }
   }
 
-  // Radar: line with linear-closed interpolation + optional fill + markers
+  // Radar: radial polygon series with optional fill + markers.
   if (config.type === 'radar') {
-    const mark: MarkSpec = { type: config.radarFilled ? 'area' : 'line' };
-    mark.interpolate = 'linear-closed';
-    if (config.radarMarkers) {
+    const radarFilled = config.radarFilled ?? (config.subType === 'filled');
+    const radarMarkers = config.radarMarkers ?? (config.subType === 'markers');
+    const mark: MarkSpec = {
+      type: 'radar',
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+    };
+    if (radarFilled) {
+      mark.fillOpacity = 0.22;
+    }
+    if (radarMarkers) {
       mark.point = true;
     }
     return mark;

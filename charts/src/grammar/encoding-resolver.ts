@@ -345,7 +345,7 @@ function createLinearScale(
 
   // Handle zero: only default to including zero for bar/area marks (Vega-Lite convention).
   // Other mark types (line, point, etc.) scale to the data range by default.
-  const zeroMarks = new Set(['bar', 'area', 'arc']);
+  const zeroMarks = new Set(['bar', 'area', 'arc', 'radar']);
   const defaultZero = zeroMarks.has(markType ?? 'bar');
   const includeZero = scaleSpec?.zero ?? defaultZero;
   if (includeZero) {

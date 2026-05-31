@@ -329,6 +329,14 @@ pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
     }
 }
 
+fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {
+    match sub {
+        Some(ChartSubType::Filled) => Some(charts::RadarStyle::Filled),
+        Some(ChartSubType::Markers) => Some(charts::RadarStyle::Marker),
+        _ => None,
+    }
+}
+
 /// Determine bar direction from domain chart type.
 pub(super) fn bar_direction_for(ct: &DomainChartType) -> BarDirection {
     match ct {
@@ -443,7 +451,10 @@ pub(super) fn build_default_config(
             bubble_3d: spec.bubble_3d_effect,
             ..Default::default()
         }),
-        OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig::default()),
+        OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig {
+            radar_style: radar_style_for_sub_type(spec.sub_type.as_ref()).unwrap_or_default(),
+            ..Default::default()
+        }),
         OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe,
             ..Default::default()
@@ -570,7 +581,10 @@ pub(super) fn inject_series_into_config(
             bubble_3d: spec.bubble_3d_effect.or(c.bubble_3d),
             ..c.clone()
         }),
-        ChartTypeConfig::Radar(c) => ChartTypeConfig::Radar(c.clone()),
+        ChartTypeConfig::Radar(c) => ChartTypeConfig::Radar(charts::RadarChartConfig {
+            radar_style: radar_style_for_sub_type(spec.sub_type.as_ref()).unwrap_or(c.radar_style),
+            ..c.clone()
+        }),
         ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe.or(c.wireframe),
             ..c.clone()

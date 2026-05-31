@@ -367,6 +367,61 @@ describe('displayBlanksAs renderability', () => {
       'C',
     ]);
   });
+
+  it('splits scatter showLines paths on gap blanks while span connects remaining points', () => {
+    const scatterData: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 1, y: 1 },
+            { x: 2, y: 0, valueState: 'blank' },
+            { x: 10, y: 3 },
+          ],
+        },
+      ],
+    };
+    const gapResult = compile(
+      configToSpec(
+        makeConfig({
+          type: 'scatter',
+          showLines: true,
+          displayBlanksAs: 'gap',
+        }),
+        scatterData,
+      ),
+      undefined,
+      {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      },
+    );
+    const spanResult = compile(
+      configToSpec(
+        makeConfig({
+          type: 'scatter',
+          showLines: true,
+          displayBlanksAs: 'span',
+        }),
+        scatterData,
+      ),
+      undefined,
+      {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      },
+    );
+
+    expect(gapResult.marks.filter((mark): mark is PathMark => mark.type === 'path')).toHaveLength(
+      2,
+    );
+    expect(spanResult.marks.filter((mark): mark is PathMark => mark.type === 'path')).toHaveLength(
+      1,
+    );
+  });
 });
 
 // =============================================================================

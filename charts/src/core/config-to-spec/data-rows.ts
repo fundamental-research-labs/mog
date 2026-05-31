@@ -116,6 +116,10 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
       const series = data.series[seriesIndex];
       const point = series.data[i];
+      if (shouldBreakScatterLineAtPoint(point, config)) {
+        gapSegmentsBySeries[seriesIndex] += 1;
+        continue;
+      }
       if (shouldEmitBlankRow(point, config)) {
         const row = buildBaseRow({
           rawCategory,
@@ -684,6 +688,18 @@ function shouldEmitBlankRow(
   if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
   if (!point) return true;
   return point.valueState === 'blank';
+}
+
+function shouldBreakScatterLineAtPoint(
+  point: ChartDataPoint | undefined,
+  config?: ChartConfig,
+): boolean {
+  return (
+    config?.type === 'scatter' &&
+    config.showLines === true &&
+    config.displayBlanksAs === 'gap' &&
+    (!point || point.valueState === 'blank')
+  );
 }
 
 function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {

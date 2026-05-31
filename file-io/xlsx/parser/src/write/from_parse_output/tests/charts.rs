@@ -1314,6 +1314,7 @@ fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
         name: Some("Revenue".to_string()),
         r#type: Some(ChartType::Waterfall),
         color: None,
+        stock_role: None,
         values: Some("Data!B2:B3".to_string()),
         value_cache: None,
         value_source_kind: Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),

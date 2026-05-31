@@ -126,6 +126,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     // chart-type strings are validated at the chart level, not here.
     type: w.type,
     color: w.color,
+    stockRole: w.stockRole,
     values: w.values,
     valueCache: w.valueCache,
     valueSourceKind: w.valueSourceKind,
@@ -195,6 +196,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     name: c.name,
     type: c.type,
     color: c.color,
+    stockRole: c.stockRole,
     values: c.values,
     valueCache: c.valueCache,
     valueSourceKind: c.valueSourceKind,

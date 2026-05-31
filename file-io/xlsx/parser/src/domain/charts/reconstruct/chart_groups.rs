@@ -1,6 +1,6 @@
 use domain_types::{
     chart::{
-        ChartLineSettingsData, ChartSeriesData, ChartSpec, ChartSubType,
+        ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, UpDownBarsData,
     },
     ChartDefinition,
@@ -72,6 +72,10 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         return groups;
     }
 
+    if let Some(group) = build_modeled_stock_role_chart_group(spec, &series_data) {
+        return vec![group];
+    }
+
     // Fallback: build a single chart group from spec.chart_type + all series.
     vec![build_modeled_chart_group(
         spec,
@@ -108,6 +112,10 @@ fn modeled_combo_series_groups<'a>(
     }
 
     if is_volume_stock_sub_type(spec.sub_type.as_ref()) {
+        if let Some(groups) = modeled_volume_stock_role_groups(series_data, spec.sub_type.as_ref())
+        {
+            return Some(groups);
+        }
         if let Some(groups) =
             modeled_volume_stock_series_groups(series_data, spec.sub_type.as_ref())
         {
@@ -133,6 +141,104 @@ fn is_volume_stock_sub_type(sub_type: Option<&ChartSubType>) -> bool {
         sub_type,
         Some(ChartSubType::VolumeHlc | ChartSubType::VolumeOhlc)
     )
+}
+
+fn stock_roles_for_sub_type(
+    sub_type: Option<&ChartSubType>,
+) -> Option<&'static [ChartSeriesStockRoleData]> {
+    use ChartSeriesStockRoleData as Role;
+
+    match sub_type {
+        Some(ChartSubType::Hlc | ChartSubType::VolumeHlc) => {
+            Some(&[Role::High, Role::Low, Role::Close])
+        }
+        Some(ChartSubType::Ohlc | ChartSubType::VolumeOhlc) => {
+            Some(&[Role::Open, Role::High, Role::Low, Role::Close])
+        }
+        _ => None,
+    }
+}
+
+fn modeled_volume_stock_role_groups<'a>(
+    series_data: &'a [ChartSeriesData],
+    sub_type: Option<&ChartSubType>,
+) -> Option<Vec<ModeledSeriesGroup<'a>>> {
+    let stock_roles = stock_roles_for_sub_type(sub_type)?;
+    if series_data.len() != stock_roles.len() + 1 {
+        return None;
+    }
+
+    let volume = series_by_stock_role(series_data, ChartSeriesStockRoleData::Volume)?;
+    let stock_series = series_by_required_stock_roles(series_data, stock_roles)?;
+
+    Some(vec![
+        ModeledSeriesGroup {
+            chart_type: DomainChartType::Column,
+            series: vec![volume],
+        },
+        ModeledSeriesGroup {
+            chart_type: DomainChartType::Stock,
+            series: stock_series,
+        },
+    ])
+}
+
+fn series_by_stock_role(
+    series_data: &[ChartSeriesData],
+    role: ChartSeriesStockRoleData,
+) -> Option<(usize, &ChartSeriesData)> {
+    let mut matches = series_data
+        .iter()
+        .enumerate()
+        .filter(|(_, series)| series.stock_role == Some(role));
+    let found = matches.next()?;
+    matches.next().is_none().then_some(found)
+}
+
+fn series_by_required_stock_roles<'a>(
+    series_data: &'a [ChartSeriesData],
+    roles: &[ChartSeriesStockRoleData],
+) -> Option<Vec<(usize, &'a ChartSeriesData)>> {
+    roles
+        .iter()
+        .map(|role| series_by_stock_role(series_data, *role))
+        .collect()
+}
+
+fn build_modeled_stock_role_chart_group(
+    spec: &ChartSpec,
+    series_data: &[ChartSeriesData],
+) -> Option<ChartGroup> {
+    let group = modeled_stock_role_series_group(spec, series_data)?;
+    Some(build_modeled_chart_group(
+        spec,
+        &group.chart_type,
+        group.series,
+    ))
+}
+
+fn modeled_stock_role_series_group<'a>(
+    spec: &ChartSpec,
+    series_data: &'a [ChartSeriesData],
+) -> Option<ModeledSeriesGroup<'a>> {
+    if spec.chart_type != DomainChartType::Stock {
+        return None;
+    }
+
+    let stock_roles = match spec.sub_type.as_ref() {
+        Some(ChartSubType::Hlc | ChartSubType::Ohlc) => {
+            stock_roles_for_sub_type(spec.sub_type.as_ref())?
+        }
+        _ => return None,
+    };
+    if series_data.len() != stock_roles.len() {
+        return None;
+    }
+
+    Some(ModeledSeriesGroup {
+        chart_type: DomainChartType::Stock,
+        series: series_by_required_stock_roles(series_data, stock_roles)?,
+    })
 }
 
 fn modeled_volume_stock_series_groups<'a>(

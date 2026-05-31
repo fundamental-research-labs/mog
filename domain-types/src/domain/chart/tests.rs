@@ -970,6 +970,7 @@ fn chart_data_serde_roundtrip() {
             name: Some("Revenue".to_string()),
             r#type: None,
             color: None,
+            stock_role: None,
             values: None,
             value_cache: None,
             value_source_kind: None,

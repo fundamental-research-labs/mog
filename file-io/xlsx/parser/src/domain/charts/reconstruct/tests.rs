@@ -2,9 +2,9 @@ use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
     ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec, ChartSubType,
-    ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, PivotChartOptionsData,
-    SingleAxisData,
+    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSeriesStockRoleData, ChartSpec,
+    ChartSubType, ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize,
+    PivotChartOptionsData, SingleAxisData,
 };
 use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
@@ -221,6 +221,96 @@ fn modeled_volume_ohlc_combo_reconstructs_volume_and_stock_groups() {
     assert!(stock_xml.contains("<c:axId val=\"444444444\"/>"), "{xml}");
     assert_eq!(xml.matches("<c:catAx>").count(), 2, "{xml}");
     assert_eq!(xml.matches("<c:valAx>").count(), 2, "{xml}");
+}
+
+#[test]
+fn modeled_volume_stock_reconstruction_prefers_stock_roles_over_series_order() {
+    use ChartSeriesStockRoleData as Role;
+
+    let mut spec = minimal_chart_spec(DomainChartType::Stock, None);
+    spec.sub_type = Some(ChartSubType::VolumeOhlc);
+    spec.series = vec![
+        modeled_series(0, None, "Close", "Data!$F$2:$F$4"),
+        modeled_series(1, None, "Volume", "Data!$B$2:$B$4"),
+        modeled_series(2, None, "Low", "Data!$E$2:$E$4"),
+        modeled_series(3, None, "Open", "Data!$C$2:$C$4"),
+        modeled_series(4, None, "High", "Data!$D$2:$D$4"),
+    ];
+    spec.series[0].stock_role = Some(Role::Close);
+    spec.series[1].stock_role = Some(Role::Volume);
+    spec.series[2].stock_role = Some(Role::Low);
+    spec.series[3].stock_role = Some(Role::Open);
+    spec.series[4].stock_role = Some(Role::High);
+
+    let xml = chart_xml(&spec);
+    let bar_xml = chart_group_xml(&xml, "<c:barChart>", "</c:barChart>");
+    let stock_xml = chart_group_xml(&xml, "<c:stockChart>", "</c:stockChart>");
+
+    assert_eq!(bar_xml.matches("<c:ser>").count(), 1, "{xml}");
+    assert!(bar_xml.contains("<c:f>Data!$B$2:$B$4</c:f>"), "{xml}");
+    assert_eq!(stock_xml.matches("<c:ser>").count(), 4, "{xml}");
+
+    let open = stock_xml.find("Data!$C$2:$C$4").expect("open series");
+    let high = stock_xml.find("Data!$D$2:$D$4").expect("high series");
+    let low = stock_xml.find("Data!$E$2:$E$4").expect("low series");
+    let close = stock_xml.find("Data!$F$2:$F$4").expect("close series");
+    assert!(open < high && high < low && low < close, "{xml}");
+}
+
+#[test]
+fn modeled_ohlc_stock_reconstruction_prefers_stock_roles_over_series_order() {
+    use ChartSeriesStockRoleData as Role;
+
+    let mut spec = minimal_chart_spec(DomainChartType::Stock, None);
+    spec.sub_type = Some(ChartSubType::Ohlc);
+    spec.series = vec![
+        modeled_series(0, None, "Close", "Data!$F$2:$F$4"),
+        modeled_series(1, None, "Low", "Data!$E$2:$E$4"),
+        modeled_series(2, None, "Open", "Data!$C$2:$C$4"),
+        modeled_series(3, None, "High", "Data!$D$2:$D$4"),
+    ];
+    spec.series[0].stock_role = Some(Role::Close);
+    spec.series[1].stock_role = Some(Role::Low);
+    spec.series[2].stock_role = Some(Role::Open);
+    spec.series[3].stock_role = Some(Role::High);
+
+    let xml = chart_xml(&spec);
+    let stock_xml = chart_group_xml(&xml, "<c:stockChart>", "</c:stockChart>");
+
+    assert_eq!(xml.matches("<c:barChart>").count(), 0, "{xml}");
+    assert_eq!(stock_xml.matches("<c:ser>").count(), 4, "{xml}");
+
+    let open = stock_xml.find("Data!$C$2:$C$4").expect("open series");
+    let high = stock_xml.find("Data!$D$2:$D$4").expect("high series");
+    let low = stock_xml.find("Data!$E$2:$E$4").expect("low series");
+    let close = stock_xml.find("Data!$F$2:$F$4").expect("close series");
+    assert!(open < high && high < low && low < close, "{xml}");
+}
+
+#[test]
+fn modeled_volume_stock_role_grouping_requires_exact_role_set() {
+    use ChartSeriesStockRoleData as Role;
+
+    let mut spec = minimal_chart_spec(DomainChartType::Stock, None);
+    spec.sub_type = Some(ChartSubType::VolumeHlc);
+    spec.series = vec![
+        modeled_series(0, None, "High", "Data!$C$2:$C$4"),
+        modeled_series(1, None, "Low", "Data!$D$2:$D$4"),
+        modeled_series(2, None, "Close", "Data!$E$2:$E$4"),
+        modeled_series(3, None, "Volume", "Data!$B$2:$B$4"),
+        modeled_series(4, None, "Extra", "Data!$F$2:$F$4"),
+    ];
+    spec.series[0].stock_role = Some(Role::High);
+    spec.series[1].stock_role = Some(Role::Low);
+    spec.series[2].stock_role = Some(Role::Close);
+    spec.series[3].stock_role = Some(Role::Volume);
+
+    let xml = chart_xml(&spec);
+    let stock_xml = chart_group_xml(&xml, "<c:stockChart>", "</c:stockChart>");
+
+    assert_eq!(xml.matches("<c:barChart>").count(), 0, "{xml}");
+    assert_eq!(stock_xml.matches("<c:ser>").count(), 5, "{xml}");
+    assert!(stock_xml.contains("<c:f>Data!$F$2:$F$4</c:f>"), "{xml}");
 }
 
 #[test]

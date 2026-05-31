@@ -80,6 +80,7 @@ describe('resolved spec series snapshot helpers', () => {
           },
           categories: 'Sheet1!A1:A3',
           categorySourceKind: 'ref',
+          stockRole: 'close',
           showMarkers: true,
           order: 2,
         },
@@ -107,6 +108,7 @@ describe('resolved spec series snapshot helpers', () => {
       name: 'Configured',
       type: 'scatter',
       xRole: 'quantitative',
+      stockRole: 'close',
       showMarkers: true,
       renderLayerCount: 1,
       projectionAuthority: 'explicitSeries',
@@ -115,6 +117,7 @@ describe('resolved spec series snapshot helpers', () => {
         valueSourceKind: 'cacheFallback',
         categories: 'Sheet1!A1:A3',
         categorySourceKind: 'ref',
+        stockRole: 'close',
       },
       renderAuthority: {
         values: 'fallbackCache',

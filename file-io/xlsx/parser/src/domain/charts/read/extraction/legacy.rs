@@ -142,6 +142,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 name,
                 r#type: None, // follow-up: derive per-series type for combo charts
                 color,
+                stock_role: None,
                 values,
                 value_cache,
                 value_source_kind,

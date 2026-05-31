@@ -707,8 +707,10 @@ fn extract_stock_sub_type_from_plot_area(
 }
 
 fn is_stock_group(group: &ooxml_types::charts::ChartGroup) -> bool {
-    matches!(&group.config, ooxml_types::charts::ChartTypeConfig::Stock(_))
-        || group.chart_type == ooxml_types::charts::ChartType::Stock
+    matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Stock(_)
+    ) || group.chart_type == ooxml_types::charts::ChartType::Stock
 }
 
 fn is_stock_volume_group(group: &ooxml_types::charts::ChartGroup) -> bool {
@@ -1175,9 +1177,24 @@ mod tests {
 
     #[test]
     fn stock_series_count_sets_hlc_and_ohlc_subtypes() {
-        for (series_count, expected) in [
-            (3, domain_types::chart::ChartSubType::Hlc),
-            (4, domain_types::chart::ChartSubType::Ohlc),
+        use domain_types::chart::{ChartSeriesStockRoleData as Role, ChartSubType};
+
+        for (series_count, expected, expected_roles) in [
+            (
+                3,
+                ChartSubType::Hlc,
+                vec![Some(Role::High), Some(Role::Low), Some(Role::Close)],
+            ),
+            (
+                4,
+                ChartSubType::Ohlc,
+                vec![
+                    Some(Role::Open),
+                    Some(Role::High),
+                    Some(Role::Low),
+                    Some(Role::Close),
+                ],
+            ),
         ] {
             let cs = ChartSpace {
                 chart: OoxmlChart {
@@ -1194,6 +1211,13 @@ mod tests {
 
             assert_eq!(spec.chart_type, domain_types::ChartType::Stock);
             assert_eq!(spec.sub_type, Some(expected));
+            assert_eq!(
+                spec.series
+                    .iter()
+                    .map(|series| series.stock_role)
+                    .collect::<Vec<_>>(),
+                expected_roles
+            );
         }
     }
 
@@ -1219,10 +1243,24 @@ mod tests {
         );
         assert_eq!(spec.series.len(), 5);
         assert_eq!(spec.series[0].r#type, Some(domain_types::ChartType::Column));
-        assert!(
+        assert_eq!(
+            spec.series[0].stock_role,
+            Some(domain_types::chart::ChartSeriesStockRoleData::Volume)
+        );
+        assert!(spec.series[1..]
+            .iter()
+            .all(|series| series.r#type == Some(domain_types::ChartType::Stock)));
+        assert_eq!(
             spec.series[1..]
                 .iter()
-                .all(|series| series.r#type == Some(domain_types::ChartType::Stock))
+                .map(|series| series.stock_role)
+                .collect::<Vec<_>>(),
+            vec![
+                Some(domain_types::chart::ChartSeriesStockRoleData::Open),
+                Some(domain_types::chart::ChartSeriesStockRoleData::High),
+                Some(domain_types::chart::ChartSeriesStockRoleData::Low),
+                Some(domain_types::chart::ChartSeriesStockRoleData::Close),
+            ]
         );
     }
 

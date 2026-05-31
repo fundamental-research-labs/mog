@@ -21,6 +21,17 @@ pub enum ChartSeriesXRoleData {
     Quantitative,
 }
 
+/// Imported stock chart series role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesStockRoleData {
+    Volume,
+    Open,
+    High,
+    Low,
+    Close,
+}
+
 /// Render authority used for projected or imported chart series data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +115,9 @@ pub struct ChartSeriesData {
     /// Fill/line color (hex, e.g., "#4472C4")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Imported stock role for HLC/OHLC and volume stock charts.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub stock_role: Option<ChartSeriesStockRoleData>,
 
     // -- Data ranges (A1-notation formulas from OOXML c:f elements) --
     /// Values range: c:val (bar/line/pie) or c:yVal (scatter/bubble)

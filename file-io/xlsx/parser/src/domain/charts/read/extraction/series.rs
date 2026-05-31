@@ -17,9 +17,11 @@ pub(super) fn extract_series_from_chart_space(
         .iter()
         .flat_map(|g| {
             let semantics = series_group_semantics(plot_area, g, is_combo);
-            g.series
-                .iter()
-                .map(move |s| extract_single_series_with_semantics(s, semantics.clone()))
+            g.series.iter().enumerate().map(move |(series_index, s)| {
+                let mut semantics = semantics.clone();
+                semantics.stock_role = stock_role_for_group_series(plot_area, g, series_index);
+                extract_single_series_with_semantics(s, semantics)
+            })
         })
         .collect()
 }
@@ -32,6 +34,7 @@ struct SeriesGroupSemantics {
     show_lines: Option<bool>,
     show_markers: Option<bool>,
     smooth: Option<bool>,
+    stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
 }
 
 fn series_group_semantics(
@@ -71,7 +74,87 @@ fn series_group_semantics(
         show_lines,
         show_markers,
         smooth,
+        stock_role: None,
     }
+}
+
+fn stock_role_for_group_series(
+    plot_area: &ooxml_types::charts::PlotArea,
+    group: &ooxml_types::charts::ChartGroup,
+    series_index: usize,
+) -> Option<domain_types::chart::ChartSeriesStockRoleData> {
+    use domain_types::chart::ChartSeriesStockRoleData as Role;
+
+    let shape = stock_plot_shape(plot_area)?;
+    if is_stock_volume_group(group) {
+        return (shape.volume_series_count == 1 && series_index == 0).then_some(Role::Volume);
+    }
+    if !is_stock_group(group) {
+        return None;
+    }
+
+    match (shape.stock_series_count, series_index) {
+        (3, 0) => Some(Role::High),
+        (3, 1) => Some(Role::Low),
+        (3, 2) => Some(Role::Close),
+        (4, 0) => Some(Role::Open),
+        (4, 1) => Some(Role::High),
+        (4, 2) => Some(Role::Low),
+        (4, 3) => Some(Role::Close),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StockPlotShape {
+    stock_series_count: usize,
+    volume_series_count: usize,
+}
+
+fn stock_plot_shape(plot_area: &ooxml_types::charts::PlotArea) -> Option<StockPlotShape> {
+    let mut stock_series_count = None;
+    let mut volume_series_count = 0usize;
+
+    for group in &plot_area.chart_groups {
+        if is_stock_group(group) {
+            if stock_series_count.is_some() {
+                return None;
+            }
+            stock_series_count = Some(group.series.len());
+        } else if is_stock_volume_group(group) {
+            volume_series_count += group.series.len();
+        } else {
+            return None;
+        }
+    }
+
+    let stock_series_count = stock_series_count?;
+    matches!(
+        (stock_series_count, volume_series_count),
+        (3, 0) | (4, 0) | (3, 1) | (4, 1)
+    )
+    .then_some(StockPlotShape {
+        stock_series_count,
+        volume_series_count,
+    })
+}
+
+fn is_stock_group(group: &ooxml_types::charts::ChartGroup) -> bool {
+    matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Stock(_)
+    ) || group.chart_type == ooxml_types::charts::ChartType::Stock
+}
+
+fn is_stock_volume_group(group: &ooxml_types::charts::ChartGroup) -> bool {
+    matches!(
+        group.chart_type,
+        ooxml_types::charts::ChartType::Bar | ooxml_types::charts::ChartType::Bar3D
+    ) && matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Bar(_)
+            | ooxml_types::charts::ChartTypeConfig::Bar3D(_)
+    )
 }
 
 fn scatter_style_semantics(
@@ -262,6 +345,7 @@ fn extract_single_series_with_semantics(
         name,
         r#type: semantics.series_type,
         color,
+        stock_role: semantics.stock_role,
         values,
         value_cache,
         value_source_kind,

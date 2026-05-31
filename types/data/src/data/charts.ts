@@ -864,6 +864,9 @@ export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback'
 /** Imported x/category dimension role for a series. */
 export type ChartSeriesXRole = 'category' | 'quantitative';
 
+/** Imported stock chart source role for HLC/OHLC and volume stock charts. */
+export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
+
 /** Render authority used for projected or imported chart series data. */
 export type ChartSeriesProjectionAuthority =
   | 'explicitSeries'
@@ -911,6 +914,7 @@ export interface SeriesConfig {
   name?: string;
   type?: string;
   color?: string;
+  stockRole?: ChartSeriesStockRole;
   values?: string;
   valueCache?: ChartSeriesPointCache;
   valueSourceKind?: ChartSeriesDimensionSourceKind;
@@ -1179,6 +1183,7 @@ export interface ResolvedChartSeriesSnapshot {
   type?: string;
   axisGroup: 'primary' | 'secondary';
   xRole?: ChartSeriesXRole;
+  stockRole?: ChartSeriesStockRole;
   showLines?: boolean;
   smooth?: boolean;
   showMarkers?: boolean;
@@ -1189,6 +1194,7 @@ export interface ResolvedChartSeriesSnapshot {
     values?: string;
     categories?: string;
     bubbleSize?: string;
+    stockRole?: ChartSeriesStockRole;
     valueSourceKind?: ChartSeriesDimensionSourceKind;
     categorySourceKind?: ChartSeriesDimensionSourceKind;
     bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;

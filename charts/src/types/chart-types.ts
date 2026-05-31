@@ -35,6 +35,7 @@ export type {
   ChartSeriesCategoryLevelsCache,
   ChartSeriesDimensionSourceKind,
   ChartSeriesXRole,
+  ChartSeriesStockRole,
   ChartSeriesPointCache,
   ChartSeriesPointCachePoint,
   ChartSeriesProjectionAuthority,

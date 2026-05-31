@@ -588,6 +588,7 @@ fn project_chart_ex_series(
                     .or_else(|| Some(format!("Series {}", idx + 1))),
                 r#type: Some(chart_type_from_chart_ex_layout_id(&series.layout_id)),
                 color: None,
+                stock_role: None,
                 values,
                 value_cache: None,
                 value_source_kind,
@@ -1690,6 +1691,7 @@ mod tests {
             name: None,
             r#type: Some(chart_type),
             color: None,
+            stock_role: None,
             values: values.map(str::to_string),
             value_cache: None,
             value_source_kind: values

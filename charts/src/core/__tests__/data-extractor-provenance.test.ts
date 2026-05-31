@@ -877,4 +877,45 @@ describe('chart data point value provenance', () => {
       { type: 'tick' },
     ]);
   });
+
+  it('maps stock source series by explicit stockRole before order heuristics', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [12, 9, 15],
+      [1000, 1500, 1200],
+      [8, 9, 10],
+      [15, 14, 16],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-explicit-role-chart',
+      type: 'stock',
+      subType: 'volume-hlc',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'Close', stockRole: 'close', values: 'A1:C1', categories: 'A5:C5' },
+        { name: 'Volume', stockRole: 'volume', values: 'A2:C2', categories: 'A5:C5' },
+        { name: 'Low', stockRole: 'low', values: 'A3:C3', categories: 'A5:C5' },
+        { name: 'High', stockRole: 'high', values: 'A4:C4', categories: 'A5:C5' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
+
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].name).toBe('Close');
+    expect(data.series[0].data.map((point) => point.high)).toEqual([15, 14, 16]);
+    expect(data.series[0].data.map((point) => point.low)).toEqual([8, 9, 10]);
+    expect(data.series[0].data.map((point) => point.close)).toEqual([12, 9, 15]);
+    expect(data.series[0].data.map((point) => point.volume)).toEqual([1000, 1500, 1200]);
+    expect(rows.map((row) => row[STOCK_HIGH_FIELD])).toEqual([15, 14, 16]);
+    expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
+    expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
+  });
 });

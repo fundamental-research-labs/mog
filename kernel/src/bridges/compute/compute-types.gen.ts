@@ -1086,6 +1086,7 @@ export interface ChartSeriesData {
   name?: string;
   type?: string;
   color?: string;
+  stockRole?: ChartSeriesStockRoleData;
   values?: string;
   valueCache?: ChartSeriesPointCacheData;
   valueSourceKind?: ChartSeriesDimensionSourceKindData;
@@ -1159,6 +1160,8 @@ export interface ChartSeriesProjectionDiagnosticData {
 }
 
 export type ChartSeriesProjectionDiagnosticReasonData = "unresolvedPivotSource" | "unsupportedPivotFeature" | "hiddenDataField" | "allItemsFiltered" | "noValueData" | "worksheetHiddenByPlotVisibleOnly" | "styleResolvedNoFillOrLine" | "staleMaterializedRange";
+
+export type ChartSeriesStockRoleData = "volume" | "open" | "high" | "low" | "close";
 
 export type ChartSeriesXRoleData = "category" | "quantitative";
 

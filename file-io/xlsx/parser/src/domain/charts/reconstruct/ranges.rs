@@ -78,6 +78,7 @@ pub(super) fn chart_series_data(
         name,
         r#type: None,
         color: None,
+        stock_role: None,
         values,
         value_cache: None,
         value_source_kind: None,

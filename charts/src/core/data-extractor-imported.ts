@@ -82,7 +82,36 @@ function isStockVolumeSeriesType(chartType: string | undefined): boolean {
   );
 }
 
+function explicitStockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
+  const roles: Partial<Record<StockRole, number>> = {};
+  let explicitRoleCount = 0;
+
+  for (let index = 0; index < seriesConfigs.length; index += 1) {
+    const role = seriesConfigs[index].stockRole;
+    if (!role) continue;
+    if (roles[role] !== undefined) return null;
+    roles[role] = index;
+    explicitRoleCount += 1;
+  }
+
+  if (explicitRoleCount === 0 || explicitRoleCount !== seriesConfigs.length) return null;
+  if (roles.high === undefined || roles.low === undefined || roles.close === undefined) {
+    return null;
+  }
+
+  return {
+    ...(roles.volume !== undefined ? { volume: roles.volume } : {}),
+    ...(roles.open !== undefined ? { open: roles.open } : {}),
+    high: roles.high,
+    low: roles.low,
+    close: roles.close,
+  };
+}
+
 function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
+  const explicitPlan = explicitStockRolePlan(seriesConfigs);
+  if (explicitPlan) return explicitPlan;
+
   const stockIndices: number[] = [];
   const volumeIndices: number[] = [];
 

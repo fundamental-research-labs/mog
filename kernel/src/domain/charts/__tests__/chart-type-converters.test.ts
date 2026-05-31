@@ -185,6 +185,7 @@ describe('chart-type-converters', () => {
       visibleOrder: 1,
       pivotSeriesKey: 'field:region',
       pivotDataFieldIndex: 2,
+      stockRole: 'close',
       projectionAuthority: 'pivotCache',
       projectionDiagnostics: [
         {
@@ -204,6 +205,7 @@ describe('chart-type-converters', () => {
         visibleOrder: 1,
         pivotSeriesKey: 'field:region',
         pivotDataFieldIndex: 2,
+        stockRole: 'close',
         projectionAuthority: 'pivotCache',
         projectionDiagnostics: [
           {
@@ -223,6 +225,7 @@ describe('chart-type-converters', () => {
         visibleOrder: 1,
         pivotSeriesKey: 'field:region',
         pivotDataFieldIndex: 2,
+        stockRole: 'close',
         projectionAuthority: 'pivotCache',
         projectionDiagnostics: seriesConfig.projectionDiagnostics,
       }),

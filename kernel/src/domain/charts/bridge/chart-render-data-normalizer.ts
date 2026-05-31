@@ -263,17 +263,38 @@ export function withSourceLinkedAxisNumberFormats(
   };
 }
 
-export function sourceLinkedAxisNumberFormatDiagnostics(config: ChartConfig): string[] {
+export function sourceLinkedAxisNumberFormatDiagnostics(
+  config: ChartConfig,
+  resolutions?: SourceLinkedAxisNumberFormatResolutions,
+): string[] {
   const axis = config.axis;
   if (!axis) return [];
+  const effectiveResolutions =
+    resolutions ?? sourceLinkedAxisNumberFormatResolutionsFromConfig(config);
   return [
-    axisSourceFormatDiagnostic(axis.categoryAxis ?? axis.xAxis, config, 'category'),
-    axisSourceFormatDiagnostic(axis.secondaryCategoryAxis, config, 'secondary category'),
-    axisSourceFormatDiagnostic(axis.valueAxis ?? axis.yAxis, config, 'value'),
+    axisSourceFormatDiagnostic(
+      axis.categoryAxis ?? axis.xAxis,
+      config,
+      'category',
+      effectiveResolutions,
+    ),
+    axisSourceFormatDiagnostic(
+      axis.secondaryCategoryAxis,
+      config,
+      'secondary category',
+      effectiveResolutions,
+    ),
+    axisSourceFormatDiagnostic(
+      axis.valueAxis ?? axis.yAxis,
+      config,
+      'value',
+      effectiveResolutions,
+    ),
     axisSourceFormatDiagnostic(
       axis.secondaryValueAxis ?? axis.secondaryYAxis,
       config,
       'secondary value',
+      effectiveResolutions,
     ),
   ].filter((diagnostic): diagnostic is string => Boolean(diagnostic));
 }

@@ -533,14 +533,14 @@ describe('configToSpec imported Excel date category axes', () => {
       categories,
       series: [
         {
-          name: 'Graph Area',
+          name: 'Primary Area',
           data: categories.map((serial, pointIndex) => ({
             x: serial,
             y: pointIndex < 2 ? -10_000_000_000 : 10_000_000_000,
           })),
         },
         {
-          name: 'Y/Y %',
+          name: 'Rate Delta',
           yAxisIndex: 1,
           data: categories.map((serial, pointIndex) => ({
             x: serial,
@@ -548,7 +548,7 @@ describe('configToSpec imported Excel date category axes', () => {
           })),
         },
         {
-          name: 'Simparica',
+          name: 'Reference Line',
           data: categories.map((serial, pointIndex) => ({
             x: serial,
             y: 20_000_000 + pointIndex * 5_000_000,
@@ -583,7 +583,7 @@ describe('configToSpec imported Excel date category axes', () => {
     };
     config.series = [
       {
-        name: 'Graph Area',
+        name: 'Primary Area',
         type: 'area',
         format: {
           fill: { type: 'solid', color: '#9DC3E6', transparency: 0.57 },
@@ -591,7 +591,7 @@ describe('configToSpec imported Excel date category axes', () => {
         },
       },
       {
-        name: 'Y/Y %',
+        name: 'Rate Delta',
         type: 'column',
         yAxisIndex: 1,
         format: {
@@ -600,7 +600,7 @@ describe('configToSpec imported Excel date category axes', () => {
         },
       },
       {
-        name: 'Simparica',
+        name: 'Reference Line',
         type: 'line',
         format: {
           fill: { type: 'solid', color: '#70AD47' },
@@ -641,16 +641,16 @@ describe('configToSpec imported Excel date category axes', () => {
 
     const bars = result.marks.filter((mark): mark is RectMark => {
       const datum = mark.datum as { series?: string } | undefined;
-      return mark.type === 'rect' && datum?.series === 'Y/Y %';
+      return mark.type === 'rect' && datum?.series === 'Rate Delta';
     });
     const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
     const area = paths.find((mark) => {
       const datum = mark.datum as Array<{ series?: string }> | undefined;
-      return Array.isArray(datum) && datum[0]?.series === 'Graph Area';
+      return Array.isArray(datum) && datum[0]?.series === 'Primary Area';
     });
     const line = paths.find((mark) => {
       const datum = mark.datum as Array<{ series?: string }> | undefined;
-      return Array.isArray(datum) && datum[0]?.series === 'Simparica';
+      return Array.isArray(datum) && datum[0]?.series === 'Reference Line';
     });
 
     expect(bars.length).toBeGreaterThan(0);

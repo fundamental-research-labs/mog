@@ -231,16 +231,16 @@ describe('resolved spec structure snapshot helpers', () => {
       },
     });
     const data: ChartData = {
-      categories: ['Vega', 'Onyx', 'Lumen'],
-      series: [{ name: 'Streams', data: [] }],
+      categories: ['Category A', 'Category B', 'Category C'],
+      series: [{ name: 'Measure', data: [] }],
     };
 
-    expect(snapshotLegend(config, [seriesSnapshot('Streams', 0)], data)).toEqual({
+    expect(snapshotLegend(config, [seriesSnapshot('Measure', 0)], data)).toEqual({
       present: true,
       visible: true,
       position: 'right',
-      entries: ['Vega', 'Onyx', 'Lumen'],
-      visibleEntries: ['Vega', 'Lumen'],
+      entries: ['Category A', 'Category B', 'Category C'],
+      visibleEntries: ['Category A', 'Category C'],
     });
   });
 });

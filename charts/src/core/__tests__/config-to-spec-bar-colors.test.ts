@@ -94,16 +94,16 @@ describe('configToSpec bar series colors', () => {
 
   it('renders imported single-series vary-by-category columns with category legend entries', () => {
     const data: ChartData = {
-      categories: ['Vega', 'Onyx', 'Lumen', 'Sable', 'Nova'],
+      categories: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
       series: [
         {
-          name: 'Streams',
+          name: 'Measure',
           data: [
-            { x: 'Vega', y: 20_803_136 },
-            { x: 'Onyx', y: 18_327_746 },
-            { x: 'Lumen', y: 17_517_053 },
-            { x: 'Sable', y: 17_478_218 },
-            { x: 'Nova', y: 15_018_083 },
+            { x: 'Category A', y: 50 },
+            { x: 'Category B', y: 40 },
+            { x: 'Category C', y: 30 },
+            { x: 'Category D', y: 20 },
+            { x: 'Category E', y: 10 },
           ],
         },
       ],
@@ -137,7 +137,7 @@ describe('configToSpec bar series colors', () => {
       },
       series: [
         {
-          name: 'Streams',
+          name: 'Measure',
           idx: 0,
           order: 0,
           format: { line: { dashStyle: 'solid' } },
@@ -150,13 +150,13 @@ describe('configToSpec bar series colors', () => {
       field: 'category',
       type: 'nominal',
       scale: {
-        domain: ['Vega', 'Onyx', 'Lumen', 'Sable', 'Nova'],
+        domain: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
         range: ['#4F81BD', '#C0504D', '#9BBB59', '#8064A2', '#4BACC6', '#F79646'],
       },
       legend: {
         orient: 'right',
         title: null,
-        values: ['Vega', 'Onyx', 'Lumen', 'Sable', 'Nova'],
+        values: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
       },
     });
 
@@ -174,7 +174,7 @@ describe('configToSpec bar series colors', () => {
       '#8064A2',
       '#4BACC6',
     ]);
-    expect(legendLabels).toEqual(['Vega', 'Onyx', 'Lumen', 'Sable', 'Nova']);
+    expect(legendLabels).toEqual(['Category A', 'Category B', 'Category C', 'Category D', 'Category E']);
     for (const rect of rects) {
       const category = String(rect.datum.category);
       const categoryX = result.scales.x?.(category) as number;
@@ -184,19 +184,19 @@ describe('configToSpec bar series colors', () => {
   });
 
   it('matches Excel horizontal clustered bar series order and data-label slots', () => {
-    const categories = Array.from({ length: 11 }, (_value, index) => `Driver ${index + 1}`);
-    const downsideValues = [-7, -3, -18, -21, -8, -14, -20, -9, -16, -23, -4];
-    const upsideValues = [17, 9, 6, 14, 15, 3, 21, 8, 11, 18, 23];
+    const categories = Array.from({ length: 11 }, (_value, index) => `Item ${index + 1}`);
+    const negativeValues = Array.from({ length: categories.length }, (_value, index) => -(index + 1));
+    const positiveValues = Array.from({ length: categories.length }, (_value, index) => index + 1);
     const data: ChartData = {
       categories,
       series: [
         {
-          name: 'Downside',
-          data: downsideValues.map((y, index) => ({ x: categories[index], y })),
+          name: 'Negative',
+          data: negativeValues.map((y, index) => ({ x: categories[index], y })),
         },
         {
-          name: 'Upside',
-          data: upsideValues.map((y, index) => ({ x: categories[index], y })),
+          name: 'Positive',
+          data: positiveValues.map((y, index) => ({ x: categories[index], y })),
         },
       ],
     };
@@ -211,7 +211,7 @@ describe('configToSpec bar series colors', () => {
       legend: { show: true, visible: true, position: 'top' },
       series: [
         {
-          name: 'Downside',
+          name: 'Negative',
           idx: 0,
           order: 0,
           color: '2F75B5',
@@ -222,7 +222,7 @@ describe('configToSpec bar series colors', () => {
           dataLabels: { show: true, showValue: true, numberFormat: '#,##0.0' },
         },
         {
-          name: 'Upside',
+          name: 'Positive',
           idx: 1,
           order: 1,
           color: '70AD47',
@@ -238,10 +238,10 @@ describe('configToSpec bar series colors', () => {
     const result = compile(configToSpec(config, data), undefined, { width: 800, height: 500 });
     const rects = result.marks
       .filter(isSeriesRect)
-      .filter((rect) => rect.datum.category === 'Driver 11');
+      .filter((rect) => rect.datum.category === 'Item 11');
     const labels = result.marks
       .filter(isDataLabel)
-      .filter((label) => label.datum.category === 'Driver 11');
+      .filter((label) => label.datum.category === 'Item 11');
     const legendLabels = result.legends
       .filter((mark): mark is TextMark => mark.type === 'text')
       .map((mark) => mark.text);
@@ -249,20 +249,20 @@ describe('configToSpec bar series colors', () => {
       .filter((mark): mark is RectMark => mark.type === 'rect')
       .map((mark) => mark.style.fill);
 
-    const downsideRect = rects.find((rect) => rect.datum.series === 'Downside')!;
-    const upsideRect = rects.find((rect) => rect.datum.series === 'Upside')!;
-    const downsideLabel = labels.find((label) => label.datum.series === 'Downside')!;
-    const upsideLabel = labels.find((label) => label.datum.series === 'Upside')!;
+    const negativeRect = rects.find((rect) => rect.datum.series === 'Negative')!;
+    const positiveRect = rects.find((rect) => rect.datum.series === 'Positive')!;
+    const negativeLabel = labels.find((label) => label.datum.series === 'Negative')!;
+    const positiveLabel = labels.find((label) => label.datum.series === 'Positive')!;
 
-    expect(result.scales.y?.domain?.()[0]).toBe('Driver 11');
-    expect(upsideRect.y).toBeLessThan(downsideRect.y);
-    expect(upsideLabel.y).toBeCloseTo(upsideRect.y + upsideRect.height / 2, 5);
-    expect(downsideLabel.y).toBeCloseTo(downsideRect.y + downsideRect.height / 2, 5);
-    expect(upsideLabel.x).toBeGreaterThan(upsideRect.x + upsideRect.width);
-    expect(downsideLabel.x).toBeLessThan(downsideRect.x);
-    expect(upsideLabel.textAlign).toBe('left');
-    expect(downsideLabel.textAlign).toBe('right');
-    expect(legendLabels).toEqual(['Upside', 'Downside']);
+    expect(result.scales.y?.domain?.()[0]).toBe('Item 11');
+    expect(positiveRect.y).toBeLessThan(negativeRect.y);
+    expect(positiveLabel.y).toBeCloseTo(positiveRect.y + positiveRect.height / 2, 5);
+    expect(negativeLabel.y).toBeCloseTo(negativeRect.y + negativeRect.height / 2, 5);
+    expect(positiveLabel.x).toBeGreaterThan(positiveRect.x + positiveRect.width);
+    expect(negativeLabel.x).toBeLessThan(negativeRect.x);
+    expect(positiveLabel.textAlign).toBe('left');
+    expect(negativeLabel.textAlign).toBe('right');
+    expect(legendLabels).toEqual(['Positive', 'Negative']);
     expect(legendFills).toEqual(['#70AD47', '#2F75B5']);
   });
 

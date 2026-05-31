@@ -187,7 +187,7 @@ fn shape_preset_spec_xml_roundtrip() {
     );
     let spec_path = std::path::Path::new(spec_path);
     if !spec_path.exists() {
-        eprintln!("skipping shape preset spec coverage check; internal ECMA-376 corpus is absent");
+        eprintln!("skipping shape preset spec coverage check; OOXML spec XML is absent");
         return;
     }
     let xml =

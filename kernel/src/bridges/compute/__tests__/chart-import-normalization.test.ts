@@ -122,7 +122,7 @@ describe('normalizeImportedComboChart', () => {
           valueCache: { pointCount: 2, points: [{ idx: 0, value: '10000000' }] },
         },
         {
-          name: 'Y/Y %',
+          name: 'Rate Delta',
           type: 'column',
           valueCache: {
             pointCount: 2,

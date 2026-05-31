@@ -17,11 +17,11 @@ export function estimateNominalYAxisLabelWidth(
   const labels = data?.categories ?? [];
   if (labels.length === 0) return undefined;
 
-  const maxLabelLength = Math.max(0, ...labels.map((label) => String(label ?? '').length));
-  if (maxLabelLength === 0) return undefined;
-
   const fontSize = y.axis?.labelFontSize ?? 11;
-  const estimatedWidth = Math.ceil(maxLabelLength * fontSize * 0.52);
+  const estimatedWidth =
+    estimateMultiLevelYAxisLabelWidth(y.axis, fontSize) ??
+    estimateSingleColumnYAxisLabelWidth(labels, fontSize);
+  if (estimatedWidth === undefined) return undefined;
   return Math.max(60, Math.min(660, estimatedWidth));
 }
 
@@ -119,6 +119,34 @@ function estimateQuantitativeAxisLabelWidth(
   const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
   const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);
   return Math.max(36, Math.min(320, estimatedWidth));
+}
+
+function estimateSingleColumnYAxisLabelWidth(
+  labels: Array<string | number | null | undefined>,
+  fontSize: number,
+): number | undefined {
+  const maxLabelLength = Math.max(0, ...labels.map((label) => String(label ?? '').length));
+  return maxLabelLength > 0 ? Math.ceil(maxLabelLength * fontSize * 0.52) : undefined;
+}
+
+function estimateMultiLevelYAxisLabelWidth(
+  axis: AxisSpec | null | undefined,
+  fontSize: number,
+): number | undefined {
+  const labelsByValue = axis?.multiLevelLabelsByValue;
+  if (!labelsByValue) return undefined;
+  const labels = Object.values(labelsByValue);
+  const levelCount = Math.max(0, ...labels.map((item) => item.length));
+  if (levelCount <= 1) return undefined;
+
+  let width = 0;
+  for (let level = 0; level < levelCount; level += 1) {
+    const maxLabelLength = Math.max(0, ...labels.map((item) => item[level]?.length ?? 0));
+    if (maxLabelLength > 0) {
+      width += Math.ceil(maxLabelLength * fontSize * 0.52) + 12;
+    }
+  }
+  return width > 0 ? width : undefined;
 }
 
 function estimateXAxisMaxLabelWidth(x: ChannelSpec, fontSize: number): number {

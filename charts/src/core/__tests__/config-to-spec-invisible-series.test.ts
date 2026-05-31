@@ -311,6 +311,7 @@ describe('configToSpec invisible stacked bar series', () => {
     expect(axisLevelLabels.map((mark) => (mark.datum as { level: number }).level)).toEqual([
       1, 0, 1, 0, 1, 0,
     ]);
+    expect(spec.config?.layoutHints?.leftYAxisLabelWidth).toBeGreaterThanOrEqual(65);
   });
 
   it('reserves enough y-axis margin for long imported category labels with chart fonts', () => {

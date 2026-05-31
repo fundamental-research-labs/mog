@@ -88,7 +88,9 @@ export function buildConfigSpec(
   const chartStyle = resolveChartOwnerElementStyle(config, 'chartArea', chartFormat, {
     widthToPx: linePointsToCanvasPx,
   });
-  const chartFill = chartStyle.paint;
+  const chartFill =
+    chartStyle.paint ??
+    (shouldUseImportedExcelDefaultFrame(config) ? excelDefaultChartFill() : undefined);
   const chartLine = chartStyle.line;
   const chartShadow = chartStyle.shadow;
   if (chartFill?.type === 'solid') {
@@ -133,4 +135,12 @@ export function buildConfigSpec(
   }
 
   return hasConfig ? configSpec : undefined;
+}
+
+function shouldUseImportedExcelDefaultFrame(config: ChartConfig): boolean {
+  return config.style !== undefined || config.chartStyleContext !== undefined;
+}
+
+function excelDefaultChartFill(): { type: 'solid'; color: '#ffffff' } {
+  return { type: 'solid', color: '#ffffff' };
 }

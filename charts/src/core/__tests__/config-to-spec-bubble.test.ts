@@ -1,4 +1,4 @@
-import type { SymbolMark } from '../../primitives/types';
+import type { SymbolMark, TextMark } from '../../primitives/types';
 import { compile } from '../../grammar/compiler';
 import type { UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
@@ -151,7 +151,90 @@ describe('configToSpec bubble size semantics', () => {
       data,
     );
 
-    expect(oversized.encoding?.size?.scale?.range).toEqual([0, 1200]);
+    expect(oversized.encoding?.size?.scale?.range).toEqual([0, 19200]);
     expect(undersized.encoding?.size?.scale?.range).toEqual([0, 0]);
+  });
+
+  it('renders imported single-series bubbles with category colors and point legend entries', () => {
+    const categories = [39.14, 68.58, 18.47, 91.87, 17.74, 31.66, 15.32, 95.27];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Products',
+          data: [
+            { x: 39.14, y: 127, size: 26875 },
+            { x: 68.58, y: 87, size: 36119 },
+            { x: 18.47, y: 348, size: 4801 },
+            { x: 91.87, y: 159, size: 3457 },
+            { x: 17.74, y: 264, size: 5578 },
+            { x: 31.66, y: 332, size: 28821 },
+            { x: 15.32, y: 339, size: 9113 },
+            { x: 95.27, y: 372, size: 42119 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      legend: { show: true, visible: true, position: 'right' },
+      workbookTheme: {
+        colors: [
+          { name: 'accent1', color: '#4F81BD' },
+          { name: 'accent2', color: '#C0504D' },
+          { name: 'accent3', color: '#9BBB59' },
+          { name: 'accent4', color: '#8064A2' },
+          { name: 'accent5', color: '#4BACC6' },
+          { name: 'accent6', color: '#F79646' },
+        ],
+        colorScheme: {
+          accent1: { type: 'SrgbClr', val: '4F81BD', transforms: [] },
+          accent2: { type: 'SrgbClr', val: 'C0504D', transforms: [] },
+          accent3: { type: 'SrgbClr', val: '9BBB59', transforms: [] },
+          accent4: { type: 'SrgbClr', val: '8064A2', transforms: [] },
+          accent5: { type: 'SrgbClr', val: '4BACC6', transforms: [] },
+          accent6: { type: 'SrgbClr', val: 'F79646', transforms: [] },
+        },
+      },
+    };
+
+    const spec = asUnitSpec(config, data);
+    expect(spec.encoding?.color).toMatchObject({
+      field: 'category',
+      type: 'nominal',
+      scale: {
+        domain: categories.map(String),
+        range: ['#4F81BD', '#C0504D', '#9BBB59', '#8064A2', '#4BACC6', '#F79646'],
+      },
+      legend: {
+        orient: 'right',
+        values: categories.map(String),
+        symbolType: 'circle',
+      },
+    });
+
+    const result = compile(spec, undefined, { width: 854, height: 428 });
+    const symbols = result.marks.filter((mark): mark is SymbolMark => mark.type === 'symbol');
+    const legendLabels = result.legends
+      .filter((mark): mark is TextMark => mark.type === 'text')
+      .map((mark) => mark.text);
+
+    expect(symbols.map((mark) => mark.style.fill)).toEqual([
+      '#4F81BD',
+      '#C0504D',
+      '#9BBB59',
+      '#8064A2',
+      '#4BACC6',
+      '#F79646',
+      '#4F81BD',
+      '#C0504D',
+    ]);
+    expect(Math.max(...symbols.map((mark) => mark.size))).toBeCloseTo(6400, 5);
+    expect(symbols.every((mark) => mark.clip === undefined)).toBe(true);
+    expect(legendLabels).toEqual(categories.map(String));
   });
 });

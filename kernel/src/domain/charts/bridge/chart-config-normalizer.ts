@@ -1,5 +1,10 @@
 import type { ChartError } from '@mog-sdk/contracts/bridges';
-import type { AxisType, ChartConfig, ChartLayoutAuthority } from '@mog-sdk/contracts/data/charts';
+import type {
+  AxisType,
+  ChartConfig,
+  ChartLayoutAuthority,
+  SingleAxisConfig,
+} from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { normalizeImportedComboChart } from '../../../bridges/compute/chart-import-normalization';
@@ -46,8 +51,10 @@ export function normalizeAxisForRendering(
       ? { ...a, type: (a.type ?? a.axisType) as AxisType | undefined, show: a.show ?? a.visible }
       : a;
   if (isStandardXYValueAxisPair(axis, chartType)) {
-    const xAxis = normAxis(axis.valueAxis);
-    const yAxis = normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis);
+    const { xAxis, yAxis } = normalizeXYValueAxisPair(
+      normAxis(axis.valueAxis),
+      normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis),
+    );
     const {
       secondaryValueAxis: _secondaryValueAxis,
       secondaryYAxis: _secondaryYAxis,
@@ -76,6 +83,48 @@ function isStandardXYValueAxisPair(
   if (chartType !== 'scatter' && chartType !== 'bubble') return false;
   if (axis.categoryAxis || axis.xAxis) return false;
   return Boolean(axis.valueAxis && (axis.secondaryValueAxis || axis.secondaryYAxis));
+}
+
+function normalizeXYValueAxisPair(
+  xAxis: SingleAxisConfig | undefined,
+  yAxis: SingleAxisConfig | undefined,
+): { xAxis: SingleAxisConfig | undefined; yAxis: SingleAxisConfig | undefined } {
+  const xPosition = normalizeAxisPosition(xAxis?.position);
+  const yPosition = normalizeAxisPosition(yAxis?.position);
+  const xCompatible = xPosition === undefined || xPosition === 'bottom' || xPosition === 'top';
+  const yCompatible = yPosition === undefined || yPosition === 'left' || yPosition === 'right';
+  const sharedIncompatiblePosition =
+    xPosition !== undefined && yPosition !== undefined && xPosition === yPosition && !xCompatible;
+
+  return {
+    xAxis: xAxis && !xCompatible ? hideTickLabels(xAxis) : xAxis,
+    yAxis: yAxis && (!yCompatible || sharedIncompatiblePosition) ? hideTickLabels(yAxis) : yAxis,
+  };
+}
+
+function hideTickLabels(axis: SingleAxisConfig): SingleAxisConfig {
+  return axis.tickLabelPosition === 'none' ? axis : { ...axis, tickLabelPosition: 'none' };
+}
+
+function normalizeAxisPosition(
+  position: SingleAxisConfig['position'] | undefined,
+): 'bottom' | 'top' | 'left' | 'right' | undefined {
+  switch (position?.toLowerCase()) {
+    case 'b':
+    case 'bottom':
+      return 'bottom';
+    case 't':
+    case 'top':
+      return 'top';
+    case 'l':
+    case 'left':
+      return 'left';
+    case 'r':
+    case 'right':
+      return 'right';
+    default:
+      return undefined;
+  }
 }
 
 function isNativeMissingChartType(

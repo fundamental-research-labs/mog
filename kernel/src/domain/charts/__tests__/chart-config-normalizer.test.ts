@@ -48,6 +48,62 @@ describe('chart config normalizer', () => {
     });
   });
 
+  it('maps imported bubble value-axis pairs to XY axes and suppresses invalid shared-side labels', () => {
+    const config = toChartConfig(
+      chart({
+        chartType: 'bubble',
+        axis: {
+          valueAxis: {
+            axisType: 'valAx',
+            visible: true,
+            position: 'l',
+            gridLines: true,
+            tickMarks: 'none',
+          },
+          secondaryValueAxis: {
+            axisType: 'valAx',
+            visible: true,
+            position: 'l',
+            gridLines: true,
+            tickMarks: 'none',
+          },
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.axis?.xAxis).toMatchObject({
+      type: 'valAx',
+      show: true,
+      position: 'l',
+      tickLabelPosition: 'none',
+    });
+    expect(config.axis?.yAxis).toMatchObject({
+      type: 'valAx',
+      show: true,
+      position: 'l',
+      tickLabelPosition: 'none',
+    });
+    expect(config.axis?.valueAxis).toMatchObject({ tickLabelPosition: 'none' });
+    expect(config.axis?.secondaryValueAxis).toBeUndefined();
+  });
+
+  it('keeps imported scatter value-axis pair labels when positions match XY geometry', () => {
+    const config = toChartConfig(
+      chart({
+        chartType: 'scatter',
+        axis: {
+          valueAxis: { axisType: 'valAx', visible: true, position: 'b' },
+          secondaryValueAxis: { axisType: 'valAx', visible: true, position: 'l' },
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.axis?.xAxis).toMatchObject({ position: 'b' });
+    expect(config.axis?.xAxis?.tickLabelPosition).toBeUndefined();
+    expect(config.axis?.yAxis).toMatchObject({ position: 'l' });
+    expect(config.axis?.yAxis?.tickLabelPosition).toBeUndefined();
+  });
+
   it('canonicalizes imported chart type aliases before rendering', () => {
     expect(toChartConfig(chart({ chartType: 'surface3D' })).type).toBe('surface3d');
     expect(toChartConfig(chart({ chartType: 'boxWhisker' })).type).toBe('boxplot');

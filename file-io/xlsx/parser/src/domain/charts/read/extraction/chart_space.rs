@@ -78,6 +78,8 @@ pub fn extract_chart_spec_from_chart_space(
     // (i) scalar fields from chart group configs
     // -------------------------------------------------------------------------
     let scalar_fields = extract_scalar_fields_from_plot_area(plot_area);
+    let vary_by_categories =
+        effective_vary_by_categories(plot_area, legend.as_ref(), scalar_fields.vary_by_categories);
     let surface_family = surface_family_for_plot_area(plot_area);
     let (drop_lines, high_low_lines, series_lines, up_down_bars) = first_group
         .map(|g| extract_analysis_fields_from_config(&g.config))
@@ -264,7 +266,7 @@ pub fn extract_chart_spec_from_chart_space(
         series_name_level: None,
         show_all_field_buttons: chart.show_all_field_buttons,
         second_plot_size: None,
-        vary_by_categories: scalar_fields.vary_by_categories,
+        vary_by_categories,
         title_h_align: None,
         title_v_align: None,
         title_show_shadow: None,
@@ -306,6 +308,30 @@ pub fn extract_chart_spec_from_chart_space(
         client_data_prints_with_sheet: anchor.client_data_prints_with_sheet,
         anchor_index: anchor.anchor_index,
         import_status,
+    }
+}
+
+fn effective_vary_by_categories(
+    plot_area: &ooxml_types::charts::PlotArea,
+    legend: Option<&domain_types::chart::LegendData>,
+    explicit: Option<bool>,
+) -> Option<bool> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    if !legend.is_some_and(|legend| legend.show && legend.visible && legend.position != "none") {
+        return None;
+    }
+
+    let [group] = plot_area.chart_groups.as_slice() else {
+        return None;
+    };
+    if group.series.len() != 1 {
+        return None;
+    }
+    match &group.config {
+        ooxml_types::charts::ChartTypeConfig::Bubble(_) => Some(true),
+        _ => None,
     }
 }
 
@@ -971,6 +997,38 @@ mod tests {
             })),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn single_series_bubble_with_legend_defaults_to_vary_by_categories_when_absent() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                legend: Some(Legend::default()),
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![ChartSeries {
+                            idx: 0,
+                            order: 0,
+                            ..Default::default()
+                        }],
+                        ..group(
+                            ChartType::Bubble,
+                            ChartTypeConfig::Bubble(BubbleChartConfig {
+                                vary_colors: None,
+                                ..Default::default()
+                            }),
+                        )
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.vary_by_categories, Some(true));
     }
 
     fn stock_group(series_count: usize) -> ChartGroup {

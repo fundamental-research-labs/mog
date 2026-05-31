@@ -61,6 +61,7 @@ export function snapshotAxis(
 export function snapshotLegend(
   config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
+  data?: ChartData,
 ): ResolvedChartSpecSnapshot['resolved']['legend'] {
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
@@ -72,24 +73,44 @@ export function snapshotLegend(
       .map((entry) => entry.idx) ?? [],
   );
   const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
+  const categoryEntries =
+    usesCategoryLegendEntries(config, data)
+      ? data.categories.map((category) => String(category))
+      : undefined;
+  const allEntries = categoryEntries ?? series.map((item) => item.name);
+  const visibleEntries = categoryEntries
+    ? categoryEntries.filter((_entry, index) => !deletedEntries.has(index))
+    : series
+        .filter(
+          (item, index) =>
+            !deletedEntries.has(index) &&
+            !deletedEntries.has(item.sourceSeriesIndex) &&
+            !isNoFillNoLineSeriesConfig(
+              config.series?.[item.sourceSeriesIndex] ?? config.series?.[index],
+            ),
+        )
+        .map((item) => item.name);
   return {
     present,
     visible,
     position: legend?.position,
-    entries: present ? series.map((item) => item.name) : [],
-    visibleEntries: visible
-      ? series
-          .filter(
-            (item, index) =>
-              !deletedEntries.has(index) &&
-              !deletedEntries.has(item.sourceSeriesIndex) &&
-              !isNoFillNoLineSeriesConfig(
-                config.series?.[item.sourceSeriesIndex] ?? config.series?.[index],
-              ),
-          )
-          .map((item) => item.name)
-      : [],
+    entries: present ? allEntries : [],
+    visibleEntries: visible ? visibleEntries : [],
   };
+}
+
+function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
+  if (!data) return false;
+  if (config.varyByCategories !== undefined) return config.varyByCategories;
+  const legend = config.legend;
+  return (
+    config.type === 'bubble' &&
+    data.series.length === 1 &&
+    legend !== undefined &&
+    legend.show === true &&
+    legend.visible !== false &&
+    legend.position !== 'none'
+  );
 }
 
 export function snapshotRange(reference: ResolvedChartRangeReference | null): RangeSnapshot | null {

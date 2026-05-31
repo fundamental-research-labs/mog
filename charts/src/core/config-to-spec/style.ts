@@ -14,6 +14,15 @@ import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-res
 import { MARK_TYPE_MAP } from './constants';
 import { linePointsToCanvasPx } from './units';
 
+const EXCEL_THEME_CATEGORY_COLOR_SLOTS = [
+  'accent1',
+  'accent2',
+  'accent3',
+  'accent4',
+  'accent5',
+  'accent6',
+] as const;
+
 export function isStrokeColoredSeries(
   series: SeriesConfig,
   fallbackType: ChartType | undefined,
@@ -64,12 +73,12 @@ export function resolvedCategoryColors(
   const configColors = resolvedConfigColors(config);
   const seriesColors = resolvedSeriesColors(config, data);
 
-  if (variesColorsByCategory(config)) {
+  if (variesColorsByCategory(config, data)) {
     return configColors.length > 0
       ? configColors
-      : seriesColors.length > 0
+      : seriesColors.length > 1
         ? seriesColors
-        : undefined;
+        : excelThemeCategoryColors(config);
   }
 
   if (seriesColors.length > 0) return seriesColors;
@@ -95,14 +104,35 @@ function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
   return seriesColors;
 }
 
-function variesColorsByCategory(config: ChartConfig): boolean {
+export function variesColorsByCategory(config: ChartConfig, data?: ChartData): boolean {
   if (config.varyByCategories !== undefined) return config.varyByCategories;
   return (
     config.type === 'pie' ||
     config.type === 'doughnut' ||
     config.type === 'pie3d' ||
-    config.type === 'ofPie'
+    config.type === 'ofPie' ||
+    defaultsToBubbleCategoryColors(config, data)
   );
+}
+
+function defaultsToBubbleCategoryColors(config: ChartConfig, data?: ChartData): boolean {
+  const legend = config.legend;
+  return (
+    config.type === 'bubble' &&
+    data?.series.length === 1 &&
+    legend !== undefined &&
+    legend.show === true &&
+    legend.visible !== false &&
+    legend.position !== 'none'
+  );
+}
+
+function excelThemeCategoryColors(config: ChartConfig): string[] | undefined {
+  const context = resolverContextFromConfig(config, 'chartArea');
+  const colors = EXCEL_THEME_CATEGORY_COLOR_SLOTS.map((theme) =>
+    resolveChartColor({ theme }, context),
+  ).filter(Boolean) as string[];
+  return colors.length > 0 ? colors : undefined;
 }
 
 function resolvedConfigColors(config: ChartConfig): string[] {

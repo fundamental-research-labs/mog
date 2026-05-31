@@ -1,4 +1,4 @@
-import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
+import type { ChannelSpec, EncodingSpec, LegendSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, SingleAxisConfig } from '../../types';
 import {
   applyAutoValueAxisTicks,
@@ -30,7 +30,7 @@ import {
   visibleLegendDomain,
 } from './legend';
 import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
-import { isNoFillNoLineSeries, resolvedCategoryColors } from './style';
+import { isNoFillNoLineSeries, resolvedCategoryColors, variesColorsByCategory } from './style';
 import { resolveStackMode } from './subtypes';
 
 /**
@@ -232,23 +232,50 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     );
   }
 
-  // Color encoding for multi-series.
-  const legendDomain = visibleLegendDomain(config, data);
-  const seriesLegendDomain = buildSeriesLegendDomain(config, data);
-  const colorChannel = buildColorEncoding(
-    hasMultipleSeries,
-    config.legend,
-    resolvedCategoryColors(config, data),
-    false,
-    legendDomain,
-    legendSymbolType(config, data),
-    seriesLegendDomain?.symbolTypeByValue,
-    config,
-    seriesLegendDomain?.forceColorEncoding,
-    seriesLegendDomain?.values,
-  );
-  if (colorChannel) {
-    encoding.color = colorChannel;
+  if (variesColorsByCategory(config, data)) {
+    const categoryLegendDomain = buildCategoryLegendDomain(config, data);
+    const categoryColors = resolvedCategoryColors(config, data);
+    encoding.color = {
+      field: 'category',
+      type: 'nominal',
+      ...((data.categories.length > 0 || (categoryColors && categoryColors.length > 0))
+        ? {
+            scale: {
+              ...(data.categories.length > 0
+                ? { domain: data.categories.map((category) => String(category)) }
+                : {}),
+              ...(categoryColors && categoryColors.length > 0 ? { range: categoryColors } : {}),
+            },
+          }
+        : {}),
+      ...(config.legend
+        ? {
+            legend: buildLegendSpec(config.legend, config, {
+              symbolType: categoryLegendSymbolType(config),
+              values: categoryLegendDomain?.values,
+            }),
+          }
+        : {}),
+    };
+  } else {
+    // Color encoding for multi-series.
+    const legendDomain = visibleLegendDomain(config, data);
+    const seriesLegendDomain = buildSeriesLegendDomain(config, data);
+    const colorChannel = buildColorEncoding(
+      hasMultipleSeries,
+      config.legend,
+      resolvedCategoryColors(config, data),
+      false,
+      legendDomain,
+      legendSymbolType(config, data),
+      seriesLegendDomain?.symbolTypeByValue,
+      config,
+      seriesLegendDomain?.forceColorEncoding,
+      seriesLegendDomain?.values,
+    );
+    if (colorChannel) {
+      encoding.color = colorChannel;
+    }
   }
   if (config.series?.some(isNoFillNoLineSeries)) {
     encoding.opacity = {
@@ -277,7 +304,12 @@ function applyCartesianValueAxisDefaults(encoding: EncodingSpec): void {
 
 function bubbleMaxArea(config: ChartConfig): number {
   const scale = typeof config.bubbleScale === 'number' ? config.bubbleScale : 100;
-  return 400 * (Math.max(0, Math.min(300, scale)) / 100);
+  return 6400 * (Math.max(0, Math.min(300, scale)) / 100);
+}
+
+function categoryLegendSymbolType(config: ChartConfig): LegendSpec['symbolType'] | undefined {
+  if (config.type === 'bubble' || config.type === 'scatter') return 'circle';
+  return undefined;
 }
 
 function applySecondaryCategoryAxis(

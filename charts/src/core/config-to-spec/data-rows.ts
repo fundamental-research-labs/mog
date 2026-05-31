@@ -10,6 +10,7 @@ import {
 import {
   BLANK_VALUE_FIELD,
   BUBBLE_SIZE_FIELD,
+  CLIP_TO_PLOT_AREA_FIELD,
   POINT_INDEX_FIELD,
   RAW_BUBBLE_SIZE_FIELD,
   SCATTER_X_FIELD,
@@ -129,6 +130,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (isBubbleSeries(config, seriesConfig)) {
           row[BUBBLE_SIZE_FIELD] = bubbleSizeValue(point, config, maxBubbleMagnitude);
           row[RAW_BUBBLE_SIZE_FIELD] = point.size;
+          row[CLIP_TO_PLOT_AREA_FIELD] = false;
         }
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfig) ? 0 : 1;

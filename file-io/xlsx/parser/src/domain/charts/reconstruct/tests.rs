@@ -1,14 +1,14 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use domain_types::ChartDefinition;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
-    ChartSeriesCategoryLevelsCacheData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec,
+    ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
+    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec, ChartSubType,
     ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, PivotChartOptionsData,
     SingleAxisData,
 };
 use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
+use domain_types::ChartDefinition;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};
@@ -128,6 +128,28 @@ fn with_original_axes(mut spec: ChartSpec, axes: Vec<ChartAxis>) -> ChartSpec {
     spec
 }
 
+fn modeled_series(
+    idx: u32,
+    chart_type: Option<DomainChartType>,
+    name: &str,
+    values: &str,
+) -> ChartSeriesData {
+    let mut series = ranges::chart_series_data(
+        Some(name.to_string()),
+        Some("Data!$A$2:$A$4".to_string()),
+        Some(values.to_string()),
+        idx,
+    );
+    series.r#type = chart_type;
+    series
+}
+
+fn chart_group_xml<'a>(xml: &'a str, start_tag: &str, end_tag: &str) -> &'a str {
+    let start = xml.find(start_tag).expect("chart group should start");
+    let end = start + xml[start..].find(end_tag).expect("chart group should end") + end_tag.len();
+    &xml[start..end]
+}
+
 #[test]
 fn data_range_chart_reconstructs_series_and_axes() {
     let spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:C4"));
@@ -159,6 +181,69 @@ fn bubble_scalars_reconstruct_into_modeled_chart_group() {
     assert!(xml.contains("<c:showNegBubbles val=\"1\"/>"), "{xml}");
     assert!(xml.contains("<c:sizeRepresents val=\"w\"/>"), "{xml}");
     assert!(xml.contains("<c:bubble3D val=\"1\"/>"), "{xml}");
+}
+
+#[test]
+fn modeled_volume_ohlc_combo_reconstructs_volume_and_stock_groups() {
+    let mut spec = minimal_chart_spec(DomainChartType::Combo, None);
+    spec.sub_type = Some(ChartSubType::VolumeOhlc);
+    spec.series = vec![
+        modeled_series(0, Some(DomainChartType::Column), "Volume", "Data!$B$2:$B$4"),
+        modeled_series(1, Some(DomainChartType::Stock), "Open", "Data!$C$2:$C$4"),
+        modeled_series(2, Some(DomainChartType::Stock), "High", "Data!$D$2:$D$4"),
+        modeled_series(3, Some(DomainChartType::Stock), "Low", "Data!$E$2:$E$4"),
+        modeled_series(4, Some(DomainChartType::Stock), "Close", "Data!$F$2:$F$4"),
+    ];
+    for series in &mut spec.series[1..] {
+        series.y_axis_index = Some(1);
+    }
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:barChart>").count(), 1, "{xml}");
+    assert_eq!(xml.matches("<c:stockChart>").count(), 1, "{xml}");
+    assert!(
+        xml.find("<c:barChart>") < xml.find("<c:stockChart>"),
+        "{xml}"
+    );
+
+    let bar_xml = chart_group_xml(&xml, "<c:barChart>", "</c:barChart>");
+    let stock_xml = chart_group_xml(&xml, "<c:stockChart>", "</c:stockChart>");
+
+    assert_eq!(bar_xml.matches("<c:ser>").count(), 1, "{xml}");
+    assert!(bar_xml.contains("<c:barDir val=\"col\"/>"), "{xml}");
+    assert!(bar_xml.contains("<c:f>Data!$B$2:$B$4</c:f>"), "{xml}");
+
+    assert_eq!(stock_xml.matches("<c:ser>").count(), 4, "{xml}");
+    assert!(!stock_xml.contains("Data!$B$2:$B$4"), "{xml}");
+    assert!(stock_xml.contains("<c:f>Data!$F$2:$F$4</c:f>"), "{xml}");
+    assert!(stock_xml.contains("<c:axId val=\"333333333\"/>"), "{xml}");
+    assert!(stock_xml.contains("<c:axId val=\"444444444\"/>"), "{xml}");
+    assert_eq!(xml.matches("<c:catAx>").count(), 2, "{xml}");
+    assert_eq!(xml.matches("<c:valAx>").count(), 2, "{xml}");
+}
+
+#[test]
+fn modeled_stock_volume_subtype_infers_volume_group_without_series_types() {
+    let mut spec = minimal_chart_spec(DomainChartType::Stock, None);
+    spec.sub_type = Some(ChartSubType::VolumeHlc);
+    spec.series = vec![
+        modeled_series(0, None, "Volume", "Data!$B$2:$B$4"),
+        modeled_series(1, None, "High", "Data!$C$2:$C$4"),
+        modeled_series(2, None, "Low", "Data!$D$2:$D$4"),
+        modeled_series(3, None, "Close", "Data!$E$2:$E$4"),
+    ];
+
+    let xml = chart_xml(&spec);
+    let bar_xml = chart_group_xml(&xml, "<c:barChart>", "</c:barChart>");
+    let stock_xml = chart_group_xml(&xml, "<c:stockChart>", "</c:stockChart>");
+
+    assert_eq!(xml.matches("<c:barChart>").count(), 1, "{xml}");
+    assert_eq!(xml.matches("<c:stockChart>").count(), 1, "{xml}");
+    assert_eq!(bar_xml.matches("<c:ser>").count(), 1, "{xml}");
+    assert_eq!(stock_xml.matches("<c:ser>").count(), 3, "{xml}");
+    assert!(bar_xml.contains("<c:f>Data!$B$2:$B$4</c:f>"), "{xml}");
+    assert!(!stock_xml.contains("Data!$B$2:$B$4"), "{xml}");
 }
 
 #[test]

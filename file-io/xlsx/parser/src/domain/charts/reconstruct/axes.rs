@@ -1,6 +1,6 @@
 use domain_types::{
-    ChartDefinition,
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -78,16 +78,53 @@ pub(super) fn build_default_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
         spec.chart_type,
         DomainChartType::Scatter | DomainChartType::Bubble
     ) {
-        return vec![
+        let mut axes = vec![
             build_single_axis_with_ids(&default_axis, AxisType::Value, cat_id, val_id),
             build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
         ];
+        if modeled_series_needs_secondary_axis(spec) {
+            axes.push(build_single_axis_with_ids(
+                &default_axis,
+                AxisType::Value,
+                333333333,
+                444444444,
+            ));
+            axes.push(build_single_axis_with_ids(
+                &default_axis,
+                AxisType::Value,
+                444444444,
+                333333333,
+            ));
+        }
+        return axes;
     }
 
-    vec![
+    let mut axes = vec![
         build_single_axis_with_ids(&default_axis, AxisType::Category, cat_id, val_id),
         build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
-    ]
+    ];
+    if modeled_series_needs_secondary_axis(spec) {
+        axes.push(build_single_axis_with_ids(
+            &default_axis,
+            AxisType::Category,
+            333333333,
+            444444444,
+        ));
+        axes.push(build_single_axis_with_ids(
+            &default_axis,
+            AxisType::Value,
+            444444444,
+            333333333,
+        ));
+    }
+
+    axes
+}
+
+fn modeled_series_needs_secondary_axis(spec: &ChartSpec) -> bool {
+    spec.series
+        .iter()
+        .any(|series| series.y_axis_index == Some(1))
 }
 
 pub(super) fn chart_type_requires_axes(chart_type: &DomainChartType) -> bool {

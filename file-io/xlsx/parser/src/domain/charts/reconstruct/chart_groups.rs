@@ -1,9 +1,9 @@
 use domain_types::{
-    ChartDefinition,
     chart::{
-        ChartLineSettingsData, ChartSpec, ChartSubType, ChartType as DomainChartType,
-        UpDownBarsData,
+        ChartLineSettingsData, ChartSeriesData, ChartSpec, ChartSubType,
+        ChartType as DomainChartType, UpDownBarsData,
     },
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,
@@ -67,21 +67,134 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         }
     }
 
-    // Fallback: build a single chart group from spec.chart_type + all series
-    let ooxml_ct = domain_to_ooxml_chart_type(&spec.chart_type, spec.sub_type.as_ref());
     let series_data = series_for_export(spec);
+    if let Some(groups) = build_modeled_combo_chart_groups(spec, &series_data) {
+        return groups;
+    }
+
+    // Fallback: build a single chart group from spec.chart_type + all series.
+    vec![build_modeled_chart_group(
+        spec,
+        &spec.chart_type,
+        series_data.iter().enumerate().collect(),
+    )]
+}
+
+#[derive(Debug)]
+struct ModeledSeriesGroup<'a> {
+    chart_type: DomainChartType,
+    series: Vec<(usize, &'a ChartSeriesData)>,
+}
+
+fn build_modeled_combo_chart_groups(
+    spec: &ChartSpec,
+    series_data: &[ChartSeriesData],
+) -> Option<Vec<ChartGroup>> {
+    let groups = modeled_combo_series_groups(spec, series_data)?;
+    Some(
+        groups
+            .iter()
+            .map(|group| build_modeled_chart_group(spec, &group.chart_type, group.series.clone()))
+            .collect(),
+    )
+}
+
+fn modeled_combo_series_groups<'a>(
+    spec: &ChartSpec,
+    series_data: &'a [ChartSeriesData],
+) -> Option<Vec<ModeledSeriesGroup<'a>>> {
+    if series_data.is_empty() {
+        return None;
+    }
+
+    if is_volume_stock_sub_type(spec.sub_type.as_ref()) {
+        if let Some(groups) =
+            modeled_volume_stock_series_groups(series_data, spec.sub_type.as_ref())
+        {
+            return Some(groups);
+        }
+    }
+
+    if spec.chart_type != DomainChartType::Combo {
+        return None;
+    }
+
+    let mut groups = Vec::new();
+    for (idx, series) in series_data.iter().enumerate() {
+        let chart_type = series.r#type.clone()?;
+        push_modeled_series_group(&mut groups, chart_type, idx, series);
+    }
+
+    (groups.len() > 1).then_some(groups)
+}
+
+fn is_volume_stock_sub_type(sub_type: Option<&ChartSubType>) -> bool {
+    matches!(
+        sub_type,
+        Some(ChartSubType::VolumeHlc | ChartSubType::VolumeOhlc)
+    )
+}
+
+fn modeled_volume_stock_series_groups<'a>(
+    series_data: &'a [ChartSeriesData],
+    sub_type: Option<&ChartSubType>,
+) -> Option<Vec<ModeledSeriesGroup<'a>>> {
+    let expected_stock_count = match sub_type {
+        Some(ChartSubType::VolumeHlc) => 3,
+        Some(ChartSubType::VolumeOhlc) => 4,
+        _ => return None,
+    };
+    if series_data.len() != expected_stock_count + 1 {
+        return None;
+    }
+
+    let mut groups = Vec::new();
+    for (idx, series) in series_data.iter().enumerate() {
+        let chart_type = series.r#type.clone().unwrap_or(if idx == 0 {
+            DomainChartType::Column
+        } else {
+            DomainChartType::Stock
+        });
+        push_modeled_series_group(&mut groups, chart_type, idx, series);
+    }
+
+    (groups.len() == 2).then_some(groups)
+}
+
+fn push_modeled_series_group<'a>(
+    groups: &mut Vec<ModeledSeriesGroup<'a>>,
+    chart_type: DomainChartType,
+    series_idx: usize,
+    series: &'a ChartSeriesData,
+) {
+    if let Some(last) = groups.last_mut() {
+        if last.chart_type == chart_type {
+            last.series.push((series_idx, series));
+            return;
+        }
+    }
+
+    groups.push(ModeledSeriesGroup {
+        chart_type,
+        series: vec![(series_idx, series)],
+    });
+}
+
+fn build_modeled_chart_group(
+    spec: &ChartSpec,
+    chart_type: &DomainChartType,
+    series_data: Vec<(usize, &ChartSeriesData)>,
+) -> ChartGroup {
+    let ooxml_ct = domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref());
     let series: Vec<_> = series_data
         .iter()
-        .enumerate()
-        .map(|(fallback_idx, sd)| build_series(sd, &spec.chart_type, fallback_idx as u32))
+        .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32))
         .collect();
-    let config = build_default_config(ooxml_ct, spec, &series);
+    let config = build_default_config(ooxml_ct, chart_type, spec, &series);
     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
+    let ax_id = default_axis_ids_for_series_group(ooxml_ct, &series_data);
 
-    // Determine default axis IDs based on chart type
-    let ax_id = default_axis_ids(ooxml_ct);
-
-    vec![ChartGroup {
+    ChartGroup {
         chart_type: ooxml_ct,
         config,
         series,
@@ -90,7 +203,7 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         raw_chart_type_attr: None,
         raw_chart_element_name: None,
         raw_chart_group_xml: None,
-    }]
+    }
 }
 
 pub(super) fn domain_to_ooxml_chart_type(
@@ -126,16 +239,35 @@ pub(super) fn default_axis_ids(ct: OoxmlChartType) -> Vec<u32> {
     }
 }
 
+fn default_axis_ids_for_series_group(
+    ct: OoxmlChartType,
+    series_data: &[(usize, &ChartSeriesData)],
+) -> Vec<u32> {
+    if default_axis_ids(ct).is_empty() {
+        return Vec::new();
+    }
+
+    if series_data
+        .iter()
+        .any(|(_, series)| series.y_axis_index == Some(1))
+    {
+        vec![333333333, 444444444]
+    } else {
+        default_axis_ids(ct)
+    }
+}
+
 /// Build a default ChartTypeConfig for a single-group chart.
 pub(super) fn build_default_config(
     ct: OoxmlChartType,
+    chart_type: &DomainChartType,
     spec: &ChartSpec,
     _series: &[charts::ChartSeries],
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
     match ct {
         OoxmlChartType::Bar => {
-            let bar_dir = bar_direction_for(&spec.chart_type);
+            let bar_dir = bar_direction_for(chart_type);
             ChartTypeConfig::Bar(charts::BarChartConfig {
                 bar_dir,
                 grouping: Some(grouping),
@@ -150,7 +282,7 @@ pub(super) fn build_default_config(
             })
         }
         OoxmlChartType::Bar3D => {
-            let bar_dir = bar_direction_for(&spec.chart_type);
+            let bar_dir = bar_direction_for(chart_type);
             ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
                 bar_dir,
                 grouping: Some(grouping),

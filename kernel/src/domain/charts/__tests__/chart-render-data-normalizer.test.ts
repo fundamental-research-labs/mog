@@ -4,8 +4,10 @@ import {
   isNoFillNoLineSeriesConfig,
   normalizeChartDataForRendering,
   normalizeImportedCategoryData,
+  sourceLinkedAxisNumberFormatDiagnostics,
   trimTrailingBlankChartData,
   withCategoryFormatCodes,
+  withSourceLinkedAxisNumberFormats,
 } from '../bridge/chart-render-data-normalizer';
 
 const data = (overrides: Partial<ChartData> = {}): ChartData => ({
@@ -155,5 +157,75 @@ describe('chart render data normalizer', () => {
       }),
     ).toBe(false);
     expect(isNoFillNoLineSeriesConfig(undefined)).toBe(false);
+  });
+
+  it('resolves source-linked category and value axis formats from imported caches', () => {
+    const config = {
+      type: 'combo',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 4,
+      axis: {
+        categoryAxis: { visible: true, linkNumberFormat: true },
+        valueAxis: { visible: true, linkNumberFormat: true },
+        secondaryValueAxis: { visible: true, linkNumberFormat: true },
+      },
+      series: [
+        {
+          categoryLabelFormat: { formatCode: 'mmm-yy', points: [] },
+          valueCache: { formatCode: '$#,##0', points: [{ idx: 0, value: '1200' }] },
+        },
+        {
+          yAxisIndex: 1,
+          valueCache: { formatCode: '0.0%', points: [{ idx: 0, value: '0.2' }] },
+        },
+      ],
+    } as ChartConfig;
+
+    const resolved = withSourceLinkedAxisNumberFormats(config);
+
+    expect(resolved).not.toBe(config);
+    expect(resolved.axis?.categoryAxis?.numberFormat).toBe('mmm-yy');
+    expect(resolved.axis?.xAxis?.numberFormat).toBe('mmm-yy');
+    expect(resolved.axis?.valueAxis?.numberFormat).toBe('$#,##0');
+    expect(resolved.axis?.yAxis?.numberFormat).toBe('$#,##0');
+    expect(resolved.axis?.secondaryValueAxis?.numberFormat).toBe('0.0%');
+    expect(resolved.axis?.secondaryYAxis?.numberFormat).toBe('0.0%');
+    expect(sourceLinkedAxisNumberFormatDiagnostics(resolved)).toEqual([]);
+  });
+
+  it('reports unresolved and conflicting source-linked value axis formats', () => {
+    expect(
+      sourceLinkedAxisNumberFormatDiagnostics({
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 4,
+        axis: {
+          valueAxis: { visible: true, linkNumberFormat: true },
+          secondaryValueAxis: { visible: true, linkNumberFormat: true, numberFormat: '0%' },
+        },
+        series: [{ valueCache: { formatCode: '$#,##0', points: [] } }],
+      } as ChartConfig),
+    ).toEqual(['secondary value axis source-linked number format has no source format; using 0%']);
+
+    expect(
+      sourceLinkedAxisNumberFormatDiagnostics({
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 4,
+        axis: { valueAxis: { visible: true, linkNumberFormat: true } },
+        series: [
+          { valueCache: { formatCode: '$#,##0', points: [] } },
+          { valueCache: { formatCode: '0.0%', points: [] } },
+        ],
+      } as ChartConfig),
+    ).toEqual([
+      'value axis source-linked number format uses first bound series format due to conflicting source formats',
+    ]);
   });
 });

@@ -268,7 +268,7 @@ describe('resolved spec snapshot helpers', () => {
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
       'region map rendering uses placeholder geometry',
       'ChartEx regionMap data projection is not implemented',
-      'value axis source-linked number format is not resolved',
+      'value axis source-linked number format has no source format; using General',
     ]);
     expect(snapshot.resolved.axes.secondaryCategory).toMatchObject({
       present: true,
@@ -309,6 +309,58 @@ describe('resolved spec snapshot helpers', () => {
       chartData: {
         categories: ['A'],
         series: [{ name: 'Percent', yAxisIndex: 1, data: [{ x: 'A', y: 0.2 }] }],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
+  });
+
+  it('does not flag source-linked value axis formats when imported cache formats resolve them', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'combo',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        axis: {
+          valueAxis: { visible: true, linkNumberFormat: true },
+          secondaryValueAxis: { visible: true, linkNumberFormat: true },
+        },
+        series: [
+          { name: 'Revenue', valueCache: { formatCode: '$#,##0', points: [] } },
+          {
+            name: 'Margin',
+            yAxisIndex: 1,
+            valueCache: { formatCode: '0.0%', points: [] },
+          },
+        ],
+      } as ChartConfig,
+      chartData: {
+        categories: ['A'],
+        series: [
+          { name: 'Revenue', data: [{ x: 'A', y: 1200 }] },
+          { name: 'Margin', yAxisIndex: 1, data: [{ x: 'A', y: 0.2 }] },
+        ],
       },
       resolvedRanges: {
         dataRange: null,

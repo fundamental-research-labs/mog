@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type { ChartData } from '@mog/charts';
+import { HIDDEN_CHART_CELL, type ChartData } from '@mog/charts';
 import { sheetId as toSheetId, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
@@ -103,10 +103,10 @@ describe('chart data resolver helpers', () => {
     };
 
     expect(chartDataToRows(data)).toEqual([
-      { category: 'FY24', value: 10, series: 'Revenue' },
-      { category: 'FY24', value: 4, series: 'Cost' },
-      { category: 'FY25', value: 20, series: 'Revenue' },
-      { category: 'FY25', value: 8, series: 'Cost' },
+      { category: 'FY24', x: 'FY24', y: 10, value: 10, series: 'Revenue' },
+      { category: 'FY24', x: 'FY24', y: 4, value: 4, series: 'Cost' },
+      { category: 'FY25', x: 'FY25', y: 20, value: 20, series: 'Revenue' },
+      { category: 'FY25', x: 'FY25', y: 8, value: 8, series: 'Cost' },
     ]);
   });
 
@@ -171,7 +171,7 @@ describe('chart data resolver helpers', () => {
     expect(accessor.getValue(0, 0)).toBe(0);
     expect(accessor.getValue(0, 0, 'Sheet 1')).toBe(0);
     expect(accessor.getValue(0, 1)).toBe(1);
-    expect(accessor.getValue(1, 0)).toBeNull();
+    expect(accessor.getValue(1, 0)).toBe(HIDDEN_CHART_CELL);
   });
 });
 

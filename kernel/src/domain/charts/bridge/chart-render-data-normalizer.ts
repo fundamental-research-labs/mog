@@ -1,4 +1,20 @@
-import type { ChartConfig, ChartData, ChartDataPoint } from '@mog/charts';
+import type { ChartData, ChartDataPoint } from '@mog/charts';
+import type {
+  ChartConfig,
+  ChartSeriesPointCache,
+  SeriesConfig,
+  SingleAxisConfig,
+} from '@mog-sdk/contracts/data/charts';
+
+type AxisRole = 'category' | 'secondary category' | 'value' | 'secondary value';
+
+type AxisSourceFormatResolution = {
+  formatCode?: string;
+  missingSource: boolean;
+  conflictingFormats: boolean;
+};
+
+const GENERAL_FORMAT = 'General';
 
 export function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
   const categoryLabelFormat = config.series?.find(
@@ -14,6 +30,166 @@ export function withCategoryFormatCodes(data: ChartData, config: ChartConfig): C
   }
 
   return categoryFormatCodes.some(Boolean) ? { ...data, categoryFormatCodes } : data;
+}
+
+function normalizeFormatCode(formatCode: string | null | undefined): string | undefined {
+  const normalized = formatCode?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function cacheFormatCode(cache: ChartSeriesPointCache | undefined): string | undefined {
+  return (
+    normalizeFormatCode(cache?.formatCode) ??
+    cache?.points.map((point) => normalizeFormatCode(point.formatCode)).find(Boolean)
+  );
+}
+
+function firstCategorySourceFormat(config: ChartConfig): AxisSourceFormatResolution {
+  const formatCode = config.series
+    ?.map((series) => {
+      const categoryLabelFormat = series.categoryLabelFormat;
+      return (
+        normalizeFormatCode(categoryLabelFormat?.formatCode) ??
+        categoryLabelFormat?.points
+          ?.map((point) => normalizeFormatCode(point.formatCode))
+          .find(Boolean) ??
+        cacheFormatCode(series.categoryCache)
+      );
+    })
+    .find(Boolean);
+
+  return { formatCode, missingSource: !formatCode, conflictingFormats: false };
+}
+
+function valueAxisGroup(role: AxisRole): 0 | 1 | undefined {
+  if (role === 'value') return 0;
+  if (role === 'secondary value') return 1;
+  return undefined;
+}
+
+function isSeriesBoundToAxis(series: SeriesConfig, axisGroup: 0 | 1): boolean {
+  return axisGroup === 1 ? series.yAxisIndex === 1 : series.yAxisIndex !== 1;
+}
+
+function firstValueSourceFormat(
+  config: ChartConfig,
+  axisGroup: 0 | 1,
+): AxisSourceFormatResolution {
+  const sourceFormats =
+    config.series
+      ?.filter((series) => isSeriesBoundToAxis(series, axisGroup))
+      .filter((series) => !isNoFillNoLineSeriesConfig(series))
+      .map((series) => cacheFormatCode(series.valueCache))
+      .filter((formatCode): formatCode is string => Boolean(formatCode)) ?? [];
+  const formatCode = sourceFormats[0];
+  const conflictingFormats = sourceFormats.some((candidate) => candidate !== formatCode);
+  return { formatCode, missingSource: !formatCode, conflictingFormats };
+}
+
+function sourceLinkedAxisFormat(
+  config: ChartConfig,
+  role: AxisRole,
+): AxisSourceFormatResolution {
+  const axisGroup = valueAxisGroup(role);
+  if (axisGroup !== undefined) return firstValueSourceFormat(config, axisGroup);
+  return firstCategorySourceFormat(config);
+}
+
+function axisWithResolvedNumberFormat(
+  axis: SingleAxisConfig | undefined,
+  config: ChartConfig,
+  role: AxisRole,
+): SingleAxisConfig | undefined {
+  if (!axis?.linkNumberFormat) return axis;
+  const resolution = sourceLinkedAxisFormat(config, role);
+  const numberFormat = resolution.formatCode ?? normalizeFormatCode(axis.numberFormat);
+  if (!numberFormat || numberFormat === axis.numberFormat) return axis;
+  return { ...axis, numberFormat };
+}
+
+function axisSourceFormatDiagnostic(
+  axis: SingleAxisConfig | undefined,
+  config: ChartConfig,
+  role: AxisRole,
+): string | undefined {
+  if (!axis?.linkNumberFormat) return undefined;
+  const resolution = sourceLinkedAxisFormat(config, role);
+  if (resolution.missingSource) {
+    return `${role} axis source-linked number format has no source format; using ${
+      normalizeFormatCode(axis.numberFormat) ?? GENERAL_FORMAT
+    }`;
+  }
+  if (resolution.conflictingFormats) {
+    return `${role} axis source-linked number format uses first bound series format due to conflicting source formats`;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve Excel source-linked axis formats before rendering.
+ *
+ * Category axes inherit imported category label/cache formats. Value axes inherit
+ * the first visible bound series' value cache format for their axis group; this
+ * keeps primary and secondary value axes independent while preserving the
+ * original linkNumberFormat contract for export.
+ */
+export function withSourceLinkedAxisNumberFormats(config: ChartConfig): ChartConfig {
+  const axis = config.axis;
+  if (!axis) return config;
+
+  const categoryAxis = axisWithResolvedNumberFormat(
+    axis.categoryAxis ?? axis.xAxis,
+    config,
+    'category',
+  );
+  const secondaryCategoryAxis = axisWithResolvedNumberFormat(
+    axis.secondaryCategoryAxis,
+    config,
+    'secondary category',
+  );
+  const valueAxis = axisWithResolvedNumberFormat(axis.valueAxis ?? axis.yAxis, config, 'value');
+  const secondaryValueAxis = axisWithResolvedNumberFormat(
+    axis.secondaryValueAxis ?? axis.secondaryYAxis,
+    config,
+    'secondary value',
+  );
+
+  if (
+    categoryAxis === (axis.categoryAxis ?? axis.xAxis) &&
+    secondaryCategoryAxis === axis.secondaryCategoryAxis &&
+    valueAxis === (axis.valueAxis ?? axis.yAxis) &&
+    secondaryValueAxis === (axis.secondaryValueAxis ?? axis.secondaryYAxis)
+  ) {
+    return config;
+  }
+
+  return {
+    ...config,
+    axis: {
+      ...axis,
+      ...(categoryAxis ? { categoryAxis, xAxis: categoryAxis } : {}),
+      ...(secondaryCategoryAxis ? { secondaryCategoryAxis } : {}),
+      ...(valueAxis ? { valueAxis, yAxis: valueAxis } : {}),
+      ...(secondaryValueAxis
+        ? { secondaryValueAxis, secondaryYAxis: secondaryValueAxis }
+        : {}),
+    },
+  };
+}
+
+export function sourceLinkedAxisNumberFormatDiagnostics(config: ChartConfig): string[] {
+  const axis = config.axis;
+  if (!axis) return [];
+  return [
+    axisSourceFormatDiagnostic(axis.categoryAxis ?? axis.xAxis, config, 'category'),
+    axisSourceFormatDiagnostic(axis.secondaryCategoryAxis, config, 'secondary category'),
+    axisSourceFormatDiagnostic(axis.valueAxis ?? axis.yAxis, config, 'value'),
+    axisSourceFormatDiagnostic(
+      axis.secondaryValueAxis ?? axis.secondaryYAxis,
+      config,
+      'secondary value',
+    ),
+  ].filter((diagnostic): diagnostic is string => Boolean(diagnostic));
 }
 
 function hasVisibleChartLineStyle(line: unknown): boolean {

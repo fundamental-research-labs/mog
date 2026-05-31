@@ -7,7 +7,7 @@ import {
 } from '@mog/charts';
 import type { ChartDataResult, ChartError } from '@mog-sdk/contracts/bridges';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { ChartConfig } from '@mog-sdk/contracts/data/charts';
+import type { ChartConfig, ChartWorkbookThemeData } from '@mog-sdk/contracts/data/charts';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
@@ -19,7 +19,10 @@ import {
   type ResolvedChartRangeReferences,
 } from '../chart-range-references';
 import { toChartConfig, unsupportedChartTypeError } from './chart-config-normalizer';
-import { normalizeChartDataForRendering } from './chart-render-data-normalizer';
+import {
+  normalizeChartDataForRendering,
+  withSourceLinkedAxisNumberFormats,
+} from './chart-render-data-normalizer';
 import {
   isCellHidden,
   loadHiddenVisibility,
@@ -29,8 +32,7 @@ import {
 } from './hidden-visibility';
 import {
   applyWorkbookThemeColors,
-  loadWorkbookThemeColorPalette,
-  type ChartWorkbookThemeColorPalette,
+  loadWorkbookTheme,
   type WorkbookThemeBridge,
 } from './theme-colors';
 import {
@@ -167,14 +169,13 @@ function hasRenderablePointCache(
 }
 
 export class ChartDataResolver {
-  /** Workbook theme color palette used to resolve imported chart scheme colors. */
-  private workbookThemeColorPalettePromise: Promise<ChartWorkbookThemeColorPalette | null> | null =
-    null;
+  /** Full workbook theme context passed through to charts-core style resolution. */
+  private workbookThemePromise: Promise<ChartWorkbookThemeData | null> | null = null;
 
   constructor(private readonly ctx: DocumentContext) {}
 
   clearWorkbookThemeColorCache(): void {
-    this.workbookThemeColorPalettePromise = null;
+    this.workbookThemePromise = null;
   }
 
   clearCaches(): void {
@@ -287,7 +288,9 @@ export class ChartDataResolver {
         hiddenVisibility,
       });
       const data = extractChartData(accessor, renderConfig);
-      const themedConfig = await this.withWorkbookThemeColors(renderConfig);
+      const themedConfig = withSourceLinkedAxisNumberFormats(
+        await this.withWorkbookThemeColors(renderConfig),
+      );
       return {
         config: themedConfig,
         data: normalizeChartDataForRendering(data, themedConfig),
@@ -320,7 +323,9 @@ export class ChartDataResolver {
       seriesRange: resolvedRanges.seriesRange?.range,
       seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
     });
-    const themedConfig = await this.withWorkbookThemeColors(config);
+    const themedConfig = withSourceLinkedAxisNumberFormats(
+      await this.withWorkbookThemeColors(config),
+    );
     return {
       config: themedConfig,
       data: normalizeChartDataForRendering(data, themedConfig),
@@ -328,13 +333,13 @@ export class ChartDataResolver {
   }
 
   private async withWorkbookThemeColors(config: ChartConfig): Promise<ChartConfig> {
-    return applyWorkbookThemeColors(config, () => this.getWorkbookThemeColorPalette());
+    return applyWorkbookThemeColors(config, () => this.getWorkbookTheme());
   }
 
-  private async getWorkbookThemeColorPalette(): Promise<ChartWorkbookThemeColorPalette | null> {
-    this.workbookThemeColorPalettePromise ??= loadWorkbookThemeColorPalette(
+  private async getWorkbookTheme(): Promise<ChartWorkbookThemeData | null> {
+    this.workbookThemePromise ??= loadWorkbookTheme(
       this.ctx.computeBridge as WorkbookThemeBridge | undefined,
     );
-    return this.workbookThemeColorPalettePromise;
+    return this.workbookThemePromise;
   }
 }

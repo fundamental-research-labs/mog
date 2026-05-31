@@ -1,6 +1,5 @@
-import type { ChartConfig } from '@mog-sdk/contracts/data/charts';
+import type { ChartConfig, ChartWorkbookThemeData } from '@mog-sdk/contracts/data/charts';
 import {
-  applyWorkbookThemePalette,
   createChartWorkbookThemeColorPalette,
   type ChartWorkbookThemeColorPalette,
 } from '@mog/charts/utils';
@@ -13,23 +12,32 @@ export type WorkbookThemeBridge = {
 
 export type { ChartWorkbookThemeColorPalette };
 
-export async function loadWorkbookThemeColorPalette(
+export async function loadWorkbookTheme(
   bridge: WorkbookThemeBridge | null | undefined,
-): Promise<ChartWorkbookThemeColorPalette | null> {
+): Promise<ChartWorkbookThemeData | null> {
   if (!bridge?.getWorkbookTheme) return null;
 
   try {
-    return createChartWorkbookThemeColorPalette((await bridge.getWorkbookTheme())?.colors);
+    return ((await bridge.getWorkbookTheme()) ?? null) as ChartWorkbookThemeData | null;
   } catch {
     return null;
   }
 }
 
+export async function loadWorkbookThemeColorPalette(
+  bridge: WorkbookThemeBridge | null | undefined,
+): Promise<ChartWorkbookThemeColorPalette | null> {
+  return createChartWorkbookThemeColorPalette((await loadWorkbookTheme(bridge))?.colors);
+}
+
 export async function applyWorkbookThemeColors(
   config: ChartConfig,
-  getPalette: () => Promise<ChartWorkbookThemeColorPalette | null>,
+  getTheme: () => Promise<ChartWorkbookThemeData | null>,
 ): Promise<ChartConfig> {
-  const palette = await getPalette();
-  if (!palette) return config;
-  return applyWorkbookThemePalette(config, palette);
+  const workbookTheme = await getTheme();
+  if (!workbookTheme) return config;
+  return {
+    ...config,
+    workbookTheme,
+  };
 }

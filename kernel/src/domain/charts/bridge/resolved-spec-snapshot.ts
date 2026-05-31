@@ -10,7 +10,10 @@ import type {
   ResolvedChartRangeReference,
   ResolvedChartRangeReferences,
 } from '../chart-range-references';
-import { isNoFillNoLineSeriesConfig } from './chart-render-data-normalizer';
+import {
+  isNoFillNoLineSeriesConfig,
+  sourceLinkedAxisNumberFormatDiagnostics,
+} from './chart-render-data-normalizer';
 
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
@@ -340,6 +343,7 @@ function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
   }
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push('pivot chart field buttons are not rendered');
+  unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
   unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis));
   return unsupported;
 }
@@ -358,9 +362,6 @@ function axisUnsupportedFeatureDiagnostics(axis: ChartConfig['axis']): string[] 
     if (!axisConfig) continue;
     if (label === 'series/depth') {
       diagnostics.add('series/depth axes are preserved but not rendered');
-    }
-    if (axisConfig.linkNumberFormat) {
-      diagnostics.add(`${label} axis source-linked number format is not resolved`);
     }
     if (
       axisConfig.crossBetween ||

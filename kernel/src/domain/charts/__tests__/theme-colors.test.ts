@@ -2,6 +2,7 @@ import type { ChartConfig } from '@mog-sdk/contracts/data/charts';
 
 import {
   applyWorkbookThemeColors,
+  loadWorkbookTheme,
   loadWorkbookThemeColorPalette,
 } from '../bridge/theme-colors';
 
@@ -35,7 +36,24 @@ describe('theme color bridge helpers', () => {
     ).resolves.toBeNull();
   });
 
-  it('applies workbook theme colors without owning color math', async () => {
+  it('loads full workbook theme context from the bridge', async () => {
+    const theme = await loadWorkbookTheme({
+      getWorkbookTheme: async () =>
+        ({
+          name: 'Office Theme',
+          colors: [{ name: 'accent1', color: '123456' }],
+          colorScheme: { accent1: { type: 'SrgbClr', val: '123456', transforms: [] } },
+        }) as any,
+    });
+
+    expect(theme).toMatchObject({
+      name: 'Office Theme',
+      colors: [{ name: 'accent1', color: '123456' }],
+      colorScheme: { accent1: { type: 'SrgbClr', val: '123456', transforms: [] } },
+    });
+  });
+
+  it('attaches workbook theme context without mutating theme references', async () => {
     const config = {
       type: 'line',
       anchorRow: 0,
@@ -52,9 +70,14 @@ describe('theme color bridge helpers', () => {
       ],
     } as ChartConfig;
 
-    const themed = await applyWorkbookThemeColors(config, async () => ({ accent1: '#123456' }));
+    const workbookTheme = {
+      colors: [{ name: 'accent1', color: '#123456' }],
+      colorScheme: { accent1: { type: 'SrgbClr', val: '123456', transforms: [] } },
+    };
+    const themed = await applyWorkbookThemeColors(config, async () => workbookTheme);
 
-    expect(themed.series?.[0]?.format?.line?.color).toBe('#123456');
+    expect(themed.series?.[0]?.format?.line?.color).toEqual({ theme: 'accent1' });
+    expect(themed.workbookTheme).toBe(workbookTheme);
     expect(config.series?.[0]?.format?.line?.color).toEqual({ theme: 'accent1' });
   });
 

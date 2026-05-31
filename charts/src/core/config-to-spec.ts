@@ -55,7 +55,6 @@ import {
   resolveSolidFillColor,
 } from '../utils/chart-colors';
 import {
-  CANDLESTICK_BAR_WIDTH,
   CATEGORY_KEY_PREFIX,
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
@@ -66,13 +65,17 @@ import {
   SERIES_OPACITY_FIELD,
 } from './config-to-spec/constants';
 import { buildDataLabelLayer } from './config-to-spec/layers/data-labels';
+import { buildStockLayers } from './config-to-spec/layers/stock';
+import { buildWaterfallLayers } from './config-to-spec/layers/waterfall';
 import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
 import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
 
 export {
   buildDataLabelLayer,
+  buildStockLayers,
   buildTrendlineTransform,
+  buildWaterfallLayers,
   buildWaterfallTransforms,
   hasSecondaryYAxis,
   resolveStackMode,
@@ -1449,123 +1452,6 @@ function applySeriesLineFormat(mark: MarkSpec, seriesConf: SeriesConfig | undefi
 
   const lineWidth = linePointsToCanvasPx(seriesConf?.lineWidth);
   if (lineWidth !== undefined) mark.strokeWidth = lineWidth;
-}
-
-/**
- * Build layers for stock (OHLC/candlestick) charts.
- * Stock charts show price ranges: open, high, low, close.
- *
- * Sub-type layer configurations:
- * - hlc (High-Low-Close): rule (H-L range) + tick (close marker)
- * - ohlc: rule (H-L range) + bar (O-C body) with directional color
- * - volume-hlc: volume bar layer + hlc layers
- * - volume-ohlc: volume bar layer + ohlc layers
- */
-export function buildStockLayers(
-  config: ChartConfig,
-  _data: ChartData,
-  _rows: DataRow[],
-): UnitSpec[] {
-  const layers: UnitSpec[] = [];
-  const subType = (config.subType as string) ?? 'ohlc';
-  const isHLC = subType === 'hlc' || subType === 'volume-hlc';
-  const hasVolume = subType === 'volume-hlc' || subType === 'volume-ohlc';
-
-  // Volume layer (if applicable) - bar chart of volume at the bottom
-  if (hasVolume) {
-    const volumeLayer: UnitSpec = {
-      mark: { type: 'bar', opacity: 0.3 },
-      encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'volume', type: 'quantitative' },
-        color: { value: '#888888' },
-      },
-    };
-    layers.push(volumeLayer);
-  }
-
-  // Layer 1: High-Low rule (the wick)
-  const wickLayer: UnitSpec = {
-    mark: { type: 'rule' },
-    encoding: {
-      x: { field: 'category', type: 'nominal' },
-      y: { field: 'low', type: 'quantitative' },
-      // y2 via a separate channel is not directly supported in our spec,
-      // so we use the value field as a proxy for the range
-      size: { value: 1 },
-    },
-  };
-  layers.push(wickLayer);
-
-  if (isHLC) {
-    // HLC: close marker as tick mark (no open-close body)
-    const closeLayer: UnitSpec = {
-      mark: { type: 'tick' },
-      encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'close', type: 'quantitative' },
-      },
-    };
-    layers.push(closeLayer);
-  } else {
-    // OHLC: Open-Close bar (the body)
-    const bodyLayer: UnitSpec = {
-      mark: {
-        type: 'bar',
-        // Use a narrow bar width for candlestick appearance
-        size: CANDLESTICK_BAR_WIDTH,
-      },
-      encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'open', type: 'quantitative' },
-        color: {
-          field: '_stockDirection',
-          type: 'nominal',
-        },
-      },
-    };
-    layers.push(bodyLayer);
-  }
-
-  return layers;
-}
-
-/**
- * Build layers for waterfall charts.
- * Waterfall charts show running totals with increase/decrease coloring.
- * Creates a bar chart with color conditional on positive/negative values
- * and "total" bars that start from zero.
- */
-export function buildWaterfallLayers(
-  config: ChartConfig,
-  _data: ChartData,
-  _rows: DataRow[],
-): UnitSpec[] {
-  const waterfall = config.waterfall;
-  const increaseColor = waterfall?.increaseColor ?? '#4caf50';
-  const decreaseColor = waterfall?.decreaseColor ?? '#f44336';
-  const totalColor = waterfall?.totalColor ?? '#2196f3';
-
-  // For waterfall, we use a single bar layer with a color encoding
-  // that maps to the _waterfallType field (increase/decrease/total)
-  const mainLayer: UnitSpec = {
-    mark: { type: 'bar' },
-    encoding: {
-      x: { field: 'category', type: 'nominal' },
-      y: { field: 'value', type: 'quantitative' },
-      color: {
-        field: '_waterfallType',
-        type: 'nominal',
-        scale: {
-          domain: ['increase', 'decrease', 'total'],
-          range: [increaseColor, decreaseColor, totalColor],
-        },
-      },
-    },
-    transform: [...buildWaterfallTransforms()],
-  };
-
-  return [mainLayer];
 }
 
 /**

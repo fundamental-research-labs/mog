@@ -44,5 +44,11 @@ function withPublicCompatibilityFields(row: Record<string, unknown>): Record<str
   const next = { ...row };
   if (!('x' in next) && 'category' in next) next.x = next.category;
   if (!('y' in next) && 'value' in next) next.y = next.value;
+  if (!('sourceSeriesIndex' in next) && '__mogSourceSeriesIndex' in next) {
+    next.sourceSeriesIndex = next.__mogSourceSeriesIndex;
+  }
+  if (!('sourceSeriesKey' in next) && '__mogSourceSeriesKey' in next) {
+    next.sourceSeriesKey = next.__mogSourceSeriesKey;
+  }
   return next;
 }

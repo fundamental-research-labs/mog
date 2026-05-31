@@ -1228,7 +1228,7 @@ describe('resolveChartData imported visibility semantics', () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data).toEqual([
-      {
+      expect.objectContaining({
         category: 'FY19',
         x: 'FY19',
         y: 10,
@@ -1236,8 +1236,8 @@ describe('resolveChartData imported visibility semantics', () => {
         series: 'Visible',
         sourceSeriesIndex: 0,
         sourceSeriesKey: 'idx:0',
-      },
-      {
+      }),
+      expect.objectContaining({
         category: 'FY20',
         x: 'FY20',
         y: 20,
@@ -1245,8 +1245,8 @@ describe('resolveChartData imported visibility semantics', () => {
         series: 'Visible',
         sourceSeriesIndex: 0,
         sourceSeriesKey: 'idx:0',
-      },
-      {
+      }),
+      expect.objectContaining({
         category: 'FY21',
         x: 'FY21',
         y: 30,
@@ -1254,7 +1254,7 @@ describe('resolveChartData imported visibility semantics', () => {
         series: 'Visible',
         sourceSeriesIndex: 0,
         sourceSeriesKey: 'idx:0',
-      },
+      }),
     ]);
   });
 

@@ -14,7 +14,8 @@ export function shouldUseStableCategoryKeys(
   data: ChartData,
   useExcelDateSerialCategories: boolean,
 ): boolean {
-  if (!config?.extra || useExcelDateSerialCategories) return false;
+  if (useExcelDateSerialCategories) return false;
+  if (!config?.extra && !data.categoryLevels?.length) return false;
   return hasDuplicateOrBlankCategoryLabels(data);
 }
 

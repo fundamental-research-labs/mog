@@ -112,6 +112,16 @@ fn archive_text(bytes: &[u8], path: &str) -> Option<String> {
         .map(|bytes| String::from_utf8(bytes).expect("XML part should be UTF-8"))
 }
 
+fn assert_substrings_in_order(haystack: &str, needles: &[&str]) {
+    let mut offset = 0;
+    for needle in needles {
+        let Some(relative_index) = haystack[offset..].find(needle) else {
+            panic!("expected to find {needle:?} after byte offset {offset}");
+        };
+        offset += relative_index + needle.len();
+    }
+}
+
 fn assert_archive_has_entry_prefix(bytes: &[u8], prefix: &str) {
     let names = archive_entry_names(bytes);
     assert!(
@@ -159,6 +169,87 @@ fn picture_source_xlsx() -> Vec<u8> {
     source
         .export_to_xlsx_bytes()
         .expect("source workbook with picture should export")
+}
+
+fn form_control_object(
+    id: &str,
+    shape_id: u32,
+    name: &str,
+    z_index: i32,
+) -> domain_types::domain::floating_object::FloatingObject {
+    use domain_types::domain::floating_object::{
+        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
+        FormControlData, FormControlOoxmlProps,
+    };
+
+    FloatingObject {
+        common: FloatingObjectCommon {
+            id: id.to_string(),
+            sheet_id: "sheet-before-hydration".to_string(),
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::TwoCell,
+                anchor_row: z_index as u32,
+                anchor_col: 0,
+                end_row: Some(z_index as u32 + 1),
+                end_col: Some(2),
+                ..Default::default()
+            },
+            width: 120.0,
+            height: 30.0,
+            z_index,
+            name: name.to_string(),
+            ..Default::default()
+        },
+        data: FloatingObjectData::FormControl(FormControlData {
+            control_type: "Button".to_string(),
+            cell_link: None,
+            input_range: None,
+            ooxml: Some(FormControlOoxmlProps {
+                shape_id,
+                anchor_source: "Modern".to_string(),
+                ..Default::default()
+            }),
+        }),
+    }
+}
+
+#[test]
+fn xlsx_export_preserves_imported_form_control_order_through_yrs_storage() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Controls".to_string(),
+            rows: 10,
+            cols: 4,
+            floating_objects: vec![
+                form_control_object("fobj-fc-30", 51242, "Button 42", 0),
+                form_control_object("fobj-fc-10", 51244, "Button 44", 0),
+                form_control_object("fobj-fc-20", 51247, "Button 47", 0),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&output);
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+
+    let sheet_xml = archive_text(&exported_bytes, "xl/worksheets/sheet1.xml")
+        .expect("worksheet XML should exist");
+    assert_substrings_in_order(
+        &sheet_xml,
+        &[
+            r#"shapeId="51242""#,
+            r#"shapeId="51244""#,
+            r#"shapeId="51247""#,
+        ],
+    );
+
+    let vml_xml =
+        archive_text(&exported_bytes, "xl/drawings/vmlDrawing1.vml").expect("VML should exist");
+    assert_substrings_in_order(
+        &vml_xml,
+        &["_x0000_s51242", "_x0000_s51244", "_x0000_s51247"],
+    );
 }
 
 fn ole_owner_parse_output() -> ParseOutput {

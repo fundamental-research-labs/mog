@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use yrs::{Any, Array, ArrayPrelim, ArrayRef, Map, MapPrelim, MapRef, Out};
 
-use domain_types::yrs_schema;
 use domain_types::{DocumentFormat, SheetData};
 
 use compute_document::hex::{SmallHex, id_to_hex};
@@ -24,10 +23,10 @@ pub(crate) use identity::SheetIdAllocation;
 
 use super::IdAllocator;
 use super::features::{
-    hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids, hydrate_comments,
-    hydrate_conditional_formats, hydrate_data_validations, hydrate_floating_objects,
-    hydrate_hyperlinks, hydrate_merges, hydrate_outline_groups, hydrate_sort_state,
-    hydrate_sparklines, hydrate_x14_data_validations,
+    FloatingObjectHydrationMaps, hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids,
+    hydrate_comments, hydrate_conditional_formats, hydrate_data_validations,
+    hydrate_floating_objects, hydrate_hyperlinks, hydrate_merges, hydrate_outline_groups,
+    hydrate_sort_state, hydrate_sparklines, hydrate_x14_data_validations,
 };
 use super::styles::{
     ImportedRangeStyle, hydrate_authored_style_runs, hydrate_cell_styles, hydrate_col_styles,
@@ -262,6 +261,8 @@ pub(crate) fn hydrate_sheet(
     let floating_objects_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let floating_objects_map: MapRef =
         sheet_map.insert(txn, KEY_FLOATING_OBJECTS, floating_objects_prelim);
+    let floating_object_order: ArrayRef =
+        sheet_map.insert(txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
 
     let floating_groups_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     sheet_map.insert(txn, KEY_FLOATING_OBJECT_GROUPS, floating_groups_prelim);
@@ -405,8 +406,11 @@ pub(crate) fn hydrate_sheet(
     all_floating_objects.extend(chart_fos);
     hydrate_floating_objects(
         txn,
-        &floating_objects_map,
-        &cells_map,
+        FloatingObjectHydrationMaps {
+            floating_objects: &floating_objects_map,
+            floating_object_order: &floating_object_order,
+            cells: &cells_map,
+        },
         &mut pos_map,
         &sheet_id,
         &all_floating_objects,
@@ -685,6 +689,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     let floating_objects_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let floating_objects_map: MapRef =
         sheet_map.insert(txn, KEY_FLOATING_OBJECTS, floating_objects_prelim);
+    let floating_object_order: ArrayRef =
+        sheet_map.insert(txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
 
     let floating_groups_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     sheet_map.insert(txn, KEY_FLOATING_OBJECT_GROUPS, floating_groups_prelim);
@@ -797,8 +803,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
     all_floating_objects.extend(chart_fos);
     hydrate_floating_objects(
         txn,
-        &floating_objects_map,
-        &cells_map,
+        FloatingObjectHydrationMaps {
+            floating_objects: &floating_objects_map,
+            floating_object_order: &floating_object_order,
+            cells: &cells_map,
+        },
         &mut pos_map,
         &alloc.sheet_id,
         &all_floating_objects,

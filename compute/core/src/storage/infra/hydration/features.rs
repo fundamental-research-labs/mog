@@ -874,10 +874,15 @@ pub(super) fn hydrate_outline_groups(
 
 /// Hydrate floating objects using structured Y.Map entries via
 /// `yrs_schema::floating_object`.
+pub(super) struct FloatingObjectHydrationMaps<'a> {
+    pub(super) floating_objects: &'a MapRef,
+    pub(super) floating_object_order: &'a yrs::ArrayRef,
+    pub(super) cells: &'a MapRef,
+}
+
 pub(super) fn hydrate_floating_objects(
     txn: &mut yrs::TransactionMut,
-    floating_objects_map: &MapRef,
-    cells_map: &MapRef,
+    maps: FloatingObjectHydrationMaps<'_>,
     pos_map: &mut HashMap<String, String>,
     sheet_id: &cell_types::SheetId,
     objects: &[domain_types::domain::floating_object::FloatingObject],
@@ -889,7 +894,7 @@ pub(super) fn hydrate_floating_objects(
         obj.common.id = sheet_unique_floating_object_id(&obj.common.id, sheet_id);
         let anchor = &obj.common.anchor;
         let anchor_hex = get_or_create_cell_id_for_pos(
-            cells_map,
+            maps.cells,
             pos_map,
             txn,
             anchor.anchor_row,
@@ -898,8 +903,9 @@ pub(super) fn hydrate_floating_objects(
         );
         obj.common.anchor_cell_id.get_or_insert(anchor_hex);
         if let (Some(end_row), Some(end_col)) = (anchor.end_row, anchor.end_col) {
-            let to_anchor_hex =
-                get_or_create_cell_id_for_pos(cells_map, pos_map, txn, end_row, end_col, allocator);
+            let to_anchor_hex = get_or_create_cell_id_for_pos(
+                maps.cells, pos_map, txn, end_row, end_col, allocator,
+            );
             obj.common.to_anchor_cell_id.get_or_insert(to_anchor_hex);
         }
         // Use the object's own ID as the Y.Map key so that get-by-ID lookups
@@ -910,7 +916,9 @@ pub(super) fn hydrate_floating_objects(
         let key = &obj.common.id;
         let entries = yrs_schema::floating_object::to_yrs_prelim(&obj);
         let obj_prelim: MapPrelim = entries.into_iter().collect();
-        floating_objects_map.insert(txn, key.as_str(), obj_prelim);
+        maps.floating_objects.insert(txn, key.as_str(), obj_prelim);
+        maps.floating_object_order
+            .push_back(txn, Any::String(Arc::from(key.as_str())));
     }
 }
 

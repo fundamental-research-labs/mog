@@ -18,6 +18,7 @@ use super::keys::{
     FO_SHADOW, FO_TEXT, FO_UPDATED_AT, KEY_ANCHOR_COL_OFFSET_EMU, KEY_ANCHOR_ROW_OFFSET_EMU,
     KEY_EXTENT_CX_EMU, KEY_EXTENT_CY_EMU,
 };
+use super::order::append_object_id_if_missing;
 use super::sheet_map::get_sheet_submap;
 use super::units::px_to_emu;
 
@@ -400,5 +401,6 @@ pub fn duplicate_floating_object_typed(
 
     // Write as typed struct — the canonical write path.
     write_object_typed(&mut txn, &map, &new_id, &obj);
+    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &new_id);
     serde_json::to_value(&obj).ok()
 }

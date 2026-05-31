@@ -74,7 +74,7 @@ pub(super) fn sorted_map_entries<T: ReadTxn>(map: &MapRef, txn: &T) -> Vec<(Stri
         let a_idx = parse_key_suffix(a);
         let b_idx = parse_key_suffix(b);
         match (a_idx, b_idx) {
-            (Some(ai), Some(bi)) => ai.cmp(&bi),
+            (Some(ai), Some(bi)) => ai.cmp(&bi).then_with(|| a.cmp(b)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => a.cmp(b),

@@ -3,6 +3,10 @@ import { isLayerSpec, type ChartSpec, type LayerSpec } from '../../grammar/spec'
 import type { ChartConfig, ChartData } from '../../types';
 import { chartDataToRows, configToSpec } from '../config-to-spec';
 import {
+  FUNNEL_X2_FIELD,
+  FUNNEL_X_FIELD,
+  FUNNEL_Y2_FIELD,
+  FUNNEL_Y_FIELD,
   WATERFALL_END_FIELD,
   WATERFALL_RUNNING_TOTAL_FIELD,
   WATERFALL_TYPE_FIELD,
@@ -14,6 +18,79 @@ function asLayerSpec(spec: ChartSpec): LayerSpec {
 }
 
 describe('configToSpec ChartEx-family semantics', () => {
+  it('renders funnel as centered proportional bars in source order', () => {
+    const data: ChartData = {
+      categories: ['Qualified', 'Proposal', 'Closed'],
+      series: [
+        {
+          name: 'Pipeline',
+          data: [
+            { x: 'Qualified', y: 100 },
+            { x: 'Proposal', y: 60 },
+            { x: 'Closed', y: 30 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'funnel',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 6,
+      height: 4,
+      colors: ['#111111', '#222222', '#333333'],
+    };
+
+    const spec = asLayerSpec(configToSpec(config, data));
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+
+    expect(rows.map((row) => [row.category, row.value])).toEqual([
+      ['Qualified', 100],
+      ['Proposal', 60],
+      ['Closed', 30],
+    ]);
+    expect(rows.map((row) => row[FUNNEL_X_FIELD])).toEqual([0, 0.2, 0.35]);
+    expect(rows.map((row) => row[FUNNEL_X2_FIELD])).toEqual([1, 0.8, 0.65]);
+    expect(rows.map((row) => row[FUNNEL_Y_FIELD])).toEqual([
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Number),
+    ]);
+    expect(rows[0][FUNNEL_Y_FIELD]).toBeLessThan(rows[1][FUNNEL_Y_FIELD] as number);
+    expect(rows[1][FUNNEL_Y_FIELD]).toBeLessThan(rows[2][FUNNEL_Y_FIELD] as number);
+    expect(spec.layer).toEqual([
+      expect.objectContaining({
+        mark: expect.objectContaining({
+          type: 'rect',
+          coordinateSystem: 'plotFraction',
+          xField: FUNNEL_X_FIELD,
+          x2Field: FUNNEL_X2_FIELD,
+          yField: FUNNEL_Y_FIELD,
+          y2Field: FUNNEL_Y2_FIELD,
+        }),
+      }),
+    ]);
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const funnelRects = compiled.marks.filter((mark) => mark.type === 'rect');
+
+    expect(funnelRects.map((mark) => mark.datum?.category)).toEqual([
+      'Qualified',
+      'Proposal',
+      'Closed',
+    ]);
+    expect(funnelRects[0].width).toBeGreaterThan(funnelRects[1].width);
+    expect(funnelRects[1].width).toBeGreaterThan(funnelRects[2].width);
+    expect(funnelRects[1].x).toBeGreaterThan(funnelRects[0].x);
+    expect(funnelRects[2].x).toBeGreaterThan(funnelRects[1].x);
+  });
+
   it('renders Pareto as sorted bars plus a cumulative percentage line', () => {
     const data: ChartData = {
       categories: ['B', 'A', 'C'],

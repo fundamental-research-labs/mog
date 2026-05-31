@@ -97,4 +97,10 @@ export const WATERFALL_RUNNING_TOTAL_FIELD = '_waterfallRunningTotal';
 export const WATERFALL_END_FIELD = '_waterfallEnd';
 export const WATERFALL_TYPE_FIELD = '_waterfallType';
 
+export const FUNNEL_X_FIELD = '__mogFunnelX';
+export const FUNNEL_X2_FIELD = '__mogFunnelX2';
+export const FUNNEL_Y_FIELD = '__mogFunnelY';
+export const FUNNEL_Y2_FIELD = '__mogFunnelY2';
+export const FUNNEL_FILL_FIELD = '__mogFunnelFill';
+
 export { SERIES_OPACITY_FIELD } from './constants';

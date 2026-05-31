@@ -16,6 +16,7 @@ import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from './layers/data-labels';
 import { buildDataTableLayers } from './layers/data-table';
 import { buildErrorBarLayers } from './layers/error-bars';
+import { buildFunnelLayers } from './layers/funnel';
 import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
 import { buildParetoLayers } from './layers/pareto';
 import { buildStockLayers } from './layers/stock';
@@ -46,6 +47,7 @@ export {
   buildDataTableLayers,
   buildEncoding,
   buildDataLabelLayer,
+  buildFunnelLayers,
   buildMark,
   buildParetoLayers,
   buildStockLayers,
@@ -110,6 +112,17 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       dimensions,
       rows,
       layers,
+      title,
+      config: configSpec,
+    });
+  }
+
+  if (config.type === 'funnel') {
+    const funnel = buildFunnelLayers(config, rows);
+    return buildLayerSpec({
+      dimensions,
+      rows: funnel.rows,
+      layers: funnel.layers,
       title,
       config: configSpec,
     });

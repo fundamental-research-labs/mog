@@ -385,6 +385,102 @@ describe('resolved spec snapshot helpers', () => {
     });
   });
 
+  it('snapshots multi-level category cache render authority', () => {
+    const sheetId = toSheetId('sheet-1');
+    const config: ChartConfig = {
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 5,
+      series: [
+        {
+          name: 'Hierarchy',
+          valueSourceKind: 'literal',
+          valueCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '10' },
+              { idx: 1, value: '20' },
+            ],
+          },
+          categories: 'Missing!A1:B2',
+          categorySourceKind: 'cacheFallback',
+          categoryLevels: {
+            pointCount: 2,
+            levels: [
+              {
+                level: 0,
+                pointCount: 2,
+                points: [
+                  { idx: 0, value: 'North' },
+                  { idx: 1, value: 'South' },
+                ],
+              },
+              {
+                level: 1,
+                pointCount: 2,
+                points: [
+                  { idx: 0, value: 'Q1' },
+                  { idx: 1, value: 'Q2' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config,
+      chartData: {
+        categories: ['North / Q1', 'South / Q2'],
+        categoryLevels: [
+          { level: 0, labels: ['North', 'South'] },
+          { level: 1, labels: ['Q1', 'Q2'] },
+        ],
+        series: [
+          {
+            name: 'Hierarchy',
+            data: [
+              { x: 'North / Q1', y: 10 },
+              { x: 'South / Q2', y: 20 },
+            ],
+          },
+        ],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [{ index: 0, values: null, categories: null, bubbleSizes: null }],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.series[0]).toMatchObject({
+      source: {
+        categories: 'Missing!A1:B2',
+        categorySourceKind: 'cacheFallback',
+      },
+      renderAuthority: {
+        values: 'literal',
+        categories: 'fallbackCache',
+      },
+    });
+  });
+
   it('uses sourceSeriesIndex as the dropped-series key fallback', () => {
     const sheetId = toSheetId('sheet-1');
     const snapshot = buildResolvedChartSpecSnapshot({

@@ -385,6 +385,9 @@ function snapshotSeries(
     }),
     categories: dimensionRenderAuthority({
       cache: configured?.categoryCache,
+      cacheRenderable:
+        hasRenderableChartPointCache(configured?.categoryCache) ||
+        hasRenderableCategoryLevelsCache(configured?.categoryLevels),
       sourceKind: configured?.categorySourceKind,
       resolvedRange: rangeReference?.categories,
     }),
@@ -526,22 +529,55 @@ function droppedSeriesReason(
 
 function dimensionRenderAuthority(input: {
   cache: ChartPointCacheLike | null | undefined;
+  cacheRenderable?: boolean;
   sourceKind: ChartSeriesDimensionSourceKind | undefined;
   resolvedRange: ResolvedChartRangeReference | null | undefined;
 }): ChartSeriesDimensionRenderAuthority {
+  const cacheRenderable = input.cacheRenderable ?? hasRenderableChartPointCache(input.cache);
   if (input.sourceKind === 'literal') {
-    return hasRenderableChartPointCache(input.cache) ? 'literal' : 'unavailable';
+    return cacheRenderable ? 'literal' : 'unavailable';
   }
   if (input.sourceKind === 'cacheFallback') {
-    return hasRenderableChartPointCache(input.cache) ? 'fallbackCache' : 'unavailable';
+    return cacheRenderable ? 'fallbackCache' : 'unavailable';
   }
   if (input.resolvedRange) {
     return 'live';
   }
-  if (hasRenderableChartPointCache(input.cache)) {
+  if (cacheRenderable) {
     return 'fallbackCache';
   }
   return 'unavailable';
+}
+
+function hasRenderableCategoryLevelsCache(
+  cache: NonNullable<NonNullable<ChartConfig['series']>[number]['categoryLevels']> | undefined,
+): boolean {
+  return categoryLevelPointCardinality(cache) > 0 && (cache?.levels.length ?? 0) > 0;
+}
+
+function categoryLevelPointCardinality(
+  cache: NonNullable<NonNullable<ChartConfig['series']>[number]['categoryLevels']> | undefined,
+): number {
+  if (!cache) return 0;
+  if (
+    typeof cache.pointCount === 'number' &&
+    Number.isInteger(cache.pointCount) &&
+    cache.pointCount >= 0
+  ) {
+    return cache.pointCount;
+  }
+  return cache.levels.reduce((max, level) => {
+    const levelPointCount =
+      typeof level.pointCount === 'number' &&
+      Number.isInteger(level.pointCount) &&
+      level.pointCount >= 0
+        ? level.pointCount
+        : 0;
+    const maxPointIndex = level.points.reduce((pointMax, point) => {
+      return Math.max(pointMax, point.idx + 1);
+    }, 0);
+    return Math.max(max, levelPointCount, maxPointIndex);
+  }, 0);
 }
 
 function snapshotSeriesName(

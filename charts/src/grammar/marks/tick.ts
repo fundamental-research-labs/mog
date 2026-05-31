@@ -10,6 +10,7 @@ import type { PathMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { centeredScalePosition } from './helpers';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
@@ -47,18 +48,18 @@ export function generateTickMarks(
 
     if (xScale && !yScale) {
       // Vertical tick on x-axis
-      x = xScale(xValue) as number;
+      x = centeredScalePosition(xScale, xValue);
       y = layout.plotArea.y + layout.plotArea.height / 2;
       path = `M${x},${y - tickLength} L${x},${y + tickLength}`;
     } else if (yScale && !xScale) {
       // Horizontal tick on y-axis
       x = layout.plotArea.x + layout.plotArea.width / 2;
-      y = yScale(yValue) as number;
+      y = centeredScalePosition(yScale, yValue);
       path = `M${x - tickLength},${y} L${x + tickLength},${y}`;
     } else if (xScale && yScale) {
       // Tick at specific position
-      x = xScale(xValue) as number;
-      y = yScale(yValue) as number;
+      x = centeredScalePosition(xScale, xValue);
+      y = centeredScalePosition(yScale, yValue);
       path =
         markSpec.orient === 'vertical'
           ? `M${x},${y - tickLength / 2} L${x},${y + tickLength / 2}`

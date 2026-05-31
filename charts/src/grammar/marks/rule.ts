@@ -12,7 +12,7 @@ import { resolveStrokeColor } from '../../algebra/color';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { definedStyle } from './helpers';
+import { centeredScalePosition, definedStyle } from './helpers';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
@@ -59,10 +59,14 @@ export function generateRuleMarks(
       x2 = directX2;
       y2 = directY2;
     } else if (encodings.x && encodings.y && encodings.x2 && encodings.y2) {
-      const encodedX1 = xScale ? (xScale(encodings.x.accessor(datum)) as number) : 0;
-      const encodedY1 = yScale ? (yScale(encodings.y.accessor(datum)) as number) : 0;
-      const encodedX2 = xScale ? (xScale(encodings.x2.accessor(datum)) as number) : encodedX1;
-      const encodedY2 = yScale ? (yScale(encodings.y2.accessor(datum)) as number) : encodedY1;
+      const encodedX1 = xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0;
+      const encodedY1 = yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0;
+      const encodedX2 = xScale
+        ? centeredScalePosition(xScale, encodings.x2.accessor(datum))
+        : encodedX1;
+      const encodedY2 = yScale
+        ? centeredScalePosition(yScale, encodings.y2.accessor(datum))
+        : encodedY1;
       x1 = directX1 ?? encodedX1;
       y1 = directY1 ?? encodedY1;
       x2 = directX2 ?? encodedX2;
@@ -70,14 +74,14 @@ export function generateRuleMarks(
       if (![x1, y1, x2, y2].every((value) => Number.isFinite(value))) continue;
     } else if (encodings.x && !encodings.y) {
       // Vertical rule
-      const x = xScale ? (xScale(encodings.x.accessor(datum)) as number) : 0;
+      const x = xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0;
       x1 = x;
       x2 = x;
       y1 = layout.plotArea.y;
       y2 = layout.plotArea.y + layout.plotArea.height;
     } else if (encodings.y && !encodings.x) {
       // Horizontal rule
-      const y = yScale ? (yScale(encodings.y.accessor(datum)) as number) : 0;
+      const y = yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0;
       x1 = layout.plotArea.x;
       x2 = layout.plotArea.x + layout.plotArea.width;
       y1 = y;

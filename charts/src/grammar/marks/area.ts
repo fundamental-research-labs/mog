@@ -13,6 +13,7 @@ import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import {
+  centeredScalePosition,
   definedStyle,
   groupDataByEncoding,
   isBlankValueDatum,
@@ -160,7 +161,7 @@ export function generateAreaMarks(
 
       for (const datum of segmentData) {
         if (isBlankValueDatum(datum)) continue;
-        const x = xScale(encodings.x?.accessor(datum)) as number;
+        const x = centeredScalePosition(xScale, encodings.x?.accessor(datum));
 
         if (isNaN(x)) continue;
 
@@ -203,7 +204,7 @@ export function generateAreaMarks(
           }
         } else {
           // Non-stacked: use original scale directly
-          const y = yScale(encodings.y?.accessor(datum)) as number;
+          const y = centeredScalePosition(yScale, encodings.y?.accessor(datum));
           if (isNaN(y)) continue;
           topPoints.push({ x, y: clampYToPlot(y), xKey: '' });
           plottedData.push(datum);

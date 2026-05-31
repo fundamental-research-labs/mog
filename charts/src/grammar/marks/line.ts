@@ -13,6 +13,7 @@ import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import {
+  centeredScalePosition,
   definedStyle,
   groupDataByEncoding,
   isBlankValueDatum,
@@ -53,8 +54,8 @@ export function generateLineMarks(
       for (let i = 0; i < segmentData.length; i++) {
         const datum = segmentData[i];
         if (isBlankValueDatum(datum)) continue;
-        const x = xScale(encodings.x?.accessor(datum)) as number;
-        const y = yScale(encodings.y?.accessor(datum)) as number;
+        const x = centeredScalePosition(xScale, encodings.x?.accessor(datum));
+        const y = centeredScalePosition(yScale, encodings.y?.accessor(datum));
 
         if (isNaN(x) || isNaN(y)) continue;
         pts.push({ x, y });

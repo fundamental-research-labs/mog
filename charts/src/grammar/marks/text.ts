@@ -10,7 +10,7 @@ import type { TextAlign, TextBaseline, TextMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { definedStyle } from './helpers';
+import { centeredScalePosition, definedStyle } from './helpers';
 
 /**
  * Generate text marks.
@@ -38,9 +38,9 @@ export function generateTextMarks(
       continue;
     }
     const x =
-      (directX ?? (xScale ? (xScale(encodings.x?.accessor(datum)) as number) : layout.plotArea.x)) + dx;
+      (directX ?? (xScale ? centeredScalePosition(xScale, encodings.x?.accessor(datum)) : layout.plotArea.x)) + dx;
     const y =
-      (directY ?? (yScale ? (yScale(encodings.y?.accessor(datum)) as number) : layout.plotArea.y)) + dy;
+      (directY ?? (yScale ? centeredScalePosition(yScale, encodings.y?.accessor(datum)) : layout.plotArea.y)) + dy;
 
     const textValue = encodings.text?.accessor(datum);
     const text = textValue != null ? String(textValue) : '';

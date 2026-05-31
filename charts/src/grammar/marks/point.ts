@@ -11,7 +11,7 @@ import type { SymbolMark, SymbolShape } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { definedStyle, invokeScale, isBlankValueDatum } from './helpers';
+import { centeredScalePosition, definedStyle, invokeScale, isBlankValueDatum } from './helpers';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
@@ -50,8 +50,8 @@ export function generatePointMarks(
   for (let i = 0; i < data.length; i++) {
     const datum = data[i];
     if (isBlankValueDatum(datum)) continue;
-    let x = xScale(encodings.x?.accessor(datum)) as number;
-    let y = yScale(encodings.y?.accessor(datum)) as number;
+    let x = centeredScalePosition(xScale, encodings.x?.accessor(datum));
+    let y = centeredScalePosition(yScale, encodings.y?.accessor(datum));
 
     // Check for non-finite positions (NaN or Infinity).
     // If only one is bad, place at the fallback position so the mark still exists.

@@ -21,6 +21,23 @@ export function invokeScale<T>(scale: AnyScale | undefined, value: unknown): T |
 }
 
 /**
+ * Position zero-width/zero-height marks on the visual center of band scales.
+ *
+ * Band scales return the leading edge of a category slot, which rect/bar/heatmap
+ * marks need. Line, area, point, text, rule, and tick marks represent a datum at
+ * a category value, so they must align with axis ticks and labels at band center.
+ */
+export function centeredScalePosition(scale: AnyScale | undefined, value: unknown): number {
+  if (!scale) return NaN;
+  const position = scale(value);
+  if (typeof position !== 'number' || !Number.isFinite(position)) return NaN;
+  const bandwidth = typeof scale.bandwidth === 'function' ? scale.bandwidth() : undefined;
+  return typeof bandwidth === 'number' && Number.isFinite(bandwidth) && bandwidth > 0
+    ? position + bandwidth / 2
+    : position;
+}
+
+/**
  * Group data by a color/detail encoding.
  */
 export function groupDataByEncoding(

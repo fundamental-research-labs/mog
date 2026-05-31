@@ -1149,7 +1149,7 @@ export class WorksheetImpl implements Worksheet {
     const linkedCells: Array<{
       row: number;
       col: number;
-      controlType: 'checkbox' | 'comboBox' | 'button';
+      controlType: 'checkbox' | 'comboBox' | 'listBox' | 'button';
     }> = [];
 
     const controls = this.formControls.list();
@@ -1190,7 +1190,7 @@ export class WorksheetImpl implements Worksheet {
     for (const { row, col, controlType } of linkedCells) {
       if (controlType === 'checkbox') {
         await CellOps.setCell(this.ctx, this.sheetId, row, col, false);
-      } else if (controlType === 'comboBox') {
+      } else if (controlType === 'comboBox' || controlType === 'listBox') {
         await CellOps.setCell(this.ctx, this.sheetId, row, col, '');
       }
       // Buttons have no value to reset

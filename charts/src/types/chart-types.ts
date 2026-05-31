@@ -324,6 +324,7 @@ export interface ChartDataPoint {
   valueState?: ChartDataPointValueState;
   name?: string;
   value?: number; // For pie charts
+  size?: number; // For bubble charts
   open?: number; // OHLC fields for stock charts
   high?: number;
   low?: number;

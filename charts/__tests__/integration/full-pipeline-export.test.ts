@@ -327,21 +327,23 @@ describe('Full pipeline export: support matrix', () => {
     expect(result.chartXml).toContain('<c:barDir val="col"/>');
   });
 
-  it('bubble chart (point + size encoding) can be exported when spec has size', () => {
-    // Bubble charts need manual spec construction with size encoding
-    const spec: ChartSpec = {
-      mark: 'point',
-      encoding: {
-        x: { field: 'x', type: 'quantitative' },
-        y: { field: 'y', type: 'quantitative' },
-        size: { field: 'size', type: 'quantitative' },
-      },
+  it('bubble chart can be exported from configToSpec with size encoding', () => {
+    const config = makeConfig({ type: 'bubble' });
+    const chartData: ChartData = {
+      categories: [1, 2, 3],
+      series: [
+        {
+          name: 'Bubbles',
+          data: [
+            { x: 1, y: 2, size: 10 },
+            { x: 2, y: 4, size: 20 },
+            { x: 3, y: 3, size: 15 },
+          ],
+        },
+      ],
     };
-    const data: DataRow[] = [
-      { x: 1, y: 2, size: 10 },
-      { x: 2, y: 4, size: 20 },
-      { x: 3, y: 3, size: 15 },
-    ];
+    const spec = configToSpec(config, chartData);
+    const data = chartDataToRows(chartData, config);
 
     expect(canExportToOOXML(spec)).toBe(true);
     const result = toOOXML(spec, data);

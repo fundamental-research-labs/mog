@@ -243,7 +243,7 @@ export function seriesSheetAliases(
 ): Map<string, string> {
   const aliases = new Map<string, string>();
   for (const series of resolvedRanges.seriesReferences) {
-    for (const reference of [series.values, series.categories]) {
+    for (const reference of [series.values, series.categories, series.bubbleSizes]) {
       const parsed = reference?.ref ? parseCellRange(reference.ref) : null;
       if (parsed?.sheetName && reference?.range.sheetId) {
         aliases.set(parsed.sheetName, String(reference.range.sheetId));
@@ -341,6 +341,7 @@ export class ChartDataResolver {
       const seriesRanges = resolvedRanges.seriesReferences.flatMap((series) => [
         series.values?.range,
         series.categories?.range,
+        series.bubbleSizes?.range,
       ]);
       const hiddenVisibility = config.plotVisibleOnly
         ? await loadHiddenVisibility(

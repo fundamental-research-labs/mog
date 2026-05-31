@@ -54,6 +54,7 @@ describe('resolved spec snapshot helpers', () => {
           name: 'Visible',
           values: 'Sheet1!B2:C2',
           categories: 'Sheet1!B1:C1',
+          bubbleSize: 'Sheet1!B4:C4',
           color: '#111111',
           idx: 4,
         },
@@ -122,6 +123,7 @@ describe('resolved spec snapshot helpers', () => {
             index: 0,
             values: { ...range, kind: 'seriesValues', ref: 'Sheet1!B2:C2' },
             categories: { ...range, kind: 'seriesCategories', ref: 'Sheet1!B1:C1' },
+            bubbleSizes: { ...range, kind: 'seriesBubbleSizes', ref: 'Sheet1!B4:C4' },
           },
         ],
         diagnostics: [
@@ -179,6 +181,18 @@ describe('resolved spec snapshot helpers', () => {
       source: {
         values: 'Sheet1!B2:C2',
         categories: 'Sheet1!B1:C1',
+        bubbleSize: 'Sheet1!B4:C4',
+      },
+    });
+    expect(snapshot.resolved.ranges.seriesReferences[0].bubbleSize).toMatchObject({
+      kind: 'seriesBubbleSizes',
+      ref: 'Sheet1!B4:C4',
+      range: {
+        sheetId: 'sheet-1',
+        startRow: 0,
+        startCol: 0,
+        endRow: 2,
+        endCol: 2,
       },
     });
     expect(snapshot.resolved.ranges.dataRange).toMatchObject({

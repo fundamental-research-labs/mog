@@ -125,6 +125,7 @@ function createDataPoint(
   x: string | number,
   rawValue: ChartCellValue,
   name: string,
+  rawSize?: ChartCellValue,
 ): ChartDataPoint {
   const numericValue = toNumber(rawValue);
   const valueState = getValueState(rawValue, numericValue);
@@ -135,6 +136,10 @@ function createDataPoint(
   };
   if (valueState) {
     point.valueState = valueState;
+  }
+  const numericSize = toNumber(rawSize);
+  if (Number.isFinite(numericSize)) {
+    point.size = numericSize;
   }
   return point;
 }
@@ -504,6 +509,8 @@ function extractChartDataFromSeriesRefs(
     const valueItems = extractValues(accessor, valueRange);
     const categoryRange = tryParseRange(seriesConfig.categories);
     const categoryItems = categoryRange ? extractLabels(accessor, categoryRange) : [];
+    const bubbleSizeRange = tryParseRange(seriesConfig.bubbleSize);
+    const bubbleSizeItems = bubbleSizeRange ? extractValues(accessor, bubbleSizeRange) : [];
 
     const data: ChartDataPoint[] = valueItems.map((rawValue, pointIndex) => {
       const liveCategory = categoryItems[pointIndex];
@@ -514,7 +521,12 @@ function extractChartDataFromSeriesRefs(
           ? liveCategory
           : (categories[pointIndex] ?? pointIndex + 1));
       const value = valueWithImportedCacheFallback(rawValue, seriesConfig.valueCache, pointIndex);
-      return createDataPoint(category, value, String(category));
+      const bubbleSize = valueWithImportedCacheFallback(
+        bubbleSizeItems[pointIndex],
+        seriesConfig.bubbleSizeCache,
+        pointIndex,
+      );
+      return createDataPoint(category, value, String(category), bubbleSize);
     });
 
     if (series.length === 0 || categories.length === 0) {

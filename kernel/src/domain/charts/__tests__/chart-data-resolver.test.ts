@@ -182,6 +182,12 @@ describe('chart data resolver helpers', () => {
               ref: 'Calendar!A1:C1',
               range: range('sheet-calendar', 0, 0, 0, 2),
             },
+            bubbleSizes: {
+              kind: 'seriesBubbleSizes',
+              source: 'a1',
+              ref: 'Size Data!A1:C1',
+              range: range('sheet-sizes', 0, 0, 0, 2),
+            },
           },
         ],
       }),
@@ -191,6 +197,7 @@ describe('chart data resolver helpers', () => {
       new Map([
         ['Revenue', 'sheet-revenue'],
         ['Calendar', 'sheet-calendar'],
+        ['Size Data', 'sheet-sizes'],
       ]),
     );
   });

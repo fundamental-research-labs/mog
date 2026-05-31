@@ -121,6 +121,7 @@ describe('resolveChartRangeReferences', () => {
             name: 'Revenue',
             values: 'Formulas!$B$2:$D$2',
             categories: 'Formulas!$B$1:$D$1',
+            bubbleSize: 'Formulas!$B$3:$D$3',
           },
         ],
       }),
@@ -141,6 +142,13 @@ describe('resolveChartRangeReferences', () => {
       startRow: 0,
       startCol: 1,
       endRow: 0,
+      endCol: 3,
+    });
+    expect(resolved.seriesReferences[0].bubbleSizes?.range).toMatchObject({
+      sheetId: FORMULAS,
+      startRow: 2,
+      startCol: 1,
+      endRow: 2,
       endCol: 3,
     });
   });

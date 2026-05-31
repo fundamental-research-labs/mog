@@ -8,8 +8,10 @@ import {
   toFiniteNumber,
 } from './category-axis';
 import {
+  BUBBLE_SIZE_FIELD,
   CATEGORY_FIELD,
   CATEGORY_FORMAT_CODE_FIELD,
+  SCATTER_X_FIELD,
   SERIES_FIELD,
   SERIES_OPACITY_FIELD,
   STOCK_CLOSE_FIELD,
@@ -54,6 +56,12 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           [VALUE_FIELD]: point.y,
           [SERIES_FIELD]: series.name,
         };
+        if (isScatterLikeChart(config)) {
+          row[SCATTER_X_FIELD] = scatterXValue(point, i);
+        }
+        if (config?.type === 'bubble') {
+          row[BUBBLE_SIZE_FIELD] = bubbleSizeValue(point);
+        }
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
         }
@@ -71,6 +79,18 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     }
   }
   return rows;
+}
+
+function isScatterLikeChart(config?: ChartConfig): boolean {
+  return config?.type === 'scatter' || config?.type === 'bubble';
+}
+
+function scatterXValue(point: ChartDataPoint, pointIndex: number): number {
+  return toFiniteNumber(point.x) ?? pointIndex + 1;
+}
+
+function bubbleSizeValue(point: ChartDataPoint): number {
+  return toFiniteNumber(point.size) ?? 1;
 }
 
 function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {

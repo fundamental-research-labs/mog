@@ -1,6 +1,8 @@
 export const CATEGORY_FIELD = 'category';
+export const SCATTER_X_FIELD = 'x';
 export const VALUE_FIELD = 'value';
 export const SERIES_FIELD = 'series';
+export const BUBBLE_SIZE_FIELD = 'size';
 export const CATEGORY_FORMAT_CODE_FIELD = 'categoryFormatCode';
 
 export const STOCK_OPEN_FIELD = 'open';

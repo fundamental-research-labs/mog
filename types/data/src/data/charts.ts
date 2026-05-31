@@ -934,6 +934,7 @@ export interface ResolvedChartSpecSnapshot {
         index: number;
         values: ChartRangeReferenceSnapshot | null;
         categories: ChartRangeReferenceSnapshot | null;
+        bubbleSize?: ChartRangeReferenceSnapshot | null;
       }>;
       diagnostics: ChartRangeDiagnosticSnapshot[];
     };

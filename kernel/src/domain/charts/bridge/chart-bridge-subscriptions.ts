@@ -43,6 +43,11 @@ type MaybeLive = {
   isLive?: () => boolean;
 };
 
+type AffectedChartInvalidation = {
+  chartId: string;
+  sheetId?: SheetId;
+};
+
 /**
  * Set up EventBus subscriptions for reactive chart updates.
  *
@@ -206,7 +211,7 @@ export async function handleCellChange(
     const referencesCell = await chartReferencesCell(deps.ctx, chart, sheetId, row, col);
     if (!deps.isLive()) return;
     if (referencesCell) {
-      deps.invalidateChart(chart.id, sheetId);
+      deps.invalidateChart(chart.id, chartOwnerSheetId(chart) ?? sheetId);
     }
   }
 }
@@ -230,7 +235,7 @@ export async function handleCellsBatchChange(
     endCol = Math.max(endCol, change.col);
   }
 
-  const affected = await getChartsAffectedByRange(
+  const affected = await getChartInvalidationsAffectedByRange(
     deps.ctx,
     sheetId,
     {
@@ -243,8 +248,8 @@ export async function handleCellsBatchChange(
     { isLive: deps.isLive },
   );
   if (!deps.isLive()) return;
-  for (const chartId of affected) {
-    deps.invalidateChart(chartId);
+  for (const chart of affected) {
+    deps.invalidateChart(chart.chartId, chart.sheetId);
   }
 }
 
@@ -267,12 +272,7 @@ export async function chartReferencesCell(
   col: number,
 ): Promise<boolean> {
   const resolved = await resolveChartRangeReferences(ctx, chart);
-  const ranges = [
-    resolved.dataRange,
-    resolved.categoryRange,
-    resolved.seriesRange,
-    ...resolved.seriesReferences.flatMap((series) => [series.values, series.categories]),
-  ];
+  const ranges = resolvedChartReferenceRanges(resolved);
 
   return ranges.some((entry) => {
     const range = entry?.range;
@@ -475,18 +475,29 @@ export async function getChartsAffectedByRange(
   range: CellRange,
   options: MaybeLive = {},
 ): Promise<string[]> {
+  return (
+    await getChartInvalidationsAffectedByRange(ctx, sheetId, range, options)
+  ).map((chart) => chart.chartId);
+}
+
+async function getChartInvalidationsAffectedByRange(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  range: CellRange,
+  options: MaybeLive = {},
+): Promise<AffectedChartInvalidation[]> {
   if (options.isLive && !options.isLive()) return [];
 
   const charts = await getAllChartsInWorkbook(ctx);
   if (options.isLive && !options.isLive()) return [];
 
-  const affected: string[] = [];
+  const affected: AffectedChartInvalidation[] = [];
 
   for (const chart of charts) {
     if (options.isLive && !options.isLive()) return affected;
     const resolved = await resolveChartRangeReferences(ctx, chart);
     if (options.isLive && !options.isLive()) return affected;
-    const ranges = [resolved.dataRange, resolved.categoryRange, resolved.seriesRange];
+    const ranges = resolvedChartReferenceRanges(resolved);
     const overlaps = ranges.some((entry) => {
       const chartRange = entry?.range;
       return (
@@ -499,9 +510,28 @@ export async function getChartsAffectedByRange(
     });
 
     if (overlaps) {
-      affected.push(chart.id);
+      affected.push({ chartId: chart.id, sheetId: chartOwnerSheetId(chart) });
     }
   }
 
   return affected;
+}
+
+function resolvedChartReferenceRanges(
+  resolved: Awaited<ReturnType<typeof resolveChartRangeReferences>>,
+) {
+  return [
+    resolved.dataRange,
+    resolved.categoryRange,
+    resolved.seriesRange,
+    ...resolved.seriesReferences.flatMap((series) => [
+      series.values,
+      series.categories,
+      series.bubbleSizes,
+    ]),
+  ];
+}
+
+function chartOwnerSheetId(chart: ChartFloatingObject): SheetId | undefined {
+  return chart.sheetId ? toSheetId(chart.sheetId) : undefined;
 }

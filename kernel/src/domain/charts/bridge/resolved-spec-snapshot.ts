@@ -106,6 +106,7 @@ export function buildResolvedChartSpecSnapshot(input: {
           index: seriesReference.index,
           values: snapshotRange(seriesReference.values),
           categories: snapshotRange(seriesReference.categories),
+          bubbleSize: snapshotRange(seriesReference.bubbleSizes ?? null),
         })),
         diagnostics: input.resolvedRanges.diagnostics.map((diagnostic) => ({
           kind: diagnostic.kind,

@@ -198,4 +198,36 @@ describe('chart data point value provenance', () => {
     expect(data.categories).toEqual([45292, 'Cached B']);
     expect(data.series[0].data.map((point) => point.x)).toEqual([45292, 'Cached B']);
   });
+
+  it('uses imported bubble size ranges and sparse caches for bubble point sizes', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 20, 30],
+      [1, 2, 3],
+      [100, null, 300],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'bubble-size-chart',
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Bubbles',
+          values: 'A1:C1',
+          categories: 'A2:C2',
+          bubbleSize: 'A3:C3',
+          bubbleSizeCache: {
+            points: [{ idx: 1, value: '200' }],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.series[0].data.map((point) => point.size)).toEqual([100, 200, 300]);
+  });
 });

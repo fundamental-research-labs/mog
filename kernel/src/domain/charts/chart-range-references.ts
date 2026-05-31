@@ -17,7 +17,8 @@ export type ChartRangeKind =
   | 'categoryRange'
   | 'seriesRange'
   | 'seriesValues'
-  | 'seriesCategories';
+  | 'seriesCategories'
+  | 'seriesBubbleSizes';
 
 export interface ResolvedChartRangeReference {
   kind: ChartRangeKind;
@@ -46,6 +47,7 @@ export interface ResolvedChartSeriesReference {
   index: number;
   values: ResolvedChartRangeReference | null;
   categories: ResolvedChartRangeReference | null;
+  bubbleSizes?: ResolvedChartRangeReference | null;
 }
 
 /**
@@ -225,7 +227,7 @@ async function resolveSeriesRangeReferences(
 ): Promise<ResolvedChartSeriesReference[]> {
   return Promise.all(
     (chart.series ?? []).map(async (series, index) => {
-      const [values, categories] = await Promise.all([
+      const [values, categories, bubbleSizes] = await Promise.all([
         resolveA1ChartRange(
           ctx,
           chartSheetId,
@@ -240,8 +242,15 @@ async function resolveSeriesRangeReferences(
           series.categories?.trim(),
           diagnostics,
         ),
+        resolveA1ChartRange(
+          ctx,
+          chartSheetId,
+          'seriesBubbleSizes',
+          series.bubbleSize?.trim(),
+          diagnostics,
+        ),
       ]);
-      return { index, values, categories };
+      return { index, values, categories, bubbleSizes };
     }),
   );
 }

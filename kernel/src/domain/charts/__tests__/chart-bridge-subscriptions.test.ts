@@ -136,6 +136,7 @@ async function flushAsyncHandlers(): Promise<void> {
   for (let i = 0; i < 8; i += 1) {
     await Promise.resolve();
   }
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 function computeBridgeMock(ctx: DocumentContext): {
@@ -236,6 +237,45 @@ describe('setupChartBridgeSubscriptions', () => {
     await flushAsyncHandlers();
 
     expect(deps.invalidateChart).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the chart owner sheet for cross-sheet batch range references', async () => {
+    const deps = createDeps({
+      ctx: {
+        computeBridge: {
+          getSheetOrder: jest.fn(async () => [SHEET_A, SHEET_B]),
+          getAllCharts: jest.fn(async (sheetId: SheetId) =>
+            sheetId === SHEET_B
+              ? [
+                  chart({
+                    id: CHART_2,
+                    sheetId: SHEET_B as unknown as string,
+                    dataRange: '',
+                    series: [
+                      {
+                        name: 'Cross sheet',
+                        values: "'Sheet A'!B2:B4",
+                        categories: "'Sheet A'!A2:A4",
+                      },
+                    ],
+                  } as never),
+                ]
+              : [],
+          ),
+        } as never,
+      },
+    });
+
+    setupChartBridgeSubscriptions(deps);
+    deps.ctx.eventBus.emit({
+      type: 'cells:batch-changed',
+      sheetId: SHEET_A as unknown as string,
+      changes: [{ row: 2, col: 1, oldValue: undefined, newValue: 42 }],
+      source: 'local',
+    } as never);
+    await flushAsyncHandlers();
+
+    expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_B);
   });
 
   it.each([
@@ -366,6 +406,45 @@ describe('chart bridge subscription range helpers', () => {
         endCol: 3,
       }),
     ).resolves.toEqual([CHART_1]);
+  });
+
+  it('finds charts whose explicit series and bubble-size ranges overlap the changed range', async () => {
+    const deps = createDeps({
+      ctx: {
+        computeBridge: {
+          getSheetOrder: jest.fn(async () => [SHEET_A, SHEET_B]),
+          getAllCharts: jest.fn(async (sheetId: SheetId) =>
+            sheetId === SHEET_B
+              ? [
+                  chart({
+                    id: CHART_2,
+                    sheetId: SHEET_B as unknown as string,
+                    dataRange: '',
+                    series: [
+                      {
+                        name: 'Bubbles',
+                        values: "'Sheet A'!B2:B4",
+                        categories: "'Sheet A'!A2:A4",
+                        bubbleSize: "'Sheet A'!C2:C4",
+                      },
+                    ],
+                  } as never),
+                ]
+              : [],
+          ),
+        } as never,
+      },
+    });
+
+    await expect(
+      getChartsAffectedByRange(deps.ctx, SHEET_A, {
+        sheetId: SHEET_A,
+        startRow: 3,
+        startCol: 2,
+        endRow: 3,
+        endCol: 2,
+      }),
+    ).resolves.toEqual([CHART_2]);
   });
 
   it('updates A1 row and column ranges through chart-store and invalidates affected charts', async () => {

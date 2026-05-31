@@ -170,6 +170,56 @@ describe('chartDataToRows', () => {
       },
     ]);
   });
+
+  it('should preserve numeric scatter x values separately from category labels', () => {
+    const rows = chartDataToRows(
+      {
+        categories: ['left', 'right', 'fallback'],
+        series: [
+          {
+            name: 'Points',
+            data: [
+              { x: 2.5, y: 10 },
+              { x: 7.75, y: 20 },
+              { x: 'not numeric', y: 30 },
+            ],
+          },
+        ],
+      },
+      makeConfig({ type: 'scatter' }),
+    );
+
+    expect(rows).toEqual([
+      { category: 'left', x: 2.5, value: 10, series: 'Points' },
+      { category: 'right', x: 7.75, value: 20, series: 'Points' },
+      { category: 'fallback', x: 3, value: 30, series: 'Points' },
+    ]);
+  });
+
+  it('should propagate bubble sizes into row size fields', () => {
+    const rows = chartDataToRows(
+      {
+        categories: [1, 2, 3],
+        series: [
+          {
+            name: 'Bubbles',
+            data: [
+              { x: 1, y: 10, size: 4 },
+              { x: 2, y: 20, size: 12 },
+              { x: 3, y: 30 },
+            ],
+          },
+        ],
+      },
+      makeConfig({ type: 'bubble' }),
+    );
+
+    expect(rows).toEqual([
+      { category: '1', x: 1, value: 10, series: 'Bubbles', size: 4 },
+      { category: '2', x: 2, value: 20, series: 'Bubbles', size: 12 },
+      { category: '3', x: 3, value: 30, series: 'Bubbles', size: 1 },
+    ]);
+  });
 });
 
 // =============================================================================
@@ -366,11 +416,20 @@ describe('buildEncoding - chart type encodings', () => {
     expect(encoding.y!.type).toBe('quantitative');
   });
 
-  it('should produce x=nominal, y=quantitative for scatter charts', () => {
+  it('should produce quantitative x/y for scatter charts', () => {
     const config = makeConfig({ type: 'scatter' });
     const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
-    expect(encoding.x!.type).toBe('nominal');
+    expect(encoding.x!.field).toBe('x');
+    expect(encoding.x!.type).toBe('quantitative');
     expect(encoding.y!.type).toBe('quantitative');
+  });
+
+  it('should produce quantitative size encoding for bubble charts', () => {
+    const config = makeConfig({ type: 'bubble' });
+    const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
+    expect(encoding.x).toMatchObject({ field: 'x', type: 'quantitative' });
+    expect(encoding.y).toMatchObject({ field: 'value', type: 'quantitative' });
+    expect(encoding.size).toMatchObject({ field: 'size', type: 'quantitative' });
   });
 
   it('should produce theta/color for pie charts (no x/y)', () => {

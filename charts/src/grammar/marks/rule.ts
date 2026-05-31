@@ -30,7 +30,17 @@ export function generateRuleMarks(
   for (const datum of data) {
     let x1: number, y1: number, x2: number, y2: number;
 
-    if (encodings.x && !encodings.y) {
+    if (encodings.x && encodings.y && encodings.x2 && encodings.y2) {
+      const x = xScale ? (xScale(encodings.x.accessor(datum)) as number) : 0;
+      const y = yScale ? (yScale(encodings.y.accessor(datum)) as number) : 0;
+      const xEnd = xScale ? (xScale(encodings.x2.accessor(datum)) as number) : x;
+      const yEnd = yScale ? (yScale(encodings.y2.accessor(datum)) as number) : y;
+      if (![x, y, xEnd, yEnd].every((value) => Number.isFinite(value))) continue;
+      x1 = x;
+      y1 = y;
+      x2 = xEnd;
+      y2 = yEnd;
+    } else if (encodings.x && !encodings.y) {
       // Vertical rule
       const x = xScale ? (xScale(encodings.x.accessor(datum)) as number) : 0;
       x1 = x;

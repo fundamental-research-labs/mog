@@ -13,6 +13,8 @@ import {
   wireToHierarchyChartConfig,
   wireToHistogramConfig,
   wireToRegionMapConfig,
+  wireToChartLineSettings,
+  wireToUpDownBarsConfig,
   wireToWaterfallConfig,
 } from '../chart-type-converters';
 
@@ -224,6 +226,10 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     titleRichText: normalizedChart.titleRichText as ChartConfig['titleRichText'],
     titleFormula: normalizedChart.titleFormula,
     dataTable: normalizedChart.dataTable as ChartConfig['dataTable'],
+    dropLines: wireToChartLineSettings(normalizedChart.dropLines),
+    highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
+    seriesLines: wireToChartLineSettings(normalizedChart.seriesLines),
+    upDownBars: wireToUpDownBarsConfig(normalizedChart.upDownBars),
     barShape: normalizedChart.barShape as ChartConfig['barShape'],
     heightPt: normalizedChart.heightPt,
     widthPt: normalizedChart.widthPt,

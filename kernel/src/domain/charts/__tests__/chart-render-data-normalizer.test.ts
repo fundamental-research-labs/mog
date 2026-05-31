@@ -79,6 +79,10 @@ describe('chart render data normalizer', () => {
       trimTrailingBlankChartData(
         data({
           categories: ['A', '', ''],
+          categoryLevels: [
+            { level: 0, labels: ['North', 'North', null] },
+            { level: 1, labels: ['Q1', null, null] },
+          ],
           categoryFormatCodes: ['fmt-a', 'fmt-b', 'fmt-c'],
           series: [
             {
@@ -94,6 +98,10 @@ describe('chart render data normalizer', () => {
       ),
     ).toEqual({
       categories: ['A'],
+      categoryLevels: [
+        { level: 0, labels: ['North'] },
+        { level: 1, labels: ['Q1'] },
+      ],
       categoryFormatCodes: ['fmt-a'],
       series: [
         {

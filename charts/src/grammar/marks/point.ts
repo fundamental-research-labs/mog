@@ -63,6 +63,10 @@ export function generatePointMarks(
       markFill: markSpec.fill,
       index: 0,
     });
+    const fillValue = encodings.fill?.accessor(datum);
+    const fill = typeof fillValue === 'string' ? fillValue : color;
+    const strokeValue = encodings.stroke?.accessor(datum);
+    const stroke = typeof strokeValue === 'string' ? strokeValue : markSpec.stroke;
 
     const sizeValue = encodings.size?.accessor(datum);
     const size =
@@ -73,7 +77,9 @@ export function generatePointMarks(
     const shapeValue = encodings.shape?.accessor(datum);
     // Shape values are always valid SymbolShape strings from DEFAULT_SHAPES
     const shape: SymbolShape = (
-      shapeValue
+      typeof shapeValue === 'string' && isSymbolShape(shapeValue)
+        ? shapeValue
+        : shapeValue
         ? (invokeScale<string>(scales.shape, shapeValue) ?? 'circle')
         : (markSpec.shape ?? 'circle')
     ) as SymbolShape;
@@ -86,8 +92,8 @@ export function generatePointMarks(
       shape,
       datum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke,
+        fill,
+        stroke,
         strokeWidth: markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
         ...definedStyle({
@@ -101,4 +107,18 @@ export function generatePointMarks(
   }
 
   return marks;
+}
+
+function isSymbolShape(value: string): value is SymbolShape {
+  return [
+    'circle',
+    'square',
+    'diamond',
+    'cross',
+    'x',
+    'star',
+    'dash',
+    'triangle-up',
+    'triangle-down',
+  ].includes(value);
 }

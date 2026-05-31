@@ -442,7 +442,22 @@ export function trimTrailingBlankChartData(data: ChartData): ChartData {
     lastIndex -= 1;
   }
 
-  if (lastIndex < 0) return { ...data, categories: [], series: [] };
+  if (lastIndex < 0) {
+    return {
+      ...data,
+      categories: [],
+      ...(data.categoryLevels
+        ? {
+            categoryLevels: data.categoryLevels.map((level) => ({
+              ...level,
+              labels: [],
+            })),
+          }
+        : {}),
+      ...(data.categoryFormatCodes ? { categoryFormatCodes: [] } : {}),
+      series: [],
+    };
+  }
   if (
     lastIndex === data.categories.length - 1 &&
     data.series.every((series) => lastIndex === series.data.length - 1)
@@ -453,6 +468,14 @@ export function trimTrailingBlankChartData(data: ChartData): ChartData {
   return {
     ...data,
     categories: data.categories.slice(0, lastIndex + 1),
+    ...(data.categoryLevels
+      ? {
+          categoryLevels: data.categoryLevels.map((level) => ({
+            ...level,
+            labels: level.labels.slice(0, lastIndex + 1),
+          })),
+        }
+      : {}),
     ...(data.categoryFormatCodes
       ? { categoryFormatCodes: data.categoryFormatCodes.slice(0, lastIndex + 1) }
       : {}),

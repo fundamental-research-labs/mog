@@ -5,6 +5,7 @@ import { resolveChartFillPaint, resolveChartLineStyle, resolverContextFromConfig
 import { MARK_TYPE_MAP } from './constants';
 import {
   applySeriesLineFormat,
+  hasExplicitNoLine,
   hasVisibleLineStyle,
   isNoFillNoLineSeries,
   resolveSeriesColor,
@@ -193,6 +194,13 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     return mark.stroke || mark.strokeWidth !== undefined || mark.fillPaint ? mark : baseType;
   }
 
+  if (baseType === 'line') {
+    const series = config.series?.find((item) => !isNoFillNoLineSeries(item));
+    if (hasExplicitNoLine(series)) {
+      return { type: 'line', opacity: 0, strokeWidth: 0 };
+    }
+  }
+
   // Simple mark type string
   return baseType;
 }
@@ -223,6 +231,10 @@ export function buildSeriesMark(
     if (line) mark.line = line;
   }
   applySeriesLineFormat(mark, seriesConf, config, seriesIndex);
+  if (hasExplicitNoLine(seriesConf) && (markType === 'line' || markType === 'area')) {
+    mark.opacity = 0;
+    mark.strokeWidth = 0;
+  }
   const fillOpacity = resolveFormatFillOpacity(seriesConf?.format);
   if (fillOpacity !== undefined) {
     if (markType === 'area') {

@@ -402,6 +402,27 @@ describe('Bin Transform', () => {
 // =============================================================================
 
 describe('Regression Transform', () => {
+  test('applyTransforms regression predicts dependent field over x field', () => {
+    const data = [
+      { x: 1, y: 2 },
+      { x: 2, y: 4 },
+      { x: 3, y: 6 },
+      { x: 4, y: 8 },
+      { x: 5, y: 10 },
+    ];
+
+    const result = applyTransforms(
+      [{ type: 'regression', regression: 'y', on: 'x', method: 'linear', as: ['x', 'y'] }],
+      data,
+    );
+
+    expect(result).toHaveLength(100);
+    expect(result[0].x).toBeCloseTo(1, 5);
+    expect(result[0].y).toBeCloseTo(2, 5);
+    expect(result[result.length - 1].x).toBeCloseTo(5, 5);
+    expect(result[result.length - 1].y).toBeCloseTo(10, 5);
+  });
+
   test('linear regression computes correct slope and intercept', () => {
     const x = [1, 2, 3, 4, 5];
     const y = [2, 4, 6, 8, 10]; // y = 2x

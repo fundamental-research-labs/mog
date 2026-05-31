@@ -463,6 +463,10 @@ export interface EncodingSpec {
   x?: ChannelSpec;
   /** Y position channel */
   y?: ChannelSpec;
+  /** Secondary X endpoint channel for ranged marks */
+  x2?: ChannelSpec;
+  /** Secondary Y endpoint channel for ranged marks */
+  y2?: ChannelSpec;
   /** X offset for grouped charts */
   xOffset?: ChannelSpec;
   /** Y offset for grouped charts */
@@ -583,6 +587,36 @@ export interface MarkSpec {
   shape?: string;
   /** Font size (for text marks) */
   fontSize?: number;
+  /** Font family (for text marks) */
+  fontFamily?: string;
+  /** Font weight (for text marks) */
+  fontWeight?: 'normal' | 'bold' | number;
+  /** Font style (for text marks) */
+  fontStyle?: 'normal' | 'italic';
+  /** Horizontal text alignment */
+  align?: 'left' | 'center' | 'right';
+  /** Vertical text baseline */
+  textBaseline?: 'top' | 'middle' | 'bottom' | 'alphabetic' | 'hanging';
+  /** Horizontal text pixel offset */
+  dx?: number;
+  /** Vertical text pixel offset */
+  dy?: number;
+  /** Text rotation angle in degrees */
+  angle?: number;
+  /** Datum field for horizontal text pixel offset */
+  dxField?: string;
+  /** Datum field for vertical text pixel offset */
+  dyField?: string;
+  /** Datum field for horizontal text alignment */
+  alignField?: string;
+  /** Datum field for vertical text baseline */
+  baselineField?: string;
+  /** Datum field for text fill color */
+  colorField?: string;
+  /** Datum field for font size */
+  fontSizeField?: string;
+  /** Datum field for text rotation angle */
+  angleField?: string;
   /** Line interpolation method */
   interpolate?: Interpolate;
   /** Line tension (for cardinal interpolation) */

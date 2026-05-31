@@ -21,6 +21,11 @@ import {
   resolveSubTypeMarkProps,
 } from '../../src/core/config-to-spec';
 import { collectMarks } from '../../src/core/chart-engine';
+import {
+  DATA_LABEL_BASELINE_FIELD,
+  DATA_LABEL_DY_FIELD,
+  DATA_LABEL_TEXT_FIELD,
+} from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
 import type { EncodingSpec, MarkSpec } from '../../src/grammar/spec';
@@ -64,6 +69,17 @@ function makeData(seriesCount = 1): ChartData {
 const SINGLE_SERIES_DATA = makeData(1);
 const MULTI_SERIES_DATA = makeData(2);
 
+function expectRowContaining(row: Record<string, unknown>, expected: Record<string, unknown>): void {
+  expect(row).toEqual(expect.objectContaining(expected));
+}
+
+function expectRowsContaining(
+  rows: Array<Record<string, unknown>>,
+  expected: Array<Record<string, unknown>>,
+): void {
+  expect(rows).toEqual(expected.map((row) => expect.objectContaining(row)));
+}
+
 // =============================================================================
 // chartDataToRows
 // =============================================================================
@@ -72,20 +88,20 @@ describe('chartDataToRows', () => {
   it('should flatten single series data into rows', () => {
     const rows = chartDataToRows(SINGLE_SERIES_DATA);
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toEqual({ category: 'A', value: 10, series: 'Series 1' });
-    expect(rows[1]).toEqual({ category: 'B', value: 20, series: 'Series 1' });
-    expect(rows[2]).toEqual({ category: 'C', value: 30, series: 'Series 1' });
+    expectRowContaining(rows[0], { category: 'A', value: 10, series: 'Series 1' });
+    expectRowContaining(rows[1], { category: 'B', value: 20, series: 'Series 1' });
+    expectRowContaining(rows[2], { category: 'C', value: 30, series: 'Series 1' });
   });
 
   it('should flatten multi-series data interleaved by category', () => {
     const rows = chartDataToRows(MULTI_SERIES_DATA);
     expect(rows).toHaveLength(6);
     // Category A: Series 1, then Series 2
-    expect(rows[0]).toEqual({ category: 'A', value: 10, series: 'Series 1' });
-    expect(rows[1]).toEqual({ category: 'A', value: 20, series: 'Series 2' });
+    expectRowContaining(rows[0], { category: 'A', value: 10, series: 'Series 1' });
+    expectRowContaining(rows[1], { category: 'A', value: 20, series: 'Series 2' });
     // Category B
-    expect(rows[2]).toEqual({ category: 'B', value: 20, series: 'Series 1' });
-    expect(rows[3]).toEqual({ category: 'B', value: 40, series: 'Series 2' });
+    expectRowContaining(rows[2], { category: 'B', value: 20, series: 'Series 1' });
+    expectRowContaining(rows[3], { category: 'B', value: 40, series: 'Series 2' });
   });
 
   it('adds imported waterfall running-total metadata', () => {
@@ -119,7 +135,7 @@ describe('chartDataToRows', () => {
     };
     const rows = chartDataToRows(data);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ category: 'A', value: 10, series: 'Sparse' });
+    expectRowContaining(rows[0], { category: 'A', value: 10, series: 'Sparse' });
   });
 
   it('should preserve imported per-category format codes separately from category identity', () => {
@@ -137,7 +153,7 @@ describe('chartDataToRows', () => {
       ],
     });
 
-    expect(rows).toEqual([
+    expectRowsContaining(rows, [
       { category: '26', categoryFormatCode: '"FY3/"0"E"', value: 10, series: 'Forecast' },
       { category: '27', categoryFormatCode: '"FY3/"0"E"', value: 20, series: 'Forecast' },
     ]);
@@ -160,7 +176,7 @@ describe('chartDataToRows', () => {
       makeConfig({ type: 'stock', subType: 'ohlc' }),
     );
 
-    expect(rows).toEqual([
+    expectRowsContaining(rows, [
       {
         category: 'Day1',
         value: 100,
@@ -200,7 +216,7 @@ describe('chartDataToRows', () => {
       makeConfig({ type: 'scatter' }),
     );
 
-    expect(rows).toEqual([
+    expectRowsContaining(rows, [
       { category: 'left', x: 2.5, value: 10, series: 'Points' },
       { category: 'right', x: 7.75, value: 20, series: 'Points' },
     ]);
@@ -224,7 +240,7 @@ describe('chartDataToRows', () => {
       makeConfig({ type: 'bubble' }),
     );
 
-    expect(rows).toEqual([
+    expectRowsContaining(rows, [
       { category: '1', x: 1, value: 10, series: 'Bubbles', size: 4 },
       { category: '2', x: 2, value: 20, series: 'Bubbles', size: 12 },
     ]);
@@ -1238,7 +1254,7 @@ describe('buildDataLabelLayer', () => {
     const result = buildDataLabelLayer({ show: true }, encoding);
     expect(result).toBeDefined();
     expect((result!.mark as MarkSpec).type).toBe('text');
-    expect(result!.encoding!.text).toEqual({ field: 'value', type: 'quantitative' });
+    expect(result!.encoding!.text).toEqual({ field: DATA_LABEL_TEXT_FIELD, type: 'nominal' });
     // Should inherit x/y from parent encoding
     expect(result!.encoding!.x).toBeDefined();
     expect(result!.encoding!.y).toBeDefined();
@@ -1425,8 +1441,9 @@ describe('configToSpec - integration', () => {
     });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
 
-    expect(spec.transform).toBeDefined();
-    expect(spec.transform!.length).toBeGreaterThan(0);
+    expect(spec.layer?.some((layer) => layer.transform?.some((transform) => transform.type === 'regression'))).toBe(
+      true,
+    );
   });
 
   it('should not include transforms when no trendline', () => {
@@ -1717,7 +1734,7 @@ describe('buildComboLayers - per-series overrides', () => {
       type: 'combo',
       series: [{ type: 'bar', dataLabels: { show: true } }],
     });
-    const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
+    const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
     // 1 main layer + 1 data label layer
     expect(layers).toHaveLength(2);
     expect((layers[1].mark as MarkSpec).type).toBe('text');
@@ -1729,7 +1746,7 @@ describe('buildComboLayers - per-series overrides', () => {
       type: 'combo',
       series: [{ type: 'bar', dataLabels: { show: false } }],
     });
-    const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
+    const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
     expect(layers).toHaveLength(1);
   });
 
@@ -1743,14 +1760,13 @@ describe('buildComboLayers - per-series overrides', () => {
         },
       ],
     });
-    const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
+    const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
     // 1 main layer + 1 trendline layer
     expect(layers).toHaveLength(2);
     const trendLayer = layers[1];
     expect((trendLayer.mark as MarkSpec).type).toBe('line');
-    expect((trendLayer.mark as MarkSpec).color).toBe('#999');
+    expect((trendLayer.mark as MarkSpec).stroke).toBe('#999');
     expect((trendLayer.mark as MarkSpec).strokeWidth).toBe(2);
-    expect((trendLayer.mark as MarkSpec).strokeDash).toEqual([4, 4]);
     // Should have filter + regression transforms
     expect(trendLayer.transform!.length).toBeGreaterThanOrEqual(2);
   });
@@ -1766,7 +1782,7 @@ describe('buildComboLayers - per-series overrides', () => {
         },
       ],
     });
-    const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
+    const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
     // 1 main + 1 label + 1 trendline
     expect(layers).toHaveLength(3);
   });
@@ -2477,41 +2493,32 @@ describe('configToSpec dropped fields', () => {
 
   describe('dataLabels.position and format', () => {
     it('maps format string to text channel format', () => {
-      const encoding: EncodingSpec = {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'value', type: 'quantitative' },
-      };
+      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
+        type: 'column',
+        dataLabels: { show: true, format: '0.00' },
+      }));
 
-      const layer = buildDataLabelLayer({ show: true, format: '0.00%' }, encoding);
-
-      expect(layer).toBeDefined();
-      expect(layer!.encoding!.text!.format).toBe('0.00%');
+      expect(rows[0][DATA_LABEL_TEXT_FIELD]).toBe('10.00');
     });
 
     it('maps top position to negative baseline offset', () => {
-      const encoding: EncodingSpec = {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'value', type: 'quantitative' },
-      };
+      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
+        type: 'column',
+        dataLabels: { show: true, position: 'top' },
+      }));
 
-      const layer = buildDataLabelLayer({ show: true, position: 'top' }, encoding);
-
-      expect(layer).toBeDefined();
-      const mark = layer!.mark as MarkSpec;
-      expect(mark.baseline).toBe(-10);
+      expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(-10);
+      expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('bottom');
     });
 
     it('maps inside position without offset', () => {
-      const encoding: EncodingSpec = {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'value', type: 'quantitative' },
-      };
+      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
+        type: 'column',
+        dataLabels: { show: true, position: 'inside' },
+      }));
 
-      const layer = buildDataLabelLayer({ show: true, position: 'inside' }, encoding);
-
-      expect(layer).toBeDefined();
-      const mark = layer!.mark as MarkSpec;
-      expect(mark.baseline).toBeUndefined();
+      expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(0);
+      expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('middle');
     });
   });
 

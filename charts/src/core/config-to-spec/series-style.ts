@@ -64,8 +64,13 @@ export function resolvedCategoryColors(config: ChartConfig): string[] | undefine
 
 export function hasVisibleLineStyle(line: unknown): boolean {
   if (!line || typeof line !== 'object') return false;
-  const candidate = line as { color?: unknown; width?: unknown };
+  const candidate = line as { color?: unknown; width?: unknown; noFill?: unknown };
+  if (candidate.noFill === true) return false;
   return candidate.color !== undefined || candidate.width !== undefined;
+}
+
+export function hasExplicitNoLine(series: SeriesConfig | undefined): boolean {
+  return series?.format?.line?.noFill === true;
 }
 
 export function isNoFillNoLineSeries(series: SeriesConfig | undefined): boolean {
@@ -110,7 +115,11 @@ export function applySeriesLineFormat(
     const strokeWidth = linePointsToCanvasPx(line.width);
     if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
   }
+  if (hasExplicitNoLine(seriesConf)) {
+    mark.opacity = 0;
+    mark.strokeWidth = 0;
+  }
 
   const lineWidth = linePointsToCanvasPx(seriesConf?.lineWidth);
-  if (lineWidth !== undefined) mark.strokeWidth = lineWidth;
+  if (lineWidth !== undefined && !hasExplicitNoLine(seriesConf)) mark.strokeWidth = lineWidth;
 }

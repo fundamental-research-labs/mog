@@ -109,6 +109,8 @@ export interface ResolvedEncoding {
 export interface ResolvedEncodings {
   x?: ResolvedEncoding;
   y?: ResolvedEncoding;
+  x2?: ResolvedEncoding;
+  y2?: ResolvedEncoding;
   color?: ResolvedEncoding;
   fill?: ResolvedEncoding;
   stroke?: ResolvedEncoding;
@@ -839,6 +841,12 @@ export function resolveEncodings(
   }
   if (encoding.y) {
     resolved.y = resolveEncoding(encoding.y, data, scales.y);
+  }
+  if (encoding.x2) {
+    resolved.x2 = resolveEncoding(encoding.x2, data, scales.x);
+  }
+  if (encoding.y2) {
+    resolved.y2 = resolveEncoding(encoding.y2, data, scales.y);
   }
   if (encoding.color) {
     resolved.color = resolveEncoding(encoding.color, data, scales.color);

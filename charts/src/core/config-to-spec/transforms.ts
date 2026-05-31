@@ -2,6 +2,8 @@ import type { Transform } from '../../grammar/spec';
 import type { TrendlineConfig } from '../../types';
 import {
   CATEGORY_FIELD,
+  POINT_INDEX_FIELD,
+  SCATTER_X_FIELD,
   VALUE_FIELD,
   WATERFALL_END_FIELD,
   WATERFALL_RUNNING_TOTAL_FIELD,
@@ -27,23 +29,33 @@ export function buildWaterfallTransforms(): Transform[] {
  * Build transforms for trendlines (scatter charts).
  * Maps showEquation, showR2, and period from TrendlineConfig.
  */
-export function buildTrendlineTransform(trendline: TrendlineConfig): Transform[] {
+export function buildTrendlineTransform(
+  trendline: TrendlineConfig,
+  xField: string = CATEGORY_FIELD,
+  yField: string = VALUE_FIELD,
+): Transform[] {
   if (trendline.show === false) return [];
   const methodMap: Record<string, string> = {
     linear: 'linear',
+    exp: 'exp',
     exponential: 'exp',
+    log: 'log',
     logarithmic: 'log',
+    poly: 'poly',
     polynomial: 'poly',
+    pow: 'pow',
     power: 'pow',
-    'moving-average': 'linear', // moving average handled separately
+    movingAvg: 'linear',
+    'moving-average': 'linear',
   };
 
   const transform: Transform = {
     type: 'regression',
-    regression: VALUE_FIELD,
-    on: CATEGORY_FIELD,
+    regression: yField,
+    on: xField,
     method: (methodMap[trendline.type ?? 'linear'] ?? 'linear') as 'linear',
     ...(trendline.order !== undefined ? { order: trendline.order } : {}),
+    as: [xField, yField],
   };
 
   // Attach showEquation/showR2/period as extra metadata on the transform
@@ -55,4 +67,8 @@ export function buildTrendlineTransform(trendline: TrendlineConfig): Transform[]
   }
 
   return [transform];
+}
+
+export function trendlineXFieldForChartType(chartType: string): string {
+  return chartType === 'scatter' || chartType === 'bubble' ? SCATTER_X_FIELD : POINT_INDEX_FIELD;
 }

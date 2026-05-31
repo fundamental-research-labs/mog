@@ -1,4 +1,4 @@
-import type { DataRow, EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
+import type { DataRow, EncodingSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType } from '../../../types';
 import {
   buildAxisScaleSpec,
@@ -7,7 +7,6 @@ import {
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
 import { buildSeriesMark } from '../marks';
-import { buildTrendlineTransform } from '../transforms';
 
 /**
  * Build layers for combo charts where each series can have its own mark type.
@@ -76,48 +75,6 @@ export function buildComboLayers(
 
     layers.push(layerSpec);
 
-    // Per-series data labels: add a text overlay layer for this series
-    if (seriesConf?.dataLabels?.show) {
-      const labelLayer: UnitSpec = {
-        mark: { type: 'text' },
-        encoding: {
-          ...layerEncoding,
-          text: { field: 'value', type: 'quantitative' },
-        },
-        transform: [
-          {
-            type: 'filter',
-            filter: { field: 'series', equal: series.name },
-          },
-        ],
-      };
-      layers.push(labelLayer);
-    }
-
-    // Per-series trendline: add a regression layer for this series
-    if (seriesConf?.trendline?.show) {
-      const trendTransforms = buildTrendlineTransform(seriesConf.trendline);
-      const trendMark: MarkSpec = { type: 'line' };
-      if (seriesConf.trendline.color) trendMark.color = seriesConf.trendline.color;
-      if (seriesConf.trendline.lineWidth) trendMark.strokeWidth = seriesConf.trendline.lineWidth;
-      trendMark.strokeDash = [4, 4]; // dashed for trendlines
-
-      const trendLayer: UnitSpec = {
-        mark: trendMark,
-        encoding: {
-          x: { ...xEncoding },
-          y: { field: 'value', type: 'quantitative' },
-        },
-        transform: [
-          {
-            type: 'filter',
-            filter: { field: 'series', equal: series.name },
-          },
-          ...trendTransforms,
-        ],
-      };
-      layers.push(trendLayer);
-    }
   }
 
   return layers;

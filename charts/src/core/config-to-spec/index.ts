@@ -6,17 +6,27 @@
  *
  * Pure function - no DOM dependencies.
  */
-import type { ChartSpec, Transform } from '../../grammar/spec';
+import type { ChartSpec, DataRow, Transform } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
+import { buildAnalysisLineLayers } from './layers/analysis-lines';
 import { buildComboLayers } from './layers/combo';
-import { buildDataLabelLayer } from './layers/data-labels';
+import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from './layers/data-labels';
+import { buildErrorBarLayers } from './layers/error-bars';
+import { buildMarkerLayers } from './layers/markers';
 import { buildStockLayers } from './layers/stock';
+import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
+import {
+  DATA_LABEL_LEADER_VISIBLE_FIELD,
+  DATA_LABEL_VISIBLE_FIELD,
+  ERROR_BAR_VISIBLE_FIELD,
+  MARKER_VISIBLE_FIELD,
+} from './fields';
 import {
   buildChartDimensions,
   buildLayerSpec,
@@ -67,11 +77,6 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   // 6. Build transforms
   const transforms: Transform[] = [];
 
-  // Trendline transforms (scatter)
-  if (config.trendline?.show) {
-    transforms.push(...buildTrendlineTransform(config.trendline));
-  }
-
   // 7. Build dimensions (cell units -> pixels)
   const dimensions = buildChartDimensions(config);
 
@@ -79,11 +84,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   if (config.type === 'combo' || hasSecondaryYAxis(config, data)) {
     const layers = buildComboLayers(config, data, rows);
 
-    // Data label layer for the whole chart
-    if (config.dataLabels?.show) {
-      const labelLayer = buildDataLabelLayer(config.dataLabels, encoding);
-      if (labelLayer) layers.push(labelLayer);
-    }
+    layers.push(...buildAnnotationLayers(config, data, encoding, rows));
 
     const resolve = buildResolve(config, data);
     return buildLayerSpec({
@@ -119,13 +120,10 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  // 9. Handle data labels as overlay layer
-  if (config.dataLabels?.show) {
+  const annotationLayers = buildAnnotationLayers(config, data, encoding, rows);
+  if (annotationLayers.length > 0) {
     const mainLayer: ChartSpec = { mark, encoding };
-    const labelLayer = buildDataLabelLayer(config.dataLabels, encoding);
-    const layers: ChartSpec[] = [mainLayer];
-    if (labelLayer) layers.push(labelLayer);
-
+    const layers: ChartSpec[] = [mainLayer, ...annotationLayers];
     return buildLayerSpec({
       dimensions,
       rows,
@@ -146,4 +144,24 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     config: configSpec,
     transforms,
   });
+}
+
+function buildAnnotationLayers(
+  config: ChartConfig,
+  data: ChartData,
+  encoding: ReturnType<typeof buildEncoding>,
+  rows: DataRow[],
+): ChartSpec[] {
+  return [
+    ...buildAnalysisLineLayers(config, encoding),
+    ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding) : []),
+    ...buildTrendlineLayers(config, data, encoding),
+    ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
+    ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
+    ...(hasRowFlag(rows, MARKER_VISIBLE_FIELD) ? buildMarkerLayers(encoding) : []),
+  ];
+}
+
+function hasRowFlag(rows: DataRow[], field: string): boolean {
+  return rows.some((row) => row[field] === true);
 }

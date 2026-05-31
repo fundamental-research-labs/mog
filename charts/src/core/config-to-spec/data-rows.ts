@@ -1,5 +1,6 @@
 import type { DataRow } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartDataPoint } from '../../types';
+import { formatExcelValue } from '@mog/spreadsheet-utils/number-formats';
 import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
@@ -11,8 +12,37 @@ import {
   BUBBLE_SIZE_FIELD,
   CATEGORY_FIELD,
   CATEGORY_FORMAT_CODE_FIELD,
+  DATA_LABEL_ALIGN_FIELD,
+  DATA_LABEL_BASELINE_FIELD,
+  DATA_LABEL_COLOR_FIELD,
+  DATA_LABEL_DX_FIELD,
+  DATA_LABEL_DY_FIELD,
+  DATA_LABEL_FONT_SIZE_FIELD,
+  DATA_LABEL_LEADER_VISIBLE_FIELD,
+  DATA_LABEL_ROTATION_FIELD,
+  DATA_LABEL_TEXT_FIELD,
+  DATA_LABEL_VALUE_ANCHOR_FIELD,
+  DATA_LABEL_VISIBLE_FIELD,
+  ERROR_BAR_VISIBLE_FIELD,
+  ERROR_BAR_X_MAX_FIELD,
+  ERROR_BAR_X_MIN_FIELD,
+  ERROR_BAR_Y_MAX_FIELD,
+  ERROR_BAR_Y_MIN_FIELD,
+  MARKER_FILL_FIELD,
+  MARKER_SHAPE_FIELD,
+  MARKER_SIZE_FIELD,
+  MARKER_STROKE_FIELD,
+  MARKER_VISIBLE_FIELD,
+  POINT_FILL_FIELD,
+  POINT_INDEX_FIELD,
+  POINT_STROKE_FIELD,
+  POINT_STROKE_WIDTH_FIELD,
+  RAW_CATEGORY_FIELD,
+  RAW_VALUE_FIELD,
   SCATTER_X_FIELD,
   SERIES_FIELD,
+  SERIES_INDEX_FIELD,
+  SERIES_ORDER_FIELD,
   SERIES_OPACITY_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_HIGH_FIELD,
@@ -25,6 +55,7 @@ import {
   WATERFALL_TYPE_FIELD,
 } from './fields';
 import { isNoFillNoLineSeries } from './series-style';
+import type { ChartFill, DataLabelConfig, ErrorBarConfig, PointFormat, SeriesConfig } from '../../types';
 
 /**
  * Convert ChartData (categories + series) to flat DataRow[] for the grammar.
@@ -65,6 +96,11 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           [CATEGORY_FIELD]: rowCategory,
           [VALUE_FIELD]: point.y,
           [SERIES_FIELD]: series.name,
+          [POINT_INDEX_FIELD]: i,
+          [SERIES_INDEX_FIELD]: seriesIndex,
+          [SERIES_ORDER_FIELD]: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
+          [RAW_CATEGORY_FIELD]: rawCategory,
+          [RAW_VALUE_FIELD]: point.y,
         };
         if (isScatterLikeChart(config)) {
           row[SCATTER_X_FIELD] = scatterXValue(point);
@@ -75,6 +111,16 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
         }
+        applyPointAnnotations(row, {
+          config,
+          seriesConfig: seriesConfigs[seriesIndex],
+          seriesName: series.name,
+          pointIndex: i,
+          category: rawCategory,
+          value: point.y,
+          bubbleSize: point.size,
+          seriesValues: series.data.map((item) => item?.y),
+        });
         if (config?.type === 'waterfall') {
           const value = toFiniteNumber(point.y) ?? 0;
           const isTotal = waterfallTotalIndices.has(i);
@@ -103,6 +149,311 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     }
   }
   return rows;
+}
+
+function applyPointAnnotations(
+  row: DataRow,
+  context: {
+    config?: ChartConfig;
+    seriesConfig?: SeriesConfig;
+    seriesName: string;
+    pointIndex: number;
+    category: string | number;
+    value: number;
+    bubbleSize?: number;
+    seriesValues: Array<number | undefined>;
+  },
+): void {
+  const { config, seriesConfig, pointIndex } = context;
+  const pointFormat = seriesConfig?.points?.find((point) => point.idx === pointIndex);
+  applyPointStyle(row, seriesConfig, pointFormat);
+  applyMarker(row, config, seriesConfig, pointFormat);
+  applyDataLabel(row, context, pointFormat);
+  applyErrorBars(row, context);
+}
+
+function applyPointStyle(
+  row: DataRow,
+  _seriesConfig: SeriesConfig | undefined,
+  pointFormat: PointFormat | undefined,
+): void {
+  const fill = pointFormat?.fill ?? solidFillColor(pointFormat?.visualFormat?.fill);
+  if (fill) row[POINT_FILL_FIELD] = fill;
+  const line = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
+  const stroke = lineColor(line) ?? pointFormat?.border?.color;
+  if (stroke) row[POINT_STROKE_FIELD] = stroke;
+  const strokeWidth = line?.width ?? pointFormat?.border?.width;
+  if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
+}
+
+function applyMarker(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+  pointFormat: PointFormat | undefined,
+): void {
+  const style = pointFormat?.markerStyle ?? seriesConfig?.markerStyle;
+  const showMarkers =
+    style === 'none'
+      ? false
+      : (pointFormat?.markerStyle !== undefined ||
+        pointFormat?.markerSize !== undefined ||
+        seriesConfig?.showMarkers === true ||
+        isMarkerDefaultChart(config?.type));
+  if (!showMarkers) return;
+
+  row[MARKER_VISIBLE_FIELD] = true;
+  row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
+  row[MARKER_SIZE_FIELD] = markerPointSizeToArea(pointFormat?.markerSize ?? seriesConfig?.markerSize);
+  const fill = colorToCss(pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor);
+  const stroke = colorToCss(pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor);
+  if (fill) row[MARKER_FILL_FIELD] = fill;
+  if (stroke) row[MARKER_STROKE_FIELD] = stroke;
+}
+
+function applyDataLabel(
+  row: DataRow,
+  context: {
+    config?: ChartConfig;
+    seriesConfig?: SeriesConfig;
+    seriesName: string;
+    pointIndex: number;
+    category: string | number;
+    value: number;
+    bubbleSize?: number;
+  },
+  pointFormat: PointFormat | undefined,
+): void {
+  const label = mergeLabels(
+    context.config?.dataLabels,
+    context.seriesConfig?.dataLabels,
+    pointFormat?.dataLabel,
+  );
+  if (!label || label.delete === true || label.show === false) return;
+
+  const text = composeLabelText(label, context);
+  if (!text) return;
+  row[DATA_LABEL_VISIBLE_FIELD] = true;
+  row[DATA_LABEL_TEXT_FIELD] = text;
+  const placement = labelPlacement(label.position, context.config?.type);
+  row[DATA_LABEL_DX_FIELD] = placement.dx;
+  row[DATA_LABEL_DY_FIELD] = placement.dy;
+  row[DATA_LABEL_ALIGN_FIELD] = placement.align;
+  row[DATA_LABEL_BASELINE_FIELD] = placement.baseline;
+  row[DATA_LABEL_VALUE_ANCHOR_FIELD] = context.value + placement.valueDelta(context.value);
+  const font = label.visualFormat?.font;
+  const color = colorToCss(font?.color);
+  if (color) row[DATA_LABEL_COLOR_FIELD] = color;
+  if (font?.size !== undefined) row[DATA_LABEL_FONT_SIZE_FIELD] = font.size;
+  const rotation = label.textOrientation ?? label.visualFormat?.textRotation;
+  if (rotation !== undefined) row[DATA_LABEL_ROTATION_FIELD] = rotation;
+  if (label.showLeaderLines === true || label.leaderLinesFormat) {
+    row[DATA_LABEL_LEADER_VISIBLE_FIELD] = true;
+  }
+}
+
+function applyErrorBars(
+  row: DataRow,
+  context: {
+    config?: ChartConfig;
+    seriesConfig?: SeriesConfig;
+    pointIndex: number;
+    value: number;
+    seriesValues: Array<number | undefined>;
+  },
+): void {
+  const bars = [
+    context.seriesConfig?.errorBars,
+    context.seriesConfig?.xErrorBars,
+    context.seriesConfig?.yErrorBars,
+  ].filter(Boolean) as ErrorBarConfig[];
+  if (bars.length === 0) return;
+
+  for (const bar of bars) {
+    if (bar.visible === false) continue;
+    const direction = bar.direction ?? (context.config?.type === 'scatter' ? 'y' : 'y');
+    const extent = errorBarExtent(bar, context);
+    if (!extent) continue;
+    row[ERROR_BAR_VISIBLE_FIELD] = true;
+    if (direction === 'x') {
+      if (extent.minus !== undefined) row[ERROR_BAR_X_MIN_FIELD] = extent.minus;
+      if (extent.plus !== undefined) row[ERROR_BAR_X_MAX_FIELD] = extent.plus;
+    } else {
+      if (extent.minus !== undefined) row[ERROR_BAR_Y_MIN_FIELD] = extent.minus;
+      if (extent.plus !== undefined) row[ERROR_BAR_Y_MAX_FIELD] = extent.plus;
+    }
+  }
+}
+
+function mergeLabels(
+  chartLabel?: DataLabelConfig,
+  seriesLabel?: DataLabelConfig,
+  pointLabel?: DataLabelConfig,
+): DataLabelConfig | undefined {
+  const merged = [chartLabel, seriesLabel, pointLabel].filter(Boolean).reduce(
+    (acc, label) => ({ ...acc, ...definedEntries(label!) }),
+    {} as Partial<DataLabelConfig>,
+  );
+  return Object.keys(merged).length > 0 ? ({ show: false, ...merged } as DataLabelConfig) : undefined;
+}
+
+function definedEntries<T extends object>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
+}
+
+function composeLabelText(
+  label: DataLabelConfig,
+  context: { seriesName: string; category: string | number; value: number; bubbleSize?: number },
+): string {
+  if (label.text) return label.text;
+  if (label.formula) return label.formula;
+  if (label.richText?.length) return label.richText.map((run) => run.text).join('');
+
+  const showValue = label.showValue ?? defaultLabelShowsValue(label);
+  const parts: string[] = [];
+  if (label.showSeriesName) parts.push(context.seriesName);
+  if (label.showCategoryName ?? label.showCategory) parts.push(String(context.category));
+  if (showValue) parts.push(formatLabelNumber(context.value, label.numberFormat ?? label.format));
+  if (label.showPercentage ?? label.showPercent) parts.push(formatLabelNumber(context.value, '0%'));
+  if (label.showBubbleSize && context.bubbleSize !== undefined) {
+    parts.push(formatLabelNumber(context.bubbleSize, label.numberFormat ?? label.format));
+  }
+  return parts.join(label.separator ?? ', ');
+}
+
+function defaultLabelShowsValue(label: DataLabelConfig): boolean {
+  return !(
+    label.showSeriesName ||
+    label.showCategoryName ||
+    label.showCategory ||
+    label.showPercentage ||
+    label.showPercent ||
+    label.showBubbleSize
+  );
+}
+
+function formatLabelNumber(value: number, format?: string): string {
+  if (format) return formatExcelValue(value, format);
+  return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(12)));
+}
+
+function labelPlacement(position: DataLabelConfig['position'], chartType?: ChartConfig['type']) {
+  const isPie = chartType === 'pie' || chartType === 'doughnut' || chartType === 'pie3d';
+  switch (position) {
+    case 'left':
+      return { dx: -10, dy: 0, align: 'right', baseline: 'middle', valueDelta: () => 0 };
+    case 'right':
+      return { dx: 10, dy: 0, align: 'left', baseline: 'middle', valueDelta: () => 0 };
+    case 'bottom':
+    case 'insideBase':
+      return { dx: 0, dy: 10, align: 'center', baseline: 'top', valueDelta: (v: number) => -Math.abs(v) * 0.08 };
+    case 'outsideEnd':
+    case 'top':
+    case 'bestFit':
+    case 'callout':
+      return {
+        dx: 0,
+        dy: isPie ? -16 : -10,
+        align: 'center',
+        baseline: 'bottom',
+        valueDelta: (v: number) => Math.max(Math.abs(v) * 0.08, 1),
+      };
+    case 'center':
+    case 'inside':
+    case 'insideEnd':
+    default:
+      return { dx: 0, dy: 0, align: 'center', baseline: 'middle', valueDelta: () => 0 };
+  }
+}
+
+function errorBarExtent(
+  bar: ErrorBarConfig,
+  context: { pointIndex: number; value: number; seriesValues: Array<number | undefined> },
+): { plus?: number; minus?: number } | undefined {
+  const type = bar.valueType ?? 'fixedVal';
+  const plusDelta = customErrorDelta(bar.plusSource, context.pointIndex) ?? baseErrorDelta(type, bar, context);
+  const minusDelta = customErrorDelta(bar.minusSource, context.pointIndex) ?? baseErrorDelta(type, bar, context);
+  const plus = bar.barType === 'minus' ? undefined : context.value + plusDelta;
+  const minus = bar.barType === 'plus' ? undefined : context.value - minusDelta;
+  return plus === undefined && minus === undefined ? undefined : { plus, minus };
+}
+
+function baseErrorDelta(
+  type: string,
+  bar: ErrorBarConfig,
+  context: { value: number; seriesValues: Array<number | undefined> },
+): number {
+  const value = bar.value ?? 1;
+  if (type === 'percentage' || type === 'percentageValue') return Math.abs(context.value) * value / 100;
+  if (type === 'stdDev') return sampleStdDev(context.seriesValues) * value;
+  if (type === 'stdErr') return sampleStdDev(context.seriesValues) / Math.sqrt(validNumbers(context.seriesValues).length) * value;
+  return value;
+}
+
+function customErrorDelta(source: ErrorBarConfig['plusSource'], pointIndex: number): number | undefined {
+  const raw = source?.cache?.points.find((point) => point.idx === pointIndex)?.value;
+  const value = raw === undefined ? undefined : Number(raw);
+  return value !== undefined && Number.isFinite(value) ? Math.abs(value) : undefined;
+}
+
+function sampleStdDev(values: Array<number | undefined>): number {
+  const nums = validNumbers(values);
+  if (nums.length < 2) return 0;
+  const mean = nums.reduce((sum, value) => sum + value, 0) / nums.length;
+  const variance = nums.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (nums.length - 1);
+  return Math.sqrt(variance);
+}
+
+function validNumbers(values: Array<number | undefined>): number[] {
+  return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+}
+
+function isMarkerDefaultChart(type?: ChartConfig['type']): boolean {
+  return type === 'lineMarkers' || type === 'lineMarkersStacked' || type === 'lineMarkersStacked100';
+}
+
+function excelMarkerShape(style?: string): string {
+  switch (style) {
+    case 'square':
+    case 'diamond':
+    case 'star':
+    case 'dash':
+      return style;
+    case 'triangle':
+      return 'triangle-up';
+    case 'plus':
+      return 'cross';
+    case 'x':
+      return 'x';
+    case 'dot':
+    case 'circle':
+    case 'auto':
+    default:
+      return 'circle';
+  }
+}
+
+function markerPointSizeToArea(size?: number): number {
+  const diameter = size ?? 7;
+  return Math.max(4, diameter * diameter);
+}
+
+function solidFillColor(fill: ChartFill | undefined): string | undefined {
+  if (!fill || fill.type !== 'solid') return undefined;
+  return colorToCss(fill.color);
+}
+
+function lineColor(line: PointFormat['lineFormat'] | undefined): string | undefined {
+  if (!line || line.noFill) return undefined;
+  return colorToCss(line.color);
+}
+
+function colorToCss(color: unknown): string | undefined {
+  if (typeof color === 'string') return color.startsWith('#') ? color : `#${color}`;
+  if (color && typeof color === 'object' && 'theme' in color) return undefined;
+  return undefined;
 }
 
 function isScatterLikeChart(config?: ChartConfig): boolean {

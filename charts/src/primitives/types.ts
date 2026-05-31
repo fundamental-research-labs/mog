@@ -225,6 +225,9 @@ export type SymbolShape =
   | 'square'
   | 'diamond'
   | 'cross'
+  | 'x'
+  | 'star'
+  | 'dash'
   | 'triangle-up'
   | 'triangle-down';
 

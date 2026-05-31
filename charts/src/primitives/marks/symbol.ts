@@ -83,6 +83,37 @@ function drawCross(ctx: CanvasRenderingContext2D, x: number, y: number, size: nu
   ctx.closePath();
 }
 
+function drawX(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const radius = sizeToRadius(size) * 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x - radius, y - radius);
+  ctx.lineTo(x + radius, y + radius);
+  ctx.moveTo(x + radius, y - radius);
+  ctx.lineTo(x - radius, y + radius);
+}
+
+function drawDash(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const radius = sizeToRadius(size) * 1.3;
+  ctx.beginPath();
+  ctx.moveTo(x - radius, y);
+  ctx.lineTo(x + radius, y);
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+  const outer = sizeToRadius(size) * 1.35;
+  const inner = outer * 0.45;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? outer : inner;
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
 /**
  * Draw an upward-pointing triangle symbol.
  */
@@ -142,6 +173,15 @@ export function drawSymbolShape(
     case 'cross':
       drawCross(ctx, x, y, size);
       break;
+    case 'x':
+      drawX(ctx, x, y, size);
+      break;
+    case 'star':
+      drawStar(ctx, x, y, size);
+      break;
+    case 'dash':
+      drawDash(ctx, x, y, size);
+      break;
     case 'triangle-up':
       drawTriangleUp(ctx, x, y, size);
       break;
@@ -196,7 +236,7 @@ export function hitTestSymbol(mark: SymbolMark, px: number, py: number): boolean
  * Get all available symbol shapes.
  */
 export function getSymbolShapes(): SymbolShape[] {
-  return ['circle', 'square', 'diamond', 'cross', 'triangle-up', 'triangle-down'];
+  return ['circle', 'square', 'diamond', 'cross', 'x', 'star', 'dash', 'triangle-up', 'triangle-down'];
 }
 
 /**

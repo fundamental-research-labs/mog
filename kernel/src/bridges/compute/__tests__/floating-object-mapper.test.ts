@@ -512,6 +512,56 @@ describe('toFloatingObject — ChartObject', () => {
     }
   });
 
+  it('preserves imported modern chart family configs in chartConfig', () => {
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: 'histogram',
+        waterfall: { subtotalIndices: [2], showConnectorLines: false },
+        histogram: { binCount: 8, overflowBin: true, overflowBinValue: 100 },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          rows: [{ id: 'A', label: 'A', level: 0, value: 3 }],
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.chartConfig).toEqual(
+        expect.objectContaining({
+          waterfall: { subtotalIndices: [2], showConnectorLines: false },
+          histogram: { binCount: 8, overflowBin: true, overflowBinValue: 100 },
+          boxplot: {
+            showOutlierPoints: false,
+            showMeanMarkers: true,
+            quartileMethod: 'exclusive',
+          },
+          hierarchy: expect.objectContaining({
+            categoryFormulas: ['Sheet1!A1:A3'],
+            valueFormula: 'Sheet1!B1:B3',
+            parentLabelLayout: 'banner',
+          }),
+          regionMap: {
+            regionFormula: 'Sheet1!A1:A3',
+            valueFormula: 'Sheet1!B1:B3',
+          },
+        }),
+      );
+    }
+  });
+
   it('preserves imported chart status and does not default missing imported type to column', () => {
     const importStatus = {
       source: 'xlsx',

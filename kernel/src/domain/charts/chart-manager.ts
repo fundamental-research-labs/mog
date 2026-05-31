@@ -196,7 +196,9 @@ export async function convertChartToFloatingObject(
     y: pixelBounds.y,
     width: pixelBounds.width,
     height: pixelBounds.height,
-    rotation: 0,
+    rotation: normalizedChart.rotation ?? 0,
+    flipH: normalizedChart.flipH ?? false,
+    flipV: normalizedChart.flipV ?? false,
   };
 
   const chartObject: ChartObject = {
@@ -210,12 +212,13 @@ export async function convertChartToFloatingObject(
     position,
     anchor: position,
     zIndex: normalizedChart.zIndex ?? 0,
-    locked: false,
-    printable: true,
-    name: normalizedChart.title ?? `Chart ${normalizedChart.id.slice(-4)}`,
+    locked: normalizedChart.locked ?? false,
+    printable: normalizedChart.printable ?? true,
+    name: normalizedChart.name || normalizedChart.title || `Chart ${normalizedChart.id.slice(-4)}`,
     altText: normalizedChart.title,
     createdAt: normalizedChart.createdAt,
     updatedAt: normalizedChart.updatedAt,
+    ...(normalizedChart.visible === false ? { visible: false } : {}),
   };
 
   return chartObject;

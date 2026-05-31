@@ -1062,7 +1062,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 wireframe: None,
                 surface_top_view: None,
                 color_scheme: None,
-                chart_style_context: None,
+                chart_style_context: projection.chart_style_context,
                 view_3d: None,
                 floor_format: None,
                 side_wall_format: None,

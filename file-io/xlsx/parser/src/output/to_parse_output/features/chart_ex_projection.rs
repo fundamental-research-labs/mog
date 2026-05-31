@@ -5,7 +5,7 @@ use domain_types::chart::{
     HierarchyChartConfigData, HierarchyChartRowData, HistogramConfigData, LegendData,
     PointFormatData, RegionMapConfigData, SingleAxisData, WaterfallOptions,
 };
-use domain_types::{ChartType, ImportObjectStatus};
+use domain_types::{ChartStyleContextData, ChartStyleOwnerData, ChartType, ImportObjectStatus};
 use ooxml_types::chart_ex::{
     ChartExAxis, ChartExBinning, ChartExBoundValue, ChartExChartData, ChartExData,
     ChartExDataLabels, ChartExDimension, ChartExFormatOverride, ChartExLayoutId,
@@ -31,6 +31,7 @@ pub(super) struct ChartExProjection {
     pub(super) plot_format: Option<ChartFormatData>,
     pub(super) title_format: Option<ChartFormatData>,
     pub(super) title_rich_text: Option<Vec<domain_types::chart::ChartFormatStringData>>,
+    pub(super) chart_style_context: Option<ChartStyleContextData>,
     pub(super) title_formula: Option<String>,
     pub(super) title_h_align: Option<String>,
     pub(super) title_v_align: Option<String>,
@@ -159,6 +160,25 @@ pub(super) fn project_chart_ex_space(
         &chart_space.chart.plot_area.axes,
         &mut projection_diagnostics,
     );
+    let legend = chart_space
+        .chart
+        .legend
+        .as_ref()
+        .map(project_chart_ex_legend);
+    let chart_format = extract_chart_format(chart_space.sp_pr.as_ref(), chart_space.tx_pr.as_ref());
+    let plot_format = merge_chart_format(
+        extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None),
+        extract_chart_format(region.sp_pr.as_ref(), None),
+    );
+    let chart_style_context = project_chart_ex_style_context(ChartExStyleContextInputs {
+        chart_format: chart_format.as_ref(),
+        plot_format: plot_format.as_ref(),
+        title_format: title_format.as_ref(),
+        title_rich_text: title_rich_text.as_deref(),
+        legend: legend.as_ref(),
+        axes: axes.as_ref(),
+        series: &series,
+    });
     let import_status = attach_projection_diagnostics(
         chart_ex_import_status(
             &chart_type,
@@ -176,21 +196,15 @@ pub(super) fn project_chart_ex_space(
         chart_type,
         title,
         series,
-        legend: chart_space
-            .chart
-            .legend
-            .as_ref()
-            .map(project_chart_ex_legend),
+        legend,
         axes,
         data_labels,
         data_range,
-        chart_format: extract_chart_format(chart_space.sp_pr.as_ref(), chart_space.tx_pr.as_ref()),
-        plot_format: merge_chart_format(
-            extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None),
-            extract_chart_format(region.sp_pr.as_ref(), None),
-        ),
+        chart_format,
+        plot_format,
         title_format,
         title_rich_text,
+        chart_style_context,
         title_formula,
         title_h_align: chart_space
             .chart
@@ -209,6 +223,137 @@ pub(super) fn project_chart_ex_space(
         region_map,
         import_status,
     }
+}
+
+struct ChartExStyleContextInputs<'a> {
+    chart_format: Option<&'a ChartFormatData>,
+    plot_format: Option<&'a ChartFormatData>,
+    title_format: Option<&'a ChartFormatData>,
+    title_rich_text: Option<&'a [domain_types::chart::ChartFormatStringData]>,
+    legend: Option<&'a LegendData>,
+    axes: Option<&'a AxisData>,
+    series: &'a [ChartSeriesData],
+}
+
+fn project_chart_ex_style_context(
+    inputs: ChartExStyleContextInputs<'_>,
+) -> Option<ChartStyleContextData> {
+    let mut context = ChartStyleContextData::default();
+
+    push_chart_ex_style_owner(
+        &mut context.owners,
+        "chartArea",
+        "cx:chartSpace/cx:spPr|cx:chartSpace/cx:txPr",
+        inputs.chart_format,
+        None,
+    );
+    push_chart_ex_style_owner(
+        &mut context.owners,
+        "plotArea",
+        "cx:chartSpace/cx:chart/cx:plotArea/cx:spPr|cx:plotAreaRegion/cx:spPr",
+        inputs.plot_format,
+        None,
+    );
+    push_chart_ex_style_owner(
+        &mut context.owners,
+        "title",
+        "cx:chartSpace/cx:chart/cx:title",
+        inputs.title_format,
+        inputs.title_rich_text,
+    );
+
+    if let Some(legend) = inputs.legend {
+        push_chart_ex_style_owner(
+            &mut context.owners,
+            "legend",
+            "cx:chartSpace/cx:chart/cx:legend",
+            legend.format.as_ref(),
+            None,
+        );
+    }
+
+    if let Some(axes) = inputs.axes {
+        push_chart_ex_axis_style_owner(
+            &mut context.owners,
+            "categoryAxis",
+            axes.category_axis.as_ref(),
+        );
+        push_chart_ex_axis_style_owner(&mut context.owners, "valueAxis", axes.value_axis.as_ref());
+        push_chart_ex_axis_style_owner(
+            &mut context.owners,
+            "secondaryCategoryAxis",
+            axes.secondary_category_axis.as_ref(),
+        );
+        push_chart_ex_axis_style_owner(
+            &mut context.owners,
+            "secondaryValueAxis",
+            axes.secondary_value_axis.as_ref(),
+        );
+        push_chart_ex_axis_style_owner(
+            &mut context.owners,
+            "seriesAxis",
+            axes.series_axis.as_ref(),
+        );
+    }
+
+    for (index, series) in inputs.series.iter().enumerate() {
+        push_chart_ex_style_owner(
+            &mut context.owners,
+            &format!("series({index})"),
+            "cx:chartSpace/cx:chart/cx:plotArea/cx:plotAreaRegion/cx:series",
+            series.format.as_ref(),
+            None,
+        );
+    }
+
+    (!context.owners.is_empty()
+        || !context.diagnostics.is_empty()
+        || context.color_map_override.is_some())
+    .then_some(context)
+}
+
+fn push_chart_ex_axis_style_owner(
+    owners: &mut Vec<ChartStyleOwnerData>,
+    owner_key: &str,
+    axis: Option<&SingleAxisData>,
+) {
+    let Some(axis) = axis else {
+        return;
+    };
+
+    push_chart_ex_style_owner(
+        owners,
+        owner_key,
+        "cx:chartSpace/cx:chart/cx:plotArea/cx:axis",
+        axis.format.as_ref(),
+        None,
+    );
+}
+
+fn push_chart_ex_style_owner(
+    owners: &mut Vec<ChartStyleOwnerData>,
+    owner_key: &str,
+    source_path: &str,
+    format: Option<&ChartFormatData>,
+    rich_text: Option<&[domain_types::chart::ChartFormatStringData]>,
+) {
+    let rich_text = rich_text
+        .filter(|runs| !runs.is_empty())
+        .map(|runs| runs.to_vec());
+
+    if format.is_none() && rich_text.is_none() {
+        return;
+    }
+
+    owners.push(ChartStyleOwnerData {
+        owner_key: owner_key.to_string(),
+        source_path: Some(source_path.to_string()),
+        edit_owner_id: None,
+        format: format.cloned(),
+        rich_text,
+        diagnostics: Vec::new(),
+        imported_drawing_ml: None,
+    });
 }
 
 pub(super) fn chart_ex_import_status(
@@ -736,6 +881,16 @@ fn chart_ex_title_text(title: &ChartExTitle) -> Option<String> {
     chart_ex_text_text(title.tx.as_ref())
 }
 
+fn chart_ex_title_rich_text(
+    title: &ChartExTitle,
+) -> Option<Vec<domain_types::chart::ChartFormatStringData>> {
+    title
+        .tx
+        .as_ref()
+        .and_then(|tx| tx.rich.as_ref())
+        .and_then(extract_chart_rich_text)
+}
+
 fn project_chart_ex_title_format(title: &ChartExTitle) -> Option<ChartFormatData> {
     let rich = title.tx.as_ref().and_then(|tx| tx.rich.as_ref());
     let mut format = extract_chart_format(title.sp_pr.as_ref(), title.tx_pr.as_ref());
@@ -962,6 +1117,7 @@ fn project_chart_ex_axis(axis: &ChartExAxis, axis_type: &str) -> SingleAxisData 
         display_unit: None,
         format: extract_chart_format(axis.sp_pr.as_ref(), axis.tx_pr.as_ref()),
         title_format: axis.title.as_ref().and_then(project_chart_ex_title_format),
+        title_rich_text: axis.title.as_ref().and_then(chart_ex_title_rich_text),
         gridline_format: axis
             .major_gridlines
             .as_ref()
@@ -1380,8 +1536,8 @@ fn cell_text(cell: Option<&FullCellData>) -> String {
 mod tests {
     use super::*;
     use ooxml_types::chart_ex::{
-        ChartExChart, ChartExChartData, ChartExFormula, ChartExLayoutVisibility, ChartExPlotArea,
-        ChartExSubtotals, ChartExTxData,
+        ChartExAxis, ChartExChart, ChartExChartData, ChartExFormula, ChartExLayoutVisibility,
+        ChartExLegend, ChartExPlotArea, ChartExScaling, ChartExSubtotals, ChartExTxData,
     };
     use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
@@ -1533,6 +1689,24 @@ mod tests {
         }
     }
 
+    fn owner<'a>(context: &'a ChartStyleContextData, owner_key: &str) -> &'a ChartStyleOwnerData {
+        context
+            .owners
+            .iter()
+            .find(|owner| owner.owner_key == owner_key)
+            .unwrap_or_else(|| panic!("expected owner {owner_key}"))
+    }
+
+    fn format_solid_hex(format: &ChartFormatData) -> Option<&str> {
+        match format.fill.as_ref()? {
+            domain_types::chart::ChartFillData::Solid {
+                color: domain_types::chart::ChartColorData::Hex(hex),
+                ..
+            } => Some(hex.as_str()),
+            _ => None,
+        }
+    }
+
     fn diagnostic_messages(status: &ImportObjectStatus) -> Vec<&str> {
         status
             .diagnostics
@@ -1642,6 +1816,95 @@ mod tests {
             })
         );
         assert!(projected.import_status.is_none());
+    }
+
+    #[test]
+    fn projects_chart_ex_style_context_owners() {
+        let mut chart_space =
+            chart_space_with_series(ChartExLayoutId::Waterfall, cat_val_dimensions(), None);
+        chart_space.sp_pr = Some(solid_shape("111111"));
+        chart_space.chart.title = Some(ChartExTitle {
+            tx: Some(ChartExText {
+                rich: Some(crate::domain::charts::parse_text_body(
+                    br#"<cx:rich xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"
+                               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                        <a:bodyPr/>
+                        <a:p>
+                            <a:r>
+                                <a:rPr b="1"/>
+                                <a:t>ChartEx Title</a:t>
+                            </a:r>
+                        </a:p>
+                    </cx:rich>"#,
+                )),
+                ..Default::default()
+            }),
+            sp_pr: Some(solid_shape("333333")),
+            ..Default::default()
+        });
+        chart_space.chart.legend = Some(ChartExLegend {
+            sp_pr: Some(solid_shape("444444")),
+            ..Default::default()
+        });
+        chart_space.chart.plot_area.sp_pr = Some(solid_shape("222222"));
+        chart_space.chart.plot_area.axes = vec![
+            ChartExAxis {
+                scaling: Some(ChartExScaling::Category { gap_width: None }),
+                sp_pr: Some(solid_shape("555555")),
+                ..Default::default()
+            },
+            ChartExAxis {
+                scaling: Some(ChartExScaling::Value {
+                    min: None,
+                    max: None,
+                }),
+                sp_pr: Some(solid_shape("666666")),
+                ..Default::default()
+            },
+        ];
+        chart_space.chart.plot_area.plot_area_region.series[0].sp_pr = Some(solid_shape("777777"));
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+        let context = projected.chart_style_context.expect("style context");
+
+        assert_eq!(context.owners.len(), 7);
+        assert_eq!(
+            format_solid_hex(owner(&context, "chartArea").format.as_ref().unwrap()),
+            Some("111111")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "plotArea").format.as_ref().unwrap()),
+            Some("222222")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "title").format.as_ref().unwrap()),
+            Some("333333")
+        );
+        assert_eq!(
+            owner(&context, "title")
+                .rich_text
+                .as_ref()
+                .and_then(|runs| runs.first())
+                .map(|run| run.text.as_str()),
+            Some("ChartEx Title")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "legend").format.as_ref().unwrap()),
+            Some("444444")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "categoryAxis").format.as_ref().unwrap()),
+            Some("555555")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "valueAxis").format.as_ref().unwrap()),
+            Some("666666")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "series(0)").format.as_ref().unwrap()),
+            Some("777777")
+        );
     }
 
     #[test]
@@ -1956,18 +2219,14 @@ mod tests {
             assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
             assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
             assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
-            assert!(
-                hierarchy
-                    .rows
-                    .iter()
-                    .any(|row| row.id == "Americas/US" && row.value == Some(10.0))
-            );
-            assert!(
-                hierarchy
-                    .rows
-                    .iter()
-                    .any(|row| row.id == "Americas/CA" && row.value == Some(20.0))
-            );
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
             assert_eq!(
                 projected.import_status.unwrap().renderability,
                 domain_types::ImportRenderability::NotRenderable

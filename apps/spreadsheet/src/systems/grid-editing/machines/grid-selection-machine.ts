@@ -580,10 +580,10 @@ export const selectionMachine = setup({
         KEY_ARROW: [
           {
             guard: 'isShiftArrow',
-            actions: ['extendSelection', 'emitUserSelectionChanged'],
+            actions: ['extendFormulaRange', 'emitUserSelectionChanged'],
           },
           {
-            actions: ['moveActiveCell', 'emitUserSelectionChanged'],
+            actions: ['moveFormulaRange', 'emitUserSelectionChanged'],
           },
         ],
         EXIT_FORMULA_RANGE_MODE: {

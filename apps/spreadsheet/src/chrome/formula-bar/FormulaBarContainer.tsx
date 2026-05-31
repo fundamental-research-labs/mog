@@ -92,6 +92,7 @@ function FormulaBarContainerImpl() {
   const { row: activeCellRow, col: activeCellCol, activeCell } = useActiveCell();
   const wb = useWorkbook();
   const coordinator = useCoordinator();
+  const paneFocusCommands = coordinator.input.access.commands.paneFocus;
   const activeSheetId = useActiveSheetId();
   const focus = useFocus();
   const deps = useActionDependencies();
@@ -451,11 +452,12 @@ function FormulaBarContainerImpl() {
 
   const handleCommit = useCallback(() => {
     dispatch('COMMIT_IN_PLACE', deps);
+    paneFocusCommands?.resetToGrid();
     // Pop the formula bar focus layer when committing
     if (focus.isFormulaBar) {
       focus.popLayer();
     }
-  }, [deps, focus]);
+  }, [deps, focus, paneFocusCommands]);
 
   const handleCancel = useCallback(() => {
     // / O-A: tag any thrown error from this fire-and-forget chain
@@ -464,11 +466,12 @@ function FormulaBarContainerImpl() {
     if (result && typeof (result as Promise<unknown>).then === 'function') {
       void withHandlerErrors('CANCEL_EDIT', () => result as Promise<unknown>);
     }
+    paneFocusCommands?.resetToGrid();
     // Pop the formula bar focus layer when cancelling
     if (focus.isFormulaBar) {
       focus.popLayer();
     }
-  }, [deps, focus]);
+  }, [deps, focus, paneFocusCommands]);
 
   /**
    * A.1: Handle focus with optional cursor position from click.
@@ -481,6 +484,7 @@ function FormulaBarContainerImpl() {
       if (!focus.isFormulaBar) {
         focus.pushLayer('formulaBar', 'formula-bar');
       }
+      paneFocusCommands?.focusPane('formulaBar');
       // Then start editing if not already editing
       if (!isEditing) {
         // Check if edit was blocked by protection
@@ -501,7 +505,15 @@ function FormulaBarContainerImpl() {
         }
       }
     },
-    [isEditing, editorActions, activeCell, activeSheetId, focus, showProtectionAlert],
+    [
+      isEditing,
+      editorActions,
+      activeCell,
+      activeSheetId,
+      focus,
+      paneFocusCommands,
+      showProtectionAlert,
+    ],
   );
 
   const handleFxClick = useCallback(() => {

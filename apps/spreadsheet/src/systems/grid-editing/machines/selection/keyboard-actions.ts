@@ -35,10 +35,13 @@ import {
   getMovingEdge,
   moveCellSkipHidden,
   normalizeRange,
+  rangeFromAnchorAndCell,
+  singleCellRange,
 } from '../../../shared/types';
 import { getNextCellInSelection, hasCyclableStops } from './cycle';
 import {
   buildExtendUpdate,
+  computeDirection,
   getEffectiveRanges,
   getSelectAllRange,
   moveInAdditive,
@@ -152,6 +155,62 @@ const extendSelection = assign(
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
     return buildExtendUpdate(anchor, newEnd);
+  },
+);
+
+/**
+ * Move the picked formula reference without moving the cell being edited.
+ *
+ * Formula point-mode visually moves the highlighted reference range (B1, C1,
+ * etc.) while the dark active cell and typing destination remain the original
+ * editing cell. The normal moveActiveCell action cannot be reused here because
+ * it replaces activeCell with the referenced cell.
+ */
+const moveFormulaRange = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'KEY_ARROW') return {};
+    const currentFormulaCell = context.anchor ?? context.activeCell;
+    const stepped = moveCellSkipHidden(
+      currentFormulaCell,
+      event.direction,
+      1,
+      context.isRowHidden,
+      context.isColHidden,
+    );
+    const newCell = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+    return {
+      pendingRange: singleCellRange(newCell),
+      committedRanges: [],
+      anchor: newCell,
+      direction: 'down-right' as const,
+      tabOriginCol: null,
+    };
+  },
+);
+
+/**
+ * Extend the picked formula range while preserving the editing active cell.
+ */
+const extendFormulaRange = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'KEY_ARROW') return {};
+    const anchor = context.anchor ?? context.activeCell;
+    const movingEdge = getMovingEdge(context.pendingRange, anchor);
+    const stepped = moveCellSkipHidden(
+      movingEdge,
+      event.direction,
+      1,
+      context.isRowHidden,
+      context.isColHidden,
+    );
+    const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+    return {
+      pendingRange: rangeFromAnchorAndCell(anchor, newEnd),
+      committedRanges: [],
+      anchor,
+      direction: computeDirection(anchor, newEnd),
+      tabOriginCol: null,
+    };
   },
 );
 
@@ -556,6 +615,8 @@ const selectAll = assign(({ context }: { context: SelectionContext }) => {
 export const keyboardActions = {
   moveActiveCell,
   extendSelection,
+  moveFormulaRange,
+  extendFormulaRange,
   // End-mode fallbacks: KEY_ARROW under modes.end.
   endModeMoveToEdge,
   endModeExtendToEdge,

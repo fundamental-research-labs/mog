@@ -14,6 +14,7 @@
  */
 
 import { assign } from 'xstate';
+import { singleCellRange } from '../../../shared/types';
 import type { SelectionContext, SelectionEvent } from './types';
 import { buildExtendUpdate, moveTo } from './helpers';
 
@@ -36,8 +37,11 @@ const enterFormulaMode = assign(
 /**
  * Exit formula range selection mode.
  */
-const exitFormulaMode = assign(() => ({
+const exitFormulaMode = assign(({ context }: { context: SelectionContext }) => ({
   formulaRangeColor: null,
+  pendingRange: singleCellRange(context.activeCell),
+  committedRanges: [],
+  anchor: context.activeCell,
 }));
 
 /**

@@ -46,6 +46,11 @@ import {
   InlineCellAutocomplete,
   type InlineCellAutocompleteHandle,
 } from './InlineCellAutocomplete';
+import {
+  FormulaHighlighter,
+  type ReferenceColorRange,
+} from '../../editor/FormulaHighlighter';
+import { extractFormulaRanges } from '../../../domain/editor/formula-range-parser';
 // =============================================================================
 // Constants
 // =============================================================================
@@ -365,6 +370,23 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     return { x: effectiveCellRect.x, y: effectiveCellRect.y + effectiveCellRect.height + 2 };
   }, [effectiveCellRect]);
 
+  const referenceColors = useMemo((): ReferenceColorRange[] | undefined => {
+    if (!value.startsWith('=')) {
+      return undefined;
+    }
+
+    const ranges = extractFormulaRanges(value);
+    if (ranges.length === 0) {
+      return undefined;
+    }
+
+    return ranges.map((ref) => ({
+      startPos: ref.startPos,
+      endPos: ref.endPos,
+      color: ref.color,
+    }));
+  }, [value]);
+
   // Only render when editing and have a cell.
   // Use effectiveCellRect (falls back to last known rect during scroll animations)
   // so the editor stays mounted — and keyboard-focused — while animateScrollTo()
@@ -431,6 +453,57 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       );
       break;
   }
+
+  const baseEditorStyle = textPosition
+    ? {
+        // WYSIWYG: Use exact position from computeTextPosition()
+        // This is the same position canvas draws text at
+        position: 'absolute' as const,
+        left: effectiveCellRect.x,
+        top: effectiveCellRect.y,
+        // Editor spans full cell width for user interaction
+        width: editorWidth,
+        height: effectiveCellRect.height,
+        // Typography from resolved style - use scaledFont for zoom-correct rendering
+        // Canvas uses ctx.scale(zoom) to scale text; DOM needs explicit font size scaling
+        font: textPosition.scaledFont,
+        lineHeight: `${scaledLineHeight}px`,
+        color: style.color,
+        backgroundColor: cellFormat?.backgroundColor || 'var(--color-ss-surface, #ffffff)',
+        // Padding matching canvas
+        paddingLeft: style.paddingX,
+        paddingRight: style.paddingX,
+        // Border/margin reset
+        border: 'none',
+        margin: 0,
+        boxSizing: 'border-box' as const,
+        // Text alignment - uses CSS alignment to match computeTextPosition
+        textAlign: style.textAlign,
+        // Vertical alignment via computed paddingTop
+        // (flexbox display/alignItems has no effect on textarea internal text)
+        paddingTop: verticalPaddingTop,
+        // Textarea styles (always applied)
+        resize: 'none' as const,
+        overflow: 'hidden',
+        whiteSpace: 'pre-wrap' as const,
+      }
+    : {
+        // Fallback to CSS-based positioning (for backwards compatibility)
+        position: 'absolute' as const,
+        left: effectiveCellRect.x,
+        top: effectiveCellRect.y,
+        width: editorWidth,
+        height: effectiveCellRect.height,
+        ...cellStyles,
+        lineHeight: `${scaledLineHeight}px`,
+        // Override any flex/alignment from cellStyles — use paddingTop instead
+        paddingTop: verticalPaddingTop,
+        // Textarea styles (always applied)
+        resize: 'none' as const,
+        overflow: 'hidden',
+        whiteSpace: 'pre-wrap' as const,
+      };
+  const isFormulaOverlay = value.startsWith('=');
 
   // Common props for both input and textarea
   const deriveCompositionText = (nextValue: string): string => {
@@ -528,54 +601,19 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // This eliminates the double-border issue when editing via formula bar.
     // F.1: Add 'ime-composing' class during IME composition for visual styling
     className: `absolute z-ss-overlay pointer-events-auto outline-none${isComposing ? ' ime-composing' : ''}`,
-    style: textPosition
+    style: isFormulaOverlay
       ? {
-          // WYSIWYG: Use exact position from computeTextPosition()
-          // This is the same position canvas draws text at
-          position: 'absolute' as const,
-          left: effectiveCellRect.x,
-          top: effectiveCellRect.y,
-          // Editor spans full cell width for user interaction
-          width: editorWidth,
-          height: effectiveCellRect.height,
-          // Typography from resolved style - use scaledFont for zoom-correct rendering
-          // Canvas uses ctx.scale(zoom) to scale text; DOM needs explicit font size scaling
-          font: textPosition.scaledFont,
-          lineHeight: `${scaledLineHeight}px`,
-          color: style.color,
-          backgroundColor: cellFormat?.backgroundColor || 'var(--color-ss-surface, #ffffff)',
-          // Padding matching canvas
-          paddingLeft: style.paddingX,
-          paddingRight: style.paddingX,
-          // Border/margin reset
-          border: 'none',
-          margin: 0,
-          boxSizing: 'border-box' as const,
-          // Text alignment - uses CSS alignment to match computeTextPosition
-          textAlign: style.textAlign,
-          // Vertical alignment via computed paddingTop
-          // (flexbox display/alignItems has no effect on textarea internal text)
-          paddingTop: verticalPaddingTop,
-          // Textarea styles (always applied)
-          resize: 'none' as const,
-          overflow: 'hidden',
-          whiteSpace: 'pre-wrap' as const,
+          ...baseEditorStyle,
+          left: 0,
+          top: 0,
+          width: '100%',
+          height: '100%',
+          color: 'transparent',
+          backgroundColor: cellFormat?.backgroundColor || '#ffffff',
+          caretColor: style.color,
+          zIndex: 1,
         }
-      : {
-          // Fallback to CSS-based positioning (for backwards compatibility)
-          left: effectiveCellRect.x,
-          top: effectiveCellRect.y,
-          width: editorWidth,
-          height: effectiveCellRect.height,
-          ...cellStyles,
-          lineHeight: `${scaledLineHeight}px`,
-          // Override any flex/alignment from cellStyles — use paddingTop instead
-          paddingTop: verticalPaddingTop,
-          // Textarea styles (always applied)
-          resize: 'none' as const,
-          overflow: 'hidden',
-          whiteSpace: 'pre-wrap' as const,
-        },
+      : baseEditorStyle,
   };
 
   // Wrap in scroll-sync container: absolute inset-0 so child absolute positioning
@@ -598,7 +636,47 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       className="absolute inset-0 pointer-events-none"
       style={{ willChange: 'transform', zIndex: 1 }}
     >
-      {React.createElement('textarea', editorProps)}
+      {isFormulaOverlay ? (
+        <div
+          data-testid="formula-edit-overlay"
+          className="absolute pointer-events-none"
+          style={{
+            left: effectiveCellRect.x,
+            top: effectiveCellRect.y,
+            width: editorWidth,
+            height: effectiveCellRect.height,
+            backgroundColor: cellFormat?.backgroundColor || '#ffffff',
+          }}
+        >
+          <div
+            className="absolute inset-0 overflow-hidden"
+            style={{
+              font: textPosition?.scaledFont,
+              fontFamily: textPosition ? undefined : cellStyles.fontFamily,
+              fontSize: textPosition ? undefined : cellStyles.fontSize,
+              fontWeight: textPosition ? undefined : cellStyles.fontWeight,
+              lineHeight: textPosition ? undefined : cellStyles.lineHeight,
+              paddingLeft: style.paddingX,
+              paddingRight: style.paddingX,
+              paddingTop: verticalPaddingTop,
+              textAlign: style.textAlign,
+              whiteSpace: 'pre-wrap',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }}
+          >
+            <FormulaHighlighter
+              formula={value}
+              cursorPosition={cursorPosition}
+              isEditing
+              referenceColors={referenceColors}
+            />
+          </div>
+          {React.createElement('textarea', editorProps)}
+        </div>
+      ) : (
+        React.createElement('textarea', editorProps)
+      )}
 
       {/* Formula autocomplete — sibling component with its own subscription (H6 fix) */}
       <InlineCellAutocomplete

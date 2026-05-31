@@ -9,6 +9,8 @@ import * as chartUtils from '@mog/charts/utils';
 import {
   DEFAULT_CATEGORY_COLORS,
   applyChartTintShade,
+  applyWorkbookThemePalette,
+  chartStyleRepeatThemeColor,
   createChartWorkbookThemeColorPalette,
   normalizeChartHexColor,
   resolveChartColor,
@@ -37,6 +39,10 @@ describe('@mog/charts package exports', () => {
     const workbookPalette: ChartWorkbookThemeColorPalette = palette!;
 
     expect(normalizeChartHexColor('abc')).toBe('#aabbcc');
+    expect(applyWorkbookThemePalette({ color: themeColor }, workbookPalette)).toEqual({
+      color: applyChartTintShade('#123456', 0.5),
+    });
+    expect(chartStyleRepeatThemeColor('accent1', 6)).toBe('#264478');
     expect(chartUtils.getDefaultColor(2)).toBe(DEFAULT_CATEGORY_COLORS[2]);
     expect(resolveChartColor(themeColor, { palette: workbookPalette })).toBe(
       applyChartTintShade('#123456', 0.5),
@@ -47,7 +53,13 @@ describe('@mog/charts package exports', () => {
   it('does not widen the root export with utility-only chart theme resolvers', () => {
     expect(chartsRoot).not.toHaveProperty('normalizeChartHexColor');
     expect(chartsRoot).not.toHaveProperty('resolveChartColor');
+    expect(chartsRoot).not.toHaveProperty('createChartWorkbookThemeColorPalette');
+    expect(chartsRoot).not.toHaveProperty('applyWorkbookThemePalette');
+    expect(chartsRoot).not.toHaveProperty('chartStyleRepeatThemeColor');
     expect(chartUtils).toHaveProperty('normalizeChartHexColor');
     expect(chartUtils).toHaveProperty('resolveChartColor');
+    expect(chartUtils).toHaveProperty('createChartWorkbookThemeColorPalette');
+    expect(chartUtils).toHaveProperty('applyWorkbookThemePalette');
+    expect(chartUtils).toHaveProperty('chartStyleRepeatThemeColor');
   });
 });

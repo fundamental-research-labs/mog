@@ -28,6 +28,25 @@ def test_native_workbook_formula_and_dispose() -> None:
         wb.sheet_names
 
 
+def test_text_formatted_cells_store_string_inputs_without_apostrophe() -> None:
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        ws.formats.set("A1", {"numberFormat": "@"})
+        ws.set_cell("A1", "11")
+        assert ws.get_value("A1") == "11"
+        assert ws.get_cell("A1").raw_value == "11"
+        assert ws.get_formula("A1") is None
+
+        ws.formats.set("B1", {"numberFormat": "@"})
+        ws.set_cell("B1", "=A1+1")
+        assert ws.get_value("B1") == "=A1+1"
+        assert ws.get_cell("B1").raw_value == "=A1+1"
+        assert ws.get_formula("B1") is None
+    finally:
+        wb.dispose()
+
+
 def test_to_buffer_is_real_export_or_explicit_unsupported() -> None:
     wb = mog.create_workbook()
     try:

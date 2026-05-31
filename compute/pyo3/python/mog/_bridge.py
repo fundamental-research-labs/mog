@@ -113,7 +113,13 @@ class Bridge:
     ) -> Any:
         """Set a cell as literal text, bypassing rich input parsing."""
         if not hasattr(self._engine, "compute_set_cell_value_as_text"):
-            return self.set_cell_value_parsed(sheet_id_json, row, col, f"'{value}")
+            sheet_id = json.loads(sheet_id_json)
+            edits_json = json.dumps(
+                [(sheet_id, row, col, {"kind": "literal", "text": value})]
+            )
+            return self.call_json(
+                "compute_batch_set_cells_by_position", edits_json, False
+            )
         return self.call_json(
             "compute_set_cell_value_as_text", sheet_id_json, row, col, value
         )

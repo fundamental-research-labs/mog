@@ -470,6 +470,8 @@ class Worksheet:
                 if formula_body.startswith("="):
                     return formula_body
                 return "=" + formula_body
+            if formula_body is None:
+                return None
         # Fallback: read from Yrs raw value (e.g. if ComputeCore hasn't
         # registered the cell yet).
         raw = self._bridge.get_raw_value(self._sheet_id_json, row, col)

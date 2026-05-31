@@ -496,6 +496,54 @@ mod tests {
     }
 
     #[test]
+    fn extraction_preserves_horizontal_axis_label_rotation() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    axes: vec![
+                        ChartAxis {
+                            axis_type: AxisType::Category,
+                            ax_id: 10,
+                            cross_ax: 20,
+                            ax_pos: ChartAxisPosition::Bottom,
+                            tx_pr: Some(TextBody {
+                                body_props: TextBodyProperties {
+                                    rot: Some(StAngle::new(-2700000)),
+                                    vert: Some(ooxml_types::drawings::TextVerticalType::Horizontal),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                        ChartAxis {
+                            axis_type: AxisType::Value,
+                            ax_id: 20,
+                            cross_ax: 10,
+                            ax_pos: ChartAxisPosition::Left,
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+        let category = axes.category_axis.expect("category axis");
+        let format = category.format.expect("category axis format");
+
+        assert_eq!(format.text_rotation, Some(-45.0));
+        assert_eq!(
+            format.text_vertical_type,
+            Some(domain_types::chart::ChartTextVerticalType::Horizontal)
+        );
+        assert_eq!(category.text_orientation, None);
+    }
+
+    #[test]
     fn secondary_date_axis_is_projected_as_secondary_category_axis() {
         let cs = ChartSpace {
             chart: Chart {

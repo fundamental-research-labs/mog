@@ -179,7 +179,30 @@ describe('configToSpec imported Excel date category axes', () => {
     );
   });
 
-  it('maps imported chart text rotation even when vertical text mode is horizontal', () => {
+  it('maps imported chart text rotation when vertical text mode is horizontal', () => {
+    const config = makeDateAxisConfig('line');
+    config.height = 16;
+    config.axis = {
+      ...config.axis,
+      categoryAxis: {
+        ...config.axis?.categoryAxis,
+        format: { font: { size: 20 }, textRotation: -45, textVerticalType: 'horz' },
+      },
+    };
+
+    const spec = asUnitSpec(configToSpec(config, makeData()));
+    const result = compile(spec);
+    const xAxisLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+      return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
+    });
+
+    expect(spec.encoding?.x?.axis).toMatchObject({ labelAngle: -45 });
+    expect(xAxisLabels.every((mark) => mark.rotation === -Math.PI / 4)).toBe(true);
+    expect(result.layout.margin.bottom).toBeGreaterThan(50);
+  });
+
+  it('ignores out-of-range imported chart text rotations', () => {
     const config = makeDateAxisConfig('line');
     config.height = 16;
     config.axis = {

@@ -11,7 +11,8 @@
 //! - SeriesAxis (c:serAx) - Z-axis for 3D charts
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+    extract_quoted_value, find_attr_simd, find_closing_tag, find_element_end, find_gt_simd,
+    find_lt_simd, find_tag_simd,
 };
 
 use super::{parse_shape_properties, parse_text_body};
@@ -286,21 +287,10 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
         }
     }
 
-    // Parse txPr (label_rotation is stored inside tx_pr.body_props.rot).
-    // Skip past the title element (which can also contain txPr) to find
-    // the axis-level txPr.
-    let txpr_search_start = if let Some(t_start) = find_tag_simd(xml, b"title", 0) {
-        find_closing_tag(xml, b"title", t_start)
-            .and_then(|t_end| find_gt_simd(xml, t_end).map(|gt| gt + 1))
-            .unwrap_or(0)
-    } else {
-        0
-    };
-    if let Some(txpr_start) = find_tag_simd(xml, b"txPr", txpr_search_start) {
-        let txpr_end = find_closing_tag(xml, b"txPr", txpr_start).unwrap_or(xml.len());
-        let txpr_bytes = &xml[txpr_start..txpr_end];
-        let text_body = parse_text_body(txpr_bytes);
-        axis.tx_pr = Some(text_body);
+    // Parse only direct-child txPr. Nested title or display-unit-label txPr belongs
+    // to that child element, not to axis tick labels.
+    if let Some(txpr_bytes) = direct_child_slice(xml, b"txPr") {
+        axis.tx_pr = Some(parse_text_body(txpr_bytes));
     }
 
     // Parse crossBetween (valAx only)
@@ -563,6 +553,72 @@ fn is_self_closing_sp_pr(xml: &[u8], pos: usize) -> bool {
     } else {
         false
     }
+}
+
+fn direct_child_slice<'a>(xml: &'a [u8], local_name: &[u8]) -> Option<&'a [u8]> {
+    let mut pos = find_element_end(xml, 0).map_or(0, |gt| gt + 1);
+    while let Some(start) = find_lt_simd(xml, pos) {
+        match xml.get(start + 1) {
+            Some(b'/') => return None,
+            Some(b'!') | Some(b'?') => {
+                pos = find_element_end(xml, start).map_or(start + 1, |gt| gt + 1);
+                continue;
+            }
+            None => return None,
+            _ => {}
+        }
+
+        let Some(child_name) = start_tag_local_name(xml, start) else {
+            pos = start + 1;
+            continue;
+        };
+        let open_end = find_element_end(xml, start)?;
+        let end = if is_self_closing_open_tag(xml, open_end) {
+            open_end + 1
+        } else {
+            find_closing_tag(xml, child_name, start)
+                .and_then(|close| find_gt_simd(xml, close).map(|gt| gt + 1))
+                .unwrap_or(xml.len())
+        };
+
+        if child_name == local_name {
+            return Some(&xml[start..end]);
+        }
+        pos = end;
+    }
+    None
+}
+
+fn start_tag_local_name(xml: &[u8], start: usize) -> Option<&[u8]> {
+    if xml.get(start) != Some(&b'<') {
+        return None;
+    }
+    let name_start = start + 1;
+    if matches!(xml.get(name_start), Some(b'/') | Some(b'!') | Some(b'?')) {
+        return None;
+    }
+    let mut name_end = name_start;
+    while name_end < xml.len() {
+        if matches!(xml[name_end], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
+            break;
+        }
+        name_end += 1;
+    }
+    if name_end == name_start {
+        return None;
+    }
+    let local_start = xml[name_start..name_end]
+        .iter()
+        .rposition(|b| *b == b':')
+        .map_or(name_start, |offset| name_start + offset + 1);
+    Some(&xml[local_start..name_end])
+}
+
+fn is_self_closing_open_tag(xml: &[u8], open_end: usize) -> bool {
+    xml[..open_end]
+        .iter()
+        .rposition(|b| !b.is_ascii_whitespace())
+        .is_some_and(|pos| xml[pos] == b'/')
 }
 
 // =============================================================================
@@ -994,6 +1050,10 @@ mod tests {
         assert_eq!(
             label.tx_pr.as_ref().and_then(|tx_pr| tx_pr.body_props.rot),
             Some(ooxml_types::drawings::StAngle::new(5400000)),
+        );
+        assert!(
+            axis.tx_pr.is_none(),
+            "nested display-unit label txPr must not become axis tick-label txPr"
         );
     }
 

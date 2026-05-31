@@ -16,7 +16,7 @@ export function normalizeAxisLabelAngle(axisConf: SingleAxisConfig): number | un
     case 'wordArtVertRtl':
       return -90;
     case 'horz':
-      return undefined;
+      break;
     default:
       break;
   }

@@ -1,10 +1,13 @@
-import { formatExcelValue } from '@mog/spreadsheet-utils/number-formats';
+import { formatExcelValueResult } from '@mog/spreadsheet-utils/number-formats';
 import type { DataRow, EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import { generateTrendlinePoints, type TrendlineResult } from '../../../math/trendlines';
 import type { ChartConfig, ChartData, TrendlineConfig } from '../../../types';
+import { resolveChartTextColor } from '../../../utils/chart-colors';
+import { resolveChartLineStyle, resolverContextFromConfig } from '../../style-resolver';
 import {
   POINT_INDEX_FIELD,
   SERIES_FIELD,
+  SOURCE_SERIES_INDEX_FIELD,
   TRENDLINE_LABEL_COLOR_FIELD,
   TRENDLINE_LABEL_FONT_SIZE_FIELD,
   TRENDLINE_LABEL_LAYOUT_X_FIELD,
@@ -15,6 +18,7 @@ import {
   VALUE_FIELD,
 } from '../fields';
 import { buildTrendlineTransform, trendlineXFieldForChartType } from '../transforms';
+import { linePointsToCanvasPx } from '../units';
 
 export function buildTrendlineLayers(
   config: ChartConfig,
@@ -61,12 +65,32 @@ function buildTrendlineLayer(
   seriesName?: string,
 ): UnitSpec {
   const xField = trendlineXFieldForChartType(config.type);
+  const resolvedLine = resolveChartLineStyle(
+    trendline.lineFormat,
+    resolverContextFromConfig(config, 'trendline'),
+    { widthToPx: linePointsToCanvasPx },
+  );
   const mark: MarkSpec = {
     type: 'line',
-    stroke: trendline.color,
-    strokeWidth: trendline.lineWidth ?? trendline.lineFormat?.width ?? 2,
-    strokeDash: trendline.lineFormat?.dashStyle && trendline.lineFormat.dashStyle !== 'solid' ? [4, 4] : undefined,
+    stroke:
+      trendline.color ??
+      (resolvedLine?.paint?.type === 'solid' ? resolvedLine.paint.color : undefined),
+    strokeWidth: trendline.lineWidth ?? resolvedLine?.width ?? 2,
   };
+  if (resolvedLine) {
+    mark.line = {
+      ...resolvedLine,
+      ...(trendline.color ? { paint: { type: 'solid' as const, color: trendline.color } } : {}),
+      ...(trendline.lineWidth !== undefined ? { width: trendline.lineWidth } : {}),
+    };
+  }
+  if (resolvedLine?.dash) mark.strokeDash = resolvedLine.dash;
+  if (resolvedLine?.opacity !== undefined) mark.opacity = resolvedLine.opacity;
+  if (trendline.lineFormat?.noFill === true) {
+    mark.opacity = 0;
+    mark.strokeWidth = 0;
+    mark.line = { ...(mark.line ?? {}), paint: { type: 'none' } };
+  }
   if (usesComputedTrendlineRows(trendline)) {
     const result = trendlineResult(sourceRows(rows, seriesName), xField, trendline);
     return {
@@ -95,9 +119,9 @@ function buildTrendlineLabelLayer(
 ): UnitSpec | undefined {
   const xField = trendlineXFieldForChartType(config.type);
   const result = trendlineResult(sourceRows(rows, seriesName), xField, trendline);
-  const text = trendlineLabelText(trendline, result);
+  const labelText = trendlineLabelText(trendline, result);
   const lastPoint = result?.points.at(-1);
-  if (!text || !lastPoint) return undefined;
+  if (!labelText.text || !lastPoint) return undefined;
   const manualLayout = trendline.label?.layout;
   const manualX = finiteNumber(manualLayout?.x);
   const manualY = finiteNumber(manualLayout?.y);
@@ -106,11 +130,20 @@ function buildTrendlineLabelLayer(
   const labelRow: DataRow = {
     [TRENDLINE_LABEL_X_FIELD]: lastPoint[0],
     [TRENDLINE_LABEL_Y_FIELD]: lastPoint[1],
-    [TRENDLINE_LABEL_TEXT_FIELD]: text,
+    [TRENDLINE_LABEL_TEXT_FIELD]: labelText.text,
   };
   if (manualX !== undefined) labelRow[TRENDLINE_LABEL_LAYOUT_X_FIELD] = manualX;
   if (manualY !== undefined) labelRow[TRENDLINE_LABEL_LAYOUT_Y_FIELD] = manualY;
-  const color = colorToCss(trendline.label?.format?.font?.color);
+  const sourceSeriesIndex = sourceSeriesIndexForRows(rows, seriesName);
+  const ownerKey =
+    sourceSeriesIndex === undefined
+      ? 'trendlineLabel(0)'
+      : `trendlineLabel(seriesIdx=${sourceSeriesIndex},idx=0)`;
+  const color =
+    resolveChartTextColor(
+      trendline.label?.format?.font?.color,
+      resolverContextFromConfig(config, ownerKey),
+    ) ?? labelText.color;
   if (color) labelRow[TRENDLINE_LABEL_COLOR_FIELD] = color;
   if (trendline.label?.format?.font?.size !== undefined) {
     labelRow[TRENDLINE_LABEL_FONT_SIZE_FIELD] = trendline.label.format.font.size;
@@ -179,20 +212,33 @@ function sourceRows(rows: DataRow[], seriesName?: string): DataRow[] {
   return seriesName ? rows.filter((row) => row[SERIES_FIELD] === seriesName) : rows;
 }
 
+function sourceSeriesIndexForRows(rows: DataRow[], seriesName?: string): number | undefined {
+  const index = sourceRows(rows, seriesName).find(
+    (row) => typeof row[SOURCE_SERIES_INDEX_FIELD] === 'number',
+  )?.[SOURCE_SERIES_INDEX_FIELD];
+  return typeof index === 'number' && Number.isFinite(index) ? index : undefined;
+}
+
 function trendlineLabelText(
   trendline: TrendlineConfig,
   result: TrendlineResult | null,
-): string | undefined {
+): { text?: string; color?: string } {
   const parts: string[] = [];
+  let color: string | undefined;
   if (trendline.label?.text) parts.push(trendline.label.text);
   if (result && (trendline.displayEquation ?? trendline.showEquation)) parts.push(result.equation);
   if (result && (trendline.displayRSquared ?? trendline.showR2)) {
     const formatted = trendline.label?.numberFormat
-      ? formatExcelValue(result.r2, trendline.label.numberFormat)
-      : result.r2.toFixed(3);
-    parts.push(`R^2 = ${formatted}`);
+      ? formatExcelValueResult(result.r2, trendline.label.numberFormat)
+      : { text: result.r2.toFixed(3) };
+    color ??= formatted.color;
+    parts.push(`R^2 = ${formatted.text}`);
   }
-  return parts.length > 0 ? parts.join('\n') : undefined;
+  const text = parts.length > 0 ? parts.join('\n') : undefined;
+  return {
+    ...(text !== undefined ? { text } : {}),
+    ...(color !== undefined ? { color } : {}),
+  };
 }
 
 function normalizedTrendlineType(type: string | undefined): TrendlineConfig['type'] {
@@ -233,11 +279,6 @@ function numeric(value: unknown): number | undefined {
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function colorToCss(color: unknown): string | undefined {
-  if (typeof color === 'string') return color.startsWith('#') ? color : `#${color}`;
-  return undefined;
 }
 
 function normalizeTrendlines(

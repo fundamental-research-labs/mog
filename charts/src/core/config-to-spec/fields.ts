@@ -6,9 +6,15 @@ export const BUBBLE_SIZE_FIELD = 'size';
 export const CATEGORY_FORMAT_CODE_FIELD = 'categoryFormatCode';
 export const POINT_INDEX_FIELD = '__mogPointIndex';
 export const SERIES_INDEX_FIELD = '__mogSeriesIndex';
+export const SOURCE_SERIES_INDEX_FIELD = '__mogSourceSeriesIndex';
+export const SOURCE_SERIES_KEY_FIELD = '__mogSourceSeriesKey';
 export const SERIES_ORDER_FIELD = '__mogSeriesOrder';
+export const SERIES_FILL_FIELD = '__mogSeriesFill';
+export const SERIES_STROKE_FIELD = '__mogSeriesStroke';
+export const SERIES_STROKE_WIDTH_FIELD = '__mogSeriesStrokeWidth';
 export const RAW_CATEGORY_FIELD = '__mogRawCategory';
 export const RAW_VALUE_FIELD = '__mogRawValue';
+export const RAW_BUBBLE_SIZE_FIELD = '__mogRawBubbleSize';
 
 export { BLANK_VALUE_FIELD, LINE_SEGMENT_FIELD } from '../../grammar/internal-fields';
 
@@ -94,6 +100,7 @@ export const STOCK_VOLUME_FIELD = 'volume';
 export const STOCK_DIRECTION_FIELD = '_stockDirection';
 
 export const WATERFALL_RUNNING_TOTAL_FIELD = '_waterfallRunningTotal';
+export const WATERFALL_START_FIELD = '_waterfallStart';
 export const WATERFALL_END_FIELD = '_waterfallEnd';
 export const WATERFALL_TYPE_FIELD = '_waterfallType';
 

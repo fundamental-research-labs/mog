@@ -270,6 +270,7 @@ pub fn extract_chart_spec_from_chart_space(
         title_v_align: None,
         title_show_shadow: None,
         pivot_options,
+        pivot_projection: None,
         bar_shape: scalar_fields.bar_shape,
         bubble_3d_effect: scalar_fields.bubble_3d_effect,
         wireframe: scalar_fields.wireframe,

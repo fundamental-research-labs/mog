@@ -160,6 +160,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.pivot_options) {
         entries.push(("pivotOptions".into(), a));
     }
+    if let Some(a) = option_sub_object(&d.pivot_projection) {
+        entries.push(("pivotProjection".into(), a));
+    }
     if let Some(ref v) = d.bar_shape {
         entries.push(("barShape".into(), Any::String(Arc::from(v.as_str()))));
     }
@@ -339,6 +342,7 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         title_v_align: read_string(map, txn, "titleVAlign"),
         title_show_shadow: read_bool(map, txn, "titleShowShadow"),
         pivot_options: read_sub_object(map, txn, "pivotOptions"),
+        pivot_projection: read_sub_object(map, txn, "pivotProjection"),
         bar_shape: read_string(map, txn, "barShape"),
         bubble_3d_effect: read_bool(map, txn, "bubble3dEffect"),
         wireframe: read_bool(map, txn, "wireframe"),

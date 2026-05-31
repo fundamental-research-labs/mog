@@ -106,6 +106,15 @@ describe('chart config normalizer', () => {
         titleLayout: { xMode: 'factor', x: 0.15, y: 0.05 },
         dataTable: { visible: true, showHorzBorder: true },
         pivotOptions: { showAxisFieldButtons: false },
+        pivotProjection: {
+          sourceRef: 'Pivot!A3',
+          pivotTableName: 'PivotTable1',
+          authority: 'pivotCache',
+          expectedImportedSeriesCount: 3,
+          projectedSeriesCount: 2,
+          renderedSeriesCount: 2,
+          diagnostics: [{ reason: 'hiddenDataField', message: 'Hidden data field omitted' }],
+        },
         bubbleScale: 175,
         showNegBubbles: true,
         sizeRepresents: 'w',
@@ -135,6 +144,15 @@ describe('chart config normalizer', () => {
     expect(config.titleLayout).toEqual({ xMode: 'factor', x: 0.15, y: 0.05 });
     expect(config.dataTable).toMatchObject({ visible: true, showHorzBorder: true });
     expect(config.pivotOptions).toEqual({ showAxisFieldButtons: false });
+    expect(config.pivotProjection).toMatchObject({
+      sourceRef: 'Pivot!A3',
+      pivotTableName: 'PivotTable1',
+      authority: 'pivotCache',
+      expectedImportedSeriesCount: 3,
+      projectedSeriesCount: 2,
+      renderedSeriesCount: 2,
+      diagnostics: [{ reason: 'hiddenDataField', message: 'Hidden data field omitted' }],
+    });
     expect(config.bubbleScale).toBe(175);
     expect(config.showNegBubbles).toBe(true);
     expect(config.sizeRepresents).toBe('w');

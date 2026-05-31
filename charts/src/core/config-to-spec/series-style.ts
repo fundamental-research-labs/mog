@@ -1,5 +1,5 @@
 import type { MarkSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartFormat, ChartType, SeriesConfig } from '../../types';
+import type { ChartConfig, ChartData, ChartFormat, ChartType, SeriesConfig } from '../../types';
 import {
   chartColorTintShade,
   chartStyleRepeatThemeColor,
@@ -11,6 +11,7 @@ import {
 } from '../../utils/chart-colors';
 import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
+import { seriesConfigForDataSeries, seriesSourceIndex } from '../series-identity';
 import { linePointsToCanvasPx } from './units';
 
 export function isStrokeColoredSeries(
@@ -50,19 +51,56 @@ export function resolveSeriesColor(
   return (series.color ? resolveChartColor(series.color, context) : undefined) ?? fillColor ?? lineColor;
 }
 
-export function resolvedCategoryColors(config: ChartConfig): string[] | undefined {
-  const seriesColors = (config.series ?? [])
-    .map((series, index) =>
-      isNoFillNoLineSeries(series)
-        ? undefined
-        : resolveSeriesColor(series, index, config.type, config),
+export function resolvedCategoryColors(config: ChartConfig, data?: ChartData): string[] | undefined {
+  const configColors = resolvedConfigColors(config);
+  const seriesColors = resolvedSeriesColors(config, data);
+
+  if (variesColorsByCategory(config)) {
+    return configColors.length > 0
+      ? configColors
+      : seriesColors.length > 0
+        ? seriesColors
+        : undefined;
+  }
+
+  if (seriesColors.length > 0) return seriesColors;
+  return configColors.length > 0 ? configColors : undefined;
+}
+
+function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
+  const seriesConfigs = config.series ?? [];
+  const colorInputs =
+    data && data.series.length > 0
+      ? data.series.map((series, renderedIndex) => ({
+          series: seriesConfigForDataSeries(series, seriesConfigs, renderedIndex),
+          sourceIndex: seriesSourceIndex(series, renderedIndex),
+        }))
+      : seriesConfigs.map((series, index) => ({ series, sourceIndex: index }));
+  const seriesColors = colorInputs
+    .map(({ series, sourceIndex }) =>
+      series && !isNoFillNoLineSeries(series)
+        ? resolveSeriesColor(series, sourceIndex, config.type, config)
+        : undefined,
     )
     .filter(Boolean) as string[];
-  if (seriesColors.length > 0) return seriesColors;
-  const configColors = (config.colors ?? [])
-    .map((color) => resolveChartColor(color))
+  return seriesColors;
+}
+
+function variesColorsByCategory(config: ChartConfig): boolean {
+  if (config.varyByCategories !== undefined) return config.varyByCategories;
+  return (
+    config.type === 'pie' ||
+    config.type === 'doughnut' ||
+    config.type === 'pie3d' ||
+    config.type === 'ofPie'
+  );
+}
+
+function resolvedConfigColors(config: ChartConfig): string[] {
+  const context = resolverContextFromConfig(config, 'chartArea');
+  return (config.colors ?? [])
+    .map((color) => resolveChartColor(color, context))
     .filter(Boolean) as string[];
-  return configColors.length > 0 ? configColors : undefined;
 }
 
 export function hasVisibleLineStyle(line: unknown): boolean {

@@ -2,6 +2,8 @@ import {
   HIDDEN_CHART_CELL,
   extractChartData,
   extractChartDataFromRange,
+  seriesSourceIndex,
+  seriesSourceKey,
   type CellDataAccessor,
   type ChartData,
 } from '@mog/charts';
@@ -214,7 +216,8 @@ export function chartDataToRows(data: ChartData): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
   for (let i = 0; i < (data.categories?.length || 0); i++) {
     const category = data.categories[i];
-    for (const series of data.series) {
+    for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
+      const series = data.series[seriesIndex];
       const point = series.data[i];
       if (!point) continue;
       if (point.valueState === 'hidden') continue;
@@ -224,6 +227,8 @@ export function chartDataToRows(data: ChartData): Record<string, unknown>[] {
         y: point.y,
         value: point.y,
         series: series.name,
+        sourceSeriesIndex: seriesSourceIndex(series, seriesIndex),
+        sourceSeriesKey: seriesSourceKey(series, seriesIndex),
       };
       if (point.size !== undefined) row.size = point.size;
       if (point.open !== undefined) row.open = point.open;
@@ -268,6 +273,88 @@ function hasRenderablePointCache(
     return true;
   }
   return cache.points.some((point) => point.idx >= 0);
+}
+
+function hasBubbleDimensionSource(
+  ref: string | undefined,
+  cache: NonNullable<ChartConfig['series']>[number]['valueCache'],
+): boolean {
+  return Boolean(ref?.trim()) || hasRenderablePointCache(cache);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function hasRenderableBubblePoint(
+  point: ChartData['series'][number]['data'][number] | undefined,
+  config: ChartConfig,
+): boolean {
+  if (!point || (point.valueState && point.valueState !== 'value')) return false;
+  const x = finiteNumber(point.x);
+  const y = finiteNumber(point.y);
+  const size = finiteNumber(point.size);
+  if (x === undefined || y === undefined || size === undefined) return false;
+  return config.showNegBubbles === true || size > 0;
+}
+
+function bubbleDataUnavailableError(
+  config: ChartConfig,
+  data: ChartData,
+  chartId: string,
+): ChartError | null {
+  if (config.type !== 'bubble') return null;
+  if (
+    data.series.some((series) =>
+      series.data.some((point) => hasRenderableBubblePoint(point, config)),
+    )
+  ) {
+    return null;
+  }
+
+  const seriesConfigs = config.series ?? [];
+  const missingDimensions: string[] = [];
+  if (!seriesConfigs.some((series) => hasBubbleDimensionSource(series.values, series.valueCache))) {
+    missingDimensions.push('y values');
+  }
+  if (
+    !seriesConfigs.some((series) =>
+      hasBubbleDimensionSource(series.categories, series.categoryCache),
+    )
+  ) {
+    missingDimensions.push('x values');
+  }
+  if (
+    !seriesConfigs.some((series) =>
+      hasBubbleDimensionSource(series.bubbleSize, series.bubbleSizeCache),
+    )
+  ) {
+    missingDimensions.push('bubble sizes');
+  }
+
+  if (missingDimensions.length > 0) {
+    return {
+      code: 'DATA_UNAVAILABLE',
+      message: `Bubble chart data is missing ${missingDimensions.join(', ')}`,
+      chartId,
+    };
+  }
+
+  const points = data.series.flatMap((series) => series.data);
+  const allPointsHidden =
+    points.length > 0 && points.every((point) => point?.valueState === 'hidden');
+  return {
+    code: 'DATA_UNAVAILABLE',
+    message: allPointsHidden
+      ? 'Bubble chart has no renderable points because all points are hidden'
+      : 'Bubble chart has no renderable points after filtering invalid x, y, or size values',
+    chartId,
+  };
 }
 
 export class ChartDataResolver {
@@ -399,9 +486,12 @@ export class ChartDataResolver {
         await this.withWorkbookThemeColors(renderConfig),
         sourceLinkedAxisFormats,
       );
+      const normalizedData = normalizeChartDataForRendering(data, themedConfig);
+      const bubbleError = bubbleDataUnavailableError(themedConfig, normalizedData, chartId);
+      if (bubbleError) return bubbleError;
       return {
         config: themedConfig,
-        data: normalizeChartDataForRendering(data, themedConfig),
+        data: normalizedData,
       };
     }
 

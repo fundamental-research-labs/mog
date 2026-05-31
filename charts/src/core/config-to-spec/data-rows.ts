@@ -1,6 +1,9 @@
 import type { DataRow } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartDataPoint } from '../../types';
-import { formatExcelValue } from '@mog/spreadsheet-utils/number-formats';
+import {
+  formatExcelValueResult,
+  type ExcelNumberFormatResult,
+} from '@mog/spreadsheet-utils/number-formats';
 import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
@@ -55,11 +58,17 @@ import {
   POINT_STYLE_VISIBLE_FIELD,
   POINT_STROKE_FIELD,
   POINT_STROKE_WIDTH_FIELD,
+  RAW_BUBBLE_SIZE_FIELD,
   RAW_CATEGORY_FIELD,
   RAW_VALUE_FIELD,
   SCATTER_X_FIELD,
   SERIES_FIELD,
+  SERIES_FILL_FIELD,
   SERIES_INDEX_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+  SOURCE_SERIES_INDEX_FIELD,
+  SOURCE_SERIES_KEY_FIELD,
   LINE_SEGMENT_FIELD,
   SERIES_ORDER_FIELD,
   SERIES_OPACITY_FIELD,
@@ -72,11 +81,32 @@ import {
   VALUE_FIELD,
   WATERFALL_END_FIELD,
   WATERFALL_RUNNING_TOTAL_FIELD,
+  WATERFALL_START_FIELD,
   WATERFALL_TYPE_FIELD,
 } from './fields';
-import { isNoFillNoLineSeries } from './series-style';
+import { isNoFillNoLineSeries, resolveSeriesColor } from './series-style';
+import {
+  resolveChartFillColor,
+  resolveChartLineStyle,
+  resolveChartOwnerFormat,
+  resolverContextFromConfig,
+} from '../style-resolver';
+import { resolveChartColor, resolveChartTextColor } from '../../utils/chart-colors';
 import { linePointsToCanvasPx } from './units';
-import type { ChartFill, DataLabelConfig, ErrorBarConfig, PointFormat, SeriesConfig } from '../../types';
+import type {
+  ChartColor,
+  ChartFormat,
+  DataLabelConfig,
+  ErrorBarConfig,
+  PointFormat,
+  SeriesConfig,
+} from '../../types';
+import {
+  seriesConfigForDataSeries,
+  seriesOrderForDataSeries,
+  seriesSourceIndex,
+  seriesSourceKey,
+} from '../series-identity';
 
 interface PieLabelGeometry {
   cos: number;
@@ -119,19 +149,24 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
       : (category ?? String(rawCategory));
     for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
       const series = data.series[seriesIndex];
+      const seriesConfig = seriesConfigForDataSeries(series, seriesConfigs, seriesIndex);
+      const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
+      const sourceSeriesIndex = seriesSourceIndex(series, seriesIndex);
       const point = series.data[i];
-      if (shouldBreakScatterLineAtPoint(point, config)) {
+      if (shouldBreakScatterLineAtPoint(point, config, seriesConfig)) {
         gapSegmentsBySeries[seriesIndex] += 1;
         continue;
       }
-      if (shouldEmitBlankRow(point, config)) {
+      if (shouldEmitBlankRow(point, config, seriesConfig)) {
         const row = buildBaseRow({
           rawCategory,
           rowCategory,
           seriesName: series.name,
           pointIndex: i,
           seriesIndex,
-          seriesOrder: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
+          sourceSeriesIndex,
+          sourceSeriesKey: seriesSourceKey(series, seriesIndex),
+          seriesOrder: seriesOrderForDataSeries(series, seriesConfig, seriesIndex),
         });
         row[BLANK_VALUE_FIELD] = true;
         applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
@@ -141,45 +176,53 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         }
         continue;
       }
-      if (point && shouldIncludePointInRows(point, config)) {
+      if (point && shouldIncludePointInRows(point, config, seriesConfig)) {
         const row = buildBaseRow({
           rawCategory,
           rowCategory,
           seriesName: series.name,
           pointIndex: i,
           seriesIndex,
-          seriesOrder: seriesConfigs[seriesIndex]?.order ?? seriesIndex,
+          sourceSeriesIndex,
+          sourceSeriesKey: seriesSourceKey(series, seriesIndex),
+          seriesOrder: seriesOrderForDataSeries(series, seriesConfig, seriesIndex),
           value: point.y,
         });
         if (config?.displayBlanksAs === 'gap') {
           row[LINE_SEGMENT_FIELD] = gapSegmentsBySeries[seriesIndex];
         }
-        if (isScatterLikeChart(config)) {
+        if (isQuantitativeX) {
           row[SCATTER_X_FIELD] = scatterXValue(point);
         }
-        if (config?.type === 'bubble') {
+        if (isBubbleSeries(config, seriesConfig)) {
           row[BUBBLE_SIZE_FIELD] = bubbleSizeValue(point, config, maxBubbleMagnitude);
+          row[RAW_BUBBLE_SIZE_FIELD] = point.size;
         }
         if (config?.series?.some(isNoFillNoLineSeries)) {
-          row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
+          row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfig) ? 0 : 1;
         }
         applyPointAnnotations(row, {
           config,
-          seriesConfig: seriesConfigs[seriesIndex],
+          seriesConfig,
           seriesName: series.name,
+          seriesIndex,
+          sourceSeriesIndex,
           pointIndex: i,
           category: rawCategory,
           value: point.y,
-          xValue: isScatterLikeChart(config) ? scatterXValue(point) : undefined,
+          xValue: isQuantitativeX ? scatterXValue(point) : undefined,
           bubbleSize: point.size,
           percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
           pieLabelGeometry: pieLabelGeometries[seriesIndex]?.[i],
           seriesValues: series.data.map((item) => item?.y),
         });
+        applySeriesVisualStyle(row, config, seriesConfig, sourceSeriesIndex);
         if (config?.type === 'waterfall') {
           const value = toFiniteNumber(point.y) ?? 0;
           const isTotal = waterfallTotalIndices.has(i);
+          const start = isTotal ? 0 : waterfallRunningTotal;
           const end = isTotal ? value : waterfallRunningTotal + value;
+          row[WATERFALL_START_FIELD] = start;
           row[WATERFALL_RUNNING_TOTAL_FIELD] = end;
           row[WATERFALL_END_FIELD] = end;
           row[WATERFALL_TYPE_FIELD] = isTotal ? 'total' : value >= 0 ? 'increase' : 'decrease';
@@ -216,6 +259,8 @@ function buildBaseRow(input: {
   seriesName: string;
   pointIndex: number;
   seriesIndex: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
   seriesOrder: number;
   value?: number;
 }): DataRow {
@@ -224,6 +269,8 @@ function buildBaseRow(input: {
     [SERIES_FIELD]: input.seriesName,
     [POINT_INDEX_FIELD]: input.pointIndex,
     [SERIES_INDEX_FIELD]: input.seriesIndex,
+    [SOURCE_SERIES_INDEX_FIELD]: input.sourceSeriesIndex,
+    [SOURCE_SERIES_KEY_FIELD]: input.sourceSeriesKey,
     [SERIES_ORDER_FIELD]: input.seriesOrder,
     [RAW_CATEGORY_FIELD]: input.rawCategory,
   };
@@ -244,6 +291,8 @@ function applyPointAnnotations(
     config?: ChartConfig;
     seriesConfig?: SeriesConfig;
     seriesName: string;
+    seriesIndex: number;
+    sourceSeriesIndex: number;
     pointIndex: number;
     category: string | number;
     value: number;
@@ -256,22 +305,34 @@ function applyPointAnnotations(
 ): void {
   const { config, seriesConfig, pointIndex } = context;
   const pointFormat = seriesConfig?.points?.find((point) => point.idx === pointIndex);
-  applyPointStyle(row, seriesConfig, pointFormat);
-  applyMarker(row, config, seriesConfig, pointFormat);
+  applyPointStyle(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
+  applyMarker(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
   applyDataLabel(row, context, pointFormat);
   applyErrorBars(row, context);
 }
 
 function applyPointStyle(
   row: DataRow,
+  config: ChartConfig | undefined,
   _seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
   pointFormat: PointFormat | undefined,
 ): void {
-  const fill = pointFormat?.fill ?? solidFillColor(pointFormat?.visualFormat?.fill);
+  const ownerKey =
+    pointFormat?.idx === undefined
+      ? undefined
+      : pointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+  const resolverContext = config && ownerKey ? resolverContextFromConfig(config, ownerKey) : {};
+  const format = config
+    ? resolveChartOwnerFormat(config, ownerKey, pointChartFormat(pointFormat))
+    : pointChartFormat(pointFormat);
+  const fill =
+    colorToCss(pointFormat?.fill, resolverContext) ??
+    resolveChartFillColor(format?.fill, resolverContext);
   let hasStyle = false;
   if (fill) row[POINT_FILL_FIELD] = fill;
-  const line = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
-  const stroke = lineColor(line) ?? pointFormat?.border?.color;
+  const line = format?.line;
+  const stroke = lineColor(line, resolverContext) ?? colorToCss(pointFormat?.border?.color);
   if (stroke) row[POINT_STROKE_FIELD] = stroke;
   const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
@@ -288,32 +349,72 @@ function applyMarker(
   row: DataRow,
   config: ChartConfig | undefined,
   seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
   pointFormat: PointFormat | undefined,
 ): void {
   const style = pointFormat?.markerStyle ?? seriesConfig?.markerStyle;
+  const hasPointMarkerOverride =
+    pointFormat?.markerStyle !== undefined || pointFormat?.markerSize !== undefined;
+  if (seriesConfig?.showMarkers === false && !hasPointMarkerOverride) return;
   const showMarkers =
     style === 'none'
       ? false
       : (pointFormat?.markerStyle !== undefined ||
         pointFormat?.markerSize !== undefined ||
+        seriesConfig?.markerStyle !== undefined ||
+        seriesConfig?.markerSize !== undefined ||
         seriesConfig?.showMarkers === true ||
-        isMarkerDefaultChart(config?.type));
+        isMarkerDefaultChart(config?.type, seriesConfig?.type));
   if (!showMarkers) return;
 
   row[MARKER_VISIBLE_FIELD] = true;
   row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
   row[MARKER_SIZE_FIELD] = markerPointSizeToArea(pointFormat?.markerSize ?? seriesConfig?.markerSize);
   const pointLine = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
+  const ownerKey =
+    pointFormat?.idx === undefined
+      ? markerOwnerKey(sourceSeriesIndex)
+      : markerPointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+  const resolverContext = config ? resolverContextFromConfig(config, ownerKey) : {};
   const fill =
-    colorToCss(pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor) ??
-    pointFormat?.fill ??
-    solidFillColor(pointFormat?.visualFormat?.fill);
+    resolveChartColor(
+      pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor,
+      resolverContext,
+    ) ??
+    colorToCss(pointFormat?.fill, resolverContext) ??
+    resolveChartFillColor(pointFormat?.visualFormat?.fill, resolverContext);
   const stroke =
-    colorToCss(pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor) ??
-    lineColor(pointLine) ??
-    pointFormat?.border?.color;
+    resolveChartColor(
+      pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor,
+      resolverContext,
+    ) ??
+    lineColor(pointLine, resolverContext) ??
+    colorToCss(pointFormat?.border?.color);
   if (fill) row[MARKER_FILL_FIELD] = fill;
   if (stroke) row[MARKER_STROKE_FIELD] = stroke;
+}
+
+function applySeriesVisualStyle(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
+): void {
+  if (!seriesConfig || isNoFillNoLineSeries(seriesConfig)) return;
+  const fill = config
+    ? resolveSeriesColor(seriesConfig, sourceSeriesIndex, config.type, config)
+    : resolveSeriesColor(seriesConfig, sourceSeriesIndex);
+  if (fill) row[SERIES_FILL_FIELD] = fill;
+
+  const ownerKey = `series(${sourceSeriesIndex})`;
+  const resolverContext = config ? resolverContextFromConfig(config, ownerKey) : {};
+  const format = config
+    ? resolveChartOwnerFormat(config, ownerKey, seriesConfig?.format)
+    : seriesConfig?.format;
+  const stroke = lineColor(format?.line, resolverContext);
+  const strokeWidth = linePointsToCanvasPx(format?.line?.width);
+  if (stroke) row[SERIES_STROKE_FIELD] = stroke;
+  if (strokeWidth !== undefined) row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
 }
 
 function applyDataLabel(
@@ -322,6 +423,8 @@ function applyDataLabel(
     config?: ChartConfig;
     seriesConfig?: SeriesConfig;
     seriesName: string;
+    seriesIndex: number;
+    sourceSeriesIndex: number;
     pointIndex: number;
     category: string | number;
     value: number;
@@ -338,10 +441,10 @@ function applyDataLabel(
   );
   if (!label || label.delete === true || label.show === false) return;
 
-  const text = composeLabelText(label, context);
-  if (!text) return;
+  const labelText = composeLabelText(label, context);
+  if (!labelText.text) return;
   row[DATA_LABEL_VISIBLE_FIELD] = true;
-  row[DATA_LABEL_TEXT_FIELD] = text;
+  row[DATA_LABEL_TEXT_FIELD] = labelText.text;
   const placement = labelPlacement(label.position, context.config?.type);
   const manualX = finiteNumber(label.layout?.x);
   const manualY = finiteNumber(label.layout?.y);
@@ -364,16 +467,23 @@ function applyDataLabel(
     row[DATA_LABEL_X_FIELD] = coordinates.labelX;
     row[DATA_LABEL_Y_FIELD] = coordinates.labelY;
   }
-  const font = label.visualFormat?.font;
-  const color = colorToCss(font?.color);
+  const ownerKey = dataLabelOwnerKey(context.sourceSeriesIndex, context.pointIndex);
+  const resolverContext = context.config
+    ? resolverContextFromConfig(context.config, ownerKey)
+    : {};
+  const labelFormat = context.config
+    ? resolveChartOwnerFormat(context.config, ownerKey, label.visualFormat)
+    : label.visualFormat;
+  const font = labelFormat?.font;
+  const color = resolveChartTextColor(font?.color, resolverContext) ?? labelText.color;
   if (color) row[DATA_LABEL_COLOR_FIELD] = color;
   if (font?.size !== undefined) row[DATA_LABEL_FONT_SIZE_FIELD] = font.size;
-  const rotation = label.textOrientation ?? label.visualFormat?.textRotation;
+  const rotation = label.textOrientation ?? labelFormat?.textRotation;
   if (rotation !== undefined) row[DATA_LABEL_ROTATION_FIELD] = rotation;
   if (label.showLeaderLines === true || label.leaderLinesFormat) {
     row[DATA_LABEL_LEADER_VISIBLE_FIELD] = true;
     const line = label.leaderLinesFormat?.format;
-    const stroke = lineColor(line);
+    const stroke = lineColor(line, resolverContext);
     const strokeWidth = linePointsToCanvasPx(line?.width);
     if (stroke) row[DATA_LABEL_LEADER_STROKE_FIELD] = stroke;
     if (strokeWidth !== undefined) row[DATA_LABEL_LEADER_STROKE_WIDTH_FIELD] = strokeWidth;
@@ -385,6 +495,7 @@ function applyErrorBars(
   context: {
     config?: ChartConfig;
     seriesConfig?: SeriesConfig;
+    sourceSeriesIndex: number;
     pointIndex: number;
     value: number;
     xValue?: number;
@@ -430,7 +541,11 @@ function applyErrorBars(
       if (extent.minus !== undefined && extent.plus === undefined) row[ERROR_BAR_Y_MAX_FIELD] = baseValue;
       if (extent.plus !== undefined && extent.minus === undefined) row[ERROR_BAR_Y_MIN_FIELD] = baseValue;
     }
-    const stroke = lineColor(bar.lineFormat);
+    const ownerKey = errorBarsOwnerKey(context.sourceSeriesIndex, direction);
+    const resolverContext = context.config
+      ? resolverContextFromConfig(context.config, ownerKey)
+      : {};
+    const stroke = lineColor(bar.lineFormat, resolverContext);
     const strokeWidth = linePointsToCanvasPx(bar.lineFormat?.width);
     if (stroke) row[ERROR_BAR_STROKE_FIELD] = stroke;
     if (strokeWidth !== undefined) row[ERROR_BAR_STROKE_WIDTH_FIELD] = strokeWidth;
@@ -475,23 +590,31 @@ function composeLabelText(
     bubbleSize?: number;
     percentage?: number;
   },
-): string {
-  if (label.text) return label.text;
-  if (label.formula) return label.formula;
-  if (label.richText?.length) return label.richText.map((run) => run.text).join('');
+): { text: string; color?: string } {
+  if (label.text) return { text: label.text };
+  if (label.formula) return { text: label.formula };
+  if (label.richText?.length) return { text: label.richText.map((run) => run.text).join('') };
 
   const showValue = label.showValue ?? defaultLabelShowsValue(label);
   const parts: string[] = [];
+  let color: string | undefined;
+  const pushNumber = (result: ExcelNumberFormatResult) => {
+    parts.push(result.text);
+    color ??= result.color;
+  };
   if (label.showSeriesName) parts.push(context.seriesName);
   if (label.showCategoryName ?? label.showCategory) parts.push(String(context.category));
-  if (showValue) parts.push(formatLabelNumber(context.value, label.numberFormat ?? label.format));
+  if (showValue) pushNumber(formatLabelNumber(context.value, label.numberFormat ?? label.format));
   if (label.showPercentage ?? label.showPercent) {
-    parts.push(formatLabelNumber(context.percentage ?? 0, label.numberFormat ?? label.format ?? '0%'));
+    pushNumber(formatLabelNumber(context.percentage ?? 0, label.numberFormat ?? label.format ?? '0%'));
   }
   if (label.showBubbleSize && context.bubbleSize !== undefined) {
-    parts.push(formatLabelNumber(context.bubbleSize, label.numberFormat ?? label.format));
+    pushNumber(formatLabelNumber(context.bubbleSize, label.numberFormat ?? label.format));
   }
-  return parts.join(label.separator ?? ', ');
+  return {
+    text: parts.join(label.separator ?? ', '),
+    ...(color !== undefined ? { color } : {}),
+  };
 }
 
 function defaultLabelShowsValue(label: DataLabelConfig): boolean {
@@ -505,9 +628,12 @@ function defaultLabelShowsValue(label: DataLabelConfig): boolean {
   );
 }
 
-function formatLabelNumber(value: number, format?: string): string {
-  if (format) return formatExcelValue(value, format);
-  return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(12)));
+function formatLabelNumber(value: number, format?: string): ExcelNumberFormatResult {
+  if (format) return formatExcelValueResult(value, format);
+  return {
+    text: Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(12))),
+    section: value < 0 ? 'negative' : value === 0 ? 'zero' : 'positive',
+  };
 }
 
 function labelPlacement(position: DataLabelConfig['position'], chartType?: ChartConfig['type']) {
@@ -642,8 +768,15 @@ function isPieLikeChart(type?: ChartConfig['type']): boolean {
   return type === 'pie' || type === 'doughnut' || type === 'pie3d';
 }
 
-function isMarkerDefaultChart(type?: ChartConfig['type']): boolean {
-  return type === 'lineMarkers' || type === 'lineMarkersStacked' || type === 'lineMarkersStacked100';
+function isMarkerDefaultChart(type?: ChartConfig['type'], seriesType?: string): boolean {
+  return (
+    type === 'lineMarkers' ||
+    type === 'lineMarkersStacked' ||
+    type === 'lineMarkersStacked100' ||
+    seriesType === 'lineMarkers' ||
+    seriesType === 'lineMarkersStacked' ||
+    seriesType === 'lineMarkersStacked100'
+  );
 }
 
 function excelMarkerShape(style?: string): string {
@@ -672,24 +805,75 @@ function markerPointSizeToArea(size?: number): number {
   return Math.max(4, diameter * diameter);
 }
 
-function solidFillColor(fill: ChartFill | undefined): string | undefined {
-  if (!fill || fill.type !== 'solid') return undefined;
-  return colorToCss(fill.color);
+function pointChartFormat(pointFormat: PointFormat | undefined): ChartFormat | undefined {
+  if (!pointFormat) return undefined;
+  const base = pointFormat.visualFormat;
+  if (!pointFormat.lineFormat) return base;
+  return { ...(base ?? {}), line: pointFormat.lineFormat };
 }
 
-function lineColor(line: PointFormat['lineFormat'] | undefined): string | undefined {
+function lineColor(
+  line: PointFormat['lineFormat'] | undefined,
+  context: Parameters<typeof resolveChartLineStyle>[1] = {},
+): string | undefined {
   if (!line || line.noFill) return undefined;
-  return colorToCss(line.color);
+  const resolved = resolveChartLineStyle(line, context, { widthToPx: linePointsToCanvasPx });
+  return resolved?.paint?.type === 'solid' ? resolved.paint.color : undefined;
 }
 
-function colorToCss(color: unknown): string | undefined {
+function colorToCss(
+  color: unknown,
+  context: Parameters<typeof resolveChartColor>[1] = {},
+): string | undefined {
   if (typeof color === 'string') return color.startsWith('#') ? color : `#${color}`;
-  if (color && typeof color === 'object' && 'theme' in color) return undefined;
+  if (color && typeof color === 'object' && 'theme' in color) {
+    return resolveChartColor(color as ChartColor, context);
+  }
   return undefined;
+}
+
+function pointOwnerKey(sourceSeriesIndex: number, pointIndex: number): string {
+  return `point(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
+}
+
+function markerOwnerKey(sourceSeriesIndex: number): string {
+  return `marker(seriesIdx=${sourceSeriesIndex})`;
+}
+
+function markerPointOwnerKey(sourceSeriesIndex: number, pointIndex: number): string {
+  return `markerPoint(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
+}
+
+function dataLabelOwnerKey(sourceSeriesIndex: number, pointIndex: number): string {
+  return `dataLabel(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
+}
+
+function errorBarsOwnerKey(sourceSeriesIndex: number, axis: 'x' | 'y'): string {
+  return `errorBars(seriesIdx=${sourceSeriesIndex},axis=${axis})`;
 }
 
 function isScatterLikeChart(config?: ChartConfig): boolean {
   return config?.type === 'scatter' || config?.type === 'bubble';
+}
+
+function isQuantitativeXSeries(
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+): boolean {
+  if (seriesConfig?.xRole === 'quantitative') return true;
+  if (seriesConfig?.xRole === 'category') return false;
+  return (
+    isScatterLikeChart(config) ||
+    seriesConfig?.type === 'scatter' ||
+    seriesConfig?.type === 'bubble'
+  );
+}
+
+function isBubbleSeries(
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+): boolean {
+  return config?.type === 'bubble' || seriesConfig?.type === 'bubble';
 }
 
 function scatterXValue(point: ChartDataPoint): number {
@@ -698,27 +882,32 @@ function scatterXValue(point: ChartDataPoint): number {
 
 function bubbleSizeValue(
   point: ChartDataPoint,
-  config: ChartConfig,
+  config: ChartConfig | undefined,
   maxBubbleMagnitude: number,
 ): number {
   const rawSize = toFiniteNumber(point.size)!;
   const magnitude = Math.abs(rawSize);
-  if (config.sizeRepresents === 'w' && maxBubbleMagnitude > 0) {
+  if (config?.sizeRepresents === 'w' && maxBubbleMagnitude > 0) {
     return (magnitude * magnitude) / maxBubbleMagnitude;
   }
   return magnitude;
 }
 
-function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
+function shouldIncludePointInRows(
+  point: ChartDataPoint,
+  config?: ChartConfig,
+  seriesConfig?: SeriesConfig,
+): boolean {
   if (point.valueState === 'hidden') return false;
   if (config?.type === 'stock' && !isRenderableStockPoint(point, config)) return false;
-  if (isScatterLikeChart(config) && toFiniteNumber(point.x) === undefined) return false;
-  if (config?.type === 'bubble') {
+  const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
+  if (isQuantitativeX && toFiniteNumber(point.x) === undefined) return false;
+  if (isBubbleSeries(config, seriesConfig)) {
     const size = toFiniteNumber(point.size);
     if (size === undefined) return false;
-    if (size <= 0 && config.showNegBubbles !== true) return false;
+    if (size <= 0 && config?.showNegBubbles !== true) return false;
   }
-  if (isScatterLikeChart(config) && point.valueState) return false;
+  if (isQuantitativeX && point.valueState) return false;
   if (!point.valueState || point.valueState === 'value') return true;
   if (point.valueState === 'blank') {
     return config?.displayBlanksAs === 'zero';
@@ -744,8 +933,9 @@ function isRenderableStockPoint(point: ChartDataPoint, config: ChartConfig): boo
 function shouldEmitBlankRow(
   point: ChartDataPoint | undefined,
   config?: ChartConfig,
+  seriesConfig?: SeriesConfig,
 ): boolean {
-  if (isScatterLikeChart(config)) return false;
+  if (isQuantitativeXSeries(config, seriesConfig)) return false;
   if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
   if (!point) return true;
   return point.valueState === 'blank';
@@ -754,21 +944,25 @@ function shouldEmitBlankRow(
 function shouldBreakScatterLineAtPoint(
   point: ChartDataPoint | undefined,
   config?: ChartConfig,
+  seriesConfig?: SeriesConfig,
 ): boolean {
   return (
-    config?.type === 'scatter' &&
-    config.showLines === true &&
-    config.displayBlanksAs === 'gap' &&
+    isQuantitativeXSeries(config, seriesConfig) &&
+    (seriesConfig?.showLines ?? config?.showLines) === true &&
+    config?.displayBlanksAs === 'gap' &&
     (!point || point.valueState === 'blank')
   );
 }
 
 function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {
-  if (config?.type !== 'bubble') return 0;
+  if (!config) return 0;
   let max = 0;
-  for (const series of data.series) {
+  for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
+    const series = data.series[seriesIndex];
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], seriesIndex);
+    if (!isBubbleSeries(config, seriesConfig)) continue;
     for (const point of series.data) {
-      if (!shouldIncludePointInRows(point, config)) continue;
+      if (!shouldIncludePointInRows(point, config, seriesConfig)) continue;
       const size = toFiniteNumber(point.size);
       if (size !== undefined) max = Math.max(max, Math.abs(size));
     }

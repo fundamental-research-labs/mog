@@ -64,6 +64,9 @@ const BOTTOM_LEGEND_HEIGHT = 30;
 const BOTTOM_LEGEND_BOTTOM_PADDING = 8;
 const BOTTOM_LEGEND_RESERVED_SPACE =
   DEFAULT_LAYOUT.xAxisLabelSpace + BOTTOM_LEGEND_HEIGHT + BOTTOM_LEGEND_BOTTOM_PADDING;
+const TOP_LEGEND_HEIGHT = 30;
+const TOP_LEGEND_RESERVED_SPACE = TOP_LEGEND_HEIGHT + 8;
+const SIDE_LEGEND_GAP = 10;
 const DATA_TABLE_TOP_PADDING = 6;
 
 // =============================================================================
@@ -94,34 +97,36 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
   const adjustedMarginTop = autoTitleArea ? autoTitleArea.height + margin.top : margin.top;
 
   const legendEncoding = legendEncodingForSpec(spec);
+  const legendSpec = firstLegendSpec(legendEncoding);
   const legendOrient = legendOrientForEncoding(legendEncoding);
+  const legendOverlaysPlot = legendSpec?.overlay === true;
   const layoutHints = spec.config?.layoutHints;
   const dataTableReservedHeight = layoutHints?.dataTable?.height ?? 0;
   const bottomAxisReservedSpace = Math.max(0, margin.bottom - DEFAULT_LAYOUT.margin.bottom);
-  const adjustedMarginBottom =
-    (legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom) +
-    dataTableReservedHeight;
+  const baseAdjustedMarginBottom = margin.bottom + dataTableReservedHeight;
 
   // Calculate legend area
   const autoLegendArea = calculateLegendArea(legendEncoding, width, height, {
     ...margin,
-    bottom: adjustedMarginBottom,
+    top: adjustedMarginTop,
+    bottom: baseAdjustedMarginBottom,
   });
-
-  // Adjust right margin for legend (if legend is on right)
-  const adjustedMarginRight =
-    autoLegendArea?.x === width - margin.right - (autoLegendArea?.width || 0) - 10
-      ? margin.right + (autoLegendArea?.width || 0) + 10
-      : margin.right;
+  const legendReservation = legendOverlaysPlot
+    ? { top: 0, right: 0, bottom: 0, left: 0 }
+    : legendReservationForArea(legendOrient, autoLegendArea);
+  const adjustedMarginTopWithLegend = adjustedMarginTop + legendReservation.top;
+  const adjustedMarginRight = margin.right + legendReservation.right;
+  const adjustedMarginBottom = baseAdjustedMarginBottom + legendReservation.bottom;
+  const adjustedMarginLeft = margin.left + legendReservation.left;
 
   // Calculate plot area
   const autoPlotArea = {
-    x: margin.left,
-    y: adjustedMarginTop,
-    width: Math.max(DEFAULT_LAYOUT.minPlotSize, width - margin.left - adjustedMarginRight),
+    x: adjustedMarginLeft,
+    y: adjustedMarginTopWithLegend,
+    width: Math.max(DEFAULT_LAYOUT.minPlotSize, width - adjustedMarginLeft - adjustedMarginRight),
     height: Math.max(
       DEFAULT_LAYOUT.minPlotSize,
-      height - adjustedMarginTop - adjustedMarginBottom,
+      height - adjustedMarginTopWithLegend - adjustedMarginBottom,
     ),
   };
   const chartBounds = { x: 0, y: 0, width, height };
@@ -157,10 +162,10 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     height,
     plotArea,
     margin: {
-      top: adjustedMarginTop,
+      top: adjustedMarginTopWithLegend,
       right: adjustedMarginRight,
       bottom: adjustedMarginBottom,
-      left: margin.left,
+      left: adjustedMarginLeft,
     },
     title: titleArea,
     legend: legendArea,
@@ -430,10 +435,10 @@ function calculateLegendArea(
 ): Layout['legend'] | undefined {
   // Check if legend is needed
   const needsLegend =
-    encoding?.color?.field ||
-    encoding?.fill?.field ||
-    encoding?.shape?.field ||
-    encoding?.size?.field;
+    channelContributesLegend(encoding?.color) ||
+    channelContributesLegend(encoding?.fill) ||
+    channelContributesLegend(encoding?.shape) ||
+    channelContributesLegend(encoding?.size);
 
   if (!needsLegend) {
     return undefined;
@@ -444,21 +449,6 @@ function calculateLegendArea(
   const fillLegend = encoding?.fill?.legend;
   const shapeLegend = encoding?.shape?.legend;
   const sizeLegend = encoding?.size?.legend;
-
-  // Check if any legend is explicitly hidden (null)
-  // If any channel that contributes to legend has legend: null, hide the legend
-  if (encoding?.color?.field && colorLegend === null) {
-    return undefined;
-  }
-  if (encoding?.fill?.field && fillLegend === null) {
-    return undefined;
-  }
-  if (encoding?.shape?.field && shapeLegend === null) {
-    return undefined;
-  }
-  if (encoding?.size?.field && sizeLegend === null) {
-    return undefined;
-  }
 
   // Find first defined (non-null, non-undefined) legend spec for configuration
   const legendSpec =
@@ -498,7 +488,7 @@ function calculateLegendArea(
         x: margin.left,
         y: margin.top + 10,
         width: width - margin.left - margin.right,
-        height: 30,
+        height: TOP_LEGEND_HEIGHT,
       };
     case 'bottom':
       return {
@@ -509,8 +499,8 @@ function calculateLegendArea(
       };
     case 'top-right':
       return {
-        x: width - margin.right - legendWidth - 10,
-        y: centeredLegendY,
+        x: width - margin.right - legendWidth - SIDE_LEGEND_GAP,
+        y: margin.top + 10,
         width: legendWidth,
         height: legendHeight,
       };
@@ -547,13 +537,43 @@ function calculateLegendArea(
   }
 }
 
+function legendReservationForArea(
+  orient: LegendSpec['orient'],
+  area: Layout['legend'] | undefined,
+): Layout['margin'] {
+  const reservation = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (!area || orient === 'none') return reservation;
+
+  switch (orient) {
+    case 'left':
+      reservation.left = area.width + SIDE_LEGEND_GAP;
+      break;
+    case 'right':
+      reservation.right = area.width + SIDE_LEGEND_GAP;
+      break;
+    case 'top':
+      reservation.top = TOP_LEGEND_RESERVED_SPACE;
+      break;
+    case 'bottom':
+      reservation.bottom = BOTTOM_LEGEND_RESERVED_SPACE;
+      break;
+    case 'top-right':
+      reservation.right = area.width + SIDE_LEGEND_GAP;
+      break;
+    default:
+      break;
+  }
+
+  return reservation;
+}
+
 function estimateLegendWidth(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
 ): number {
-  const labels = legendDomainLabels(
-    encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size,
-  );
+  const labels =
+    legendSpec?.values ??
+    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size);
   if (labels.length === 0) return DEFAULT_LAYOUT.legendWidth;
 
   const labelFontSize = legendSpec?.labelFontSize ?? 11;
@@ -579,22 +599,26 @@ function collectEncodings(spec: ChartSpec): EncodingSpec[] {
 
 function hasLegendChannel(encoding: EncodingSpec | undefined): boolean {
   return Boolean(
-    encoding?.color?.field ||
-      encoding?.fill?.field ||
-      encoding?.shape?.field ||
-      encoding?.size?.field,
+    channelContributesLegend(encoding?.color) ||
+      channelContributesLegend(encoding?.fill) ||
+      channelContributesLegend(encoding?.shape) ||
+      channelContributesLegend(encoding?.size),
   );
 }
 
 function mergeLegendEncoding(encodings: EncodingSpec[]): EncodingSpec | undefined {
   const merged: EncodingSpec = {};
   for (const encoding of encodings) {
-    if (!merged.color && encoding.color) merged.color = encoding.color;
-    if (!merged.fill && encoding.fill) merged.fill = encoding.fill;
-    if (!merged.shape && encoding.shape) merged.shape = encoding.shape;
-    if (!merged.size && encoding.size) merged.size = encoding.size;
+    if (!merged.color && channelContributesLegend(encoding.color)) merged.color = encoding.color;
+    if (!merged.fill && channelContributesLegend(encoding.fill)) merged.fill = encoding.fill;
+    if (!merged.shape && channelContributesLegend(encoding.shape)) merged.shape = encoding.shape;
+    if (!merged.size && channelContributesLegend(encoding.size)) merged.size = encoding.size;
   }
   return hasLegendChannel(merged) ? merged : undefined;
+}
+
+function channelContributesLegend(channel: ChannelSpec | undefined): boolean {
+  return Boolean(channel?.field && channel.legend !== null);
 }
 
 function legendEncodingForSpec(spec: ChartSpec): EncodingSpec | undefined {

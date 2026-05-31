@@ -438,6 +438,7 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.display_blanks_as);
     fingerprint.write_json(&spec.plot_visible_only);
     fingerprint.write_json(&spec.gap_width);
+    fingerprint.write_json(&spec.gap_depth);
     fingerprint.write_json(&spec.overlap);
     fingerprint.write_json(&spec.doughnut_hole_size);
     fingerprint.write_json(&spec.first_slice_angle);
@@ -969,6 +970,7 @@ pub(crate) fn build_fallback_chart_spec(
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
@@ -1105,6 +1107,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 title_v_align: projection.title_v_align,
                 title_show_shadow: None,
                 pivot_options: None,
+                pivot_projection: None,
                 bar_shape: None,
                 bubble_3d_effect: None,
                 wireframe: None,

@@ -1,20 +1,16 @@
 import type { EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { explicitDomainBound, isHorizontalBarType } from './axis';
+import { hasExcelBarGeometryConfig } from './bar-geometry';
 import { categoryDisplayLabel, categoryKeyForIndex } from './category-axis';
-import { MARK_TYPE_MAP } from './constants';
 import { resolveStackMode } from './subtypes';
-
-function hasBarSpacingConfig(config: ChartConfig): boolean {
-  return typeof config.gapWidth === 'number' || typeof config.overlap === 'number';
-}
 
 export function applyBarCategorySpacingScale(
   config: ChartConfig,
   encoding: EncodingSpec,
   isHorizontal: boolean,
 ): void {
-  if (MARK_TYPE_MAP[config.type] !== 'bar' || !hasBarSpacingConfig(config)) return;
+  if (!hasExcelBarGeometryConfig(config)) return;
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
   if (!categoryChannel) return;
 
@@ -75,7 +71,7 @@ export function applyStackedValueDomain(
   encoding: EncodingSpec,
 ): void {
   const stack = resolveStackMode(config);
-  if (!stack || stack === 'normalize') return;
+  if (!stack) return;
 
   const chartType = config.type;
   const valueChannel = isHorizontalBarType(chartType) ? encoding.x : encoding.y;
@@ -86,6 +82,31 @@ export function applyStackedValueDomain(
     : undefined;
   const explicitMin = explicitDomainBound(existingDomain, 0);
   const explicitMax = explicitDomainBound(existingDomain, 1);
+
+  if (stack === 'normalize') {
+    let hasPositive = false;
+    let hasNegative = false;
+    for (let pointIndex = 0; pointIndex < (data.categories?.length ?? 0); pointIndex += 1) {
+      for (const series of data.series) {
+        const value = series.data[pointIndex]?.y;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) continue;
+        if (value > 0) hasPositive = true;
+        else hasNegative = true;
+      }
+    }
+
+    const defaultMin = hasNegative ? -100 : 0;
+    const defaultMax = hasPositive ? 100 : 0;
+    valueChannel.scale = {
+      ...(valueChannel.scale ?? {}),
+      domain: [
+        explicitMin ?? defaultMin,
+        explicitMax ?? (defaultMax === defaultMin ? 100 : defaultMax),
+      ],
+      nice: false,
+    };
+    return;
+  }
 
   let maxPositive = 0;
   let minNegative = 0;

@@ -152,6 +152,7 @@ fn test_chart_round_trip() {
             title_v_align: None,
             title_show_shadow: None,
             pivot_options: None,
+            pivot_projection: None,
             bar_shape: None,
             bubble_3d_effect: None,
             wireframe: None,

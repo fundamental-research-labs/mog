@@ -34,8 +34,12 @@ export type {
   ChartSeriesCategoryLevelCache,
   ChartSeriesCategoryLevelsCache,
   ChartSeriesDimensionSourceKind,
+  ChartSeriesXRole,
   ChartSeriesPointCache,
   ChartSeriesPointCachePoint,
+  ChartSeriesProjectionAuthority,
+  ChartSeriesProjectionDiagnostic,
+  ChartSeriesProjectionDiagnosticReason,
   ChartShadow,
   ChartStyleContext,
   ChartStyleDiagnostic,
@@ -58,6 +62,7 @@ export type {
   LineSubType,
   MarkerStyle,
   PieSliceConfig,
+  PivotChartProjectionData,
   PointFormat,
   RadarSubType,
   SeriesConfig,
@@ -81,7 +86,11 @@ import type {
   BarSubType,
   ChartAnchorMode,
   ChartConfig,
+  ChartSeriesProjectionAuthority,
+  ChartSeriesProjectionDiagnostic,
+  ChartSeriesProjectionDiagnosticReason,
   ChartType,
+  PivotChartProjectionData,
   LineSubType,
   RadarSubType,
   StockSubType,
@@ -390,6 +399,13 @@ export interface ChartDataSeries {
   type?: ChartType;
   color?: string;
   yAxisIndex?: 0 | 1;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  visibleOrder?: number;
+  pivotSeriesKey?: string;
+  pivotDataFieldIndex?: number;
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
 }
 
 /**

@@ -13,6 +13,11 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
+import {
+  effectiveBarGeometryFromSpec,
+  effectiveGapWidth,
+  effectiveOverlap,
+} from '../../core/config-to-spec/bar-geometry';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   BarDirection,
@@ -60,7 +65,7 @@ export function generateBarChartXML(
   });
 
   // Generate bar chart content
-  const chartContent = generateBarChartContent(seriesData, barDir, grouping, sheetName);
+  const chartContent = generateBarChartContent(seriesData, barDir, grouping, sheetName, spec);
 
   // Generate axes (swap for horizontal)
   const axes = generateBarAxes(encoding, isHorizontal);
@@ -93,8 +98,11 @@ function generateBarChartContent(
   barDir: BarDirection,
   grouping: BarGrouping,
   sheetName: string,
+  spec: ChartSpec,
 ): string {
-  const overlap = grouping === 'clustered' ? '0' : '100';
+  const geometry = effectiveBarGeometryFromSpec(spec.config);
+  const gapWidth = effectiveGapWidth(geometry.gapWidth);
+  const overlap = effectiveOverlap(geometry.overlap, grouping);
 
   return `<c:barChart>
     <c:barDir val="${barDir}"/>
@@ -102,7 +110,7 @@ function generateBarChartContent(
     <c:varyColors val="0"/>
     ${seriesData.map((series, idx) => generateBarSeriesXML(series, idx, sheetName)).join('\n    ')}
     ${generateDataLabelsXML()}
-    <c:gapWidth val="150"/>
+    <c:gapWidth val="${gapWidth}"/>
     <c:overlap val="${overlap}"/>
     <c:axId val="${AXIS_IDS.CATEGORY}"/>
     <c:axId val="${AXIS_IDS.VALUE}"/>

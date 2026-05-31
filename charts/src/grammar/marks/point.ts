@@ -57,6 +57,9 @@ export function generatePointMarks(
     // If only one is bad, place at the fallback position so the mark still exists.
     const xNaN = typeof x !== 'number' || !isFinite(x);
     const yNaN = typeof y !== 'number' || !isFinite(y);
+    if (markSpec.skipInvalidPositions && (xNaN || yNaN)) {
+      continue;
+    }
     if (xNaN && yNaN) {
       // Still emit a mark at fallback position to match data count
       x = xFallback;

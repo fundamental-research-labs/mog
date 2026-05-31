@@ -569,6 +569,27 @@ fn imported_chart_with_modeled_chart_property_does_not_replay_stale_raw_chart_xm
 }
 
 #[test]
+fn gap_depth_only_edit_invalidates_standard_chart_replay_authority() {
+    let mut imported_chart = make_chart(ChartType::Column3D, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    imported_chart.gap_depth = Some(150);
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace::default(),
+    ));
+    let mut imported_chart = with_current_standard_chart_authority(imported_chart);
+    let imported_fingerprint = chart_replay::standard_chart_projection_fingerprint(&imported_chart);
+
+    imported_chart.gap_depth = Some(225);
+    let edited_fingerprint = chart_replay::standard_chart_projection_fingerprint(&imported_chart);
+
+    assert_ne!(imported_fingerprint, edited_fingerprint);
+    assert!(chart_replay::should_reconstruct_chart_space(
+        &imported_chart
+    ));
+}
+
+#[test]
 fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
@@ -1115,6 +1136,13 @@ fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
         marker_background_color: None,
         marker_foreground_color: None,
         filtered: None,
+        source_series_index: None,
+        source_series_key: None,
+        visible_order: None,
+        pivot_series_key: None,
+        pivot_data_field_index: None,
+        projection_authority: None,
+        projection_diagnostics: Vec::new(),
         show_shadow: None,
         show_connector_lines: None,
         leader_line_format: None,

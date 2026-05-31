@@ -70,6 +70,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.plot_visible_only.is_some()
         || chart_spec.sub_type.is_some()
         || chart_spec.gap_width.is_some()
+        || chart_spec.gap_depth.is_some()
         || chart_spec.overlap.is_some()
         || chart_spec.doughnut_hole_size.is_some()
         || chart_spec.first_slice_angle.is_some()
@@ -137,6 +138,7 @@ pub(super) fn standard_chart_projection_fingerprint(
     fingerprint.write_json(&chart_spec.display_blanks_as);
     fingerprint.write_json(&chart_spec.plot_visible_only);
     fingerprint.write_json(&chart_spec.gap_width);
+    fingerprint.write_json(&chart_spec.gap_depth);
     fingerprint.write_json(&chart_spec.overlap);
     fingerprint.write_json(&chart_spec.doughnut_hole_size);
     fingerprint.write_json(&chart_spec.first_slice_angle);

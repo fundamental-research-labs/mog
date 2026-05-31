@@ -103,10 +103,42 @@ describe('chart data resolver helpers', () => {
     };
 
     expect(chartDataToRows(data)).toEqual([
-      { category: 'FY24', x: 'FY24', y: 10, value: 10, series: 'Revenue' },
-      { category: 'FY24', x: 'FY24', y: 4, value: 4, series: 'Cost' },
-      { category: 'FY25', x: 'FY25', y: 20, value: 20, series: 'Revenue' },
-      { category: 'FY25', x: 'FY25', y: 8, value: 8, series: 'Cost' },
+      {
+        category: 'FY24',
+        x: 'FY24',
+        y: 10,
+        value: 10,
+        series: 'Revenue',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'series:0',
+      },
+      {
+        category: 'FY24',
+        x: 'FY24',
+        y: 4,
+        value: 4,
+        series: 'Cost',
+        sourceSeriesIndex: 1,
+        sourceSeriesKey: 'series:1',
+      },
+      {
+        category: 'FY25',
+        x: 'FY25',
+        y: 20,
+        value: 20,
+        series: 'Revenue',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'series:0',
+      },
+      {
+        category: 'FY25',
+        x: 'FY25',
+        y: 8,
+        value: 8,
+        series: 'Cost',
+        sourceSeriesIndex: 1,
+        sourceSeriesKey: 'series:1',
+      },
     ]);
   });
 

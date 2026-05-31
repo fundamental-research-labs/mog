@@ -1,5 +1,6 @@
 import type { MarkSpec, StackMode } from '../../grammar/spec';
 import type { ChartConfig } from '../../types';
+import { stackModeForChartType } from './bar-geometry';
 
 /**
  * Derive the StackMode from the config subType.
@@ -7,9 +8,10 @@ import type { ChartConfig } from '../../types';
  */
 export function resolveStackMode(config: ChartConfig): StackMode | undefined {
   const sub = config.subType;
-  if (!sub) return undefined;
   if (sub === 'stacked') return 'zero';
   if (sub === 'percentStacked') return 'normalize';
+  const chartTypeStack = stackModeForChartType(config.type);
+  if (chartTypeStack) return chartTypeStack;
   // 'clustered', 'standard', 'basic', etc. => no stacking
   return undefined;
 }

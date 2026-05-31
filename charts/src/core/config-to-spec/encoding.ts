@@ -21,8 +21,10 @@ import {
   applyStackedValueDomain,
 } from './encoding-adjustments';
 import {
+  buildCategoryLegendDomain,
   buildColorEncoding,
   buildLegendSpec,
+  buildSeriesLegendDomain,
   legendSymbolType,
   visibleLegendDomain,
 } from './legend';
@@ -59,14 +61,16 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       field: 'category',
       type: 'nominal',
     };
-    const categoryColors = resolvedCategoryColors(config);
+    const categoryColors = resolvedCategoryColors(config, data);
     if (categoryColors) {
       encoding.color.scale = { range: categoryColors };
     }
     // Apply legend config to color channel.
     if (config.legend) {
+      const legendDomain = buildCategoryLegendDomain(config, data);
       encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
+        values: legendDomain?.values,
       });
     }
     return encoding;
@@ -79,17 +83,20 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       bin:
         config.histogram?.binCount || config.histogram?.binWidth
           ? { maxbins: config.histogram.binCount, step: config.histogram.binWidth }
-          : true,
+        : true,
       scale: { zero: false, nice: true },
     };
+    const seriesLegendDomain = buildSeriesLegendDomain(config, data);
     const colorChannel = buildColorEncoding(
       hasMultipleSeries,
       config.legend,
-      resolvedCategoryColors(config),
+      resolvedCategoryColors(config, data),
       false,
       visibleLegendDomain(config, data),
       legendSymbolType(config, data),
       config,
+      seriesLegendDomain?.forceColorEncoding,
+      seriesLegendDomain?.values,
     );
     if (colorChannel) encoding.color = colorChannel;
     return encoding;
@@ -138,6 +145,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
         scale: {
           range: [0, bubbleMaxArea(config)],
         },
+        legend: null,
       };
     }
   } else if (isHorizontal) {
@@ -172,14 +180,17 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
 
   // Color encoding for multi-series.
   const legendDomain = visibleLegendDomain(config, data);
+  const seriesLegendDomain = buildSeriesLegendDomain(config, data);
   const colorChannel = buildColorEncoding(
     hasMultipleSeries,
     config.legend,
-    resolvedCategoryColors(config),
+    resolvedCategoryColors(config, data),
     Boolean(resolveStackMode(config)) && !legendDomain,
     legendDomain,
     legendSymbolType(config, data),
     config,
+    seriesLegendDomain?.forceColorEncoding,
+    seriesLegendDomain?.values,
   );
   if (colorChannel) {
     encoding.color = colorChannel;

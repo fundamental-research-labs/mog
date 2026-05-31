@@ -6,7 +6,7 @@
  * Extracted from compiler.ts - no logic changes.
  */
 
-import type { AnyMark, PathMark, RectMark, TextMark } from '../primitives/types';
+import type { AnyMark, PathMark, RectMark, SymbolMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { ChannelSpec, EncodingSpec, Layout } from './spec';
 
@@ -67,7 +67,8 @@ export function generateColorLegend(
 
   // Get domain
   const domain: unknown[] = typeof scale.domain === 'function' ? scale.domain() : [];
-  const legendValues = legendSpec.reverse ? [...domain].reverse() : domain;
+  const legendEntries: unknown[] = legendSpec.values ?? domain;
+  const legendValues = legendSpec.reverse ? [...legendEntries].reverse() : legendEntries;
 
   const symbolType = legendSpec.symbolType ?? 'square';
   const symbolSize = legendSpec.symbolSize ?? (symbolType === 'line' ? 28 : 10);
@@ -115,7 +116,7 @@ export function generateColorLegend(
           fill: undefined,
         },
       } as PathMark);
-    } else {
+    } else if (symbolType === 'square') {
       marks.push({
         type: 'rect',
         x: entryX,
@@ -129,6 +130,20 @@ export function generateColorLegend(
           strokeWidth: 0.5,
         },
       } as RectMark);
+    } else {
+      marks.push({
+        type: 'symbol',
+        x: entryX + symbolSize / 2,
+        y: entryY + symbolSize / 2,
+        shape: symbolType,
+        size: symbolSize * symbolSize,
+        datum: { entryIndex: i },
+        style: {
+          fill: color,
+          stroke: '#000',
+          strokeWidth: 0.5,
+        },
+      } as SymbolMark);
     }
 
     // Label

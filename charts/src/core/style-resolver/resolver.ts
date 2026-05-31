@@ -56,7 +56,12 @@ export function chartStyleOwner(
   ownerKey: string | undefined,
 ): ChartStyleOwner | undefined {
   if (!config || !ownerKey) return undefined;
-  return config.chartStyleContext?.owners?.find((owner) => owner.ownerKey === ownerKey);
+  const owners = config.chartStyleContext?.owners;
+  if (!owners?.length) return undefined;
+  const exact = owners.find((owner) => owner.ownerKey === ownerKey);
+  if (exact) return exact;
+  const candidates = chartStyleOwnerKeyCandidates(config, ownerKey);
+  return owners.find((owner) => candidates.includes(owner.ownerKey));
 }
 
 export function mergeChartFormats(
@@ -295,4 +300,81 @@ function definedEntries<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as Partial<T>;
+}
+
+function chartStyleOwnerKeyCandidates(config: ChartConfig, ownerKey: string): string[] {
+  const seriesIndex = matchSingleIndex(ownerKey, 'series');
+  if (seriesIndex !== undefined) {
+    return seriesOwnerKeyCandidates(config, seriesIndex);
+  }
+
+  const point = ownerKey.match(/^(point|markerPoint|dataLabel)\(seriesIdx=(\d+),pointIdx=(\d+)\)$/);
+  if (point) {
+    return pointOwnerKeyCandidates(config, point[1]!, Number(point[2]!), Number(point[3]!));
+  }
+
+  const marker = ownerKey.match(/^marker\(seriesIdx=(\d+)\)$/);
+  if (marker) {
+    return seriesScopedOwnerKeyCandidates(config, 'marker', Number(marker[1]!));
+  }
+
+  const errorBars = ownerKey.match(/^errorBars\(seriesIdx=(\d+),axis=([xy])\)$/);
+  if (errorBars) {
+    return seriesScopedOwnerKeyCandidates(
+      config,
+      `errorBars(axis=${errorBars[2]!})`,
+      Number(errorBars[1]!),
+    );
+  }
+
+  return [];
+}
+
+function matchSingleIndex(ownerKey: string, owner: string): number | undefined {
+  const match = ownerKey.match(new RegExp(`^${owner}\\((\\d+)\\)$`));
+  if (!match) return undefined;
+  const index = Number(match[1]!);
+  return Number.isInteger(index) && index >= 0 ? index : undefined;
+}
+
+function seriesOwnerKeyCandidates(config: ChartConfig, seriesIndex: number): string[] {
+  const series = config.series?.[seriesIndex];
+  const idx = series?.idx;
+  const order = series?.order;
+  return [
+    typeof idx === 'number' && typeof order === 'number'
+      ? `series(idx=${idx},order=${order})`
+      : undefined,
+    typeof idx === 'number' ? `series(idx=${idx})` : undefined,
+    typeof order === 'number' ? `series(order=${order})` : undefined,
+    `series(${seriesIndex})`,
+  ].filter(Boolean) as string[];
+}
+
+function seriesScopedOwnerKeyCandidates(
+  config: ChartConfig,
+  owner: string,
+  sourceSeriesIndex: number,
+): string[] {
+  const seriesIndex = config.series?.findIndex((series) => series.idx === sourceSeriesIndex) ?? -1;
+  return [
+    `${owner}(seriesIdx=${sourceSeriesIndex})`,
+    `${owner}(series=${sourceSeriesIndex})`,
+    seriesIndex >= 0 ? `${owner}(series=${seriesIndex})` : undefined,
+  ].filter(Boolean) as string[];
+}
+
+function pointOwnerKeyCandidates(
+  config: ChartConfig,
+  owner: string,
+  sourceSeriesIndex: number,
+  pointIndex: number,
+): string[] {
+  const seriesIndex = config.series?.findIndex((series) => series.idx === sourceSeriesIndex) ?? -1;
+  return [
+    `${owner}(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`,
+    `${owner}(series=${sourceSeriesIndex},point=${pointIndex})`,
+    seriesIndex >= 0 ? `${owner}(series=${seriesIndex},point=${pointIndex})` : undefined,
+    seriesIndex >= 0 ? `${owner}(${seriesIndex},${pointIndex})` : undefined,
+  ].filter(Boolean) as string[];
 }

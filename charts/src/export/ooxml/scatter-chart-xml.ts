@@ -14,6 +14,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
+import { RAW_BUBBLE_SIZE_FIELD } from '../../core/config-to-spec/fields';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   ExportOptions,
@@ -419,7 +420,7 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
     const points: XYPoint[] = data.map((row) => ({
       x: Number(row[xField]) || 0,
       y: Number(row[yField]) || 0,
-      size: sizeField ? Number(row[sizeField]) || 10 : 10,
+      size: bubbleExportSize(row, sizeField),
     }));
 
     return [
@@ -444,7 +445,7 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
       points: rows.map((row) => ({
         x: Number(row[xField]) || 0,
         y: Number(row[yField]) || 0,
-        size: sizeField ? Number(row[sizeField]) || 10 : 10,
+        size: bubbleExportSize(row, sizeField),
       })),
       color: getDefaultColor(colorIndex),
     });
@@ -452,6 +453,13 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
   }
 
   return series;
+}
+
+function bubbleExportSize(row: DataRow, sizeField: string | undefined): number {
+  const rawSize = Number(row[RAW_BUBBLE_SIZE_FIELD]);
+  if (Number.isFinite(rawSize)) return rawSize;
+  const encodedSize = sizeField ? Number(row[sizeField]) : NaN;
+  return Number.isFinite(encodedSize) ? encodedSize : 10;
 }
 
 // =============================================================================

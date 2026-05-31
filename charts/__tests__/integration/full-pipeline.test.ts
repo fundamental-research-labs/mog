@@ -69,6 +69,18 @@ describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () =>
       },
     ],
   };
+  const STOCK_DATA: ChartData = {
+    categories: ['Day1', 'Day2'],
+    series: [
+      {
+        name: 'Stock',
+        data: [
+          { x: 'Day1', y: 100, open: 95, high: 110, low: 90, close: 105 },
+          { x: 'Day2', y: 102, open: 105, high: 115, low: 98, close: 108 },
+        ],
+      },
+    ],
+  };
 
   // --- bar ---
 
@@ -245,12 +257,12 @@ describe('Full pipeline: ChartConfig -> configToSpec -> compile -> marks', () =>
 
   describe('stock chart', () => {
     it('produces marks for hlc stock chart', () => {
-      const result = runPipeline(makeConfig({ type: 'stock', subType: 'hlc' }), SINGLE_DATA);
+      const result = runPipeline(makeConfig({ type: 'stock', subType: 'hlc' }), STOCK_DATA);
       expect(result.marks.length).toBeGreaterThan(0);
     });
 
     it('produces marks for ohlc stock chart', () => {
-      const result = runPipeline(makeConfig({ type: 'stock', subType: 'ohlc' }), SINGLE_DATA);
+      const result = runPipeline(makeConfig({ type: 'stock', subType: 'ohlc' }), STOCK_DATA);
       expect(result.marks.length).toBeGreaterThan(0);
     });
   });

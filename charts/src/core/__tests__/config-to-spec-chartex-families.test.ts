@@ -9,6 +9,7 @@ import {
   FUNNEL_Y_FIELD,
   WATERFALL_END_FIELD,
   WATERFALL_RUNNING_TOTAL_FIELD,
+  WATERFALL_START_FIELD,
   WATERFALL_TYPE_FIELD,
 } from '../config-to-spec/fields';
 
@@ -235,12 +236,40 @@ describe('configToSpec ChartEx-family semantics', () => {
       'decrease',
       'total',
     ]);
+    expect(rows.map((row) => row[WATERFALL_START_FIELD])).toEqual([0, 10, 0]);
     expect(rows.map((row) => row[WATERFALL_END_FIELD])).toEqual([10, 7, 7]);
     expect(rows.map((row) => row[WATERFALL_RUNNING_TOTAL_FIELD])).toEqual([10, 7, 7]);
 
     const spec = asLayerSpec(configToSpec(config, data));
+    expect(spec.layer[0]).toEqual(
+      expect.objectContaining({
+        mark: expect.objectContaining({ type: 'bar' }),
+        encoding: expect.objectContaining({
+          y: expect.objectContaining({ field: WATERFALL_END_FIELD }),
+          y2: expect.objectContaining({ field: WATERFALL_START_FIELD }),
+        }),
+      }),
+    );
     expect(spec.layer.some((layer) => layer.mark === 'line' || layer.mark?.type === 'line')).toBe(
       true,
+    );
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const waterfallRects = compiled.marks.filter((mark) => mark.type === 'rect');
+    expect(waterfallRects).toHaveLength(3);
+    expect(waterfallRects[1].y).toBeCloseTo(waterfallRects[0].y);
+    expect(waterfallRects[1].height).toBeGreaterThan(0);
+    expect(waterfallRects[1].datum).toEqual(
+      expect.objectContaining({
+        [WATERFALL_START_FIELD]: 10,
+        [WATERFALL_END_FIELD]: 7,
+      }),
     );
 
     const noConnectorSpec = asLayerSpec(

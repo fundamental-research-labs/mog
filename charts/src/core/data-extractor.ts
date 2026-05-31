@@ -17,6 +17,7 @@ import type {
 // Import canonical types from contracts - SINGLE SOURCE OF TRUTH
 import type { CellAddress, CellRange } from '@mog-sdk/contracts/core';
 import { colToLetter, parseCellRange } from '@mog/spreadsheet-utils/a1';
+import { chartDataSeriesIdentity, withSeriesConfigIdentity } from './series-identity';
 
 // Re-export for backwards compatibility
 export type { CellAddress, CellRange };
@@ -444,7 +445,9 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
  * @returns Extracted chart data ready for rendering
  */
 export function extractChartData(accessor: CellDataAccessor, config: ChartConfig): ChartData {
-  const importedSeries = config.series?.filter(hasRenderableImportedSeriesData);
+  const importedSeries = config.series
+    ?.map((seriesConfig, index) => withSeriesConfigIdentity(seriesConfig, index))
+    .filter(hasRenderableImportedSeriesData);
   if (importedSeries?.length) {
     return extractChartDataFromSeriesRefs(
       accessor,
@@ -734,6 +737,20 @@ function hasCategoryDimensionConfig(seriesConfig: SeriesConfig): boolean {
   );
 }
 
+function isQuantitativeXSeries(
+  seriesConfig: SeriesConfig,
+  chartType: ChartConfig['type'],
+): boolean {
+  if (seriesConfig.xRole === 'quantitative') return true;
+  if (seriesConfig.xRole === 'category') return false;
+  return (
+    chartType === 'scatter' ||
+    chartType === 'bubble' ||
+    seriesConfig.type === 'scatter' ||
+    seriesConfig.type === 'bubble'
+  );
+}
+
 type ImportedDimension = {
   values: ChartCellValue[];
   hasLiveRange: boolean;
@@ -893,6 +910,7 @@ function extractStockChartDataFromSeriesRefs(
         name: closeSeries.name ?? defaultSeriesName(closeSeries, roles.close),
         data,
         type: 'stock',
+        ...chartDataSeriesIdentity(closeSeries, roles.close, 0),
       },
     ],
   };
@@ -909,7 +927,6 @@ function extractChartDataFromSeriesRefs(
   let categoryLevels: ChartCategoryLevelData[] | undefined;
   const categoryFormatCodes: Array<string | null | undefined> = [];
   const selectedLevel = selectedCategoryLabelLevel(categoryLabelLevel);
-  const isXYChart = chartType === 'scatter' || chartType === 'bubble';
   if (chartType === 'stock') {
     const stockData = extractStockChartDataFromSeriesRefs(
       accessor,
@@ -921,6 +938,7 @@ function extractChartDataFromSeriesRefs(
 
   for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
     const seriesConfig = seriesConfigs[seriesIndex];
+    const isXYSeries = isQuantitativeXSeries(seriesConfig, chartType);
     const valueDimension = extractImportedDimension(
       accessor,
       seriesConfig.values,
@@ -965,7 +983,7 @@ function extractChartDataFromSeriesRefs(
       const rawCategory = categoryDimension.values[pointIndex];
       const categoryFallback = categories[pointIndex] ?? pointIndex + 1;
       const category =
-        isXYChart && !hasCategoryLevels
+        isXYSeries && !hasCategoryLevels
           ? categoryDimension.values.length > pointIndex
             ? xyValue(rawCategory)
             : xyValue(cacheValueAt(seriesConfig.categoryCache, pointIndex))
@@ -1001,6 +1019,7 @@ function extractChartDataFromSeriesRefs(
     series.push({
       name: seriesConfig.name ?? defaultSeriesName(seriesConfig, seriesIndex),
       data,
+      ...chartDataSeriesIdentity(seriesConfig, seriesIndex, series.length),
       ...(seriesConfig.type ? { type: seriesConfig.type as ChartDataSeries['type'] } : {}),
       ...(seriesConfig.color ? { color: seriesConfig.color } : {}),
       ...(seriesConfig.yAxisIndex === 0 || seriesConfig.yAxisIndex === 1

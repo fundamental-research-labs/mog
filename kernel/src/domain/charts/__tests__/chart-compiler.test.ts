@@ -93,6 +93,24 @@ describe('chart compiler bridge module', () => {
         name: 'Chart 1',
         width: 4,
         height: 3,
+        ooxml: {
+          standardChartProvenance: {
+            originalPath: 'xl/charts/chart1.xml',
+            relsPath: 'xl/charts/_rels/chart1.xml.rels',
+            projectionSchemaVersion: 3,
+            projectionFingerprint: 'fp-import',
+            relationships: [{ rId: 'rId1', relationshipType: 'style', target: 'style1.xml' }],
+            auxiliaryPaths: ['xl/charts/style1.xml'],
+          },
+          standardChartExportAuthority: {
+            schemaVersion: 3,
+            validity: 'current',
+            chartPartRevision: 0,
+            packageOwner: 'xl/charts/chart1.xml',
+            relationshipClosureCurrent: true,
+            projectionFingerprint: 'fp-current',
+          },
+        },
       } as unknown as ChartFloatingObject;
       const exportOptions = defaultExportOptionsForSize(320, 180);
       const compiled = compileChartMarks({
@@ -121,6 +139,13 @@ describe('chart compiler bridge module', () => {
         compilerInputHash: hashJson({
           chartId: 'chart-1',
           sheetId,
+          renderFrame: {
+            kind: 'embedded',
+            sheetId: String(sheetId),
+            chartId: 'chart-1',
+            width: 320,
+            height: 180,
+          },
           config: baseConfig,
           chartData: baseChartData,
           resolvedRanges,
@@ -132,6 +157,20 @@ describe('chart compiler bridge module', () => {
         }),
       });
       expect(snapshot.resolvedChartSpec.export).toEqual(exportOptions);
+      expect(snapshot.resolvedChartSpec.packageAuthority).toMatchObject({
+        source: 'xl/charts/chart1.xml',
+        fingerprint: 'fp-current',
+        status: 'current',
+        details: {
+          kind: 'standardChart',
+          validity: 'current',
+          relationshipClosureCurrent: true,
+          projectionSchemaVersion: 3,
+          originalPath: 'xl/charts/chart1.xml',
+          relsPath: 'xl/charts/_rels/chart1.xml.rels',
+          relationshipCount: 1,
+        },
+      });
     });
   });
 

@@ -165,6 +165,7 @@ function inferredYAxisIndex(
   series: ChartSeriesData,
 ): number | undefined {
   if (series.yAxisIndex === 0 || series.yAxisIndex === 1) return undefined;
+  if (isStandardXYChartGroup(chart)) return undefined;
 
   const axis = axisDataFor(chart);
   const secondaryAxis = axis?.secondaryValueAxis;
@@ -189,6 +190,13 @@ function inferredYAxisIndex(
   if (!primaryDomain || valuesConflictDomain(values, primaryDomain)) return 1;
 
   return undefined;
+}
+
+function isStandardXYChartGroup(chart: ImportNormalizableChart): boolean {
+  const groups = chart.rt?.chartGroupsMeta ?? [];
+  const chartType = chart.chartType?.toLowerCase() ?? groups[0]?.chartType?.toLowerCase();
+  if (chartType !== 'scatter' && chartType !== 'bubble') return false;
+  return groups.length <= 1;
 }
 
 function normalizeSeriesAxisBindings<T extends ImportNormalizableChart>(

@@ -16,7 +16,7 @@ use super::{
 };
 use super::{
     BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
-    RegionMapConfigData,
+    PivotChartProjectionData, RegionMapConfigData,
 };
 
 /// Chart-level line feature such as drop lines, high-low lines, or series lines.
@@ -205,6 +205,8 @@ pub struct ChartSpec {
     // -- Pivot chart options --
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pivot_options: Option<PivotChartOptionsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_projection: Option<PivotChartProjectionData>,
 
     // -- 3D --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -642,6 +644,7 @@ impl ChartSpec {
             title_show_shadow: chart_data.title_show_shadow,
             // Pivot chart options
             pivot_options: chart_data.pivot_options.clone(),
+            pivot_projection: chart_data.pivot_projection.clone(),
             // Bar shape
             bar_shape: chart_data.bar_shape.clone(),
             // Bubble / Surface / Theming
@@ -899,6 +902,7 @@ impl ChartSpec {
             title_show_shadow: self.title_show_shadow,
             // Pivot chart options
             pivot_options: self.pivot_options.clone(),
+            pivot_projection: self.pivot_projection.clone(),
             // Bubble / Surface / Theming
             bubble_3d_effect: self.bubble_3d_effect,
             wireframe: self.wireframe,

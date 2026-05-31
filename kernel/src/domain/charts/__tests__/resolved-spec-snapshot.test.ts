@@ -228,7 +228,7 @@ describe('resolved spec snapshot helpers', () => {
     ]);
     expect(snapshot.diagnostics.compiler).toEqual(['Unknown sheet "Missing"']);
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
-      'surface chart rendering is not fully semantic',
+      'contour/top-view surface rendering is not implemented; chart is preserved as a placeholder',
     ]);
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
@@ -329,6 +329,60 @@ describe('resolved spec snapshot helpers', () => {
         bubbleSize: 'literal',
       },
     });
+  });
+
+  it('uses sourceSeriesIndex as the dropped-series key fallback', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'column',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 5,
+        series: [
+          { name: 'Rendered', values: 'Sheet1!A1:A2' },
+          {
+            name: 'Dropped projected source',
+            values: 'Sheet1!F1:F2',
+            sourceSeriesIndex: 5,
+            projectionDiagnostics: [{ reason: 'allItemsFiltered' }],
+          },
+        ],
+      },
+      chartData: {
+        categories: ['A'],
+        series: [{ name: 'Rendered', data: [{ x: 'A', y: 1 }] }],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.seriesProjection.droppedSeries).toEqual([
+      {
+        sourceSeriesIndex: 5,
+        sourceSeriesKey: 'series:5',
+        name: 'Dropped projected source',
+        reason: 'allItemsFiltered',
+        message: undefined,
+      },
+    ]);
   });
 
   it('aligns unnamed series snapshot labels with chart data extraction fallback order', () => {
@@ -603,7 +657,7 @@ describe('resolved spec snapshot helpers', () => {
       'manual legend layout is preserved but not rendered',
       'manual data-label layout is preserved but not rendered',
       'chart data table is preserved but not rendered',
-      'view3D camera/depth is preserved but rendered as a 2D approximation',
+      'view3D camera/depth is preserved but rendered as a 2-D approximation',
       'floor/sideWall/backWall surfaces are preserved but not rendered',
     ]);
   });
@@ -646,6 +700,127 @@ describe('resolved spec snapshot helpers', () => {
       'picture markers are preserved for export but rendered as standard symbols',
       'source-linked data label number formats are preserved but rendered with modeled fallback formatting',
       'of-pie series lines require secondary-plot geometry and are preserved for export only',
+    ]);
+  });
+
+  it('includes renderable import-status diagnostics in unsupported feature snapshots', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+        importStatus: {
+          source: 'xlsx',
+          featureKind: 'chart',
+          recoverability: 'partiallySupported',
+          renderability: 'renderable',
+          editability: 'partiallyEditable',
+          diagnostics: [
+            {
+              code: 'unsupportedFeature',
+              message:
+                'Pivot chart formatting (c:pivotFmts, 1 entries) is preserved for export but not rendered; semantic style resolution is owned by the chart style plan',
+            },
+            {
+              code: 'missingRelationshipTarget',
+              message: 'Chart relationship `rIdVendor` has unsupported type `vendor`',
+            },
+          ],
+        },
+      } as any,
+      sheetId,
+      config: {
+        type: 'bar',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'Pivot chart formatting (c:pivotFmts, 1 entries) is preserved for export but not rendered; semantic style resolution is owned by the chart style plan',
+      'Chart relationship `rIdVendor` has unsupported type `vendor`',
+    ]);
+  });
+
+  it('snapshots stale standard chart package authority diagnostics', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+        ooxml: {
+          standardChartProvenance: {
+            originalPath: 'xl/charts/chart2.xml',
+            projectionSchemaVersion: 3,
+            projectionFingerprint: 'fp-import',
+            relationships: [{ rId: 'rId1', target: '../media/image1.png' }],
+            auxiliaryPaths: [],
+          },
+          standardChartExportAuthority: {
+            schemaVersion: 3,
+            validity: 'unsafe',
+            chartPartRevision: 0,
+            packageOwner: 'xl/charts/chart2.xml',
+            relationshipClosureCurrent: false,
+            projectionFingerprint: 'fp-import',
+            staleReason: 'missing internal chart relationship target',
+          },
+        },
+      } as any,
+      sheetId,
+      config: {
+        type: 'bar',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.packageAuthority).toMatchObject({
+      source: 'xl/charts/chart2.xml',
+      fingerprint: 'fp-import',
+      status: 'stale',
+      details: {
+        kind: 'standardChart',
+        validity: 'unsafe',
+        relationshipClosureCurrent: false,
+        staleReason: 'missing internal chart relationship target',
+        relationshipCount: 1,
+      },
+    });
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'standard chart package authority is unsafe: missing internal chart relationship target',
     ]);
   });
 

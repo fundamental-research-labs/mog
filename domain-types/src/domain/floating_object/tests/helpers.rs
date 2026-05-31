@@ -266,6 +266,7 @@ pub(super) fn chart_data_with_optional_keys() -> ChartData {
         title_v_align: Some("top".to_string()),
         title_show_shadow: Some(false),
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: Some("box".to_string()),
         bubble_3d_effect: Some(false),
         wireframe: Some(false),

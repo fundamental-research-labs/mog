@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::formatting::{ChartColorData, ChartFormatData, ChartLineData};
+use super::style_context::ChartStyleDiagnosticSeverityData;
 use super::{ChartType, DataLabelData, ErrorBarData, TrendlineData};
 
 /// Imported chart dimension source authority.
@@ -18,6 +19,75 @@ pub enum ChartSeriesDimensionSourceKindData {
 pub enum ChartSeriesXRoleData {
     Category,
     Quantitative,
+}
+
+/// Render authority used for projected or imported chart series data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesProjectionAuthorityData {
+    ExplicitSeries,
+    LiveRange,
+    PivotCache,
+    FallbackCache,
+    Literal,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesProjectionDiagnosticReasonData {
+    UnresolvedPivotSource,
+    UnsupportedPivotFeature,
+    HiddenDataField,
+    AllItemsFiltered,
+    NoValueData,
+    WorksheetHiddenByPlotVisibleOnly,
+    StyleResolvedNoFillOrLine,
+    StaleMaterializedRange,
+}
+
+/// Diagnostic explaining why a source series was altered, dropped, or not renderable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesProjectionDiagnosticData {
+    pub reason: ChartSeriesProjectionDiagnosticReasonData,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub severity: Option<ChartStyleDiagnosticSeverityData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_series_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_series_index: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PivotChartCacheIdData {
+    String(String),
+    Number(f64),
+}
+
+/// Workbook-level pivot chart projection summary used by render diagnostics.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PivotChartProjectionData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_table_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_cache_id: Option<PivotChartCacheIdData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub authority: Option<ChartSeriesProjectionAuthorityData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub expected_imported_series_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub projected_series_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rendered_series_count: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ChartSeriesProjectionDiagnosticData>,
 }
 
 /// Runtime series data — carries both range references and visual config.
@@ -148,6 +218,27 @@ pub struct ChartSeriesData {
     pub marker_foreground_color: Option<ChartColorData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub filtered: Option<bool>,
+    /// Original chart series index before filtering/projection.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_series_index: Option<u32>,
+    /// Stable source key used to join extracted data back to this series.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_series_key: Option<String>,
+    /// Visible/rendered series order after projection.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub visible_order: Option<u32>,
+    /// Stable key for projected pivot-chart series.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_series_key: Option<String>,
+    /// Pivot data-field index when this series was projected from a data field.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_data_field_index: Option<u32>,
+    /// Data authority used to render this series.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub projection_authority: Option<ChartSeriesProjectionAuthorityData>,
+    /// Projection/render diagnostics associated with this series.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub projection_diagnostics: Vec<ChartSeriesProjectionDiagnosticData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_shadow: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

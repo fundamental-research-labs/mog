@@ -67,7 +67,7 @@ describe('hidden visibility bridge helpers', () => {
     ).toBe(true);
   });
 
-  it('filters fully hidden explicit series while preserving visible series objects', () => {
+  it('filters fully hidden explicit series while preserving visible source identity', () => {
     const visible = {
       name: 'Visible',
       values: 'Sheet1!A1:B1',
@@ -107,7 +107,41 @@ describe('hidden visibility bridge helpers', () => {
     const filtered = withHiddenSeriesFiltered(config, resolvedRanges, visibility);
 
     expect(filtered).not.toBe(config);
-    expect(filtered.series).toEqual([visible, later]);
-    expect(filtered.series?.[1]).toBe(later);
+    expect(filtered.series).toEqual([
+      { ...visible, sourceSeriesIndex: 0, sourceSeriesKey: 'series:0' },
+      { ...later, sourceSeriesIndex: 2, sourceSeriesKey: 'series:2' },
+    ]);
+    expect(filtered.series?.[1]).not.toBe(later);
+  });
+
+  it('uses source series identity when checking projected series visibility', () => {
+    const projected = {
+      name: 'Projected',
+      values: 'Sheet1!A6:B6',
+      sourceSeriesIndex: 5,
+    };
+    const config = {
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 8,
+      dataRange: '',
+      series: [projected],
+    } as ChartConfig;
+    const resolvedRanges = {
+      seriesReferences: [
+        { index: 0, values: { range: range('sheet-a', 0) } },
+        { index: 5, values: { range: range('sheet-a', 5) } },
+      ],
+    } as unknown as ResolvedChartRangeReferences;
+    const visibility = {
+      hiddenRowsBySheet: new Map([['sheet-a', new Set([5])]]),
+      hiddenColsBySheet: new Map<string, Set<number>>(),
+    };
+
+    const filtered = withHiddenSeriesFiltered(config, resolvedRanges, visibility);
+
+    expect(filtered.series).toEqual([]);
   });
 });

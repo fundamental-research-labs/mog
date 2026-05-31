@@ -21,10 +21,12 @@ import type {
   ChartBorder,
   DataLabelConfig,
   DataTableConfig,
+  HierarchyChartConfig,
   HistogramConfig,
   ImageExportOptions,
   LegendEntryConfig,
   PointFormat,
+  RegionMapConfig,
   SeriesConfig,
   TrendlineConfig,
 } from '@mog-sdk/contracts/data/charts';
@@ -40,8 +42,12 @@ import {
   legendConfigToWire,
   seriesConfigArrayToWire,
   wireToAxisConfig,
+  wireToBoxplotConfig,
   wireToDataLabelConfig,
+  wireToHierarchyChartConfig,
+  wireToHistogramConfig,
   wireToLegendConfig,
+  wireToRegionMapConfig,
   wireToSeriesConfigArray,
   wireToSizeRepresents,
   wireToTrendlineConfigArray,
@@ -99,6 +105,52 @@ function waterfallConfigFromWire(
     ...(waterfall.showConnectorLines !== undefined
       ? { showConnectorLines: waterfall.showConnectorLines }
       : {}),
+  };
+}
+
+function histogramConfigToWire(
+  histogram: HistogramConfig | undefined,
+): ChartFloatingObject['histogram'] {
+  if (!histogram) return undefined;
+  return {
+    binCount: histogram.binCount,
+    binWidth: histogram.binWidth,
+    overflowBin: histogram.overflowBin,
+    overflowBinValue: histogram.overflowBinValue,
+    underflowBin: histogram.underflowBin,
+    underflowBinValue: histogram.underflowBinValue,
+  };
+}
+
+function boxplotConfigToWire(boxplot: BoxplotConfig | undefined): ChartFloatingObject['boxplot'] {
+  if (!boxplot) return undefined;
+  return {
+    showOutlierPoints: boxplot.showOutlierPoints ?? boxplot.showOutliers,
+    showMeanMarkers: boxplot.showMeanMarkers ?? boxplot.showMean,
+    showMeanLine: boxplot.showMeanLine,
+    quartileMethod: boxplot.quartileMethod,
+  };
+}
+
+function hierarchyChartConfigToWire(
+  hierarchy: HierarchyChartConfig | undefined,
+): ChartFloatingObject['hierarchy'] {
+  if (!hierarchy) return undefined;
+  return {
+    rows: hierarchy.rows,
+    categoryFormulas: hierarchy.categoryFormulas,
+    valueFormula: hierarchy.valueFormula,
+    parentLabelLayout: hierarchy.parentLabelLayout,
+  };
+}
+
+function regionMapConfigToWire(
+  regionMap: RegionMapConfig | undefined,
+): ChartFloatingObject['regionMap'] {
+  if (!regionMap) return undefined;
+  return {
+    regionFormula: regionMap.regionFormula,
+    valueFormula: regionMap.valueFormula,
   };
 }
 
@@ -514,9 +566,14 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     radarFilled: config.radarFilled,
     radarMarkers: config.radarMarkers,
     waterfall: config.waterfall ? waterfallConfigToWire(config.waterfall) : undefined,
+    histogram: histogramConfigToWire(config.histogram),
+    boxplot: boxplotConfigToWire(config.boxplot),
+    hierarchy: hierarchyChartConfigToWire(config.hierarchy),
+    regionMap: regionMapConfigToWire(config.regionMap),
     displayBlanksAs: config.displayBlanksAs,
     plotVisibleOnly: config.plotVisibleOnly,
     gapWidth: config.gapWidth,
+    gapDepth: config.gapDepth,
     overlap: config.overlap,
     doughnutHoleSize: config.doughnutHoleSize,
     firstSliceAngle: config.firstSliceAngle,
@@ -547,6 +604,7 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     titleVAlign: config.chartTitle?.verticalAlignment,
     titleShowShadow: config.chartTitle?.showShadow,
     pivotOptions: config.pivotOptions,
+    pivotProjection: config.pivotProjection,
   };
 }
 
@@ -640,10 +698,16 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.radarFilled !== undefined) result.radarFilled = updates.radarFilled;
   if (updates.radarMarkers !== undefined) result.radarMarkers = updates.radarMarkers;
   if (updates.waterfall !== undefined) result.waterfall = waterfallConfigToWire(updates.waterfall);
+  if (updates.histogram !== undefined) result.histogram = histogramConfigToWire(updates.histogram);
+  if (updates.boxplot !== undefined) result.boxplot = boxplotConfigToWire(updates.boxplot);
+  if (updates.hierarchy !== undefined)
+    result.hierarchy = hierarchyChartConfigToWire(updates.hierarchy);
+  if (updates.regionMap !== undefined) result.regionMap = regionMapConfigToWire(updates.regionMap);
 
   if (updates.displayBlanksAs !== undefined) result.displayBlanksAs = updates.displayBlanksAs;
   if (updates.plotVisibleOnly !== undefined) result.plotVisibleOnly = updates.plotVisibleOnly;
   if (updates.gapWidth !== undefined) result.gapWidth = updates.gapWidth;
+  if (updates.gapDepth !== undefined) result.gapDepth = updates.gapDepth;
   if (updates.overlap !== undefined) result.overlap = updates.overlap;
   if (updates.doughnutHoleSize !== undefined) result.doughnutHoleSize = updates.doughnutHoleSize;
   if (updates.firstSliceAngle !== undefined) result.firstSliceAngle = updates.firstSliceAngle;
@@ -680,6 +744,7 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
     result.titleShowShadow = updates.chartTitle.showShadow;
   }
   if (updates.pivotOptions !== undefined) result.pivotOptions = updates.pivotOptions;
+  if (updates.pivotProjection !== undefined) result.pivotProjection = updates.pivotProjection;
 
   return result;
 }
@@ -767,9 +832,14 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     radarFilled: chart.radarFilled,
     radarMarkers: chart.radarMarkers,
     waterfall: waterfallConfigFromWire(chart.waterfall),
+    histogram: wireToHistogramConfig(chart.histogram),
+    boxplot: wireToBoxplotConfig(chart.boxplot),
+    hierarchy: wireToHierarchyChartConfig(chart.hierarchy),
+    regionMap: wireToRegionMapConfig(chart.regionMap),
     displayBlanksAs: chart.displayBlanksAs as Chart['displayBlanksAs'],
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
+    gapDepth: chart.gapDepth,
     overlap: chart.overlap,
     doughnutHoleSize: chart.doughnutHoleSize,
     firstSliceAngle: chart.firstSliceAngle,
@@ -817,6 +887,7 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
       ...(chart.titleShowShadow != null ? { showShadow: chart.titleShowShadow } : {}),
     } as Chart['chartTitle'],
     pivotOptions: chart.pivotOptions as Chart['pivotOptions'],
+    pivotProjection: chart.pivotProjection as Chart['pivotProjection'],
     createdAt: chart.createdAt,
     updatedAt: chart.updatedAt,
   };

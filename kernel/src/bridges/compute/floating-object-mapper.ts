@@ -742,6 +742,7 @@ function toChartObject(d: WireChart): ChartObject {
     displayBlanksAs: chart.displayBlanksAs,
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
+    gapDepth: chart.gapDepth,
     overlap: chart.overlap,
     doughnutHoleSize: chart.doughnutHoleSize,
     firstSliceAngle: chart.firstSliceAngle,

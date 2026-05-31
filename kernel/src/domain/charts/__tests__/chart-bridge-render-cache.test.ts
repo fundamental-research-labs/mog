@@ -45,6 +45,7 @@ import type { DocumentContext } from '../../../context/types';
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { ChartBridge } from '../chart-bridge';
 import type { ChartRenderCache } from '../bridge/chart-render-cache';
+import { normalizeChartRenderFrame } from '../bridge/chart-render-frame';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
 const SHEET_B: SheetId = toSheetId('sheet-b');
@@ -220,6 +221,10 @@ function bounds() {
   return { x: 100, y: 100, width: 200, height: 150 };
 }
 
+function renderFrame() {
+  return normalizeChartRenderFrame(bounds());
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -257,7 +262,7 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
     // Pretend a previous compile populated the cache and committed cleanly.
-    getRenderCache(bridge).commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    getRenderCache(bridge).commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
 
     const spy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -274,11 +279,12 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(true);
     bridge.stop();
   });
@@ -481,14 +487,15 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
     const renderCache = getRenderCache(bridge);
-    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
     renderCache.invalidateChart(CHART_1, SHEET_A);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     // No placeholder — the stale marks render, not a "Chart loading…" overlay.
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(false);
     bridge.stop();
@@ -502,8 +509,8 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
     const renderCache = getRenderCache(bridge);
-    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
-    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, frame: renderFrame() });
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
@@ -534,7 +541,7 @@ describe('renderCached — sync paint contract', () => {
       },
       SHEET_A,
     );
-    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, frame: renderFrame() });
 
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
     bridge.renderCached(CHART_1, sheetACtx, bounds(), SHEET_A);
@@ -839,11 +846,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
 
     emitChartUpdated(eventBus, CHART_1, SHEET_A, ['chartType'], fakeChart);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(true);
     expect(ops.some((o) => o.kind === 'fillRect' && o.style === '#f8d7da')).toBe(false);
     bridge.stop();
@@ -1023,9 +1031,33 @@ describe('resolveChartData imported visibility semantics', () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data).toEqual([
-      { category: 'FY19', x: 'FY19', y: 10, value: 10, series: 'Visible' },
-      { category: 'FY20', x: 'FY20', y: 20, value: 20, series: 'Visible' },
-      { category: 'FY21', x: 'FY21', y: 30, value: 30, series: 'Visible' },
+      {
+        category: 'FY19',
+        x: 'FY19',
+        y: 10,
+        value: 10,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      },
+      {
+        category: 'FY20',
+        x: 'FY20',
+        y: 20,
+        value: 20,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      },
+      {
+        category: 'FY21',
+        x: 'FY21',
+        y: 30,
+        value: 30,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      },
     ]);
   });
 

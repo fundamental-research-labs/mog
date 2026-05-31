@@ -162,17 +162,21 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Scatter with lines
   if (config.type === 'scatter') {
-    if (config.showLines) {
+    const showLines = config.showLines ?? config.series?.some((series) => series.showLines === true);
+    const smoothLines = config.smoothLines ?? config.series?.some((series) => series.smooth === true);
+    if (showLines) {
       const mark: MarkSpec = { type: 'line' };
-      if (config.smoothLines) {
+      if (smoothLines) {
         mark.interpolate = 'monotone';
       }
-      mark.point = true;
+      if (config.series?.some((series) => series.showMarkers === true)) {
+        mark.point = true;
+      }
       return mark;
     }
     // Smooth scatter (no lines but smooth points connected)
-    if (config.smoothLines) {
-      return { type: 'point' };
+    if (smoothLines) {
+      return { type: 'point', skipInvalidPositions: true };
     }
   }
 
@@ -237,9 +241,14 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   }
 
   if (baseType === 'point') {
-    const mark: MarkSpec = { type: baseType };
+    const mark: MarkSpec = {
+      type: baseType,
+      ...((config.type === 'scatter' || config.type === 'bubble')
+        ? { skipInvalidPositions: true }
+        : {}),
+    };
     applyPointStyleFields(mark, config);
-    return hasPointStyleOverrides(config) ? mark : baseType;
+    return hasPointStyleOverrides(config) || mark.skipInvalidPositions ? mark : baseType;
   }
 
   if (baseType === 'line') {

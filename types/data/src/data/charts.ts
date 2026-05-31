@@ -128,7 +128,17 @@ export type SeriesOrientation = 'rows' | 'columns';
 /**
  * Legend position options
  */
-export type LegendPosition = 'top' | 'bottom' | 'left' | 'right' | 'none' | 'corner' | 'custom';
+export type LegendPosition =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'topRight'
+  | 'top-right'
+  | 'tr'
+  | 'none'
+  | 'corner'
+  | 'custom';
 
 /**
  * Axis type
@@ -851,6 +861,49 @@ export interface ChartSeriesCategoryLevelCache {
 /** Imported chart dimension source authority. */
 export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback';
 
+/** Imported x/category dimension role for a series. */
+export type ChartSeriesXRole = 'category' | 'quantitative';
+
+/** Render authority used for projected or imported chart series data. */
+export type ChartSeriesProjectionAuthority =
+  | 'explicitSeries'
+  | 'liveRange'
+  | 'pivotCache'
+  | 'fallbackCache'
+  | 'literal'
+  | 'unavailable';
+
+export type ChartSeriesProjectionDiagnosticReason =
+  | 'unresolvedPivotSource'
+  | 'unsupportedPivotFeature'
+  | 'hiddenDataField'
+  | 'allItemsFiltered'
+  | 'noValueData'
+  | 'worksheetHiddenByPlotVisibleOnly'
+  | 'styleResolvedNoFillOrLine'
+  | 'staleMaterializedRange';
+
+/** Diagnostic explaining why a source series was altered, dropped, or not renderable. */
+export interface ChartSeriesProjectionDiagnostic {
+  reason: ChartSeriesProjectionDiagnosticReason;
+  severity?: ChartStyleDiagnosticSeverity;
+  sourceSeriesKey?: string;
+  sourceSeriesIndex?: number;
+  message?: string;
+}
+
+/** Workbook-level pivot chart projection summary used by render diagnostics. */
+export interface PivotChartProjectionData {
+  sourceRef?: string;
+  pivotTableName?: string;
+  pivotCacheId?: string | number;
+  authority?: ChartSeriesProjectionAuthority;
+  expectedImportedSeriesCount?: number;
+  projectedSeriesCount?: number;
+  renderedSeriesCount?: number;
+  diagnostics?: ChartSeriesProjectionDiagnostic[];
+}
+
 /**
  * Individual series configuration (matches ChartSeriesData wire type)
  */
@@ -862,6 +915,7 @@ export interface SeriesConfig {
   valueCache?: ChartSeriesPointCache;
   valueSourceKind?: ChartSeriesDimensionSourceKind;
   categories?: string;
+  xRole?: ChartSeriesXRole;
   categoryCache?: ChartSeriesPointCache;
   categoryLevels?: ChartSeriesCategoryLevelsCache;
   categorySourceKind?: ChartSeriesDimensionSourceKind;
@@ -870,6 +924,7 @@ export interface SeriesConfig {
   bubbleSizeCache?: ChartSeriesPointCache;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
   smooth?: boolean;
+  showLines?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
   yAxisIndex?: number;
@@ -896,6 +951,20 @@ export interface SeriesConfig {
   markerForegroundColor?: ChartColor;
   /** Whether this series is hidden/filtered from the chart. */
   filtered?: boolean;
+  /** Original chart series index before filtering/projection. */
+  sourceSeriesIndex?: number;
+  /** Stable source key used to join extracted data back to this series. */
+  sourceSeriesKey?: string;
+  /** Visible/rendered series order after projection. */
+  visibleOrder?: number;
+  /** Stable key for projected pivot-chart series. */
+  pivotSeriesKey?: string;
+  /** Pivot data-field index when this series was projected from a data field. */
+  pivotDataFieldIndex?: number;
+  /** Data authority used to render this series. */
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  /** Projection/render diagnostics associated with this series. */
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
   /** Show drop shadow on series. */
   showShadow?: boolean;
   /** Show connector lines between pie slices (bar-of-pie, pie-of-pie). */
@@ -1094,9 +1163,22 @@ export type ChartSeriesDimensionRenderAuthority =
 export interface ResolvedChartSeriesSnapshot {
   index: number;
   order: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  visibleOrder?: number;
+  pivotSeriesKey?: string;
+  pivotDataFieldIndex?: number;
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
   name: string;
   type?: string;
   axisGroup: 'primary' | 'secondary';
+  xRole?: ChartSeriesXRole;
+  showLines?: boolean;
+  smooth?: boolean;
+  showMarkers?: boolean;
+  markerStyle?: string;
+  renderLayerCount?: number;
   color?: string;
   source: {
     values?: string;
@@ -1114,7 +1196,26 @@ export interface ResolvedChartSeriesSnapshot {
   categories: Array<string | number | null>;
   values: Array<number | null>;
   blankMask: boolean[];
+  pointCount: number;
+  renderedPointCount: number;
   dataHash: string;
+}
+
+export interface ResolvedChartDroppedSeriesSnapshot {
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  name?: string;
+  reason: ChartSeriesProjectionDiagnosticReason;
+  message?: string;
+}
+
+export interface ResolvedChartSeriesProjectionSnapshot {
+  authority: ChartSeriesProjectionAuthority;
+  expectedImportedSeriesCount: number;
+  projectedSeriesCount: number;
+  renderedSeriesCount: number;
+  renderedPointCountBySourceSeriesKey: Record<string, number>;
+  droppedSeries: ResolvedChartDroppedSeriesSnapshot[];
 }
 
 /** Normalized top-level chart layout rectangle in chart-relative coordinates. */
@@ -1168,6 +1269,26 @@ export interface ChartRenderFrameSnapshot {
 export interface ChartAreaSizeSnapshot {
   width: number;
   height: number;
+}
+
+export interface ResolvedChartBarGeometryOffsetSnapshot {
+  seriesIndex: number;
+  offset: number;
+}
+
+export interface ResolvedChartBarGeometrySnapshot {
+  orientation?: 'horizontal' | 'vertical';
+  grouping: 'standard' | 'clustered' | 'stacked' | 'percentStacked';
+  sourceGapWidth?: number;
+  sourceOverlap?: number;
+  gapWidth: number;
+  overlap: number;
+  gapWidthClamped?: boolean;
+  overlapClamped?: boolean;
+  seriesIndices: number[];
+  categoryPitch?: number;
+  barSize?: number;
+  offsets?: ResolvedChartBarGeometryOffsetSnapshot[];
 }
 
 /** Package identity/authority metadata for import/export diagnostics. */
@@ -1224,13 +1345,16 @@ export interface ResolvedChartSpecSnapshot {
       series?: ResolvedChartAxisSnapshot;
     };
     series: ResolvedChartSeriesSnapshot[];
+    seriesProjection: ResolvedChartSeriesProjectionSnapshot;
     categories: Array<string | number | null>;
     layout?: ResolvedChartLayoutSnapshot;
     plot: {
       displayBlanksAs?: 'gap' | 'zero' | 'span';
       plotVisibleOnly?: boolean;
       gapWidth?: number;
+      gapDepth?: number;
       overlap?: number;
+      barGeometry?: ResolvedChartBarGeometrySnapshot[];
     };
     ranges: {
       dataRange: ChartRangeReferenceSnapshot | null;
@@ -1392,6 +1516,8 @@ export interface ChartConfig {
   plotVisibleOnly?: boolean;
   /** Gap width between bars/columns as percentage (0-500). Applied to bar/column chart types. */
   gapWidth?: number;
+  /** Gap depth between 3D bar/column series as percentage (0-500). Preserved for import/export. */
+  gapDepth?: number;
   /** Overlap between bars/columns (-100 to 100). Applied to clustered bar/column types. */
   overlap?: number;
   /** Hole size for doughnut charts as percentage (10-90) */
@@ -1467,6 +1593,8 @@ export interface ChartConfig {
   // Pivot chart options
   /** Pivot chart display options. */
   pivotOptions?: PivotChartOptions;
+  /** Pivot/import projection metadata used by render and snapshot diagnostics. */
+  pivotProjection?: PivotChartProjectionData;
 
   // 3D preserve-only metadata
   view3d?: ChartView3DConfig;
@@ -1486,7 +1614,7 @@ export interface ChartConfig {
   zOrder?: 'front' | 'back' | 'forward' | 'backward';
 
   /** Mark shape for 3D bar/column charts (default: 'box'). Maps to OOXML c:shape. */
-  barShape?: 'box' | 'cylinder' | 'cone' | 'pyramid';
+  barShape?: 'box' | 'cylinder' | 'cone' | 'coneToMax' | 'pyramid' | 'pyramidToMax';
 
   /**
    * Extensible extra data for enriched chart configurations.

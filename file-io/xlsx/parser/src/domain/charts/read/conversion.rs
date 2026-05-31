@@ -130,6 +130,7 @@ pub(super) fn convert_chart_to_chart_spec(
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,

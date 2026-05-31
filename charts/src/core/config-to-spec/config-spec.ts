@@ -8,6 +8,7 @@ import { buildLayoutHints } from './layout-hints';
 import { resolvedCategoryColors } from './series-style';
 import { resolveStackMode } from './subtypes';
 import { linePointsToCanvasPx } from './units';
+import { effectiveBarGeometry } from './bar-geometry';
 
 /**
  * Build the ConfigSpec from chart-level settings: stacking, colors, and layout hints.
@@ -36,8 +37,14 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
+  const barGeometry = effectiveBarGeometry(config);
+  if (barGeometry) {
+    configSpec.barGeometry = barGeometry;
+    hasConfig = true;
+  }
+
   // Colors
-  const categoryColors = resolvedCategoryColors(config);
+  const categoryColors = resolvedCategoryColors(config, data);
   if (categoryColors && categoryColors.length > 0) {
     configSpec.range = { category: categoryColors };
     hasConfig = true;

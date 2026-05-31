@@ -161,14 +161,34 @@ describe('WorksheetChartsImpl chart ref read normalization', () => {
   });
 });
 
-describe('WorksheetChartsImpl waterfall config mapping', () => {
-  it('preserves imported waterfall subtotal and connector-line options on read', async () => {
+describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
+  it('preserves imported ChartEx family options on read', async () => {
     const charts = createChartsApi([
       makeChart({
         chartType: 'waterfall',
         waterfall: {
           subtotalIndices: [1, 3],
           showConnectorLines: false,
+        },
+        histogram: {
+          binCount: 8,
+          underflowBin: true,
+          underflowBinValue: 1,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          showMeanLine: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
         },
       }),
     ]);
@@ -180,11 +200,36 @@ describe('WorksheetChartsImpl waterfall config mapping', () => {
           totalIndices: [1, 3],
           showConnectorLines: false,
         },
+        histogram: {
+          binCount: 8,
+          binWidth: undefined,
+          overflowBin: undefined,
+          overflowBinValue: undefined,
+          underflowBin: true,
+          underflowBinValue: 1,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showOutliers: false,
+          showMeanMarkers: true,
+          showMean: true,
+          showMeanLine: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
       }),
     );
   });
 
-  it('writes waterfall subtotal options through the generated compute bridge shape', async () => {
+  it('writes ChartEx family options through the generated compute bridge shape', async () => {
     const chart = makeChart({ chartType: 'waterfall' });
     const updateChart = jest.fn(async () => undefined);
     const charts = new WorksheetChartsImpl(
@@ -198,12 +243,31 @@ describe('WorksheetChartsImpl waterfall config mapping', () => {
     );
 
     await charts.update('chart-1', {
-      waterfall: {
-        subtotalIndices: [2],
-        totalIndices: [9],
-        showConnectorLines: true,
-      },
-    });
+        waterfall: {
+          subtotalIndices: [2],
+          totalIndices: [9],
+          showConnectorLines: true,
+        },
+        histogram: {
+          binWidth: 2.5,
+          overflowBin: true,
+          overflowBinValue: 10,
+        },
+        boxplot: {
+          showOutliers: false,
+          showMean: true,
+          quartileMethod: 'inclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'overlapping',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      });
 
     expect(updateChart).toHaveBeenCalledWith(
       SHEET_ID,
@@ -212,6 +276,30 @@ describe('WorksheetChartsImpl waterfall config mapping', () => {
         waterfall: {
           subtotalIndices: [2],
           showConnectorLines: true,
+        },
+        histogram: {
+          binCount: undefined,
+          binWidth: 2.5,
+          overflowBin: true,
+          overflowBinValue: 10,
+          underflowBin: undefined,
+          underflowBinValue: undefined,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          showMeanLine: undefined,
+          quartileMethod: 'inclusive',
+        },
+        hierarchy: {
+          rows: undefined,
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'overlapping',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
         },
       }),
     );

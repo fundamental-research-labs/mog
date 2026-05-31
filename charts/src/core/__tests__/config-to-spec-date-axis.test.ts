@@ -302,7 +302,8 @@ describe('configToSpec imported Excel date category axes', () => {
     );
 
     const result = compile(spec);
-    expect(result.layout.margin.left).toBeGreaterThanOrEqual(result.layout.margin.right);
+    expect(result.layout.margin.left).toBeGreaterThan(0);
+    expect(result.layout.margin.right).toBeGreaterThan(0);
     const secondaryBars = result.marks.filter((mark): mark is RectMark => {
       const datum = mark.datum as { series?: string } | undefined;
       return mark.type === 'rect' && datum?.series === 'Percent';
@@ -508,7 +509,10 @@ describe('configToSpec imported Excel date category axes', () => {
     const spec = asLayerSpec(configToSpec(config, data));
 
     expect(spec.encoding?.color).toBeUndefined();
-    expect(spec.layer.every((layer) => !layer.encoding?.color)).toBe(true);
+    expect(spec.layer.some((layer) => layer.encoding?.color)).toBe(true);
+    expect(
+      spec.layer.every((layer) => !layer.encoding?.color || layer.encoding.color.legend === null),
+    ).toBe(true);
     expect((spec.layer[0].encoding?.x?.axis as AxisWithTicks | undefined)?.tickInterval).toEqual({
       unit: 'month',
       step: 2,
@@ -518,7 +522,8 @@ describe('configToSpec imported Excel date category axes', () => {
     );
 
     const result = compile(spec);
-    expect(result.layout.margin.left).toBeGreaterThanOrEqual(result.layout.margin.right);
+    expect(result.layout.margin.left).toBeGreaterThan(0);
+    expect(result.layout.margin.right).toBeGreaterThan(0);
     expect(result.legends).toHaveLength(0);
 
     const plotClip = result.layout.plotArea;

@@ -39,11 +39,27 @@ import {
  */
 export function normalizeAxisForRendering(
   axis: NonNullable<ChartConfig['axis']>,
+  chartType?: ChartConfig['type'],
 ): ChartConfig['axis'] {
   const normAxis = (a: (typeof axis)['categoryAxis']) =>
     a
       ? { ...a, type: (a.type ?? a.axisType) as AxisType | undefined, show: a.show ?? a.visible }
       : a;
+  if (isStandardXYValueAxisPair(axis, chartType)) {
+    const xAxis = normAxis(axis.valueAxis);
+    const yAxis = normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis);
+    const {
+      secondaryValueAxis: _secondaryValueAxis,
+      secondaryYAxis: _secondaryYAxis,
+      ...rest
+    } = axis;
+    return {
+      ...rest,
+      valueAxis: yAxis,
+      xAxis,
+      yAxis,
+    };
+  }
   return {
     ...axis,
     xAxis: normAxis(axis.categoryAxis ?? axis.xAxis),
@@ -51,6 +67,15 @@ export function normalizeAxisForRendering(
     secondaryCategoryAxis: normAxis(axis.secondaryCategoryAxis),
     secondaryYAxis: normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis),
   };
+}
+
+function isStandardXYValueAxisPair(
+  axis: NonNullable<ChartConfig['axis']>,
+  chartType: ChartConfig['type'] | undefined,
+): boolean {
+  if (chartType !== 'scatter' && chartType !== 'bubble') return false;
+  if (axis.categoryAxis || axis.xAxis) return false;
+  return Boolean(axis.valueAxis && (axis.secondaryValueAxis || axis.secondaryYAxis));
 }
 
 function isNativeMissingChartType(
@@ -88,6 +113,9 @@ type ChartColorMapOverrideConfig = NonNullable<
 >;
 type ChartWithLayoutAuthority = ChartFloatingObject & {
   layoutAuthority?: ChartLayoutAuthority;
+};
+type ChartWithPivotProjection = ChartFloatingObject & {
+  pivotProjection?: ChartConfig['pivotProjection'];
 };
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -180,6 +208,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   }
   const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
   const layoutAuthority = (normalizedChart as ChartWithLayoutAuthority).layoutAuthority;
+  const pivotProjection = (normalizedChart as ChartWithPivotProjection).pivotProjection;
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
@@ -206,7 +235,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     // chart-type-converters.ts for why this is not a cast.
     legend: normalizedChart.legend ? wireToLegendConfig(normalizedChart.legend) : undefined,
     axis: normalizedChart.axis
-      ? normalizeAxisForRendering(wireToAxisConfig(normalizedChart.axis))
+      ? normalizeAxisForRendering(wireToAxisConfig(normalizedChart.axis), narrowedType.type)
       : undefined,
     colors: normalizedChart.colors,
     series: normalizedChart.series ? wireToSeriesConfigArray(normalizedChart.series) : undefined,
@@ -228,6 +257,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
     plotVisibleOnly: normalizedChart.plotVisibleOnly,
     gapWidth: normalizedChart.gapWidth,
+    gapDepth: normalizedChart.gapDepth,
     overlap: normalizedChart.overlap,
     doughnutHoleSize: normalizedChart.doughnutHoleSize,
     firstSliceAngle: normalizedChart.firstSliceAngle,
@@ -243,6 +273,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     secondPlotSize: normalizedChart.secondPlotSize,
     varyByCategories: normalizedChart.varyByCategories,
     pivotOptions: normalizedChart.pivotOptions as ChartConfig['pivotOptions'],
+    pivotProjection,
     style: normalizedChart.style,
     roundedCorners: normalizedChart.roundedCorners,
     autoTitleDeleted: normalizedChart.autoTitleDeleted,

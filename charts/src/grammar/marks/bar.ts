@@ -3,26 +3,25 @@
  *
  * Generates rect marks for bar charts (vertical and horizontal),
  * with support for grouping, stacking, and percent-stacking.
- *
- * Extracted from compiler.ts - no logic changes.
  */
 
 import { resolveColor } from '../../algebra/color';
-import { uniqueValues } from '../../algebra/group-by';
+import {
+  effectiveBarGeometryFromSpec,
+  excelBarSlotGeometry,
+  hasExcelBarGeometrySpec,
+} from '../../core/config-to-spec/bar-geometry';
+import {
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+} from '../../core/config-to-spec/fields';
 import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import { definedStyle, renderableDataRows } from './helpers';
 
-type BarSlotGeometry = {
-  offset: number;
-  size: number;
-};
-
-function finiteNumber(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
+const SERIES_ORDER_FIELD = '__mogSeriesOrder';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -45,8 +44,8 @@ function datumNumber(datum: DataRow, field: string | undefined): number | undefi
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function hasExplicitBarSpacing(config: ConfigSpec | undefined): boolean {
-  return finiteNumber(config?.gapWidth) !== undefined || finiteNumber(config?.overlap) !== undefined;
+function finitePosition(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function scaleStep(scale: AnyScale, fallback: number): number {
@@ -54,24 +53,22 @@ function scaleStep(scale: AnyScale, fallback: number): number {
   return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : fallback;
 }
 
-function excelBarSlotGeometry(
-  categoryStep: number,
-  groupCount: number,
-  groupIndex: number,
-  config: ConfigSpec | undefined,
-): BarSlotGeometry {
-  const safeGroupCount = Math.max(1, groupCount);
-  const safeGroupIndex = clamp(groupIndex, 0, safeGroupCount - 1);
-  const gapRatio = clamp(finiteNumber(config?.gapWidth) ?? 150, 0, 500) / 100;
-  const overlapRatio = clamp(finiteNumber(config?.overlap) ?? 0, -100, 100) / 100;
-  const groupStepUnits = 1 - overlapRatio;
-  const clusterUnits = 1 + (safeGroupCount - 1) * groupStepUnits;
-  const barSize = categoryStep / (clusterUnits + gapRatio);
-  const clusterSize = barSize * clusterUnits;
-  return {
-    offset: (categoryStep - clusterSize) / 2 + safeGroupIndex * barSize * groupStepUnits,
-    size: barSize,
-  };
+function orderedUniqueValues(data: DataRow[], field: string): string[] {
+  const values = new Map<string, { firstIndex: number; seriesOrder: number }>();
+
+  for (let index = 0; index < data.length; index += 1) {
+    const row = data[index];
+    const value = String(row[field]);
+    if (values.has(value)) continue;
+    values.set(value, {
+      firstIndex: index,
+      seriesOrder: datumNumber(row, SERIES_ORDER_FIELD) ?? index,
+    });
+  }
+
+  return [...values.entries()]
+    .sort(([, a], [, b]) => a.seriesOrder - b.seriesOrder || a.firstIndex - b.firstIndex)
+    .map(([value]) => value);
 }
 
 /**
@@ -113,7 +110,7 @@ export function generateBarMarks(
   // For grouped bars, compute group info (unique groups and their order)
   let uniqueGroups: string[] = [];
   if (isGrouped && colorField) {
-    uniqueGroups = uniqueValues(renderData, colorField);
+    uniqueGroups = orderedUniqueValues(renderData, colorField);
   }
 
   // Detect duplicate categories: when multiple data rows share the same category
@@ -146,28 +143,51 @@ export function generateBarMarks(
     : isGrouped
       ? Math.max(uniqueGroups.length, 1)
       : 1;
+  const useExcelGeometry = hasExcelBarGeometrySpec(config);
+  const barGeometry = useExcelGeometry ? effectiveBarGeometryFromSpec(config) : undefined;
 
   // For percent-stacked mode, normalize values per category group
   let normalizedData = renderData;
+  let percentDomainMin = 0;
+  let percentDomainMax = 100;
   if (isPercentStacked) {
     if (catField && valField) {
-      const totals = new Map<string, number>();
+      const totals = new Map<string, { positive: number; negativeMagnitude: number }>();
       for (const d of renderData) {
         const cat = String(d[catField]);
-        const val = typeof d[valField] === 'number' ? Math.abs(d[valField] as number) : 0;
-        totals.set(cat, (totals.get(cat) || 0) + val);
+        const val = typeof d[valField] === 'number' ? (d[valField] as number) : 0;
+        const total = totals.get(cat) ?? { positive: 0, negativeMagnitude: 0 };
+        if (val >= 0) total.positive += val;
+        else total.negativeMagnitude += Math.abs(val);
+        totals.set(cat, total);
       }
+      let hasPositive = false;
+      let hasNegative = false;
       normalizedData = renderData.map((d) => {
         const cat = String(d[catField]);
-        const total = totals.get(cat) || 1;
+        const total = totals.get(cat) ?? { positive: 0, negativeMagnitude: 0 };
         const val = typeof d[valField] === 'number' ? (d[valField] as number) : 0;
-        return { ...d, [valField]: (val / total) * 100 };
+        if (val > 0) {
+          hasPositive = true;
+          return { ...d, [valField]: total.positive > 0 ? (val / total.positive) * 100 : 0 };
+        }
+        if (val < 0) {
+          hasNegative = true;
+          return {
+            ...d,
+            [valField]: total.negativeMagnitude > 0 ? (val / total.negativeMagnitude) * 100 : 0,
+          };
+        }
+        return { ...d, [valField]: 0 };
       });
+      percentDomainMin = hasNegative ? -100 : 0;
+      percentDomainMax = hasPositive ? 100 : 0;
+      if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
     }
   }
 
-  // For percent-stacked mode, override the value axis scale to use [0, 100] domain
-  // so normalized values map correctly to the full plot area.
+  // For percent-stacked mode, override the value axis scale so separately normalized
+  // positive and negative stacks map to the final plot area.
   let effectiveXScale = xScale;
   let effectiveYScale = yScale;
   if (isPercentStacked) {
@@ -177,8 +197,7 @@ export function generateBarMarks(
     const percentScale: AnyScale = Object.assign((v: unknown): number => {
       const num = typeof v === 'number' ? v : parseFloat(String(v));
       if (isNaN(num)) return valRange[0];
-      // Linear mapping from [0, 100] to valRange
-      const t = num / 100;
+      const t = (num - percentDomainMin) / (percentDomainMax - percentDomainMin);
       return valRange[0] + t * (valRange[1] - valRange[0]);
     }, {});
     if (isHorizontal) {
@@ -193,8 +212,8 @@ export function generateBarMarks(
   // in the opposite direction from positive bars.
   const posStackAccumulators = new Map<string, number>();
   const negStackAccumulators = new Map<string, number>();
-  // Cumulative value tracker for percent-stacked mode
-  const cumulativeValues = new Map<string, number>();
+  const posPercentAccumulators = new Map<string, number>();
+  const negPercentAccumulators = new Map<string, number>();
 
   // Compute the zero position for the value axis (for proper baseline)
   const zeroPos = isHorizontal ? (effectiveXScale(0) as number) : (effectiveYScale(0) as number);
@@ -228,6 +247,8 @@ export function generateBarMarks(
     const datum = renderData[i]; // Keep original datum for mark.datum
     const xValue = encodings.x?.accessor(normalizedDatum);
     const yValue = encodings.y?.accessor(normalizedDatum);
+    const x2Value = encodings.x2?.accessor(normalizedDatum);
+    const y2Value = encodings.y2?.accessor(normalizedDatum);
     const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);
     const opacityValue = encodings.opacity?.accessor(datum);
 
@@ -252,14 +273,21 @@ export function generateBarMarks(
       // Horizontal bar
       const barY = yScale(yValue) as number; // Category axis always uses original scale
       const fullBandHeight = typeof yScale.bandwidth === 'function' ? yScale.bandwidth() : 20;
-      const explicitSpacing = hasExplicitBarSpacing(config);
-      const slot = explicitSpacing
-        ? excelBarSlotGeometry(scaleStep(yScale, fullBandHeight), numGroups, groupIndex, config)
+      const slot = barGeometry
+        ? excelBarSlotGeometry(
+            scaleStep(yScale, fullBandHeight),
+            numGroups,
+            groupIndex,
+            barGeometry,
+          )
         : { offset: groupIndex * (fullBandHeight / numGroups), size: fullBandHeight / numGroups };
       const barHeight = slot.size;
       const groupOffset = slot.offset;
 
       const scaledX = effectiveXScale(xValue) as number;
+      const rangeStartX = finitePosition(x2Value);
+      const scaledX2 =
+        rangeStartX !== undefined ? (effectiveXScale(rangeStartX) as number) : undefined;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.x;
 
       if (isNaN(barY) || isNaN(scaledX) || !isFinite(scaledX) || !isFinite(barY)) {
@@ -267,19 +295,25 @@ export function generateBarMarks(
         y = isNaN(barY) || !isFinite(barY) ? layout.plotArea.y : barY + groupOffset;
         width = 0;
         height = isNaN(barY) || !isFinite(barY) ? 0 : barHeight;
+      } else if (scaledX2 !== undefined && Number.isFinite(scaledX2)) {
+        x = Math.min(scaledX, scaledX2);
+        y = barY + groupOffset;
+        width = Math.abs(scaledX - scaledX2);
+        height = barHeight;
       } else if (isStacked) {
         // Stacked bars: accumulate positions so segments tile correctly
         const catKey = catField ? String(normalizedDatum[catField]) : String(i);
 
         if (isPercentStacked && valField) {
           // For percent-stacked: use cumulative percentages for precise positioning
-          const cumStart = cumulativeValues.get(catKey) || 0;
           const barVal =
             typeof normalizedDatum[valField] === 'number'
-              ? Math.abs(normalizedDatum[valField] as number)
+              ? (normalizedDatum[valField] as number)
               : 0;
+          const accumulator = barVal >= 0 ? posPercentAccumulators : negPercentAccumulators;
+          const cumStart = accumulator.get(catKey) || 0;
           const cumEnd = cumStart + barVal;
-          cumulativeValues.set(catKey, cumEnd);
+          accumulator.set(catKey, cumEnd);
 
           const startX = effectiveXScale(cumStart) as number;
           const endX = effectiveXScale(cumEnd) as number;
@@ -316,14 +350,21 @@ export function generateBarMarks(
       // Vertical bar
       const barX = xScale(xValue) as number; // Category axis always uses original scale
       const fullBandWidth = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : 20;
-      const explicitSpacing = hasExplicitBarSpacing(config);
-      const slot = explicitSpacing
-        ? excelBarSlotGeometry(scaleStep(xScale, fullBandWidth), numGroups, groupIndex, config)
+      const slot = barGeometry
+        ? excelBarSlotGeometry(
+            scaleStep(xScale, fullBandWidth),
+            numGroups,
+            groupIndex,
+            barGeometry,
+          )
         : { offset: groupIndex * (fullBandWidth / numGroups), size: fullBandWidth / numGroups };
       const barWidth = slot.size;
       const groupOffset = slot.offset;
 
       const yPos = effectiveYScale(yValue) as number;
+      const rangeStartY = finitePosition(y2Value);
+      const y2Pos =
+        rangeStartY !== undefined ? (effectiveYScale(rangeStartY) as number) : undefined;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.y + layout.plotArea.height;
 
       if (isNaN(barX) || isNaN(yPos) || !isFinite(yPos) || !isFinite(barX)) {
@@ -331,19 +372,25 @@ export function generateBarMarks(
         y = baseline;
         width = isNaN(barX) || !isFinite(barX) ? 0 : barWidth;
         height = 0;
+      } else if (y2Pos !== undefined && Number.isFinite(y2Pos)) {
+        x = barX + groupOffset;
+        y = Math.min(yPos, y2Pos);
+        width = barWidth;
+        height = Math.abs(y2Pos - yPos);
       } else if (isStacked) {
         // Stacked bars: accumulate positions so segments tile correctly
         const catKey = catField ? String(normalizedDatum[catField]) : String(i);
 
         if (isPercentStacked && valField) {
           // For percent-stacked: use cumulative percentages for precise positioning
-          const cumStart = cumulativeValues.get(catKey) || 0;
           const barVal =
             typeof normalizedDatum[valField] === 'number'
-              ? Math.abs(normalizedDatum[valField] as number)
+              ? (normalizedDatum[valField] as number)
               : 0;
+          const accumulator = barVal >= 0 ? posPercentAccumulators : negPercentAccumulators;
+          const cumStart = accumulator.get(catKey) || 0;
           const cumEnd = cumStart + barVal;
-          cumulativeValues.set(catKey, cumEnd);
+          accumulator.set(catKey, cumEnd);
 
           const startY = effectiveYScale(cumStart) as number;
           const endY = effectiveYScale(cumEnd) as number;
@@ -402,8 +449,14 @@ export function generateBarMarks(
       datum,
       style: {
         fill: datumString(datum, markSpec.fillField) ?? color,
-        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke,
-        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
+        stroke:
+          datumString(datum, markSpec.strokeField) ??
+          datumString(datum, SERIES_STROKE_FIELD) ??
+          markSpec.stroke,
+        strokeWidth:
+          datumNumber(datum, markSpec.strokeWidthField) ??
+          datumNumber(datum, SERIES_STROKE_WIDTH_FIELD) ??
+          markSpec.strokeWidth,
         opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
         ...definedStyle({

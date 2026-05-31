@@ -10,7 +10,10 @@
 import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisOrient, AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
-import { formatExcelValue } from '@mog/spreadsheet-utils/number-formats';
+import {
+  formatExcelValueResult,
+  type ExcelNumberFormatResult,
+} from '@mog/spreadsheet-utils/number-formats';
 
 type AxisPart =
   | 'domain'
@@ -42,10 +45,23 @@ function axisLabelText(
   tick: unknown,
   format: string | undefined,
 ): string {
+  return axisLabelResult(channel, axisSpec, tick, format).text;
+}
+
+function axisLabelResult(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  tick: unknown,
+  format: string | undefined,
+): ExcelNumberFormatResult {
   const mapped = axisSpec.labelTextByValue?.[String(tick)];
-  return mapped !== undefined
-    ? mapped
-    : formatAxisTick(channel, axisSpec, displayUnitTickValue(axisSpec, tick), format);
+  const formatted = formatAxisTickResult(
+    channel,
+    axisSpec,
+    displayUnitTickValue(axisSpec, tick),
+    format,
+  );
+  return mapped !== undefined ? { ...formatted, text: mapped } : formatted;
 }
 
 function displayUnitTickValue(axisSpec: AxisSpec, tick: unknown): unknown {
@@ -233,12 +249,13 @@ export function generateXAxis(
 
     // Label (skip labels that would overlap or by explicit skip)
     if (axisSpec.labels !== false && axisSpec.labelPosition !== 'none' && showThisLabel) {
-      const labelText = axisLabelText(
+      const labelResult = axisLabelResult(
         channel,
         axisSpec,
         tick,
         axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
       );
+      const labelText = labelResult.text;
       const labelAngle = axisSpec.labelAngle ?? 0;
       const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? (labelAngle ? 2 : 3);
@@ -256,7 +273,7 @@ export function generateXAxis(
         textBaseline: labelLayout.baseline,
         rotation: labelAngle ? (labelAngle * Math.PI) / 180 : undefined,
         style: {
-          fill: axisSpec.labelColor ?? '#000',
+          fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
         },
       } as TextMark);
     }
@@ -626,12 +643,13 @@ export function generateYAxis(
 
     // Label (skip labels that would overlap vertically or by explicit skip)
     if (axisSpec.labels !== false && axisSpec.labelPosition !== 'none' && showThisLabel) {
-      const labelText = axisLabelText(
+      const labelResult = axisLabelResult(
         channel,
         axisSpec,
         tick,
         axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
       );
+      const labelText = labelResult.text;
 
       const tickSize = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? 3;
@@ -648,7 +666,7 @@ export function generateYAxis(
         textBaseline: 'middle',
         rotation: axisSpec.labelAngle ? (axisSpec.labelAngle * Math.PI) / 180 : undefined,
         style: {
-          fill: axisSpec.labelColor ?? '#000',
+          fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
         },
       } as TextMark);
     }
@@ -993,9 +1011,20 @@ function formatAxisTick(
   value: unknown,
   format: string | undefined,
 ): string {
-  if (channel.type === 'temporal') return formatTemporalTick(value);
-  if (axisSpec.formatType === 'time') return formatExcelSerialDateTick(value, format);
-  return formatTickValue(value, format);
+  return formatAxisTickResult(channel, axisSpec, value, format).text;
+}
+
+function formatAxisTickResult(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  value: unknown,
+  format: string | undefined,
+): ExcelNumberFormatResult {
+  if (channel.type === 'temporal') return { text: formatTemporalTick(value), section: 'general' };
+  if (axisSpec.formatType === 'time') {
+    return formatExcelValueResult(value, format);
+  }
+  return formatTickValueResult(value, format);
 }
 
 const EXCEL_SERIAL_UNIX_EPOCH = 25569;
@@ -1112,5 +1141,12 @@ function normalizeExcelDateFormat(format: string | undefined): string {
  * Format a tick value.
  */
 export function formatTickValue(value: unknown, format?: string): string {
-  return formatExcelValue(value, format);
+  return formatTickValueResult(value, format).text;
+}
+
+export function formatTickValueResult(
+  value: unknown,
+  format?: string,
+): ExcelNumberFormatResult {
+  return formatExcelValueResult(value, format);
 }

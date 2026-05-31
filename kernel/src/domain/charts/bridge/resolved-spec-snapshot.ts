@@ -1,7 +1,23 @@
-import type { ChartConfig, ChartData, ChartDataPoint, ChartDataSeries } from '@mog/charts';
+import {
+  effectiveBarGeometry,
+  excelBarSlotGeometry,
+  hasExcelBarGeometryConfig,
+  isBarLikeChartType,
+  seriesConfigForDataSeries,
+  seriesConfigSourceIndex,
+  seriesConfigSourceKey,
+  seriesSourceIndex,
+  seriesSourceKey,
+  type ChartConfig,
+  type ChartData,
+  type ChartDataPoint,
+  type ChartDataSeries,
+} from '@mog/charts';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   ChartSeriesDimensionRenderAuthority,
+  ChartSeriesProjectionAuthority,
+  ChartSeriesProjectionDiagnosticReason,
   ChartSeriesDimensionSourceKind,
   ChartExportOptionsSnapshot,
   ResolvedChartSpecSnapshot,
@@ -20,6 +36,9 @@ import {
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
 type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']>;
+type BarGeometrySnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['plot']['barGeometry']
+>[number];
 type SingleAxisConfig = NonNullable<NonNullable<ChartConfig['axis']>['categoryAxis']>;
 type AxisDiagnosticRole = 'category' | 'value' | 'series';
 type AxisOrientation = 'horizontal' | 'vertical';
@@ -72,10 +91,11 @@ export function buildResolvedChartSpecSnapshot(input: {
       categories,
       input.config,
       hasExplicitSeriesReferences,
-      seriesReferencesByIndex.get(index),
+      seriesReferencesByIndex.get(seriesSourceIndex(dataSeries, index)),
     ),
   );
   const legend = snapshotLegend(input.config, series);
+  const seriesProjection = snapshotSeriesProjection(input.config, input.chartData, series);
 
   return {
     schemaVersion: 1,
@@ -87,7 +107,7 @@ export function buildResolvedChartSpecSnapshot(input: {
     chartArea: input.chartArea,
     plotArea: input.plotArea ?? undefined,
     pageContext: input.pageContext ?? input.renderFrame?.pageContext,
-    packageAuthority: input.packageAuthority,
+    packageAuthority: input.packageAuthority ?? snapshotPackageAuthority(input.chart),
     chartObject: {
       id: input.chart.id,
       name: input.chart.name,
@@ -125,13 +145,16 @@ export function buildResolvedChartSpecSnapshot(input: {
         series: snapshotAxis(input.config.axis?.seriesAxis),
       },
       series,
+      seriesProjection,
       categories,
       layout: input.layout ?? undefined,
       plot: {
         displayBlanksAs: input.config.displayBlanksAs,
         plotVisibleOnly: input.config.plotVisibleOnly,
         gapWidth: input.config.gapWidth,
+        gapDepth: chartGapDepth(input.config),
         overlap: input.config.overlap,
+        barGeometry: snapshotBarGeometry(input.config, input.chartData, input.layout ?? null),
       },
       ranges: {
         dataRange: snapshotRange(input.resolvedRanges.dataRange),
@@ -159,12 +182,83 @@ export function buildResolvedChartSpecSnapshot(input: {
     diagnostics: {
       compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
       unsupportedFeatures: unsupportedFeatureDiagnostics(
+        input.chart,
         input.config,
         series,
         input.layout ?? null,
       ),
     },
   };
+}
+
+function snapshotBarGeometry(
+  config: ChartConfig,
+  chartData: ChartData,
+  layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null,
+): BarGeometrySnapshot[] | undefined {
+  if (!hasExcelBarGeometryConfig(config)) return undefined;
+
+  const geometry = effectiveBarGeometry(config);
+  if (!geometry) return undefined;
+
+  const seriesIndices = barGeometrySeriesIndices(config, chartData);
+  if (seriesIndices.length === 0) return undefined;
+
+  const categoryLength =
+    geometry.orientation === 'horizontal'
+      ? layout?.plotArea.height
+      : layout?.plotArea.width;
+  const categoryPitch =
+    categoryLength && chartData.categories.length > 0
+      ? categoryLength / chartData.categories.length
+      : undefined;
+  const offsets =
+    categoryPitch !== undefined
+      ? seriesIndices.map((seriesIndex, slotIndex) => ({
+          seriesIndex,
+          offset: excelBarSlotGeometry(categoryPitch, seriesIndices.length, slotIndex, geometry)
+            .offset,
+        }))
+      : undefined;
+  const barSize =
+    categoryPitch !== undefined
+      ? excelBarSlotGeometry(categoryPitch, seriesIndices.length, 0, geometry).size
+      : undefined;
+
+  return [
+    {
+      orientation: geometry.orientation,
+      grouping: geometry.grouping,
+      sourceGapWidth: geometry.sourceGapWidth,
+      sourceOverlap: geometry.sourceOverlap,
+      gapWidth: geometry.gapWidth,
+      overlap: geometry.overlap,
+      gapWidthClamped: geometry.gapWidthClamped,
+      overlapClamped: geometry.overlapClamped,
+      seriesIndices,
+      categoryPitch,
+      barSize,
+      offsets,
+    },
+  ];
+}
+
+function barGeometrySeriesIndices(config: ChartConfig, chartData: ChartData): number[] {
+  return chartData.series
+    .map((dataSeries, index) => {
+      const seriesConfig = seriesConfigForDataSeries(dataSeries, config.series ?? [], index);
+      const seriesType = seriesConfig?.type ?? dataSeries.type ?? config.type;
+      return {
+        index,
+        seriesConfig,
+        isBarLike: config.type === 'combo' ? isBarLikeChartType(seriesType) : true,
+      };
+    })
+    .filter(
+      ({ isBarLike, seriesConfig }) =>
+        isBarLike && !isNoFillNoLineSeriesConfig(seriesConfig),
+    )
+    .map(({ index }) => index);
 }
 
 function snapshotAxis(
@@ -215,7 +309,7 @@ function snapshotLegend(
   const present = !!legend && legend.position !== 'none';
   const deletedEntries = new Set(
     legend?.entries
-      ?.filter((entry) => entry.delete || entry.visible === false)
+      ?.filter((entry) => entry.delete === true || (entry.delete !== false && entry.visible === false))
       .map((entry) => entry.idx) ?? [],
   );
   const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
@@ -227,8 +321,12 @@ function snapshotLegend(
     visibleEntries: visible
       ? series
           .filter(
-            (_item, index) =>
-              !deletedEntries.has(index) && !isNoFillNoLineSeriesConfig(config.series?.[index]),
+            (item, index) =>
+              !deletedEntries.has(index) &&
+              !deletedEntries.has(item.sourceSeriesIndex) &&
+              !isNoFillNoLineSeriesConfig(
+                config.series?.[item.sourceSeriesIndex] ?? config.series?.[index],
+              ),
           )
           .map((item) => item.name)
       : [],
@@ -243,7 +341,9 @@ function snapshotSeries(
   hasExplicitSeriesReferences: boolean,
   rangeReference: SeriesRangeReference | undefined,
 ): ResolvedChartSpecSnapshot['resolved']['series'][number] {
-  const configured = config.series?.[index];
+  const configured = seriesConfigForDataSeries(series, config.series ?? [], index);
+  const sourceSeriesIndex = seriesSourceIndex(series, index);
+  const sourceSeriesKey = seriesSourceKey(series, index);
   const values: Array<number | null> = [];
   const blankMask: boolean[] = [];
   const seriesCategories = snapshotCategoriesForSeries(
@@ -283,30 +383,131 @@ function snapshotSeries(
       resolvedRange: rangeReference?.bubbleSizes ?? null,
     }),
   };
-  const name = snapshotSeriesName(series, configured, index);
+  const name = snapshotSeriesName(series, configured, sourceSeriesIndex);
+  const renderedPointCount = values.filter((value) => value !== null).length;
+  const effectiveType = series.type ?? configured?.type;
+  const xRole = effectiveSeriesXRole(config, configured, effectiveType);
 
   return {
     index,
     order: configured?.order ?? configured?.idx ?? index,
+    sourceSeriesIndex,
+    sourceSeriesKey,
+    visibleOrder: configured?.visibleOrder ?? series.visibleOrder ?? index,
+    pivotSeriesKey: configured?.pivotSeriesKey ?? series.pivotSeriesKey,
+    pivotDataFieldIndex: configured?.pivotDataFieldIndex ?? series.pivotDataFieldIndex,
+    projectionAuthority:
+      series.projectionAuthority ??
+      configured?.projectionAuthority ??
+      seriesProjectionAuthority(config, configured, hasExplicitSeriesReferences),
+    projectionDiagnostics: [
+      ...(configured?.projectionDiagnostics ?? []),
+      ...(series.projectionDiagnostics ?? []),
+    ],
     name,
-    type: series.type ?? configured?.type,
+    type: effectiveType,
     axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
-    color: series.color ?? configured?.color ?? config.colors?.[index],
+    xRole,
+    showLines: configured?.showLines,
+    smooth: configured?.smooth,
+    showMarkers: configured?.showMarkers,
+    markerStyle: configured?.markerStyle,
+    renderLayerCount: estimatedRenderLayerCount(config, configured, effectiveType, index),
+    color: series.color ?? configured?.color ?? config.colors?.[sourceSeriesIndex] ?? config.colors?.[index],
     source,
     renderAuthority,
     categories: seriesCategories,
     values,
     blankMask,
+    pointCount: length,
+    renderedPointCount,
     dataHash: hashJson({
       name,
+      sourceSeriesIndex,
+      sourceSeriesKey,
+      type: effectiveType,
+      xRole,
+      showLines: configured?.showLines,
+      smooth: configured?.smooth,
+      showMarkers: configured?.showMarkers,
+      markerStyle: configured?.markerStyle,
+      renderLayerCount: estimatedRenderLayerCount(config, configured, effectiveType, index),
       source,
       renderAuthority,
       categories: seriesCategories,
-      categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
+      categoryFormatCodes: configured?.categoryLabelFormat,
       values,
       blankMask,
     }),
   };
+}
+
+function seriesProjectionAuthority(
+  config: ChartConfig,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  hasExplicitSeriesReferences: boolean,
+): ChartSeriesProjectionAuthority {
+  if (configured?.projectionAuthority) return configured.projectionAuthority;
+  if (config.pivotProjection?.authority) return config.pivotProjection.authority;
+  if (hasExplicitSeriesReferences) return 'explicitSeries';
+  return config.dataRange ? 'liveRange' : 'unavailable';
+}
+
+function snapshotSeriesProjection(
+  config: ChartConfig,
+  data: ChartData,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): ResolvedChartSpecSnapshot['resolved']['seriesProjection'] {
+  const renderedPointCountBySourceSeriesKey: Record<string, number> = {};
+  for (const item of series) {
+    renderedPointCountBySourceSeriesKey[item.sourceSeriesKey] = item.renderedPointCount;
+  }
+
+  const projectedKeys = new Set(series.map((item) => item.sourceSeriesKey));
+  const droppedSeries =
+    config.series
+      ?.map((configured, index) => {
+        const sourceSeriesIndex = seriesConfigSourceIndex(configured, index);
+        const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
+        if (projectedKeys.has(sourceSeriesKey)) return undefined;
+        const diagnostic = configured.projectionDiagnostics?.[0];
+        return {
+          sourceSeriesIndex,
+          sourceSeriesKey,
+          name: configured.name,
+          reason: diagnostic?.reason ?? droppedSeriesReason(configured),
+          message: diagnostic?.message,
+        };
+      })
+      .filter(
+        (item): item is NonNullable<typeof item> =>
+          item !== undefined,
+      ) ?? [];
+
+  const renderedSeriesCount = series.filter((item) => item.renderedPointCount > 0).length;
+  const hasExplicitSeries = config.series?.some((item) =>
+    Boolean(item.values || item.valueCache || item.categories || item.categoryCache),
+  );
+  return {
+    authority:
+      config.pivotProjection?.authority ??
+      (hasExplicitSeries ? 'explicitSeries' : config.dataRange ? 'liveRange' : 'unavailable'),
+    expectedImportedSeriesCount:
+      config.pivotProjection?.expectedImportedSeriesCount ?? config.series?.length ?? data.series.length,
+    projectedSeriesCount: config.pivotProjection?.projectedSeriesCount ?? data.series.length,
+    renderedSeriesCount: config.pivotProjection?.renderedSeriesCount ?? renderedSeriesCount,
+    renderedPointCountBySourceSeriesKey,
+    droppedSeries,
+  };
+}
+
+function droppedSeriesReason(
+  series: NonNullable<ChartConfig['series']>[number],
+): ChartSeriesProjectionDiagnosticReason {
+  if (series.filtered) return 'allItemsFiltered';
+  if (isNoFillNoLineSeriesConfig(series)) return 'styleResolvedNoFillOrLine';
+  if (series.projectionAuthority === 'unavailable') return 'unresolvedPivotSource';
+  return 'noValueData';
 }
 
 function dimensionRenderAuthority(input: {
@@ -411,22 +612,157 @@ function snapshotScalar(value: string | number | null | undefined): string | num
   return null;
 }
 
+function effectiveSeriesXRole(
+  config: ChartConfig,
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+  seriesType: string | undefined,
+): 'category' | 'quantitative' | undefined {
+  if (series?.xRole) return series.xRole;
+  if (
+    config.type === 'scatter' ||
+    config.type === 'bubble' ||
+    seriesType === 'scatter' ||
+    seriesType === 'bubble'
+  ) {
+    return 'quantitative';
+  }
+  return series?.categories ? 'category' : undefined;
+}
+
+function estimatedRenderLayerCount(
+  config: ChartConfig,
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+  seriesType: string | undefined,
+  index: number,
+): number {
+  const type = seriesType ?? (config.type === 'combo' ? (index === 0 ? 'column' : 'line') : config.type);
+  if (!isKnownRenderableSeriesType(type)) return 0;
+  const markFamily = seriesMarkFamily(type);
+  const showLines = effectiveSeriesShowLines(config, series, type);
+  const showMarkers = effectiveSeriesShowMarkers(series, type, config.type, !showLines);
+  if (markFamily === 'point') return (showLines ? 1 : 0) + (showMarkers ? 1 : 0);
+  if (markFamily === 'line' || markFamily === 'area') {
+    return (showLines ? 1 : 0) + (showMarkers ? 1 : 0);
+  }
+  return 1;
+}
+
+function effectiveSeriesShowLines(
+  config: ChartConfig,
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+  seriesType: string,
+): boolean {
+  if (series?.showLines !== undefined) return series.showLines;
+  if (seriesType === 'scatter' || seriesType === 'bubble') return config.showLines === true;
+  const markFamily = seriesMarkFamily(seriesType);
+  return markFamily === 'line' || markFamily === 'area';
+}
+
+function effectiveSeriesShowMarkers(
+  series: NonNullable<ChartConfig['series']>[number] | undefined,
+  seriesType: string | undefined,
+  chartType: ChartConfig['type'],
+  defaultValue = false,
+): boolean {
+  if (series?.markerStyle === 'none') return false;
+  if (series?.showMarkers !== undefined) return series.showMarkers;
+  if (series?.markerStyle !== undefined || series?.markerSize !== undefined) return true;
+  if (
+    series?.points?.some(
+      (point) =>
+        point.markerStyle !== undefined ||
+        point.markerSize !== undefined ||
+        point.markerBackgroundColor !== undefined ||
+        point.markerForegroundColor !== undefined,
+    )
+  ) {
+    return true;
+  }
+  return (
+    chartType === 'lineMarkers' ||
+    seriesType === 'lineMarkers' ||
+    seriesType === 'lineMarkersStacked' ||
+    seriesType === 'lineMarkersStacked100' ||
+    defaultValue
+  );
+}
+
+function seriesMarkFamily(seriesType: string | undefined): 'bar' | 'line' | 'area' | 'point' | 'other' {
+  switch (seriesType) {
+    case 'bar':
+    case 'column':
+    case 'bar3d':
+    case 'column3d':
+    case 'bar3D':
+    case 'column3D':
+    case 'cylinderColClustered':
+    case 'cylinderColStacked':
+    case 'cylinderColStacked100':
+    case 'cylinderBarClustered':
+    case 'cylinderBarStacked':
+    case 'cylinderBarStacked100':
+    case 'cylinderCol':
+    case 'coneColClustered':
+    case 'coneColStacked':
+    case 'coneColStacked100':
+    case 'coneBarClustered':
+    case 'coneBarStacked':
+    case 'coneBarStacked100':
+    case 'coneCol':
+    case 'pyramidColClustered':
+    case 'pyramidColStacked':
+    case 'pyramidColStacked100':
+    case 'pyramidBarClustered':
+    case 'pyramidBarStacked':
+    case 'pyramidBarStacked100':
+    case 'pyramidCol':
+      return 'bar';
+    case 'line':
+    case 'line3d':
+    case 'line3D':
+    case 'lineMarkers':
+    case 'lineMarkersStacked':
+    case 'lineMarkersStacked100':
+      return 'line';
+    case 'area':
+    case 'area3d':
+    case 'area3D':
+      return 'area';
+    case 'scatter':
+    case 'bubble':
+    case 'bubble3DEffect':
+      return 'point';
+    default:
+      return 'other';
+  }
+}
+
+function isKnownRenderableSeriesType(seriesType: string | undefined): boolean {
+  return seriesMarkFamily(seriesType) !== 'other';
+}
+
 function unsupportedFeatureDiagnostics(
+  chart: ChartFloatingObject,
   config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
   layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null,
 ): string[] {
   const unsupported: string[] = [];
-  if (String(config.type).endsWith('3d'))
-    unsupported.push('3d chart rendering is approximated by the 2d chart backend');
-  if (config.type === 'surface' || config.type === 'surface3d' || config.type === 'surfaceTopView')
-    unsupported.push('surface chart rendering is not fully semantic');
-  if (
-    config.wireframe ||
-    config.type === 'surfaceWireframe' ||
-    config.type === 'surfaceTopViewWireframe'
-  )
-    unsupported.push('surface wireframe rendering is not fully semantic');
+  unsupported.push(...importStatusUnsupportedDiagnostics(chart.importStatus));
+  unsupported.push(...packageAuthorityDiagnostics(chart));
+  if (config.type === 'bar3d' || config.type === 'column3d') {
+    unsupported.push('3-D bar chart rendered as 2-D bar/column approximation');
+    for (const shape of barShapeDiagnostics(config)) {
+      unsupported.push(
+        `3-D bar shape "${shape}" is preserved but rendered as rectangular bars`,
+      );
+    }
+    if (chartGapDepth(config) !== undefined)
+      unsupported.push('3-D bar gapDepth is preserved but not rendered');
+  } else if (String(config.type).endsWith('3d') && config.type !== 'surface3d') {
+    unsupported.push('3-D chart rendering is approximated by the 2-D chart backend');
+  }
+  unsupported.push(...surfaceFamilyDiagnostics(config));
   if (config.type === 'regionMap')
     unsupported.push('region map rendering uses placeholder geometry');
   if (config.type === 'treemap')
@@ -443,6 +779,12 @@ function unsupportedFeatureDiagnostics(
   }
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push(pivotFieldButtonDiagnostic(config));
+  for (const diagnostic of config.pivotProjection?.diagnostics ?? []) {
+    unsupported.push(
+      diagnostic.message ??
+        `pivot chart projection diagnostic: ${diagnostic.reason}`,
+    );
+  }
   if (!layout) {
     if (hasManualPlotLayout(config))
       unsupported.push('manual plot layout is preserved but not rendered');
@@ -457,6 +799,7 @@ function unsupportedFeatureDiagnostics(
     unsupported.push('chart data table is preserved but not rendered');
   if (hasPictureMarkers(config))
     unsupported.push('picture markers are preserved for export but rendered as standard symbols');
+  unsupported.push(...comboScatterSeriesDiagnostics(config, series));
   if (hasSourceLinkedDataLabelFormatWithoutModeledFormat(config))
     unsupported.push(
       'source-linked data label number formats are preserved but rendered with modeled fallback formatting',
@@ -466,12 +809,158 @@ function unsupportedFeatureDiagnostics(
       'of-pie series lines require secondary-plot geometry and are preserved for export only',
     );
   if (config.view3d)
-    unsupported.push('view3D camera/depth is preserved but rendered as a 2D approximation');
+    unsupported.push('view3D camera/depth is preserved but rendered as a 2-D approximation');
   if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
     unsupported.push('floor/sideWall/backWall surfaces are preserved but not rendered');
   unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
   unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
   return unsupported;
+}
+
+function snapshotPackageAuthority(
+  chart: ChartFloatingObject,
+): ResolvedChartSpecSnapshot['packageAuthority'] | undefined {
+  const authority = chart.ooxml?.standardChartExportAuthority;
+  const provenance = chart.ooxml?.standardChartProvenance;
+  if (!authority && !provenance) return undefined;
+
+  return {
+    source: authority?.packageOwner ?? provenance?.originalPath ?? 'standardChart',
+    fingerprint: authority?.projectionFingerprint ?? provenance?.projectionFingerprint,
+    status: packageAuthorityStatus(authority),
+    details: {
+      kind: 'standardChart',
+      validity: authority?.validity,
+      chartPartRevision: authority?.chartPartRevision,
+      packageOwner: authority?.packageOwner,
+      relationshipClosureCurrent: authority?.relationshipClosureCurrent,
+      staleReason: authority?.staleReason,
+      projectionSchemaVersion: provenance?.projectionSchemaVersion,
+      originalPath: provenance?.originalPath,
+      relsPath: provenance?.relsPath,
+      auxiliaryPaths: provenance?.auxiliaryPaths,
+      relationshipCount: provenance?.relationships?.length,
+    },
+  };
+}
+
+function packageAuthorityStatus(
+  authority: ChartFloatingObject['ooxml'] extends infer O
+    ? O extends { standardChartExportAuthority?: infer A }
+      ? A | undefined
+      : never
+    : never,
+): NonNullable<ResolvedChartSpecSnapshot['packageAuthority']>['status'] {
+  if (!authority) return 'unknown';
+  if (authority.validity === 'current')
+    return authority.relationshipClosureCurrent === false ? 'stale' : 'current';
+  if (authority.validity === 'unverified') return 'unknown';
+  return 'stale';
+}
+
+function packageAuthorityDiagnostics(chart: ChartFloatingObject): string[] {
+  const authority = chart.ooxml?.standardChartExportAuthority;
+  if (!authority) return [];
+  const status = packageAuthorityStatus(authority);
+  if (status !== 'stale') return [];
+  const validity = authority.validity ?? 'unknown';
+  const reason =
+    authority.staleReason ??
+    (authority.relationshipClosureCurrent === false
+      ? 'chart relationship graph is not closed'
+      : undefined);
+  return [
+    reason
+      ? `standard chart package authority is ${validity}: ${reason}`
+      : `standard chart package authority is ${validity}`,
+  ];
+}
+
+function importStatusUnsupportedDiagnostics(importStatus: unknown): string[] {
+  if (typeof importStatus !== 'object' || importStatus === null) return [];
+  const diagnostics = (importStatus as { diagnostics?: unknown }).diagnostics;
+  if (!Array.isArray(diagnostics)) return [];
+
+  const messages: string[] = [];
+  for (const diagnostic of diagnostics) {
+    if (typeof diagnostic !== 'object' || diagnostic === null) continue;
+    const message = (diagnostic as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) messages.push(message);
+  }
+  return Array.from(new Set(messages));
+}
+
+function barShapeDiagnostics(config: ChartConfig): string[] {
+  const shapes = new Set<string>();
+  if (config.barShape) shapes.add(config.barShape);
+  for (const series of config.series ?? []) {
+    if (series.barShape) shapes.add(series.barShape);
+  }
+  return Array.from(shapes);
+}
+
+function chartGapDepth(config: ChartConfig): number | undefined {
+  return finiteNumber(config.gapDepth) ?? findNumberField(config.extra, ['gapDepth', 'gap_depth']);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function findNumberField(value: unknown, keys: readonly string[], depth = 0): number | undefined {
+  if (depth > 16 || typeof value !== 'object' || value === null) return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNumberField(item, keys, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const found = finiteNumber(record[key]);
+    if (found !== undefined) return found;
+  }
+  for (const child of Object.values(record)) {
+    const found = findNumberField(child, keys, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function surfaceFamilyDiagnostics(config: ChartConfig): string[] {
+  const type = config.type;
+  const isSurfaceType =
+    type === 'surface' ||
+    type === 'surface3d' ||
+    type === 'surfaceWireframe' ||
+    type === 'surfaceTopView' ||
+    type === 'surfaceTopViewWireframe';
+  if (!isSurfaceType) return [];
+
+  const wireframe =
+    config.wireframe === true ||
+    type === 'surfaceWireframe' ||
+    type === 'surfaceTopViewWireframe';
+  if (wireframe) {
+    return ['surface wireframe rendering is not implemented; chart is preserved as a placeholder'];
+  }
+
+  const topView = config.surfaceTopView === true || type === 'surfaceTopView' || type === 'surface';
+  if (topView) {
+    return [
+      'contour/top-view surface rendering is not implemented; chart is preserved as a placeholder',
+    ];
+  }
+
+  if (type === 'surface3d') {
+    return [
+      '3-D surface chart rendering is not implemented; chart is preserved as a placeholder',
+    ];
+  }
+
+  return ['surface chart rendering is not implemented; chart is preserved as a placeholder'];
 }
 
 function hasManualPlotLayout(config: ChartConfig): boolean {
@@ -521,6 +1010,49 @@ function hasPictureMarkers(config: ChartConfig): boolean {
         series.points?.some((point) => point.markerStyle === 'picture'),
     ),
   );
+}
+
+function comboScatterSeriesDiagnostics(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): string[] {
+  const diagnostics: string[] = [];
+  if (config.type === 'combo') {
+    const xRoles = new Set(series.map((item) => item.xRole).filter(Boolean));
+    if (xRoles.size > 1) {
+      diagnostics.push(
+        'combo chart mixes category and quantitative x roles; layers are rendered with per-series x encodings where possible',
+      );
+    }
+  }
+
+  for (const item of series) {
+    if (item.type && item.renderLayerCount === 0) {
+      diagnostics.push(
+        `series ${item.sourceSeriesIndex} uses unsupported chart type "${item.type}" and is not rendered as a combo layer`,
+      );
+    }
+    if (
+      item.xRole === 'quantitative' &&
+      !item.categories.some((category, index) => typeof category === 'number' && item.values[index] !== null)
+    ) {
+      diagnostics.push(
+        `series ${item.sourceSeriesIndex} has no valid numeric x/y points for scatter rendering`,
+      );
+    }
+    if (
+      (item.type === 'scatter' || item.xRole === 'quantitative') &&
+      item.showLines === false &&
+      item.showMarkers === false &&
+      item.markerStyle !== 'picture'
+    ) {
+      diagnostics.push(
+        `series ${item.sourceSeriesIndex} has no visible line or marker channel`,
+      );
+    }
+  }
+
+  return diagnostics;
 }
 
 function hasSourceLinkedDataLabelFormatWithoutModeledFormat(config: ChartConfig): boolean {

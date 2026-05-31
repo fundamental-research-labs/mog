@@ -27,6 +27,7 @@ import {
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_TEXT_FIELD,
   LINE_SEGMENT_FIELD,
+  SERIES_INDEX_FIELD,
   STOCK_DIRECTION_FIELD,
 } from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
@@ -72,6 +73,18 @@ function makeData(seriesCount = 1): ChartData {
 
 const SINGLE_SERIES_DATA = makeData(1);
 const MULTI_SERIES_DATA = makeData(2);
+const STOCK_SERIES_DATA: ChartData = {
+  categories: ['Day1', 'Day2'],
+  series: [
+    {
+      name: 'Stock',
+      data: [
+        { x: 'Day1', y: 100, open: 95, high: 110, low: 90, close: 105 },
+        { x: 'Day2', y: 102, open: 105, high: 115, low: 98, close: 108 },
+      ],
+    },
+  ],
+};
 
 function expectRowContaining(row: Record<string, unknown>, expected: Record<string, unknown>): void {
   expect(row).toEqual(expect.objectContaining(expected));
@@ -429,20 +442,20 @@ describe('displayBlanksAs renderability', () => {
 // =============================================================================
 
 describe('buildMark - mark type mapping', () => {
-  const simpleMarkTypes: [ChartType, string][] = [
+  const simpleMarkTypes: [ChartType, string | MarkSpec][] = [
     ['bar', 'bar'],
     ['column', 'bar'],
     ['line', 'line'],
     ['area', 'area'],
-    ['scatter', 'point'],
-    ['bubble', 'point'],
+    ['scatter', { type: 'point', skipInvalidPositions: true }],
+    ['bubble', { type: 'point', skipInvalidPositions: true }],
     ['waterfall', 'bar'],
   ];
 
   it.each(simpleMarkTypes)('should map %s to mark type %s', (chartType, expectedMark) => {
     const config = makeConfig({ type: chartType });
     const mark = buildMark(config);
-    expect(mark).toBe(expectedMark);
+    expect(mark).toEqual(expectedMark);
   });
 
   it('should map funnel to bar mark with cornerRadius', () => {
@@ -1056,6 +1069,7 @@ describe('buildEncoding - legend config', () => {
     expect(encoding.color!.legend).toEqual({
       orient: 'right',
       title: null,
+      values: ['Series 1', 'Series 2'],
       labelFontSize: 18,
       labelColor: '#595959',
     });
@@ -1101,8 +1115,8 @@ describe('buildConfigSpec - colors', () => {
     expect(configSpec!.range).toEqual({ category: ['#ff0000', '#00ff00', '#0000ff'] });
   });
 
-  it('should return undefined when no colors and no subType', () => {
-    const config = makeConfig({});
+  it('should return undefined when no colors, no subType, and no chart-specific config', () => {
+    const config = makeConfig({ type: 'line' });
     const configSpec = buildConfigSpec(config);
     expect(configSpec).toBeUndefined();
   });
@@ -1343,18 +1357,27 @@ describe('buildMark - scatter', () => {
   it('should return point for basic scatter', () => {
     const config = makeConfig({ type: 'scatter' });
     const mark = buildMark(config);
-    expect(mark).toBe('point');
+    expect(mark).toEqual({ type: 'point', skipInvalidPositions: true });
   });
 
   it('should return line with point=true when showLines', () => {
-    const config = makeConfig({ type: 'scatter', showLines: true });
+    const config = makeConfig({
+      type: 'scatter',
+      showLines: true,
+      series: [{ showMarkers: true }],
+    });
     const mark = buildMark(config) as MarkSpec;
     expect(mark.type).toBe('line');
     expect(mark.point).toBe(true);
   });
 
   it('should return line with monotone interpolation when showLines + smoothLines', () => {
-    const config = makeConfig({ type: 'scatter', showLines: true, smoothLines: true });
+    const config = makeConfig({
+      type: 'scatter',
+      showLines: true,
+      smoothLines: true,
+      series: [{ showMarkers: true }],
+    });
     const mark = buildMark(config) as MarkSpec;
     expect(mark.type).toBe('line');
     expect(mark.interpolate).toBe('monotone');
@@ -1497,10 +1520,14 @@ describe('buildComboLayers', () => {
       expect(layers[i].transform).toHaveLength(1);
       const filterTransform = layers[i].transform![0] as {
         type: 'filter';
-        filter: { field: string; equal: string };
+        filter: { field: string; equal?: number; oneOf?: number[] };
       };
-      expect(filterTransform.filter.field).toBe('series');
-      expect(filterTransform.filter.equal).toBe(MULTI_SERIES_DATA.series[i].name);
+      expect(filterTransform.filter.field).toBe(SERIES_INDEX_FIELD);
+      if (filterTransform.filter.oneOf) {
+        expect(filterTransform.filter.oneOf).toContain(i);
+      } else {
+        expect(filterTransform.filter.equal).toBe(i);
+      }
     }
   });
 
@@ -1512,8 +1539,9 @@ describe('buildComboLayers', () => {
     const data = makeData(1);
     const layers = buildComboLayers(config, data, []);
     const mark = layers[0].mark as MarkSpec;
+    const markerLayer = layers.find((layer) => (layer.mark as MarkSpec).type === 'point');
     expect(mark.strokeWidth).toBe(6);
-    expect(mark.point).toBe(true);
+    expect(markerLayer).toBeDefined();
   });
 });
 
@@ -1683,6 +1711,7 @@ describe('configToSpec - integration', () => {
     expect(spec.encoding!.color!.legend).toEqual({
       orient: 'top',
       title: null,
+      values: ['Series 1', 'Series 2'],
       symbolType: 'line',
     });
   });
@@ -1880,7 +1909,9 @@ describe('buildComboLayers - enhanced', () => {
       ],
     });
     const layers = buildComboLayers(config, MULTI_SERIES_DATA, []);
-    expect((layers[0].mark as MarkSpec).color).toBe('#ff0000');
+    expect(layers[0].encoding?.color?.scale).toEqual({
+      range: ['#ff0000', '#0000ff'],
+    });
     expect((layers[1].mark as MarkSpec).color).toBe('#0000ff');
   });
 
@@ -1910,8 +1941,10 @@ describe('buildComboLayers - per-series overrides', () => {
       series: [{ type: 'line', markerSize: 50 }],
     });
     const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
-    const mark = layers[0].mark as MarkSpec;
-    expect(mark.point).toEqual({ size: 50, filled: true });
+    const markerLayer = layers.find((layer) => (layer.mark as MarkSpec).type === 'point');
+    const mark = markerLayer?.mark as MarkSpec | undefined;
+    expect(markerLayer).toBeDefined();
+    expect(mark!.point).toEqual({ size: 50, filled: true });
   });
 
   it('should apply lineWidth as strokeWidth', () => {
@@ -2088,36 +2121,35 @@ describe('buildWaterfallTransforms', () => {
 describe('configToSpec - stock chart', () => {
   it('should produce a layered spec for stock charts', () => {
     const config = makeConfig({ type: 'stock' });
-    const spec = configToSpec(config, SINGLE_SERIES_DATA);
+    const spec = configToSpec(config, STOCK_SERIES_DATA);
     expect(spec.layer).toBeDefined();
     expect(spec.layer!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('should have high-low and open-close rule layers', () => {
-    const config = makeConfig({ type: 'stock' });
-    const spec = configToSpec(config, SINGLE_SERIES_DATA);
+  it('should have high-low rule and close tick layers for HLC charts', () => {
+    const config = makeConfig({ type: 'stock', subType: 'hlc' });
+    const spec = configToSpec(config, STOCK_SERIES_DATA);
     const markTypes = spec.layer!.map((l) => (l.mark as MarkSpec).type);
-    expect(markTypes).toEqual(['rule', 'rule']);
+    expect(markTypes).toEqual(['rule', 'tick']);
   });
 });
 
 describe('buildStockLayers', () => {
-  it('should produce two layers (wick + body)', () => {
+  it('should produce two HLC layers (wick + close tick)', () => {
     const config = makeConfig({ type: 'stock' });
-    const layers = buildStockLayers(config, SINGLE_SERIES_DATA, []);
+    const layers = buildStockLayers(config, STOCK_SERIES_DATA, []);
     expect(layers).toHaveLength(2);
     expect((layers[0].mark as MarkSpec).type).toBe('rule');
-    expect((layers[1].mark as MarkSpec).type).toBe('rule');
+    expect((layers[1].mark as MarkSpec).type).toBe('tick');
   });
 });
 
 describe('configToSpec - funnel chart', () => {
-  it('should produce a bar mark with cornerRadius for funnel', () => {
+  it('should produce a rect layer for funnel', () => {
     const config = makeConfig({ type: 'funnel' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
-    const mark = spec.mark as MarkSpec;
-    expect(mark.type).toBe('bar');
-    expect(mark.cornerRadius).toBe(2);
+    const mark = spec.layer?.[0]?.mark as MarkSpec;
+    expect(mark.type).toBe('rect');
   });
 });
 
@@ -2555,14 +2587,14 @@ describe('configToSpec -> compile round-trip: mark verification', () => {
 
   it('stock (hlc): produces marks from layered spec', () => {
     const config = makeConfig({ type: 'stock', subType: 'hlc' });
-    const spec = configToSpec(config, richSingle);
+    const spec = configToSpec(config, STOCK_SERIES_DATA);
     const result = compile(spec, undefined, { width: 600, height: 400 });
     expect(result.marks.length).toBeGreaterThan(0);
   });
 
   it('stock (ohlc): produces marks from layered spec', () => {
     const config = makeConfig({ type: 'stock', subType: 'ohlc' });
-    const spec = configToSpec(config, richSingle);
+    const spec = configToSpec(config, STOCK_SERIES_DATA);
     const result = compile(spec, undefined, { width: 600, height: 400 });
     expect(result.marks.length).toBeGreaterThan(0);
   });
@@ -2659,6 +2691,7 @@ describe('configToSpec dropped fields', () => {
 
     it('does not set explicit scale type for category/value axis types', () => {
       const config = makeConfig({
+        type: 'line',
         axis: {
           xAxis: { type: 'category' },
           yAxis: { type: 'value' },
@@ -2667,9 +2700,9 @@ describe('configToSpec dropped fields', () => {
 
       const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
 
-      // No scale should be set for default axis types
-      expect(encoding.x?.scale).toBeUndefined();
-      expect(encoding.y?.scale).toBeUndefined();
+      // Default category/value axis types should not force an explicit scale type.
+      expect(encoding.x?.scale?.type).toBeUndefined();
+      expect(encoding.y?.scale?.type).toBeUndefined();
     });
 
     it('combines log scale type with domain min/max', () => {

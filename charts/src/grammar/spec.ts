@@ -370,10 +370,14 @@ export interface LegendSpec {
   titleFontFamily?: string;
   titleColor?: string;
   orient?: LegendOrient;
+  /** Whether the legend should be drawn over the plot area without reserving space. */
+  overlay?: boolean;
   direction?: 'horizontal' | 'vertical';
   labelFontSize?: number;
   labelFontFamily?: string;
   labelColor?: string;
+  /** Explicit legend entries to render when they differ from the backing scale domain. */
+  values?: string[];
   /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
   reverse?: boolean;
   symbolSize?: number;
@@ -643,6 +647,8 @@ export interface MarkSpec {
   effects?: EffectSpec;
   /** Show points on lines */
   point?: boolean | { color?: string; size?: number; filled?: boolean };
+  /** Skip point marks whose scaled x/y positions are not finite. */
+  skipInvalidPositions?: boolean;
   /** Tick orientation when a tick mark has both x and y encodings. */
   orient?: 'horizontal' | 'vertical';
   /** Inner radius for arc marks (0-1 ratio or pixels) */
@@ -738,6 +744,31 @@ export interface ManualLayoutSpec {
   h?: number;
 }
 
+export type BarGeometryGrouping = 'standard' | 'clustered' | 'stacked' | 'percentStacked';
+
+export type BarGeometryOrientation = 'horizontal' | 'vertical';
+
+export interface BarGeometrySpec {
+  /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
+  orientation?: BarGeometryOrientation;
+  /** Excel/OOXML bar grouping mode used for category slot layout. */
+  grouping: BarGeometryGrouping;
+  /** Source gap width when explicitly supplied by the chart config. */
+  sourceGapWidth?: number;
+  /** Source overlap when explicitly supplied by the chart config. */
+  sourceOverlap?: number;
+  /** Render-effective Excel gap width, clamped to 0..500. */
+  gapWidth: number;
+  /** Render-effective Excel overlap, clamped to -100..100. */
+  overlap: number;
+  /** Whether the source gap width was outside Excel's render range. */
+  gapWidthClamped?: boolean;
+  /** Whether the source overlap was outside Excel's render range. */
+  overlapClamped?: boolean;
+  /** Stable series indices owned by this geometry group when known. */
+  seriesIndices?: number[];
+}
+
 /**
  * Chart configuration options.
  */
@@ -748,6 +779,8 @@ export interface ConfigSpec {
   gapWidth?: number;
   /** Excel/OOXML intra-category series overlap percentage (-100 to 100) */
   overlap?: number;
+  /** Render-normalized Excel bar/column category slot geometry. */
+  barGeometry?: BarGeometrySpec;
   /** Background color */
   background?: string;
   /** Paint-aware chart frame rendered behind all chart content. */

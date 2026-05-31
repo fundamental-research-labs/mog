@@ -3,7 +3,9 @@ import { formatDateSerial } from './date-serial';
 
 type FormatSection = {
   raw: string;
+  index: number;
   condition?: FormatCondition;
+  color?: ExcelNumberFormatColor;
 };
 
 type FormatCondition = {
@@ -11,28 +13,154 @@ type FormatCondition = {
   value: number;
 };
 
+export type ExcelNumberFormatSection =
+  | 'general'
+  | 'positive'
+  | 'negative'
+  | 'zero'
+  | 'text'
+  | 'conditional';
+
+export type ExcelNumberFormatColor =
+  | { kind: 'named'; name: ExcelNumberFormatColorName; color: string }
+  | { kind: 'indexed'; name: `Color${number}`; index: number; color: string };
+
+export type ExcelNumberFormatColorName =
+  | 'Black'
+  | 'Blue'
+  | 'Cyan'
+  | 'Green'
+  | 'Magenta'
+  | 'Red'
+  | 'White'
+  | 'Yellow';
+
+export interface ExcelNumberFormatResult {
+  text: string;
+  color?: string;
+  colorName?: string;
+  colorIndex?: number;
+  section?: ExcelNumberFormatSection;
+  sectionIndex?: number;
+}
+
 const CONDITION_RE = /^\s*\[(<=|>=|<>|<|>|=)\s*(-?\d+(?:\.\d+)?)\]/;
 const COLOR_OR_LOCALE_RE = /^\s*\[(?!<=|>=|<>|<|>|=)[^\]]+\]/;
+const LEADING_BRACKET_DIRECTIVE_RE = /^\s*\[([^\]]+)\]/;
+
+const NAMED_FORMAT_COLORS: Record<string, ExcelNumberFormatColorName> = {
+  BLACK: 'Black',
+  BLUE: 'Blue',
+  CYAN: 'Cyan',
+  GREEN: 'Green',
+  MAGENTA: 'Magenta',
+  RED: 'Red',
+  WHITE: 'White',
+  YELLOW: 'Yellow',
+};
+
+const NAMED_FORMAT_COLOR_HEX: Record<ExcelNumberFormatColorName, string> = {
+  Black: '#000000',
+  Blue: '#0000FF',
+  Cyan: '#00FFFF',
+  Green: '#008000',
+  Magenta: '#FF00FF',
+  Red: '#FF0000',
+  White: '#FFFFFF',
+  Yellow: '#FFFF00',
+};
+
+const EXCEL_INDEXED_FORMAT_COLORS = [
+  '#000000',
+  '#FFFFFF',
+  '#FF0000',
+  '#00FF00',
+  '#0000FF',
+  '#FFFF00',
+  '#FF00FF',
+  '#00FFFF',
+  '#800000',
+  '#008000',
+  '#000080',
+  '#808000',
+  '#800080',
+  '#008080',
+  '#C0C0C0',
+  '#808080',
+  '#9999FF',
+  '#993366',
+  '#FFFFCC',
+  '#CCFFFF',
+  '#660066',
+  '#FF8080',
+  '#0066CC',
+  '#CCCCFF',
+  '#000080',
+  '#FF00FF',
+  '#FFFF00',
+  '#00FFFF',
+  '#800080',
+  '#800000',
+  '#008080',
+  '#0000FF',
+  '#00CCFF',
+  '#CCFFFF',
+  '#CCFFCC',
+  '#FFFF99',
+  '#99CCFF',
+  '#FF99CC',
+  '#CC99FF',
+  '#FFCC99',
+  '#3366FF',
+  '#33CCCC',
+  '#99CC00',
+  '#FFCC00',
+  '#FF9900',
+  '#FF6600',
+  '#666699',
+  '#969696',
+  '#003366',
+  '#339966',
+  '#003300',
+  '#333300',
+  '#993300',
+  '#993366',
+  '#333399',
+  '#333333',
+];
 
 export function formatExcelValue(value: unknown, formatCode?: string): string {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toLocaleDateString();
+  return formatExcelValueResult(value, formatCode).text;
+}
+
+export function formatExcelValueResult(value: unknown, formatCode?: string): ExcelNumberFormatResult {
+  if (value === null || value === undefined) return { text: '', section: 'general' };
+  if (value instanceof Date) return { text: value.toLocaleDateString(), section: 'general' };
 
   const numericValue = numericScalar(value);
-  if (!Number.isFinite(numericValue)) return String(value);
+  if (!Number.isFinite(numericValue)) return { text: String(value), section: 'general' };
 
   const normalized = formatCode?.trim();
-  if (!normalized || normalized === 'General') return formatGeneralNumber(numericValue);
-
-  const formatType = detectFormatType(normalized);
-  if (formatType === 'date' || formatType === 'time') {
-    const formatted = formatDateSerial(numericValue, firstSection(normalized));
-    return formatted || String(value);
+  if (!normalized || normalized === 'General') {
+    return { text: formatGeneralNumber(numericValue), section: 'general' };
   }
 
-  const section = selectSection(numericValue, normalized);
-  if (!section) return formatGeneralNumber(numericValue);
-  return formatNumberSection(numericValue, section.raw);
+  const formatType = detectFormatType(normalized);
+  const sections = splitSections(normalized).map(parseSection);
+  const section = selectSection(numericValue, sections);
+  if (!section) return { text: formatGeneralNumber(numericValue), section: 'general' };
+
+  if (formatType === 'date' || formatType === 'time') {
+    const formatted = formatDateSerial(numericValue, section.raw);
+    return formatResult(formatted || String(value), section, numericValue, sections.length);
+  }
+
+  return formatResult(
+    formatNumberSection(numericValue, section.raw),
+    section,
+    numericValue,
+    sections.length,
+  );
 }
 
 function numericScalar(value: unknown): number {
@@ -47,12 +175,7 @@ function formatGeneralNumber(value: number): string {
   return Number(value.toPrecision(15)).toString();
 }
 
-function firstSection(formatCode: string): string {
-  return splitSections(formatCode)[0] ?? formatCode;
-}
-
-function selectSection(value: number, formatCode: string): FormatSection | undefined {
-  const sections = splitSections(formatCode).map(parseSection);
+function selectSection(value: number, sections: FormatSection[]): FormatSection | undefined {
   const conditional = sections.find((section) => section.condition && matchesCondition(value, section.condition));
   if (conditional) return conditional;
 
@@ -91,14 +214,37 @@ function splitSections(formatCode: string): string[] {
   return sections;
 }
 
-function parseSection(raw: string): FormatSection {
+function parseSection(raw: string, index: number): FormatSection {
   let section = raw;
-  const conditionMatch = section.match(CONDITION_RE);
-  const condition = conditionMatch
-    ? { op: conditionMatch[1] as FormatCondition['op'], value: Number(conditionMatch[2]) }
-    : undefined;
-  if (conditionMatch) section = section.slice(conditionMatch[0].length);
-  return { raw: section, condition };
+  let condition: FormatCondition | undefined;
+  let color: ExcelNumberFormatColor | undefined;
+
+  while (true) {
+    const directiveMatch = section.match(LEADING_BRACKET_DIRECTIVE_RE);
+    if (!directiveMatch) break;
+
+    const conditionMatch = section.match(CONDITION_RE);
+    if (conditionMatch) {
+      condition ??= {
+        op: conditionMatch[1] as FormatCondition['op'],
+        value: Number(conditionMatch[2]),
+      };
+      section = section.slice(conditionMatch[0].length);
+      continue;
+    }
+
+    const parsedColor = parseFormatColorDirective(directiveMatch[1]);
+    if (!parsedColor) break;
+    color ??= parsedColor;
+    section = section.slice(directiveMatch[0].length);
+  }
+
+  return {
+    raw: section,
+    index,
+    ...(condition !== undefined ? { condition } : {}),
+    ...(color !== undefined ? { color } : {}),
+  };
 }
 
 function matchesCondition(value: number, condition: FormatCondition): boolean {
@@ -145,6 +291,58 @@ function formatNumberSection(value: number, section: string): string {
   });
 
   return applyNumberToPattern(stripped, numeric, isNegative);
+}
+
+function formatResult(
+  text: string,
+  section: FormatSection,
+  value: number,
+  sectionCount: number,
+): ExcelNumberFormatResult {
+  return {
+    text,
+    ...(section.color
+      ? {
+          color: section.color.color,
+          colorName: section.color.name,
+          ...(section.color.kind === 'indexed' ? { colorIndex: section.color.index } : {}),
+        }
+      : {}),
+    section: sectionName(section, value, sectionCount),
+    sectionIndex: section.index,
+  };
+}
+
+function sectionName(
+  section: FormatSection,
+  value: number,
+  sectionCount: number,
+): ExcelNumberFormatSection {
+  if (section.condition) return 'conditional';
+  if (sectionCount >= 4 && section.index === 3) return 'text';
+  if (sectionCount >= 3 && section.index === 2) return 'zero';
+  if (sectionCount >= 2 && section.index === 1) return 'negative';
+  if (value < 0 && sectionCount === 1) return 'negative';
+  if (value === 0) return 'zero';
+  return 'positive';
+}
+
+function parseFormatColorDirective(raw: string): ExcelNumberFormatColor | undefined {
+  const directive = raw.trim();
+  const named = NAMED_FORMAT_COLORS[directive.toUpperCase()];
+  if (named) {
+    return { kind: 'named', name: named, color: NAMED_FORMAT_COLOR_HEX[named] };
+  }
+
+  const indexed = directive.match(/^Color([1-9]|[1-4]\d|5[0-6])$/i);
+  if (!indexed) return undefined;
+  const index = Number(indexed[1]);
+  return {
+    kind: 'indexed',
+    name: `Color${index}`,
+    index,
+    color: EXCEL_INDEXED_FORMAT_COLORS[index - 1] ?? '#000000',
+  };
 }
 
 function stripDirectives(section: string): string {

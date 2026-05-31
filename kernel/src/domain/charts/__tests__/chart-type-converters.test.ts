@@ -10,7 +10,18 @@ import {
 
 describe('chart-type-converters', () => {
   it('narrows canonical and aliased chart type strings at the wire boundary', () => {
-    expect(wireChartTypeToConfig('funnel')).toEqual({ type: 'funnel', diagnostics: [] });
+    for (const type of [
+      'waterfall',
+      'treemap',
+      'sunburst',
+      'funnel',
+      'histogram',
+      'pareto',
+      'boxplot',
+      'regionMap',
+    ] as const) {
+      expect(wireChartTypeToConfig(type)).toEqual({ type, diagnostics: [] });
+    }
     expect(wireChartTypeToConfig('surface3D')).toEqual({
       type: 'surface3d',
       diagnostics: [
@@ -93,6 +104,58 @@ describe('chart-type-converters', () => {
           formatCode: '"FY3/"0',
           points: [{ idx: 7, formatCode: '"FY3/"0"E"' }],
         },
+      }),
+    );
+  });
+
+  it('round-trips projected series identity metadata on series configs', () => {
+    const seriesConfig = wireToSeriesConfig({
+      name: 'Projected',
+      sourceSeriesIndex: 5,
+      sourceSeriesKey: 'series:5',
+      visibleOrder: 1,
+      pivotSeriesKey: 'field:region',
+      pivotDataFieldIndex: 2,
+      projectionAuthority: 'pivotCache',
+      projectionDiagnostics: [
+        {
+          reason: 'allItemsFiltered',
+          severity: 'warning',
+          sourceSeriesIndex: 5,
+          sourceSeriesKey: 'series:5',
+          message: 'All items are filtered',
+        },
+      ],
+    });
+
+    expect(seriesConfig).toEqual(
+      expect.objectContaining({
+        sourceSeriesIndex: 5,
+        sourceSeriesKey: 'series:5',
+        visibleOrder: 1,
+        pivotSeriesKey: 'field:region',
+        pivotDataFieldIndex: 2,
+        projectionAuthority: 'pivotCache',
+        projectionDiagnostics: [
+          {
+            reason: 'allItemsFiltered',
+            severity: 'warning',
+            sourceSeriesIndex: 5,
+            sourceSeriesKey: 'series:5',
+            message: 'All items are filtered',
+          },
+        ],
+      }),
+    );
+    expect(seriesConfigToWire(seriesConfig)).toEqual(
+      expect.objectContaining({
+        sourceSeriesIndex: 5,
+        sourceSeriesKey: 'series:5',
+        visibleOrder: 1,
+        pivotSeriesKey: 'field:region',
+        pivotDataFieldIndex: 2,
+        projectionAuthority: 'pivotCache',
+        projectionDiagnostics: seriesConfig.projectionDiagnostics,
       }),
     );
   });

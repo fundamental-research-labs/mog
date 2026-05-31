@@ -900,6 +900,7 @@ export interface ChartData {
   titleVAlign?: string;
   titleShowShadow?: boolean;
   pivotOptions?: PivotChartOptionsData;
+  pivotProjection?: PivotChartProjectionData;
   bubble3dEffect?: boolean;
   wireframe?: boolean;
   surfaceTopView?: boolean;
@@ -1120,6 +1121,13 @@ export interface ChartSeriesData {
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
   filtered?: boolean;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  visibleOrder?: number;
+  pivotSeriesKey?: string;
+  pivotDataFieldIndex?: number;
+  projectionAuthority?: ChartSeriesProjectionAuthorityData;
+  projectionDiagnostics?: ChartSeriesProjectionDiagnosticData[];
   showShadow?: boolean;
   showConnectorLines?: boolean;
   leaderLineFormat?: ChartFormatData;
@@ -1139,6 +1147,18 @@ export interface ChartSeriesPointCachePointData {
   value: string;
   formatCode?: string;
 }
+
+export type ChartSeriesProjectionAuthorityData = "explicitSeries" | "liveRange" | "pivotCache" | "fallbackCache" | "literal" | "unavailable";
+
+export interface ChartSeriesProjectionDiagnosticData {
+  reason: ChartSeriesProjectionDiagnosticReasonData;
+  severity?: ChartStyleDiagnosticSeverityData;
+  sourceSeriesKey?: string;
+  sourceSeriesIndex?: number;
+  message?: string;
+}
+
+export type ChartSeriesProjectionDiagnosticReasonData = "unresolvedPivotSource" | "unsupportedPivotFeature" | "hiddenDataField" | "allItemsFiltered" | "noValueData" | "worksheetHiddenByPlotVisibleOnly" | "styleResolvedNoFillOrLine" | "staleMaterializedRange";
 
 export type ChartSeriesXRoleData = "category" | "quantitative";
 
@@ -1219,6 +1239,7 @@ export interface ChartSpec {
   titleVAlign?: string;
   titleShowShadow?: boolean;
   pivotOptions?: PivotChartOptionsData;
+  pivotProjection?: PivotChartProjectionData;
   view3d?: ChartView3DData;
   floorFormat?: ChartFormatData;
   sideWallFormat?: ChartFormatData;
@@ -3152,11 +3173,24 @@ export interface PivotCalculatedMeasureDescriptor {
   formula: string;
 }
 
+export type PivotChartCacheIdData = string | number;
+
 export interface PivotChartOptionsData {
   showAxisFieldButtons?: boolean;
   showLegendFieldButtons?: boolean;
   showReportFilterFieldButtons?: boolean;
   showValueFieldButtons?: boolean;
+}
+
+export interface PivotChartProjectionData {
+  sourceRef?: string;
+  pivotTableName?: string;
+  pivotCacheId?: PivotChartCacheIdData;
+  authority?: ChartSeriesProjectionAuthorityData;
+  expectedImportedSeriesCount?: number;
+  projectedSeriesCount?: number;
+  renderedSeriesCount?: number;
+  diagnostics?: ChartSeriesProjectionDiagnosticData[];
 }
 
 export interface PivotColumnHeader {

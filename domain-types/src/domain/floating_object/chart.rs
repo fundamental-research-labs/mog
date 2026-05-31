@@ -5,8 +5,8 @@ use crate::domain::chart::{
     AxisData, BoxplotConfigData, ChartDataTableData, ChartFormatData, ChartFormatStringData,
     ChartLineSettingsData, ChartSeriesData, ChartStyleContextData, ChartSubType, ChartType,
     ChartView3DData, DataLabelData, HierarchyChartConfigData, HistogramConfigData, LegendData,
-    PieSliceData, PivotChartOptionsData, RegionMapConfigData, SeriesOrientation, TrendlineData,
-    UpDownBarsData, WaterfallOptions,
+    PieSliceData, PivotChartOptionsData, PivotChartProjectionData, RegionMapConfigData,
+    SeriesOrientation, TrendlineData, UpDownBarsData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
 use crate::domain::drawings::ManualLayout;
@@ -139,6 +139,8 @@ pub struct ChartData {
     // ── Pivot chart options ──
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pivot_options: Option<PivotChartOptionsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_projection: Option<PivotChartProjectionData>,
 
     // ── Bubble / Surface / Theming ──
     /// Whether 3D effect is applied to bubble charts.

@@ -1,6 +1,11 @@
 import type { DataRow, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
-import { CATEGORY_FIELD, WATERFALL_END_FIELD, WATERFALL_TYPE_FIELD } from '../fields';
+import {
+  CATEGORY_FIELD,
+  WATERFALL_END_FIELD,
+  WATERFALL_START_FIELD,
+  WATERFALL_TYPE_FIELD,
+} from '../fields';
 import { buildWaterfallTransforms } from '../transforms';
 
 /**
@@ -26,6 +31,7 @@ export function buildWaterfallLayers(
     encoding: {
       x: { field: CATEGORY_FIELD, type: 'nominal' },
       y: { field: WATERFALL_END_FIELD, type: 'quantitative' },
+      y2: { field: WATERFALL_START_FIELD, type: 'quantitative' },
       color: {
         field: WATERFALL_TYPE_FIELD,
         type: 'nominal',

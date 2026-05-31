@@ -71,9 +71,56 @@ export function withHiddenSeriesFiltered(
   hiddenVisibility: HiddenCellVisibility,
 ): ChartConfig {
   if (!config.series?.length) return config;
-  const series = config.series.filter((_, index) => {
-    const valuesRange = resolvedRanges.seriesReferences[index]?.values?.range;
-    return !valuesRange || !isRangeFullyHidden(valuesRange, hiddenVisibility);
+  let changed = false;
+  const seriesReferencesBySourceIndex = new Map(
+    resolvedRanges.seriesReferences.map((reference) => [reference.index, reference]),
+  );
+  const series = config.series.flatMap((item, index) => {
+    const sourceSeriesIndex = sourceSeriesIndexForConfig(item, index);
+    const reference =
+      seriesReferencesBySourceIndex.get(sourceSeriesIndex) ??
+      resolvedRanges.seriesReferences[index];
+    const liveDimensionRanges = [
+      reference?.values?.range,
+      reference?.categories?.range,
+      reference?.bubbleSizes?.range,
+    ];
+    if (liveDimensionRanges.some((range) => range && isRangeFullyHidden(range, hiddenVisibility))) {
+      changed = true;
+      return [];
+    }
+    const sourceSeriesKey = sourceSeriesKeyForConfig(item, sourceSeriesIndex);
+    if (item.sourceSeriesIndex === sourceSeriesIndex && item.sourceSeriesKey === sourceSeriesKey) {
+      return [item];
+    }
+    changed = true;
+    return [{ ...item, sourceSeriesIndex, sourceSeriesKey }];
   });
-  return series.length === config.series.length ? config : { ...config, series };
+  return changed ? { ...config, series } : config;
+}
+
+function sourceSeriesIndexForConfig(
+  series: NonNullable<ChartConfig['series']>[number],
+  fallbackIndex: number,
+): number {
+  return typeof series.sourceSeriesIndex === 'number' &&
+    Number.isInteger(series.sourceSeriesIndex) &&
+    series.sourceSeriesIndex >= 0
+    ? series.sourceSeriesIndex
+    : fallbackIndex;
+}
+
+function sourceSeriesKeyForConfig(
+  series: NonNullable<ChartConfig['series']>[number],
+  fallbackIndex: number,
+): string {
+  if (series.sourceSeriesKey) return series.sourceSeriesKey;
+  if (series.pivotSeriesKey) return `pivot:${series.pivotSeriesKey}`;
+  if (typeof series.idx === 'number' && Number.isInteger(series.idx) && series.idx >= 0) {
+    return `idx:${series.idx}`;
+  }
+  if (typeof series.order === 'number' && Number.isInteger(series.order) && series.order >= 0) {
+    return `order:${series.order}`;
+  }
+  return `series:${fallbackIndex}`;
 }

@@ -803,6 +803,7 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,

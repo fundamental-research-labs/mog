@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 
+use crate::ImportObjectStatus;
 use crate::domain::chart::ChartType;
 use crate::domain::floating_object::*;
 use crate::domain::smartart::{SmartArtCategory, SmartArtDefinition};
 use crate::domain::text_effects::{
     LineDash, TextEffectConfig, TextEffectFill, TextEffectOutline, TextWarpPreset,
 };
-use crate::ImportObjectStatus;
 
 pub(super) fn make_common(id: &str, sheet_id: &str) -> FloatingObjectCommon {
     FloatingObjectCommon {

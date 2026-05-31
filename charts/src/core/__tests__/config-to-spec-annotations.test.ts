@@ -438,6 +438,33 @@ describe('configToSpec annotation layers', () => {
     expect(leaderLayer).toBeDefined();
   });
 
+  it('carries imported manual layouts into render layout hints', () => {
+    const data: ChartData = {
+      categories: ['A'],
+      series: [{ name: 'Revenue', data: [{ x: 'A', y: 10 }] }],
+    };
+    const config: ChartConfig = {
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      plotLayout: { layoutTarget: 'inner', xMode: 'factor', x: 0.12, w: 0.7 },
+      titleLayout: { xMode: 'edge', y: 0.04 },
+      legend: { show: true, layout: { layoutTarget: 'outer', yMode: 'factor', h: 0.2 } },
+    };
+
+    const spec = configToSpec(config, data);
+
+    expect(spec.config?.layoutHints).toEqual(
+      expect.objectContaining({
+        manualPlotArea: { layoutTarget: 'inner', xMode: 'factor', x: 0.12, w: 0.7 },
+        manualTitle: { xMode: 'edge', y: 0.04 },
+        manualLegend: { layoutTarget: 'outer', yMode: 'factor', h: 0.2 },
+      }),
+    );
+  });
+
   it('renders x error bars from xErrorBars defaults and preserves one-sided custom sources', () => {
     const data: ChartData = {
       categories: [1, 2],

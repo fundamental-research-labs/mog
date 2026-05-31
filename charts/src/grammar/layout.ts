@@ -9,7 +9,14 @@
  * Pure functions - no side effects.
  */
 
-import type { ChannelSpec, ChartSpec, EncodingSpec, Layout, LegendSpec } from './spec';
+import type {
+  ChannelSpec,
+  ChartSpec,
+  EncodingSpec,
+  Layout,
+  LegendSpec,
+  ManualLayoutSpec,
+} from './spec';
 
 // =============================================================================
 // Types
@@ -22,6 +29,13 @@ export interface LayoutDimensions {
   width: number;
   height: number;
 }
+
+type LayoutRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 /**
  * Default layout values.
@@ -73,10 +87,10 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
   const margin = calculateMargins(spec);
 
   // Calculate title area
-  const titleArea = calculateTitleArea(spec.title, width, margin.top);
+  const autoTitleArea = calculateTitleArea(spec.title, width, margin.top);
 
   // Adjust top margin for title
-  const adjustedMarginTop = titleArea ? titleArea.height + margin.top : margin.top;
+  const adjustedMarginTop = autoTitleArea ? autoTitleArea.height + margin.top : margin.top;
 
   const legendEncoding = legendEncodingForSpec(spec);
   const legendOrient = legendOrientForEncoding(legendEncoding);
@@ -84,19 +98,19 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom;
 
   // Calculate legend area
-  const legendArea = calculateLegendArea(legendEncoding, width, height, {
+  const autoLegendArea = calculateLegendArea(legendEncoding, width, height, {
     ...margin,
     bottom: adjustedMarginBottom,
   });
 
   // Adjust right margin for legend (if legend is on right)
   const adjustedMarginRight =
-    legendArea?.x === width - margin.right - (legendArea?.width || 0) - 10
-      ? margin.right + (legendArea?.width || 0) + 10
+    autoLegendArea?.x === width - margin.right - (autoLegendArea?.width || 0) - 10
+      ? margin.right + (autoLegendArea?.width || 0) + 10
       : margin.right;
 
   // Calculate plot area
-  const plotArea = {
+  const autoPlotArea = {
     x: margin.left,
     y: adjustedMarginTop,
     width: Math.max(DEFAULT_LAYOUT.minPlotSize, width - margin.left - adjustedMarginRight),
@@ -105,6 +119,25 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
       height - adjustedMarginTop - adjustedMarginBottom,
     ),
   };
+  const layoutHints = spec.config?.layoutHints;
+  const chartBounds = { x: 0, y: 0, width, height };
+  const plotArea =
+    applyManualLayout(layoutHints?.manualPlotArea, autoPlotArea, chartBounds, autoPlotArea, {
+      minWidth: DEFAULT_LAYOUT.minPlotSize,
+      minHeight: DEFAULT_LAYOUT.minPlotSize,
+    }) ?? autoPlotArea;
+  const titleArea = applyManualLayout(
+    layoutHints?.manualTitle,
+    autoTitleArea,
+    chartBounds,
+    plotArea,
+  );
+  const legendArea = applyManualLayout(
+    layoutHints?.manualLegend,
+    autoLegendArea,
+    chartBounds,
+    plotArea,
+  );
 
   return {
     width,
@@ -119,6 +152,100 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     title: titleArea,
     legend: legendArea,
   };
+}
+
+function applyManualLayout(
+  manualLayout: ManualLayoutSpec | undefined,
+  baseRect: LayoutRect | undefined,
+  chartBounds: LayoutRect,
+  innerTarget: LayoutRect,
+  options: { minWidth?: number; minHeight?: number } = {},
+): LayoutRect | undefined {
+  if (!baseRect) return undefined;
+  if (!manualLayout) return baseRect;
+
+  const target = manualLayout.layoutTarget === 'inner' ? innerTarget : chartBounds;
+  const x = manualCoordinate(manualLayout.x, target.x, target.width, baseRect.x);
+  const y = manualCoordinate(manualLayout.y, target.y, target.height, baseRect.y);
+  const width = manualDimension(
+    manualLayout.w,
+    manualLayout.wMode,
+    target.x,
+    target.width,
+    x,
+    baseRect.width,
+  );
+  const height = manualDimension(
+    manualLayout.h,
+    manualLayout.hMode,
+    target.y,
+    target.height,
+    y,
+    baseRect.height,
+  );
+
+  return clampRectToBounds(
+    { x, y, width, height },
+    chartBounds,
+    finiteManualValue(manualLayout.w) === undefined ? options.minWidth : undefined,
+    finiteManualValue(manualLayout.h) === undefined ? options.minHeight : undefined,
+  );
+}
+
+function manualCoordinate(
+  value: number | undefined,
+  targetOrigin: number,
+  targetSize: number,
+  fallback: number,
+): number {
+  const finite = finiteManualValue(value);
+  return finite === undefined ? fallback : targetOrigin + finite * targetSize;
+}
+
+function manualDimension(
+  value: number | undefined,
+  mode: ManualLayoutSpec['wMode'] | undefined,
+  targetOrigin: number,
+  targetSize: number,
+  start: number,
+  fallback: number,
+): number {
+  const finite = finiteManualValue(value);
+  if (finite === undefined) return fallback;
+  if (mode === 'edge') {
+    return targetOrigin + finite * targetSize - start;
+  }
+  return targetSize * finite;
+}
+
+function finiteManualValue(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clampRectToBounds(
+  rect: LayoutRect,
+  bounds: LayoutRect,
+  minWidth = 1,
+  minHeight = 1,
+): LayoutRect {
+  const width = clampSize(rect.width, bounds.width, minWidth);
+  const height = clampSize(rect.height, bounds.height, minHeight);
+  return {
+    x: clampNumber(rect.x, bounds.x, bounds.x + bounds.width - width),
+    y: clampNumber(rect.y, bounds.y, bounds.y + bounds.height - height),
+    width,
+    height,
+  };
+}
+
+function clampSize(value: number, max: number, min: number): number {
+  const finite = Number.isFinite(value) ? value : min;
+  return Math.min(Math.max(finite, Math.min(min, max)), max);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  const finite = Number.isFinite(value) ? value : min;
+  return Math.min(Math.max(finite, min), Math.max(min, max));
 }
 
 /**

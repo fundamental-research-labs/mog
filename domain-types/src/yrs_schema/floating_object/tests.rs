@@ -438,8 +438,8 @@ fn test_textbox_roundtrip() {
 fn test_chart_roundtrip() {
     use crate::domain::chart::{
         ChartColorMapOverrideData, ChartColorMappingData, ChartFormatStringData,
-        ChartStyleContextData, ChartStyleOwnerData, ChartSubType, ChartType,
-        PivotChartOptionsData, SeriesOrientation,
+        ChartStyleContextData, ChartStyleOwnerData, ChartSubType, ChartType, PivotChartOptionsData,
+        SeriesOrientation,
     };
     use crate::domain::conditional_format::CellIdRange;
 
@@ -475,12 +475,15 @@ fn test_chart_roundtrip() {
                 color: None,
                 values: None,
                 value_cache: None,
+                value_source_kind: None,
                 categories: None,
                 category_cache: None,
+                category_source_kind: None,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size: None,
                 bubble_size_cache: None,
+                bubble_size_source_kind: None,
                 smooth: None,
                 explosion: None,
                 invert_if_negative: None,

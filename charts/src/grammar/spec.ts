@@ -722,6 +722,22 @@ export interface ChartFrameSpec {
   diagnostics?: string[];
 }
 
+export type ManualLayoutTargetSpec = 'inner' | 'outer';
+
+export type ManualLayoutModeSpec = 'edge' | 'factor';
+
+export interface ManualLayoutSpec {
+  layoutTarget?: ManualLayoutTargetSpec;
+  xMode?: ManualLayoutModeSpec;
+  yMode?: ManualLayoutModeSpec;
+  wMode?: ManualLayoutModeSpec;
+  hMode?: ManualLayoutModeSpec;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
 /**
  * Chart configuration options.
  */
@@ -765,6 +781,9 @@ export interface ConfigSpec {
     /** @deprecated Use side-specific y-axis label widths. */
     yAxisLabelWidth?: number;
     bottomMargin?: number;
+    manualPlotArea?: ManualLayoutSpec;
+    manualTitle?: ManualLayoutSpec;
+    manualLegend?: ManualLayoutSpec;
   };
 }
 

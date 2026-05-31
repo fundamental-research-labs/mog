@@ -420,6 +420,12 @@ fn project_chart_ex_series(
 
             push_formula(formulas, categories.as_deref());
             push_formula(formulas, values.as_deref());
+            let value_source_kind = values
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+            let category_source_kind = categories
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
 
             Some(ChartSeriesData {
                 name: chart_ex_text_text(series.tx.as_ref())
@@ -428,12 +434,15 @@ fn project_chart_ex_series(
                 color: None,
                 values,
                 value_cache: None,
+                value_source_kind,
                 categories,
                 category_cache: None,
+                category_source_kind,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size: None,
                 bubble_size_cache: None,
+                bubble_size_source_kind: None,
                 smooth: None,
                 explosion: None,
                 invert_if_negative: None,
@@ -1472,12 +1481,17 @@ mod tests {
             color: None,
             values: values.map(str::to_string),
             value_cache: None,
+            value_source_kind: values
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
             categories: categories.map(str::to_string),
             category_cache: None,
+            category_source_kind: categories
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
             category_levels: None,
             category_label_format: None,
             bubble_size: None,
             bubble_size_cache: None,
+            bubble_size_source_kind: None,
             smooth: None,
             explosion: None,
             invert_if_negative: None,
@@ -1942,14 +1956,18 @@ mod tests {
             assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
             assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
             assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/US" && row.value == Some(10.0))
+            );
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/CA" && row.value == Some(20.0))
+            );
             assert_eq!(
                 projected.import_status.unwrap().renderability,
                 domain_types::ImportRenderability::NotRenderable

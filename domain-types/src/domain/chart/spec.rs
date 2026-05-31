@@ -1,8 +1,8 @@
 use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::drawings::ManualLayout;
 use crate::ImportObjectStatus;
+use crate::domain::drawings::ManualLayout;
 
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
@@ -10,9 +10,9 @@ use super::floating_object::{
 };
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
-    ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData, ChartSubType,
-    ChartStyleContextData, ChartType, ChartView3DData, DataLabelData, LegendData, ObjectSize,
-    StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
+    ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData,
+    ChartStyleContextData, ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData,
+    ObjectSize, StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
 };
 use super::{
     BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,

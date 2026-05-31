@@ -1116,6 +1116,22 @@ export interface ResolvedChartSeriesSnapshot {
   dataHash: string;
 }
 
+/** Normalized top-level chart layout rectangle in chart-relative coordinates. */
+export interface ResolvedChartLayoutRectSnapshot {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Final top-level chart layout regions after chart grammar compilation. */
+export interface ResolvedChartLayoutSnapshot {
+  plotArea: ResolvedChartLayoutRectSnapshot;
+  legend?: ResolvedChartLayoutRectSnapshot;
+  title?: ResolvedChartLayoutRectSnapshot;
+  dataLabels?: ResolvedChartLayoutRectSnapshot;
+}
+
 export interface ResolvedChartSpecSnapshot {
   schemaVersion: 1;
   chartId: string;
@@ -1156,6 +1172,7 @@ export interface ResolvedChartSpecSnapshot {
     };
     series: ResolvedChartSeriesSnapshot[];
     categories: Array<string | number | null>;
+    layout?: ResolvedChartLayoutSnapshot;
     plot: {
       displayBlanksAs?: 'gap' | 'zero' | 'span';
       plotVisibleOnly?: boolean;

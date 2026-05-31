@@ -143,13 +143,16 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     let display_blanks_as = chart.disp_blanks_as.map(|d| d.to_ooxml().to_string());
     let plot_visible_only = chart.plot_vis_only;
-    let chart_style_context = cs
-        .clr_map_ovr
-        .as_ref()
-        .map(|color_map_override| domain_types::ChartStyleContextData {
-            color_map_override: Some(color_map_override.into()),
-            ..Default::default()
-        });
+    let chart_style_context = extract_chart_style_context(
+        cs,
+        chart_format.as_ref(),
+        plot_format.as_ref(),
+        title_format.as_ref(),
+        title_rich_text.as_deref(),
+        legend.as_ref(),
+        axes.as_ref(),
+        &series,
+    );
     let import_status = match &chart_type {
         domain_types::ChartType::Unknown(raw) => chart_import_status_for_unsupported_chart_type(
             raw,
@@ -434,6 +437,145 @@ fn extract_title_rich_text(
     }
 }
 
+fn extract_chart_style_context(
+    cs: &ooxml_types::charts::ChartSpace,
+    chart_format: Option<&domain_types::chart::ChartFormatData>,
+    plot_format: Option<&domain_types::chart::ChartFormatData>,
+    title_format: Option<&domain_types::chart::ChartFormatData>,
+    title_rich_text: Option<&[domain_types::chart::ChartFormatStringData]>,
+    legend: Option<&domain_types::chart::LegendData>,
+    axes: Option<&domain_types::chart::AxisData>,
+    series: &[domain_types::chart::ChartSeriesData],
+) -> Option<domain_types::ChartStyleContextData> {
+    let mut context = domain_types::ChartStyleContextData {
+        color_map_override: cs.clr_map_ovr.as_ref().map(Into::into),
+        ..Default::default()
+    };
+
+    push_style_owner(
+        &mut context.owners,
+        "chartArea",
+        "c:chartSpace/c:spPr|c:chartSpace/c:txPr",
+        chart_format,
+        None,
+    );
+    push_style_owner(
+        &mut context.owners,
+        "plotArea",
+        "c:chartSpace/c:chart/c:plotArea/c:spPr",
+        plot_format,
+        None,
+    );
+    push_style_owner(
+        &mut context.owners,
+        "title",
+        "c:chartSpace/c:chart/c:title",
+        title_format,
+        title_rich_text,
+    );
+
+    if let Some(legend) = legend {
+        push_style_owner(
+            &mut context.owners,
+            "legend",
+            "c:chartSpace/c:chart/c:legend",
+            legend.format.as_ref(),
+            None,
+        );
+    }
+
+    if let Some(axes) = axes {
+        push_axis_style_owner(
+            &mut context.owners,
+            "categoryAxis",
+            "c:chartSpace/c:chart/c:plotArea/c:catAx|c:dateAx",
+            axes.category_axis.as_ref(),
+        );
+        push_axis_style_owner(
+            &mut context.owners,
+            "valueAxis",
+            "c:chartSpace/c:chart/c:plotArea/c:valAx",
+            axes.value_axis.as_ref(),
+        );
+        push_axis_style_owner(
+            &mut context.owners,
+            "secondaryCategoryAxis",
+            "c:chartSpace/c:chart/c:plotArea/c:catAx[secondary]|c:dateAx[secondary]",
+            axes.secondary_category_axis.as_ref(),
+        );
+        push_axis_style_owner(
+            &mut context.owners,
+            "secondaryValueAxis",
+            "c:chartSpace/c:chart/c:plotArea/c:valAx[secondary]",
+            axes.secondary_value_axis.as_ref(),
+        );
+        push_axis_style_owner(
+            &mut context.owners,
+            "seriesAxis",
+            "c:chartSpace/c:chart/c:plotArea/c:serAx",
+            axes.series_axis.as_ref(),
+        );
+    }
+
+    for (index, series) in series.iter().enumerate() {
+        push_style_owner(
+            &mut context.owners,
+            &format!("series({index})"),
+            "c:chartSpace/c:chart/c:plotArea/*/c:ser",
+            series.format.as_ref(),
+            None,
+        );
+    }
+
+    if context.color_map_override.is_none()
+        && context.diagnostics.is_empty()
+        && context.owners.is_empty()
+    {
+        None
+    } else {
+        Some(context)
+    }
+}
+
+fn push_axis_style_owner(
+    owners: &mut Vec<domain_types::ChartStyleOwnerData>,
+    owner_key: &str,
+    source_path: &str,
+    axis: Option<&domain_types::chart::SingleAxisData>,
+) {
+    let Some(axis) = axis else {
+        return;
+    };
+
+    push_style_owner(owners, owner_key, source_path, axis.format.as_ref(), None);
+}
+
+fn push_style_owner(
+    owners: &mut Vec<domain_types::ChartStyleOwnerData>,
+    owner_key: &str,
+    source_path: &str,
+    format: Option<&domain_types::chart::ChartFormatData>,
+    rich_text: Option<&[domain_types::chart::ChartFormatStringData]>,
+) {
+    let rich_text = rich_text
+        .filter(|runs| !runs.is_empty())
+        .map(|runs| runs.to_vec());
+
+    if format.is_none() && rich_text.is_none() {
+        return;
+    }
+
+    owners.push(domain_types::ChartStyleOwnerData {
+        owner_key: owner_key.to_string(),
+        source_path: Some(source_path.to_string()),
+        edit_owner_id: None,
+        format: format.cloned(),
+        rich_text,
+        diagnostics: Vec::new(),
+        imported_drawing_ml: None,
+    });
+}
+
 /// Extract sub-type from a chart type config.
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
@@ -493,8 +635,9 @@ fn extract_scalar_fields_from_config(
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, Chart as OoxmlChart, ChartGroup, ChartSpace, ChartText, ChartType,
-        ChartTypeConfig, LineChartConfig, PlotArea, Title,
+        AreaChartConfig, AxisType, Chart as OoxmlChart, ChartAxis, ChartAxisPosition, ChartGroup,
+        ChartSeries, ChartSpace, ChartText, ChartType, ChartTypeConfig, Legend, LineChartConfig,
+        PlotArea, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -555,6 +698,50 @@ mod tests {
             raw_chart_type_attr: None,
             raw_chart_element_name: Some(raw_element_name.to_string()),
             raw_chart_group_xml: Some(format!("<c:{raw_element_name}/>")),
+        }
+    }
+
+    fn owner<'a>(
+        context: &'a domain_types::ChartStyleContextData,
+        owner_key: &str,
+    ) -> &'a domain_types::ChartStyleOwnerData {
+        context
+            .owners
+            .iter()
+            .find(|owner| owner.owner_key == owner_key)
+            .unwrap_or_else(|| panic!("expected owner {owner_key}"))
+    }
+
+    fn solid_fill_sp_pr(hex: &str) -> ooxml_types::charts::ShapeProperties {
+        let xml = format!(
+            r#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:solidFill><a:srgbClr val="{hex}"/></a:solidFill>
+            </c:spPr>"#
+        );
+        crate::domain::charts::parse_shape_properties(xml.as_bytes())
+    }
+
+    fn tx_pr_with_font_size(size: u32) -> ooxml_types::drawings::TextBody {
+        let xml = format!(
+            r#"<c:txPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:pPr><a:defRPr sz="{size}"/></a:pPr>
+                </a:p>
+            </c:txPr>"#
+        );
+        crate::domain::charts::parse_text_body(xml.as_bytes())
+    }
+
+    fn format_solid_hex(format: &domain_types::chart::ChartFormatData) -> Option<&str> {
+        match format.fill.as_ref()? {
+            domain_types::chart::ChartFillData::Solid {
+                color: domain_types::chart::ChartColorData::Hex(hex),
+                ..
+            } => Some(hex.as_str()),
+            _ => None,
         }
     }
 
@@ -689,13 +876,15 @@ mod tests {
     #[test]
     fn color_map_override_projects_to_style_context() {
         let cs = ChartSpace {
-            clr_map_ovr: Some(ooxml_types::themes::ColorMappingOverride::OverrideClrMapping(
-                ooxml_types::themes::ColorMapping {
-                    bg1: ooxml_types::themes::ColorSchemeIndex::Dk2,
-                    tx1: ooxml_types::themes::ColorSchemeIndex::Accent2,
-                    ..Default::default()
-                },
-            )),
+            clr_map_ovr: Some(
+                ooxml_types::themes::ColorMappingOverride::OverrideClrMapping(
+                    ooxml_types::themes::ColorMapping {
+                        bg1: ooxml_types::themes::ColorSchemeIndex::Dk2,
+                        tx1: ooxml_types::themes::ColorSchemeIndex::Accent2,
+                        ..Default::default()
+                    },
+                ),
+            ),
             ..Default::default()
         };
 
@@ -716,6 +905,125 @@ mod tests {
         };
         assert_eq!(mapping.bg1.as_deref(), Some("Dk2"));
         assert_eq!(mapping.tx1.as_deref(), Some("Accent2"));
+    }
+
+    #[test]
+    fn imported_formatting_projects_to_style_context_owners() {
+        let title_rich_text = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:r>
+                        <a:rPr b="1"/>
+                        <a:t>Owner Title</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let cs = ChartSpace {
+            sp_pr: Some(solid_fill_sp_pr("111111")),
+            chart: OoxmlChart {
+                title: Some(Title {
+                    tx: Some(ChartText::Rich(title_rich_text)),
+                    sp_pr: Some(solid_fill_sp_pr("333333")),
+                    ..Default::default()
+                }),
+                legend: Some(Legend {
+                    tx_pr: Some(tx_pr_with_font_size(900)),
+                    ..Default::default()
+                }),
+                plot_area: PlotArea {
+                    sp_pr: Some(solid_fill_sp_pr("222222")),
+                    axes: vec![
+                        ChartAxis {
+                            axis_type: AxisType::Category,
+                            ax_id: 10,
+                            cross_ax: 20,
+                            ax_pos: ChartAxisPosition::Bottom,
+                            sp_pr: Some(solid_fill_sp_pr("444444")),
+                            ..Default::default()
+                        },
+                        ChartAxis {
+                            axis_type: AxisType::Value,
+                            ax_id: 20,
+                            cross_ax: 10,
+                            ax_pos: ChartAxisPosition::Left,
+                            tx_pr: Some(tx_pr_with_font_size(1100)),
+                            ..Default::default()
+                        },
+                    ],
+                    chart_groups: vec![ChartGroup {
+                        chart_type: ChartType::Line,
+                        config: ChartTypeConfig::Line(LineChartConfig::default()),
+                        series: vec![ChartSeries {
+                            idx: 0,
+                            order: 0,
+                            sp_pr: Some(solid_fill_sp_pr("555555")),
+                            ..Default::default()
+                        }],
+                        ax_id: vec![10, 20],
+                        d_lbls: None,
+                        raw_chart_type_attr: None,
+                        raw_chart_element_name: None,
+                        raw_chart_group_xml: None,
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+        let context = spec.chart_style_context.expect("style context");
+
+        assert_eq!(context.color_map_override, None);
+        assert_eq!(context.owners.len(), 7);
+        assert_eq!(
+            format_solid_hex(owner(&context, "chartArea").format.as_ref().unwrap()),
+            Some("111111")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "plotArea").format.as_ref().unwrap()),
+            Some("222222")
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "title").format.as_ref().unwrap()),
+            Some("333333")
+        );
+        assert_eq!(
+            owner(&context, "title")
+                .rich_text
+                .as_ref()
+                .and_then(|runs| runs.first())
+                .map(|run| run.text.as_str()),
+            Some("Owner Title")
+        );
+        assert_eq!(
+            owner(&context, "legend")
+                .format
+                .as_ref()
+                .and_then(|format| format.font.as_ref())
+                .and_then(|font| font.size),
+            Some(9.0)
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "categoryAxis").format.as_ref().unwrap()),
+            Some("444444")
+        );
+        assert_eq!(
+            owner(&context, "valueAxis")
+                .format
+                .as_ref()
+                .and_then(|format| format.font.as_ref())
+                .and_then(|font| font.size),
+            Some(11.0)
+        );
+        assert_eq!(
+            format_solid_hex(owner(&context, "series(0)").format.as_ref().unwrap()),
+            Some("555555")
+        );
     }
 
     #[test]

@@ -3,6 +3,15 @@ use serde::{Deserialize, Serialize};
 use super::formatting::{ChartColorData, ChartFormatData, ChartLineData};
 use super::{ChartType, DataLabelData, ErrorBarData, TrendlineData};
 
+/// Imported chart dimension source authority.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesDimensionSourceKindData {
+    Ref,
+    Literal,
+    CacheFallback,
+}
+
 /// Runtime series data — carries both range references and visual config.
 /// bridge-ts generates the TS equivalent, replacing hand-written SeriesConfig.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -29,12 +38,18 @@ pub struct ChartSeriesData {
     /// live cell resolution cannot provide a point.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub value_cache: Option<ChartSeriesPointCacheData>,
+    /// Source authority for the value/y dimension.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value_source_kind: Option<ChartSeriesDimensionSourceKindData>,
     /// Categories range: c:cat (bar/line/pie) or c:xVal (scatter/bubble)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categories: Option<String>,
     /// Imported cached category/x values from the source chart data reference.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_cache: Option<ChartSeriesPointCacheData>,
+    /// Source authority for the category/x dimension.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_source_kind: Option<ChartSeriesDimensionSourceKindData>,
     /// Imported cached multi-level category labels, keyed by point index.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_levels: Option<ChartSeriesCategoryLevelsCacheData>,
@@ -47,6 +62,9 @@ pub struct ChartSeriesData {
     /// Imported cached bubble sizes from the source chart data reference.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bubble_size_cache: Option<ChartSeriesPointCacheData>,
+    /// Source authority for the bubble-size dimension.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bubble_size_source_kind: Option<ChartSeriesDimensionSourceKindData>,
 
     // -- Visual properties --
     /// Smooth line (line, scatter)

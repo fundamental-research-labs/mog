@@ -147,6 +147,61 @@ describe('extractChartLayout', () => {
     expect(layout.plotArea.height).toBeCloseTo(internalPlot.height * PX_TO_PT, 5);
   });
 
+  it('applies manual plot, title, and legend layout hints', () => {
+    const result = compile(
+      makeBarSpec({
+        title: 'Manual Layout',
+        data: {
+          values: [
+            { category: 'A', value: 10, group: 'North' },
+            { category: 'B', value: 20, group: 'South' },
+            { category: 'C', value: 30, group: 'North' },
+          ],
+        },
+        encoding: {
+          x: { field: 'category', type: 'nominal' },
+          y: { field: 'value', type: 'quantitative' },
+          color: { field: 'group', type: 'nominal' },
+        },
+        config: {
+          layoutHints: {
+            manualPlotArea: { x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
+            manualTitle: { x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
+            manualLegend: {
+              xMode: 'edge',
+              yMode: 'edge',
+              wMode: 'edge',
+              hMode: 'edge',
+              x: 0.65,
+              y: 0.1,
+              w: 0.95,
+              h: 0.3,
+            },
+          },
+        },
+      }),
+    );
+
+    const layout = extractChartLayout(result);
+
+    expect(layout.plotArea.left).toBeCloseTo(60 * PX_TO_PT, 5);
+    expect(layout.plotArea.top).toBeCloseTo(80 * PX_TO_PT, 5);
+    expect(layout.plotArea.width).toBeCloseTo(300 * PX_TO_PT, 5);
+    expect(layout.plotArea.height).toBeCloseTo(160 * PX_TO_PT, 5);
+
+    expect(layout.title).toBeDefined();
+    expect(layout.title!.left).toBeCloseTo(120 * PX_TO_PT, 5);
+    expect(layout.title!.top).toBeCloseTo(20 * PX_TO_PT, 5);
+    expect(layout.title!.width).toBeCloseTo(300 * PX_TO_PT, 5);
+    expect(layout.title!.height).toBeCloseTo(40 * PX_TO_PT, 5);
+
+    expect(layout.legend).toBeDefined();
+    expect(layout.legend!.left).toBeCloseTo(390 * PX_TO_PT, 5);
+    expect(layout.legend!.top).toBeCloseTo(40 * PX_TO_PT, 5);
+    expect(layout.legend!.width).toBeCloseTo(180 * PX_TO_PT, 5);
+    expect(layout.legend!.height).toBeCloseTo(80 * PX_TO_PT, 5);
+  });
+
   it('updates layout when chart dimensions change', () => {
     const smallResult = compile(makeBarSpec({ width: 300, height: 200 }));
     const largeResult = compile(makeBarSpec({ width: 900, height: 600 }));

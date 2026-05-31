@@ -135,6 +135,7 @@ export function compileChartRenderSnapshotAtSize(
         resolvedRanges: input.resolvedRanges,
         compileInput: compiled.compileInput,
       }),
+      layout: compiled.layout,
     }),
   };
 }

@@ -125,6 +125,15 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
 
             // Series-level data labels
             let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
+            let value_source_kind = values
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+            let category_source_kind = categories
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+            let bubble_size_source_kind = bubble_size
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
 
             domain_types::chart::ChartSeriesData {
                 name,
@@ -132,12 +141,15 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 color,
                 values,
                 value_cache: None,
+                value_source_kind,
                 categories,
                 category_cache: None,
+                category_source_kind,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size,
                 bubble_size_cache: None,
+                bubble_size_source_kind,
                 smooth: s.smooth,
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,

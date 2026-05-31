@@ -1,10 +1,10 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
+use domain_types::ChartDefinition;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSpec, ChartType as DomainChartType,
     DataLabelData, LegendData, ObjectSize, SingleAxisData,
 };
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
-use domain_types::ChartDefinition;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};

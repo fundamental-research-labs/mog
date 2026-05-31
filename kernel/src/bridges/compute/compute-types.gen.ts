@@ -1083,12 +1083,15 @@ export interface ChartSeriesData {
   color?: string;
   values?: string;
   valueCache?: ChartSeriesPointCacheData;
+  valueSourceKind?: ChartSeriesDimensionSourceKindData;
   categories?: string;
   categoryCache?: ChartSeriesPointCacheData;
+  categorySourceKind?: ChartSeriesDimensionSourceKindData;
   categoryLevels?: ChartSeriesCategoryLevelsCacheData;
   categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCacheData;
+  bubbleSizeSourceKind?: ChartSeriesDimensionSourceKindData;
   smooth?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
@@ -1116,6 +1119,8 @@ export interface ChartSeriesData {
   leaderLineFormat?: ChartFormatData;
   showLeaderLines?: boolean;
 }
+
+export type ChartSeriesDimensionSourceKindData = "ref" | "literal" | "cacheFallback";
 
 export interface ChartSeriesPointCacheData {
   pointCount?: number;

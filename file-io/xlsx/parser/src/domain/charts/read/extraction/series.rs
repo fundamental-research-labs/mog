@@ -56,11 +56,15 @@ pub(super) fn extract_single_series(
     // Values range: val (standard) or y_val (scatter/bubble)
     let values = extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));
     let value_cache = extract_num_point_cache(&s.val).or_else(|| extract_num_point_cache(&s.y_val));
+    let value_source_kind =
+        extract_num_source_kind(&s.val).or_else(|| extract_num_source_kind(&s.y_val));
 
     // Categories range: cat (standard) or x_val (scatter/bubble)
     let categories = extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
     let category_cache =
         extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
+    let category_source_kind =
+        extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
     let category_levels =
         extract_cat_level_cache(&s.cat).or_else(|| extract_cat_level_cache(&s.x_val));
     let category_label_format =
@@ -68,6 +72,7 @@ pub(super) fn extract_single_series(
 
     let bubble_size = extract_num_ref_formula(&s.bubble_size);
     let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
+    let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
     // Markers
     let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
@@ -177,12 +182,15 @@ pub(super) fn extract_single_series(
         color,
         values,
         value_cache,
+        value_source_kind,
         categories,
         category_cache,
+        category_source_kind,
         category_levels,
         category_label_format,
         bubble_size,
         bubble_size_cache,
+        bubble_size_source_kind,
         smooth: s.smooth,
         explosion: s.explosion,
         invert_if_negative: s.invert_if_negative,
@@ -247,6 +255,19 @@ fn extract_num_point_cache(
     Some(num_data_to_point_cache(data))
 }
 
+fn extract_num_source_kind(
+    src: &Option<ooxml_types::charts::NumDataSource>,
+) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
+    use ooxml_types::charts::NumDataSource;
+
+    match src.as_ref()? {
+        NumDataSource::Ref(_) => Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+        NumDataSource::Lit(_) => {
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        }
+    }
+}
+
 fn extract_cat_point_cache(
     src: &Option<ooxml_types::charts::CatDataSource>,
 ) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
@@ -258,6 +279,21 @@ fn extract_cat_point_cache(
         CatDataSource::StrRef(str_ref) => str_ref.str_cache.as_ref().map(str_data_to_point_cache),
         CatDataSource::StrLit(str_data) => Some(str_data_to_point_cache(str_data)),
         CatDataSource::MultiLvlStrRef(_) => None,
+    }
+}
+
+fn extract_cat_source_kind(
+    src: &Option<ooxml_types::charts::CatDataSource>,
+) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
+    use ooxml_types::charts::CatDataSource;
+
+    match src.as_ref()? {
+        CatDataSource::NumRef(_) | CatDataSource::StrRef(_) | CatDataSource::MultiLvlStrRef(_) => {
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        }
+        CatDataSource::NumLit(_) | CatDataSource::StrLit(_) => {
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        }
     }
 }
 
@@ -549,6 +585,10 @@ mod tests {
         let extracted = extract_single_series(&series, None, None);
         let cache = extracted.value_cache.expect("value cache");
 
+        assert_eq!(
+            extracted.value_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        );
         assert_eq!(cache.point_count, Some(4));
         assert_eq!(cache.format_code.as_deref(), Some("General"));
         assert_eq!(cache.points.len(), 2);
@@ -595,6 +635,14 @@ mod tests {
         let category_cache = extracted.category_cache.expect("category cache");
         let bubble_size_cache = extracted.bubble_size_cache.expect("bubble size cache");
 
+        assert_eq!(
+            extracted.category_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        );
+        assert_eq!(
+            extracted.bubble_size_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        );
         assert_eq!(category_cache.point_count, Some(2));
         assert_eq!(category_cache.format_code.as_deref(), Some("m/d/yyyy"));
         assert_eq!(category_cache.points[0].idx, 1);
@@ -604,6 +652,81 @@ mod tests {
         );
         assert_eq!(bubble_size_cache.point_count, Some(2));
         assert_eq!(bubble_size_cache.points[0].value, "10");
+    }
+
+    #[test]
+    fn preserves_literal_series_dimension_source_authority() {
+        let series = ooxml_types::charts::ChartSeries {
+            val: Some(NumDataSource::Lit(NumData {
+                pt_count: Some(1),
+                pts: vec![NumPoint {
+                    idx: 0,
+                    v: "42".to_string(),
+                    format_code: None,
+                }],
+                ..Default::default()
+            })),
+            cat: Some(CatDataSource::StrLit(StrData {
+                pt_count: Some(1),
+                pts: vec![StrPoint {
+                    idx: 0,
+                    v: "Q1".to_string(),
+                }],
+                extensions: vec![],
+            })),
+            bubble_size: Some(NumDataSource::Lit(NumData {
+                pt_count: Some(1),
+                pts: vec![NumPoint {
+                    idx: 0,
+                    v: "7".to_string(),
+                    format_code: None,
+                }],
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+
+        assert!(extracted.values.is_none());
+        assert!(extracted.categories.is_none());
+        assert!(extracted.bubble_size.is_none());
+        assert_eq!(
+            extracted.value_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        );
+        assert_eq!(
+            extracted.category_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        );
+        assert_eq!(
+            extracted.bubble_size_source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        );
+        assert_eq!(
+            extracted
+                .value_cache
+                .as_ref()
+                .and_then(|cache| cache.points.first())
+                .map(|point| point.value.as_str()),
+            Some("42")
+        );
+        assert_eq!(
+            extracted
+                .category_cache
+                .as_ref()
+                .and_then(|cache| cache.points.first())
+                .map(|point| point.value.as_str()),
+            Some("Q1")
+        );
+        assert_eq!(
+            extracted
+                .bubble_size_cache
+                .as_ref()
+                .and_then(|cache| cache.points.first())
+                .map(|point| point.value.as_str()),
+            Some("7")
+        );
     }
 
     #[test]

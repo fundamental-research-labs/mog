@@ -50,6 +50,7 @@ export function buildResolvedChartSpecSnapshot(input: {
   exportOptions: ChartExportOptionsSnapshot;
   compilerPathId: CompilerPathId;
   compilerInputHash: string;
+  layout?: ResolvedChartSpecSnapshot['resolved']['layout'] | null;
 }): ResolvedChartSpecSnapshot {
   const categories = input.chartData.categories.map(snapshotScalar);
   const hasExplicitSeriesReferences =
@@ -113,6 +114,7 @@ export function buildResolvedChartSpecSnapshot(input: {
       },
       series,
       categories,
+      layout: input.layout ?? undefined,
       plot: {
         displayBlanksAs: input.config.displayBlanksAs,
         plotVisibleOnly: input.config.plotVisibleOnly,
@@ -408,11 +410,6 @@ function unsupportedFeatureDiagnostics(
   }
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push(pivotFieldButtonDiagnostic(config));
-  if (config.plotLayout) unsupported.push('manual plot layout is preserved but not rendered');
-  if (config.titleLayout || config.chartTitle?.layout)
-    unsupported.push('manual title layout is preserved but not rendered');
-  if (config.legend?.layout)
-    unsupported.push('manual legend layout is preserved but not rendered');
   if (hasManualDataLabelLayout(config))
     unsupported.push('manual data-label layout is preserved but not rendered');
   if (hasTrendlineLabelLayout(config))

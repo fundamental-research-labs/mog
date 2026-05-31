@@ -131,6 +131,78 @@ describe('chart compiler bridge module', () => {
     });
   });
 
+  it('includes rendered manual plot, title, and legend layout in resolved snapshots', async () => {
+    await withFreshCompiler(({ compileChartRenderSnapshotAtSize }) => {
+      const sheetId = toSheetId('sheet-1');
+      const chart = {
+        id: 'chart-1',
+        name: 'Chart 1',
+        width: 4,
+        height: 3,
+      } as unknown as ChartFloatingObject;
+      const config: ChartConfig = {
+        type: 'column',
+        width: 4,
+        height: 3,
+        title: 'Manual Layout',
+        plotLayout: { x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
+        titleLayout: { x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
+        legend: {
+          show: true,
+          visible: true,
+          position: 'right',
+          layout: {
+            xMode: 'edge',
+            yMode: 'edge',
+            wMode: 'edge',
+            hMode: 'edge',
+            x: 0.65,
+            y: 0.1,
+            w: 0.95,
+            h: 0.3,
+          },
+        },
+      };
+      const chartData: ChartData = {
+        categories: ['A', 'B'],
+        series: [
+          { name: 'North', data: [10, 20] },
+          { name: 'South', data: [12, 22] },
+        ],
+      };
+
+      const snapshot = compileChartRenderSnapshotAtSize({
+        chart,
+        sheetId,
+        chartId: 'chart-1',
+        config,
+        chartData,
+        resolvedRanges,
+        exportOptions: defaultExportOptionsForSize(320, 180),
+        width: 320,
+        height: 180,
+      });
+
+      const layout = snapshot.resolvedChartSpec.resolved.layout;
+      expect(layout?.plotArea).toEqual({
+        left: 0.1,
+        top: 0.2,
+        width: 0.5,
+        height: 0.4,
+      });
+      expect(layout?.title).toEqual({
+        left: 0.2,
+        top: 0.05,
+        width: 0.5,
+        height: 0.1,
+      });
+      expect(layout?.legend?.left).toBeCloseTo(0.65, 5);
+      expect(layout?.legend?.top).toBeCloseTo(0.1, 5);
+      expect(layout?.legend?.width).toBeCloseTo(0.3, 5);
+      expect(layout?.legend?.height).toBeCloseTo(0.2, 5);
+    });
+  });
+
   it('uses injected WASM transforms before the TypeScript grammar compiler when available', async () => {
     await withFreshCompiler(({ compileChartMarks, initChartWasm }) => {
       const calls: Array<{ data: unknown; transforms: unknown }> = [];

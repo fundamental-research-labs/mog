@@ -1,6 +1,5 @@
-import type { ChannelSpec, EncodingSpec, LegendOrient, LegendSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartType, LegendConfig } from '../../types';
-import { resolveChartTextColor } from '../../utils/chart-colors';
+import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
+import type { ChartConfig, ChartData } from '../../types';
 import {
   buildAxisScaleSpec,
   categoryDisplayLabel,
@@ -14,118 +13,14 @@ import {
   shouldUseStableCategoryKeys,
 } from './axis';
 import { MARK_TYPE_MAP, SERIES_OPACITY_FIELD } from './constants';
+import {
+  buildColorEncoding,
+  buildLegendSpec,
+  legendSymbolType,
+  visibleLegendDomain,
+} from './legend';
 import { isNoFillNoLineSeries, resolvedCategoryColors } from './series-style';
 import { resolveStackMode } from './subtypes';
-import { pointsToCanvasPx } from './units';
-
-/**
- * Map LegendConfig.position to LegendOrient.
- */
-function legendPositionToOrient(position: string): LegendOrient {
-  switch (position) {
-    case 't':
-    case 'top':
-      return 'top';
-    case 'b':
-    case 'bottom':
-      return 'bottom';
-    case 'l':
-    case 'left':
-      return 'left';
-    case 'r':
-    case 'right':
-      return 'right';
-    case 'tr':
-    case 'topRight':
-    case 'top-right':
-    case 'corner':
-      return 'top-right';
-    case 'none':
-      return 'none';
-    default:
-      return 'bottom';
-  }
-}
-
-export function isLegendShown(legend: LegendConfig | undefined): legend is LegendConfig {
-  return Boolean(legend && legend.show && legend.visible !== false && legend.position !== 'none');
-}
-
-/**
- * Build encoding for the color channel, including legend config.
- */
-function buildColorEncoding(
-  hasMultipleSeries: boolean,
-  legend?: LegendConfig,
-  colors?: string[],
-  reverseLegend?: boolean,
-  legendDomain?: string[],
-  symbolType?: LegendSpec['symbolType'],
-): ChannelSpec | undefined {
-  if (!hasMultipleSeries) return undefined;
-  const channel: ChannelSpec = {
-    field: 'series',
-    type: 'nominal',
-  };
-  if ((colors && colors.length > 0) || (legendDomain && legendDomain.length > 0)) {
-    channel.scale = {
-      ...(legendDomain && legendDomain.length > 0 ? { domain: legendDomain } : {}),
-      ...(colors && colors.length > 0 ? { range: colors } : {}),
-    };
-  }
-  if (legend) {
-    if (!isLegendShown(legend)) {
-      channel.legend = null;
-    } else {
-      const legendFont = legend.format?.font ?? legend.font;
-      const labelColor = resolveChartTextColor(legendFont?.color);
-      channel.legend = {
-        orient: legendPositionToOrient(legend.position),
-        title: null,
-        ...(reverseLegend ? { reverse: true } : {}),
-        ...(symbolType ? { symbolType } : {}),
-        ...(legendFont?.size !== undefined
-          ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
-          : {}),
-        ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
-        ...(labelColor ? { labelColor } : {}),
-      };
-    }
-  }
-  return channel;
-}
-
-function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | undefined {
-  const seriesConfigs = config.series ?? [];
-  if (!seriesConfigs.some(isNoFillNoLineSeries)) return undefined;
-
-  const names: string[] = [];
-  for (let index = 0; index < data.series.length; index += 1) {
-    if (isNoFillNoLineSeries(seriesConfigs[index])) continue;
-    const name = data.series[index]?.name;
-    if (name && !names.includes(name)) names.push(name);
-  }
-
-  return names.length > 0 ? names : undefined;
-}
-
-function legendSymbolType(
-  config: ChartConfig,
-  data: ChartData,
-): LegendSpec['symbolType'] | undefined {
-  const markTypes = data.series
-    .map((series, index) => {
-      const seriesConfig = config.series?.[index];
-      if (isNoFillNoLineSeries(seriesConfig)) return undefined;
-      const seriesType = (seriesConfig?.type ?? series.type ?? config.type) as ChartType;
-      return MARK_TYPE_MAP[seriesType];
-    })
-    .filter(Boolean);
-
-  return markTypes.length > 0 && markTypes.every((markType) => markType === 'line')
-    ? 'line'
-    : undefined;
-}
 
 /**
  * Build the main encoding spec for a chart.
@@ -162,22 +57,9 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     }
     // Apply legend config to color channel.
     if (config.legend) {
-      if (!isLegendShown(config.legend)) {
-        encoding.color.legend = null;
-      } else {
-        const legendFont = config.legend.format?.font ?? config.legend.font;
-        const labelColor = resolveChartTextColor(legendFont?.color);
-        encoding.color.legend = {
-          orient: legendPositionToOrient(config.legend.position),
-          title: null,
-          ...(resolveStackMode(config) ? { reverse: true } : {}),
-          ...(legendFont?.size !== undefined
-            ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
-            : {}),
-          ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
-          ...(labelColor ? { labelColor } : {}),
-        };
-      }
+      encoding.color.legend = buildLegendSpec(config.legend, {
+        reverse: Boolean(resolveStackMode(config)),
+      });
     }
     return encoding;
   }

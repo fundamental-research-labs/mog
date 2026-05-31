@@ -1,5 +1,11 @@
 import type { Transform } from '../../grammar/spec';
 import type { TrendlineConfig } from '../../types';
+import {
+  CATEGORY_FIELD,
+  VALUE_FIELD,
+  WATERFALL_END_FIELD,
+  WATERFALL_RUNNING_TOTAL_FIELD,
+} from './fields';
 
 /**
  * Build transforms for waterfall charts.
@@ -11,8 +17,8 @@ export function buildWaterfallTransforms(): Transform[] {
   // Calculate running total for waterfall positioning
   transforms.push({
     type: 'calculate',
-    calculate: 'datum._waterfallRunningTotal',
-    as: '_waterfallEnd',
+    calculate: `datum.${WATERFALL_RUNNING_TOTAL_FIELD}`,
+    as: WATERFALL_END_FIELD,
   });
   return transforms;
 }
@@ -34,8 +40,8 @@ export function buildTrendlineTransform(trendline: TrendlineConfig): Transform[]
 
   const transform: Transform = {
     type: 'regression',
-    regression: 'value',
-    on: 'category',
+    regression: VALUE_FIELD,
+    on: CATEGORY_FIELD,
     method: (methodMap[trendline.type ?? 'linear'] ?? 'linear') as 'linear',
     ...(trendline.order !== undefined ? { order: trendline.order } : {}),
   };

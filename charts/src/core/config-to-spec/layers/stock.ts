@@ -1,6 +1,14 @@
 import type { DataRow, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
 import { CANDLESTICK_BAR_WIDTH } from '../constants';
+import {
+  CATEGORY_FIELD,
+  STOCK_CLOSE_FIELD,
+  STOCK_DIRECTION_FIELD,
+  STOCK_LOW_FIELD,
+  STOCK_OPEN_FIELD,
+  STOCK_VOLUME_FIELD,
+} from '../fields';
 
 /**
  * Build layers for stock (OHLC/candlestick) charts.
@@ -27,8 +35,8 @@ export function buildStockLayers(
     const volumeLayer: UnitSpec = {
       mark: { type: 'bar', opacity: 0.3 },
       encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'volume', type: 'quantitative' },
+        x: { field: CATEGORY_FIELD, type: 'nominal' },
+        y: { field: STOCK_VOLUME_FIELD, type: 'quantitative' },
         color: { value: '#888888' },
       },
     };
@@ -39,8 +47,8 @@ export function buildStockLayers(
   const wickLayer: UnitSpec = {
     mark: { type: 'rule' },
     encoding: {
-      x: { field: 'category', type: 'nominal' },
-      y: { field: 'low', type: 'quantitative' },
+      x: { field: CATEGORY_FIELD, type: 'nominal' },
+      y: { field: STOCK_LOW_FIELD, type: 'quantitative' },
       // y2 via a separate channel is not directly supported in our spec,
       // so we use the value field as a proxy for the range
       size: { value: 1 },
@@ -53,8 +61,8 @@ export function buildStockLayers(
     const closeLayer: UnitSpec = {
       mark: { type: 'tick' },
       encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'close', type: 'quantitative' },
+        x: { field: CATEGORY_FIELD, type: 'nominal' },
+        y: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
       },
     };
     layers.push(closeLayer);
@@ -67,10 +75,10 @@ export function buildStockLayers(
         size: CANDLESTICK_BAR_WIDTH,
       },
       encoding: {
-        x: { field: 'category', type: 'nominal' },
-        y: { field: 'open', type: 'quantitative' },
+        x: { field: CATEGORY_FIELD, type: 'nominal' },
+        y: { field: STOCK_OPEN_FIELD, type: 'quantitative' },
         color: {
-          field: '_stockDirection',
+          field: STOCK_DIRECTION_FIELD,
           type: 'nominal',
         },
       },

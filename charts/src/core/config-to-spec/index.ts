@@ -16,11 +16,12 @@ import {
 } from './constants';
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
-import { buildEncoding, isLegendShown } from './encoding';
+import { buildEncoding } from './encoding';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildStockLayers } from './layers/stock';
 import { buildWaterfallLayers } from './layers/waterfall';
+import { isLegendShown } from './legend';
 import { buildMark } from './marks';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
 import { resolveStackMode, resolveSubTypeMarkProps } from './subtypes';

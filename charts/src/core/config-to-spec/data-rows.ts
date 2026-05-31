@@ -7,7 +7,17 @@ import {
   shouldUseStableCategoryKeys,
   toFiniteNumber,
 } from './axis';
-import { SERIES_OPACITY_FIELD } from './constants';
+import {
+  CATEGORY_FIELD,
+  CATEGORY_FORMAT_CODE_FIELD,
+  SERIES_FIELD,
+  SERIES_OPACITY_FIELD,
+  STOCK_CLOSE_FIELD,
+  STOCK_HIGH_FIELD,
+  STOCK_LOW_FIELD,
+  STOCK_OPEN_FIELD,
+  VALUE_FIELD,
+} from './fields';
 import { isNoFillNoLineSeries } from './series-style';
 
 /**
@@ -40,20 +50,22 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
       const point = series.data[i];
       if (point && shouldIncludePointInRows(point, config)) {
         const row: DataRow = {
-          category: rowCategory,
-          value: point.y,
-          series: series.name,
+          [CATEGORY_FIELD]: rowCategory,
+          [VALUE_FIELD]: point.y,
+          [SERIES_FIELD]: series.name,
         };
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
         }
         const categoryFormatCode = data.categoryFormatCodes?.[i];
-        if (categoryFormatCode) row.categoryFormatCode = categoryFormatCode;
+        if (categoryFormatCode) row[CATEGORY_FORMAT_CODE_FIELD] = categoryFormatCode;
         // Propagate OHLC fields if present (for stock charts)
-        if (point.open !== undefined) row.open = point.open;
-        if (point.high !== undefined) row.high = point.high;
-        if (point.low !== undefined) row.low = point.low;
-        if (point.close !== undefined) row.close = point.close;
+        if (point[STOCK_OPEN_FIELD] !== undefined) row[STOCK_OPEN_FIELD] = point[STOCK_OPEN_FIELD];
+        if (point[STOCK_HIGH_FIELD] !== undefined) row[STOCK_HIGH_FIELD] = point[STOCK_HIGH_FIELD];
+        if (point[STOCK_LOW_FIELD] !== undefined) row[STOCK_LOW_FIELD] = point[STOCK_LOW_FIELD];
+        if (point[STOCK_CLOSE_FIELD] !== undefined) {
+          row[STOCK_CLOSE_FIELD] = point[STOCK_CLOSE_FIELD];
+        }
         rows.push(row);
       }
     }

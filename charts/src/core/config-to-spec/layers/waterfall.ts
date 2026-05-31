@@ -1,5 +1,6 @@
 import type { DataRow, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
+import { CATEGORY_FIELD, VALUE_FIELD, WATERFALL_TYPE_FIELD } from '../fields';
 import { buildWaterfallTransforms } from '../transforms';
 
 /**
@@ -23,10 +24,10 @@ export function buildWaterfallLayers(
   const mainLayer: UnitSpec = {
     mark: { type: 'bar' },
     encoding: {
-      x: { field: 'category', type: 'nominal' },
-      y: { field: 'value', type: 'quantitative' },
+      x: { field: CATEGORY_FIELD, type: 'nominal' },
+      y: { field: VALUE_FIELD, type: 'quantitative' },
       color: {
-        field: '_waterfallType',
+        field: WATERFALL_TYPE_FIELD,
         type: 'nominal',
         scale: {
           domain: ['increase', 'decrease', 'total'],

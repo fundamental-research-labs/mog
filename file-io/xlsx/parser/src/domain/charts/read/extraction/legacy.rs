@@ -6,7 +6,10 @@ use super::data_refs::{
 use super::formatting::extract_fill_color;
 use super::labels::extract_data_label_data;
 use super::markers::extract_marker_config;
-use super::series::extract_single_series;
+use super::series::{
+    extract_cat_point_cache, extract_cat_source_kind, extract_num_point_cache,
+    extract_num_source_kind, extract_single_series,
+};
 
 pub(in crate::domain::charts::read) fn extract_chart_series(
     chart: &crate::domain::charts::Chart,
@@ -48,12 +51,22 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
             // Values range: val (standard) or y_val (scatter/bubble)
             let values =
                 extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));
+            let value_cache =
+                extract_num_point_cache(&s.val).or_else(|| extract_num_point_cache(&s.y_val));
+            let value_source_kind =
+                extract_num_source_kind(&s.val).or_else(|| extract_num_source_kind(&s.y_val));
 
             // Categories range: cat (standard) or x_val (scatter/bubble)
             let categories =
                 extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
+            let category_cache =
+                extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
+            let category_source_kind =
+                extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
 
             let bubble_size = extract_num_ref_formula(&s.bubble_size);
+            let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
+            let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
             // Markers
             let (
@@ -125,30 +138,20 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
 
             // Series-level data labels
             let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
-            let value_source_kind = values
-                .as_ref()
-                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
-            let category_source_kind = categories
-                .as_ref()
-                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
-            let bubble_size_source_kind = bubble_size
-                .as_ref()
-                .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
-
             domain_types::chart::ChartSeriesData {
                 name,
                 r#type: None, // follow-up: derive per-series type for combo charts
                 color,
                 values,
-                value_cache: None,
+                value_cache,
                 value_source_kind,
                 categories,
-                category_cache: None,
+                category_cache,
                 category_source_kind,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size,
-                bubble_size_cache: None,
+                bubble_size_cache,
                 bubble_size_source_kind,
                 smooth: s.smooth,
                 explosion: s.explosion,

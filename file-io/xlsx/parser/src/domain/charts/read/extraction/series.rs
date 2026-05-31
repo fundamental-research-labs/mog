@@ -243,7 +243,7 @@ fn default_series_name(idx: u32, order: u32) -> String {
     format!("Series {ordinal}")
 }
 
-fn extract_num_point_cache(
+pub(super) fn extract_num_point_cache(
     src: &Option<ooxml_types::charts::NumDataSource>,
 ) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
     use ooxml_types::charts::NumDataSource;
@@ -255,7 +255,7 @@ fn extract_num_point_cache(
     Some(num_data_to_point_cache(data))
 }
 
-fn extract_num_source_kind(
+pub(super) fn extract_num_source_kind(
     src: &Option<ooxml_types::charts::NumDataSource>,
 ) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
     use ooxml_types::charts::NumDataSource;
@@ -268,7 +268,7 @@ fn extract_num_source_kind(
     }
 }
 
-fn extract_cat_point_cache(
+pub(super) fn extract_cat_point_cache(
     src: &Option<ooxml_types::charts::CatDataSource>,
 ) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
     use ooxml_types::charts::CatDataSource;
@@ -282,7 +282,7 @@ fn extract_cat_point_cache(
     }
 }
 
-fn extract_cat_source_kind(
+pub(super) fn extract_cat_source_kind(
     src: &Option<ooxml_types::charts::CatDataSource>,
 ) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
     use ooxml_types::charts::CatDataSource;

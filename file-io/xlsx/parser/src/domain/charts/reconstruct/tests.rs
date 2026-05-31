@@ -1,8 +1,9 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::ChartDefinition;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartFormatData, ChartSpec, ChartType as DomainChartType,
-    DataLabelData, LegendData, ObjectSize, SingleAxisData,
+    AnchorPosition, AxisData, ChartFormatData, ChartSeriesDimensionSourceKindData,
+    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec,
+    ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, SingleAxisData,
 };
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
@@ -164,6 +165,57 @@ fn explicit_series_keep_distinct_default_idx_order() {
     assert!(xml.contains("<c:idx val=\"1\"/>"));
     assert!(xml.contains("<c:order val=\"0\"/>"));
     assert!(xml.contains("<c:order val=\"1\"/>"));
+}
+
+#[test]
+fn literal_series_sources_reconstruct_from_imported_caches() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    let mut series = ranges::chart_series_data(None, None, None, 0);
+    series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Literal);
+    series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "10".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "20".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Literal);
+    series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "North".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "South".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:strLit>"));
+    assert!(xml.contains("<c:numLit>"));
+    assert!(xml.contains("<c:formatCode>General</c:formatCode>"));
+    assert!(xml.contains("<c:ptCount val=\"2\"/>"));
+    assert!(xml.contains("<c:v>North</c:v>"));
+    assert!(xml.contains("<c:v>20</c:v>"));
+    assert!(!xml.contains("<c:f>"));
 }
 
 #[test]

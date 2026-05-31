@@ -1,11 +1,12 @@
 use domain_types::chart::{
-    ChartSeriesData, ChartSeriesPointCacheData, ChartType as DomainChartType, ErrorBarData,
-    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
+    ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
+    ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData, PointFormatData, TrendlineData,
+    TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
     ErrorValueType, Marker, MarkerStyle, NumData, NumDataSource, NumFmt, NumPoint, NumRef,
-    SeriesTextSource, StrRef, Trendline, TrendlineLabel, TrendlineType,
+    SeriesTextSource, StrData, StrPoint, StrRef, Trendline, TrendlineLabel, TrendlineType,
 };
 use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
@@ -37,12 +38,11 @@ pub(super) fn build_series(
     let tx = sd.name.as_ref().map(|n| SeriesTextSource::Value(n.clone()));
 
     // Value data (val or y_val)
-    let val_ref = sd.values.as_ref().map(|f| {
-        NumDataSource::Ref(NumRef {
-            f: f.clone(),
-            ..Default::default()
-        })
-    });
+    let val_ref = build_num_data_source(
+        sd.values.as_deref(),
+        sd.value_cache.as_ref(),
+        sd.value_source_kind,
+    );
     let (val, y_val) = if has_x_val {
         (None, val_ref)
     } else {
@@ -50,12 +50,11 @@ pub(super) fn build_series(
     };
 
     // Category data (cat or x_val)
-    let cat_ref = sd.categories.as_ref().map(|f| {
-        CatDataSource::StrRef(StrRef {
-            f: f.clone(),
-            ..Default::default()
-        })
-    });
+    let cat_ref = build_cat_data_source(
+        sd.categories.as_deref(),
+        sd.category_cache.as_ref(),
+        sd.category_source_kind,
+    );
     let (cat, x_val) = if has_x_val {
         (None, cat_ref)
     } else {
@@ -63,12 +62,11 @@ pub(super) fn build_series(
     };
 
     // Bubble size
-    let bubble_size = sd.bubble_size.as_ref().map(|f| {
-        NumDataSource::Ref(NumRef {
-            f: f.clone(),
-            ..Default::default()
-        })
-    });
+    let bubble_size = build_num_data_source(
+        sd.bubble_size.as_deref(),
+        sd.bubble_size_cache.as_ref(),
+        sd.bubble_size_source_kind,
+    );
 
     // Marker
     let marker = build_marker(sd);
@@ -148,6 +146,88 @@ pub(super) fn build_series(
         trendline,
         err_bars,
         shape,
+        ..Default::default()
+    }
+}
+
+fn build_num_data_source(
+    formula: Option<&str>,
+    cache: Option<&ChartSeriesPointCacheData>,
+    source_kind: Option<ChartSeriesDimensionSourceKindData>,
+) -> Option<NumDataSource> {
+    if let Some(formula) = formula {
+        return Some(NumDataSource::Ref(NumRef {
+            f: formula.to_string(),
+            num_cache: cache.map(num_data_from_cache),
+            ..Default::default()
+        }));
+    }
+
+    if source_kind == Some(ChartSeriesDimensionSourceKindData::Ref) {
+        return None;
+    }
+
+    cache
+        .filter(|cache| point_cache_has_payload(cache))
+        .map(num_data_from_cache)
+        .map(NumDataSource::Lit)
+}
+
+fn build_cat_data_source(
+    formula: Option<&str>,
+    cache: Option<&ChartSeriesPointCacheData>,
+    source_kind: Option<ChartSeriesDimensionSourceKindData>,
+) -> Option<CatDataSource> {
+    if let Some(formula) = formula {
+        return Some(CatDataSource::StrRef(StrRef {
+            f: formula.to_string(),
+            str_cache: cache.map(str_data_from_cache),
+            ..Default::default()
+        }));
+    }
+
+    if source_kind == Some(ChartSeriesDimensionSourceKindData::Ref) {
+        return None;
+    }
+
+    cache
+        .filter(|cache| point_cache_has_payload(cache))
+        .map(str_data_from_cache)
+        .map(CatDataSource::StrLit)
+}
+
+fn point_cache_has_payload(cache: &ChartSeriesPointCacheData) -> bool {
+    cache.point_count.is_some() || cache.format_code.is_some() || !cache.points.is_empty()
+}
+
+fn num_data_from_cache(cache: &ChartSeriesPointCacheData) -> NumData {
+    NumData {
+        format_code: cache.format_code.clone(),
+        pt_count: cache.point_count,
+        pts: cache
+            .points
+            .iter()
+            .map(|point| NumPoint {
+                idx: point.idx,
+                v: point.value.clone(),
+                format_code: point.format_code.clone(),
+            })
+            .collect(),
+        ..Default::default()
+    }
+}
+
+fn str_data_from_cache(cache: &ChartSeriesPointCacheData) -> StrData {
+    StrData {
+        pt_count: cache.point_count,
+        pts: cache
+            .points
+            .iter()
+            .map(|point| StrPoint {
+                idx: point.idx,
+                v: point.value.clone(),
+            })
+            .collect(),
         ..Default::default()
     }
 }

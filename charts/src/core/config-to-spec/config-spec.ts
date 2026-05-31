@@ -43,6 +43,25 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
+  if (config.type === 'bubble') {
+    if (typeof config.bubbleScale === 'number') {
+      configSpec.bubbleScale = config.bubbleScale;
+      hasConfig = true;
+    }
+    if (typeof config.showNegBubbles === 'boolean') {
+      configSpec.showNegBubbles = config.showNegBubbles;
+      hasConfig = true;
+    }
+    if (config.sizeRepresents === 'area' || config.sizeRepresents === 'w') {
+      configSpec.sizeRepresents = config.sizeRepresents;
+      hasConfig = true;
+    }
+    if (typeof config.bubble3DEffect === 'boolean') {
+      configSpec.bubble3DEffect = config.bubble3DEffect;
+      hasConfig = true;
+    }
+  }
+
   const chartFormat = mergeChartFormats(
     mergeChartFormats(
       config.chartArea?.format,

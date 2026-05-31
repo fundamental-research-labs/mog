@@ -750,6 +750,14 @@ export interface ConfigSpec {
   scheme?: string;
   /** Custom color range */
   range?: { category?: string[]; ordinal?: string[]; ramp?: string[] };
+  /** Bubble scale percentage for OOXML bubble charts. */
+  bubbleScale?: number;
+  /** Whether OOXML bubble charts should preserve negative/zero bubbles. */
+  showNegBubbles?: boolean;
+  /** Whether OOXML bubble values represent symbol area or width/diameter. */
+  sizeRepresents?: 'area' | 'w';
+  /** Whether OOXML bubble series should use the 3D bubble flag. */
+  bubble3DEffect?: boolean;
   /** Layout hints computed from imported workbook chart semantics. */
   layoutHints?: {
     leftYAxisLabelWidth?: number;

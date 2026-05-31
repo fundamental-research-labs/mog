@@ -104,12 +104,13 @@ export function generateBubbleChartXML(
 ): OOXMLExportResult {
   const encoding = spec.encoding!;
   const sheetName = options?.sheetName ?? 'Sheet1';
+  const bubbleOptions = resolveBubbleChartOptions(spec);
 
   // Extract bubble series data
   const seriesData = extractBubbleSeriesData(data, encoding);
 
   // Generate bubble chart content
-  const chartContent = generateBubbleChartContent(seriesData, sheetName);
+  const chartContent = generateBubbleChartContent(seriesData, sheetName, bubbleOptions);
 
   // Generate axes (both value axes for bubble)
   const axes = [
@@ -232,13 +233,27 @@ function generateScatterSeriesXML(
 /**
  * Generate the <c:bubbleChart> element content.
  */
-function generateBubbleChartContent(seriesData: ScatterSeriesData[], sheetName: string): string {
+interface BubbleChartOptions {
+  bubbleScale: number;
+  showNegBubbles: boolean;
+  sizeRepresents?: 'area' | 'w';
+  bubble3D: boolean;
+}
+
+function generateBubbleChartContent(
+  seriesData: ScatterSeriesData[],
+  sheetName: string,
+  options: BubbleChartOptions,
+): string {
+  const sizeRepresentsXml = options.sizeRepresents
+    ? `\n    <c:sizeRepresents val="${options.sizeRepresents}"/>`
+    : '';
   return `<c:bubbleChart>
     <c:varyColors val="0"/>
-    ${seriesData.map((series, idx) => generateBubbleSeriesXML(series, idx, sheetName)).join('\n    ')}
+    ${seriesData.map((series, idx) => generateBubbleSeriesXML(series, idx, sheetName, options)).join('\n    ')}
     ${generateDataLabelsXML()}
-    <c:bubbleScale val="100"/>
-    <c:showNegBubbles val="0"/>
+    <c:bubbleScale val="${options.bubbleScale}"/>
+    <c:showNegBubbles val="${options.showNegBubbles ? '1' : '0'}"/>${sizeRepresentsXml}
     <c:axId val="${AXIS_IDS.CATEGORY}"/>
     <c:axId val="${AXIS_IDS.VALUE}"/>
   </c:bubbleChart>`;
@@ -251,6 +266,7 @@ function generateBubbleSeriesXML(
   series: ScatterSeriesData,
   index: number,
   sheetName: string,
+  options: BubbleChartOptions,
 ): string {
   const ptCount = series.points.length;
 
@@ -310,8 +326,25 @@ function generateBubbleSeriesXML(
         </c:numCache>
       </c:numRef>
     </c:bubbleSize>
-    <c:bubble3D val="0"/>
+    <c:bubble3D val="${options.bubble3D ? '1' : '0'}"/>
   </c:ser>`;
+}
+
+function resolveBubbleChartOptions(spec: ChartSpec): BubbleChartOptions {
+  return {
+    bubbleScale: bubbleScaleValue(spec.config?.bubbleScale),
+    showNegBubbles: spec.config?.showNegBubbles === true,
+    sizeRepresents:
+      spec.config?.sizeRepresents === 'area' || spec.config?.sizeRepresents === 'w'
+        ? spec.config.sizeRepresents
+        : undefined,
+    bubble3D: spec.config?.bubble3DEffect === true,
+  };
+}
+
+function bubbleScaleValue(value: unknown): number {
+  const scale = typeof value === 'number' && Number.isFinite(value) ? value : 100;
+  return Math.round(Math.max(0, Math.min(300, scale)));
 }
 
 // =============================================================================

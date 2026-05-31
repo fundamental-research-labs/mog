@@ -223,6 +223,7 @@ const SPELLING_SUGGESTIONS: Record<string, string[]> = {
 function scanTextForSpellingErrors(
   text: string,
   sheetId: string,
+  sheetName: string,
   row: number,
   col: number,
   ignoredWords: Set<string>,
@@ -237,6 +238,7 @@ function scanTextForSpellingErrors(
       word,
       suggestions: SPELLING_SUGGESTIONS[key],
       sheetId,
+      sheetName,
       row,
       col,
       startIndex: match.index ?? 0,
@@ -262,6 +264,7 @@ export const OPEN_SPELLING_DIALOG: AsyncActionHandler = async (deps): Promise<Ac
 
   const sheetId = state.activeSheetId;
   const ws = deps.workbook.getSheetById(sheetId);
+  const sheetName = (await ws.getName()) || sheetId;
   const ignoredWords = state.spellingDialog.ignoredWords;
   const usedRange = await ws.getUsedRange();
 
@@ -276,7 +279,7 @@ export const OPEN_SPELLING_DIALOG: AsyncActionHandler = async (deps): Promise<Ac
       const cell = await ws.getCell(row, col);
       const value = cell?.value;
       if (typeof value !== 'string' || value.startsWith('=')) continue;
-      errors.push(...scanTextForSpellingErrors(value, sheetId, row, col, ignoredWords));
+      errors.push(...scanTextForSpellingErrors(value, sheetId, sheetName, row, col, ignoredWords));
     }
   }
 

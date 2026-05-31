@@ -402,6 +402,8 @@ export interface DialogHeaderProps {
    * dialog's own visible close affordance.
    */
   closeTestId?: string;
+  /** Accessible label for the header close button. Defaults to "Close". */
+  closeAriaLabel?: string;
 }
 
 /**
@@ -412,6 +414,7 @@ export function DialogHeader({
   onClose,
   className = '',
   closeTestId,
+  closeAriaLabel = 'Close',
 }: DialogHeaderProps) {
   return (
     <div
@@ -426,7 +429,7 @@ export function DialogHeader({
             type="button"
             className="p-1 rounded text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors duration-ss-fast"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={closeAriaLabel}
             data-testid={closeTestId}
           >
             <CloseIcon />

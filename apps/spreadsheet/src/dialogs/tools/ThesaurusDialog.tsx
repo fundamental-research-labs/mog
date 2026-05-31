@@ -221,7 +221,9 @@ export function ThesaurusDialog() {
       width="md"
       onEnterKeyDown={handleConfirm}
     >
-      <DialogHeader onClose={handleClose}>Thesaurus</DialogHeader>
+      <DialogHeader onClose={handleClose} closeAriaLabel="Close Thesaurus dialog">
+        Thesaurus
+      </DialogHeader>
 
       <DialogBody>
         <div className="flex flex-col gap-4">

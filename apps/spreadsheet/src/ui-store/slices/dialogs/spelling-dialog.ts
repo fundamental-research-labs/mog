@@ -33,6 +33,8 @@ export interface SpellingError {
   suggestions: string[];
   /** Sheet ID where error was found */
   sheetId: string;
+  /** Display name for the worksheet where error was found */
+  sheetName: string;
   /** Row where error was found */
   row: number;
   /** Column where error was found */

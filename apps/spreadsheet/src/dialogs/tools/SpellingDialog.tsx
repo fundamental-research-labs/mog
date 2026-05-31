@@ -129,7 +129,9 @@ export function SpellingDialog() {
         dialogId="spelling-dialog"
         width="sm"
       >
-        <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+        <DialogHeader onClose={handleClose} closeAriaLabel="Close spelling dialog">
+          Spelling
+        </DialogHeader>
         <DialogBody>
           <div className="flex flex-col items-center gap-4 py-4 text-center">
             <div className="text-4xl">
@@ -164,7 +166,9 @@ export function SpellingDialog() {
         dialogId="spelling-dialog"
         width="sm"
       >
-        <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+        <DialogHeader onClose={handleClose} closeAriaLabel="Close spelling dialog">
+          Spelling
+        </DialogHeader>
         <DialogBody>
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="w-6 h-6 border-2 border-ss-primary border-t-transparent rounded-full animate-ss-spin" />
@@ -194,7 +198,9 @@ export function SpellingDialog() {
         if (currentError) handleChange();
       }}
     >
-      <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+      <DialogHeader onClose={handleClose} closeAriaLabel="Close spelling dialog">
+        Spelling
+      </DialogHeader>
 
       <DialogBody>
         <div className="flex flex-col gap-4">
@@ -207,14 +213,14 @@ export function SpellingDialog() {
           <div className="flex flex-col gap-1">
             <label className="text-body-sm text-ss-text-secondary">Not in Dictionary:</label>
             <div className="bg-ss-error/10 text-ss-error px-3 py-2 rounded font-medium">
-              {currentError?.word ?? ''}
+              {currentError?.word ?? ''}{' '}
             </div>
           </div>
 
           {/* Cell location */}
           {currentError && (
             <div className="text-caption text-ss-text-tertiary">
-              Found in: {currentError.sheetId} at row {currentError.row + 1}, column{' '}
+              Found in: {currentError.sheetName} at row {currentError.row + 1}, column{' '}
               {currentError.col + 1}
             </div>
           )}

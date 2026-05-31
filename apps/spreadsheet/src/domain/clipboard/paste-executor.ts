@@ -774,42 +774,6 @@ function checkPastedValuesAgainstValidation(
   return violations;
 }
 
-function isBlankSourceCell(cell: ReturnType<PasteStoreOperations['getCellData']>): boolean {
-  if (!cell) return true;
-  const hasFormula = cell.formula !== undefined && cell.formula !== null && cell.formula !== '';
-  const hasRaw = cell.raw !== undefined && cell.raw !== null && cell.raw !== '';
-  const hasComputed = cell.computed !== undefined && cell.computed !== null && cell.computed !== '';
-  return !hasFormula && !hasRaw && !hasComputed;
-}
-
-function collectCoreCopyBlankClears(
-  store: PasteStoreOperations,
-  sourceSheetId: SheetId,
-  sourceRange: CellRange,
-  target: CellCoord,
-  transpose: boolean,
-): Array<{ row: number; col: number; value: null }> {
-  const clears: Array<{ row: number; col: number; value: null }> = [];
-
-  for (let relRow = 0; relRow <= sourceRange.endRow - sourceRange.startRow; relRow++) {
-    for (let relCol = 0; relCol <= sourceRange.endCol - sourceRange.startCol; relCol++) {
-      const sourceRow = sourceRange.startRow + relRow;
-      const sourceCol = sourceRange.startCol + relCol;
-      if (!isBlankSourceCell(store.getCellData(sourceSheetId, sourceRow, sourceCol))) {
-        continue;
-      }
-
-      clears.push({
-        row: target.row + (transpose ? relCol : relRow),
-        col: target.col + (transpose ? relRow : relCol),
-        value: null,
-      });
-    }
-  }
-
-  return clears;
-}
-
 // =============================================================================
 // Main Executor
 // =============================================================================
@@ -908,8 +872,17 @@ export async function executePaste(
             : coreCopyType === 'values'
               ? clipboardHasValue || clipboardHasFormula
               : false;
+    // Cross-sheet pastes cannot use the core copy_range fast path: that path
+    // re-reads the source range from the engine at paste time, but the source
+    // sheet may no longer be mirrored once a different sheet is active, so the
+    // re-read yields blanks and nothing is written. The clipboard payload was
+    // captured while the source sheet was active and already holds the
+    // values/formulas/formats, so route cross-sheet pastes through the TS
+    // cell-by-cell path which writes that captured payload directly.
+    const isCrossSheetPaste = isInternalSource && toSheetId(data.sourceSheetId) !== sheetId;
     const useCoreCopyRange =
       isInternalSource &&
+      !isCrossSheetPaste &&
       clipboardHasCorePayload &&
       !!store.copyRange &&
       coreCopyType !== null &&
@@ -1147,20 +1120,23 @@ export async function executePaste(
     // synthesis above cannot do. Secondary payloads (comments, hyperlinks, etc.)
     // still go through TS below.
     if (useCoreCopyRange && store.copyRange) {
-      const originalSource = data.sourceRanges[0];
-      const blankClears =
-        !options.skipBlanks && coreCopyType !== 'formats'
-          ? collectCoreCopyBlankClears(
-              store,
-              toSheetId(data.sourceSheetId),
-              originalSource,
-              target,
-              options.transpose ?? false,
-            )
-          : [];
+      // copy_range owns the full-rectangle write atomically — including
+      // clearing target cells whose source position is blank. For All /
+      // Values / Formulas (skip_blanks=false) the engine pushes
+      // CellValue::Null for every blank source position, so pre-existing
+      // target content is overwritten in the same CRDT transaction (see
+      // range_operations/copy.rs and the test_copy_range_skip_blanks
+      // assertion that a blank source clears the target).
+      //
+      // Do NOT layer a second TS blank-clear pass on top. It would be
+      // redundant with the engine, non-atomic (a separate setCellValues
+      // mutation + IPC round-trip), and — critically — wrong for cross-sheet
+      // paste: the source read is viewport-scoped to the *active* sheet, so
+      // when the source sheet isn't active every source cell reads as blank
+      // and the clears wipe the values copy_range just wrote.
       await store.copyRange(
         toSheetId(data.sourceSheetId),
-        originalSource,
+        data.sourceRanges[0],
         sheetId,
         target.row,
         target.col,
@@ -1168,9 +1144,6 @@ export async function executePaste(
         options.skipBlanks ?? false,
         options.transpose ?? false,
       );
-      if (blankClears.length > 0) {
-        await store.setCellValues(sheetId, blankClears);
-      }
     } else if (valueUpdates.length > 0) {
       await store.setCellValues(sheetId, valueUpdates);
     }

@@ -20,32 +20,26 @@ import type {
   Transform,
   UnitSpec,
 } from '../grammar/spec';
-import type { ChartConfig, ChartData, ChartDataPoint, ChartType } from '../types';
+import type { ChartConfig, ChartData, ChartType } from '../types';
 import {
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
   MARK_TYPE_MAP,
   PIXELS_PER_COLUMN,
   PIXELS_PER_ROW,
-  SERIES_OPACITY_FIELD,
 } from './config-to-spec/constants';
 import {
   buildAxisScaleSpec,
-  categoryKeyForIndex,
-  isHorizontalBarType,
   mapAxisConfigToAxisSpec,
-  shouldUseDateSerialCategoryAxis,
-  shouldUseStableCategoryKeys,
-  toFiniteNumber,
 } from './config-to-spec/axis';
 import { buildConfigSpec } from './config-to-spec/config-spec';
+import { chartDataToRows } from './config-to-spec/data-rows';
 import { buildEncoding, isLegendShown } from './config-to-spec/encoding';
 import { buildDataLabelLayer } from './config-to-spec/layers/data-labels';
 import { buildStockLayers } from './config-to-spec/layers/stock';
 import { buildWaterfallLayers } from './config-to-spec/layers/waterfall';
 import { buildMark, buildSeriesMark } from './config-to-spec/marks';
 import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
-import { isNoFillNoLineSeries } from './config-to-spec/series-style';
 import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
 import { buildTitle } from './config-to-spec/title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
@@ -60,73 +54,11 @@ export {
   buildTrendlineTransform,
   buildWaterfallLayers,
   buildWaterfallTransforms,
+  chartDataToRows,
   hasSecondaryYAxis,
   resolveStackMode,
   resolveSubTypeMarkProps,
 };
-
-// =============================================================================
-// Data Conversion
-// =============================================================================
-
-/**
- * Convert ChartData (categories + series) to flat DataRow[] for the grammar.
- * Each row gets { category, value, series } fields.
- *
- * For stock charts with OHLC data, we also emit open/high/low/close fields
- * from the data point's extra properties when available.
- */
-export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[] {
-  const rows: DataRow[] = [];
-  const categories = data.categories ?? [];
-  const useExcelDateSerialCategories = config
-    ? shouldUseDateSerialCategoryAxis(config, data, isHorizontalBarType(config.type))
-    : false;
-  const useStableCategoryKeys = shouldUseStableCategoryKeys(
-    config,
-    data,
-    useExcelDateSerialCategories,
-  );
-  const seriesConfigs = config?.series ?? [];
-  for (let i = 0; i < categories.length; i++) {
-    const rawCategory = categories[i];
-    const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
-    const rowCategory = useStableCategoryKeys
-      ? categoryKeyForIndex(i)
-      : (category ?? String(rawCategory));
-    for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
-      const series = data.series[seriesIndex];
-      const point = series.data[i];
-      if (point && shouldIncludePointInRows(point, config)) {
-        const row: DataRow = {
-          category: rowCategory,
-          value: point.y,
-          series: series.name,
-        };
-        if (config?.series?.some(isNoFillNoLineSeries)) {
-          row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
-        }
-        const categoryFormatCode = data.categoryFormatCodes?.[i];
-        if (categoryFormatCode) row.categoryFormatCode = categoryFormatCode;
-        // Propagate OHLC fields if present (for stock charts)
-        if (point.open !== undefined) row.open = point.open;
-        if (point.high !== undefined) row.high = point.high;
-        if (point.low !== undefined) row.low = point.low;
-        if (point.close !== undefined) row.close = point.close;
-        rows.push(row);
-      }
-    }
-  }
-  return rows;
-}
-
-function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
-  if (!point.valueState || point.valueState === 'value') return true;
-  if (point.valueState === 'blank') {
-    return config?.displayBlanksAs === 'zero';
-  }
-  return false;
-}
 
 // =============================================================================
 // Layer Builders (Combo, Stock, Waterfall, Data Labels)

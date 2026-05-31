@@ -5,7 +5,7 @@ import type { ChartConfig, ChartData, ChartType } from '../../types';
 import { configToSpec } from '../config-to-spec';
 
 const DATE_SERIALS = [45292, 45322, 45352];
-type AxisWithTickStep = { tickStep?: number };
+type AxisWithTicks = { tickStep?: number; tickInterval?: { unit: string; step: number } };
 
 function makeData(seriesCount = 1): ChartData {
   return {
@@ -95,7 +95,7 @@ describe('configToSpec imported Excel date category axes', () => {
         formatType: 'time',
       },
     });
-    expect((spec.encoding?.x?.axis as AxisWithTickStep | undefined)?.tickStep).toBe(30);
+    expect((spec.encoding?.x?.axis as AxisWithTicks | undefined)?.tickStep).toBe(30);
 
     const result = compile(spec);
     expect(result.scales.x?.bandwidth).toBeUndefined();
@@ -105,6 +105,39 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(xAxisLabels(spec)).toEqual(
       expect.arrayContaining(['1/1/2024', '1/31/2024', '3/1/2024']),
     );
+  });
+
+  it('uses calendar-aware imported month major units for date axes', () => {
+    const data = makeData();
+    const config = makeDateAxisConfig('line');
+    config.axis = {
+      ...config.axis,
+      categoryAxis: {
+        ...config.axis?.categoryAxis,
+        min: 45292,
+        max: 45658,
+        majorUnit: 2,
+        baseTimeUnit: 'months',
+        majorTimeUnit: 'months',
+      },
+    };
+    data.categories = [45292, 45352, 45413, 45474, 45535, 45596, 45658];
+    data.series[0]!.data = data.categories.map((serial, index) => ({ x: serial, y: index + 1 }));
+
+    const spec = asUnitSpec(configToSpec(config, data));
+    const axis = spec.encoding?.x?.axis as AxisWithTicks | undefined;
+
+    expect(axis?.tickStep).toBeUndefined();
+    expect(axis?.tickInterval).toEqual({ unit: 'month', step: 2 });
+    expect(xAxisLabels(spec)).toEqual([
+      '1/1/2024',
+      '3/1/2024',
+      '5/1/2024',
+      '7/1/2024',
+      '9/1/2024',
+      '11/1/2024',
+      '1/1/2025',
+    ]);
   });
 
   it('uses the same continuous date category semantics for area charts', () => {
@@ -136,7 +169,7 @@ describe('configToSpec imported Excel date category axes', () => {
         formatType: 'time',
       },
     });
-    expect((spec.layer[0].encoding?.x?.axis as AxisWithTickStep | undefined)?.tickStep).toBe(30);
+    expect((spec.layer[0].encoding?.x?.axis as AxisWithTicks | undefined)?.tickStep).toBe(30);
     expect(spec.layer[1].encoding?.x?.type).toBe('quantitative');
 
     const result = compile(spec);
@@ -326,10 +359,10 @@ describe('configToSpec imported Excel date category axes', () => {
       orient: 'right',
       format: '$#,##0',
     });
-    expect(spec.layer[0].encoding?.color?.scale).toMatchObject({
+    expect(spec.encoding?.color?.scale).toMatchObject({
       range: ['#A5A5A5', '#ED7D31'],
     });
-    expect(spec.layer[0].encoding?.color?.legend).toMatchObject({
+    expect(spec.encoding?.color?.legend).toMatchObject({
       symbolType: 'line',
     });
 
@@ -353,6 +386,135 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(
       result.layout.plotArea.y + result.layout.plotArea.height,
     );
+  });
+
+  it('clips imported combo marks and keeps per-series colors without a default legend', () => {
+    const categories = [DATE_SERIALS[0] - 30, ...DATE_SERIALS, DATE_SERIALS[2] + 30];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Graph Area',
+          data: categories.map((serial, pointIndex) => ({
+            x: serial,
+            y: pointIndex < 2 ? -10_000_000_000 : 10_000_000_000,
+          })),
+        },
+        {
+          name: 'Y/Y %',
+          yAxisIndex: 1,
+          data: categories.map((serial, pointIndex) => ({
+            x: serial,
+            y: -0.15 + pointIndex * 0.1,
+          })),
+        },
+        {
+          name: 'Simparica',
+          data: categories.map((serial, pointIndex) => ({
+            x: serial,
+            y: 20_000_000 + pointIndex * 5_000_000,
+          })),
+        },
+      ],
+    };
+    const config = makeDateAxisConfig('combo', 3);
+    config.height = 18;
+    config.axis = {
+      ...config.axis,
+      categoryAxis: {
+        ...config.axis?.categoryAxis,
+        min: DATE_SERIALS[0],
+        max: DATE_SERIALS[2],
+        majorUnit: 2,
+        baseTimeUnit: 'months',
+        majorTimeUnit: 'months',
+      },
+      valueAxis: {
+        visible: true,
+        min: 0,
+        max: 50_000_000,
+      },
+      secondaryValueAxis: {
+        visible: true,
+        min: -0.2,
+        max: 0.3,
+        numberFormat: '0%',
+      },
+    };
+    config.series = [
+      {
+        name: 'Graph Area',
+        type: 'area',
+        format: {
+          fill: { type: 'solid', color: '#9DC3E6', transparency: 0.57 },
+          line: { color: '#9DC3E6' },
+        },
+      },
+      {
+        name: 'Y/Y %',
+        type: 'column',
+        yAxisIndex: 1,
+        format: {
+          fill: { type: 'solid', color: '#70AD47' },
+          line: { color: '#000000', width: 0.75 },
+        },
+      },
+      {
+        name: 'Simparica',
+        type: 'line',
+        format: {
+          fill: { type: 'solid', color: '#70AD47' },
+          line: { color: '#000000', width: 1.5 },
+        },
+      },
+    ];
+
+    const spec = asLayerSpec(configToSpec(config, data));
+
+    expect(spec.encoding?.color).toBeUndefined();
+    expect(spec.layer.every((layer) => !layer.encoding?.color)).toBe(true);
+    expect((spec.layer[0].encoding?.x?.axis as AxisWithTicks | undefined)?.tickInterval).toEqual({
+      unit: 'month',
+      step: 2,
+    });
+
+    const result = compile(spec);
+    expect(result.legends).toHaveLength(0);
+
+    const plotClip = result.layout.plotArea;
+    const clippedDataMarks = result.marks.filter(
+      (mark) => mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol',
+    );
+    expect(clippedDataMarks.length).toBeGreaterThan(0);
+    expect(clippedDataMarks.every((mark) => mark.clip !== undefined)).toBe(true);
+    expect(clippedDataMarks.map((mark) => mark.clip)).toEqual(
+      clippedDataMarks.map(() => ({ ...plotClip })),
+    );
+
+    const bars = result.marks.filter((mark): mark is RectMark => {
+      const datum = mark.datum as { series?: string } | undefined;
+      return mark.type === 'rect' && datum?.series === 'Y/Y %';
+    });
+    const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
+    const area = paths.find((mark) => {
+      const datum = mark.datum as Array<{ series?: string }> | undefined;
+      return Array.isArray(datum) && datum[0]?.series === 'Graph Area';
+    });
+    const line = paths.find((mark) => {
+      const datum = mark.datum as Array<{ series?: string }> | undefined;
+      return Array.isArray(datum) && datum[0]?.series === 'Simparica';
+    });
+
+    expect(bars.length).toBeGreaterThan(0);
+    expect(bars.every((mark) => mark.style.fill === '#70AD47')).toBe(true);
+    expect(area?.style.fill).toBe('#9DC3E6');
+    expect(area?.style.opacity).toBeCloseTo(0.43);
+    expect(line?.style.stroke).toBe('#000000');
+
+    const areaCoordinates = (area?.path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const areaYCoordinates = areaCoordinates.filter((_, index) => index % 2 === 1);
+    expect(Math.min(...areaYCoordinates)).toBeGreaterThanOrEqual(plotClip.y);
+    expect(Math.max(...areaYCoordinates)).toBeLessThanOrEqual(plotClip.y + plotClip.height);
   });
 
   it('keeps ordinary string category charts on nominal band scales', () => {

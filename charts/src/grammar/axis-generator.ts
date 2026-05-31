@@ -12,7 +12,6 @@ import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 
 type AxisPart = 'domain' | 'tick' | 'label' | 'grid' | 'title';
-type AxisSpecWithTickStep = AxisSpec & { tickStep?: number };
 
 function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
   return { role, axisPart };
@@ -455,17 +454,21 @@ export function formatTemporalTick(value: unknown): string {
 }
 
 function getAxisTicks(scale: AnyScale, axisSpec: AxisSpec): unknown[] {
-  const steppedAxis = axisSpec as AxisSpecWithTickStep;
-  if (
-    steppedAxis.tickStep !== undefined &&
-    steppedAxis.tickStep > 0 &&
-    typeof scale.domain === 'function'
-  ) {
+  if (axisSpec.tickInterval !== undefined && typeof scale.domain === 'function') {
     const domain = scale.domain();
     const start = numericTickValue(domain?.[0]);
     const stop = numericTickValue(domain?.[1]);
     if (start !== undefined && stop !== undefined) {
-      return generateSteppedTicks(start, stop, steppedAxis.tickStep);
+      return generateIntervalTicks(start, stop, axisSpec.tickInterval);
+    }
+  }
+
+  if (axisSpec.tickStep !== undefined && axisSpec.tickStep > 0 && typeof scale.domain === 'function') {
+    const domain = scale.domain();
+    const start = numericTickValue(domain?.[0]);
+    const stop = numericTickValue(domain?.[1]);
+    if (start !== undefined && stop !== undefined) {
+      return generateSteppedTicks(start, stop, axisSpec.tickStep);
     }
   }
 
@@ -497,6 +500,43 @@ function generateSteppedTicks(start: number, stop: number, step: number): number
   return ascending ? ticks : ticks.reverse();
 }
 
+function generateIntervalTicks(
+  start: number,
+  stop: number,
+  interval: NonNullable<AxisSpec['tickInterval']>,
+): number[] {
+  if (interval.step <= 0 || !Number.isFinite(interval.step)) return [];
+  if (interval.unit === 'day') return generateSteppedTicks(start, stop, interval.step);
+
+  const monthStep = interval.unit === 'year' ? interval.step * 12 : interval.step;
+  if (!Number.isInteger(monthStep)) return [];
+
+  return generateCalendarMonthTicks(start, stop, monthStep);
+}
+
+function generateCalendarMonthTicks(start: number, stop: number, monthStep: number): number[] {
+  if (monthStep <= 0) return [];
+
+  const ascending = start <= stop;
+  const lo = ascending ? start : stop;
+  const hi = ascending ? stop : start;
+  const ticks: number[] = [];
+  const epsilon = 1 / 1_000_000;
+  let current = excelSerialToUtcDate(lo);
+
+  for (let count = 0; count < 1000; count += 1) {
+    const serial = utcDateToExcelSerial(current);
+    if (serial > hi + epsilon) break;
+    if (serial >= lo - epsilon) ticks.push(parseFloat(serial.toPrecision(12)));
+
+    const next = addUtcMonths(current, monthStep);
+    if (next.getTime() <= current.getTime()) break;
+    current = next;
+  }
+
+  return ascending ? ticks : ticks.reverse();
+}
+
 function formatAxisTick(
   channel: ChannelSpec,
   axisSpec: AxisSpec,
@@ -511,6 +551,39 @@ function formatAxisTick(
 const EXCEL_SERIAL_UNIX_EPOCH = 25569;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+function excelSerialToUtcDate(serial: number): Date {
+  return new Date((serial - EXCEL_SERIAL_UNIX_EPOCH) * MS_PER_DAY);
+}
+
+function utcDateToExcelSerial(date: Date): number {
+  return date.getTime() / MS_PER_DAY + EXCEL_SERIAL_UNIX_EPOCH;
+}
+
+function addUtcMonths(date: Date, months: number): Date {
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const targetMonthIndex = month + months;
+  const targetYear = year + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const day = Math.min(date.getUTCDate(), daysInUtcMonth(targetYear, targetMonth));
+
+  return new Date(
+    Date.UTC(
+      targetYear,
+      targetMonth,
+      day,
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
+      date.getUTCMilliseconds(),
+    ),
+  );
+}
+
+function daysInUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+
 /**
  * Format an Excel 1900-system serial date value.
  */
@@ -523,7 +596,7 @@ export function formatExcelSerialDateTick(value: unknown, format?: string): stri
         : NaN;
 
   if (!Number.isFinite(serial)) return String(value);
-  const date = new Date((serial - EXCEL_SERIAL_UNIX_EPOCH) * MS_PER_DAY);
+  const date = excelSerialToUtcDate(serial);
   if (Number.isNaN(date.getTime())) return String(value);
 
   return formatUtcDate(date, format);

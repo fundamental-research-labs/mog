@@ -5,7 +5,7 @@ use image::ExtendedColorType;
 use image::codecs::jpeg::JpegEncoder;
 use rustybuzz::UnicodeBuffer;
 use serde::Deserialize;
-use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{Color, FillRule, Mask, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
 use ttf_parser::GlyphId;
 
 #[derive(Debug, thiserror::Error)]
@@ -75,6 +75,15 @@ pub struct RawStyle {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RawClip {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RawMark {
     #[serde(rename = "type")]
     pub mark_type: String,
@@ -101,6 +110,7 @@ pub struct RawMark {
     pub stroke: Option<String>,
     pub stroke_width: Option<f64>,
     pub opacity: Option<f64>,
+    pub clip: Option<RawClip>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +121,14 @@ struct MarkStyle {
     stroke_dash: Option<Vec<f32>>,
     opacity: f32,
     corner_radius: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MarkClip {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
 }
 
 struct RenderSurface {
@@ -236,6 +254,7 @@ impl RenderSurface {
         let width = required_f32(mark.width, index, "width")?;
         let height = required_f32(mark.height, index, "height")?;
         let style = mark_style(mark)?;
+        let clip = mark_clip(mark, index)?;
         if width <= 0.0 || height <= 0.0 {
             return Ok(());
         }
@@ -244,7 +263,7 @@ impl RenderSurface {
         } else {
             rect_path(x, y, width, height, self.dpr)
         };
-        self.fill_and_stroke_path(&path, &style)
+        self.fill_and_stroke_path(&path, &style, clip.as_ref())
     }
 
     fn render_path(&mut self, mark: &RawMark, index: usize) -> Result<()> {
@@ -256,7 +275,8 @@ impl RenderSurface {
             .ok_or_else(|| invalid_mark(index, "path mark requires path"))?;
         let path = parse_svg_path(path_data, x, y, self.dpr)?;
         let style = mark_style(mark)?;
-        self.fill_and_stroke_path(&path, &style)
+        let clip = mark_clip(mark, index)?;
+        self.fill_and_stroke_path(&path, &style, clip.as_ref())
     }
 
     fn render_arc(&mut self, mark: &RawMark, index: usize) -> Result<()> {
@@ -279,7 +299,8 @@ impl RenderSurface {
             self.dpr,
         )?;
         let style = mark_style(mark)?;
-        self.fill_and_stroke_path(&path, &style)
+        let clip = mark_clip(mark, index)?;
+        self.fill_and_stroke_path(&path, &style, clip.as_ref())
     }
 
     fn render_symbol(&mut self, mark: &RawMark, index: usize) -> Result<()> {
@@ -292,7 +313,8 @@ impl RenderSurface {
         let shape = mark.shape.as_deref().unwrap_or("circle");
         let path = symbol_path(shape, x, y, size, self.dpr)?;
         let style = mark_style(mark)?;
-        self.fill_and_stroke_path(&path, &style)
+        let clip = mark_clip(mark, index)?;
+        self.fill_and_stroke_path(&path, &style, clip.as_ref())
     }
 
     fn render_text(&mut self, mark: &RawMark, index: usize) -> Result<()> {
@@ -376,13 +398,29 @@ impl RenderSurface {
         Ok(())
     }
 
-    fn fill_and_stroke_path(&mut self, path: &Path, style: &MarkStyle) -> Result<()> {
+    fn fill_and_stroke_path(
+        &mut self,
+        path: &Path,
+        style: &MarkStyle,
+        clip: Option<&MarkClip>,
+    ) -> Result<()> {
+        let mask = match clip {
+            Some(clip) => Some(self.clip_mask(clip)?),
+            None => None,
+        };
+        let mask_ref = mask.as_ref();
+
         if let Some(color) = parse_optional_color(style.fill.as_deref(), style.opacity)? {
             let mut paint = Paint::default();
             paint.set_color(color);
             paint.anti_alias = true;
-            self.pixmap
-                .fill_path(path, &paint, FillRule::Winding, Transform::identity(), None);
+            self.pixmap.fill_path(
+                path,
+                &paint,
+                FillRule::Winding,
+                Transform::identity(),
+                mask_ref,
+            );
         }
         if let Some(color) = parse_optional_color(style.stroke.as_deref(), style.opacity)? {
             let mut paint = Paint::default();
@@ -397,9 +435,25 @@ impl RenderSurface {
                 ..Default::default()
             };
             self.pixmap
-                .stroke_path(path, &paint, &stroke, Transform::identity(), None);
+                .stroke_path(path, &paint, &stroke, Transform::identity(), mask_ref);
         }
         Ok(())
+    }
+
+    fn clip_mask(&self, clip: &MarkClip) -> Result<Mask> {
+        let rect = Rect::from_xywh(
+            clip.x * self.dpr,
+            clip.y * self.dpr,
+            clip.width * self.dpr,
+            clip.height * self.dpr,
+        )
+        .ok_or_else(|| ChartRenderError::InvalidMark("invalid mark clip rectangle".to_string()))?;
+        let mut mask = Mask::new(self.pixmap.width(), self.pixmap.height()).ok_or_else(|| {
+            ChartRenderError::InvalidRequest("unable to allocate chart clip mask".to_string())
+        })?;
+        let path = PathBuilder::from_rect(rect);
+        mask.fill_path(&path, FillRule::Winding, false, Transform::identity());
+        Ok(mask)
     }
 }
 
@@ -506,6 +560,28 @@ fn mark_style(mark: &RawMark) -> Result<MarkStyle> {
         opacity: opacity as f32,
         corner_radius: corner_radius as f32,
     })
+}
+
+fn mark_clip(mark: &RawMark, index: usize) -> Result<Option<MarkClip>> {
+    let Some(clip) = mark.clip.as_ref() else {
+        return Ok(None);
+    };
+    let x = optional_f32(Some(clip.x), 0.0, index, "clip.x")?;
+    let y = optional_f32(Some(clip.y), 0.0, index, "clip.y")?;
+    let width = optional_f32(Some(clip.width), 0.0, index, "clip.width")?;
+    let height = optional_f32(Some(clip.height), 0.0, index, "clip.height")?;
+    if width <= 0.0 || height <= 0.0 {
+        return Err(invalid_mark(
+            index,
+            "clip width and height must be positive",
+        ));
+    }
+    Ok(Some(MarkClip {
+        x,
+        y,
+        width,
+        height,
+    }))
 }
 
 fn rect_path(x: f32, y: f32, width: f32, height: f32, dpr: f32) -> Path {
@@ -1425,6 +1501,11 @@ mod tests {
             .count()
     }
 
+    fn pixel(data: &[u8], width: u32, x: u32, y: u32) -> &[u8] {
+        let offset = ((y * width + x) * 4) as usize;
+        &data[offset..offset + 4]
+    }
+
     #[test]
     fn renders_conformance_mark_families_to_nonblank_png() {
         let req = request(vec![
@@ -1511,6 +1592,26 @@ mod tests {
             render_chart_marks_image(&svg),
             Err(ChartRenderError::UnsupportedFormat(_))
         ));
+    }
+
+    #[test]
+    fn clips_marks_to_requested_rectangle() {
+        let req = request(vec![serde_json::json!({
+            "type": "rect",
+            "x": 0,
+            "y": 0,
+            "width": 240,
+            "height": 160,
+            "clip": { "x": 50, "y": 40, "width": 30, "height": 20 },
+            "style": { "fill": "#0000ff" }
+        })]);
+
+        let rendered = render_chart_marks_image(&req).unwrap();
+        let (width, _height, data) = decode_png(&rendered.bytes);
+
+        assert_eq!(pixel(&data, width, 65, 50), &[0, 0, 255, 255]);
+        assert_eq!(pixel(&data, width, 40, 50), &[255, 255, 255, 255]);
+        assert_eq!(pixel(&data, width, 65, 70), &[255, 255, 255, 255]);
     }
 
     #[test]

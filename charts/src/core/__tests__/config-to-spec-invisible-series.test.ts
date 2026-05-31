@@ -190,4 +190,38 @@ describe('configToSpec invisible stacked bar series', () => {
     const bars = result.marks.filter((mark): mark is RectMark => mark.type === 'rect');
     expect(new Set(bars.map((mark) => mark.y))).toHaveProperty('size', 3);
   });
+
+  it('reserves enough y-axis margin for long imported category labels with chart fonts', () => {
+    const longLabelData: ChartData = {
+      categories: ['13.5% - 15.5% Discount Rate, 2.0% - 4.0% Terminal FCF Growth Rate:'],
+      series: [
+        {
+          name: 'Visible',
+          data: [{ x: '13.5% - 15.5% Discount Rate, 2.0% - 4.0% Terminal FCF Growth Rate:', y: 1 }],
+        },
+      ],
+    };
+    const importedConfig: ChartConfig = {
+      type: 'bar',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      axis: {
+        categoryAxis: {
+          visible: true,
+          format: {
+            font: {
+              name: '+mn-lt',
+              size: 12,
+            },
+          },
+        },
+      },
+    };
+
+    const spec = asUnitSpec(configToSpec(importedConfig, longLabelData));
+
+    expect(spec.config?.layoutHints?.yAxisLabelWidth).toBeGreaterThan(560);
+  });
 });

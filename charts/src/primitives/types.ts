@@ -25,6 +25,16 @@ export interface MarkStyle {
 }
 
 /**
+ * Rectangular clipping region in canvas coordinates.
+ */
+export interface MarkClip {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
  * Base mark interface - all marks extend this.
  */
 export interface Mark {
@@ -38,6 +48,8 @@ export interface Mark {
   datum?: unknown;
   /** Visual styling */
   style: MarkStyle;
+  /** Optional clipping rectangle for plot-area constrained data marks. */
+  clip?: MarkClip;
   /** Whether this mark is interactive (default: true) */
   interactive?: boolean;
 }

@@ -70,8 +70,8 @@ export function compileLayered(
     height: options.height ?? (typeof spec.height === 'number' ? spec.height : 400),
   });
 
-  // Merge encodings from layers to create shared scales
-  const mergedEncoding = mergeEncodings(spec.layer.map((l) => l.encoding));
+  // Merge top-level shared encodings and layer encodings to create shared scales.
+  const mergedEncoding = mergeEncodings([spec.encoding, ...spec.layer.map((l) => l.encoding)]);
   const mergedData = spec.layer.flatMap((layer) => {
     if (layer.data && 'values' in layer.data) {
       return layer.data.values;
@@ -168,11 +168,13 @@ export function compileLayered(
   const background = generateBackground(spec.config?.background, layout.width, layout.height);
 
   // Dev-mode assertion: all data marks must carry their source datum
-  assertDataMarksHaveDatum(allMarks);
+  const clippedMarks = clipMarksToPlotArea(allMarks, layout.plotArea);
+
+  assertDataMarksHaveDatum(clippedMarks);
 
   return {
     background,
-    marks: allMarks,
+    marks: clippedMarks,
     axes,
     legends,
     title,
@@ -203,6 +205,24 @@ function generateBackground(
       style: { fill },
     } as RectMark,
   ];
+}
+
+function isPlotClippableMark(mark: AnyMark): boolean {
+  return mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol';
+}
+
+function clipMarksToPlotArea(
+  marks: AnyMark[],
+  plotArea: { x: number; y: number; width: number; height: number },
+): AnyMark[] {
+  return marks.map((mark) =>
+    isPlotClippableMark(mark)
+      ? {
+          ...mark,
+          clip: { ...plotArea },
+        }
+      : mark,
+  );
 }
 
 /**

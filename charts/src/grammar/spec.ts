@@ -268,6 +268,13 @@ export interface ScaleSpec {
  */
 export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
 
+export type AxisTickIntervalUnit = 'day' | 'month' | 'year';
+
+export interface AxisTickInterval {
+  unit: AxisTickIntervalUnit;
+  step: number;
+}
+
 /**
  * Axis specification.
  */
@@ -289,6 +296,8 @@ export interface AxisSpec {
   tickSize?: number;
   tickColor?: string;
   tickWidth?: number;
+  tickStep?: number;
+  tickInterval?: AxisTickInterval;
   grid?: boolean;
   gridColor?: string;
   gridWidth?: number;

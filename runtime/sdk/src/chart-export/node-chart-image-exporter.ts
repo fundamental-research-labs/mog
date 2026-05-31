@@ -28,6 +28,13 @@ type SerializableStyle = {
   cornerRadius?: number;
 };
 
+type SerializableClip = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 type SerializableMark = {
   type: SerializableMarkType;
   x?: number;
@@ -48,6 +55,7 @@ type SerializableMark = {
   fontWeight?: 'normal' | 'bold' | number;
   shape?: 'circle' | 'square' | 'diamond' | 'cross' | 'triangle-up' | 'triangle-down';
   size?: number;
+  clip?: SerializableClip;
   style: SerializableStyle;
 };
 
@@ -146,6 +154,7 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
   const source = record(mark, index, 'mark');
   const type = stringField(source, 'type', index) as SerializableMarkType;
   const style = serializeStyle(source, index);
+  const clip = serializeClip(source, index);
 
   switch (type) {
     case 'rect':
@@ -155,6 +164,7 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
         y: numberField(source, 'y', index),
         width: numberField(source, 'width', index),
         height: numberField(source, 'height', index),
+        ...(clip ? { clip } : {}),
         style,
       };
     case 'path':
@@ -165,6 +175,7 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
         x: optionalNumberField(source, 'x', index) ?? 0,
         y: optionalNumberField(source, 'y', index) ?? 0,
         path: stringField(source, 'path', index),
+        ...(clip ? { clip } : {}),
         style,
       };
     case 'arc':
@@ -176,6 +187,7 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
         outerRadius: numberField(source, 'outerRadius', index),
         startAngle: numberField(source, 'startAngle', index),
         endAngle: numberField(source, 'endAngle', index),
+        ...(clip ? { clip } : {}),
         style,
       };
     case 'symbol':
@@ -185,6 +197,7 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
         y: numberField(source, 'y', index),
         shape: symbolShapeField(source, index),
         size: numberField(source, 'size', index),
+        ...(clip ? { clip } : {}),
         style,
       };
     case 'text':
@@ -199,11 +212,23 @@ function serializeMark(mark: unknown, index: number): SerializableMark {
         textBaseline: textBaselineField(source, index),
         rotation: optionalNumberField(source, 'rotation', index),
         fontWeight: fontWeightField(source, index),
+        ...(clip ? { clip } : {}),
         style,
       };
     default:
       throw new Error(`Unsupported chart mark type "${String(type)}" at index ${index}`);
   }
+}
+
+function serializeClip(source: Record<string, unknown>, index: number): SerializableClip | undefined {
+  if (source.clip === undefined) return undefined;
+  const clip = record(source.clip, index, 'clip');
+  return {
+    x: numberField(clip, 'x', index),
+    y: numberField(clip, 'y', index),
+    width: numberField(clip, 'width', index),
+    height: numberField(clip, 'height', index),
+  };
 }
 
 function serializeStyle(source: Record<string, unknown>, index: number): SerializableStyle {

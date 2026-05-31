@@ -34,6 +34,8 @@ export function generateAreaMarks(
   if (!xScale || !yScale) return [];
 
   const chartBaseline = layout.plotArea.y + layout.plotArea.height;
+  const clampYToPlot = (y: number): number =>
+    Math.max(layout.plotArea.y, Math.min(chartBaseline, y));
 
   // Group by color/detail
   const groups = groupDataByEncoding(data, encodings.color ?? encodings.detail);
@@ -172,7 +174,7 @@ export function generateAreaMarks(
 
           const y = effectiveYScale(cumEnd) as number;
           if (isNaN(y)) continue;
-          topPoints.push({ x, y, xKey: cat });
+          topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
         } else {
           // stack: 'zero' — accumulate raw values, separated by sign
           let cumVal: number;
@@ -187,13 +189,13 @@ export function generateAreaMarks(
           }
           const y = effectiveYScale(cumVal) as number;
           if (isNaN(y)) continue;
-          topPoints.push({ x, y, xKey: cat });
+          topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
         }
       } else {
         // Non-stacked: use original scale directly
         const y = yScale(encodings.y?.accessor(datum)) as number;
         if (isNaN(y)) continue;
-        topPoints.push({ x, y, xKey: '' });
+        topPoints.push({ x, y: clampYToPlot(y), xKey: '' });
       }
     }
 

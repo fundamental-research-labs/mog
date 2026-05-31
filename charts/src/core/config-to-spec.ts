@@ -72,8 +72,6 @@ const MINOR_GRIDLINE_TICK_COUNT = 10;
 const SERIES_OPACITY_FIELD = '__mogSeriesOpacity';
 const CATEGORY_KEY_PREFIX = '__mogCategory';
 
-type AxisSpecWithTickStep = AxisSpec & { tickStep?: number };
-
 // =============================================================================
 // Imported Style Helpers
 // =============================================================================
@@ -234,6 +232,12 @@ function resolveSolidFillColor(fill: ChartFill | undefined): string | undefined 
 
 function resolveFormatFillColor(format: ChartFormat | undefined): string | undefined {
   return resolveSolidFillColor(format?.fill);
+}
+
+function resolveFormatFillOpacity(format: ChartFormat | undefined): number | undefined {
+  const transparency = format?.fill?.type === 'solid' ? format.fill.transparency : undefined;
+  if (typeof transparency !== 'number' || !Number.isFinite(transparency)) return undefined;
+  return Math.max(0, Math.min(1, 1 - transparency));
 }
 
 function resolveLineColor(line: ChartFormat['line'] | undefined): string | undefined {
@@ -624,9 +628,11 @@ function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec {
   if (axisConf.numberFormat) spec.format = axisConf.numberFormat;
   if (isDateAxisConfig(axisConf)) {
     spec.formatType = 'time';
-    const majorUnit = toFiniteNumber(axisConf.majorUnit);
-    if (majorUnit !== undefined && majorUnit > 0) {
-      (spec as AxisSpecWithTickStep).tickStep = majorUnit;
+    const tickInterval = dateAxisTickInterval(axisConf);
+    if (tickInterval) spec.tickInterval = tickInterval;
+    else {
+      const majorUnit = toFiniteNumber(axisConf.majorUnit);
+      if (majorUnit !== undefined && majorUnit > 0) spec.tickStep = majorUnit;
     }
   }
   if (axisConf.crossesAt) spec.crossesAt = axisConf.crossesAt;
@@ -760,6 +766,32 @@ function isDateAxisConfig(axisConf: SingleAxisConfig | undefined): boolean {
   );
 }
 
+function dateAxisTickInterval(axisConf: SingleAxisConfig): AxisSpec['tickInterval'] | undefined {
+  const majorUnit = toFiniteNumber(axisConf.majorUnit);
+  if (majorUnit === undefined || majorUnit <= 0) return undefined;
+
+  const unit = normalizeDateAxisTimeUnit(axisConf.majorTimeUnit ?? axisConf.baseTimeUnit);
+  return unit ? { unit, step: majorUnit } : undefined;
+}
+
+function normalizeDateAxisTimeUnit(
+  value: string | undefined,
+): NonNullable<AxisSpec['tickInterval']>['unit'] | undefined {
+  switch (value?.toLowerCase()) {
+    case 'day':
+    case 'days':
+      return 'day';
+    case 'month':
+    case 'months':
+      return 'month';
+    case 'year':
+    case 'years':
+      return 'year';
+    default:
+      return undefined;
+  }
+}
+
 function shouldUseDateSerialCategoryAxis(
   config: ChartConfig,
   data: ChartData,
@@ -837,6 +869,10 @@ function legendPositionToOrient(position: string): LegendOrient {
   }
 }
 
+function isLegendShown(legend: LegendConfig | undefined): legend is LegendConfig {
+  return Boolean(legend && legend.show && legend.visible !== false && legend.position !== 'none');
+}
+
 /**
  * Build encoding for the color channel, including legend config.
  */
@@ -860,7 +896,7 @@ function buildColorEncoding(
     };
   }
   if (legend) {
-    if (!legend.show) {
+    if (!isLegendShown(legend)) {
       channel.legend = null; // hide
     } else {
       const legendFont = legend.format?.font ?? legend.font;
@@ -948,7 +984,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     }
     // Apply legend config to color channel
     if (config.legend) {
-      if (!config.legend.show) {
+      if (!isLegendShown(config.legend)) {
         encoding.color.legend = null;
       } else {
         const legendFont = config.legend.format?.font ?? config.legend.font;
@@ -1417,7 +1453,7 @@ function estimateNominalYAxisLabelWidth(
 
   const fontSize = y.axis?.labelFontSize ?? 11;
   const estimatedWidth = Math.ceil(maxLabelLength * fontSize * 0.52);
-  return Math.max(60, Math.min(560, estimatedWidth));
+  return Math.max(60, Math.min(660, estimatedWidth));
 }
 
 function estimateYAxisLabelWidth(encoding: EncodingSpec | undefined): number | undefined {
@@ -1579,7 +1615,6 @@ export function buildComboLayers(
   const baseEncoding = buildEncoding(config, data);
   const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' };
   const yEncoding = baseEncoding.y ?? { field: 'value', type: 'quantitative' };
-  const colorEncoding = baseEncoding.color;
   const secondaryYAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
 
   for (let i = 0; i < data.series.length; i++) {
@@ -1592,7 +1627,6 @@ export function buildComboLayers(
     const layerEncoding: EncodingSpec = {
       x: { ...xEncoding },
       y: { ...yEncoding, field: 'value', type: 'quantitative' },
-      ...(colorEncoding ? { color: { ...colorEncoding } } : {}),
     };
 
     // Per-series y-axis encoding for dual-axis support
@@ -1689,6 +1723,14 @@ function buildSeriesMark(
   const mark: MarkSpec = { type: markType };
   const color = seriesConf ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType) : undefined;
   if (color) mark.color = color;
+  const fillOpacity = resolveFormatFillOpacity(seriesConf?.format);
+  if (fillOpacity !== undefined) {
+    if (markType === 'area') {
+      mark.fillOpacity = fillOpacity;
+    } else if (markType === 'bar' || markType === 'point' || markType === 'arc') {
+      mark.opacity = fillOpacity;
+    }
+  }
   if (seriesConf?.lineWidth) mark.strokeWidth = seriesConf.lineWidth;
   if (seriesConf?.showMarkers) mark.point = true;
   if (seriesConf?.markerSize) {
@@ -1935,11 +1977,14 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     }
 
     const resolve = buildResolve(config, data);
+    const sharedEncoding: EncodingSpec | undefined =
+      encoding.color && isLegendShown(config.legend) ? { color: { ...encoding.color } } : undefined;
     const spec: LayerSpec = {
       width,
       height,
       data: { values: rows },
       layer: layers,
+      ...(sharedEncoding ? { encoding: sharedEncoding } : {}),
       title,
       config: configSpec,
       ...(resolve ? { resolve } : {}),

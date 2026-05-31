@@ -107,6 +107,7 @@ export function compile(
     spec.encoding,
     spec.config,
   );
+  const clippedMarks = clipMarksToPlotArea(marks, layout.plotArea);
 
   // Generate axes
   const axes = options.skipAxes ? [] : generateAxes(spec.encoding, scales, layout, spec.config);
@@ -119,11 +120,11 @@ export function compile(
   const background = generateBackground(spec.config?.background, layout.width, layout.height);
 
   // Dev-mode assertion: all data marks must carry their source datum
-  assertDataMarksHaveDatum(marks);
+  assertDataMarksHaveDatum(clippedMarks);
 
   return {
     background,
-    marks,
+    marks: clippedMarks,
     axes,
     legends,
     title,
@@ -154,6 +155,24 @@ function generateBackground(
       style: { fill },
     } as RectMark,
   ];
+}
+
+function isPlotClippableMark(mark: AnyMark): boolean {
+  return mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol';
+}
+
+function clipMarksToPlotArea(
+  marks: AnyMark[],
+  plotArea: { x: number; y: number; width: number; height: number },
+): AnyMark[] {
+  return marks.map((mark) =>
+    isPlotClippableMark(mark)
+      ? {
+          ...mark,
+          clip: { ...plotArea },
+        }
+      : mark,
+  );
 }
 
 // =============================================================================

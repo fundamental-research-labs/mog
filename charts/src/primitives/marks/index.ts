@@ -10,6 +10,7 @@ export type {
   AnyMark,
   ArcMark,
   Mark,
+  MarkClip,
   MarkStyle,
   PathMark,
   RectMark,
@@ -63,12 +64,21 @@ export {
   sizeToRadius,
 } from './symbol';
 
-import type { AnyMark } from '../types';
+import type { AnyMark, MarkClip } from '../types';
 import { renderArc } from './arc';
 import { renderPath } from './path';
 import { renderRect } from './rect';
 import { renderSymbol } from './symbol';
 import { renderText } from './text';
+
+/**
+ * Apply a rectangular clip before rendering a mark.
+ */
+function applyClip(ctx: CanvasRenderingContext2D, clip: MarkClip): void {
+  ctx.beginPath();
+  ctx.rect(clip.x, clip.y, clip.width, clip.height);
+  ctx.clip();
+}
 
 /**
  * Render any mark type to canvas.
@@ -77,6 +87,14 @@ import { renderText } from './text';
  * @param mark - Any mark type to render
  */
 export function renderMark(ctx: CanvasRenderingContext2D, mark: AnyMark): void {
+  if (mark.clip) {
+    ctx.save();
+    applyClip(ctx, mark.clip);
+    renderMark(ctx, { ...mark, clip: undefined } as AnyMark);
+    ctx.restore();
+    return;
+  }
+
   switch (mark.type) {
     case 'rect':
       renderRect(ctx, mark);

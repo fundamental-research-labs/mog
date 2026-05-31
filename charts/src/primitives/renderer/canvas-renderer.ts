@@ -13,11 +13,12 @@
  */
 
 import { renderMark } from '../marks';
+import { buildCanvasFontString } from '../font';
 import type { PathCommand } from '../marks/path';
 import { applyPathCommands, parsePath } from '../marks/path';
 import { applyStyle, roundRect } from '../marks/rect';
 import { drawSymbolShape } from '../marks/symbol';
-import type { AnyMark, ArcMark, PathMark, RectMark, SymbolMark, TextMark } from '../types';
+import type { AnyMark, ArcMark, MarkClip, PathMark, RectMark, SymbolMark, TextMark } from '../types';
 
 // =============================================================================
 // Renderer Interface
@@ -54,16 +55,21 @@ export interface Renderer {
  * Text marks always get a unique-ish key because they carry per-mark font
  * and alignment state that must be set individually.
  */
+function clipKey(clip: MarkClip | undefined): string {
+  return clip ? `|clip:${clip.x},${clip.y},${clip.width},${clip.height}` : '';
+}
+
 function styleKey(mark: AnyMark): string {
   const s = mark.style;
+  const clip = clipKey(mark.clip);
   // Text marks need per-mark font/alignment, so we include those properties
   // in the key to ensure correct rendering within a batch.
   if (mark.type === 'text') {
     const t = mark as TextMark;
-    const weight = t.fontWeight ?? 'normal';
-    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${weight} ${t.fontSize}px ${t.fontFamily}|${t.textAlign}|${t.textBaseline}`;
+    const font = buildCanvasFontString(t.fontWeight, t.fontSize, t.fontFamily);
+    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${font}|${t.textAlign}|${t.textBaseline}${clip}`;
   }
-  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}`;
+  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}${clip}`;
 }
 
 // =============================================================================
@@ -164,10 +170,15 @@ function drawMarkBatched(ctx: CanvasRenderingContext2D, mark: AnyMark): void {
  * Apply text-specific context state (font, alignment) for a text-mark batch.
  */
 function applyTextState(ctx: CanvasRenderingContext2D, mark: TextMark): void {
-  const weight = mark.fontWeight ?? 'normal';
-  ctx.font = `${weight} ${mark.fontSize}px ${mark.fontFamily}`;
+  ctx.font = buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily);
   ctx.textAlign = mark.textAlign;
   ctx.textBaseline = mark.textBaseline;
+}
+
+function applyClip(ctx: CanvasRenderingContext2D, clip: MarkClip): void {
+  ctx.beginPath();
+  ctx.rect(clip.x, clip.y, clip.width, clip.height);
+  ctx.clip();
 }
 
 // =============================================================================
@@ -268,6 +279,9 @@ export class CanvasRenderer implements Renderer {
 
       ctx.save();
       applyStyle(ctx, firstMark.style);
+      if (firstMark.clip) {
+        applyClip(ctx, firstMark.clip);
+      }
 
       // For text batches, also set font/alignment from the first mark (all
       // marks in the batch share the same font properties because the key

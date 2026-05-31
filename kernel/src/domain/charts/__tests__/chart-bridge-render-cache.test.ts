@@ -43,6 +43,7 @@ import type {
 import type { DocumentContext } from '../../../context/types';
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { ChartBridge } from '../chart-bridge';
+import type { ChartSheetIndex } from '../bridge/chart-sheet-index';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
 const SHEET_B: SheetId = toSheetId('sheet-b');
@@ -662,6 +663,33 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     emitChartUpdated(eventBus, CHART_1, SHEET_B, ['anchorRow', 'anchorCol']);
     expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_B);
     bridge.stop();
+  });
+
+  it('clearAllCaches leaves the sheet index intact', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const internals = bridge as unknown as { chartSheetIndex: ChartSheetIndex };
+
+    bridge.clearAllCaches();
+
+    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    bridge.stop();
+  });
+
+  it('stop() clears the sheet index', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const internals = bridge as unknown as { chartSheetIndex: ChartSheetIndex };
+
+    bridge.stop();
+
+    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
   });
 
   it('position-only :updated does not invalidate the marks cache', () => {

@@ -105,6 +105,7 @@ import {
   renderChartMarks,
   renderChartPlaceholder,
 } from './bridge/chart-renderer';
+import { ChartSheetIndex } from './bridge/chart-sheet-index';
 
 import type { DocumentContext } from '../../context/types';
 
@@ -365,16 +366,8 @@ export class ChartBridge implements IChartBridge {
   /** Set of chart IDs currently being recompiled (in-flight async compilation) */
   private pendingCompilations = new Set<string>();
 
-  /**
-   * Index from chartId to the SheetId that owns it.
-   *
-   * Populated by the floating-object event handlers (`:created`, `:updated`,
-   * `:deleted`). The sync paint path (`renderCached`) uses this for an O(1)
-   * sheet lookup instead of awaiting `getAllSheetIds` + a chart get per
-   * sheet — the await chain is what made the old async `render()` paint in
-   * the wrong canvas frame.
-   */
-  private chartSheetIndex = new Map<string, SheetId>();
+  /** Sync paint-path chartId -> owning SheetId index. */
+  private chartSheetIndex = new ChartSheetIndex();
 
   /** Listeners notified when a real cache outcome (marks or error) is committed. */
   private cacheUpdateListeners: Array<(chartId: string) => void> = [];
@@ -392,8 +385,7 @@ export class ChartBridge implements IChartBridge {
   constructor(private ctx: DocumentContext) {}
 
   private cacheKey(chartId: string, sheetId?: SheetId): string {
-    const resolvedSheetId = sheetId ?? this.chartSheetIndex.get(chartId);
-    return resolvedSheetId ? `${resolvedSheetId}::${chartId}` : chartId;
+    return this.chartSheetIndex.cacheKey(chartId, sheetId);
   }
 
   private deleteCacheEntries(chartId: string, sheetId?: SheetId): void {
@@ -570,10 +562,7 @@ export class ChartBridge implements IChartBridge {
     // exists.
     const unsubSheetDeleted = this.ctx.eventBus.on<SheetDeletedEvent>('sheet:deleted', (event) => {
       const deletedSheetId = toSheetId(event.sheetId);
-      const orphanedChartIds: string[] = [];
-      for (const [chartId, sheetId] of this.chartSheetIndex) {
-        if (sheetId === deletedSheetId) orphanedChartIds.push(chartId);
-      }
+      const orphanedChartIds = this.chartSheetIndex.chartIdsForSheet(deletedSheetId);
       for (const chartId of orphanedChartIds) {
         this.chartSheetIndex.delete(chartId);
         this.deleteCacheEntries(chartId, deletedSheetId);
@@ -1552,7 +1541,7 @@ export class ChartBridge implements IChartBridge {
       return;
     }
 
-    const resolvedSheetId = sheetId ?? this.chartSheetIndex.get(chartId);
+    const resolvedSheetId = this.chartSheetIndex.resolveSheetId(chartId, sheetId);
     if (!resolvedSheetId) {
       // First-paint case: floatingObject:created hasn't been delivered yet,
       // OR the chart was already deleted. Either way paint a placeholder; the
@@ -1629,7 +1618,7 @@ export class ChartBridge implements IChartBridge {
    * Trigger compilation if dirty or absent. See {@link IChartBridge.ensureCompiled}.
    */
   async ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void> {
-    const resolvedSheetId = sheetId ?? this.chartSheetIndex.get(chartId);
+    const resolvedSheetId = this.chartSheetIndex.resolveSheetId(chartId, sheetId);
     if (!resolvedSheetId) return;
     await this.getMarks(resolvedSheetId, chartId);
   }

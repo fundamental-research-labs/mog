@@ -81,10 +81,10 @@ describe('Number Format Handlers — preset format strings', () => {
     expect(getAppliedFormat(deps)).toBe('#,##0.00');
   });
 
-  it('FORMAT_TIME applies h:mm:ss AM/PM', async () => {
+  it('FORMAT_TIME applies h:mm AM/PM', async () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_TIME(deps);
-    expect(getAppliedFormat(deps)).toBe('h:mm:ss AM/PM');
+    expect(getAppliedFormat(deps)).toBe('h:mm AM/PM');
   });
 
   it('FORMAT_CURRENCY applies $#,##0.00', async () => {
@@ -109,5 +109,35 @@ describe('Number Format Handlers — preset format strings', () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_COMMA(deps);
     expect(getAppliedFormat(deps)).toBe('#,##0.00');
+  });
+});
+
+describe('Number Format Handlers — decimal adjustment', () => {
+  function createMockDepsWithNumberFormat(numberFormat: string | undefined): ActionDependencies {
+    const deps = createMockDeps() as any;
+    const ws = deps.workbook.getSheetById();
+    ws.viewport = {
+      getCellData: jest.fn().mockReturnValue({ format: { numberFormat } }),
+    };
+    deps.workbook.activeSheet = ws;
+    return deps as ActionDependencies;
+  }
+
+  it('DECREASE_DECIMALS starts unformatted cells from two decimals', async () => {
+    const deps = createMockDepsWithNumberFormat('General');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.0');
+  });
+
+  it('DECREASE_DECIMALS keeps explicit zero-decimal formats clamped at zero', async () => {
+    const deps = createMockDepsWithNumberFormat('0');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0');
+  });
+
+  it('INCREASE_DECIMALS increments explicit zero-decimal formats', async () => {
+    const deps = createMockDepsWithNumberFormat('0');
+    await NumberFormatHandlers.INCREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.0');
   });
 });

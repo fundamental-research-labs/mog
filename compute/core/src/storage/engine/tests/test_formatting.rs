@@ -284,6 +284,84 @@ fn formula_edit_copies_number_format_through_formula_chain() {
 }
 
 #[test]
+fn test_set_cell_currency_string_applies_currency_format() {
+    use crate::bridge_types::CellInput;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                3u32,
+                CellInput::Parse {
+                    text: "$19.99".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    let cell_value = engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 3));
+    match cell_value {
+        Some(CellValue::Number(value)) => assert_eq!(value.get(), 19.99),
+        other => panic!("expected Number for currency input, got {:?}", other),
+    }
+
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        Some("$#,##0.00")
+    );
+    assert_eq!(engine.format_cell_display(&sid, 0, 3), "$19.99");
+}
+
+#[test]
+fn test_set_cell_currency_string_preserves_explicit_destination_format() {
+    use crate::bridge_types::CellInput;
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 3, 0, 3)],
+            &CellFormat {
+                number_format: Some("0.00".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                0u32,
+                3u32,
+                CellInput::Parse {
+                    text: "$19.99".to_string(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    assert_eq!(
+        stored_number_format_at(&engine, &sid, 0, 3).as_deref(),
+        Some("0.00")
+    );
+    assert_eq!(engine.format_cell_display(&sid, 0, 3), "19.99");
+}
+
+#[test]
 fn test_set_cell_date_formula_applies_date_format() {
     use crate::bridge_types::CellInput;
 

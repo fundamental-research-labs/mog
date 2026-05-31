@@ -288,6 +288,44 @@ describe('SelectionLayer clipboard suppression', () => {
     expect(ctx.fillRect).toHaveBeenCalled();
   });
 
+  it('should draw active single-cell selections without filling over the active cell', () => {
+    const range = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 } as CellRange;
+    const selectionData = createMockSelectionDataSource({
+      ranges: [range],
+      activeCell: { row: 0, col: 0 },
+    });
+
+    const positionIndex = createTestPositionIndex();
+    const mergeIndex = createMockMergeIndex();
+    const sheetData = createMockSheetDataSource();
+    const ctx = createMockContext();
+
+    const layer = new SelectionLayer(selectionData, positionIndex, mergeIndex, sheetData);
+    layer.render(ctx, createRegion(), createFrame());
+
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+    expect(ctx.strokeRect).toHaveBeenCalled();
+  });
+
+  it('should still fill non-active single-cell ranges in a multi-selection', () => {
+    const activeRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 } as CellRange;
+    const otherRange = { startRow: 2, startCol: 2, endRow: 2, endCol: 2 } as CellRange;
+    const selectionData = createMockSelectionDataSource({
+      ranges: [activeRange, otherRange],
+      activeCell: { row: 0, col: 0 },
+    });
+
+    const positionIndex = createTestPositionIndex();
+    const mergeIndex = createMockMergeIndex();
+    const sheetData = createMockSheetDataSource();
+    const ctx = createMockContext();
+
+    const layer = new SelectionLayer(selectionData, positionIndex, mergeIndex, sheetData);
+    layer.render(ctx, createRegion(), createFrame());
+
+    expect(ctx.fillRect).toHaveBeenCalledTimes(1);
+  });
+
   it('should only suppress fill for clipboard-matching ranges, not all ranges', () => {
     const copyRange = { startRow: 0, startCol: 0, endRow: 2, endCol: 2 } as CellRange;
     const otherRange = { startRow: 5, startCol: 5, endRow: 7, endCol: 7 } as CellRange;

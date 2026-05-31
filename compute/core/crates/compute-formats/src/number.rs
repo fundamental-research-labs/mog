@@ -106,7 +106,7 @@ pub(crate) fn apply_text_section(section: &FormatSection, text: &str) -> String 
         match tok {
             Token::TextPlaceholder => result.push_str(text),
             Token::Literal(s) => result.push_str(s),
-            Token::SkipWidth(_) => result.push(' '),
+            Token::SkipWidth(_) => {}
             _ => {}
         }
     }

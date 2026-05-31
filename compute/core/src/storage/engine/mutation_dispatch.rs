@@ -149,6 +149,7 @@ impl YrsComputeEngine {
                 if !inferred_format_candidates.is_empty() {
                     self.apply_inferred_date_formats(&inferred_format_candidates)?;
                     self.apply_inferred_time_formats(&inferred_format_candidates)?;
+                    self.apply_inferred_currency_formats(&inferred_format_candidates)?;
                 }
 
                 let mut result = MutationResult::from_recalc(recalc);

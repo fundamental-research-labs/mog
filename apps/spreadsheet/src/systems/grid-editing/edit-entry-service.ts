@@ -3,6 +3,7 @@ import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { protectionError, successResult } from '@mog/spreadsheet-utils/protection';
 
@@ -31,6 +32,7 @@ export interface EditEntryServiceOptions {
   isReadOnly: () => boolean;
   getMergedRegion?: (sheetId: SheetId, cell: CellCoord) => CellRange | undefined;
   getPreEditSelectionRanges?: () => CellRange[];
+  getCachedRichTextSegments?: (sheetId: SheetId, cell: CellCoord) => RichTextSegment[] | null;
 }
 
 export interface EditEntryService {
@@ -170,6 +172,13 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
         openDropdown: request.openDropdown,
         preEditSelectionRanges,
       });
+      const cachedSegments = options.getCachedRichTextSegments?.(request.sheetId, request.cell);
+      if (cachedSegments) {
+        options.editorActor.send({
+          type: 'START_RICH_TEXT_EDITING',
+          segments: cachedSegments,
+        });
+      }
 
       const validationRequest = {
         sheetId: request.sheetId,

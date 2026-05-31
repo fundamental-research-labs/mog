@@ -317,6 +317,7 @@ export type EditorEvent =
   | { type: 'ACTIVATED' }
   | { type: 'INPUT'; value: string; cursorPosition: number }
   | { type: 'SET_CURSOR'; position: number }
+  | { type: 'TEXT_SELECTION_CHANGED'; anchor: number; cursorPosition: number }
   | { type: 'IME_START' }
   | { type: 'IME_UPDATE'; compositionText: string }
   | { type: 'IME_END'; finalText: string }

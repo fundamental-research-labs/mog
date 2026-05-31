@@ -46,10 +46,7 @@ import {
   InlineCellAutocomplete,
   type InlineCellAutocompleteHandle,
 } from './InlineCellAutocomplete';
-import {
-  FormulaHighlighter,
-  type ReferenceColorRange,
-} from '../../editor/FormulaHighlighter';
+import { FormulaHighlighter, type ReferenceColorRange } from '../../editor/FormulaHighlighter';
 import { extractFormulaRanges } from '../../../domain/editor/formula-range-parser';
 // =============================================================================
 // Constants
@@ -246,7 +243,9 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el || !isEditing || isFormulaBarFocused) return;
-    const selectionStart = hasSelection ? Math.min(cursorPosition, selectionAnchor) : cursorPosition;
+    const selectionStart = hasSelection
+      ? Math.min(cursorPosition, selectionAnchor)
+      : cursorPosition;
     const selectionEnd = hasSelection ? Math.max(cursorPosition, selectionAnchor) : cursorPosition;
     if (el.selectionStart !== selectionStart || el.selectionEnd !== selectionEnd) {
       el.setSelectionRange(selectionStart, selectionEnd);
@@ -329,6 +328,27 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
         return;
       }
 
+      if ((e.key === 'Home' || e.key === 'End') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const el = e.currentTarget;
+        const target = e.key === 'Home' ? 0 : el.value.length;
+        e.preventDefault();
+
+        if (e.shiftKey) {
+          const anchor = el.selectionStart ?? cursorPosition;
+          el.setSelectionRange(Math.min(anchor, target), Math.max(anchor, target));
+          editorActor.send({
+            type: 'TEXT_SELECTION_CHANGED',
+            anchor,
+            cursorPosition: target,
+          });
+          return;
+        }
+
+        el.setSelectionRange(target, target);
+        editorActions.setCursor(target);
+        return;
+      }
+
       // Alt+Enter: pre-apply newline to DOM before React reconciliation
       if (e.key === 'Enter' && e.altKey) {
         const textarea = inputRef.current as HTMLTextAreaElement | null;
@@ -339,7 +359,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
         }
       }
     },
-    [],
+    [cursorPosition, editorActions, editorActor],
   );
 
   // WYSIWYG: Compute text position using the SINGLE SOURCE OF TRUTH
@@ -389,6 +409,22 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       color: ref.color,
     }));
   }, [value]);
+
+  const syncDomSelection = useCallback(
+    (el: HTMLInputElement | HTMLTextAreaElement) => {
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      if (start === null || end === null) return;
+      if (start !== end) {
+        editorActor.send({ type: 'TEXT_SELECTION_CHANGED', anchor: start, cursorPosition: end });
+        return;
+      }
+      if (start !== cursorPosition || hasSelection) {
+        editorActions.setCursor(start);
+      }
+    },
+    [cursorPosition, editorActions, editorActor, hasSelection],
+  );
 
   // Only render when editing and have a cell.
   // Use effectiveCellRect (falls back to last known rect during scroll animations)
@@ -554,10 +590,18 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       editorActions.input(e.target.value, e.target.selectionStart ?? e.target.value.length);
     },
     onSelect: (e: React.SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const el = e.currentTarget;
-      const pos = el.selectionStart;
-      if (pos !== null && pos === el.selectionEnd && pos !== cursorPosition) {
-        editorActions.setCursor(pos);
+      syncDomSelection(e.currentTarget);
+    },
+    onKeyUp: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (
+        e.key === 'Home' ||
+        e.key === 'End' ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      ) {
+        syncDomSelection(e.currentTarget);
       }
     },
     // Autocomplete keyboard routing: Tab/Arrow/Escape when suggestions are open.

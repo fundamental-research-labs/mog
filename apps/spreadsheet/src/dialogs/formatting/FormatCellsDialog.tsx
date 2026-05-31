@@ -267,6 +267,12 @@ export function FormatCellsDialog() {
           setPendingNumberFormat(draft.format);
           const result = await dispatch('APPLY_NUMBER_FORMAT', deps);
           if (result.handled === false) return false;
+          pendingNumberFormatRef.current = null;
+          setPendingNumberFormatDraft(null);
+          setCellFormat((prev) => ({
+            ...(prev ?? {}),
+            numberFormat: draft.format,
+          }));
         }
         break;
       }

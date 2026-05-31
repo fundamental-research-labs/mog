@@ -181,6 +181,14 @@ export const setCursor = assign({
   hasSelection: false,
 });
 
+export const setTextSelection = assign({
+  cursorPosition: ({ event }) =>
+    event.type === 'TEXT_SELECTION_CHANGED' ? event.cursorPosition : 0,
+  selectionAnchor: ({ event }) => (event.type === 'TEXT_SELECTION_CHANGED' ? event.anchor : 0),
+  hasSelection: ({ event }) =>
+    event.type === 'TEXT_SELECTION_CHANGED' ? event.anchor !== event.cursorPosition : false,
+});
+
 /**
  * Start IME composition.
  * Initializes compositionText for tracking IME input.
@@ -398,6 +406,7 @@ export const coreActions = {
   // Input
   updateValue,
   setCursor,
+  setTextSelection,
   startIMEComposition,
   updateIMEComposition,
   commitIMEComposition,

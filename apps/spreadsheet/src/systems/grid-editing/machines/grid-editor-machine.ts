@@ -235,6 +235,11 @@ export const editorMachine = setup({
           { actions: ['updateValue', 'closePicker'] },
         ],
         SET_CURSOR: { actions: 'setCursor' },
+        TEXT_SELECTION_CHANGED: { actions: 'setTextSelection' },
+        START_RICH_TEXT_EDITING: {
+          target: 'richTextEditing.editMode',
+          actions: 'startRichTextEditing',
+        },
         IME_START: { target: 'imeComposing', actions: ['startIMEComposition', 'closePicker'] },
         COMMIT: { target: 'validating', actions: ['storeCommitDirection', 'closePicker'] },
         PICKER_COMMIT: { target: 'validating', actions: ['applyPickerCommit', 'closePicker'] },
@@ -543,10 +548,11 @@ export const editorMachine = setup({
         CLEAR_CHAR_FORMAT: { actions: 'clearCharFormat' },
 
         SET_CURSOR: { actions: 'setCursor' },
+        TEXT_SELECTION_CHANGED: { actions: 'setTextSelection' },
         IME_START: { target: 'imeComposing', actions: 'startIMEComposition' },
         COMMIT: {
           target: 'validating',
-          actions: ['storeCommitDirection', 'resetRichTextState'],
+          actions: 'storeCommitDirection',
         },
         CANCEL: {
           target: 'inactive',

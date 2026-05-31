@@ -1,10 +1,10 @@
 import type { DataRow, EncodingSpec, MarkType, Transform, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../../types';
+import { applyAutoValueAxisTicks, buildAxisScaleSpec, mapAxisConfigToAxisSpec } from '../axis';
 import {
-  applyAutoValueAxisTicks,
-  buildAxisScaleSpec,
-  mapAxisConfigToAxisSpec,
-} from '../axis';
+  applyAutomaticCategoryAxisCrossing,
+  applyMogAutoValueAxisScale,
+} from '../encoding-adjustments';
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
 import {
@@ -61,6 +61,9 @@ export function buildComboLayers(
       baseX: xEncoding,
       baseY: yEncoding,
       seriesConf,
+      values: series.data
+        .map((point) => point?.y)
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)),
       seriesYAxisIndex: series.yAxisIndex,
       seriesType: rawSeriesType,
     });
@@ -144,6 +147,7 @@ function buildSeriesEncoding(input: {
   baseX: NonNullable<EncodingSpec['x']>;
   baseY: NonNullable<EncodingSpec['y']>;
   seriesConf: SeriesConfig | undefined;
+  values: number[];
   seriesYAxisIndex: 0 | 1 | undefined;
   seriesType: ChartType;
 }): EncodingSpec {
@@ -181,9 +185,10 @@ function buildSeriesEncoding(input: {
     applyAutoValueAxisTicks(encoding.x);
   }
   if (encoding.y?.field === VALUE_FIELD) {
-    applyAutoValueAxisTicks(encoding.y, {
-      includeZero: !isQuantitativeXSeries(input.seriesConf, input.seriesType, input.config),
-    });
+    const includeZero = !isQuantitativeXSeries(input.seriesConf, input.seriesType, input.config);
+    applyAutoValueAxisTicks(encoding.y, { includeZero });
+    applyMogAutoValueAxisScale(encoding.y, input.values, { includeZero });
+    applyAutomaticCategoryAxisCrossing(encoding);
   }
 
   return encoding;
@@ -266,6 +271,14 @@ function buildBarGroupLayer(input: {
     )
     .map((item) => item.index);
 
+  const encoding: EncodingSpec = {
+    ...input.encoding,
+    y: withBarGroupValueScale(input.encoding.y, input.data, memberIndices),
+    ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
+    ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
+  };
+  applyAutomaticCategoryAxisCrossing(encoding);
+
   return {
     mark: {
       type: 'bar',
@@ -273,13 +286,32 @@ function buildBarGroupLayer(input: {
       strokeField: SERIES_STROKE_FIELD,
       strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
     },
-    encoding: {
-      ...input.encoding,
-      ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
-      ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
-    },
+    encoding,
     transform: [{ type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: memberIndices } }],
   };
+}
+
+function withBarGroupValueScale(
+  y: EncodingSpec['y'],
+  data: ChartData,
+  memberIndices: number[],
+): EncodingSpec['y'] {
+  if (!y) return y;
+  const adjusted = { ...y };
+  applyMogAutoValueAxisScale(adjusted, memberValues(data, memberIndices), { includeZero: true });
+  return adjusted;
+}
+
+function memberValues(data: ChartData, memberIndices: number[]): number[] {
+  const memberSet = new Set(memberIndices);
+  const values: number[] = [];
+  data.series.forEach((series, seriesIndex) => {
+    if (!memberSet.has(seriesIndex)) return;
+    for (const point of series.data) {
+      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
+    }
+  });
+  return values;
 }
 
 function seriesFilter(seriesIndex: number): Transform {

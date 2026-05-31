@@ -1,4 +1,4 @@
-import type { EncodingSpec } from '../../grammar/spec';
+import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
 import { tickStep } from '../../primitives/scales/linear';
 import type { ChartConfig, ChartData } from '../../types';
 import { explicitDomainBound, isHorizontalBarType } from './axis';
@@ -7,7 +7,10 @@ import { categoryDisplayLabel, categoryKeyForIndex } from './category-axis';
 import { resolveStackMode } from './subtypes';
 
 const STACKED_VALUE_AXIS_TICK_COUNT = 6;
+const AUTO_VALUE_AXIS_TICK_COUNT = 5;
+const DIVERGING_VALUE_AXIS_TICK_COUNT = 8;
 const DOMAIN_EPSILON = 1e-10;
+const HEADROOM_STEP_FRACTION = 0.2;
 
 export function applyBarCategorySpacingScale(
   config: ChartConfig,
@@ -218,4 +221,77 @@ export function applyAutomaticCategoryAxisCrossing(encoding: EncodingSpec): void
     ...(x.axis ?? {}),
     crossesAt: 'automatic',
   };
+}
+
+export function applyMogAutoValueAxisScale(
+  channel: ChannelSpec | undefined,
+  values: readonly number[],
+  options: { includeZero: boolean; tickCount?: number } = { includeZero: true },
+): void {
+  if (!channel || channel.type !== 'quantitative' || channel.scale === null) return;
+  if (channel.scale?.type && channel.scale.type !== 'linear') return;
+  if (hasExplicitScaleDomain(channel.scale?.domain)) return;
+
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (finiteValues.length === 0) return;
+
+  const dataMin = Math.min(...finiteValues);
+  const dataMax = Math.max(...finiteValues);
+  let axisMin = options.includeZero ? Math.min(0, dataMin) : dataMin;
+  let axisMax = options.includeZero ? Math.max(0, dataMax) : dataMax;
+  if (axisMin === axisMax) {
+    if (axisMin === 0) {
+      axisMax = 1;
+    } else if (axisMin > 0) {
+      axisMin = options.includeZero ? 0 : axisMin * 0.9;
+      axisMax *= 1.1;
+    } else {
+      axisMin *= 1.1;
+      axisMax = options.includeZero ? 0 : axisMax * 0.9;
+    }
+  }
+
+  const diverging = options.includeZero && dataMin < 0 && dataMax > 0;
+  const requestedTickCount = options.tickCount ?? AUTO_VALUE_AXIS_TICK_COUNT;
+  const tickCount = diverging
+    ? Math.max(requestedTickCount, DIVERGING_VALUE_AXIS_TICK_COUNT)
+    : requestedTickCount;
+  const explicitTickStep = positiveNumber(channel.axis?.tickStep);
+  const step = explicitTickStep ?? Math.abs(tickStep(axisMin, axisMax, tickCount));
+  if (!Number.isFinite(step) || step <= 0) return;
+
+  let domainMin = Math.floor(axisMin / step) * step;
+  let domainMax = Math.ceil(axisMax / step) * step;
+
+  if (options.includeZero && dataMin >= 0) domainMin = Math.min(0, domainMin);
+  if (options.includeZero && dataMax <= 0) domainMax = Math.max(0, domainMax);
+  if (domainMin === domainMax) domainMax = domainMin + step;
+
+  if (domainMax > 0 && dataMax > 0 && domainMax - dataMax <= step * HEADROOM_STEP_FRACTION) {
+    domainMax += step;
+  }
+  if (domainMin < 0 && dataMin < 0 && dataMin - domainMin <= step * HEADROOM_STEP_FRACTION) {
+    domainMin -= step;
+  }
+
+  channel.scale = {
+    ...(channel.scale ?? {}),
+    domain: [roundDomainBound(domainMin), roundDomainBound(domainMax)],
+    nice: false,
+    ...(options.includeZero ? { zero: true } : {}),
+  };
+  if (channel.axis !== null && channel.axis !== undefined) {
+    channel.axis = {
+      ...channel.axis,
+      tickStep: explicitTickStep ?? roundDomainBound(step),
+    };
+  }
+}
+
+function hasExplicitScaleDomain(domain: unknown): boolean {
+  return Array.isArray(domain) && domain.some((bound) => bound !== undefined);
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }

@@ -1,4 +1,5 @@
 import type { LayerSpec, UnitSpec } from '../../grammar/spec';
+import type { PathMark, RectMark, TextMark } from '../../primitives/types';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
 import { compile } from '../../grammar/compiler';
@@ -43,6 +44,26 @@ function axisTextMarks(
       return mark.type === 'text' && datum?.role === role && datum.axisPart === axisPart;
     },
   );
+}
+
+function axisLabels(result: ReturnType<typeof compile>, role: string): TextMark[] {
+  return result.axes.filter((mark): mark is TextMark => {
+    const datum = mark.datum as Record<string, unknown> | undefined;
+    return mark.type === 'text' && datum?.role === role && datum.axisPart === 'label';
+  });
+}
+
+function axisDomain(result: ReturnType<typeof compile>, role: string): PathMark | undefined {
+  return result.axes.find((mark): mark is PathMark => {
+    const datum = mark.datum as Record<string, unknown> | undefined;
+    return mark.type === 'path' && datum?.role === role && datum.axisPart === 'domain';
+  });
+}
+
+function horizontalPathY(path: string): number {
+  const match = /^M[^,]+,([^ ]+) L/.exec(path);
+  if (!match) throw new Error(`Unexpected horizontal path: ${path}`);
+  return Number(match[1]);
 }
 
 describe('configToSpec axis render contracts', () => {
@@ -602,9 +623,11 @@ describe('configToSpec axis render contracts', () => {
     });
     expect(spec.layer[0]?.encoding?.y?.scale).not.toHaveProperty('zero');
     expect(spec.layer[1]?.encoding?.y?.scale).toMatchObject({
-      nice: 5,
+      domain: [0, 700],
+      nice: false,
       zero: true,
     });
+    expect(spec.layer[1]?.encoding?.y?.axis).toMatchObject({ tickStep: 100 });
 
     const result = compile(spec, undefined, { width: 1454, height: 724 });
 
@@ -620,5 +643,114 @@ describe('configToSpec axis render contracts', () => {
       '600',
       '700',
     ]);
+  });
+
+  it('uses Mog auto value-axis domains and primary-zero crossing for dual-axis column-line combos', () => {
+    const categories = ['Period 1', 'Period 2', 'Period 3', 'Period 4', 'Period 5'];
+    const primaryValues = [118, -176, 182, -207, 64];
+    const secondaryValues = [1_110, 948, 1_388, 972, 1_264];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Delta count',
+          data: categories.map((x, index) => ({ x, y: primaryValues[index] })),
+        },
+        {
+          name: 'Running total',
+          yAxisIndex: 1,
+          data: categories.map((x, index) => ({ x, y: secondaryValues[index] })),
+        },
+      ],
+    };
+    const spec = asLayerSpec(
+      {
+        type: 'combo',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 20,
+        height: 10,
+        axis: {
+          categoryAxis: { visible: true, title: 'Period' },
+          valueAxis: { visible: true, title: 'Delta count' },
+          secondaryValueAxis: {
+            visible: true,
+            position: 'r',
+            crossesAt: 'max',
+            numberFormat: '#,##0',
+          },
+        },
+        series: [
+          {
+            name: 'Delta count',
+            type: 'column',
+            color: '059669',
+            invertIfNegative: true,
+            format: {
+              fill: { type: 'solid', color: '059669' },
+              line: { color: '065F46' },
+            },
+          },
+          {
+            name: 'Running total',
+            type: 'line',
+            yAxisIndex: 1,
+            showMarkers: true,
+          },
+        ],
+      } as ChartConfig,
+      data,
+    );
+
+    expect(spec.layer[0]?.encoding?.y?.scale).toMatchObject({
+      domain: [-250, 200],
+      nice: false,
+    });
+    expect(spec.layer[0]?.encoding?.y?.axis).toMatchObject({ tickStep: 50 });
+    expect(spec.layer[1]?.encoding?.y?.scale).toMatchObject({
+      domain: [0, 1600],
+      nice: false,
+    });
+    expect(spec.layer[1]?.encoding?.y?.axis).toMatchObject({ tickStep: 200 });
+
+    const result = compile(spec, undefined, { width: 1454, height: 724 });
+    expect(axisLabelTexts(result, 'y-axis')).toEqual([
+      '-250',
+      '-200',
+      '-150',
+      '-100',
+      '-50',
+      '0',
+      '50',
+      '100',
+      '150',
+      '200',
+    ]);
+    expect(axisLabelTexts(result, 'y-axis-right')).toEqual([
+      '0',
+      '200',
+      '400',
+      '600',
+      '800',
+      '1,000',
+      '1,200',
+      '1,400',
+      '1,600',
+    ]);
+
+    const xDomain = axisDomain(result, 'x-axis');
+    const primaryZero = axisLabels(result, 'y-axis').find((label) => label.text === '0');
+    expect(xDomain).toBeDefined();
+    expect(primaryZero).toBeDefined();
+    expect(horizontalPathY(xDomain!.path)).toBeCloseTo(primaryZero!.y, 6);
+
+    const negativeBars = result.marks.filter((mark): mark is RectMark => {
+      const datum = mark.datum as { series?: string; value?: number } | undefined;
+      return mark.type === 'rect' && datum?.series === 'Delta count' && Number(datum.value) < 0;
+    });
+    expect(negativeBars).toHaveLength(2);
+    expect(negativeBars.map((bar) => bar.style.fill)).toEqual(['#FFFFFF', '#FFFFFF']);
+    expect(negativeBars.map((bar) => bar.style.stroke)).toEqual(['#065F46', '#065F46']);
   });
 });

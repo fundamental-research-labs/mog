@@ -1,5 +1,5 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartDataPointValueState } from '../../types';
+import type { ChartConfig, ChartData, ChartDataPointValueState, PointFormat } from '../../types';
 import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
@@ -135,6 +135,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfig) ? 0 : 1;
         }
+        const pointFormat = seriesConfig?.points?.find((point) => point.idx === i);
         applyPointAnnotations(row, {
           config,
           seriesConfig,
@@ -150,8 +151,9 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
           pieLabelGeometry: pieLabelGeometries[seriesIndex]?.[i],
           seriesValues: series.data.map((item) => item?.y),
+          pointFormat,
         });
-        applySeriesVisualStyle(row, config, seriesConfig, sourceSeriesIndex);
+        applySeriesVisualStyle(row, config, seriesConfig, sourceSeriesIndex, point.y, pointFormat);
         if (config?.type === 'waterfall') {
           const end = applyWaterfallFields({
             row,
@@ -190,10 +192,10 @@ function applyPointAnnotations(
     percentage?: number;
     pieLabelGeometry?: PieLabelGeometry;
     seriesValues: Array<number | undefined>;
+    pointFormat?: PointFormat;
   },
 ): void {
-  const { config, seriesConfig, pointIndex } = context;
-  const pointFormat = seriesConfig?.points?.find((point) => point.idx === pointIndex);
+  const { config, seriesConfig, pointFormat } = context;
   applyPointStyle(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
   applyMarker(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
   applyDataLabel(row, context, pointFormat);

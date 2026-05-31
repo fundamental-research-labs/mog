@@ -109,6 +109,8 @@ export function compileLayered(
   const independentYAxes: AnyMark[] = [];
   const emittedIndependentYAxes = new Set<AxisOrient>();
   const hasIndependentY = spec.resolve?.scale?.y === 'independent';
+  let sharedXAxisValueScale: ScaleMap['y'];
+  let sharedXAxisValueScaleOrient: AxisOrient | undefined;
 
   for (const layerItem of spec.layer) {
     const layerUnit = layerItem;
@@ -134,6 +136,16 @@ export function compileLayered(
         markType,
       );
       layerScales = { ...scales, y: independentScales.y ?? scales.y };
+      if (layerScales.y) {
+        const orient = yAxisOrient(layerUnit.encoding);
+        if (
+          !sharedXAxisValueScale ||
+          (orient === 'left' && sharedXAxisValueScaleOrient !== 'left')
+        ) {
+          sharedXAxisValueScale = layerScales.y;
+          sharedXAxisValueScaleOrient = orient;
+        }
+      }
 
       if (spec.resolve?.axis?.y === 'independent' && layerUnit.encoding.y.axis !== null) {
         const orient = yAxisOrient(layerUnit.encoding);
@@ -171,12 +183,14 @@ export function compileLayered(
   }
 
   // Generate shared axes and legends
+  const sharedAxisScales =
+    hasIndependentY && sharedXAxisValueScale ? { ...scales, y: sharedXAxisValueScale } : scales;
   const axes = options.skipAxes
     ? []
     : [
         ...generateAxes(
           hasIndependentY ? withoutYEncoding(mergedEncoding) : mergedEncoding,
-          scales,
+          sharedAxisScales,
           layout,
           spec.config,
         ),

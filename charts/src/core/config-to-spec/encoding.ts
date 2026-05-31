@@ -16,12 +16,14 @@ import {
 } from './category-axis';
 import { SERIES_OPACITY_FIELD } from './constants';
 import {
+  applyMogAutoValueAxisScale,
   applyAutomaticCategoryAxisCrossing,
   applyBarCategorySpacingScale,
   applyCategoryAxisLabels,
   applyStackedValueDomain,
 } from './encoding-adjustments';
 import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
+import { hasSecondaryYAxis } from './secondary-axis';
 import {
   buildCategoryLegendDomain,
   buildColorEncoding,
@@ -291,9 +293,23 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
 
   applyStackedValueDomain(config, data, encoding);
   applyCartesianValueAxisDefaults(encoding, { includeZero: !isXYChart });
+  if (!isXYChart && !hasSecondaryYAxis(config, data)) {
+    const valueChannel = isHorizontal ? encoding.x : encoding.y;
+    applyMogAutoValueAxisScale(valueChannel, valueValues(data), { includeZero: true });
+  }
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
+}
+
+function valueValues(data: ChartData): number[] {
+  const values: number[] = [];
+  for (const series of data.series) {
+    for (const point of series.data) {
+      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
+    }
+  }
+  return values;
 }
 
 function applyCartesianValueAxisDefaults(

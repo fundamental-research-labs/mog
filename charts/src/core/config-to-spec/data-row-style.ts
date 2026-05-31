@@ -113,11 +113,15 @@ export function applySeriesVisualStyle(
   config: ChartConfig | undefined,
   seriesConfig: SeriesConfig | undefined,
   sourceSeriesIndex: number,
+  value?: number,
+  pointFormat?: PointFormat,
 ): void {
   if (!seriesConfig || isNoFillNoLineSeries(seriesConfig)) return;
-  const fill = config
+  const baseFill = config
     ? resolveSeriesColor(seriesConfig, sourceSeriesIndex, config.type, config)
     : resolveSeriesColor(seriesConfig, sourceSeriesIndex);
+  const fill =
+    invertedNegativeFill(config, seriesConfig, sourceSeriesIndex, value, pointFormat) ?? baseFill;
   if (fill) row[SERIES_FILL_FIELD] = fill;
 
   const ownerKey = `series(${sourceSeriesIndex})`;
@@ -129,6 +133,21 @@ export function applySeriesVisualStyle(
   const strokeWidth = linePointsToCanvasPx(format?.line?.width);
   if (stroke) row[SERIES_STROKE_FIELD] = stroke;
   if (strokeWidth !== undefined) row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
+}
+
+function invertedNegativeFill(
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig,
+  sourceSeriesIndex: number,
+  value: number | undefined,
+  pointFormat: PointFormat | undefined,
+): string | undefined {
+  if (!(typeof value === 'number' && Number.isFinite(value) && value < 0)) return undefined;
+  if ((pointFormat?.invertIfNegative ?? seriesConfig.invertIfNegative) !== true) return undefined;
+
+  const ownerKey = `series(${sourceSeriesIndex})`;
+  const context = config ? resolverContextFromConfig(config, ownerKey) : {};
+  return resolveChartColor(seriesConfig.invertColor, context) ?? '#FFFFFF';
 }
 
 export function lineColor(

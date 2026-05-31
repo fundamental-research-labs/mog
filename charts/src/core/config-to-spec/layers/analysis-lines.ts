@@ -1,7 +1,7 @@
 import type { DataRow, EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartFormat, ChartLineSettings } from '../../../types';
 import { resolveFormatFillColor, resolveLineColor } from '../../../utils/chart-colors';
-import { resolverContextFromConfig } from '../../style-resolver';
+import { resolveChartLineStyle, resolverContextFromConfig } from '../../style-resolver';
 import {
   ANALYSIS_DIRECTION_FIELD,
   ANALYSIS_FILL_FIELD,
@@ -260,13 +260,21 @@ function lineMark(
 ): MarkSpec {
   const line = settings?.format;
   const context = resolverContextFromConfig(config, 'analysisLine');
-  return {
+  const resolvedLine = resolveChartLineStyle(line, context, {
+    widthToPx: linePointsToCanvasPx,
+  });
+  const stroke = resolvedLine?.paint?.type === 'solid' ? resolvedLine.paint.color : undefined;
+  const mark: MarkSpec = {
     type: 'rule',
-    stroke: resolveLineColor(line, context) ?? fallbackStroke,
-    strokeWidth: linePointsToCanvasPx(line?.width) ?? 1,
+    stroke: stroke ?? resolveLineColor(line, context) ?? fallbackStroke,
+    strokeWidth: resolvedLine?.width ?? linePointsToCanvasPx(line?.width) ?? 1,
     strokeField: ANALYSIS_STROKE_FIELD,
     strokeWidthField: ANALYSIS_STROKE_WIDTH_FIELD,
   };
+  if (resolvedLine?.dash) mark.strokeDash = resolvedLine.dash;
+  if (resolvedLine) mark.line = resolvedLine;
+  if (resolvedLine?.opacity !== undefined) mark.opacity = resolvedLine.opacity;
+  return mark;
 }
 
 function upDownMark(config: ChartConfig, format: ChartFormat | undefined, fallback: string): MarkSpec {

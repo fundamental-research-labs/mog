@@ -19,6 +19,10 @@ import { buildErrorBarLayers } from './layers/error-bars';
 import { buildFunnelLayers } from './layers/funnel';
 import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
 import { buildParetoLayers } from './layers/pareto';
+import {
+  buildPerSeriesLineLayers,
+  shouldBuildPerSeriesLineLayers,
+} from './layers/series-lines';
 import { buildStockLayers } from './layers/stock';
 import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
@@ -91,7 +95,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   if (config.type === 'combo' || hasSecondaryYAxis(config, data)) {
     const layers = buildComboLayers(config, data, rows);
 
-    layers.push(...buildAnnotationLayers(config, data, encoding, rows));
+    layers.push(...buildAnnotationLayers(config, data, encoding, rows, { includeMarkers: false }));
 
     const resolve = buildResolve(config, data);
     return buildLayerSpec({
@@ -167,6 +171,22 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   const annotationLayers = buildAnnotationLayers(config, data, encoding, rows);
+  if (shouldBuildPerSeriesLineLayers(config, data)) {
+    const layers: ChartSpec[] = [
+      ...buildPerSeriesLineLayers(config, data, encoding),
+      ...annotationLayers,
+    ];
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
+      encoding: sharedLayerEncodingForLegend(encoding, config.legend),
+      title,
+      config: configSpec,
+      transforms,
+    });
+  }
+
   if (annotationLayers.length > 0) {
     const mainLayer: ChartSpec = { mark, encoding };
     const layers: ChartSpec[] = [mainLayer, ...annotationLayers];
@@ -197,6 +217,7 @@ function buildAnnotationLayers(
   data: ChartData,
   encoding: ReturnType<typeof buildEncoding>,
   rows: DataRow[],
+  options: { includeMarkers?: boolean } = {},
 ): ChartSpec[] {
   return [
     ...buildAnalysisLineLayers(config, encoding, rows),
@@ -208,7 +229,9 @@ function buildAnnotationLayers(
     ...(isAreaChart(config.type) && hasRowFlag(rows, POINT_STYLE_VISIBLE_FIELD)
       ? buildPointStyleLayers(encoding)
       : []),
-    ...(hasRowFlag(rows, MARKER_VISIBLE_FIELD) ? buildMarkerLayers(encoding) : []),
+    ...(options.includeMarkers !== false && hasRowFlag(rows, MARKER_VISIBLE_FIELD)
+      ? buildMarkerLayers(encoding)
+      : []),
   ];
 }
 

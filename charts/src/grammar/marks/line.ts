@@ -93,6 +93,7 @@ export function generateLineMarks(
           opacity: markSpec.opacity ?? 1,
           ...definedStyle({
             strokePaint: markSpec.strokePaint,
+            strokeDash: markSpec.strokeDash,
             line: markSpec.line,
             effects: markSpec.effects,
           }),

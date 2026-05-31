@@ -970,7 +970,7 @@ export function useContextMenuActions(
 
   const insertComment = useCallback(() => {
     selectResolvedContextCell();
-    dispatch('INSERT_COMMENT', actionDeps, { commentType: 'note' });
+    dispatch('INSERT_COMMENT', actionDeps, { commentType: 'threadedComment' });
     closeContextMenu();
   }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 

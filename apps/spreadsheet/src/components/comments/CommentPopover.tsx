@@ -183,7 +183,9 @@ function CommentItem({
           )}
         </div>
       </div>
-      <p className="text-body text-text whitespace-pre-wrap">{contentText}</p>
+      <p data-testid="comment-body" className="text-body text-text whitespace-pre-wrap">
+        {contentText}
+      </p>
     </div>
   );
 }

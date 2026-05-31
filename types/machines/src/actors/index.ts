@@ -65,7 +65,12 @@ export type {
 export type { PageBreakAccessor, PageBreakCommands, PageBreakState } from './page-break';
 
 // Comment actor types
-export type { CommentAccessor, CommentState, CommentTarget } from './comment';
+export type {
+  CommentAccessor,
+  CommentState,
+  CommentTarget,
+  ComposeCommentType,
+} from './comment';
 
 // Pane Focus actor types
 export type { PaneFocusAccessor, PaneFocusCommands, PaneFocusState, PaneType } from './pane-focus';

@@ -27,6 +27,7 @@ import { assign, setup } from 'xstate';
 import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { RichText } from '@mog-sdk/contracts/rich-text';
+import type { ComposeCommentType } from '@mog-sdk/contracts/actors/comment';
 // Note: commentSelectors from contracts use CommentState interface, which is compatible
 // with the machine's SnapshotFrom type. We don't import CommentState here because we
 // define our own CommentState export as SnapshotFrom<typeof commentMachine>.
@@ -61,6 +62,8 @@ export interface CommentContext {
   editingCommentId: string | null;
   /** Draft content while editing/composing (rich text segments) */
   draftContent: RichText;
+  /** Type to create when saving a fresh composed comment */
+  composeCommentType: ComposeCommentType;
   /** Comment ID pending deletion (in confirmingDelete state) */
   deletingCommentId: string | null;
 }
@@ -79,7 +82,7 @@ export type CommentEvent =
   | { type: 'LEAVE_CELL' }
   | { type: 'CLOSE' }
   // Action events
-  | { type: 'START_COMPOSE' }
+  | { type: 'START_COMPOSE'; commentType?: ComposeCommentType }
   | { type: 'START_EDIT'; commentId: string; content: RichText }
   | { type: 'UPDATE_DRAFT'; content: RichText }
   | { type: 'SAVE' }
@@ -119,8 +122,9 @@ export const CommentEvents = {
     type: 'CLOSE',
   }),
 
-  startCompose: (): CommentEvent => ({
+  startCompose: (commentType?: ComposeCommentType): CommentEvent => ({
     type: 'START_COMPOSE',
+    commentType,
   }),
 
   startEdit: (commentId: string, content: RichText): CommentEvent => ({
@@ -174,6 +178,7 @@ const initialContext: CommentContext = {
   target: null,
   editingCommentId: null,
   draftContent: [],
+  composeCommentType: 'threadedComment',
   deletingCommentId: null,
 };
 
@@ -251,6 +256,10 @@ export const commentMachine = setup({
     /** Initialize empty draft for new comment */
     initializeDraft: assign({
       draftContent: () => [],
+      composeCommentType: ({ event }) =>
+        event.type === 'START_COMPOSE'
+          ? (event.commentType ?? 'threadedComment')
+          : 'threadedComment',
     }),
 
     /** Set comment pending deletion */
@@ -428,6 +437,8 @@ export interface CommentSnapshot {
   editingCommentId: string | null;
   /** Current draft content */
   draftContent: RichText;
+  /** Type to create when saving a fresh composed comment */
+  composeCommentType: ComposeCommentType;
   /** Comment ID pending deletion */
   deletingCommentId: string | null;
 }
@@ -449,6 +460,7 @@ export function getCommentSnapshot(snapshot: SnapshotFrom<typeof commentMachine>
     isEditing: commentSelectors.isInEditMode(s),
     editingCommentId: commentSelectors.editingCommentId(s),
     draftContent: commentSelectors.draftContent(s),
+    composeCommentType: commentSelectors.composeCommentType(s),
     deletingCommentId: commentSelectors.deletingCommentId(s),
   };
 }

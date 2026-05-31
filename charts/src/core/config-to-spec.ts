@@ -320,7 +320,7 @@ function normalizeAxisLabelAngle(
     case 'wordArtVertRtl':
       return -90;
     case 'horz':
-      break;
+      return undefined;
     default:
       break;
   }
@@ -329,9 +329,9 @@ function normalizeAxisLabelAngle(
   if (raw === undefined) return undefined;
   if (raw === 0) return 0;
   const degrees = Math.abs(raw) >= 60000 ? raw / 60000 : raw;
-  if (Math.abs(degrees) >= 999) return degrees < 0 ? -90 : 90;
+  if (Math.abs(degrees) > 90) return undefined;
   if (Math.abs(degrees) <= 90) return degrees;
-  return degrees < 0 ? -90 : 90;
+  return undefined;
 }
 
 function pointsToCanvasPx(sizePt: number | undefined): number | undefined {

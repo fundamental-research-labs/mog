@@ -46,6 +46,11 @@ export const DEFAULT_LAYOUT = {
   minPlotSize: 50,
 } as const;
 
+const BOTTOM_LEGEND_HEIGHT = 30;
+const BOTTOM_LEGEND_BOTTOM_PADDING = 8;
+const BOTTOM_LEGEND_RESERVED_SPACE =
+  DEFAULT_LAYOUT.xAxisLabelSpace + BOTTOM_LEGEND_HEIGHT + BOTTOM_LEGEND_BOTTOM_PADDING;
+
 // =============================================================================
 // Layout Calculation
 // =============================================================================
@@ -76,7 +81,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
   const legendEncoding = legendEncodingForSpec(spec);
   const legendOrient = legendOrientForEncoding(legendEncoding);
   const adjustedMarginBottom =
-    legendOrient === 'bottom' ? margin.bottom + DEFAULT_LAYOUT.xAxisLabelSpace + 30 : margin.bottom;
+    legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom;
 
   // Calculate legend area
   const legendArea = calculateLegendArea(legendEncoding, width, height, {
@@ -317,9 +322,9 @@ function calculateLegendArea(
     case 'bottom':
       return {
         x: margin.left,
-        y: height - margin.bottom + 8,
+        y: Math.max(margin.top, height - BOTTOM_LEGEND_HEIGHT - BOTTOM_LEGEND_BOTTOM_PADDING),
         width: width - margin.left - margin.right,
-        height: 30,
+        height: BOTTOM_LEGEND_HEIGHT,
       };
     case 'top-right':
       return {

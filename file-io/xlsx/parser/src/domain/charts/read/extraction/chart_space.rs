@@ -30,10 +30,7 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (c) title — from cs.chart.title
     // -------------------------------------------------------------------------
-    let title = chart
-        .title
-        .as_ref()
-        .and_then(|t| extract_title_text_from_title(t));
+    let title = extract_chart_title_text(chart);
 
     // -------------------------------------------------------------------------
     // (d) series — from all chart groups
@@ -269,6 +266,23 @@ fn chart_type_for_plot_area(plot_area: &ooxml_types::charts::PlotArea) -> domain
     }
 }
 
+fn extract_chart_title_text(chart: &ooxml_types::charts::Chart) -> Option<String> {
+    if let Some(title) = chart
+        .title
+        .as_ref()
+        .and_then(|t| extract_title_text_from_title(t))
+        .filter(|text| !text.trim().is_empty())
+    {
+        return Some(title);
+    }
+
+    if chart.title.is_some() && chart.auto_title_deleted != Some(true) {
+        return Some("Chart Title".to_string());
+    }
+
+    None
+}
+
 /// Extract sub-type from a chart type config.
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
@@ -328,8 +342,44 @@ fn extract_scalar_fields_from_config(
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, ChartGroup, ChartType, ChartTypeConfig, LineChartConfig, PlotArea,
+        AreaChartConfig, Chart as OoxmlChart, ChartGroup, ChartSpace, ChartType, ChartTypeConfig,
+        LineChartConfig, PlotArea, Title,
     };
+
+    fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
+        crate::domain::charts::read::xml_parsing::ChartRefInfo {
+            target: "charts/chart1.xml".to_string(),
+            from_row: 0,
+            from_col: 0,
+            from_col_off: 0,
+            from_row_off: 0,
+            absolute_x: None,
+            absolute_y: None,
+            to_row: None,
+            to_col: None,
+            to_col_off: None,
+            to_row_off: None,
+            cx: 600 * 9525,
+            cy: 400 * 9525,
+            xfrm_off_x: 0,
+            xfrm_off_y: 0,
+            xfrm_ext_cx: 600 * 9525,
+            xfrm_ext_cy: 400 * 9525,
+            cnv_pr_name: Some("Chart 1".to_string()),
+            cnv_pr_id: Some(1),
+            cnv_pr_descr: None,
+            cnv_pr_title: None,
+            cnv_pr_hidden: false,
+            no_change_aspect: None,
+            has_graphic_frame_locks: false,
+            cnv_pr_ext_lst: None,
+            anchor_edit_as: None,
+            macro_name: None,
+            client_data_locks_with_sheet: None,
+            client_data_prints_with_sheet: None,
+            anchor_index: Some(0),
+        }
+    }
 
     fn group(chart_type: ChartType, config: ChartTypeConfig) -> ChartGroup {
         ChartGroup {
@@ -384,5 +434,39 @@ mod tests {
             chart_type_for_plot_area(&plot_area),
             domain_types::ChartType::Combo
         );
+    }
+
+    #[test]
+    fn empty_visible_title_imports_excel_default_chart_title() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                title: Some(Title::default()),
+                auto_title_deleted: Some(false),
+                plot_area: PlotArea::default(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.title.as_deref(), Some("Chart Title"));
+    }
+
+    #[test]
+    fn empty_deleted_title_imports_no_title() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                title: Some(Title::default()),
+                auto_title_deleted: Some(true),
+                plot_area: PlotArea::default(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.title, None);
     }
 }

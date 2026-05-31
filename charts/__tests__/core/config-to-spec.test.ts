@@ -617,11 +617,11 @@ describe('buildEncoding - axis config', () => {
         title: null,
         format: '"FY3/"0',
         labelFontSize: 18,
-        labelAngle: -90,
         labelColor: '#595959',
         crossesAt: 'automatic',
       }),
     );
+    expect(encoding.x!.axis?.labelAngle).toBeUndefined();
     expect(encoding.y!.axis).toEqual(
       expect.objectContaining({
         title: null,
@@ -854,11 +854,11 @@ describe('buildConfigSpec - colors', () => {
     expect(encoding.x?.axis).toEqual(
       expect.objectContaining({
         crossesAt: 'automatic',
-        labelAngle: -90,
         labelPadding: 14,
       }),
     );
-    expect(configSpec?.layoutHints?.bottomMargin).toBe(166);
+    expect(encoding.x?.axis?.labelAngle).toBeUndefined();
+    expect(configSpec?.layoutHints?.bottomMargin).toBe(35);
   });
 
   it('should derive category colors from imported series theme fills', () => {

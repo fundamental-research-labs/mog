@@ -198,9 +198,9 @@ describe('configToSpec imported Excel date category axes', () => {
       return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
     });
 
-    expect(spec.encoding?.x?.axis).toMatchObject({ labelAngle: -90 });
-    expect(xAxisLabels.every((mark) => mark.rotation === -Math.PI / 2)).toBe(true);
-    expect(result.layout.margin.bottom).toBeGreaterThanOrEqual(160);
+    expect(spec.encoding?.x?.axis?.labelAngle).toBeUndefined();
+    expect(xAxisLabels.every((mark) => mark.rotation === undefined)).toBe(true);
+    expect(result.layout.margin.bottom).toBeLessThan(160);
   });
 
   it('maps OOXML vertical text modes to label angles', () => {
@@ -403,6 +403,14 @@ describe('configToSpec imported Excel date category axes', () => {
     });
     const legendLabels = result.legends.filter((mark): mark is TextMark => mark.type === 'text');
     const legendSymbols = result.legends.filter((mark): mark is PathMark => mark.type === 'path');
+    const xAxisLabelBottom = Math.max(
+      ...result.axes
+        .filter((mark): mark is TextMark => {
+          const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+          return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
+        })
+        .map((mark) => mark.y + (mark.fontSize ?? 0)),
+    );
 
     expect(rightAxisLabels.length).toBeGreaterThan(0);
     expect(lineMarks.map((mark) => mark.style.stroke)).toEqual(['#A5A5A5', '#ED7D31']);
@@ -412,6 +420,7 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(
       result.layout.plotArea.y + result.layout.plotArea.height,
     );
+    expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(xAxisLabelBottom);
   });
 
   it('clips imported combo marks and keeps per-series colors without a default legend', () => {

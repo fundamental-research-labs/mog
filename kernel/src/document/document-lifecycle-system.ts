@@ -909,6 +909,24 @@ export class DocumentLifecycleSystem {
       if (m) {
         slog('documentLifecycle.deferredHydrationMeasure', { durationMs: m.duration });
       }
+
+      // Deferred hydration just populated engine state that the first-paint
+      // viewport buffers never saw — most notably the CF render cache
+      // (`init_cf_caches`), which carries data-bar fill ratios and icon-set
+      // buckets. Those render extras live only in the viewport binary buffer
+      // (unlike color-scale/style fills, which read through the live
+      // displayed-format cascade), so a coordinator whose buffer was committed
+      // before completion keeps showing no bars/icons until some unrelated
+      // scroll/resize forces a refetch. Mirror the post-Provider-replay path
+      // (see `forceRefreshAllViewports` in attachProviders) and refresh every
+      // registered coordinator from Rust now that the cache is complete. No-op
+      // when no coordinator is registered yet.
+      try {
+        await bridge.forceRefreshAllViewports();
+      } catch (err) {
+        slog('documentLifecycle.deferredHydrationForceRefreshAllViewportsFailed', { error: err });
+      }
+
       this.deferredHydrationPending = false;
     };
 

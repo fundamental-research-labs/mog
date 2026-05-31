@@ -419,7 +419,7 @@ function unsupportedFeatureDiagnostics(
     if (hasManualLegendLayout(config))
       unsupported.push('manual legend layout is preserved but not rendered');
   }
-  if (hasManualDataLabelLayout(config))
+  if (hasManualDataLabelLayout(config) && !layout?.dataLabels)
     unsupported.push('manual data-label layout is preserved but not rendered');
   if (config.dataTable)
     unsupported.push('chart data table is preserved but not rendered');

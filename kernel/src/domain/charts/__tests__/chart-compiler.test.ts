@@ -207,6 +207,53 @@ describe('chart compiler bridge module', () => {
     });
   });
 
+  it('includes rendered manual data-label layout in resolved snapshots', async () => {
+    await withFreshCompiler(({ compileChartRenderSnapshotAtSize }) => {
+      const sheetId = toSheetId('sheet-1');
+      const chart = {
+        id: 'chart-1',
+        name: 'Chart 1',
+        width: 4,
+        height: 3,
+      } as unknown as ChartFloatingObject;
+      const config: ChartConfig = {
+        type: 'column',
+        width: 4,
+        height: 3,
+        dataLabels: {
+          show: true,
+          showValue: true,
+          layout: { x: 0.25, y: 0.3 },
+        },
+      };
+      const chartData: ChartData = {
+        categories: ['A'],
+        series: [{ name: 'Revenue', data: [{ x: 'A', y: 10 }] }],
+      };
+
+      const snapshot = compileChartRenderSnapshotAtSize({
+        chart,
+        sheetId,
+        chartId: 'chart-1',
+        config,
+        chartData,
+        resolvedRanges,
+        exportOptions: defaultExportOptionsForSize(400, 200),
+        width: 400,
+        height: 200,
+      });
+
+      expect(snapshot.resolvedChartSpec.resolved.layout?.dataLabels).toMatchObject({
+        left: 0.25,
+        top: 0.3,
+      });
+      expect(snapshot.resolvedChartSpec.resolved.layout?.dataLabels?.width).toBeGreaterThan(0);
+      expect(snapshot.resolvedChartSpec.diagnostics.unsupportedFeatures).not.toContain(
+        'manual data-label layout is preserved but not rendered',
+      );
+    });
+  });
+
   it('uses injected WASM transforms before the TypeScript grammar compiler when available', async () => {
     await withFreshCompiler(({ compileChartMarks, initChartWasm }) => {
       const calls: Array<{ data: unknown; transforms: unknown }> = [];

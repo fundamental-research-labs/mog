@@ -1589,7 +1589,7 @@ describe('configToSpec - integration', () => {
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
 
     expect(spec.layer).toBeDefined();
-    expect(spec.layer!).toHaveLength(2); // main + label layer
+    expect(spec.layer!).toHaveLength(4); // main + normal/outer/inner label layers
   });
 
   it('should include config.stack for stacked bar', () => {
@@ -1710,12 +1710,12 @@ describe('configToSpec - integration', () => {
     });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     expect(spec.layer).toBeDefined();
-    // At least 1 series layer + 1 data label layer
+    // At least 1 series layer + normal/outer/inner data label layers.
     const textLayers = spec.layer!.filter((l) => {
       const m = l.mark as MarkSpec;
       return m.type === 'text';
     });
-    expect(textLayers.length).toBe(1);
+    expect(textLayers.length).toBe(3);
   });
 });
 
@@ -1930,8 +1930,10 @@ describe('buildComboLayers - per-series overrides', () => {
       series: [{ type: 'bar', dataLabels: { show: true } }],
     });
     const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
-    // 1 main layer + 1 data label layer
-    expect(layers).toHaveLength(2);
+    // 1 main layer + normal/outer/inner data label layers
+    expect(layers).toHaveLength(4);
+    const textLayers = layers.filter((layer) => (layer.mark as MarkSpec).type === 'text');
+    expect(textLayers).toHaveLength(3);
     expect((layers[1].mark as MarkSpec).type).toBe('text');
     expect(layers[1].encoding!.text).toBeDefined();
   });
@@ -1978,8 +1980,8 @@ describe('buildComboLayers - per-series overrides', () => {
       ],
     });
     const layers = configToSpec(config, SINGLE_SERIES_DATA).layer!;
-    // 1 main + 1 label + 1 trendline
-    expect(layers).toHaveLength(3);
+    // 1 main + 1 trendline + normal/outer/inner label layers
+    expect(layers).toHaveLength(5);
   });
 });
 

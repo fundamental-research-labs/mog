@@ -261,4 +261,57 @@ describe('extractChartLayout', () => {
 
     expect(layout.dataLabels).toEqual([]);
   });
+
+  it('extracts data-label bounds from generated text marks', () => {
+    const result = compile({
+      width: 400,
+      height: 200,
+      data: {
+        values: [
+          {
+            category: 'A',
+            value: 10,
+            __mogDataLabelVisible: true,
+            __mogPointIndex: 0,
+            __mogSeriesIndex: 0,
+            __mogDataLabelText: '10',
+            __mogDataLabelLayoutX: 0.25,
+            __mogDataLabelLayoutY: 0.3,
+          },
+        ],
+      },
+      layer: [
+        {
+          mark: 'bar',
+          encoding: {
+            x: { field: 'category', type: 'nominal' },
+            y: { field: 'value', type: 'quantitative' },
+          },
+        },
+        {
+          mark: {
+            type: 'text',
+            xField: '__mogDataLabelLayoutX',
+            yField: '__mogDataLabelLayoutY',
+            coordinateSystem: 'chartFraction',
+            align: 'left',
+            textBaseline: 'top',
+          },
+          encoding: {
+            text: { field: '__mogDataLabelText', type: 'nominal' },
+          },
+        },
+      ],
+    });
+    const layout = extractChartLayout(result);
+
+    expect(layout.dataLabels).toHaveLength(1);
+    expect(layout.dataLabels[0]).toMatchObject({
+      left: 100 * PX_TO_PT,
+      top: 60 * PX_TO_PT,
+      seriesIndex: 0,
+      pointIndex: 0,
+    });
+    expect(layout.dataLabels[0].width).toBeGreaterThan(0);
+  });
 });

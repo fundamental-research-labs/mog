@@ -553,6 +553,63 @@ describe('renderCached — sync paint contract', () => {
     expect(sheetBOps.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(false);
     bridge.stop();
   });
+
+  it('same imported chartId keeps cache lifecycle state sheet-scoped', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks: ChartMark[] = [];
+    const sheetBMarks: ChartMark[] = [];
+    const layoutA = { plotArea: { left: 0.1, top: 0.2, width: 0.3, height: 0.4 } };
+    const layoutB = { plotArea: { left: 0.5, top: 0.6, width: 0.7, height: 0.8 } };
+
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A, layout: layoutA });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B, layout: layoutB });
+
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(sheetAMarks);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(layoutA);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_B)).toEqual(layoutB);
+
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
+
+    expect(renderCache.isChartDirty(CHART_1, SHEET_A)).toBe(true);
+    expect(renderCache.isChartDirty(CHART_1, SHEET_B)).toBe(false);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(true);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_B)).toBe(false);
+
+    renderCache.syncImportRenderStatus(
+      CHART_1,
+      {
+        importStatus: {
+          renderable: false,
+          message: 'Sheet A imported chart is unsupported',
+        },
+      },
+      SHEET_A,
+    );
+
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_A)?.message).toBe(
+      'Sheet A imported chart is unsupported',
+    );
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_B)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)?.message).toBe(
+      'Sheet A imported chart is unsupported',
+    );
+    expect(renderCache.getCachedError(CHART_1, SHEET_B)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_B)).toEqual(layoutB);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_B)).toBe(false);
+    bridge.stop();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -669,7 +726,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
 
     const renderCache = getRenderCache(bridge);
     renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
-    renderCache.commitError(CHART_1, { code: 'EMPTY_DATA', message: 'empty', chartId: CHART_1 }, SHEET_A);
+    renderCache.commitError(
+      CHART_1,
+      { code: 'EMPTY_DATA', message: 'empty', chartId: CHART_1 },
+      SHEET_A,
+    );
     renderCache.syncImportRenderStatus(
       CHART_1,
       { importStatus: { state: 'non-renderable', message: 'Unsupported imported chart' } },

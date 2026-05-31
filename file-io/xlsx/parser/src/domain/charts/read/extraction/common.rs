@@ -44,7 +44,10 @@ fn series_has_renderable_value_dimension(series: &domain_types::chart::ChartSeri
 fn point_cache_has_renderable_points(
     cache: &domain_types::chart::ChartSeriesPointCacheData,
 ) -> bool {
-    cache.point_count.is_some_and(|count| count > 0) || !cache.points.is_empty()
+    match cache.point_count {
+        Some(count) => count > 0,
+        None => !cache.points.is_empty(),
+    }
 }
 
 pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart_type(

@@ -1121,6 +1121,59 @@ mod tests {
     }
 
     #[test]
+    fn explicit_zero_point_count_cache_is_not_renderable() {
+        let literal_series = ChartSeries {
+            idx: 0,
+            order: 0,
+            val: Some(NumDataSource::Lit(NumData {
+                pt_count: Some(0),
+                pts: vec![NumPoint {
+                    idx: 0,
+                    v: "10".to_string(),
+                    format_code: None,
+                }],
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![ChartGroup {
+                        series: vec![literal_series],
+                        ..group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                        )
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.series.len(), 1);
+        assert_eq!(
+            spec.series[0]
+                .value_cache
+                .as_ref()
+                .and_then(|cache| cache.point_count),
+            Some(0)
+        );
+        let status = spec.import_status.expect("zero point count status");
+        assert_eq!(
+            status
+                .diagnostics
+                .first()
+                .and_then(|diagnostic| diagnostic.code.clone()),
+            Some(domain_types::ImportDiagnosticCode::ChartPartEmptySeries)
+        );
+    }
+
+    #[test]
     fn stock_series_count_sets_hlc_and_ohlc_subtypes() {
         for (series_count, expected) in [
             (3, domain_types::chart::ChartSubType::Hlc),

@@ -168,6 +168,7 @@ function PaneNavigationSetup({ children }: { children: ReactNode }) {
 function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
   const coordinator = useCoordinator();
   const wb = useWorkbook();
+  const uiStoreApi = useUIStoreApi();
 
   useEffect(() => {
     // Set up undo-selection coordination
@@ -175,10 +176,25 @@ function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
     const cleanup = setupUndoSelectionCoordination({
       history: wb.history,
       selectionActor: coordinator.grid.access.actors.selection,
+      getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
+      setActiveSheet: (sheetId) => uiStoreApi.getState().setActiveSheet(sheetId),
+      primeSheetViewState: (sheetId, checkpoint) => {
+        const uiStore = uiStoreApi.getState();
+        const existing = uiStore.getSheetViewState(sheetId);
+        uiStore.saveSheetViewState(sheetId, {
+          ranges: checkpoint.ranges,
+          activeCell: checkpoint.activeCell,
+          anchor: checkpoint.anchor,
+          anchorCol: null,
+          anchorRow: null,
+          scrollTop: existing?.scrollTop ?? 0,
+          scrollLeft: existing?.scrollLeft ?? 0,
+        });
+      },
     });
 
     return cleanup;
-  }, [coordinator, wb.history]);
+  }, [coordinator, uiStoreApi, wb.history]);
 
   return <>{children}</>;
 }

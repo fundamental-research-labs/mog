@@ -22,10 +22,11 @@
  *
  * ## Undo vs Redo Selection
  *
- * - On **undo**: Restore selection from the pre-operation checkpoint
- * Also capture current selection as post-operation checkpoint for redo
+ * - On **undo**: Restore selection from the operation checkpoint and move it
+ * to the redo stack
  *
- * - On **redo**: Restore selection from the post-operation checkpoint
+ * - On **redo**: Restore selection from the same operation checkpoint and move
+ * it back to the undo stack
  *
  */
 
@@ -33,6 +34,8 @@ import { selectionSelectors } from '../../../selectors';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 
 import type { WorkbookHistory } from '@mog-sdk/contracts/api';
+import { sheetId as toSheetId, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 import type { SelectionActor } from './cross-coordination';
 
@@ -48,6 +51,12 @@ export interface UndoSelectionCoordinationConfig {
   history: WorkbookHistory;
   /** Selection actor to restore selection on undo/redo */
   selectionActor: SelectionActor;
+  /** Current active sheet ID at the time an undoable operation is pushed */
+  getActiveSheetId?: () => SheetId | string;
+  /** Switch to the sheet associated with a restored checkpoint */
+  setActiveSheet?: (sheetId: SheetId) => void;
+  /** Prime per-sheet view state before switching, preventing async restore overwrite */
+  primeSheetViewState?: (sheetId: SheetId, checkpoint: SelectionCheckpoint) => void;
 }
 
 // =============================================================================
@@ -68,7 +77,7 @@ export interface UndoSelectionCoordinationConfig {
 export function setupUndoSelectionCoordination(
   config: UndoSelectionCoordinationConfig,
 ): () => void {
-  const { history, selectionActor } = config;
+  const { history, selectionActor, getActiveSheetId } = config;
 
   // Local stacks mirroring the Rust undo/redo depth
   // Each entry is a selection checkpoint captured before/after an operation
@@ -80,55 +89,27 @@ export function setupUndoSelectionCoordination(
     const { trigger } = event;
 
     if (trigger === 'undo') {
-      // Capture current selection for potential redo
-      const currentSnapshot = selectionActor.getSnapshot();
-      const currentSelection = currentSnapshot.context;
-      const postCheckpoint: SelectionCheckpoint = {
-        ranges: [...selectionSelectors.ranges(currentSnapshot)],
-        activeCell: { ...currentSelection.activeCell },
-        anchor: currentSelection.anchor ? { ...currentSelection.anchor } : null,
-        direction: currentSelection.direction,
-      };
-      redoSelections.push(postCheckpoint);
-
-      // Restore pre-operation selection from undo stack
+      // Move the original operation checkpoint to redo. Sampling the current
+      // cursor during replay would bind redo to whichever sheet the user is on.
       const checkpoint = undoSelections.pop();
       if (checkpoint) {
-        selectionActor.send({
-          type: 'SET_SELECTION',
-          ranges: checkpoint.ranges,
-          activeCell: checkpoint.activeCell,
-          anchor: checkpoint.anchor,
-        });
+        redoSelections.push(checkpoint);
+        restoreSelectionCheckpoint(checkpoint, config);
       }
     } else if (trigger === 'redo') {
-      // Capture current selection for potential undo
-      const currentSnapshot = selectionActor.getSnapshot();
-      const currentSelection = currentSnapshot.context;
-      const preCheckpoint: SelectionCheckpoint = {
-        ranges: [...selectionSelectors.ranges(currentSnapshot)],
-        activeCell: { ...currentSelection.activeCell },
-        anchor: currentSelection.anchor ? { ...currentSelection.anchor } : null,
-        direction: currentSelection.direction,
-      };
-      undoSelections.push(preCheckpoint);
-
-      // Restore post-operation selection from redo stack
+      // Move the original operation checkpoint back to undo so future undo/redo
+      // cycles keep targeting the operation's sheet, not the replay location.
       const checkpoint = redoSelections.pop();
       if (checkpoint) {
-        selectionActor.send({
-          type: 'SET_SELECTION',
-          ranges: checkpoint.ranges,
-          activeCell: checkpoint.activeCell,
-          anchor: checkpoint.anchor,
-        });
+        undoSelections.push(checkpoint);
+        restoreSelectionCheckpoint(checkpoint, config);
       }
     } else if (trigger === 'push') {
       // Capture current selection as pre-operation checkpoint for the undo stack.
       // The push event fires synchronously from notifyForwardMutation() before
       // the action handler continues, so the selection actor still reflects the
       // position at mutation time — the correct checkpoint for undo restoration.
-      undoSelections.push(captureSelectionCheckpoint(selectionActor));
+      undoSelections.push(captureSelectionCheckpoint(selectionActor, getActiveSheetId));
 
       // Clear redo selections on new operation (redo path is invalidated)
       redoSelections.length = 0;
@@ -156,14 +137,49 @@ export function setupUndoSelectionCoordination(
  * @param selectionActor - The selection actor to capture state from
  * @returns SelectionCheckpoint to store
  */
-export function captureSelectionCheckpoint(selectionActor: SelectionActor): SelectionCheckpoint {
+export function captureSelectionCheckpoint(
+  selectionActor: SelectionActor,
+  getActiveSheetId?: () => SheetId | string,
+): SelectionCheckpoint {
   const snapshot = selectionActor.getSnapshot();
   const context = snapshot.context;
 
   return {
-    ranges: selectionSelectors.ranges(snapshot),
-    activeCell: context.activeCell,
-    anchor: context.anchor,
+    sheetId: getActiveSheetId ? toSheetId(getActiveSheetId()) : undefined,
+    ranges: cloneRanges(selectionSelectors.ranges(snapshot)),
+    activeCell: cloneCell(context.activeCell),
+    anchor: context.anchor ? cloneCell(context.anchor) : null,
     direction: context.direction,
   };
+}
+
+function restoreSelectionCheckpoint(
+  checkpoint: SelectionCheckpoint,
+  config: UndoSelectionCoordinationConfig,
+): void {
+  const targetSheetId = checkpoint.sheetId ? toSheetId(checkpoint.sheetId) : null;
+
+  if (targetSheetId && config.setActiveSheet && config.getActiveSheetId) {
+    const activeSheetId = toSheetId(config.getActiveSheetId());
+
+    if (targetSheetId !== activeSheetId) {
+      config.primeSheetViewState?.(targetSheetId, checkpoint);
+      config.setActiveSheet(targetSheetId);
+    }
+  }
+
+  config.selectionActor.send({
+    type: 'SET_SELECTION',
+    ranges: cloneRanges(checkpoint.ranges),
+    activeCell: cloneCell(checkpoint.activeCell),
+    anchor: checkpoint.anchor ? cloneCell(checkpoint.anchor) : null,
+  });
+}
+
+function cloneRanges(ranges: CellRange[]): CellRange[] {
+  return ranges.map((range) => ({ ...range }));
+}
+
+function cloneCell(cell: CellCoord): CellCoord {
+  return { row: cell.row, col: cell.col };
 }

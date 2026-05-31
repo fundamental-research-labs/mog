@@ -53,8 +53,11 @@ describe('resolved spec snapshot helpers', () => {
         {
           name: 'Visible',
           values: 'Sheet1!B2:C2',
+          valueSourceKind: 'ref',
           categories: 'Sheet1!B1:C1',
+          categorySourceKind: 'ref',
           bubbleSize: 'Sheet1!B4:C4',
+          bubbleSizeSourceKind: 'ref',
           color: '#111111',
           idx: 4,
         },
@@ -180,8 +183,16 @@ describe('resolved spec snapshot helpers', () => {
       blankMask: [false, true],
       source: {
         values: 'Sheet1!B2:C2',
+        valueSourceKind: 'ref',
         categories: 'Sheet1!B1:C1',
+        categorySourceKind: 'ref',
         bubbleSize: 'Sheet1!B4:C4',
+        bubbleSizeSourceKind: 'ref',
+      },
+      renderAuthority: {
+        values: 'live',
+        categories: 'live',
+        bubbleSize: 'live',
       },
     });
     expect(snapshot.resolved.ranges.seriesReferences[0].bubbleSize).toMatchObject({
@@ -221,6 +232,103 @@ describe('resolved spec snapshot helpers', () => {
     ]);
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('snapshots literal and fallback-cache render authority per series dimension', () => {
+    const sheetId = toSheetId('sheet-1');
+    const config: ChartConfig = {
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 5,
+      series: [
+        {
+          name: 'Cached',
+          values: 'Missing!B2:C2',
+          valueSourceKind: 'cacheFallback',
+          valueCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '10' },
+              { idx: 1, value: '20' },
+            ],
+          },
+          categorySourceKind: 'literal',
+          categoryCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '1' },
+              { idx: 1, value: '2' },
+            ],
+          },
+          bubbleSizeSourceKind: 'literal',
+          bubbleSizeCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '5' },
+              { idx: 1, value: '15' },
+            ],
+          },
+        },
+      ],
+    };
+    const chartData: ChartData = {
+      categories: [1, 2],
+      series: [
+        {
+          name: 'Cached',
+          data: [
+            { x: 1, y: 10, size: 5 },
+            { x: 2, y: 20, size: 15 },
+          ],
+        },
+      ],
+    };
+
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config,
+      chartData,
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [
+          {
+            index: 0,
+            values: null,
+            categories: null,
+            bubbleSizes: null,
+          },
+        ],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.series[0]).toMatchObject({
+      source: {
+        values: 'Missing!B2:C2',
+        valueSourceKind: 'cacheFallback',
+        categorySourceKind: 'literal',
+        bubbleSizeSourceKind: 'literal',
+      },
+      renderAuthority: {
+        values: 'fallbackCache',
+        categories: 'literal',
+        bubbleSize: 'literal',
+      },
+    });
   });
 
   it('reports deterministic chart type and axis unsupported feature diagnostics', () => {
@@ -392,6 +500,47 @@ describe('resolved spec snapshot helpers', () => {
       'chart data table is preserved but not rendered',
       'view3D camera/depth is preserved but rendered as a 2D approximation',
       'floor/sideWall/backWall surfaces are preserved but not rendered',
+    ]);
+  });
+
+  it('reports preserve-only chart annotation diagnostics', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'ofPie',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        dataLabels: { show: true, showValue: true, linkNumberFormat: true },
+        seriesLines: { visible: true },
+        series: [{ markerStyle: 'picture' }],
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'picture markers are preserved for export but rendered as standard symbols',
+      'source-linked data label number formats are preserved but rendered with modeled fallback formatting',
+      'of-pie series lines require secondary-plot geometry and are preserved for export only',
     ]);
   });
 

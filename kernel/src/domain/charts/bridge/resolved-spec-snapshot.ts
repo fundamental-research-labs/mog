@@ -1,6 +1,8 @@
 import type { ChartConfig, ChartData, ChartDataPoint, ChartDataSeries } from '@mog/charts';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
+  ChartSeriesDimensionRenderAuthority,
+  ChartSeriesDimensionSourceKind,
   ChartExportOptionsSnapshot,
   ResolvedChartSpecSnapshot,
 } from '@mog-sdk/contracts/data/charts';
@@ -22,6 +24,7 @@ type SingleAxisConfig = NonNullable<NonNullable<ChartConfig['axis']>['categoryAx
 type AxisDiagnosticRole = 'category' | 'value' | 'series';
 type AxisOrientation = 'horizontal' | 'vertical';
 type AxisPosition = 'bottom' | 'top' | 'left' | 'right';
+type SeriesRangeReference = ResolvedChartRangeReferences['seriesReferences'][number];
 
 export function defaultExportOptionsForSize(
   width: number,
@@ -53,8 +56,18 @@ export function buildResolvedChartSpecSnapshot(input: {
     input.config.series?.some((item) =>
       Boolean(item.values || item.categories || item.bubbleSize),
     ) ?? false;
+  const seriesReferencesByIndex = new Map(
+    input.resolvedRanges.seriesReferences.map((reference) => [reference.index, reference]),
+  );
   const series = input.chartData.series.map((dataSeries, index) =>
-    snapshotSeries(dataSeries, index, categories, input.config, hasExplicitSeriesReferences),
+    snapshotSeries(
+      dataSeries,
+      index,
+      categories,
+      input.config,
+      hasExplicitSeriesReferences,
+      seriesReferencesByIndex.get(index),
+    ),
   );
   const legend = snapshotLegend(input.config, series);
 
@@ -210,6 +223,7 @@ function snapshotSeries(
   categories: Array<string | number | null>,
   config: ChartConfig,
   hasExplicitSeriesReferences: boolean,
+  rangeReference: SeriesRangeReference | undefined,
 ): ResolvedChartSpecSnapshot['resolved']['series'][number] {
   const configured = config.series?.[index];
   const values: Array<number | null> = [];
@@ -230,6 +244,26 @@ function snapshotSeries(
     values: configured?.values,
     categories: configured?.categories,
     bubbleSize: configured?.bubbleSize,
+    valueSourceKind: configured?.valueSourceKind,
+    categorySourceKind: configured?.categorySourceKind,
+    bubbleSizeSourceKind: configured?.bubbleSizeSourceKind,
+  };
+  const renderAuthority = {
+    values: dimensionRenderAuthority({
+      cache: configured?.valueCache,
+      sourceKind: configured?.valueSourceKind,
+      resolvedRange: rangeReference?.values,
+    }),
+    categories: dimensionRenderAuthority({
+      cache: configured?.categoryCache,
+      sourceKind: configured?.categorySourceKind,
+      resolvedRange: rangeReference?.categories,
+    }),
+    bubbleSize: dimensionRenderAuthority({
+      cache: configured?.bubbleSizeCache,
+      sourceKind: configured?.bubbleSizeSourceKind,
+      resolvedRange: rangeReference?.bubbleSizes ?? null,
+    }),
   };
   const name = snapshotSeriesName(series, configured, index);
 
@@ -241,18 +275,40 @@ function snapshotSeries(
     axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
     color: series.color ?? configured?.color ?? config.colors?.[index],
     source,
+    renderAuthority,
     categories: seriesCategories,
     values,
     blankMask,
     dataHash: hashJson({
       name,
       source,
+      renderAuthority,
       categories: seriesCategories,
       categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
       values,
       blankMask,
     }),
   };
+}
+
+function dimensionRenderAuthority(input: {
+  cache: unknown;
+  sourceKind: ChartSeriesDimensionSourceKind | undefined;
+  resolvedRange: ResolvedChartRangeReference | null | undefined;
+}): ChartSeriesDimensionRenderAuthority {
+  if (input.sourceKind === 'literal') {
+    return input.cache ? 'literal' : 'unavailable';
+  }
+  if (input.sourceKind === 'cacheFallback') {
+    return input.cache ? 'fallbackCache' : 'unavailable';
+  }
+  if (input.resolvedRange) {
+    return 'live';
+  }
+  if (input.cache) {
+    return 'fallbackCache';
+  }
+  return 'unavailable';
 }
 
 function snapshotSeriesName(
@@ -363,6 +419,12 @@ function unsupportedFeatureDiagnostics(
     unsupported.push('trendline label layout is preserved but not rendered');
   if (config.dataTable)
     unsupported.push('chart data table is preserved but not rendered');
+  if (hasPictureMarkers(config))
+    unsupported.push('picture markers are preserved for export but rendered as standard symbols');
+  if (hasSourceLinkedDataLabelFormatWithoutModeledFormat(config))
+    unsupported.push('source-linked data label number formats are preserved but rendered with modeled fallback formatting');
+  if (config.type === 'ofPie' && config.seriesLines && config.seriesLines.visible !== false)
+    unsupported.push('of-pie series lines require secondary-plot geometry and are preserved for export only');
   if (config.view3d)
     unsupported.push('view3D camera/depth is preserved but rendered as a 2D approximation');
   if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
@@ -408,6 +470,37 @@ function hasTrendlineLabelLayout(config: ChartConfig): boolean {
         series.trendlines?.some((trendline) => trendline.label?.layout),
       ),
   );
+}
+
+function hasPictureMarkers(config: ChartConfig): boolean {
+  return Boolean(
+    config.series?.some(
+      (series) =>
+        series.markerStyle === 'picture' ||
+        series.points?.some((point) => point.markerStyle === 'picture'),
+    ),
+  );
+}
+
+function hasSourceLinkedDataLabelFormatWithoutModeledFormat(config: ChartConfig): boolean {
+  return dataLabelConfigs(config).some(
+    (label) =>
+      label.linkNumberFormat === true &&
+      !label.numberFormat &&
+      !label.format,
+  );
+}
+
+function dataLabelConfigs(config: ChartConfig): NonNullable<ChartConfig['dataLabels']>[] {
+  const labels: NonNullable<ChartConfig['dataLabels']>[] = [];
+  if (config.dataLabels) labels.push(config.dataLabels);
+  for (const series of config.series ?? []) {
+    if (series.dataLabels) labels.push(series.dataLabels);
+    for (const point of series.points ?? []) {
+      if (point.dataLabel) labels.push(point.dataLabel);
+    }
+  }
+  return labels;
 }
 
 function axisUnsupportedFeatureDiagnostics(

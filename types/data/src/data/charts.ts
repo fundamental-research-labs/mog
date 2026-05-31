@@ -1084,6 +1084,12 @@ export interface ResolvedChartLegendSnapshot {
   visibleEntries: string[];
 }
 
+export type ChartSeriesDimensionRenderAuthority =
+  | 'live'
+  | 'literal'
+  | 'fallbackCache'
+  | 'unavailable';
+
 export interface ResolvedChartSeriesSnapshot {
   index: number;
   order: number;
@@ -1095,6 +1101,14 @@ export interface ResolvedChartSeriesSnapshot {
     values?: string;
     categories?: string;
     bubbleSize?: string;
+    valueSourceKind?: ChartSeriesDimensionSourceKind;
+    categorySourceKind?: ChartSeriesDimensionSourceKind;
+    bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
+  };
+  renderAuthority: {
+    values: ChartSeriesDimensionRenderAuthority;
+    categories: ChartSeriesDimensionRenderAuthority;
+    bubbleSize: ChartSeriesDimensionRenderAuthority;
   };
   categories: Array<string | number | null>;
   values: Array<number | null>;

@@ -428,6 +428,62 @@ describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
   });
 });
 
+describe('WorksheetChartsImpl surface chart config mapping', () => {
+  it('preserves imported surface rendering options on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartType: 'surface3D',
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20, depthPercent: 125 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.1 } } },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        type: 'surface3D',
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20, depthPercent: 125 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tintShade: -0.1 } } },
+      }),
+    );
+  });
+
+  it('writes surface rendering options through the generated compute bridge shape', async () => {
+    const chart = makeChart({ chartType: 'surface3D' });
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      wireframe: true,
+      surfaceTopView: false,
+      view3d: { rotX: 15, rotY: 20 },
+      floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tintShade: -0.1 } } },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.1 } } },
+      }),
+    );
+  });
+});
+
 describe('Worksheet chart image export', () => {
   it('delegates worksheet.charts.exportImage through the context chart image exporter', async () => {
     const chart = makeChart();

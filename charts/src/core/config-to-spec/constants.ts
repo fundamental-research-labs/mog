@@ -51,9 +51,9 @@ export const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
   line3d: 'line',
   pie3d: 'arc',
   area3d: 'area',
-  // Surface and ofPie have no grammar equivalents yet; use placeholder marks
-  surface: 'rect',
-  surface3d: 'rect',
+  // Top-view surface charts are contour plots; 3-D surface charts project a surface mesh.
+  surface: 'contour',
+  surface3d: 'surface3d',
   ofPie: 'arc',
   // Statistical chart types
   histogram: 'histogram',
@@ -68,9 +68,9 @@ export const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
   // Bubble with 3D effect
   bubble3DEffect: 'point',
   // Surface variants
-  surfaceWireframe: 'rect',
-  surfaceTopView: 'rect',
-  surfaceTopViewWireframe: 'rect',
+  surfaceWireframe: 'surface3d',
+  surfaceTopView: 'contour',
+  surfaceTopViewWireframe: 'contour',
   // Line with markers variants
   lineMarkers: 'line',
   lineMarkersStacked: 'line',

@@ -16,7 +16,12 @@ import {
   hasPictureMarkers,
   hasSourceLinkedDataLabelFormatWithoutModeledFormat,
 } from './resolved-spec-diagnostics-series';
-import { barShapeDiagnostics, surfaceFamilyDiagnostics } from './resolved-spec-diagnostics-surface';
+import {
+  barShapeDiagnostics,
+  isSurfaceFamilyConfig,
+  isSurfaceTopViewConfig,
+  surfaceFamilyDiagnostics,
+} from './resolved-spec-diagnostics-surface';
 import {
   importStatusUnsupportedDiagnostics,
   packageAuthorityDiagnostics,
@@ -38,6 +43,8 @@ export function unsupportedFeatureDiagnostics(input: {
 }): string[] {
   const { chart, config, series, layout } = input;
   const unsupported: string[] = [];
+  const isSurfaceFamily = isSurfaceFamilyConfig(config);
+  const isSurfaceTopView = isSurfaceTopViewConfig(config);
   unsupported.push(...importStatusUnsupportedDiagnostics(chart.importStatus));
   unsupported.push(...packageAuthorityDiagnostics(chart));
   if (config.type === 'bar3d' || config.type === 'column3d') {
@@ -91,11 +98,11 @@ export function unsupportedFeatureDiagnostics(input: {
     unsupported.push(
       'of-pie series lines require secondary-plot geometry and are preserved for export only',
     );
-  if (config.view3d)
+  if (config.view3d && !isSurfaceFamily)
     unsupported.push('view3D camera/depth is preserved but rendered as a 2-D approximation');
-  if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
+  if ((config.floorFormat || config.sideWallFormat || config.backWallFormat) && !isSurfaceTopView)
     unsupported.push('floor/sideWall/backWall surfaces are preserved but not rendered');
   unsupported.push(...input.sourceLinkedAxisNumberFormatDiagnostics);
-  unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
+  if (!isSurfaceTopView) unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
   return unsupported;
 }

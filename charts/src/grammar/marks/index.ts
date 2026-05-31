@@ -15,11 +15,13 @@ import { generateArcMarks } from './arc';
 import { generateAreaMarks } from './area';
 import { generateBarMarks } from './bar';
 import { generateBoxPlotMarks } from './boxplot';
+import { generateContourMarks } from './contour';
 import { generateHistogramMarks } from './histogram';
 import { generateLineMarks } from './line';
 import { generatePointMarks } from './point';
 import { generateRectMarks } from './rect';
 import { generateRuleMarks } from './rule';
+import { generateSurface3DMarks } from './surface-3d';
 import { generateTextMarks } from './text';
 import { generateTickMarks } from './tick';
 import { generateViolinMarks } from './violin';
@@ -64,6 +66,10 @@ export function generateMarks(
       return generateHistogramMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'violin':
       return generateViolinMarks(markSpec, data, scales, encodings, layout, encoding, config);
+    case 'contour':
+      return generateContourMarks(markSpec, data, layout);
+    case 'surface3d':
+      return generateSurface3DMarks(markSpec, data, layout);
     default:
       return [];
   }
@@ -74,11 +80,13 @@ export { generateArcMarks } from './arc';
 export { generateAreaMarks } from './area';
 export { generateBarMarks } from './bar';
 export { generateBoxPlotMarks } from './boxplot';
+export { generateContourMarks } from './contour';
 export { generateHistogramMarks } from './histogram';
 export { generateLineMarks } from './line';
 export { generatePointMarks } from './point';
 export { generateRectMarks } from './rect';
 export { generateRuleMarks } from './rule';
+export { generateSurface3DMarks } from './surface-3d';
 export { generateTextMarks } from './text';
 export { generateTickMarks } from './tick';
 export { generateViolinMarks } from './violin';

@@ -19,6 +19,8 @@ import { buildFunnelLayers } from './layers/funnel';
 import { buildParetoLayers } from './layers/pareto';
 import { buildPerSeriesLineLayers, shouldBuildPerSeriesLineLayers } from './layers/series-lines';
 import { buildStockLayers, hasStockVolumeLayer } from './layers/stock';
+import { buildSurface3DSpec, shouldRenderSurface3D } from './layers/surface-3d';
+import { buildSurfaceContourSpec, shouldRenderSurfaceContour } from './layers/surface-contour';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
@@ -43,6 +45,8 @@ export {
   buildMark,
   buildParetoLayers,
   buildStockLayers,
+  buildSurface3DSpec,
+  buildSurfaceContourSpec,
   buildTitle,
   buildTrendlineTransform,
   buildWaterfallLayers,
@@ -51,6 +55,8 @@ export {
   hasSecondaryYAxis,
   resolveStackMode,
   resolveSubTypeMarkProps,
+  shouldRenderSurfaceContour,
+  shouldRenderSurface3D,
 };
 
 /**
@@ -80,6 +86,24 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 
   // 7. Build dimensions (cell units -> pixels)
   const dimensions = buildChartDimensions(renderConfig);
+
+  if (shouldRenderSurfaceContour(renderConfig)) {
+    return buildSurfaceContourSpec({
+      config: renderConfig,
+      data,
+      dimensions,
+      title,
+    });
+  }
+
+  if (shouldRenderSurface3D(renderConfig)) {
+    return buildSurface3DSpec({
+      config: renderConfig,
+      data,
+      dimensions,
+      title,
+    });
+  }
 
   // 8. Handle layered chart types (combo, stock, waterfall, dual-axis)
   if (renderConfig.type === 'combo' || hasSecondaryYAxis(renderConfig, data)) {

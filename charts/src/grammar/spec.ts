@@ -531,7 +531,30 @@ export type MarkType =
   | 'trail'
   | 'boxplot'
   | 'histogram'
-  | 'violin';
+  | 'violin'
+  | 'contour'
+  | 'surface3d';
+
+/**
+ * One filled value band in a top-view surface/contour chart.
+ */
+export interface ContourBandSpec {
+  min: number;
+  max: number;
+  label: string;
+  color: string;
+}
+
+/**
+ * 3-D view metadata used by surface charts.
+ */
+export interface SurfaceView3DSpec {
+  rotX?: number;
+  rotY?: number;
+  depthPercent?: number;
+  perspective?: number;
+  heightPercent?: number;
+}
 
 /**
  * Line interpolation options.
@@ -663,6 +686,12 @@ export interface MarkSpec {
   tooltip?: boolean | { content?: 'data' | 'encoding' };
   /** Show KDE density curve overlay (histogram mark only) */
   density?: boolean;
+  /** Filled value bands for top-view surface/contour marks. */
+  contourBands?: ContourBandSpec[];
+  /** Render top-view surface chart as contour isolines only. */
+  contourWireframe?: boolean;
+  /** Projected 3-D view settings for surface marks. */
+  surfaceView3d?: SurfaceView3DSpec;
   /** Imported histogram bin count. */
   binCount?: number;
   /** Imported histogram bin width. */

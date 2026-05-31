@@ -9,32 +9,26 @@ export function barShapeDiagnostics(config: ChartConfig): string[] {
   return Array.from(shapes);
 }
 
-export function surfaceFamilyDiagnostics(config: ChartConfig): string[] {
-  const type = config.type;
-  const isSurfaceType =
-    type === 'surface' ||
-    type === 'surface3d' ||
-    type === 'surfaceWireframe' ||
-    type === 'surfaceTopView' ||
-    type === 'surfaceTopViewWireframe';
-  if (!isSurfaceType) return [];
+export function surfaceFamilyDiagnostics(_config: ChartConfig): string[] {
+  // Surface, 3-D surface, wireframe, and top-view surface configs render through the chart backend.
+  return [];
+}
 
-  const wireframe =
-    config.wireframe === true || type === 'surfaceWireframe' || type === 'surfaceTopViewWireframe';
-  if (wireframe) {
-    return ['surface wireframe rendering is not implemented; chart is preserved as a placeholder'];
-  }
+export function isSurfaceFamilyConfig(config: ChartConfig): boolean {
+  return (
+    config.type === 'surface' ||
+    config.type === 'surface3d' ||
+    config.type === 'surfaceWireframe' ||
+    config.type === 'surfaceTopView' ||
+    config.type === 'surfaceTopViewWireframe'
+  );
+}
 
-  const topView = config.surfaceTopView === true || type === 'surfaceTopView' || type === 'surface';
-  if (topView) {
-    return [
-      'contour/top-view surface rendering is not implemented; chart is preserved as a placeholder',
-    ];
-  }
-
-  if (type === 'surface3d') {
-    return ['3-D surface chart rendering is not implemented; chart is preserved as a placeholder'];
-  }
-
-  return ['surface chart rendering is not implemented; chart is preserved as a placeholder'];
+export function isSurfaceTopViewConfig(config: ChartConfig): boolean {
+  return (
+    config.type === 'surface' ||
+    config.type === 'surfaceTopView' ||
+    config.type === 'surfaceTopViewWireframe' ||
+    config.surfaceTopView === true
+  );
 }

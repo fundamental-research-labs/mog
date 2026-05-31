@@ -75,32 +75,15 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart
 }
 
 pub(in crate::domain::charts::read) fn chart_import_status_for_surface_family(
-    chart_type: &domain_types::ChartType,
-    wireframe: Option<bool>,
-    surface_top_view: Option<bool>,
-    part_path: Option<&str>,
-    object_name: Option<&str>,
+    _chart_type: &domain_types::ChartType,
+    _wireframe: Option<bool>,
+    _surface_top_view: Option<bool>,
+    _part_path: Option<&str>,
+    _object_name: Option<&str>,
 ) -> Option<domain_types::ImportObjectStatus> {
-    if !matches!(
-        chart_type,
-        domain_types::ChartType::Surface | domain_types::ChartType::Surface3D
-    ) {
-        return None;
-    }
-
-    let message = surface_family_placeholder_message(chart_type, wireframe, surface_top_view);
-    Some(crate::domain::charts::chart_import_status_with_diagnostic(
-        crate::domain::charts::ChartImportDiagnosticInput {
-            code: domain_types::ImportDiagnosticCode::UnsupportedFeature,
-            message: message.to_string(),
-            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
-            renderability: domain_types::ImportRenderability::Placeholder,
-            editability: domain_types::ImportEditability::PartiallyEditable,
-            part_path,
-            object_name,
-            object_id: None,
-        },
-    ))
+    // Surface charts are renderability-neutral here; data and unsupported-type
+    // gates remain responsible for terminal import statuses.
+    None
 }
 
 pub(in crate::domain::charts::read) fn merge_chart_import_statuses(
@@ -123,25 +106,6 @@ pub(in crate::domain::charts::read) fn merge_chart_import_statuses(
         (Some(status), None) | (None, Some(status)) => Some(status),
         (None, None) => None,
     }
-}
-
-fn surface_family_placeholder_message(
-    chart_type: &domain_types::ChartType,
-    wireframe: Option<bool>,
-    surface_top_view: Option<bool>,
-) -> &'static str {
-    let top_view =
-        surface_top_view.unwrap_or(matches!(chart_type, domain_types::ChartType::Surface));
-    if wireframe == Some(true) {
-        return "surface wireframe rendering is not implemented; chart is preserved as a placeholder";
-    }
-    if top_view {
-        return "contour/top-view surface rendering is not implemented; chart is preserved as a placeholder";
-    }
-    if matches!(chart_type, domain_types::ChartType::Surface3D) {
-        return "3-D surface chart rendering is not implemented; chart is preserved as a placeholder";
-    }
-    "surface chart rendering is not implemented; chart is preserved as a placeholder"
 }
 
 /// Map ooxml ChartType + config to domain ChartType.
@@ -182,5 +146,58 @@ pub(super) fn map_ooxml_chart_type_to_domain(
         OT::OfPie => domain_types::ChartType::OfPie,
         OT::Combo => domain_types::ChartType::Combo,
         OT::Unknown => domain_types::ChartType::Unknown(String::new()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_view_surface_family_is_renderable() {
+        assert!(chart_import_status_for_surface_family(
+            &domain_types::ChartType::Surface,
+            None,
+            Some(true),
+            None,
+            None,
+        )
+        .is_none());
+        assert!(chart_import_status_for_surface_family(
+            &domain_types::ChartType::Surface,
+            Some(true),
+            Some(true),
+            None,
+            None,
+        )
+        .is_none());
+        assert!(chart_import_status_for_surface_family(
+            &domain_types::ChartType::Surface3D,
+            Some(true),
+            Some(true),
+            None,
+            None,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn perspective_surface_family_is_renderable_as_projected_paths() {
+        assert!(chart_import_status_for_surface_family(
+            &domain_types::ChartType::Surface3D,
+            None,
+            Some(false),
+            None,
+            None,
+        )
+        .is_none());
+        assert!(chart_import_status_for_surface_family(
+            &domain_types::ChartType::Surface3D,
+            Some(true),
+            Some(false),
+            None,
+            None,
+        )
+        .is_none());
     }
 }

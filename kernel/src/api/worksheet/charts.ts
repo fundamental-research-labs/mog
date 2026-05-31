@@ -589,8 +589,13 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     bubbleScale: config.bubbleScale,
     showNegBubbles: config.showNegBubbles,
     sizeRepresents: config.sizeRepresents,
+    bubble3dEffect: config.bubble3DEffect,
     splitType: config.splitType,
     splitValue: config.splitValue,
+    barShape: config.barShape,
+    wireframe: config.wireframe,
+    surfaceTopView: config.surfaceTopView,
+    colorScheme: config.colorScheme,
     widthCells: config.width,
     heightCells: config.height,
     // rich formatting fields
@@ -615,6 +620,10 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     pivotOptions: config.pivotOptions,
     pivotProjection: config.pivotProjection,
     chartStyleContext: chartStyleContextToWire(config.chartStyleContext),
+    view3d: config.view3d,
+    floorFormat: chartFormatToWire(config.floorFormat),
+    sideWallFormat: chartFormatToWire(config.sideWallFormat),
+    backWallFormat: chartFormatToWire(config.backWallFormat),
   };
 }
 
@@ -726,8 +735,13 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.bubbleScale !== undefined) result.bubbleScale = updates.bubbleScale;
   if (updates.showNegBubbles !== undefined) result.showNegBubbles = updates.showNegBubbles;
   if (updates.sizeRepresents !== undefined) result.sizeRepresents = updates.sizeRepresents;
+  if (updates.bubble3DEffect !== undefined) result.bubble3dEffect = updates.bubble3DEffect;
   if (updates.splitType !== undefined) result.splitType = updates.splitType;
   if (updates.splitValue !== undefined) result.splitValue = updates.splitValue;
+  if (updates.barShape !== undefined) result.barShape = updates.barShape;
+  if (updates.wireframe !== undefined) result.wireframe = updates.wireframe;
+  if (updates.surfaceTopView !== undefined) result.surfaceTopView = updates.surfaceTopView;
+  if (updates.colorScheme !== undefined) result.colorScheme = updates.colorScheme;
 
   if (updates.name !== undefined) result.name = updates.name;
 
@@ -762,6 +776,13 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.pivotProjection !== undefined) result.pivotProjection = updates.pivotProjection;
   if (updates.chartStyleContext !== undefined)
     result.chartStyleContext = chartStyleContextToWire(updates.chartStyleContext);
+  if (updates.view3d !== undefined) result.view3d = updates.view3d;
+  if (updates.floorFormat !== undefined)
+    result.floorFormat = chartFormatToWire(updates.floorFormat);
+  if (updates.sideWallFormat !== undefined)
+    result.sideWallFormat = chartFormatToWire(updates.sideWallFormat);
+  if (updates.backWallFormat !== undefined)
+    result.backWallFormat = chartFormatToWire(updates.backWallFormat);
 
   return result;
 }
@@ -863,8 +884,13 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     bubbleScale: chart.bubbleScale,
     showNegBubbles: chart.showNegBubbles,
     sizeRepresents: wireToSizeRepresents(chart.sizeRepresents),
+    bubble3DEffect: chart.bubble3dEffect,
     splitType: chart.splitType as Chart['splitType'],
     splitValue: chart.splitValue,
+    barShape: chart.barShape as Chart['barShape'],
+    wireframe: chart.wireframe,
+    surfaceTopView: chart.surfaceTopView,
+    colorScheme: chart.colorScheme,
     name: chart.name || undefined,
     // rich formatting fields
     style: chart.style,
@@ -906,6 +932,10 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     pivotOptions: chart.pivotOptions as Chart['pivotOptions'],
     pivotProjection: chart.pivotProjection as Chart['pivotProjection'],
     chartStyleContext: wireToChartStyleContext(chart.chartStyleContext),
+    view3d: chart.view3d,
+    floorFormat: wireToChartFormat(chart.floorFormat),
+    sideWallFormat: wireToChartFormat(chart.sideWallFormat),
+    backWallFormat: wireToChartFormat(chart.backWallFormat),
     createdAt: chart.createdAt,
     updatedAt: chart.updatedAt,
   };

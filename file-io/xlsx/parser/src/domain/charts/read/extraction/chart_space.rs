@@ -873,7 +873,7 @@ mod tests {
         AreaChartConfig, AxisType, BarChartConfig, BubbleChartConfig, Chart as OoxmlChart,
         ChartAxis, ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
         ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource, NumPoint, PlotArea,
-        SizeRepresents, StockChartConfig, Title,
+        SizeRepresents, StockChartConfig, SurfaceChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -938,6 +938,30 @@ mod tests {
                 })
                 .collect(),
             ..group(chart_type, config)
+        }
+    }
+
+    fn literal_value_series() -> ChartSeries {
+        ChartSeries {
+            idx: 0,
+            order: 0,
+            val: Some(NumDataSource::Lit(NumData {
+                pt_count: Some(2),
+                pts: vec![
+                    NumPoint {
+                        idx: 0,
+                        v: "10".to_string(),
+                        format_code: None,
+                    },
+                    NumPoint {
+                        idx: 1,
+                        v: "20".to_string(),
+                        format_code: None,
+                    },
+                ],
+                ..Default::default()
+            })),
+            ..Default::default()
         }
     }
 
@@ -1238,6 +1262,97 @@ mod tests {
                 .and_then(|diagnostic| diagnostic.code.clone()),
             Some(domain_types::ImportDiagnosticCode::ChartPartEmptySeries)
         );
+    }
+
+    #[test]
+    fn surface_family_with_renderable_series_is_not_terminal_placeholder() {
+        for (chart_type, config, expected_chart_type) in [
+            (
+                ChartType::Surface,
+                ChartTypeConfig::Surface(SurfaceChartConfig {
+                    wireframe: Some(true),
+                    ..Default::default()
+                }),
+                domain_types::ChartType::Surface,
+            ),
+            (
+                ChartType::Surface3D,
+                ChartTypeConfig::Surface3D(SurfaceChartConfig {
+                    wireframe: Some(true),
+                    ..Default::default()
+                }),
+                domain_types::ChartType::Surface3D,
+            ),
+        ] {
+            let cs = ChartSpace {
+                chart: OoxmlChart {
+                    plot_area: PlotArea {
+                        chart_groups: vec![ChartGroup {
+                            series: vec![literal_value_series()],
+                            ..group(chart_type, config)
+                        }],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+            assert_eq!(spec.chart_type, expected_chart_type);
+            assert_eq!(spec.wireframe, Some(true));
+            assert!(
+                spec.import_status.is_none(),
+                "surface family should not create a terminal placeholder status"
+            );
+        }
+    }
+
+    #[test]
+    fn surface_family_without_renderable_series_uses_empty_series_gate() {
+        for (chart_type, config, expected_chart_type) in [
+            (
+                ChartType::Surface,
+                ChartTypeConfig::Surface(SurfaceChartConfig::default()),
+                domain_types::ChartType::Surface,
+            ),
+            (
+                ChartType::Surface3D,
+                ChartTypeConfig::Surface3D(SurfaceChartConfig::default()),
+                domain_types::ChartType::Surface3D,
+            ),
+        ] {
+            let cs = ChartSpace {
+                chart: OoxmlChart {
+                    plot_area: PlotArea {
+                        chart_groups: vec![group_with_series(chart_type, config, 1)],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+            assert_eq!(spec.chart_type, expected_chart_type);
+            let status = spec.import_status.expect("empty surface series status");
+            assert_eq!(
+                status.renderability,
+                domain_types::ImportRenderability::Placeholder
+            );
+            assert_eq!(
+                status
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| diagnostic.code.clone())
+                    .collect::<Vec<_>>(),
+                vec![Some(
+                    domain_types::ImportDiagnosticCode::ChartPartEmptySeries
+                )]
+            );
+        }
     }
 
     #[test]

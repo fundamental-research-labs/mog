@@ -29,7 +29,7 @@ describe('resolved spec snapshot helpers', () => {
     expect(hashJson({ a: 1 })).toMatch(/^[0-9a-f]{16}$/);
   });
 
-  it('preserves compiler, range, unsupported-feature, and resolved data fields', () => {
+  it('preserves compiler, range, and resolved data fields', () => {
     const sheetId = toSheetId('sheet-1');
     const config: ChartConfig = {
       type: 'surface',
@@ -227,11 +227,137 @@ describe('resolved spec snapshot helpers', () => {
       },
     ]);
     expect(snapshot.diagnostics.compiler).toEqual(['Unknown sheet "Missing"']);
-    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
-      'contour/top-view surface rendering is not implemented; chart is preserved as a placeholder',
-    ]);
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it.each([
+    ['surface', { type: 'surface' }],
+    ['surface3d', { type: 'surface3d' }],
+    ['surfaceWireframe', { type: 'surfaceWireframe' }],
+    ['surfaceTopView', { type: 'surfaceTopView' }],
+    ['surfaceTopViewWireframe', { type: 'surfaceTopViewWireframe' }],
+    ['wireframe flag', { type: 'surface3d', wireframe: true }],
+    ['surfaceTopView flag', { type: 'surface3d', surfaceTopView: true }],
+  ] as const)(
+    'does not report not-implemented diagnostics for supported %s rendering',
+    (_label, surfaceConfig) => {
+      const sheetId = toSheetId('sheet-1');
+      const snapshot = buildResolvedChartSpecSnapshot({
+        chart: {
+          id: 'chart-1',
+          name: 'Chart 1',
+          anchor: { anchorRow: 1, anchorCol: 2 },
+          widthCells: 4,
+          heightCells: 5,
+        } as any,
+        sheetId,
+        config: {
+          ...surfaceConfig,
+          anchorRow: 1,
+          anchorCol: 2,
+          width: 4,
+          height: 5,
+        } as ChartConfig,
+        chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+        resolvedRanges: {
+          dataRange: null,
+          categoryRange: null,
+          seriesRange: null,
+          seriesReferences: [],
+          diagnostics: [],
+        },
+        exportOptions: defaultExportOptionsForSize(320, 180),
+        compilerPathId: 'ts-grammar',
+        compilerInputHash: 'input-hash',
+      });
+
+      expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
+    },
+  );
+
+  it('does not report OOXML contour-view metadata as unsupported for top-view surfaces', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'surface3d',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        wireframe: true,
+        surfaceTopView: true,
+        view3d: { rotX: 30, rotY: 20 },
+        floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
+        axis: {
+          categoryAxis: { visible: true, position: 'l' },
+          seriesAxis: { visible: true, position: 'l' },
+        },
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
+  });
+
+  it('keeps unrelated preserve-only diagnostics for projected 3-D surface configs', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'surface3d',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        view3d: { rotX: 30, rotY: 20 },
+        floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'floor/sideWall/backWall surfaces are preserved but not rendered',
+    ]);
+    expect(snapshot.diagnostics.unsupportedFeatures).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('not implemented')]),
+    );
   });
 
   it('snapshots literal and fallback-cache render authority per series dimension', () => {

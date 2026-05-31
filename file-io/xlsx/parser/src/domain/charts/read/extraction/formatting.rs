@@ -75,9 +75,7 @@ pub(super) fn extract_title_chart_format(
 
     match format.as_mut() {
         Some(existing) => {
-            if existing.font.is_none() {
-                existing.font = rich_format.font;
-            }
+            existing.font = merge_chart_font(existing.font.take(), rich_format.font);
             if existing.text_rotation.is_none() {
                 existing.text_rotation = rich_format.text_rotation;
             }
@@ -636,6 +634,56 @@ mod tests {
         assert_eq!(font.size, Some(14.0));
         assert_eq!(font.bold, Some(true));
         assert_eq!(format.text_rotation, Some(-90.0));
+    }
+
+    #[test]
+    fn merges_title_rich_text_font_with_title_tx_pr_font() {
+        let tx_pr = crate::domain::charts::parse_text_body(
+            br#"<c:txPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:pPr>
+                        <a:defRPr sz="1600">
+                            <a:solidFill>
+                                <a:srgbClr val="1F1F1F"/>
+                            </a:solidFill>
+                        </a:defRPr>
+                    </a:pPr>
+                </a:p>
+            </c:txPr>"#,
+        );
+        let rich = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:pPr>
+                        <a:defRPr b="1"/>
+                    </a:pPr>
+                    <a:r>
+                        <a:rPr lang="en-US"/>
+                        <a:t>Modern Specialty Proxy 39</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let title = ooxml_types::charts::Title {
+            tx: Some(ooxml_types::charts::ChartText::Rich(rich)),
+            tx_pr: Some(tx_pr),
+            ..Default::default()
+        };
+
+        let format = extract_title_chart_format(&title).expect("expected title format");
+        let font = format.font.expect("expected title font");
+        assert_eq!(font.size, Some(16.0));
+        assert_eq!(
+            font.color,
+            Some(domain_types::chart::ChartColorData::Hex(
+                "1F1F1F".to_string()
+            ))
+        );
+        assert_eq!(font.bold, Some(true));
     }
 
     #[test]

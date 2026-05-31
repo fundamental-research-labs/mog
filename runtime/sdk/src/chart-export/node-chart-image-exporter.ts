@@ -94,6 +94,7 @@ type SerializableTextMark = SerializableMarkBase & {
   textBaseline: 'top' | 'middle' | 'bottom';
   rotation?: number;
   fontWeight?: 'normal' | 'bold' | number;
+  fontStyle?: 'normal' | 'italic';
 };
 
 type SerializableMark =
@@ -252,6 +253,7 @@ function serializeMark(mark: ChartMark, index: number): SerializableMark {
         textBaseline: textBaselineField(mark.textBaseline, index),
         rotation: optionalFiniteNumber(mark.rotation, 'rotation', index),
         fontWeight: fontWeightField(mark.fontWeight, index),
+        fontStyle: fontStyleField(mark.fontStyle, index),
         ...(clip ? { clip } : {}),
         style,
       };
@@ -390,6 +392,15 @@ function fontWeightField(
   throw new Error(
     `Invalid chart mark at index ${index}: fontWeight must be "normal", "bold", or a finite number`,
   );
+}
+
+function fontStyleField(
+  value: ChartTextMark['fontStyle'],
+  index: number,
+): 'normal' | 'italic' | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'normal' || value === 'italic') return value;
+  throw new Error(`Invalid chart mark at index ${index}: fontStyle must be "normal" or "italic"`);
 }
 
 type SerializablePaint =

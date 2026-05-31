@@ -62,6 +62,22 @@ fn resolve_styled_falls_through_to_base() {
 }
 
 #[test]
+fn resolve_styled_preserves_style_through_fallbacks() {
+    let db = FontDb::with_defaults();
+    let (id_calibri_bold, _) = db.resolve_styled("Calibri", true, false).unwrap();
+    let (id_carlito_bold, _) = db.resolve_styled("Carlito", true, false).unwrap();
+    let (id_carlito_regular, _) = db.resolve_styled("Carlito", false, false).unwrap();
+    let (id_unknown_bold_italic, _) = db
+        .resolve_styled("system-ui", true, true)
+        .expect("unknown chart UI font should fall back to a styled default");
+    let (id_carlito_bold_italic, _) = db.resolve_styled("Carlito", true, true).unwrap();
+
+    assert_eq!(id_calibri_bold, id_carlito_bold);
+    assert_ne!(id_calibri_bold, id_carlito_regular);
+    assert_eq!(id_unknown_bold_italic, id_carlito_bold_italic);
+}
+
+#[test]
 fn resolve_styled_returns_correct_variant() {
     let db = FontDb::with_defaults();
     let (id_regular, _) = db.resolve_styled("Carlito", false, false).unwrap();

@@ -26,6 +26,19 @@ describe('Node chart image exporter mark serialization', () => {
           cornerRadius: 3,
         },
       },
+      {
+        type: 'text',
+        x: 12,
+        y: 18,
+        text: 'Styled title',
+        fontSize: 18,
+        fontFamily: 'system-ui, sans-serif',
+        fontWeight: 'bold',
+        fontStyle: 'italic',
+        textAlign: 'center',
+        textBaseline: 'top',
+        style: { fill: '#222222' },
+      },
     ] satisfies ChartMark[];
 
     const exporter = createNodeChartImageExporterFactory({
@@ -66,6 +79,21 @@ describe('Node chart image exporter mark serialization', () => {
             strokeDash: [4, 2],
             opacity: 0.75,
             cornerRadius: 3,
+          },
+        },
+        {
+          type: 'text',
+          x: 12,
+          y: 18,
+          text: 'Styled title',
+          fontSize: 18,
+          fontFamily: 'system-ui, sans-serif',
+          fontWeight: 'bold',
+          fontStyle: 'italic',
+          textAlign: 'center',
+          textBaseline: 'top',
+          style: {
+            fill: '#222222',
           },
         },
       ],

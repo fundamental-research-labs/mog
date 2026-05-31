@@ -232,16 +232,31 @@ impl FontDb {
     ) -> Option<(u16, &FontEntry)> {
         let base_key = family.to_lowercase();
 
-        // Build the styled key
-        let styled_key = match (bold, italic) {
-            (true, true) => format!("{} bolditalic", base_key),
-            (true, false) => format!("{} bold", base_key),
-            (false, true) => format!("{} italic", base_key),
-            (false, false) => base_key.clone(),
-        };
-
         // Try styled variant first
-        if let Some(&id) = self.name_to_id.get(&styled_key) {
+        if let Some(&id) = self
+            .name_to_id
+            .get(&styled_font_key(&base_key, bold, italic))
+        {
+            return Some((id, &self.fonts[id as usize]));
+        }
+
+        // Preserve style while walking the metric-compatible fallback chain.
+        if let Some(chain) = self.fallbacks.get(&base_key) {
+            for fallback in chain {
+                if let Some(&id) = self
+                    .name_to_id
+                    .get(&styled_font_key(fallback, bold, italic))
+                {
+                    return Some((id, &self.fonts[id as usize]));
+                }
+            }
+        }
+
+        // Preserve style for the default spreadsheet fallback.
+        if let Some(&id) = self
+            .name_to_id
+            .get(&styled_font_key("carlito", bold, italic))
+        {
             return Some((id, &self.fonts[id as usize]));
         }
 
@@ -252,6 +267,15 @@ impl FontDb {
     /// Check if a string contains CJK characters that need CJK fonts.
     pub fn needs_cjk(text: &str) -> bool {
         text.chars().any(is_cjk_char)
+    }
+}
+
+fn styled_font_key(family: &str, bold: bool, italic: bool) -> String {
+    match (bold, italic) {
+        (true, true) => format!("{family} bolditalic"),
+        (true, false) => format!("{family} bold"),
+        (false, true) => format!("{family} italic"),
+        (false, false) => family.to_string(),
     }
 }
 

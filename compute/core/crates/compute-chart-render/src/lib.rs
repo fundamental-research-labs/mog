@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
 
 use compute_text_measurement::FontDb;
-use image::ExtendedColorType;
 use image::codecs::jpeg::JpegEncoder;
+use image::ExtendedColorType;
 use rustybuzz::UnicodeBuffer;
 use serde::Deserialize;
 use tiny_skia::{Color, FillRule, Mask, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
@@ -103,6 +103,7 @@ pub struct RawMark {
     pub text_baseline: Option<String>,
     pub rotation: Option<f64>,
     pub font_weight: Option<serde_json::Value>,
+    pub font_style: Option<String>,
     pub shape: Option<String>,
     pub size: Option<f64>,
     pub style: Option<RawStyle>,
@@ -330,10 +331,11 @@ impl RenderSurface {
         let font_size = required_f32(mark.font_size, index, "fontSize")?;
         let family = normalize_font_family(mark.font_family.as_deref().unwrap_or("Carlito"));
         let bold = is_bold_font_weight(mark.font_weight.as_ref());
+        let italic = is_italic_font_style(mark.font_style.as_deref());
         let (_, entry) = self
             .font_db
-            .resolve_styled(&family, bold, false)
-            .or_else(|| self.font_db.resolve("Carlito"))
+            .resolve_styled(&family, bold, italic)
+            .or_else(|| self.font_db.resolve_styled("Carlito", bold, italic))
             .ok_or_else(|| {
                 ChartRenderError::InvalidMark("no bundled font available".to_string())
             })?;
@@ -811,7 +813,11 @@ fn parse_svg_path(data: &str, offset_x: f32, offset_y: f32, dpr: f32) -> Result<
 
         let point = |x: f32, y: f32| ((x + offset_x) * dpr, (y + offset_y) * dpr);
         let resolve = |cx: f32, cy: f32, x: f32, y: f32| {
-            if relative { (cx + x, cy + y) } else { (x, y) }
+            if relative {
+                (cx + x, cy + y)
+            } else {
+                (x, y)
+            }
         };
 
         match upper {
@@ -1431,6 +1437,10 @@ fn is_bold_font_weight(value: Option<&serde_json::Value>) -> bool {
     }
 }
 
+fn is_italic_font_style(value: Option<&str>) -> bool {
+    value.is_some_and(|style| style.eq_ignore_ascii_case("italic"))
+}
+
 fn encode_png(pixmap: &Pixmap) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     {
@@ -1506,6 +1516,34 @@ mod tests {
         &data[offset..offset + 4]
     }
 
+    fn render_text_pixels(
+        font_family: &str,
+        font_weight: Option<serde_json::Value>,
+        font_style: Option<&str>,
+    ) -> Vec<u8> {
+        let mut mark = serde_json::json!({
+            "type": "text",
+            "x": 120,
+            "y": 36,
+            "text": "Modern Specialty Proxy 39",
+            "fontSize": 24,
+            "fontFamily": font_family,
+            "textAlign": "center",
+            "textBaseline": "top",
+            "style": { "fill": "#1f1f1f" }
+        });
+        if let Some(weight) = font_weight {
+            mark["fontWeight"] = weight;
+        }
+        if let Some(style) = font_style {
+            mark["fontStyle"] = serde_json::Value::String(style.to_string());
+        }
+
+        let rendered = render_chart_marks_image(&request(vec![mark])).unwrap();
+        let (_, _, data) = decode_png(&rendered.bytes);
+        data
+    }
+
     #[test]
     fn renders_conformance_mark_families_to_nonblank_png() {
         let req = request(vec![
@@ -1569,6 +1607,20 @@ mod tests {
         let (width, height, data) = decode_png(&rendered.bytes);
         assert_eq!((width, height), (240, 160));
         assert!(nonwhite_pixels(&data) > 500);
+    }
+
+    #[test]
+    fn styled_text_fallback_preserves_font_weight_and_style() {
+        let regular = render_text_pixels("system-ui, sans-serif", None, None);
+        let bold = render_text_pixels(
+            "system-ui, sans-serif",
+            Some(serde_json::Value::String("bold".to_string())),
+            None,
+        );
+        let italic = render_text_pixels("system-ui, sans-serif", None, Some("italic"));
+
+        assert!(nonwhite_pixels(&bold) > nonwhite_pixels(&regular) + 50);
+        assert_ne!(italic, regular);
     }
 
     #[test]

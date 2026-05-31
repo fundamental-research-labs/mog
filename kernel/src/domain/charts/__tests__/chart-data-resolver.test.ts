@@ -350,6 +350,77 @@ describe('ChartDataResolver', () => {
     expect(chartDataToRows(result.data).map((row) => row.size)).toEqual([5, 15]);
   });
 
+  it('renders unresolved multi-level category refs from fallback level caches', async () => {
+    const getCellData = jest.fn(async () => ({ value: { type: 'number', value: null } }));
+    const resolver = new ChartDataResolver(ctx({ getCellData }));
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        dataRange: undefined,
+        series: [
+          {
+            name: 'Hierarchical',
+            values: 'Missing!C1:D1',
+            valueSourceKind: 'ref',
+            valueCache: {
+              pointCount: 2,
+              points: [
+                { idx: 0, value: '10' },
+                { idx: 1, value: '20' },
+              ],
+            },
+            categories: 'Missing!A1:B2',
+            categorySourceKind: 'ref',
+            categoryLevels: {
+              pointCount: 2,
+              levels: [
+                {
+                  level: 0,
+                  pointCount: 2,
+                  points: [
+                    { idx: 0, value: 'North' },
+                    { idx: 1, value: 'South' },
+                  ],
+                },
+                {
+                  level: 1,
+                  pointCount: 2,
+                  points: [
+                    { idx: 0, value: 'Q1' },
+                    { idx: 1, value: 'Q1' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        seriesReferences: [{ index: 0, values: null, categories: null }],
+      }),
+      CHART_ID,
+    );
+
+    expect('code' in result).toBe(false);
+    if ('code' in result) return;
+    expect(getCellData).not.toHaveBeenCalled();
+    expect(result.config.series?.[0]).toMatchObject({
+      valueSourceKind: 'cacheFallback',
+      categorySourceKind: 'cacheFallback',
+    });
+    expect(result.data.categories).toEqual(['North / Q1', 'South / Q1']);
+    expect(result.data.categoryLevels).toEqual([
+      { level: 0, labels: ['North', 'South'] },
+      { level: 1, labels: ['Q1', 'Q1'] },
+    ]);
+    expect(result.data.series[0].data.map((point) => point.x)).toEqual([
+      'North / Q1',
+      'South / Q1',
+    ]);
+    expect(result.data.series[0].data.map((point) => point.y)).toEqual([10, 20]);
+  });
+
   it('keeps hidden bubble-size source cells from falling back to imported caches', async () => {
     const getCellData = jest.fn(async (sheetId: SheetId, row: number, col: number) => {
       if (sheetId === SHEET_SIZES) {

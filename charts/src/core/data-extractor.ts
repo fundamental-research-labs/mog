@@ -649,6 +649,34 @@ function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boolean {
   return Boolean(seriesConfig.values?.trim()) || hasRenderableCachedDimension(seriesConfig.valueCache);
 }
 
+type StockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
+type StockRolePlan = Partial<Record<StockRole, number>> & {
+  high: number;
+  low: number;
+  close: number;
+};
+
+function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
+  if (seriesConfigs.length >= 5) {
+    return { volume: 0, open: 1, high: 2, low: 3, close: 4 };
+  }
+  if (seriesConfigs.length >= 4) {
+    return { open: 0, high: 1, low: 2, close: 3 };
+  }
+  if (seriesConfigs.length >= 3) {
+    return { high: 0, low: 1, close: 2 };
+  }
+  return null;
+}
+
+function hasCategoryDimensionConfig(seriesConfig: SeriesConfig): boolean {
+  return Boolean(
+    seriesConfig.categories?.trim() ||
+      seriesConfig.categoryCache ||
+      hasRenderableCategoryLevels(seriesConfig.categoryLevels),
+  );
+}
+
 type ImportedDimension = {
   values: ChartCellValue[];
   hasLiveRange: boolean;
@@ -679,6 +707,142 @@ function extractImportedDimension(
   };
 }
 
+function importedDimensionForSeries(
+  accessor: CellDataAccessor,
+  seriesConfig: SeriesConfig,
+): ImportedDimension {
+  return extractImportedDimension(
+    accessor,
+    seriesConfig.values,
+    seriesConfig.valueCache,
+    seriesConfig.valueSourceKind,
+  );
+}
+
+function finiteStockValue(value: ChartCellValue): number | undefined {
+  const numeric = toNumber(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function extractStockChartDataFromSeriesRefs(
+  accessor: CellDataAccessor,
+  seriesConfigs: SeriesConfig[],
+  categoryLabelLevel: number | undefined,
+): ChartData | null {
+  const roles = stockRolePlan(seriesConfigs);
+  if (!roles) return null;
+
+  const roleDimensions = {
+    open:
+      roles.open === undefined
+        ? undefined
+        : importedDimensionForSeries(accessor, seriesConfigs[roles.open]),
+    high: importedDimensionForSeries(accessor, seriesConfigs[roles.high]),
+    low: importedDimensionForSeries(accessor, seriesConfigs[roles.low]),
+    close: importedDimensionForSeries(accessor, seriesConfigs[roles.close]),
+    volume:
+      roles.volume === undefined
+        ? undefined
+        : importedDimensionForSeries(accessor, seriesConfigs[roles.volume]),
+  };
+  if (
+    roleDimensions.high.values.length === 0 ||
+    roleDimensions.low.values.length === 0 ||
+    roleDimensions.close.values.length === 0 ||
+    (roles.open !== undefined && roleDimensions.open?.values.length === 0)
+  ) {
+    return null;
+  }
+
+  const categoryCarrier =
+    [roles.open, roles.high, roles.low, roles.close, roles.volume]
+      .filter((index): index is number => index !== undefined)
+      .map((index) => seriesConfigs[index])
+      .find(hasCategoryDimensionConfig) ?? seriesConfigs[roles.close];
+  const selectedLevel = selectedCategoryLabelLevel(categoryLabelLevel);
+  const categoryLevelsCache = categoryCarrier.categoryLevels;
+  const hasCategoryLevels = hasRenderableCategoryLevels(categoryLevelsCache);
+  const categoryDimension = hasCategoryLevels
+    ? {
+        values: Array.from({ length: categoryLevelPointCardinality(categoryLevelsCache) }, (_, i) =>
+          multiLevelCategoryLabelAt(categoryLevelsCache, i, selectedLevel, i + 1),
+        ),
+        hasLiveRange: false,
+      }
+    : extractImportedDimension(
+        accessor,
+        categoryCarrier.categories,
+        categoryCarrier.categoryCache,
+        categoryCarrier.categorySourceKind,
+      );
+  const pointCount = Math.max(
+    roleDimensions.open?.values.length ?? 0,
+    roleDimensions.high.values.length,
+    roleDimensions.low.values.length,
+    roleDimensions.close.values.length,
+    roleDimensions.volume?.values.length ?? 0,
+    categoryDimension.values.length,
+  );
+  if (pointCount === 0) return null;
+  const categoryLevels = categoryLevelsFromCache(categoryLevelsCache);
+
+  const categories: (string | number)[] = [];
+  const categoryFormatCodes: Array<string | null | undefined> = [];
+  const data: ChartDataPoint[] = [];
+  for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
+    const categoryFallback = pointIndex + 1;
+    const rawCategory = categoryDimension.values[pointIndex];
+    const category =
+      hasCategoryLevels && categoryDimension.values.length > pointIndex
+        ? labelValue(rawCategory, categoryFallback)
+        : categoryDimension.values.length > pointIndex
+          ? categoryDimension.hasLiveRange
+            ? labelValue(rawCategory, categoryFallback)
+            : cacheLabelAt(categoryCarrier.categoryCache, pointIndex, categoryFallback)
+          : cacheLabelAt(categoryCarrier.categoryCache, pointIndex, categoryFallback);
+    const rawHigh = roleDimensions.high.values[pointIndex];
+    const rawLow = roleDimensions.low.values[pointIndex];
+    const rawClose = roleDimensions.close.values[pointIndex];
+    const rawOpen = roleDimensions.open?.values[pointIndex];
+    const rawVolume = roleDimensions.volume?.values[pointIndex];
+    const pointHidden =
+      isHiddenChartCellValue(rawCategory) ||
+      isHiddenChartCellValue(rawHigh) ||
+      isHiddenChartCellValue(rawLow) ||
+      isHiddenChartCellValue(rawClose) ||
+      isHiddenChartCellValue(rawOpen) ||
+      isHiddenChartCellValue(rawVolume);
+    const point = createDataPoint(category, rawClose, String(category), { hidden: pointHidden });
+    const high = finiteStockValue(rawHigh);
+    const low = finiteStockValue(rawLow);
+    const close = finiteStockValue(rawClose);
+    const open = finiteStockValue(rawOpen);
+    const volume = finiteStockValue(rawVolume);
+    if (open !== undefined) point.open = open;
+    if (high !== undefined) point.high = high;
+    if (low !== undefined) point.low = low;
+    if (close !== undefined) point.close = close;
+    if (volume !== undefined) point.volume = volume;
+    data.push(point);
+    categories[pointIndex] = point.x;
+    categoryFormatCodes[pointIndex] = categoryFormatCodeAt(categoryCarrier, pointIndex);
+  }
+
+  const closeSeries = seriesConfigs[roles.close];
+  return {
+    categories,
+    ...(categoryLevels ? { categoryLevels } : {}),
+    ...(categoryFormatCodes.some(Boolean) ? { categoryFormatCodes } : {}),
+    series: [
+      {
+        name: closeSeries.name ?? defaultSeriesName(closeSeries, roles.close),
+        data,
+        type: 'stock',
+      },
+    ],
+  };
+}
+
 function extractChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
@@ -691,6 +855,14 @@ function extractChartDataFromSeriesRefs(
   const categoryFormatCodes: Array<string | null | undefined> = [];
   const selectedLevel = selectedCategoryLabelLevel(categoryLabelLevel);
   const isXYChart = chartType === 'scatter' || chartType === 'bubble';
+  if (chartType === 'stock') {
+    const stockData = extractStockChartDataFromSeriesRefs(
+      accessor,
+      seriesConfigs,
+      categoryLabelLevel,
+    );
+    if (stockData) return stockData;
+  }
 
   for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
     const seriesConfig = seriesConfigs[seriesIndex];

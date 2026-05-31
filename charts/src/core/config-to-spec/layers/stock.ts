@@ -24,10 +24,10 @@ import {
 export function buildStockLayers(
   config: ChartConfig,
   _data: ChartData,
-  _rows: DataRow[],
+  rows: DataRow[],
 ): UnitSpec[] {
   const layers: UnitSpec[] = [];
-  const subType = (config.subType as string) ?? 'ohlc';
+  const subType = stockSubType(config, rows);
   const isHLC = subType === 'hlc' || subType === 'volume-hlc';
   const hasVolume = subType === 'volume-hlc' || subType === 'volume-ohlc';
 
@@ -88,4 +88,24 @@ export function buildStockLayers(
   }
 
   return layers;
+}
+
+function stockSubType(config: ChartConfig, rows: DataRow[]): string {
+  if (
+    config.subType === 'hlc' ||
+    config.subType === 'ohlc' ||
+    config.subType === 'volume-hlc' ||
+    config.subType === 'volume-ohlc'
+  ) {
+    return config.subType;
+  }
+
+  const hasOpen = rows.some((row) => finite(row[STOCK_OPEN_FIELD]) !== undefined);
+  const hasVolume = rows.some((row) => finite(row[STOCK_VOLUME_FIELD]) !== undefined);
+  if (hasVolume) return hasOpen ? 'volume-ohlc' : 'volume-hlc';
+  return hasOpen ? 'ohlc' : 'hlc';
+}
+
+function finite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

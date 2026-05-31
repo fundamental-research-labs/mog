@@ -711,6 +711,7 @@ function bubbleSizeValue(
 
 function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
   if (point.valueState === 'hidden') return false;
+  if (config?.type === 'stock' && !isRenderableStockPoint(point, config)) return false;
   if (isScatterLikeChart(config) && toFiniteNumber(point.x) === undefined) return false;
   if (config?.type === 'bubble') {
     const size = toFiniteNumber(point.size);
@@ -723,6 +724,21 @@ function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): 
     return config?.displayBlanksAs === 'zero';
   }
   return false;
+}
+
+function isRenderableStockPoint(point: ChartDataPoint, config: ChartConfig): boolean {
+  const hasHighLowClose =
+    toFiniteNumber(point.high) !== undefined &&
+    toFiniteNumber(point.low) !== undefined &&
+    toFiniteNumber(point.close) !== undefined;
+  if (hasHighLowClose) {
+    return (
+      (config.subType !== 'ohlc' && config.subType !== 'volume-ohlc') ||
+      toFiniteNumber(point.open) !== undefined
+    );
+  }
+
+  return toFiniteNumber(point.open) !== undefined && toFiniteNumber(point.close) !== undefined;
 }
 
 function shouldEmitBlankRow(

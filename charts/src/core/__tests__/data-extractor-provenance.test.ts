@@ -6,7 +6,15 @@ import {
   parseRange,
 } from '../data-extractor';
 import { configToSpec } from '../config-to-spec';
-import { SCATTER_X_FIELD, VALUE_FIELD } from '../config-to-spec/fields';
+import {
+  SCATTER_X_FIELD,
+  STOCK_CLOSE_FIELD,
+  STOCK_DIRECTION_FIELD,
+  STOCK_HIGH_FIELD,
+  STOCK_LOW_FIELD,
+  STOCK_OPEN_FIELD,
+  VALUE_FIELD,
+} from '../config-to-spec/fields';
 import type { StoredChartConfig } from '../../types';
 
 function specRows(spec: ReturnType<typeof configToSpec>) {
@@ -554,5 +562,87 @@ describe('chart data point value provenance', () => {
     const data = extractChartData(accessor, config);
 
     expect(data.series[0].data.map((point) => point.size)).toEqual([undefined, 200, undefined]);
+  });
+
+  it('maps imported OHLC stock source series into one stock data series', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 11, 12],
+      [15, 14, 16],
+      [8, 9, 10],
+      [12, 9, 15],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-ohlc-chart',
+      type: 'stock',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'Open', values: 'A1:C1', categories: 'A5:C5' },
+        { name: 'High', values: 'A2:C2', categories: 'A5:C5' },
+        { name: 'Low', values: 'A3:C3', categories: 'A5:C5' },
+        { name: 'Close', values: 'A4:C4', categories: 'A5:C5' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categories).toEqual(['Jan', 'Feb', 'Mar']);
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].name).toBe('Close');
+    expect(data.series[0].data.map((point) => point.y)).toEqual([12, 9, 15]);
+    expect(data.series[0].data.map((point) => point.open)).toEqual([10, 11, 12]);
+    expect(data.series[0].data.map((point) => point.high)).toEqual([15, 14, 16]);
+    expect(data.series[0].data.map((point) => point.low)).toEqual([8, 9, 10]);
+    expect(data.series[0].data.map((point) => point.close)).toEqual([12, 9, 15]);
+    expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([10, 11, 12]);
+    expect(rows.map((row) => row[STOCK_HIGH_FIELD])).toEqual([15, 14, 16]);
+    expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
+    expect(rows.map((row) => row[STOCK_DIRECTION_FIELD])).toEqual(['up', 'down', 'up']);
+  });
+
+  it('maps imported HLC stock source series without requiring open values', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [15, HIDDEN_CHART_CELL, 16],
+      [8, 9, 10],
+      [12, 9, 15],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-hlc-chart',
+      type: 'stock',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'High', values: 'A1:C1', categories: 'A4:C4' },
+        { name: 'Low', values: 'A2:C2', categories: 'A4:C4' },
+        { name: 'Close', values: 'A3:C3', categories: 'A4:C4' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
+
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].data.map((point) => point.open)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 15]);
+    expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([undefined, undefined]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
+      { type: 'rule' },
+      { type: 'tick' },
+    ]);
   });
 });

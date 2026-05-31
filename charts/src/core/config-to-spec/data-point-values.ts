@@ -77,12 +77,10 @@ export function shouldBreakScatterLineAtPoint(
   config?: ChartConfig,
   seriesConfig?: SeriesConfig,
 ): boolean {
-  return (
-    isQuantitativeXSeries(config, seriesConfig) &&
-    (seriesConfig?.showLines ?? config?.showLines) === true &&
-    config?.displayBlanksAs === 'gap' &&
-    (!point || point.valueState === 'blank')
-  );
+  if (!isQuantitativeXSeries(config, seriesConfig)) return false;
+  if ((seriesConfig?.showLines ?? config?.showLines) !== true) return false;
+  if (config?.displayBlanksAs !== 'gap') return false;
+  return !point || !shouldIncludePointInRows(point, config, seriesConfig);
 }
 
 export function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {

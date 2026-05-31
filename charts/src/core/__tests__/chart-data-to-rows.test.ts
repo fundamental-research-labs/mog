@@ -126,6 +126,43 @@ describe('chartDataToRows', () => {
     expect(rows.map((row) => row[LINE_SEGMENT_FIELD])).toEqual([0, 2]);
   });
 
+  it('breaks scatter line segments for invalid omitted quantitative points only in gap mode', () => {
+    const data: ChartData = {
+      categories: [1, 'not-x', 3],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 1, y: 10 },
+            { x: 'not-x', y: 20 },
+            { x: 3, y: 30 },
+          ],
+        },
+      ],
+    };
+    const gapConfig: ChartConfig = {
+      ...baseConfig('scatter'),
+      displayBlanksAs: 'gap',
+      showLines: true,
+    };
+    const spanConfig: ChartConfig = {
+      ...baseConfig('scatter'),
+      displayBlanksAs: 'span',
+      showLines: true,
+    };
+
+    const gapRows = chartDataToRows(data, gapConfig);
+    const spanRows = chartDataToRows(data, spanConfig);
+
+    expect(gapRows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 2]);
+    expect(gapRows.map((row) => row[SCATTER_X_FIELD])).toEqual([1, 3]);
+    expect(gapRows.map((row) => row[VALUE_FIELD])).toEqual([10, 30]);
+    expect(gapRows.map((row) => row[LINE_SEGMENT_FIELD])).toEqual([0, 1]);
+
+    expect(spanRows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 2]);
+    expect(spanRows.map((row) => row[LINE_SEGMENT_FIELD])).toEqual([undefined, undefined]);
+  });
+
   it('emits raw and width-normalized bubble size fields', () => {
     const data: ChartData = {
       categories: [1, 2],

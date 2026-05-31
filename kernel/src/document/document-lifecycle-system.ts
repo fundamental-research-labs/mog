@@ -305,6 +305,12 @@ export class DocumentLifecycleSystem {
   /** Stable import durability barrier for deferred import hydration. */
   private deferredHydrationPromise: Promise<void> | null = null;
 
+  /** Pending delayed import durability timer, promoted by explicit barriers. */
+  private deferredHydrationTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Starts a scheduled deferred hydration run before its background timer fires. */
+  private startDeferredHydrationNow: (() => void) | null = null;
+
   /** True while imported content has not reached a full durable checkpoint. */
   private importDurabilityPending = false;
 
@@ -858,7 +864,7 @@ export class DocumentLifecycleSystem {
   }
 
   ensureDeferredHydration(): Promise<void> {
-    return this.scheduleDeferredHydration();
+    return this.scheduleDeferredHydration({ immediate: true });
   }
 
   async awaitMaterialized(_scope: SheetId | 'allSheets' = 'allSheets'): Promise<void> {
@@ -870,8 +876,13 @@ export class DocumentLifecycleSystem {
    * Call AFTER the first viewport paint to avoid blocking the UI.
    * The heavy Yrs write (~2s) runs asynchronously.
    */
-  scheduleDeferredHydration(): Promise<void> {
-    if (this.deferredHydrationPromise) return this.deferredHydrationPromise;
+  scheduleDeferredHydration(options?: { immediate?: boolean }): Promise<void> {
+    if (this.deferredHydrationPromise) {
+      if (options?.immediate) {
+        this.startDeferredHydrationNow?.();
+      }
+      return this.deferredHydrationPromise;
+    }
     if (!this.deferredHydrationPending) return Promise.resolve();
     const snap = this.actor.getSnapshot();
     const bridge = snap.context.computeBridge;
@@ -903,22 +914,42 @@ export class DocumentLifecycleSystem {
 
     // Use a macrotask after the app's first paint. Host-backed browser imports
     // get a grace period so the user-visible open path can finish first-contact
-    // interactions before the heavy durability barrier runs.
+    // interactions before the heavy durability barrier runs. Explicit
+    // durability/materialization barriers promote the scheduled run immediately,
+    // so close/dispose never waits out the background grace period.
     this.importDurabilityPending = true;
     const delayMs =
-      this.hostLifecycleInput !== undefined && this.environment === 'browser' ? 60_000 : 0;
+      !options?.immediate && this.hostLifecycleInput !== undefined && this.environment === 'browser'
+        ? 60_000
+        : 0;
     const scheduled = new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
+      const start = () => {
+        if (this.startDeferredHydrationNow !== start) return;
+        if (this.deferredHydrationTimer !== null) {
+          clearTimeout(this.deferredHydrationTimer);
+        }
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         void run().then(resolve, reject);
-      }, delayMs);
+      };
+      this.startDeferredHydrationNow = start;
+      if (delayMs > 0) {
+        this.deferredHydrationTimer = setTimeout(start, delayMs);
+      } else {
+        start();
+      }
     });
     this.deferredHydrationPromise = scheduled
       .catch((err) => {
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         this.deferredHydrationPromise = null;
         this.deferredHydrationPending = true;
         throw err;
       })
       .finally(() => {
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         this.importDurabilityPending = this.deferredHydrationPending;
       });
     void this.deferredHydrationPromise.catch((err) => {

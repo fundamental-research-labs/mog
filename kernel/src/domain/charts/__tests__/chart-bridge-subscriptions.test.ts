@@ -12,6 +12,7 @@ import type {
 import {
   getChartsAffectedByRange,
   handleColumnsDeleted,
+  handleRowsDeleted,
   handleRowsInserted,
   setupChartBridgeSubscriptions,
 } from '../bridge/chart-bridge-subscriptions';
@@ -468,5 +469,19 @@ describe('chart bridge subscription range helpers', () => {
     });
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_A);
+  });
+
+  it('sheet-scopes row-deletion invalidation when the deleted rows are before the chart range', async () => {
+    const deps = createDeps();
+    const computeBridge = computeBridgeMock(deps.ctx);
+    computeBridge.getAllCharts.mockResolvedValueOnce([chart({ id: CHART_1, dataRange: 'B5:C7' })]);
+
+    await handleRowsDeleted(deps, SHEET_A, 1, 2);
+
+    expect(computeBridge.updateChart).toHaveBeenCalledWith(SHEET_A, CHART_1, {
+      dataRange: 'B3:C5',
+    });
+    expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(deps.invalidateChart).not.toHaveBeenCalledWith(CHART_1, undefined);
   });
 });

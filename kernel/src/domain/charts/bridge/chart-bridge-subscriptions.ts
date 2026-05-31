@@ -352,7 +352,7 @@ export async function handleRowsDeleted(
       };
       await updateChart(deps.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
       if (!deps.isLive()) return;
-      deps.invalidateChart(chart.id);
+      deps.invalidateChart(chart.id, sheetId);
     } else if (startRow > range.endRow) {
       // Deletion entirely after range - no change.
     } else {

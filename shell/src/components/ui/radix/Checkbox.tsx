@@ -35,6 +35,8 @@ export interface CheckboxProps {
   required?: boolean;
   /** Optional stable test selector forwarded to the Radix root */
   'data-testid'?: string;
+  /** Accessible label forwarded to the Radix root */
+  'aria-label'?: string;
 }
 
 // Checkbox base styles using semantic design tokens
@@ -109,6 +111,7 @@ export function Checkbox({
   value,
   required,
   'data-testid': dataTestId,
+  'aria-label': ariaLabel,
 }: CheckboxProps) {
   // Generate a stable unique ID if not provided
   const generatedId = useId();
@@ -155,6 +158,7 @@ export function Checkbox({
       required={required}
       className={checkboxClasses}
       data-testid={dataTestId}
+      aria-label={ariaLabel}
     >
       <RadixCheckbox.Indicator className="flex items-center justify-center">
         {radixChecked === 'indeterminate' ? (

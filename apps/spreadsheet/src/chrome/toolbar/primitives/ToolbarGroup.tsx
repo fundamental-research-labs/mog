@@ -177,6 +177,8 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
                 <Tooltip title={launchTitle}>
                   <button
                     type="button"
+                    data-ribbon-dialog-launcher={groupVisibility.groupKey}
+                    data-testid={`ribbon-dialog-launcher-${groupVisibility.groupKey}`}
                     onClick={onDialogLaunch}
                     className="
  absolute right-0 bottom-0

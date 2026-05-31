@@ -404,10 +404,10 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   // Textarea is a replaced element — display:flex/alignItems has no effect on its
   // internal text positioning. We use paddingTop to push text to the correct position.
   const lineCount = (value.match(/\n/g) || []).length + 1;
-  const scaledLineHeight = textPosition
-    ? textPosition.scaledFontSize * 1.2 // DEFAULT_LINE_HEIGHT_FACTOR
-    : style.fontSize * 1.2;
+  const scaledFontSize = textPosition ? textPosition.scaledFontSize : style.fontSize;
+  const scaledLineHeight = scaledFontSize * 1.2; // DEFAULT_LINE_HEIGHT_FACTOR
   const totalTextHeight = lineCount * scaledLineHeight;
+  const lineBoxLeading = Math.max(0, scaledLineHeight - scaledFontSize);
   const paddingY = style.paddingX; // Canvas uses paddingX for vertical too
 
   let verticalPaddingTop: number;
@@ -420,7 +420,10 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       break;
     case 'bottom':
     default:
-      verticalPaddingTop = Math.max(0, effectiveCellRect.height - totalTextHeight - paddingY);
+      verticalPaddingTop = Math.max(
+        0,
+        effectiveCellRect.height - totalTextHeight - paddingY + lineBoxLeading / 2,
+      );
       break;
   }
 
@@ -491,6 +494,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
           // Typography from resolved style - use scaledFont for zoom-correct rendering
           // Canvas uses ctx.scale(zoom) to scale text; DOM needs explicit font size scaling
           font: textPosition.scaledFont,
+          lineHeight: `${scaledLineHeight}px`,
           color: style.color,
           backgroundColor: cellFormat?.backgroundColor || 'var(--color-ss-surface, #ffffff)',
           // Padding matching canvas
@@ -517,6 +521,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
           width: editorWidth,
           height: effectiveCellRect.height,
           ...cellStyles,
+          lineHeight: `${scaledLineHeight}px`,
           // Override any flex/alignment from cellStyles — use paddingTop instead
           paddingTop: verticalPaddingTop,
           // Textarea styles (always applied)

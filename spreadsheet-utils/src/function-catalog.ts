@@ -25,6 +25,24 @@ type FnDef = [string, FunctionCategory, string, number, number];
 
 const C = FunctionCategory;
 
+const ARGUMENT_METADATA_OVERRIDES: Record<string, FunctionMetadata['arguments']> = {
+  SUM: [
+    {
+      name: 'number1',
+      description: 'The first number, cell reference, or range to add.',
+      type: 'any',
+      optional: false,
+    },
+    {
+      name: 'number2',
+      description: 'Additional numbers, cell references, or ranges to add.',
+      type: 'any',
+      optional: true,
+      repeating: true,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Inline-dispatched functions (eval_primitives.rs)
 // ---------------------------------------------------------------------------
@@ -834,6 +852,7 @@ export function ensureFunctionCatalog(): void {
       description,
       minArgs,
       maxArgs: maxArgs === -1 ? Infinity : maxArgs,
+      arguments: ARGUMENT_METADATA_OVERRIDES[name],
     }),
   );
 

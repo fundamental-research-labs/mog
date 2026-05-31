@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CheckmarkSvg, WarningSvg } from '@mog/icons';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import { useUIStore, useWorkbook } from '../../infra/context';
 import {
@@ -125,11 +126,19 @@ function FontItem({
       {icon && <span className="mr-1.5 text-ss-text-tertiary text-body-sm">{icon}</span>}
       <span className={!isAvailable ? 'opacity-60' : ''}>{font}</span>
       {!isAvailable && (
-        <span className="ml-1 text-ss-warning text-body-sm" title="Font not installed">
-          ⚠
+        <span
+          className="ml-1 inline-flex text-ss-warning"
+          title="Font not installed"
+          aria-hidden="true"
+        >
+          <WarningSvg className="h-3 w-3" />
         </span>
       )}
-      {isSelected && <span className="ml-auto text-ss-primary text-body-lg font-bold">✓</span>}
+      {isSelected && (
+        <span className="ml-auto inline-flex text-ss-primary" aria-hidden="true">
+          <CheckmarkSvg className="h-3 w-3" />
+        </span>
+      )}
     </button>
   );
 }
@@ -356,10 +365,11 @@ export function FontPicker({
     (fontTheme: 'major' | 'minor') => {
       if (onSelect) {
         onSelect({ type: 'theme', fontTheme });
+      } else {
+        const resolvedFont =
+          fontTheme === 'major' ? themeFonts.headings.font : themeFonts.body.font;
+        onChange(resolvedFont);
       }
-      // Also call legacy onChange with the resolved font for backward compatibility
-      const resolvedFont = fontTheme === 'major' ? themeFonts.headings.font : themeFonts.body.font;
-      onChange(resolvedFont);
       onClose?.();
     },
     [onSelect, onChange, onClose, themeFonts],
@@ -391,10 +401,9 @@ export function FontPicker({
       // Notify parent via new API if available
       if (onSelect) {
         onSelect({ type: 'font', fontFamily });
+      } else {
+        onChange(fontFamily);
       }
-
-      // Notify parent via legacy callback
-      onChange(fontFamily);
       onClose?.();
     },
     [onChange, onSelect, onClose, wb.notifications, clearPreviewFont],

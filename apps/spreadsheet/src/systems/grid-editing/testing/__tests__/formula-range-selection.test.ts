@@ -156,4 +156,25 @@ describe('Formula Range Selection', () => {
     // Active cell should remain at original position
     expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
   });
+
+  it('cancel after point-mode reference restores edited cell selection', async () => {
+    sim = createGridSimulator({ activeCell: { row: 4, col: 1 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=');
+    await sim.flush();
+
+    sim.arrow('down');
+    await sim.flush();
+
+    expect(sim.editorValue()).toBe('=B6');
+    expect(sim.activeCell()).toEqual({ row: 5, col: 1 });
+
+    sim.cancelEdit();
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.isSelectingRangeForFormula()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
+    expect(sim.selectionRanges()).toEqual([{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }]);
+  });
 });

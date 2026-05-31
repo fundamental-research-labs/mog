@@ -133,6 +133,33 @@ export function setupEditorToSelectionCoordination(
     // Editor exited formula mode
     if (wasFormulaEditing && !isFormulaEditing) {
       selectionActor.send({ type: 'EXIT_FORMULA_RANGE_MODE' });
+
+      const exitedViaNormalCancel =
+        state.matches('inactive') &&
+        !state.context.wasRemotelyDeleted &&
+        !state.context.wasSheetDeleted &&
+        !state.context.wasStructurallyCancelled;
+      const previousContext = previousState?.context;
+      const editingCell = previousContext?.editingCell;
+
+      if (exitedViaNormalCancel && editingCell) {
+        const restoreRanges = previousContext.editStartSelectionRanges?.length
+          ? previousContext.editStartSelectionRanges.map((range) => ({ ...range }))
+          : [
+              {
+                startRow: editingCell.row,
+                startCol: editingCell.col,
+                endRow: editingCell.row,
+                endCol: editingCell.col,
+              },
+            ];
+
+        selectionActor.send({
+          type: 'SET_SELECTION',
+          ranges: restoreRanges,
+          activeCell: { ...editingCell },
+        });
+      }
     }
 
     // Editor is committing - move selection based on direction

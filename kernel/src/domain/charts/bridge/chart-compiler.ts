@@ -18,6 +18,7 @@ import type {
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   ChartExportOptionsSnapshot,
+  ChartRenderFrameSnapshot,
   ResolvedChartSpecSnapshot,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -58,6 +59,8 @@ export interface CompileChartMarksInput {
 export interface CompileChartMarksResult {
   marks: ChartMark[];
   layout: ChartLayoutSnapshot | null;
+  chartArea: { width: number; height: number };
+  plotArea: { width: number; height: number } | null;
   compilerPathId: ChartCompilerPathId;
   compileInput: ChartSpec;
 }
@@ -72,6 +75,7 @@ export interface CompileChartRenderSnapshotAtSizeInput {
   exportOptions: ChartExportOptionsSnapshot;
   width: number;
   height: number;
+  renderFrame?: ChartRenderFrameSnapshot;
 }
 
 let chartWasmExports: ChartWasmExports | null = null;
@@ -105,6 +109,16 @@ export function compileChartMarks(input: CompileChartMarksInput): CompileChartMa
   return {
     marks: collectMarks(compileResult) as ChartMark[],
     layout: extractLayoutSnapshot(compileResult),
+    chartArea: {
+      width: compileResult.layout.width,
+      height: compileResult.layout.height,
+    },
+    plotArea: compileResult.layout.plotArea
+      ? {
+          width: compileResult.layout.plotArea.width,
+          height: compileResult.layout.plotArea.height,
+        }
+      : null,
     compilerPathId: compileInput.compilerPathId,
     compileInput: compileInput.spec,
   };
@@ -113,6 +127,13 @@ export function compileChartMarks(input: CompileChartMarksInput): CompileChartMa
 export function compileChartRenderSnapshotAtSize(
   input: CompileChartRenderSnapshotAtSizeInput,
 ): ChartRenderSnapshot {
+  const renderFrame = input.renderFrame ?? {
+    kind: 'embedded' as const,
+    sheetId: String(input.sheetId),
+    chartId: input.chartId,
+    width: input.width,
+    height: input.height,
+  };
   const compiled = compileChartMarks({
     config: input.config,
     chartData: input.chartData,
@@ -132,6 +153,7 @@ export function compileChartRenderSnapshotAtSize(
       compilerInputHash: hashJson({
         chartId: input.chartId,
         sheetId: input.sheetId,
+        renderFrame,
         config: input.config,
         chartData: input.chartData,
         resolvedRanges: input.resolvedRanges,
@@ -142,6 +164,9 @@ export function compileChartRenderSnapshotAtSize(
         },
       }),
       layout: compiled.layout,
+      renderFrame,
+      chartArea: compiled.chartArea,
+      plotArea: compiled.plotArea,
     }),
   };
 }

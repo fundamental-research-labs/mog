@@ -71,6 +71,7 @@ export type {
   ChartLayoutRect,
   ChartLayoutSnapshot,
   ChartMark,
+  ChartRenderFrame,
   ChartRenderSnapshot,
   DataLabelLayout,
   ElementBounds,

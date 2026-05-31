@@ -15,6 +15,7 @@ import {
 import type { ChartRenderCache } from './chart-render-cache';
 import { importedChartRenderStatusToError } from './import-render-status';
 import { defaultExportOptionsForSize } from './resolved-spec-snapshot';
+import type { NormalizedChartRenderFrame } from './chart-render-frame';
 
 export interface ChartRenderOrchestratorOptions {
   renderCache: ChartRenderCache;
@@ -41,10 +42,15 @@ export class ChartRenderOrchestrator {
    * Get compiled marks for a chart.
    *
    * Returns cached marks if available, otherwise resolves data and compiles
-   * through the shared @mog/charts production path.
+   * through the shared @mog/charts production path at the supplied render
+   * frame size.
    */
-  async getMarks(sheetId: SheetId, chartId: string): Promise<ChartMark[] | ChartError> {
-    const cacheState = this.renderCache.getCompileState(chartId, sheetId);
+  async getMarks(
+    sheetId: SheetId,
+    chartId: string,
+    frame?: NormalizedChartRenderFrame,
+  ): Promise<ChartMark[] | ChartError> {
+    const cacheState = this.renderCache.getCompileState(chartId, sheetId, frame);
     // Started-gate at function entry: a caller landing here after stop()
     // (e.g. an in-flight ensureCompiled racing a bridge teardown) must NOT
     // mutate caches or add to pendingCompilations. Without this, the
@@ -74,26 +80,30 @@ export class ChartRenderOrchestrator {
       return cacheState.marks;
     }
 
-    this.renderCache.beginCompilation(chartId, sheetId);
+    this.renderCache.beginCompilation(chartId, sheetId, frame);
 
     const chartRenderDataOrError = await this.dataResolver.resolveForRendering(sheetId, chartId);
     if ('code' in chartRenderDataOrError) {
-      this.commitError(chartId, chartRenderDataOrError, sheetId);
+      this.commitError(chartId, chartRenderDataOrError, sheetId, frame);
       return chartRenderDataOrError;
     }
     const { config, data: chartData } = chartRenderDataOrError;
 
     if (chartData.series.length === 0) {
       const error = emptyDataError(chartId);
-      this.commitError(chartId, error, sheetId);
+      this.commitError(chartId, error, sheetId, frame);
       return error;
     }
 
-    const { marks, layout } = compileChartMarks({ config, chartData });
+    const { marks, layout } = compileChartMarks({
+      config,
+      chartData,
+      size: frame ? { width: frame.width, height: frame.height } : undefined,
+    });
 
     // Real cache commit: fires listeners so the renderer dirties the drawing
     // layer and the next frame paints from cache instead of the placeholder.
-    this.commitMarks(chartId, marks, sheetId, layout);
+    this.commitMarks(chartId, marks, sheetId, layout, frame);
 
     return marks;
   }
@@ -133,27 +143,35 @@ export class ChartRenderOrchestrator {
   /**
    * Trigger compilation if dirty or absent.
    */
-  async ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void> {
+  async ensureCompiled(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): Promise<void> {
     const resolvedSheetId = this.renderCache.resolveSheetId(chartId, sheetId);
     if (!resolvedSheetId) return;
-    await this.getMarks(resolvedSheetId, chartId);
+    await this.getMarks(resolvedSheetId, chartId, frame);
   }
 
   /**
    * Return a cached layout, compiling first when the chart is dirty or absent.
    */
-  async getLayout(sheetId: SheetId, chartId: string): Promise<ChartLayoutSnapshot | null> {
-    const cached = this.renderCache.getFreshLayout(chartId, sheetId);
+  async getLayout(
+    sheetId: SheetId,
+    chartId: string,
+    frame?: NormalizedChartRenderFrame,
+  ): Promise<ChartLayoutSnapshot | null> {
+    const cached = this.renderCache.getFreshLayout(chartId, sheetId, frame);
     if (cached) {
       return cached;
     }
 
-    const marksOrError = await this.getMarks(sheetId, chartId);
+    const marksOrError = await this.getMarks(sheetId, chartId, frame);
     if ('code' in marksOrError) {
       return null;
     }
 
-    return this.renderCache.getCachedLayout(chartId, sheetId) ?? null;
+    return this.renderCache.getCachedLayout(chartId, sheetId, frame) ?? null;
   }
 
   private async compileChartRenderSnapshotAtSize(
@@ -202,15 +220,21 @@ export class ChartRenderOrchestrator {
     marks: ChartMark[],
     sheetId?: SheetId,
     layout?: ChartLayoutSnapshot | null,
+    frame?: NormalizedChartRenderFrame,
   ): void {
-    this.renderCache.commitMarks(chartId, marks, { sheetId, layout });
+    this.renderCache.commitMarks(chartId, marks, { sheetId, frame, layout });
   }
 
   /**
    * Commit an error outcome to the cache and notify listeners.
    */
-  private commitError(chartId: string, error: ChartError, sheetId?: SheetId): void {
-    this.renderCache.commitError(chartId, error, sheetId);
+  private commitError(
+    chartId: string,
+    error: ChartError,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): void {
+    this.renderCache.commitError(chartId, error, sheetId, frame);
   }
 }
 

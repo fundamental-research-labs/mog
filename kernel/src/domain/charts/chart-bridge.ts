@@ -12,6 +12,7 @@ import type {
   ChartErrorCode,
   ChartLayoutSnapshot,
   ChartMark,
+  ChartRenderFrame,
   ChartRenderSnapshot,
   IChartBridge,
 } from '@mog-sdk/contracts/bridges';
@@ -29,10 +30,18 @@ import {
   getChartsAffectedByRange as getChartsAffectedByRangeForSubscriptions,
   setupChartBridgeSubscriptions,
 } from './bridge/chart-bridge-subscriptions';
+import { normalizeChartRenderFrame } from './bridge/chart-render-frame';
 
 import type { DocumentContext } from '../../context/types';
 
-export type { ChartBounds, ChartDataResult, ChartError, ChartErrorCode, ChartMark };
+export type {
+  ChartBounds,
+  ChartDataResult,
+  ChartError,
+  ChartErrorCode,
+  ChartMark,
+  ChartRenderFrame,
+};
 export { initChartWasm } from './bridge/chart-compiler';
 export type { ChartWasmExports } from './bridge/chart-compiler';
 export { isPositionOnlyUpdate } from './bridge/position-only-update';
@@ -140,8 +149,10 @@ export class ChartBridge implements IChartBridge {
     ctx: CanvasRenderingContext2D,
     bounds: ChartBounds,
     sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
   ): void {
-    const paintState = this.renderCache.getPaintState(chartId, sheetId);
+    const normalizedFrame = normalizeChartRenderFrame(bounds, renderFrame);
+    const paintState = this.renderCache.getPaintState(chartId, sheetId, normalizedFrame);
     if (paintState.importRenderStatus) {
       renderChartError(ctx, bounds, {
         code: 'RENDER_FAILED',
@@ -165,13 +176,13 @@ export class ChartBridge implements IChartBridge {
     if (!paintState.marks) {
       renderChartPlaceholder(ctx, bounds, 'Chart loading…');
       if (!paintState.isCompilePending) {
-        void this.ensureCompiled(chartId, paintState.resolvedSheetId);
+        void this.ensureCompiled(chartId, paintState.resolvedSheetId, normalizedFrame);
       }
       return;
     }
 
     if (paintState.isDirty && !paintState.isCompilePending) {
-      void this.ensureCompiled(chartId, paintState.resolvedSheetId);
+      void this.ensureCompiled(chartId, paintState.resolvedSheetId, normalizedFrame);
     }
 
     renderChartMarks(ctx, paintState.marks, bounds);
@@ -181,8 +192,19 @@ export class ChartBridge implements IChartBridge {
     return this.renderCache.onCacheUpdate(listener);
   }
 
-  async ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void> {
-    await this.renderOrchestrator.ensureCompiled(chartId, sheetId);
+  async ensureCompiled(
+    chartId: string,
+    sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
+  ): Promise<void> {
+    const normalizedFrame =
+      renderFrame?.width !== undefined && renderFrame.height !== undefined
+        ? normalizeChartRenderFrame(
+            { width: renderFrame.width, height: renderFrame.height },
+            renderFrame,
+          )
+        : undefined;
+    await this.renderOrchestrator.ensureCompiled(chartId, sheetId, normalizedFrame);
   }
 
   async getLayout(sheetId: SheetId, chartId: string): Promise<ChartLayoutSnapshot | null> {

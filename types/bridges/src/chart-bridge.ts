@@ -16,6 +16,8 @@
 import type { CellRange, SheetId } from '@mog/types-core';
 import type {
   ChartExportOptionsSnapshot,
+  ChartLayoutAuthority,
+  ChartPageContextSnapshot,
   ResolvedChartSpecSnapshot,
 } from '@mog/types-data/data/charts';
 
@@ -106,6 +108,21 @@ export interface ChartBounds {
 export interface ChartRenderSnapshot {
   marks: ChartMark[];
   resolvedChartSpec: ResolvedChartSpecSnapshot;
+}
+
+/**
+ * Runtime render frame for cache-backed chart compilation.
+ *
+ * Embedded charts use their worksheet floating-object bounds. Chart sheets use
+ * the chart-sheet surface bounds plus view/page context when available.
+ */
+export interface ChartRenderFrame {
+  kind: ChartLayoutAuthority;
+  width: number;
+  height: number;
+  windowViewId?: number;
+  zoomToFit?: boolean;
+  pageContext?: ChartPageContextSnapshot;
 }
 
 // =============================================================================
@@ -305,12 +322,14 @@ export interface IChartBridge {
    * @param ctx - Canvas 2D rendering context
    * @param bounds - Bounding box for the chart
    * @param sheetId - Optional owner sheet ID for duplicate imported chart IDs
+   * @param renderFrame - Optional layout authority and frame metadata
    */
   renderCached(
     chartId: string,
     ctx: CanvasRenderingContext2D,
     bounds: ChartBounds,
     sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
   ): void;
 
   /**
@@ -339,8 +358,13 @@ export interface IChartBridge {
    *
    * @param chartId - Chart ID
    * @param sheetId - Optional owner sheet ID for duplicate imported chart IDs
+   * @param renderFrame - Optional layout authority and frame metadata
    */
-  ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void>;
+  ensureCompiled(
+    chartId: string,
+    sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
+  ): Promise<void>;
 
   // ===========================================================================
   // Cache Invalidation

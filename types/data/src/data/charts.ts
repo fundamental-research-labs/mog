@@ -1134,10 +1134,61 @@ export interface ResolvedChartLayoutSnapshot {
   dataLabels?: ResolvedChartLayoutRectSnapshot;
 }
 
+/** Runtime sheet kind carried by chart diagnostics. */
+export type ChartSheetKindSnapshot =
+  | 'worksheet'
+  | 'chartSheet'
+  | 'dialogSheet'
+  | 'macroSheet'
+  | 'unsupported';
+
+/** Source of authority for chart layout and render dimensions. */
+export type ChartLayoutAuthority = 'embedded' | 'chartSheet';
+
+/** Page context that can influence chart-sheet print/export output. */
+export interface ChartPageContextSnapshot {
+  pageSetup?: unknown;
+  pageMargins?: unknown;
+  headerFooter?: unknown;
+}
+
+/** Render frame used for size-aware chart compilation. */
+export interface ChartRenderFrameSnapshot {
+  kind: ChartLayoutAuthority;
+  sheetId: string;
+  chartId: string;
+  width: number;
+  height: number;
+  windowViewId?: number;
+  zoomToFit?: boolean;
+  pageContext?: ChartPageContextSnapshot;
+}
+
+/** Absolute chart or plot area size in CSS pixels. */
+export interface ChartAreaSizeSnapshot {
+  width: number;
+  height: number;
+}
+
+/** Package identity/authority metadata for import/export diagnostics. */
+export interface ChartPackageAuthoritySnapshot {
+  source?: string;
+  fingerprint?: string;
+  status?: 'current' | 'stale' | 'unknown';
+  details?: unknown;
+}
+
 export interface ResolvedChartSpecSnapshot {
   schemaVersion: 1;
   chartId: string;
   sheetId: string;
+  sheetKind?: ChartSheetKindSnapshot;
+  layoutAuthority?: ChartLayoutAuthority;
+  renderFrame?: ChartRenderFrameSnapshot;
+  chartArea?: ChartAreaSizeSnapshot;
+  plotArea?: ChartAreaSizeSnapshot;
+  pageContext?: ChartPageContextSnapshot;
+  packageAuthority?: ChartPackageAuthoritySnapshot;
   chartObject: {
     id: string;
     name?: string;
@@ -1285,6 +1336,8 @@ export interface ChartConfig {
   width: number;
   /** Chart height in cells */
   height: number;
+  /** Layout authority for render diagnostics; embedded charts keep width/height as cell counts. */
+  layoutAuthority?: ChartLayoutAuthority;
 
   // Data binding (A1 strings)
   /** Data range in A1 notation (e.g., "A1:D10"). Optional when series[].values are provided. */

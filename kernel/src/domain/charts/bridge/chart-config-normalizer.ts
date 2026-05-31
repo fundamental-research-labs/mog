@@ -1,5 +1,9 @@
 import type { ChartError } from '@mog-sdk/contracts/bridges';
-import type { AxisType, ChartConfig } from '@mog-sdk/contracts/data/charts';
+import type {
+  AxisType,
+  ChartConfig,
+  ChartLayoutAuthority,
+} from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { normalizeImportedComboChart } from '../../../bridges/compute/chart-import-normalization';
@@ -82,6 +86,9 @@ export function unsupportedChartTypeError(
 type ChartColorMapOverrideConfig = NonNullable<
   NonNullable<ChartConfig['chartStyleContext']>['colorMapOverride']
 >;
+type ChartWithLayoutAuthority = ChartFloatingObject & {
+  layoutAuthority?: ChartLayoutAuthority;
+};
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
@@ -172,13 +179,23 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     throw new Error(narrowedType.diagnostics[0]?.message ?? 'Imported chart type is not supported');
   }
   const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
+  const layoutAuthority = (normalizedChart as ChartWithLayoutAuthority).layoutAuthority;
+  const widthCells =
+    layoutAuthority === 'chartSheet'
+      ? undefined
+      : normalizedChart.widthCells ?? normalizedChart.width;
+  const heightCells =
+    layoutAuthority === 'chartSheet'
+      ? undefined
+      : normalizedChart.heightCells ?? normalizedChart.height;
 
   return {
     type: narrowedType.type ?? 'bar',
     anchorRow: normalizedChart.anchor.anchorRow,
     anchorCol: normalizedChart.anchor.anchorCol,
-    width: normalizedChart.widthCells ?? normalizedChart.width ?? 4,
-    height: normalizedChart.heightCells ?? normalizedChart.height ?? 10,
+    width: widthCells ?? 4,
+    height: heightCells ?? 10,
+    layoutAuthority,
     dataRange: normalizedChart.dataRange ?? '',
     seriesRange: normalizedChart.seriesRange,
     categoryRange: normalizedChart.categoryRange,

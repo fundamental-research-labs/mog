@@ -11,6 +11,10 @@ import {
   type ImportedChartRenderStatus,
 } from './import-render-status';
 import { ChartSheetIndex } from './chart-sheet-index';
+import {
+  chartRenderFrameCacheSuffix,
+  type NormalizedChartRenderFrame,
+} from './chart-render-frame';
 
 type CacheUpdateListener = (chartId: string) => void;
 
@@ -33,6 +37,7 @@ export type ChartRenderCachePaintState = {
 
 export type CommitMarksOptions = {
   sheetId?: SheetId;
+  frame?: NormalizedChartRenderFrame;
   layout?: ChartLayoutSnapshot | null;
 };
 
@@ -43,13 +48,13 @@ export type CommitMarksOptions = {
  * painting to canvas. This class owns only cache/listener/index lifecycle.
  */
 export class ChartRenderCache {
-  /** Cache of compiled marks per chart ID or sheet-scoped cache key. */
+  /** Cache of compiled marks per chart ID, sheet key, or sheet/frame key. */
   private readonly markCache = new Map<string, ChartMark[]>();
 
-  /** Cache of layout snapshots per chart ID or sheet-scoped cache key. */
+  /** Cache of layout snapshots per chart ID, sheet key, or sheet/frame key. */
   private readonly layoutCache = new Map<string, ChartLayoutSnapshot>();
 
-  /** Cache of chart errors per chart ID or sheet-scoped cache key. */
+  /** Cache of chart errors per chart ID, sheet key, or sheet/frame key. */
   private readonly errorCache = new Map<string, ChartError>();
 
   /** Renderer-side terminal import/render status for imported charts. */
@@ -58,7 +63,7 @@ export class ChartRenderCache {
   /** Set of dirty charts that need recompilation. */
   private readonly dirtyCharts = new Set<string>();
 
-  /** Set of chart IDs currently being recompiled. */
+  /** Set of chart cache keys currently being recompiled. */
   private readonly pendingCompilations = new Set<string>();
 
   /** Sync paint-path chartId -> owning SheetId index. */
@@ -82,8 +87,10 @@ export class ChartRenderCache {
     this.cacheUpdateListeners.length = 0;
   }
 
-  cacheKey(chartId: string, sheetId?: SheetId): string {
-    return this.chartSheetIndex.cacheKey(chartId, sheetId);
+  cacheKey(chartId: string, sheetId?: SheetId, frame?: NormalizedChartRenderFrame): string {
+    const baseKey = this.chartSheetIndex.cacheKey(chartId, sheetId);
+    const frameSuffix = chartRenderFrameCacheSuffix(frame);
+    return frameSuffix ? `${baseKey}::${frameSuffix}` : baseKey;
   }
 
   resolveSheetId(chartId: string, explicitSheetId?: SheetId): SheetId | undefined {
@@ -111,7 +118,7 @@ export class ChartRenderCache {
   }
 
   deleteChartCaches(chartId: string, sheetId?: SheetId): void {
-    const keys = new Set([chartId, this.cacheKey(chartId, sheetId)]);
+    const keys = this.matchingCacheKeys(chartId, sheetId);
     for (const key of keys) {
       this.markCache.delete(key);
       this.layoutCache.delete(key);
@@ -123,63 +130,105 @@ export class ChartRenderCache {
   }
 
   invalidateChart(chartId: string, sheetId?: SheetId): void {
-    const key = this.cacheKey(chartId, sheetId);
+    const keys = this.matchingCacheKeys(chartId, sheetId);
     // Keep stale marks/layouts available during async recompilation; only the
     // known error is cleared so recovery can paint once the compile succeeds.
-    this.errorCache.delete(key);
-    this.dirtyCharts.add(key);
+    for (const key of keys) {
+      this.errorCache.delete(key);
+      this.dirtyCharts.add(key);
+    }
   }
 
-  isChartDirty(chartId: string, sheetId?: SheetId): boolean {
-    const key = this.cacheKey(chartId, sheetId);
+  isChartDirty(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): boolean {
+    const key = this.cacheKey(chartId, sheetId, frame);
     return this.dirtyCharts.has(key) || !this.markCache.has(key);
   }
 
-  clearDirtyFlag(chartId: string, sheetId?: SheetId): void {
-    this.dirtyCharts.delete(this.cacheKey(chartId, sheetId));
+  clearDirtyFlag(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): void {
+    this.dirtyCharts.delete(this.cacheKey(chartId, sheetId, frame));
   }
 
   getDirtyChartKeys(): string[] {
     return Array.from(this.dirtyCharts);
   }
 
-  getCachedMarks(chartId: string, sheetId?: SheetId): ChartMark[] | undefined {
-    return this.markCache.get(this.cacheKey(chartId, sheetId));
+  getCachedMarks(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartMark[] | undefined {
+    return this.markCache.get(this.cacheKey(chartId, sheetId, frame));
   }
 
-  getCachedError(chartId: string, sheetId?: SheetId): ChartError | undefined {
-    return this.errorCache.get(this.cacheKey(chartId, sheetId));
+  getCachedError(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartError | undefined {
+    return this.errorCache.get(this.cacheKey(chartId, sheetId, frame));
   }
 
-  getCachedLayout(chartId: string, sheetId?: SheetId): ChartLayoutSnapshot | undefined {
-    return this.layoutCache.get(this.cacheKey(chartId, sheetId));
+  getCachedLayout(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartLayoutSnapshot | undefined {
+    return this.layoutCache.get(this.cacheKey(chartId, sheetId, frame));
   }
 
   getImportRenderStatus(
     chartId: string,
     sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
   ): ImportedChartRenderStatus | undefined {
-    return this.chartImportRenderStatus.get(this.cacheKey(chartId, sheetId));
+    const key = this.cacheKey(chartId, sheetId, frame);
+    return (
+      this.chartImportRenderStatus.get(key) ??
+      this.chartImportRenderStatus.get(this.cacheKey(chartId, sheetId)) ??
+      this.chartImportRenderStatus.get(chartId)
+    );
   }
 
-  getFreshLayout(chartId: string, sheetId: SheetId): ChartLayoutSnapshot | undefined {
-    const key = this.cacheKey(chartId, sheetId);
+  getFreshLayout(
+    chartId: string,
+    sheetId: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartLayoutSnapshot | undefined {
+    const key = this.cacheKey(chartId, sheetId, frame);
     const cached = this.layoutCache.get(key);
     return cached && !this.dirtyCharts.has(key) ? cached : undefined;
   }
 
-  getCompileState(chartId: string, sheetId: SheetId): ChartRenderCacheCompileState {
-    const key = this.cacheKey(chartId, sheetId);
+  getCompileState(
+    chartId: string,
+    sheetId: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartRenderCacheCompileState {
+    const key = this.cacheKey(chartId, sheetId, frame);
+    const baseKey = this.cacheKey(chartId, sheetId);
     return {
       key,
       marks: this.markCache.get(key),
-      error: this.errorCache.get(key),
+      error:
+        this.errorCache.get(key) ?? this.errorCache.get(baseKey) ?? this.errorCache.get(chartId),
       isDirty: this.dirtyCharts.has(key),
       isCompilePending: this.pendingCompilations.has(key),
     };
   }
 
-  getPaintState(chartId: string, sheetId?: SheetId): ChartRenderCachePaintState {
+  getPaintState(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): ChartRenderCachePaintState {
     const legacyImportRenderStatus = this.chartImportRenderStatus.get(chartId);
     if (legacyImportRenderStatus) {
       return {
@@ -204,33 +253,43 @@ export class ChartRenderCache {
       };
     }
 
-    const key = this.cacheKey(chartId, resolvedSheetId);
+    const key = this.cacheKey(chartId, resolvedSheetId, frame);
+    const baseKey = this.cacheKey(chartId, resolvedSheetId);
     const keyMarks = this.markCache.get(key);
-    const legacyMarks = this.markCache.get(chartId);
+    const legacyMarks = frame ? undefined : this.markCache.get(chartId);
     return {
       resolvedSheetId,
       importRenderStatus:
-        this.chartImportRenderStatus.get(key) ?? this.chartImportRenderStatus.get(chartId),
-      error: this.errorCache.get(key) ?? this.errorCache.get(chartId),
+        this.chartImportRenderStatus.get(key) ??
+        this.chartImportRenderStatus.get(baseKey) ??
+        this.chartImportRenderStatus.get(chartId),
+      error:
+        this.errorCache.get(key) ?? this.errorCache.get(baseKey) ?? this.errorCache.get(chartId),
       marks: keyMarks ?? legacyMarks,
       isDirty: keyMarks != null ? this.dirtyCharts.has(key) : this.dirtyCharts.has(chartId),
       isCompilePending:
-        this.pendingCompilations.has(key) || this.pendingCompilations.has(chartId),
+        this.pendingCompilations.has(key) ||
+        this.pendingCompilations.has(baseKey) ||
+        this.pendingCompilations.has(chartId),
     };
   }
 
-  beginCompilation(chartId: string, sheetId: SheetId): void {
-    this.pendingCompilations.add(this.cacheKey(chartId, sheetId));
+  beginCompilation(chartId: string, sheetId: SheetId, frame?: NormalizedChartRenderFrame): void {
+    this.pendingCompilations.add(this.cacheKey(chartId, sheetId, frame));
   }
 
-  isCompilationPending(chartId: string, sheetId?: SheetId): boolean {
-    return this.pendingCompilations.has(this.cacheKey(chartId, sheetId));
+  isCompilationPending(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): boolean {
+    return this.pendingCompilations.has(this.cacheKey(chartId, sheetId, frame));
   }
 
   commitMarks(chartId: string, marks: ChartMark[], options: CommitMarksOptions = {}): boolean {
-    const key = this.cacheKey(chartId, options.sheetId);
+    const key = this.cacheKey(chartId, options.sheetId, options.frame);
     if (!this.acceptsCommits) {
-      this.clearPendingAliases(chartId, options.sheetId);
+      this.clearPendingAliases(chartId, options.sheetId, options.frame);
       return false;
     }
 
@@ -239,20 +298,25 @@ export class ChartRenderCache {
     }
     this.markCache.set(key, marks);
     this.dirtyCharts.delete(key);
-    this.clearPendingAliases(chartId, options.sheetId);
+    this.clearPendingAliases(chartId, options.sheetId, options.frame);
     this.fireCacheUpdate(chartId);
     return true;
   }
 
-  commitError(chartId: string, error: ChartError, sheetId?: SheetId): boolean {
-    const key = this.cacheKey(chartId, sheetId);
+  commitError(
+    chartId: string,
+    error: ChartError,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): boolean {
+    const key = this.cacheKey(chartId, sheetId, frame);
     if (!this.acceptsCommits) {
-      this.clearPendingAliases(chartId, sheetId);
+      this.clearPendingAliases(chartId, sheetId, frame);
       return false;
     }
 
     this.errorCache.set(key, error);
-    this.clearPendingAliases(chartId, sheetId);
+    this.clearPendingAliases(chartId, sheetId, frame);
     this.fireCacheUpdate(chartId);
     return true;
   }
@@ -319,9 +383,52 @@ export class ChartRenderCache {
     this.pendingCompilations.clear();
   }
 
-  private clearPendingAliases(chartId: string, sheetId?: SheetId): void {
+  private clearPendingAliases(
+    chartId: string,
+    sheetId?: SheetId,
+    frame?: NormalizedChartRenderFrame,
+  ): void {
+    this.pendingCompilations.delete(this.cacheKey(chartId, sheetId, frame));
     this.pendingCompilations.delete(this.cacheKey(chartId, sheetId));
     this.pendingCompilations.delete(chartId);
+  }
+
+  private matchingCacheKeys(chartId: string, sheetId?: SheetId): Set<string> {
+    const baseKey = this.cacheKey(chartId, sheetId);
+    const keys = new Set([chartId, baseKey]);
+    const framePrefix = `${baseKey}::frame=`;
+    for (const map of [
+      this.markCache,
+      this.layoutCache,
+      this.errorCache,
+      this.chartImportRenderStatus,
+    ]) {
+      for (const key of map.keys()) {
+        if (this.isMatchingCacheKey(key, chartId, baseKey, framePrefix, sheetId)) {
+          keys.add(key);
+        }
+      }
+    }
+    for (const set of [this.dirtyCharts, this.pendingCompilations]) {
+      for (const key of set) {
+        if (this.isMatchingCacheKey(key, chartId, baseKey, framePrefix, sheetId)) {
+          keys.add(key);
+        }
+      }
+    }
+    return keys;
+  }
+
+  private isMatchingCacheKey(
+    key: string,
+    chartId: string,
+    baseKey: string,
+    framePrefix: string,
+    sheetId?: SheetId,
+  ): boolean {
+    if (key === baseKey || key.startsWith(framePrefix)) return true;
+    if (sheetId !== undefined) return false;
+    return key.endsWith(`::${chartId}`) || key.includes(`::${chartId}::frame=`);
   }
 
   /**

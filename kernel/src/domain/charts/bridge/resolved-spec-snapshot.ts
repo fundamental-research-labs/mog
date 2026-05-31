@@ -51,6 +51,11 @@ export function buildResolvedChartSpecSnapshot(input: {
   compilerPathId: CompilerPathId;
   compilerInputHash: string;
   layout?: ResolvedChartSpecSnapshot['resolved']['layout'] | null;
+  renderFrame?: ResolvedChartSpecSnapshot['renderFrame'];
+  chartArea?: ResolvedChartSpecSnapshot['chartArea'];
+  plotArea?: ResolvedChartSpecSnapshot['plotArea'] | null;
+  pageContext?: ResolvedChartSpecSnapshot['pageContext'];
+  packageAuthority?: ResolvedChartSpecSnapshot['packageAuthority'];
 }): ResolvedChartSpecSnapshot {
   const categories = input.chartData.categories.map(snapshotScalar);
   const hasExplicitSeriesReferences =
@@ -76,6 +81,13 @@ export function buildResolvedChartSpecSnapshot(input: {
     schemaVersion: 1,
     chartId: input.chart.id,
     sheetId: String(input.sheetId),
+    sheetKind: input.renderFrame?.kind === 'chartSheet' ? 'chartSheet' : 'worksheet',
+    layoutAuthority: input.renderFrame?.kind ?? 'embedded',
+    renderFrame: input.renderFrame,
+    chartArea: input.chartArea,
+    plotArea: input.plotArea ?? undefined,
+    pageContext: input.pageContext ?? input.renderFrame?.pageContext,
+    packageAuthority: input.packageAuthority,
     chartObject: {
       id: input.chart.id,
       name: input.chart.name,

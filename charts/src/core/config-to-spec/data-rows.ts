@@ -10,31 +10,12 @@ import {
 import {
   BLANK_VALUE_FIELD,
   BUBBLE_SIZE_FIELD,
-  CATEGORY_FIELD,
-  CATEGORY_FORMAT_CODE_FIELD,
   POINT_INDEX_FIELD,
   RAW_BUBBLE_SIZE_FIELD,
-  RAW_CATEGORY_FIELD,
-  RAW_VALUE_FIELD,
   SCATTER_X_FIELD,
-  SERIES_FIELD,
-  SERIES_INDEX_FIELD,
-  SOURCE_SERIES_INDEX_FIELD,
-  SOURCE_SERIES_KEY_FIELD,
   LINE_SEGMENT_FIELD,
-  SERIES_ORDER_FIELD,
   SERIES_OPACITY_FIELD,
-  STOCK_CLOSE_FIELD,
-  STOCK_DIRECTION_FIELD,
-  STOCK_HIGH_FIELD,
-  STOCK_LOW_FIELD,
-  STOCK_OPEN_FIELD,
-  STOCK_VOLUME_FIELD,
   VALUE_FIELD,
-  WATERFALL_END_FIELD,
-  WATERFALL_RUNNING_TOTAL_FIELD,
-  WATERFALL_START_FIELD,
-  WATERFALL_TYPE_FIELD,
 } from './fields';
 import {
   bubbleSizeValue,
@@ -56,13 +37,16 @@ import {
 } from './data-label-rows';
 import { applyErrorBars } from './error-bar-rows';
 import { isNoFillNoLineSeries } from './style';
-import type { PointFormat, SeriesConfig } from '../../types';
+import type { SeriesConfig } from '../../types';
 import {
   seriesConfigForDataSeries,
   seriesOrderForDataSeries,
   seriesSourceIndex,
   seriesSourceKey,
 } from '../series-identity';
+import { applyCategoryFormat, buildBaseRow } from './data-row-base';
+import { applyStockFields } from './data-row-stock';
+import { applyWaterfallFields, waterfallTotalIndices } from './data-row-waterfall';
 
 /**
  * Convert ChartData (categories + series) to flat DataRow[] for the grammar.
@@ -88,10 +72,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const pieLabelGeometries = buildPieLabelGeometries(data, config);
   const gapSegmentsBySeries = data.series.map(() => 0);
   let waterfallRunningTotal = 0;
-  const waterfallTotalIndices = new Set([
-    ...(config?.waterfall?.totalIndices ?? []),
-    ...(config?.waterfall?.subtotalIndices ?? []),
-  ]);
+  const totalWaterfallIndices = waterfallTotalIndices(config);
   for (let i = 0; i < categories.length; i++) {
     const rawCategory = categories[i];
     const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
@@ -169,71 +150,24 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         });
         applySeriesVisualStyle(row, config, seriesConfig, sourceSeriesIndex);
         if (config?.type === 'waterfall') {
-          const value = toFiniteNumber(point.y) ?? 0;
-          const isTotal = waterfallTotalIndices.has(i);
-          const start = isTotal ? 0 : waterfallRunningTotal;
-          const end = isTotal ? value : waterfallRunningTotal + value;
-          row[WATERFALL_START_FIELD] = start;
-          row[WATERFALL_RUNNING_TOTAL_FIELD] = end;
-          row[WATERFALL_END_FIELD] = end;
-          row[WATERFALL_TYPE_FIELD] = isTotal ? 'total' : value >= 0 ? 'increase' : 'decrease';
+          const end = applyWaterfallFields({
+            row,
+            value: point.y,
+            pointIndex: i,
+            runningTotal: waterfallRunningTotal,
+            totalIndices: totalWaterfallIndices,
+          });
           if (seriesIndex === data.series.length - 1) {
             waterfallRunningTotal = end;
           }
         }
         applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
-        // Propagate OHLC fields if present (for stock charts)
-        if (point[STOCK_OPEN_FIELD] !== undefined) row[STOCK_OPEN_FIELD] = point[STOCK_OPEN_FIELD];
-        if (point[STOCK_HIGH_FIELD] !== undefined) row[STOCK_HIGH_FIELD] = point[STOCK_HIGH_FIELD];
-        if (point[STOCK_LOW_FIELD] !== undefined) row[STOCK_LOW_FIELD] = point[STOCK_LOW_FIELD];
-        if (point[STOCK_CLOSE_FIELD] !== undefined) {
-          row[STOCK_CLOSE_FIELD] = point[STOCK_CLOSE_FIELD];
-        }
-        const stockOpen = toFiniteNumber(point[STOCK_OPEN_FIELD]);
-        const stockClose = toFiniteNumber(point[STOCK_CLOSE_FIELD]);
-        if (stockOpen !== undefined && stockClose !== undefined) {
-          row[STOCK_DIRECTION_FIELD] = stockClose >= stockOpen ? 'up' : 'down';
-        }
-        if (point[STOCK_VOLUME_FIELD] !== undefined) {
-          row[STOCK_VOLUME_FIELD] = point[STOCK_VOLUME_FIELD];
-        }
+        applyStockFields(row, point);
         rows.push(row);
       }
     }
   }
   return rows;
-}
-
-function buildBaseRow(input: {
-  rawCategory: string | number;
-  rowCategory: string | number;
-  seriesName: string;
-  pointIndex: number;
-  seriesIndex: number;
-  sourceSeriesIndex: number;
-  sourceSeriesKey: string;
-  seriesOrder: number;
-  value?: number;
-}): DataRow {
-  const row: DataRow = {
-    [CATEGORY_FIELD]: input.rowCategory,
-    [SERIES_FIELD]: input.seriesName,
-    [POINT_INDEX_FIELD]: input.pointIndex,
-    [SERIES_INDEX_FIELD]: input.seriesIndex,
-    [SOURCE_SERIES_INDEX_FIELD]: input.sourceSeriesIndex,
-    [SOURCE_SERIES_KEY_FIELD]: input.sourceSeriesKey,
-    [SERIES_ORDER_FIELD]: input.seriesOrder,
-    [RAW_CATEGORY_FIELD]: input.rawCategory,
-  };
-  if (input.value !== undefined) {
-    row[VALUE_FIELD] = input.value;
-    row[RAW_VALUE_FIELD] = input.value;
-  }
-  return row;
-}
-
-function applyCategoryFormat(row: DataRow, categoryFormatCode: string | null | undefined): void {
-  if (categoryFormatCode) row[CATEGORY_FORMAT_CODE_FIELD] = categoryFormatCode;
 }
 
 function applyPointAnnotations(

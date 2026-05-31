@@ -840,12 +840,13 @@ export interface EditorDependencies {
     errorMessage: string,
     onEdit: () => void,
     onAcceptAsText: () => void,
+    onCancel: () => void,
     /** G.2: Optional error position for cursor placement (0-based character index) */
     errorPosition?: number,
   ) => void;
   /**
-   * Show direct circular-reference warning dialog. The coordinator commits the
-   * authored formula immediately; callbacks are dialog follow-up hooks only.
+   * Show direct circular-reference warning dialog. Enable proceeds after the
+   * host enables iterative calculation; cancel discards the edit.
    */
   onCircularReferenceWarning?: (
     cellAddress: string,

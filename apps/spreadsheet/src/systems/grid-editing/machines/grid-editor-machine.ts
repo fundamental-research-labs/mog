@@ -390,6 +390,7 @@ export const editorMachine = setup({
           { actions: ['updateValue', 'computeFormulaContext'] },
         ],
         SET_CURSOR: { actions: ['setCursor', 'computeFormulaContext'] },
+        TEXT_SELECTION_CHANGED: { actions: ['setTextSelection', 'computeFormulaContext'] },
         IME_START: { target: 'imeComposing', actions: ['startIMEComposition', 'hideSuggestions'] },
         FORMULA_RANGE_SELECTED: { actions: ['insertFormulaRange', 'computeFormulaContext'] },
         // C.3/H.3: Update formula range reference after drag-resize

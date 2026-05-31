@@ -78,6 +78,9 @@ export interface UseEditorActionsReturn {
   /** Set cursor position */
   setCursor: (position: number) => void;
 
+  /** Mirror a DOM text selection */
+  setTextSelection: (cursorPosition: number, selectionAnchor: number) => void;
+
   /** Commit the edit with optional direction to move selection */
   commit: (direction: Direction | 'none') => void;
 
@@ -306,6 +309,13 @@ export function useEditorActions(): UseEditorActionsReturn {
     [commands],
   );
 
+  const setTextSelection = useMemo(
+    () => (cursorPosition: number, selectionAnchor: number) => {
+      commands.setTextSelection(cursorPosition, selectionAnchor);
+    },
+    [commands],
+  );
+
   const commit = useMemo(
     () => (direction: Direction | 'none') => {
       commands.commit(direction);
@@ -434,6 +444,7 @@ export function useEditorActions(): UseEditorActionsReturn {
       canEditCell,
       input,
       setCursor,
+      setTextSelection,
       commit,
       commitWithKey,
       cancel,
@@ -455,6 +466,7 @@ export function useEditorActions(): UseEditorActionsReturn {
       canEditCell,
       input,
       setCursor,
+      setTextSelection,
       commit,
       commitWithKey,
       cancel,

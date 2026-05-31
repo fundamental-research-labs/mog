@@ -725,8 +725,8 @@ export function SpreadsheetCoordinatorProvider({
       onValidationInformation: (message, title, onProceed, onCancel) => {
         showValidationWarning(message, title, 'information', onProceed, onCancel);
       },
-      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, errorPosition) => {
-        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, errorPosition);
+      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition) => {
+        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition);
       },
       onCircularReferenceWarning: (cellAddress, formula, onEnableIterative, onCancel) => {
         showCircularReferenceDialog(

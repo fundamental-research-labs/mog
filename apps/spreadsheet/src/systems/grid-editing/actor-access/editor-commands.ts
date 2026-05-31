@@ -47,6 +47,9 @@ export function createEditorCommands(actor: MinimalActor): EditorCommands {
 
     setCursor: (position: number) => actor.send({ type: 'SET_CURSOR', position }),
 
+    setTextSelection: (cursorPosition: number, selectionAnchor: number) =>
+      actor.send({ type: 'TEXT_SELECTION_CHANGED', anchor: selectionAnchor, cursorPosition }),
+
     commit: (
       direction: Direction | 'none',
       commitKey?: 'tab' | 'shift-tab' | 'enter' | 'shift-enter',

@@ -31,6 +31,7 @@ import { moveCellSkipHidden } from '../../shared/types';
 
 import type { rendererMachine } from '../../renderer/machines/grid-renderer-machine';
 import type { clipboardMachine } from '../machines/clipboard-machine';
+import { isCursorAtReferencePosition } from '../machines/editor/formula-editing';
 import type { editorMachine } from '../machines/grid-editor-machine';
 import type { selectionMachine } from '../machines/grid-selection-machine';
 
@@ -500,6 +501,15 @@ export interface EditingInputInterceptionResult {
   clearPendingSelection: () => void;
 }
 
+function canInsertFormulaReference(context: EditorState['context']): boolean {
+  const isReplacingActiveRef =
+    context.formulaRefInsertStart !== null &&
+    context.formulaRefInsertEnd !== null &&
+    context.cursorPosition === context.formulaRefInsertEnd;
+
+  return isReplacingActiveRef || isCursorAtReferencePosition(context.value, context.cursorPosition);
+}
+
 /**
  * Set up editing input interception.
  *
@@ -588,6 +598,11 @@ export function setupEditingInputInterception(
       const isInEnterMode = !editorState.context.isEditMode;
 
       if (isFormulaEditing && isInEnterMode) {
+        if (!canInsertFormulaReference(editorState.context)) {
+          editorActor.send({ type: 'CANCEL' });
+          return false;
+        }
+
         selectionActor.send({
           type: 'MOUSE_DOWN',
           cell,

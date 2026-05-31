@@ -34,8 +34,17 @@ export interface FormulaErrorCallbacks {
   onEdit: () => void;
   /** Accept as literal text (commit with apostrophe prefix) */
   onAcceptAsText: () => void;
+  /** Cancel the edit and discard the invalid formula */
+  onCancel: () => void;
   /** Open help documentation */
   onHelp: () => void;
+}
+
+function focusActiveFormulaEditor(): void {
+  const editor = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    '[data-testid="inline-cell-editor"], [data-testid="formula-bar"] input, [data-testid="formula-bar"] textarea',
+  );
+  editor?.focus();
 }
 
 // =============================================================================
@@ -98,12 +107,21 @@ export function useFormulaErrorDialog() {
     const { onEdit } = getCallbacks();
     closeFormulaError();
     onEdit();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(focusActiveFormulaEditor);
+    });
   }, [closeFormulaError, getCallbacks]);
 
   const handleAcceptAsText = useCallback(() => {
     const { onAcceptAsText } = getCallbacks();
     closeFormulaError();
     onAcceptAsText();
+  }, [closeFormulaError, getCallbacks]);
+
+  const handleCancel = useCallback(() => {
+    const { onCancel } = getCallbacks();
+    closeFormulaError();
+    onCancel();
   }, [closeFormulaError, getCallbacks]);
 
   const handleHelp = useCallback(() => {
@@ -116,6 +134,7 @@ export function useFormulaErrorDialog() {
     showError,
     handleEdit,
     handleAcceptAsText,
+    handleCancel,
     handleHelp,
   };
 }
@@ -147,12 +166,21 @@ export function FormulaErrorDialog() {
     const { onEdit } = getCallbacks();
     closeFormulaError();
     onEdit();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(focusActiveFormulaEditor);
+    });
   }, [closeFormulaError, getCallbacks]);
 
   const handleAcceptAsText = useCallback(() => {
     const { onAcceptAsText } = getCallbacks();
     closeFormulaError();
     onAcceptAsText();
+  }, [closeFormulaError, getCallbacks]);
+
+  const handleCancel = useCallback(() => {
+    const { onCancel } = getCallbacks();
+    closeFormulaError();
+    onCancel();
   }, [closeFormulaError, getCallbacks]);
 
   const handleHelp = useCallback(() => {
@@ -164,12 +192,12 @@ export function FormulaErrorDialog() {
   return (
     <Dialog
       open={dialog.isOpen}
-      onClose={handleEdit}
+      onClose={handleCancel}
       dialogId="formula-error-dialog"
       width="md"
       dataAttributes={{ 'data-testid': 'formula-error-dialog' }}
     >
-      <DialogHeader onClose={handleEdit}>Formula Error</DialogHeader>
+      <DialogHeader onClose={handleCancel}>Formula Error</DialogHeader>
       <DialogBody>
         <div className="space-y-4">
           <p className="text-body text-ss-text-secondary m-0">

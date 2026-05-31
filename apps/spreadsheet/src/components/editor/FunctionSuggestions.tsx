@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { FunctionInfo } from '../../internal-api';
-import { formatNameForInsertion, type NameSuggestion } from '../../domain/editor/name-completion';
+import type { NameSuggestion } from '../../domain/editor/name-completion';
 
 // =============================================================================
 // Types
@@ -30,7 +30,7 @@ export interface FunctionSuggestionsProps {
   /** Currently selected index (from editor machine) */
   selectedIndex: number;
   /** Callback when a function is selected */
-  onSelect: (name: string, appendOpeningParen?: boolean) => void;
+  onSelect: (name: string) => void;
   /** Callback for keyboard navigation */
   onNavigate: (direction: 'up' | 'down') => void;
   /** Callback to dismiss suggestions */
@@ -125,6 +125,10 @@ function HighlightedText({ text, matchedIndices }: HighlightedTextProps) {
   );
 }
 
+function nameSuggestionTypeLabel(ns: NameSuggestion): string {
+  return ns.type === 'definedName' ? 'Name' : ns.type === 'table' ? 'Table' : ns.type;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -190,10 +194,10 @@ export function FunctionSuggestions({
           e.stopPropagation();
           const fnItem = filteredFunctions[clampedIndex];
           if (fnItem) {
-            onSelect(fnItem.fn.name, true);
+            onSelect(fnItem.fn.name);
           } else {
             const nameItem = nameSuggestions[clampedIndex - filteredFunctions.length];
-            if (nameItem) onSelect(formatNameForInsertion(nameItem), false);
+            if (nameItem) onSelect(nameItem.name);
           }
           break;
         }
@@ -209,8 +213,8 @@ export function FunctionSuggestions({
 
   // Handle item click
   const handleItemClick = useCallback(
-    (name: string, appendOpeningParen: boolean) => {
-      onSelect(name, appendOpeningParen);
+    (name: string) => {
+      onSelect(name);
     },
     [onSelect],
   );
@@ -239,12 +243,14 @@ export function FunctionSuggestions({
           <li
             key={item.fn.name}
             role="option"
+            data-suggestion={item.fn.name}
+            aria-label={`${item.fn.name} ${item.fn.description} ${item.fn.category}`}
             aria-selected={index === clampedIndex}
             className={`
  px-3 py-2 cursor-pointer flex items-start gap-3
  ${index === clampedIndex ? 'bg-ss-primary-lighter text-ss-primary' : 'hover:bg-ss-surface-hover'}
  `}
-            onClick={() => handleItemClick(item.fn.name, true)}
+            onClick={() => handleItemClick(item.fn.name)}
             onMouseEnter={() => {
               // Could optionally update selection on hover
             }}
@@ -253,9 +259,11 @@ export function FunctionSuggestions({
               <div className="font-ss-mono font-medium text-body">
                 <HighlightedText text={item.fn.name} matchedIndices={item.matchedIndices} />
               </div>
+              <span className="sr-only"> </span>
               <div className="text-caption text-text-muted truncate mt-0.5">
                 {item.fn.description}
               </div>
+              <span className="sr-only"> </span>
             </div>
             <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
               {item.fn.category}
@@ -268,19 +276,23 @@ export function FunctionSuggestions({
             <li
               key={`name:${ns.name}`}
               role="option"
+              data-suggestion={ns.name}
+              aria-label={`${ns.name} ${ns.refersTo} ${nameSuggestionTypeLabel(ns)}`}
               aria-selected={globalIndex === clampedIndex}
               className={`
  px-3 py-2 cursor-pointer flex items-start gap-3
  ${globalIndex === clampedIndex ? 'bg-ss-primary-lighter text-ss-primary' : 'hover:bg-ss-surface-hover'}
  `}
-              onClick={() => handleItemClick(formatNameForInsertion(ns), false)}
+              onClick={() => handleItemClick(ns.name)}
             >
               <div className="flex-1 min-w-0">
                 <div className="font-ss-mono font-medium text-body">{ns.name}</div>
+                <span className="sr-only"> </span>
                 <div className="text-caption text-text-muted truncate mt-0.5">{ns.refersTo}</div>
+                <span className="sr-only"> </span>
               </div>
               <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
-                {ns.type === 'definedName' ? 'Name' : ns.type === 'table' ? 'Table' : ns.type}
+                {nameSuggestionTypeLabel(ns)}
               </div>
             </li>
           );

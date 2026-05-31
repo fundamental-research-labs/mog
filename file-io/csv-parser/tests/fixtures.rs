@@ -32,6 +32,7 @@ fn read_fixture(name: &str) -> Vec<u8> {
             }
             bytes
         }
+        "bad-utf8.csv" => b"name,value\nfoo,1\nbar,\xFF\xFE\xFD invalid bytes\nbaz,3\n".to_vec(),
         "large-90kb.csv" => large_csv(3_000).into_bytes(),
         "large-2mb.csv" => large_csv(60_000).into_bytes(),
         other => panic!("unknown CSV fixture {other}"),
@@ -242,7 +243,25 @@ fn fixture_utf16_le_bom_decodes() {
 }
 
 // =========================================================================
-// 9. 90 KB scale fixture parses cleanly.
+// 9. Malformed UTF-8 bytes are kept visible as replacement characters.
+// =========================================================================
+#[test]
+fn fixture_bad_utf8_decodes_with_replacement_chars() {
+    let r = parse("bad-utf8.csv");
+    assert_eq!(r.detected_encoding, "UTF-8");
+    assert_eq!(r.warnings, vec![CsvWarning::MalformedUtf8]);
+    assert_text(&r.output, 0, 0, "name");
+    assert_text(&r.output, 0, 1, "value");
+    assert_text(&r.output, 1, 0, "foo");
+    assert_number(&r.output, 1, 1, 1.0);
+    assert_text(&r.output, 2, 0, "bar");
+    assert_text(&r.output, 2, 1, "\u{FFFD}\u{FFFD}\u{FFFD} invalid bytes");
+    assert_text(&r.output, 3, 0, "baz");
+    assert_number(&r.output, 3, 1, 3.0);
+}
+
+// =========================================================================
+// 10. 90 KB scale fixture parses cleanly.
 // =========================================================================
 #[test]
 fn fixture_large_90kb_parses() {
@@ -257,7 +276,7 @@ fn fixture_large_90kb_parses() {
 }
 
 // =========================================================================
-// 10. 2 MB scale fixture parses cleanly (release-tier perf check).
+// 11. 2 MB scale fixture parses cleanly (release-tier perf check).
 // =========================================================================
 #[test]
 fn fixture_large_2mb_parses() {

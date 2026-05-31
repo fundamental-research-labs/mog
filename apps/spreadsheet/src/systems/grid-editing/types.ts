@@ -844,8 +844,8 @@ export interface EditorDependencies {
     errorPosition?: number,
   ) => void;
   /**
-   * Show direct circular-reference warning dialog. Enable proceeds after the
-   * host enables iterative calculation; cancel discards the edit.
+   * Show direct circular-reference warning dialog. The coordinator commits the
+   * authored formula immediately; callbacks are dialog follow-up hooks only.
    */
   onCircularReferenceWarning?: (
     cellAddress: string,

@@ -207,8 +207,9 @@ export interface EditorCommitCoordinationConfig {
   ) => void;
   /**
    * Optional callback for direct circular-reference warnings.
-   * Enable proceeds with commit after the host enables iterative calculation;
-   * cancel abandons the edit without mutating workbook state.
+   * Circular references are warning-only for interactive commits: the formula
+   * is committed while the host shows the warning and can optionally enable
+   * iterative calculation.
    */
   onCircularReferenceWarning?: (
     cellAddress: string,
@@ -399,15 +400,11 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
               onCircularReferenceWarning(
                 circularReferenceResult.cellAddress,
                 circularReferenceResult.formula,
-                () => editorActor.send({ type: 'VALIDATION_SUCCESS' }),
-                () => editorActor.send({ type: 'CANCEL' }),
+                () => {},
+                () => {},
               );
-            } else {
-              editorActor.send({
-                type: 'VALIDATION_ERROR',
-                message: `Circular reference detected in cell ${circularReferenceResult.cellAddress}`,
-              });
             }
+            editorActor.send({ type: 'VALIDATION_SUCCESS' });
             return;
           }
         }

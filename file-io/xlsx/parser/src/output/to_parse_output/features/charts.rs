@@ -362,7 +362,7 @@ fn supported_chart_auxiliary_relationship(rel_type: &str, target_path: &str) -> 
     }
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 3;
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 4;
 
 fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     let mut fingerprint = Fnv1a64::default();

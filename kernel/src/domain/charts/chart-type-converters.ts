@@ -48,6 +48,7 @@ import type {
 import type {
   AxisConfig,
   BoxplotConfig,
+  ChartConfig,
   ChartLeaderLinesFormat,
   ChartLineFormat,
   ChartLineSettings,
@@ -127,6 +128,11 @@ const MARKER_STYLES = [
   'x',
   'auto',
 ] as const;
+
+const SIZE_REPRESENTS_VALUES = ['area', 'w'] as const satisfies readonly NonNullable<
+  ChartConfig['sizeRepresents']
+>[];
+type SizeRepresents = (typeof SIZE_REPRESENTS_VALUES)[number];
 
 const CHART_TYPES = [
   'bar',
@@ -337,6 +343,12 @@ export function wireChartTypeToConfig(
       },
     ],
   };
+}
+
+export function wireToSizeRepresents(
+  value: string | null | undefined,
+): ChartConfig['sizeRepresents'] {
+  return narrowEnum<SizeRepresents>(value, SIZE_REPRESENTS_VALUES, 'Chart.sizeRepresents');
 }
 
 // =============================================================================

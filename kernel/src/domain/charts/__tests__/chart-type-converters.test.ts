@@ -5,6 +5,7 @@ import {
   wireChartTypeToConfig,
   wireToLegendConfig,
   wireToSeriesConfig,
+  wireToSizeRepresents,
 } from '../chart-type-converters';
 
 describe('chart-type-converters', () => {
@@ -52,6 +53,13 @@ describe('chart-type-converters', () => {
         },
       ],
     });
+  });
+
+  it('narrows bubble size representation strings at the wire boundary', () => {
+    expect(wireToSizeRepresents('area')).toBe('area');
+    expect(wireToSizeRepresents('w')).toBe('w');
+    expect(wireToSizeRepresents('diameter')).toBeUndefined();
+    expect(wireToSizeRepresents(undefined)).toBeUndefined();
   });
 
   it('reconciles imported legend visibility when OOXML preserved visible=true with show=false', () => {

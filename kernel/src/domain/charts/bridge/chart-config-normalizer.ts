@@ -18,6 +18,7 @@ import {
   wireToWaterfallConfig,
   wireToManualLayout,
   wireToTrendlineConfigArray,
+  wireToSizeRepresents,
 } from '../chart-type-converters';
 
 /**
@@ -170,10 +171,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   if (!narrowedType.type && !isNativeMissingChartType(normalizedChart)) {
     throw new Error(narrowedType.diagnostics[0]?.message ?? 'Imported chart type is not supported');
   }
-  const sizeRepresents =
-    normalizedChart.sizeRepresents === 'area' || normalizedChart.sizeRepresents === 'w'
-      ? normalizedChart.sizeRepresents
-      : undefined;
+  const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
 
   return {
     type: narrowedType.type ?? 'bar',

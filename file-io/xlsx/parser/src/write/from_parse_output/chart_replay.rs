@@ -99,7 +99,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.back_wall_format.is_some()
 }
 
-pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 3;
+pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 4;
 
 pub(super) fn standard_chart_projection_fingerprint(
     chart_spec: &domain_types::ChartSpec,

@@ -43,6 +43,7 @@ import {
   wireToDataLabelConfig,
   wireToLegendConfig,
   wireToSeriesConfigArray,
+  wireToSizeRepresents,
   wireToTrendlineConfigArray,
 } from '../../domain/charts/chart-type-converters';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
@@ -774,7 +775,7 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     firstSliceAngle: chart.firstSliceAngle,
     bubbleScale: chart.bubbleScale,
     showNegBubbles: chart.showNegBubbles,
-    sizeRepresents: chart.sizeRepresents as Chart['sizeRepresents'],
+    sizeRepresents: wireToSizeRepresents(chart.sizeRepresents),
     splitType: chart.splitType as Chart['splitType'],
     splitValue: chart.splitValue,
     name: chart.name || undefined,

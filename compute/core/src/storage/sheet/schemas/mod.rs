@@ -24,7 +24,7 @@ pub use columns::{
 pub(crate) use range_store::write_imported_validation_specs;
 pub use ranges::{
     delete_range_schema, get_range_schema, get_range_schemas_for_sheet, set_range_schema,
-    update_range_schema,
+    set_range_schema_with_alloc, update_range_schema, update_range_schema_with_alloc,
 };
 pub(crate) use validator::{
     DataValidationOutcome, validate_cell_value, validate_cell_value_against_data_validations,

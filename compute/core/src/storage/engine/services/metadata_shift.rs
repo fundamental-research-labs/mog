@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use cell_types::SheetId;
+use cell_types::{IdAllocator, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_PROPERTIES;
 use formula_types::StructureChange;
@@ -76,6 +76,7 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
         target_col + width,
     );
 
+    let id_alloc = stores.id_alloc.clone();
     let doc = stores.storage.doc();
     let sheets = doc.get_or_insert_map("sheets");
 
@@ -189,7 +190,7 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
             .get(&sheet_id)
             .map(Vec::as_slice)
             .unwrap_or(&[]);
-        apply_validation_schema_delta(doc, &sheets, &sheet_id, original, updated);
+        apply_validation_schema_delta(doc, &sheets, &sheet_id, original, updated, &id_alloc);
     }
 }
 
@@ -411,6 +412,7 @@ fn shift_validation_ranges(
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
+    let id_alloc = stores.id_alloc.clone();
     let doc = stores.storage.doc();
     let sheets = doc.get_or_insert_map("sheets");
     let range_schemas = schemas::get_range_schemas_for_sheet(doc, &sheets, sheet_id);
@@ -467,7 +469,9 @@ fn shift_validation_ranges(
             } else {
                 let mut updated = schema.clone();
                 updated.ranges = new_ranges;
-                let _ = schemas::set_range_schema(doc, &sheets, sheet_id, &updated);
+                let _ = schemas::set_range_schema_with_alloc(
+                    doc, &sheets, sheet_id, &updated, &id_alloc,
+                );
             }
         }
     }
@@ -581,6 +585,7 @@ fn apply_validation_schema_delta(
     sheet_id: &SheetId,
     original: &[schemas::RangeSchema],
     updated: &[schemas::RangeSchema],
+    id_alloc: &IdAllocator,
 ) {
     let updated_ids: HashSet<&str> = updated
         .iter()
@@ -596,7 +601,7 @@ fn apply_validation_schema_delta(
 
     for schema in updated {
         if !schema.ranges.is_empty() {
-            let _ = schemas::set_range_schema(doc, sheets, sheet_id, schema);
+            let _ = schemas::set_range_schema_with_alloc(doc, sheets, sheet_id, schema, id_alloc);
         }
     }
 }

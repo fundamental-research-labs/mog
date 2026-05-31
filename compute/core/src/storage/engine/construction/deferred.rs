@@ -283,9 +283,10 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     let shared_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed));
     engine.stores.grid_id_alloc = std::sync::Arc::clone(&shared_alloc);
     engine.stores.compute.set_id_alloc(shared_alloc);
-    engine.stores.id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(
-        engine.stores.storage.doc().client_id(),
-    ));
+    engine.stores.id_alloc =
+        std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
+            engine.stores.storage.doc().client_id(),
+        ));
 
     // Build indexes for only the first sheet (viewport-visible).
     // Remaining sheets' indexes are built during complete_deferred_hydration.
@@ -602,7 +603,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
 
         let settings = derive_settings(&new_storage);
         let calculation = full_parse_output.calculation.clone();
-        let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(
+        let id_alloc = std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
             new_storage.doc().client_id(),
         ));
         let mut stores = EngineStores {

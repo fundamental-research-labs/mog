@@ -525,7 +525,7 @@ export function SortDialog() {
         <Button variant="secondary" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSort}>
+        <Button variant="primary" onClick={handleSort} data-confirm-button="true">
           OK
         </Button>
       </DialogFooter>

@@ -13,6 +13,7 @@ import {
   STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
+  STOCK_VOLUME_FIELD,
   VALUE_FIELD,
 } from '../config-to-spec/fields';
 import type { StoredChartConfig } from '../../types';
@@ -641,6 +642,101 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 15]);
     expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([undefined, undefined]);
     expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
+      { type: 'rule' },
+      { type: 'tick' },
+    ]);
+  });
+
+  it('maps imported volume-OHLC stock combo source series into stock rows', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [1000, 1500, 1200],
+      [10, 11, 12],
+      [15, 14, 16],
+      [8, 9, 10],
+      [12, 9, 15],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-volume-ohlc-chart',
+      type: 'stock',
+      subType: 'volume-ohlc',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'Volume', type: 'column', values: 'A1:C1', categories: 'A6:C6' },
+        { name: 'Open', type: 'stock', values: 'A2:C2', categories: 'A6:C6' },
+        { name: 'High', type: 'stock', values: 'A3:C3', categories: 'A6:C6' },
+        { name: 'Low', type: 'stock', values: 'A4:C4', categories: 'A6:C6' },
+        { name: 'Close', type: 'stock', values: 'A5:C5', categories: 'A6:C6' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
+
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].name).toBe('Close');
+    expect(data.series[0].data.map((point) => point.volume)).toEqual([1000, 1500, 1200]);
+    expect(data.series[0].data.map((point) => point.open)).toEqual([10, 11, 12]);
+    expect(data.series[0].data.map((point) => point.high)).toEqual([15, 14, 16]);
+    expect(data.series[0].data.map((point) => point.low)).toEqual([8, 9, 10]);
+    expect(data.series[0].data.map((point) => point.close)).toEqual([12, 9, 15]);
+    expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
+    expect(rows.map((row) => row[STOCK_DIRECTION_FIELD])).toEqual(['up', 'down', 'up']);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
+      { type: 'bar', opacity: 0.3 },
+      { type: 'rule' },
+      expect.objectContaining({ type: 'rule', strokeWidth: expect.any(Number) }),
+    ]);
+  });
+
+  it('maps imported volume-HLC stock combo source series by typed roles, not raw order', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [15, 14, 16],
+      [8, 9, 10],
+      [12, 9, 15],
+      [1000, 1500, 1200],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-volume-hlc-chart',
+      type: 'stock',
+      subType: 'volume-hlc',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'High', type: 'stock', values: 'A1:C1', categories: 'A5:C5' },
+        { name: 'Low', type: 'stock', values: 'A2:C2', categories: 'A5:C5' },
+        { name: 'Close', type: 'stock', values: 'A3:C3', categories: 'A5:C5' },
+        { name: 'Volume', type: 'column', values: 'A4:C4', categories: 'A5:C5' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
+
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].name).toBe('Close');
+    expect(data.series[0].data.map((point) => point.open)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(data.series[0].data.map((point) => point.volume)).toEqual([1000, 1500, 1200]);
+    expect(rows.map((row) => row[STOCK_HIGH_FIELD])).toEqual([15, 14, 16]);
+    expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
+    expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
+      { type: 'bar', opacity: 0.3 },
       { type: 'rule' },
       { type: 'tick' },
     ]);

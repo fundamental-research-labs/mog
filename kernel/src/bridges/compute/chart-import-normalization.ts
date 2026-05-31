@@ -7,6 +7,7 @@ import type {
 
 export type ImportNormalizableChart = {
   chartType?: string;
+  subType?: string;
   axis?: AxisData;
   axes?: AxisData;
   rt?: {
@@ -65,6 +66,40 @@ function chartTypeForUniformSeries(chart: ImportNormalizableChart): string | nul
 
   const [firstType] = seriesTypes;
   return firstType && seriesTypes.every((chartType) => chartType === firstType) ? firstType : null;
+}
+
+function isVolumeSeriesType(chartType: string | undefined): boolean {
+  return (
+    chartType === 'bar' ||
+    chartType === 'column' ||
+    chartType === 'bar3D' ||
+    chartType === 'bar3d' ||
+    chartType === 'column3D' ||
+    chartType === 'column3d'
+  );
+}
+
+function importedStockVolumeSubType(
+  chart: ImportNormalizableChart,
+  groups: readonly ChartGroupMeta[],
+  series: readonly ChartSeriesData[] | undefined,
+): 'volume-hlc' | 'volume-ohlc' | null {
+  if (!series?.length) return null;
+  if (chart.chartType !== 'combo' && groups.length <= 1) return null;
+
+  const stockIndices: number[] = [];
+  const volumeIndices: number[] = [];
+
+  series.forEach((entry, index) => {
+    if (entry.type === 'stock') stockIndices.push(index);
+    if (isVolumeSeriesType(entry.type)) volumeIndices.push(index);
+  });
+
+  if (volumeIndices.length !== 1) return null;
+  if (stockIndices.length !== 3 && stockIndices.length !== 4) return null;
+  if (stockIndices.length + volumeIndices.length !== series.length) return null;
+
+  return stockIndices.length === 4 ? 'volume-ohlc' : 'volume-hlc';
 }
 
 function axisDataFor(chart: ImportNormalizableChart): AxisData | undefined {
@@ -186,16 +221,22 @@ export function normalizeImportedComboChart<T extends ImportNormalizableChart>(c
     : chart.series;
   const series = normalizeSeriesAxisBindings(chart, typedSeries);
   const chartWithNormalizedSeries = series === chart.series ? chart : { ...chart, series };
+  const stockVolumeSubType = importedStockVolumeSubType(chartWithNormalizedSeries, groups, series);
   const chartType =
+    (stockVolumeSubType ? 'stock' : null) ??
     (groups.length > 1 ? chartTypeForImportedGroups(groups) : null) ??
     chartTypeForUniformSeries(chartWithNormalizedSeries) ??
     chart.chartType;
+  const subType = stockVolumeSubType ?? chart.subType;
 
-  if (chartType === chart.chartType && series === chart.series) return chart;
+  if (chartType === chart.chartType && series === chart.series && subType === chart.subType) {
+    return chart;
+  }
 
   return {
     ...chart,
     ...(chartType ? { chartType } : {}),
+    ...(subType ? { subType } : {}),
     ...(series ? { series } : {}),
   };
 }

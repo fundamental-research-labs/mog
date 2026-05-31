@@ -278,7 +278,10 @@ function hasRenderableCategoryLevels(cache: ChartSeriesCategoryLevelsCache | und
   return categoryLevelPointCardinality(cache) > 0 && orderedCategoryLevels(cache).length > 0;
 }
 
-function cacheValueAt(cache: ChartSeriesPointCache | undefined, pointIndex: number): ChartCellValue {
+function cacheValueAt(
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): ChartCellValue {
   const cached = importedCachePointState(cache, pointIndex);
   return cached.kind === 'explicit' ? cached.value : undefined;
 }
@@ -324,10 +327,7 @@ function pointFormatCodeAt(
   return cache?.points.find((point) => point.idx === pointIndex)?.formatCode ?? cache?.formatCode;
 }
 
-function categoryFormatCodeAt(
-  seriesConfig: SeriesConfig,
-  pointIndex: number,
-): string | undefined {
+function categoryFormatCodeAt(seriesConfig: SeriesConfig, pointIndex: number): string | undefined {
   return (
     seriesConfig.categoryLabelFormat?.points?.find((point) => point.idx === pointIndex)
       ?.formatCode ??
@@ -646,7 +646,9 @@ function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): str
 }
 
 function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boolean {
-  return Boolean(seriesConfig.values?.trim()) || hasRenderableCachedDimension(seriesConfig.valueCache);
+  return (
+    Boolean(seriesConfig.values?.trim()) || hasRenderableCachedDimension(seriesConfig.valueCache)
+  );
 }
 
 type StockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
@@ -656,7 +658,62 @@ type StockRolePlan = Partial<Record<StockRole, number>> & {
   close: number;
 };
 
+function isStockVolumeSeriesType(chartType: string | undefined): boolean {
+  return (
+    chartType === 'bar' ||
+    chartType === 'column' ||
+    chartType === 'bar3D' ||
+    chartType === 'bar3d' ||
+    chartType === 'column3D' ||
+    chartType === 'column3d'
+  );
+}
+
 function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
+  const stockIndices: number[] = [];
+  const volumeIndices: number[] = [];
+
+  seriesConfigs.forEach((seriesConfig, index) => {
+    if (seriesConfig.type === 'stock') stockIndices.push(index);
+    if (isStockVolumeSeriesType(seriesConfig.type)) volumeIndices.push(index);
+  });
+
+  if (
+    volumeIndices.length === 1 &&
+    (stockIndices.length === 3 || stockIndices.length === 4) &&
+    stockIndices.length + volumeIndices.length === seriesConfigs.length
+  ) {
+    return stockIndices.length === 4
+      ? {
+          volume: volumeIndices[0],
+          open: stockIndices[0],
+          high: stockIndices[1],
+          low: stockIndices[2],
+          close: stockIndices[3],
+        }
+      : {
+          volume: volumeIndices[0],
+          high: stockIndices[0],
+          low: stockIndices[1],
+          close: stockIndices[2],
+        };
+  }
+
+  if (
+    volumeIndices.length === 0 &&
+    (stockIndices.length === 3 || stockIndices.length === 4) &&
+    stockIndices.length === seriesConfigs.length
+  ) {
+    return stockIndices.length === 4
+      ? {
+          open: stockIndices[0],
+          high: stockIndices[1],
+          low: stockIndices[2],
+          close: stockIndices[3],
+        }
+      : { high: stockIndices[0], low: stockIndices[1], close: stockIndices[2] };
+  }
+
   if (seriesConfigs.length >= 5) {
     return { volume: 0, open: 1, high: 2, low: 3, close: 4 };
   }
@@ -672,8 +729,8 @@ function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
 function hasCategoryDimensionConfig(seriesConfig: SeriesConfig): boolean {
   return Boolean(
     seriesConfig.categories?.trim() ||
-      seriesConfig.categoryCache ||
-      hasRenderableCategoryLevels(seriesConfig.categoryLevels),
+    seriesConfig.categoryCache ||
+    hasRenderableCategoryLevels(seriesConfig.categoryLevels),
   );
 }
 
@@ -700,9 +757,7 @@ function extractImportedDimension(
   }
 
   return {
-    values: Array.from({ length: pointCount }, (_, pointIndex) =>
-      cacheValueAt(cache, pointIndex),
-    ),
+    values: Array.from({ length: pointCount }, (_, pointIndex) => cacheValueAt(cache, pointIndex)),
     hasLiveRange: false,
   };
 }
@@ -878,8 +933,15 @@ function extractChartDataFromSeriesRefs(
     const hasCategoryLevels = hasRenderableCategoryLevels(categoryLevelsCache);
     const categoryDimension = hasCategoryLevels
       ? {
-          values: Array.from({ length: categoryLevelPointCardinality(categoryLevelsCache) }, (_, i) =>
-            multiLevelCategoryLabelAt(categoryLevelsCache, i, selectedLevel, categories[i] ?? i + 1),
+          values: Array.from(
+            { length: categoryLevelPointCardinality(categoryLevelsCache) },
+            (_, i) =>
+              multiLevelCategoryLabelAt(
+                categoryLevelsCache,
+                i,
+                selectedLevel,
+                categories[i] ?? i + 1,
+              ),
           ),
           hasLiveRange: false,
         }
@@ -908,12 +970,12 @@ function extractChartDataFromSeriesRefs(
             ? xyValue(rawCategory)
             : xyValue(cacheValueAt(seriesConfig.categoryCache, pointIndex))
           : hasCategoryLevels && categoryDimension.values.length > pointIndex
-          ? labelValue(rawCategory, categoryFallback)
-          : categoryDimension.values.length > pointIndex
-            ? categoryDimension.hasLiveRange
-              ? labelValue(rawCategory, categoryFallback)
-              : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback)
-            : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback);
+            ? labelValue(rawCategory, categoryFallback)
+            : categoryDimension.values.length > pointIndex
+              ? categoryDimension.hasLiveRange
+                ? labelValue(rawCategory, categoryFallback)
+                : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback)
+              : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback);
       const rawSize =
         bubbleSizeDimension.values.length > pointIndex
           ? bubbleSizeDimension.values[pointIndex]

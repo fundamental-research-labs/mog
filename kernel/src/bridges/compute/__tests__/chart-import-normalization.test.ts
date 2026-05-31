@@ -53,6 +53,51 @@ describe('normalizeImportedComboChart', () => {
     expect(normalized.series).toEqual([{ type: 'area' }, { type: 'line' }]);
   });
 
+  it('normalizes imported volume-HLC stock combo groups to stock', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      rt: {
+        chartGroupsMeta: [group('column', [0]), group('stock', [1, 2, 3])],
+      },
+      series: [{ name: 'Volume' }, { name: 'High' }, { name: 'Low' }, { name: 'Close' }],
+    });
+
+    expect(normalized.chartType).toBe('stock');
+    expect(normalized.subType).toBe('volume-hlc');
+    expect(normalized.series).toEqual([
+      { name: 'Volume', type: 'column' },
+      { name: 'High', type: 'stock' },
+      { name: 'Low', type: 'stock' },
+      { name: 'Close', type: 'stock' },
+    ]);
+  });
+
+  it('normalizes imported volume-OHLC stock combo groups to stock', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      rt: {
+        chartGroupsMeta: [group('stock', [1, 2, 3, 4]), group('bar', [0])],
+      },
+      series: [
+        { name: 'Volume' },
+        { name: 'Open' },
+        { name: 'High' },
+        { name: 'Low' },
+        { name: 'Close' },
+      ],
+    });
+
+    expect(normalized.chartType).toBe('stock');
+    expect(normalized.subType).toBe('volume-ohlc');
+    expect(normalized.series?.map((entry) => entry.type)).toEqual([
+      'bar',
+      'stock',
+      'stock',
+      'stock',
+      'stock',
+    ]);
+  });
+
   it('does not infer chart type from partially typed series', () => {
     const normalized = normalizeImportedComboChart({
       chartType: 'combo',

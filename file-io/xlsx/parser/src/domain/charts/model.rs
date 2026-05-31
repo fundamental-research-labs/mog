@@ -45,6 +45,12 @@ pub struct Chart {
     /// Whether auto title is deleted.
     /// `None` means the element was absent in the original XML.
     pub auto_title_deleted: Option<bool>,
+    /// Pivot chart field button visibility flags.
+    pub show_all_field_buttons: Option<bool>,
+    pub show_axis_field_buttons: Option<bool>,
+    pub show_legend_field_buttons: Option<bool>,
+    pub show_value_field_buttons: Option<bool>,
+    pub show_report_filter_field_buttons: Option<bool>,
     /// Pivot chart formatting entries (c:pivotFmts).
     pub pivot_fmts: Vec<ooxml_types::charts::PivotFmt>,
 

@@ -3,7 +3,8 @@ use domain_types::ChartDefinition;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSeriesDimensionSourceKindData,
     ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec,
-    ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, SingleAxisData,
+    ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, PivotChartOptionsData,
+    SingleAxisData,
 };
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
@@ -382,6 +383,26 @@ fn manual_layouts_reconstruct_for_chart_level_surfaces() {
     assert!(xml.contains("<c:x val=\"0.3125\"/>"));
     assert!(xml.contains("<c:x val=\"0.875\"/>"));
     assert!(xml.contains("<c:showVal val=\"1\"/>"));
+}
+
+#[test]
+fn pivot_field_buttons_reconstruct_from_modeled_spec() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.show_all_field_buttons = Some(true);
+    spec.pivot_options = Some(PivotChartOptionsData {
+        show_axis_field_buttons: Some(false),
+        show_legend_field_buttons: Some(true),
+        show_report_filter_field_buttons: Some(false),
+        show_value_field_buttons: Some(true),
+    });
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains(r#"<c:showAllFieldButtons val="1"/>"#));
+    assert!(xml.contains(r#"<c:showAxisFieldButtons val="0"/>"#));
+    assert!(xml.contains(r#"<c:showLegendFieldButtons val="1"/>"#));
+    assert!(xml.contains(r#"<c:showValueFieldButtons val="1"/>"#));
+    assert!(xml.contains(r#"<c:showReportFilterFieldButtons val="0"/>"#));
 }
 
 #[test]

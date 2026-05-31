@@ -44,6 +44,29 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
             .as_deref()
             .map(DisplayBlanksAs::from_ooxml),
         show_d_lbls_over_max: spec.show_data_labels_over_max,
+        show_all_field_buttons: spec
+            .show_all_field_buttons
+            .or_else(|| imported_chart.and_then(|chart| chart.show_all_field_buttons)),
+        show_axis_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_axis_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_axis_field_buttons)),
+        show_legend_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_legend_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_legend_field_buttons)),
+        show_value_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_value_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_value_field_buttons)),
+        show_report_filter_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_report_filter_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_report_filter_field_buttons)),
         pivot_fmts: imported_chart
             .map(|chart| chart.pivot_fmts.clone())
             .unwrap_or_default(),

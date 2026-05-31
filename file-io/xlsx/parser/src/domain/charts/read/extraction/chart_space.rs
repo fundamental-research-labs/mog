@@ -108,6 +108,7 @@ pub fn extract_chart_spec_from_chart_space(
         .back_wall
         .as_ref()
         .and_then(|s| extract_chart_format(s.sp_pr.as_ref(), None));
+    let pivot_options = pivot_chart_options_from_chart(chart);
 
     // -------------------------------------------------------------------------
     // data_table
@@ -245,13 +246,13 @@ pub fn extract_chart_spec_from_chart_space(
         split_value: scalar_fields.split_value,
         category_label_level: None,
         series_name_level: None,
-        show_all_field_buttons: None,
+        show_all_field_buttons: chart.show_all_field_buttons,
         second_plot_size: None,
         vary_by_categories: None,
         title_h_align: None,
         title_v_align: None,
         title_show_shadow: None,
-        pivot_options: None,
+        pivot_options,
         bar_shape: None,
         bubble_3d_effect: scalar_fields.bubble_3d_effect,
         wireframe: None,
@@ -429,6 +430,22 @@ fn extract_title_rich_text(
         ooxml_types::charts::ChartText::Rich(body) => extract_chart_rich_text(body),
         ooxml_types::charts::ChartText::StrRef(_) => None,
     }
+}
+
+fn pivot_chart_options_from_chart(
+    chart: &ooxml_types::charts::Chart,
+) -> Option<domain_types::chart::PivotChartOptionsData> {
+    let options = domain_types::chart::PivotChartOptionsData {
+        show_axis_field_buttons: chart.show_axis_field_buttons,
+        show_legend_field_buttons: chart.show_legend_field_buttons,
+        show_report_filter_field_buttons: chart.show_report_filter_field_buttons,
+        show_value_field_buttons: chart.show_value_field_buttons,
+    };
+    (options.show_axis_field_buttons.is_some()
+        || options.show_legend_field_buttons.is_some()
+        || options.show_report_filter_field_buttons.is_some()
+        || options.show_value_field_buttons.is_some())
+    .then_some(options)
 }
 
 struct ChartStyleContextInputs<'a> {

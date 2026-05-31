@@ -473,6 +473,40 @@ fn test_parse_chart_with_data_table() {
 }
 
 #[test]
+fn test_parse_pivot_field_buttons() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                    </c:barChart>
+                </c:plotArea>
+                <c:showAllFieldButtons val="1"/>
+                <c:showAxisFieldButtons val="0"/>
+                <c:showLegendFieldButtons/>
+                <c:showValueFieldButtons val="1"/>
+                <c:showReportFilterFieldButtons val="0"/>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let chart = Chart::parse(xml);
+    assert_eq!(chart.show_all_field_buttons, Some(true));
+    assert_eq!(chart.show_axis_field_buttons, Some(false));
+    assert_eq!(chart.show_legend_field_buttons, Some(true));
+    assert_eq!(chart.show_value_field_buttons, Some(true));
+    assert_eq!(chart.show_report_filter_field_buttons, Some(false));
+
+    let spec = project_chart_xml(xml);
+    assert_eq!(spec.show_all_field_buttons, Some(true));
+    let pivot_options = spec.pivot_options.expect("pivot options");
+    assert_eq!(pivot_options.show_axis_field_buttons, Some(false));
+    assert_eq!(pivot_options.show_legend_field_buttons, Some(true));
+    assert_eq!(pivot_options.show_value_field_buttons, Some(true));
+    assert_eq!(pivot_options.show_report_filter_field_buttons, Some(false));
+}
+
+#[test]
 fn test_parse_legend_entries() {
     let xml = br#"<?xml version="1.0"?>
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">

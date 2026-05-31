@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 import {
   AUTO_SUM,
+  CLEAR_CONTENTS,
   COMMIT_ACTION_FOR,
   COMMIT_IN_PLACE,
   EDIT_CELL,
@@ -142,6 +143,44 @@ describe('EDIT_CELL edit-source contract', () => {
       cell: { row: 0, col: 0 },
       entryMode: 'F2',
     });
+  });
+});
+
+describe('CLEAR_CONTENTS protection feedback', () => {
+  test('shows protection feedback when a locked protected cell rejects Delete', async () => {
+    const error = new Error('Cannot edit cell (0, 0): sheet is protected and cell is locked');
+    const range = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const clear = jest.fn().mockRejectedValue(error as never);
+    const setSelectionError = jest.fn();
+    const showProtectionAlert = jest.fn();
+    const undoGroup = jest.fn(async (fn: () => Promise<void>) => {
+      await fn();
+    });
+    const deps = {
+      getActiveSheetId: jest.fn().mockReturnValue('sheet1'),
+      workbook: {
+        getSheetById: jest.fn().mockReturnValue({ clear }),
+        undoGroup,
+      },
+      accessors: {
+        selection: {
+          getActiveCell: jest.fn().mockReturnValue({ row: 0, col: 0 }),
+          getRanges: jest.fn().mockReturnValue([range]),
+        },
+      },
+      uiStore: {
+        getState: () => ({
+          setSelectionError,
+          showProtectionAlert,
+        }),
+      },
+    } as any;
+
+    await expect(CLEAR_CONTENTS(deps)).resolves.toEqual({ handled: false, reason: 'blocked' });
+
+    expect(clear).toHaveBeenCalledWith(range, 'contents');
+    expect(setSelectionError).toHaveBeenCalledWith('protection', error.message);
+    expect(showProtectionAlert).toHaveBeenCalledWith(error.message);
   });
 });
 

@@ -5,7 +5,13 @@ import {
   ObjectCellAccessor,
   parseRange,
 } from '../data-extractor';
+import { configToSpec } from '../config-to-spec';
+import { SCATTER_X_FIELD, VALUE_FIELD } from '../config-to-spec/fields';
 import type { StoredChartConfig } from '../../types';
+
+function specRows(spec: ReturnType<typeof configToSpec>) {
+  return spec.data && 'values' in spec.data ? spec.data.values : [];
+}
 
 describe('chart data point value provenance', () => {
   it('marks blank and invalid cell values without changing rendered y values', () => {
@@ -311,6 +317,73 @@ describe('chart data point value provenance', () => {
 
     expect(data.categories).toEqual([45292, 'Cached B']);
     expect(data.series[0].data.map((point) => point.x)).toEqual([45292, 'Cached B']);
+  });
+
+  it('does not place blank or text scatter x values on fallback category positions', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 20, 30],
+      [1, null, 'not-x'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'scatter-live-x-authority-chart',
+      type: 'scatter',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:C1',
+          categories: 'A2:C2',
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categories).toEqual([1, '', 'not-x']);
+    expect(data.series[0].data.map((point) => point.x)).toEqual([1, '', 'not-x']);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.[SCATTER_X_FIELD]).toBe(1);
+    expect(rows[0]?.[VALUE_FIELD]).toBe(10);
+  });
+
+  it('treats omitted scatter x cache indices as blanks instead of fallback positions', () => {
+    const accessor = ObjectCellAccessor.fromArray([[10, 20, 30]]);
+    const config: StoredChartConfig = {
+      id: 'scatter-cache-x-authority-chart',
+      type: 'scatter',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:C1',
+          categorySourceKind: 'literal',
+          categoryCache: {
+            pointCount: 3,
+            points: [
+              { idx: 0, value: '1' },
+              { idx: 2, value: 'not-x' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categories).toEqual([1, '', 'not-x']);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.[SCATTER_X_FIELD]).toBe(1);
+    expect(rows[0]?.[VALUE_FIELD]).toBe(10);
   });
 
   it('uses imported multi-level category caches as composed chart-domain labels', () => {

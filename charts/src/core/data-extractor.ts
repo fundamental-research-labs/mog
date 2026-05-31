@@ -297,6 +297,22 @@ function cacheLabelAt(
   return label;
 }
 
+function xyValue(value: ChartCellValue): string | number {
+  if (isHiddenChartCellValue(value) || isBlankChartCellValue(value)) {
+    return '';
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+
+  const text = String(value);
+  const numeric = Number(text);
+  return text.trim() !== '' && Number.isFinite(numeric) ? numeric : text;
+}
+
 function hasRenderableCachedDimension(cache: ChartSeriesPointCache | undefined): boolean {
   return cachePointCardinality(cache) > 0;
 }
@@ -430,7 +446,12 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
 export function extractChartData(accessor: CellDataAccessor, config: ChartConfig): ChartData {
   const importedSeries = config.series?.filter(hasRenderableImportedSeriesData);
   if (importedSeries?.length) {
-    return extractChartDataFromSeriesRefs(accessor, importedSeries, config.categoryLabelLevel);
+    return extractChartDataFromSeriesRefs(
+      accessor,
+      importedSeries,
+      config.categoryLabelLevel,
+      config.type,
+    );
   }
 
   if (!config.dataRange) {
@@ -662,12 +683,14 @@ function extractChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
   categoryLabelLevel: number | undefined,
+  chartType: ChartConfig['type'],
 ): ChartData {
   const series: ChartDataSeries[] = [];
   let categories: (string | number)[] = [];
   let categoryLevels: ChartCategoryLevelData[] | undefined;
   const categoryFormatCodes: Array<string | null | undefined> = [];
   const selectedLevel = selectedCategoryLabelLevel(categoryLabelLevel);
+  const isXYChart = chartType === 'scatter' || chartType === 'bubble';
 
   for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
     const seriesConfig = seriesConfigs[seriesIndex];
@@ -708,7 +731,11 @@ function extractChartDataFromSeriesRefs(
       const rawCategory = categoryDimension.values[pointIndex];
       const categoryFallback = categories[pointIndex] ?? pointIndex + 1;
       const category =
-        hasCategoryLevels && categoryDimension.values.length > pointIndex
+        isXYChart && !hasCategoryLevels
+          ? categoryDimension.values.length > pointIndex
+            ? xyValue(rawCategory)
+            : xyValue(cacheValueAt(seriesConfig.categoryCache, pointIndex))
+          : hasCategoryLevels && categoryDimension.values.length > pointIndex
           ? labelValue(rawCategory, categoryFallback)
           : categoryDimension.values.length > pointIndex
             ? categoryDimension.hasLiveRange

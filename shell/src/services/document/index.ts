@@ -29,8 +29,10 @@ export {
   getImportedPivotMetadata,
 } from './imported-pivot-metadata';
 export type {
+  ImportedPivotArea,
   ImportedPivotFieldMetadata,
   ImportedPivotMetadataSet,
+  ImportedPivotPlacementMetadata,
   ImportedPivotRange,
   ImportedPivotTableMetadata,
 } from './imported-pivot-metadata';

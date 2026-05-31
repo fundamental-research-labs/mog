@@ -210,14 +210,16 @@ describe('chart data resolver helpers', () => {
 
 describe('ChartDataResolver', () => {
   it('returns CHART_NOT_FOUND through the resolver facade', async () => {
-    await expect(new ChartDataResolver(ctx()).resolveChartData(SHEET_A, CHART_ID)).resolves.toEqual({
-      success: false,
-      error: {
-        code: 'CHART_NOT_FOUND',
-        message: 'Chart not found',
-        chartId: CHART_ID,
+    await expect(new ChartDataResolver(ctx()).resolveChartData(SHEET_A, CHART_ID)).resolves.toEqual(
+      {
+        success: false,
+        error: {
+          code: 'CHART_NOT_FOUND',
+          message: 'Chart not found',
+          chartId: CHART_ID,
+        },
       },
-    });
+    );
   });
 
   it('uses compiler row semantics in the public resolveChartData facade', async () => {
@@ -362,6 +364,66 @@ describe('ChartDataResolver', () => {
         __mogRawBubbleSize: 20,
         series: 'Bubbles',
         __mogPointIndex: 1,
+      }),
+    ]);
+  });
+
+  it('extracts dataRange-only bubble charts through the public resolveChartData facade', async () => {
+    const values = [
+      ['X', 'Revenue', 'Revenue Size'],
+      [1, 10, 4],
+      [2, 20, 9],
+      [10, 30, 16],
+    ];
+    const getCellData = jest.fn(async (_sheetId, row: number, col: number) => {
+      const value = values[row]?.[col];
+      if (typeof value === 'number') return { value: { type: 'number', value } };
+      if (typeof value === 'string') return { value: { type: 'text', value } };
+      return null;
+    });
+    const resolver = new ChartDataResolver(
+      ctx({
+        getChart: jest.fn(async () =>
+          chart({
+            chartType: 'bubble',
+            dataRange: 'A1:C4',
+          }),
+        ),
+        getCellData,
+      }),
+    );
+
+    const result = await resolver.resolveChartData(SHEET_A, CHART_ID);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        category: '1',
+        x: 1,
+        value: 10,
+        y: 10,
+        size: 4,
+        __mogRawBubbleSize: 4,
+        series: 'Revenue',
+      }),
+      expect.objectContaining({
+        category: '2',
+        x: 2,
+        value: 20,
+        y: 20,
+        size: 9,
+        __mogRawBubbleSize: 9,
+        series: 'Revenue',
+      }),
+      expect.objectContaining({
+        category: '10',
+        x: 10,
+        value: 30,
+        y: 30,
+        size: 16,
+        __mogRawBubbleSize: 16,
+        series: 'Revenue',
       }),
     ]);
   });
@@ -572,21 +634,14 @@ describe('ChartDataResolver', () => {
       if (sheetId === SHEET_SIZES) {
         return { value: { type: 'number', value: [100, 200, 300][col] ?? null } };
       }
-      const raw =
-        row === 0
-          ? [10, 20, 30][col]
-          : row === 1
-            ? [1, 2, 3][col]
-            : null;
+      const raw = row === 0 ? [10, 20, 30][col] : row === 1 ? [1, 2, 3][col] : null;
       return { value: { type: 'number', value: raw } };
     });
     const resolver = new ChartDataResolver(
       ctx({
         getCellData,
         getHiddenRows: jest.fn(async () => []),
-        getHiddenColumns: jest.fn(async (sheetId: SheetId) =>
-          sheetId === SHEET_SIZES ? [1] : [],
-        ),
+        getHiddenColumns: jest.fn(async (sheetId: SheetId) => (sheetId === SHEET_SIZES ? [1] : [])),
       }),
     );
 

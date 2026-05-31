@@ -610,10 +610,17 @@ export const selectionMachine = setup({
       states: {
         idle: {
           on: {
-            MOUSE_DOWN: {
-              target: 'dragging',
-              actions: 'setFormulaRange',
-            },
+            MOUSE_DOWN: [
+              {
+                guard: 'isShiftClick',
+                target: 'dragging',
+                actions: ['extendToCell', 'emitUserSelectionChanged'],
+              },
+              {
+                target: 'dragging',
+                actions: 'setFormulaRange',
+              },
+            ],
           },
         },
         dragging: {

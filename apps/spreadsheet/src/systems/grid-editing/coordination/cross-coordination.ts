@@ -263,15 +263,13 @@ export function setupSelectionToEditorCoordination(
       // Detect anchor change (plain arrow key via moveTo, or click)
       const anchorChanged = currAnchor && (!prevAnchor || !cellsEqual(prevAnchor, currAnchor));
 
-      // Detect range extension (Shift+Arrow): anchor stays the same but
-      // the last range's extent changes. extendSelection keeps activeCell
-      // at anchor, so we must compare ranges directly.
+      // Detect range changes (Shift+Arrow/Shift+click): the anchor may stay
+      // the same, or may be initialized from null on the first Shift action.
       const prevRanges = previousState ? selectionSelectors.ranges(previousState) : undefined;
       const currRanges = selectionSelectors.ranges(state);
       const prevLastRange = prevRanges?.[prevRanges.length - 1];
       const currLastRange = currRanges?.[currRanges.length - 1];
-      const rangeExtended =
-        !anchorChanged &&
+      const rangeChanged =
         currAnchor &&
         currLastRange &&
         prevLastRange &&
@@ -280,10 +278,10 @@ export function setupSelectionToEditorCoordination(
           currLastRange.endRow !== prevLastRange.endRow ||
           currLastRange.endCol !== prevLastRange.endCol);
 
-      if (anchorChanged || rangeExtended) {
+      if (anchorChanged || rangeChanged) {
         // For anchor change (plain arrow / click): range is the single anchor cell
-        // For range extension (Shift+Arrow): use the actual selection range
-        const range: CellRange = rangeExtended
+        // For range changes (Shift+Arrow/Shift+click): use the actual selection range
+        const range: CellRange = rangeChanged
           ? currLastRange!
           : {
               startRow: currAnchor!.row,

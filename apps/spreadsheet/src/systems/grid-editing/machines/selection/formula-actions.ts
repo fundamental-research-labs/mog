@@ -30,6 +30,7 @@ const enterFormulaMode = assign(
     if (event.type !== 'ENTER_FORMULA_RANGE_MODE') return {};
     return {
       formulaRangeColor: event.color,
+      anchor: null,
     };
   },
 );

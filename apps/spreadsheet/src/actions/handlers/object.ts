@@ -849,6 +849,7 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
       width: DEFAULT_CHECKBOX_WIDTH,
       height: DEFAULT_CHECKBOX_HEIGHT,
     });
+    await ws.setCell(position.row, position.col, false);
     await ws.formats.set(position.row, position.col, {
       numberFormat: CHECKBOX_LINKED_CELL_HIDDEN_FORMAT,
     });

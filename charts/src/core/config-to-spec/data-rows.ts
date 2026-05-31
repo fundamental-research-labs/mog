@@ -707,17 +707,10 @@ function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): nu
   let max = 0;
   for (const series of data.series) {
     for (const point of series.data) {
-      if (!shouldBubbleSizeParticipate(point, config)) continue;
+      if (!shouldIncludePointInRows(point, config)) continue;
       const size = toFiniteNumber(point.size);
       if (size !== undefined) max = Math.max(max, Math.abs(size));
     }
   }
   return max;
-}
-
-function shouldBubbleSizeParticipate(point: ChartDataPoint, config: ChartConfig): boolean {
-  if (point.valueState === 'hidden') return false;
-  const size = toFiniteNumber(point.size);
-  if (size === undefined) return false;
-  return size > 0 || config.showNegBubbles === true;
 }

@@ -5,6 +5,9 @@ import { configToSpec } from '../config-to-spec';
 import {
   DATA_LABEL_ANCHOR_X_FIELD,
   DATA_LABEL_DX_FIELD,
+  DATA_LABEL_LAYOUT_TARGET_FIELD,
+  DATA_LABEL_LAYOUT_X_FIELD,
+  DATA_LABEL_LAYOUT_Y_FIELD,
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
   DATA_LABEL_X_FIELD,
@@ -480,6 +483,93 @@ describe('configToSpec annotation layers', () => {
     expect(Math.hypot(explodedArc.x - centerX, explodedArc.y - centerY)).toBeCloseTo(
       Math.min(explodedArc.outerRadius * 0.25, 12),
     );
+  });
+
+  it('renders chart and point manual data-label layouts through direct coordinates', () => {
+    const data: ChartData = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Revenue',
+          data: [
+            { x: 'A', y: 10 },
+            { x: 'B', y: 20 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      dataLabels: {
+        show: true,
+        showValue: true,
+        layout: { x: 0.1, y: 0.2 },
+      },
+      series: [
+        {
+          points: [{ idx: 1, dataLabel: { layout: { layoutTarget: 'inner', x: 0.3, y: 0.4 } } }],
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        [DATA_LABEL_VISIBLE_FIELD]: true,
+        [DATA_LABEL_LAYOUT_TARGET_FIELD]: 'outer',
+        [DATA_LABEL_LAYOUT_X_FIELD]: 0.1,
+        [DATA_LABEL_LAYOUT_Y_FIELD]: 0.2,
+      }),
+    );
+    expect(rows[1]).toEqual(
+      expect.objectContaining({
+        [DATA_LABEL_VISIBLE_FIELD]: true,
+        [DATA_LABEL_LAYOUT_TARGET_FIELD]: 'inner',
+        [DATA_LABEL_LAYOUT_X_FIELD]: 0.3,
+        [DATA_LABEL_LAYOUT_Y_FIELD]: 0.4,
+      }),
+    );
+    expect(spec.layer).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mark: expect.objectContaining({
+            type: 'text',
+            xField: DATA_LABEL_LAYOUT_X_FIELD,
+            yField: DATA_LABEL_LAYOUT_Y_FIELD,
+            coordinateSystem: 'chartFraction',
+          }),
+        }),
+        expect.objectContaining({
+          mark: expect.objectContaining({
+            type: 'text',
+            xField: DATA_LABEL_LAYOUT_X_FIELD,
+            yField: DATA_LABEL_LAYOUT_Y_FIELD,
+            coordinateSystem: 'plotFraction',
+          }),
+        }),
+      ]),
+    );
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 200,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const chartRelativeLabel = compiled.marks.find(
+      (mark) =>
+        mark.type === 'text' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_LABEL_TEXT_FIELD] === '10',
+    );
+    expect(chartRelativeLabel?.x).toBeCloseTo(40, 5);
+    expect(chartRelativeLabel?.y).toBeCloseTo(40, 5);
   });
 
   it('uses the text displacement fields as leader-line endpoint offsets', () => {

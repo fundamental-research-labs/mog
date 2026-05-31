@@ -125,6 +125,10 @@ describe('chart compiler bridge module', () => {
           chartData: baseChartData,
           resolvedRanges,
           compileInput: compiled.compileInput,
+          renderSize: {
+            width: 320,
+            height: 180,
+          },
         }),
       });
       expect(snapshot.resolvedChartSpec.export).toEqual(exportOptions);
@@ -145,8 +149,8 @@ describe('chart compiler bridge module', () => {
         width: 4,
         height: 3,
         title: 'Manual Layout',
-        plotLayout: { x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
-        titleLayout: { x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
+        plotLayout: { xMode: 'edge', yMode: 'edge', x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
+        titleLayout: { xMode: 'edge', yMode: 'edge', x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
         legend: {
           show: true,
           visible: true,

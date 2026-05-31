@@ -21,6 +21,9 @@ import {
   DATA_LABEL_DX_FIELD,
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_FONT_SIZE_FIELD,
+  DATA_LABEL_LAYOUT_TARGET_FIELD,
+  DATA_LABEL_LAYOUT_X_FIELD,
+  DATA_LABEL_LAYOUT_Y_FIELD,
   DATA_LABEL_LEADER_STROKE_FIELD,
   DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
   DATA_LABEL_LEADER_VISIBLE_FIELD,
@@ -340,11 +343,20 @@ function applyDataLabel(
   row[DATA_LABEL_VISIBLE_FIELD] = true;
   row[DATA_LABEL_TEXT_FIELD] = text;
   const placement = labelPlacement(label.position, context.config?.type);
-  row[DATA_LABEL_DX_FIELD] = placement.dx;
-  row[DATA_LABEL_DY_FIELD] = placement.dy;
-  row[DATA_LABEL_ALIGN_FIELD] = placement.align;
-  row[DATA_LABEL_BASELINE_FIELD] = placement.baseline;
+  const manualX = finiteNumber(label.layout?.x);
+  const manualY = finiteNumber(label.layout?.y);
+  const hasManualPosition = manualX !== undefined || manualY !== undefined;
+  row[DATA_LABEL_DX_FIELD] = hasManualPosition ? 0 : placement.dx;
+  row[DATA_LABEL_DY_FIELD] = hasManualPosition ? 0 : placement.dy;
+  row[DATA_LABEL_ALIGN_FIELD] = hasManualPosition ? 'left' : placement.align;
+  row[DATA_LABEL_BASELINE_FIELD] = hasManualPosition ? 'top' : placement.baseline;
   row[DATA_LABEL_VALUE_ANCHOR_FIELD] = context.value + placement.valueDelta(context.value);
+  if (hasManualPosition) {
+    row[DATA_LABEL_LAYOUT_TARGET_FIELD] =
+      label.layout?.layoutTarget === 'inner' ? 'inner' : 'outer';
+    if (manualX !== undefined) row[DATA_LABEL_LAYOUT_X_FIELD] = manualX;
+    if (manualY !== undefined) row[DATA_LABEL_LAYOUT_Y_FIELD] = manualY;
+  }
   if (context.pieLabelGeometry) {
     const coordinates = pieLabelCoordinates(context.pieLabelGeometry, label.position);
     row[DATA_LABEL_ANCHOR_X_FIELD] = coordinates.anchorX;
@@ -572,6 +584,10 @@ function sampleStdDev(values: Array<number | undefined>): number {
 
 function validNumbers(values: Array<number | undefined>): number[] {
   return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function seriesTotal(values: Array<{ y: number } | undefined>): number {

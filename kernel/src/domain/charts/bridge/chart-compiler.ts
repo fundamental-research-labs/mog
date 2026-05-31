@@ -134,6 +134,10 @@ export function compileChartRenderSnapshotAtSize(
         chartData: input.chartData,
         resolvedRanges: input.resolvedRanges,
         compileInput: compiled.compileInput,
+        renderSize: {
+          width: input.width,
+          height: input.height,
+        },
       }),
       layout: compiled.layout,
     }),

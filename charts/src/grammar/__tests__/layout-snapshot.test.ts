@@ -208,7 +208,14 @@ describe('extractChartLayout', () => {
         title: 'Factor Layout',
         config: {
           layoutHints: {
-            manualTitle: { xMode: 'factor', yMode: 'factor', x: 0.1, y: 0.1 },
+            manualTitle: {
+              xMode: 'factor',
+              yMode: 'factor',
+              x: 0.1,
+              y: 0.1,
+              w: 0.5,
+              h: 0.2,
+            },
           },
         },
       }),

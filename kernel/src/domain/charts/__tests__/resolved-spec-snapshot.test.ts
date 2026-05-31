@@ -492,6 +492,9 @@ describe('resolved spec snapshot helpers', () => {
 
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
       'pivot chart field buttons are preserved but not rendered (showAllFieldButtons, showAxisFieldButtons, showValueFieldButtons)',
+      'manual plot layout is preserved but not rendered',
+      'manual title layout is preserved but not rendered',
+      'manual legend layout is preserved but not rendered',
       'manual data-label layout is preserved but not rendered',
       'chart data table is preserved but not rendered',
       'view3D camera/depth is preserved but rendered as a 2D approximation',

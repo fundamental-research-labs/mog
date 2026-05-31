@@ -14,6 +14,7 @@ import {
 } from '../bridge/chart-data-resolver';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
+const SHEET_SIZES: SheetId = toSheetId('sheet-sizes');
 const CHART_ID = 'chart-1';
 
 function range(
@@ -285,6 +286,84 @@ describe('ChartDataResolver', () => {
       chartId: CHART_ID,
     });
     expect(getCellData).not.toHaveBeenCalled();
+  });
+
+  it('keeps hidden bubble-size source cells from falling back to imported caches', async () => {
+    const getCellData = jest.fn(async (sheetId: SheetId, row: number, col: number) => {
+      if (sheetId === SHEET_SIZES) {
+        return { value: { type: 'number', value: [100, 200, 300][col] ?? null } };
+      }
+      const raw =
+        row === 0
+          ? [10, 20, 30][col]
+          : row === 1
+            ? [1, 2, 3][col]
+            : null;
+      return { value: { type: 'number', value: raw } };
+    });
+    const resolver = new ChartDataResolver(
+      ctx({
+        getCellData,
+        getHiddenRows: jest.fn(async () => []),
+        getHiddenColumns: jest.fn(async (sheetId: SheetId) =>
+          sheetId === SHEET_SIZES ? [1] : [],
+        ),
+      }),
+    );
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        chartType: 'bubble',
+        dataRange: undefined,
+        plotVisibleOnly: true,
+        series: [
+          {
+            name: 'Bubbles',
+            values: 'A1:C1',
+            categories: 'A2:C2',
+            bubbleSize: 'Sizes!A1:C1',
+            bubbleSizeCache: {
+              pointCount: 3,
+              points: [{ idx: 1, value: '999' }],
+            },
+          },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        seriesReferences: [
+          {
+            index: 0,
+            values: {
+              kind: 'seriesValues',
+              source: 'a1',
+              ref: 'A1:C1',
+              range: range(SHEET_A, 0, 0, 0, 2),
+            },
+            categories: {
+              kind: 'seriesCategories',
+              source: 'a1',
+              ref: 'A2:C2',
+              range: range(SHEET_A, 1, 0, 1, 2),
+            },
+            bubbleSizes: {
+              kind: 'seriesBubbleSizes',
+              source: 'a1',
+              ref: 'Sizes!A1:C1',
+              range: range(SHEET_SIZES, 0, 0, 0, 2),
+            },
+          },
+        ],
+      }),
+      CHART_ID,
+    );
+
+    expect('code' in result).toBe(false);
+    if ('code' in result) return;
+    const points = result.data.series[0].data;
+    expect(points.map((point) => point.valueState)).toEqual([undefined, 'hidden', undefined]);
+    expect(points.map((point) => point.size)).toEqual([100, undefined, 300]);
+    expect(chartDataToRows(result.data).map((row) => row.size)).toEqual([100, 300]);
   });
 
   it('caches workbook theme palette loads until the resolver cache is cleared', async () => {

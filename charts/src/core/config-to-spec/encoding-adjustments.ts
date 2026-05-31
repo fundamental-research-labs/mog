@@ -1,9 +1,13 @@
 import type { EncodingSpec } from '../../grammar/spec';
+import { tickStep } from '../../primitives/scales/linear';
 import type { ChartConfig, ChartData } from '../../types';
 import { explicitDomainBound, isHorizontalBarType } from './axis';
 import { hasExcelBarGeometryConfig } from './bar-geometry';
 import { categoryDisplayLabel, categoryKeyForIndex } from './category-axis';
 import { resolveStackMode } from './subtypes';
+
+const STACKED_VALUE_AXIS_TICK_COUNT = 6;
+const DOMAIN_EPSILON = 1e-10;
 
 export function applyBarCategorySpacingScale(
   config: ChartConfig,
@@ -155,21 +159,50 @@ export function applyStackedValueDomain(
 
   if (maxPositive === 0 && minNegative === 0) return;
 
+  const isAutoPositiveStack =
+    explicitMax === undefined && minNegative === 0 && maxPositive > 0;
+  const isAutoNegativeStack =
+    explicitMin === undefined && maxPositive === 0 && minNegative < 0;
   const isAutoDivergingStack =
     explicitMin === undefined && explicitMax === undefined && minNegative < 0 && maxPositive > 0;
 
   valueChannel.scale = {
     ...(valueChannel.scale ?? {}),
-    domain: [explicitMin ?? minNegative, explicitMax ?? maxPositive],
-    ...(isAutoDivergingStack ? { nice: valueChannel.scale?.nice ?? 6 } : {}),
+    domain: [
+      explicitMin ??
+        (isAutoNegativeStack ? -niceStackedAxisUpperBound(Math.abs(minNegative)) : minNegative),
+      explicitMax ?? (isAutoPositiveStack ? niceStackedAxisUpperBound(maxPositive) : maxPositive),
+    ],
+    ...(isAutoDivergingStack
+      ? { nice: valueChannel.scale?.nice ?? STACKED_VALUE_AXIS_TICK_COUNT }
+      : isAutoPositiveStack || isAutoNegativeStack
+        ? { nice: false }
+        : {}),
   };
 
-  if (isAutoDivergingStack) {
+  if (isAutoPositiveStack || isAutoNegativeStack || isAutoDivergingStack) {
     valueChannel.axis = {
       ...(valueChannel.axis ?? {}),
-      tickCount: valueChannel.axis?.tickCount ?? 6,
+      tickCount: valueChannel.axis?.tickCount ?? STACKED_VALUE_AXIS_TICK_COUNT,
     };
   }
+}
+
+function niceStackedAxisUpperBound(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return value;
+
+  const step = tickStep(0, value, STACKED_VALUE_AXIS_TICK_COUNT);
+  if (!Number.isFinite(step) || step <= 0) return value;
+
+  const ratio = value / step;
+  const roundedRatio = Math.round(ratio);
+  const upperRatio =
+    Math.abs(ratio - roundedRatio) < DOMAIN_EPSILON ? roundedRatio + 1 : Math.ceil(ratio);
+  return roundDomainBound(upperRatio * step);
+}
+
+function roundDomainBound(value: number): number {
+  return Number.parseFloat(value.toPrecision(12));
 }
 
 export function applyAutomaticCategoryAxisCrossing(encoding: EncodingSpec): void {

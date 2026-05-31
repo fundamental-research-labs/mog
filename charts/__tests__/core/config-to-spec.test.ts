@@ -28,6 +28,9 @@ import {
   DATA_LABEL_TEXT_FIELD,
   LINE_SEGMENT_FIELD,
   SERIES_INDEX_FIELD,
+  SERIES_FILL_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
   STOCK_HIGH_FIELD,
@@ -448,13 +451,37 @@ describe('displayBlanksAs renderability', () => {
 
 describe('buildMark - mark type mapping', () => {
   const simpleMarkTypes: [ChartType, string | MarkSpec][] = [
-    ['bar', 'bar'],
-    ['column', 'bar'],
+    [
+      'bar',
+      {
+        type: 'bar',
+        fillField: SERIES_FILL_FIELD,
+        strokeField: SERIES_STROKE_FIELD,
+        strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      },
+    ],
+    [
+      'column',
+      {
+        type: 'bar',
+        fillField: SERIES_FILL_FIELD,
+        strokeField: SERIES_STROKE_FIELD,
+        strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      },
+    ],
     ['line', 'line'],
     ['area', 'area'],
     ['scatter', { type: 'point', skipInvalidPositions: true }],
     ['bubble', { type: 'point', skipInvalidPositions: true }],
-    ['waterfall', 'bar'],
+    [
+      'waterfall',
+      {
+        type: 'bar',
+        fillField: SERIES_FILL_FIELD,
+        strokeField: SERIES_STROKE_FIELD,
+        strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      },
+    ],
   ];
 
   it.each(simpleMarkTypes)('should map %s to mark type %s', (chartType, expectedMark) => {
@@ -531,7 +558,12 @@ describe('buildMark - mark type mapping', () => {
     // For combo, the base mark is bar; layers are built separately
     const config = makeConfig({ type: 'combo' });
     const mark = buildMark(config);
-    expect(mark).toBe('bar');
+    expect(mark).toEqual({
+      type: 'bar',
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+    });
   });
 
   it('should map stock to rule as default base mark', () => {
@@ -577,14 +609,52 @@ describe('buildEncoding - bar/column chart encoding', () => {
     const config = makeConfig({ type: 'column', subType: 'stacked' });
     const encoding = buildEncoding(config, MULTI_SERIES_DATA);
 
-    expect(encoding.y?.scale?.domain).toEqual([0, 90]);
+    expect(encoding.y?.scale?.domain).toEqual([0, 100]);
+    expect(encoding.y?.scale?.nice).toBe(false);
+    expect(encoding.y?.axis?.tickCount).toBe(6);
   });
 
   it('uses cumulative stacked totals for horizontal bar value domain', () => {
     const config = makeConfig({ type: 'bar', subType: 'stacked' });
     const encoding = buildEncoding(config, MULTI_SERIES_DATA);
 
-    expect(encoding.x?.scale?.domain).toEqual([0, 90]);
+    expect(encoding.x?.scale?.domain).toEqual([0, 100]);
+    expect(encoding.x?.scale?.nice).toBe(false);
+    expect(encoding.x?.axis?.tickCount).toBe(6);
+  });
+
+  it('adds Excel-like headroom when stacked totals exactly hit a major value-axis tick', () => {
+    const config = makeConfig({ type: 'column', subType: 'stacked' });
+    const data: ChartData = {
+      categories: ['A'],
+      series: [
+        { name: 'Series 1', data: [{ x: 'A', y: 55 }] },
+        { name: 'Series 2', data: [{ x: 'A', y: 45 }] },
+      ],
+    };
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.y?.scale?.domain).toEqual([0, 120]);
+    expect(encoding.y?.scale?.nice).toBe(false);
+    expect(encoding.y?.axis?.tickCount).toBe(6);
+  });
+
+  it('adds Excel-like headroom for negative-only stacked value domains', () => {
+    const config = makeConfig({ type: 'column', subType: 'stacked' });
+    const data: ChartData = {
+      categories: ['A'],
+      series: [
+        { name: 'Series 1', data: [{ x: 'A', y: -55 }] },
+        { name: 'Series 2', data: [{ x: 'A', y: -45 }] },
+      ],
+    };
+
+    const encoding = buildEncoding(config, data);
+
+    expect(encoding.y?.scale?.domain).toEqual([-120, 0]);
+    expect(encoding.y?.scale?.nice).toBe(false);
+    expect(encoding.y?.axis?.tickCount).toBe(6);
   });
 
   it('combines explicit imported value-axis max with stacked negative extent', () => {
@@ -1594,7 +1664,12 @@ describe('configToSpec - integration', () => {
 
     expect(spec.width).toBe(640); // 8 * 80
     expect(spec.height).toBe(300); // 15 * 20
-    expect(spec.mark).toBe('bar');
+    expect(spec.mark).toEqual({
+      type: 'bar',
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+    });
     expect(spec.data).toEqual({ values: expect.any(Array) });
     expect(spec.encoding).toBeDefined();
     expect(spec.encoding!.x!.type).toBe('quantitative');
@@ -1847,6 +1922,81 @@ describe('configToSpec - compile round-trip', () => {
 
     const categoryStep = secondCategoryBar!.x - firstCategoryBars[0].x;
     expect(firstCategoryBars[0].width / categoryStep).toBeCloseTo(0.4, 2);
+  });
+
+  it('renders stacked column segments with imported per-series fills', () => {
+    const categories = [
+      'North Coast',
+      'Central Plains',
+      'Mountain West',
+      'River Delta',
+      'Island Chain',
+    ];
+    const seriesNames = ['Forest', 'Agriculture', 'Urban', 'Water/Wetland'];
+    const seriesValues = [
+      [32, 18, 44, 22, 55],
+      [28, 51, 12, 47, 8],
+      [16, 21, 9, 19, 25],
+      [24, 10, 35, 12, 12],
+    ];
+    const colors = ['2F75B5', '70AD47', 'ED7D31', '7030A0'];
+    const data: ChartData = {
+      categories,
+      series: seriesNames.map((name, seriesIndex) => ({
+        name,
+        data: categories.map((category, pointIndex) => ({
+          x: category,
+          y: seriesValues[seriesIndex][pointIndex],
+        })),
+      })),
+    };
+    const config = makeConfig({
+      type: 'column',
+      subType: 'stacked',
+      gapWidth: 150,
+      overlap: 100,
+      legend: { show: true, position: 'bottom' },
+      series: seriesNames.map((name, index) => ({
+        name,
+        idx: index,
+        order: index,
+        color: colors[index],
+        format: {
+          fill: { type: 'solid' as const, color: colors[index] },
+          line: { color: colors[index] },
+        },
+      })),
+    });
+
+    const spec = configToSpec(config, data);
+    expect(spec.encoding?.y?.scale?.domain).toEqual([0, 120]);
+
+    const result = compile(spec, undefined, { width: 600, height: 400 });
+    const firstStack = result.marks.filter(
+      (mark) =>
+        mark.type === 'rect' &&
+        (mark.datum as Record<string, unknown>).category === categories[0],
+    );
+    const legendLabels = result.legends
+      .filter((mark) => mark.type === 'text')
+      .map((mark) => (mark as { text: string }).text);
+
+    expect(firstStack).toHaveLength(4);
+    expect(firstStack.map((mark) => mark.style.fill)).toEqual([
+      '#2F75B5',
+      '#70AD47',
+      '#ED7D31',
+      '#7030A0',
+    ]);
+    for (let index = 1; index < firstStack.length; index += 1) {
+      expect(firstStack[index].x).toBeCloseTo(firstStack[0].x, 6);
+      expect(firstStack[index].width).toBeCloseTo(firstStack[0].width, 6);
+      expect(firstStack[index].y + firstStack[index].height).toBeCloseTo(
+        firstStack[index - 1].y,
+        6,
+      );
+    }
+    expect(legendLabels).toEqual(seriesNames);
   });
 
   it('should produce a spec that the compiler accepts (line chart)', () => {

@@ -20,6 +20,11 @@ import {
   applyPrimarySeriesFormat,
   hasPointStyleOverrides,
 } from './mark-format';
+import {
+  SERIES_FILL_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+} from './fields';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 
@@ -178,7 +183,12 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   }
 
   if (baseType === 'bar') {
-    const mark: MarkSpec = { type: baseType };
+    const mark: MarkSpec = {
+      type: baseType,
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+    };
     applyPrimarySeriesFormat(mark, config);
     applyImportedBarOutline(mark, config);
     applyPointStyleFields(mark, config);

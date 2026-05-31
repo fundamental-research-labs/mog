@@ -191,7 +191,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     hasMultipleSeries,
     config.legend,
     resolvedCategoryColors(config, data),
-    Boolean(resolveStackMode(config)) && !legendDomain,
+    false,
     legendDomain,
     legendSymbolType(config, data),
     config,

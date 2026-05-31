@@ -30,8 +30,17 @@ pub(super) fn extract_chart_format(
         .map(|tp| &tp.body_props)
         .and_then(|bp| bp.rot)
         .map(|r| r.value() as f64 / 60000.0);
+    let text_vertical_type = tx_pr
+        .map(|tp| &tp.body_props)
+        .and_then(|bp| bp.vert.as_ref())
+        .map(chart_text_vertical_type_from_ooxml);
 
-    if fill.is_none() && line.is_none() && font.is_none() && text_rotation.is_none() {
+    if fill.is_none()
+        && line.is_none()
+        && font.is_none()
+        && text_rotation.is_none()
+        && text_vertical_type.is_none()
+    {
         return None;
     }
 
@@ -40,8 +49,45 @@ pub(super) fn extract_chart_format(
         line,
         font,
         text_rotation,
+        text_vertical_type,
         shadow: None,
     })
+}
+
+/// Extract a chart/axis title format.
+///
+/// Excel commonly stores title text styling inside `<c:tx><c:rich>` instead of
+/// the sibling `<c:txPr>`. Shape formatting still comes from `<c:spPr>`, while
+/// rich text supplies missing font/rotation fields.
+pub(super) fn extract_title_chart_format(
+    title: &ooxml_types::charts::Title,
+) -> Option<domain_types::chart::ChartFormatData> {
+    let mut format = extract_chart_format(title.sp_pr.as_ref(), title.tx_pr.as_ref());
+
+    let rich_format = title.tx.as_ref().and_then(|tx| match tx {
+        ooxml_types::charts::ChartText::Rich(body) => extract_chart_format(None, Some(body)),
+        ooxml_types::charts::ChartText::StrRef(_) => None,
+    });
+
+    let Some(rich_format) = rich_format else {
+        return format;
+    };
+
+    match format.as_mut() {
+        Some(existing) => {
+            if existing.font.is_none() {
+                existing.font = rich_format.font;
+            }
+            if existing.text_rotation.is_none() {
+                existing.text_rotation = rich_format.text_rotation;
+            }
+            if existing.text_vertical_type.is_none() {
+                existing.text_vertical_type = rich_format.text_vertical_type;
+            }
+            format
+        }
+        None => Some(rich_format),
+    }
 }
 
 /// Extract ChartFillData from a DrawingFill.
@@ -170,18 +216,53 @@ pub(super) fn extract_chart_line(
     }
 }
 
-/// Extract ChartFontData from a TextBody (uses defRPr from first paragraph).
+/// Extract ChartFontData from a TextBody.
 fn extract_chart_font(
     tx_pr: &ooxml_types::drawings::TextBody,
 ) -> Option<domain_types::chart::ChartFontData> {
-    // Use defRPr from first paragraph's properties
-    let rpr = tx_pr
-        .paragraphs
-        .first()
-        .and_then(|p| p.props.def_run_props.as_ref());
+    use ooxml_types::drawings::TextRunContent;
 
-    let rpr = rpr.map(|b| b.as_ref())?;
+    for paragraph in &tx_pr.paragraphs {
+        let default_font = paragraph
+            .props
+            .def_run_props
+            .as_deref()
+            .and_then(extract_chart_font_from_run_properties);
 
+        for run_content in &paragraph.runs {
+            let run_font = match run_content {
+                TextRunContent::Run(run) => extract_chart_font_from_run_properties(&run.props),
+                TextRunContent::LineBreak { props } => props
+                    .as_ref()
+                    .and_then(extract_chart_font_from_run_properties),
+                TextRunContent::Field { run_props, .. } => run_props
+                    .as_ref()
+                    .and_then(extract_chart_font_from_run_properties),
+            };
+            if default_font.is_some() || run_font.is_some() {
+                return merge_chart_font(default_font, run_font);
+            }
+        }
+
+        if default_font.is_some() {
+            return default_font;
+        }
+
+        if let Some(end_font) = paragraph
+            .end_para_rpr
+            .as_ref()
+            .and_then(extract_chart_font_from_run_properties)
+        {
+            return Some(end_font);
+        }
+    }
+
+    None
+}
+
+fn extract_chart_font_from_run_properties(
+    rpr: &ooxml_types::drawings::RunProperties,
+) -> Option<domain_types::chart::ChartFontData> {
     let name = rpr.latin.as_ref().map(|f| f.typeface.clone());
     let size = rpr.size.map(|s| s.value() as f64 / 100.0); // hundredths of a point to points
     let bold = rpr.bold;
@@ -250,6 +331,69 @@ fn extract_chart_font(
         underline,
         strikethrough,
     })
+}
+
+fn merge_chart_font(
+    base: Option<domain_types::chart::ChartFontData>,
+    override_font: Option<domain_types::chart::ChartFontData>,
+) -> Option<domain_types::chart::ChartFontData> {
+    match (base, override_font) {
+        (Some(mut base), Some(override_font)) => {
+            if override_font.name.is_some() {
+                base.name = override_font.name;
+            }
+            if override_font.size.is_some() {
+                base.size = override_font.size;
+            }
+            if override_font.bold.is_some() {
+                base.bold = override_font.bold;
+            }
+            if override_font.italic.is_some() {
+                base.italic = override_font.italic;
+            }
+            if override_font.color.is_some() {
+                base.color = override_font.color;
+            }
+            if override_font.underline.is_some() {
+                base.underline = override_font.underline;
+            }
+            if override_font.strikethrough.is_some() {
+                base.strikethrough = override_font.strikethrough;
+            }
+            Some(base)
+        }
+        (Some(base), None) => Some(base),
+        (None, Some(override_font)) => Some(override_font),
+        (None, None) => None,
+    }
+}
+
+fn chart_text_vertical_type_from_ooxml(
+    value: &ooxml_types::drawings::TextVerticalType,
+) -> domain_types::chart::ChartTextVerticalType {
+    match value {
+        ooxml_types::drawings::TextVerticalType::Horizontal => {
+            domain_types::chart::ChartTextVerticalType::Horizontal
+        }
+        ooxml_types::drawings::TextVerticalType::Vertical => {
+            domain_types::chart::ChartTextVerticalType::Vertical
+        }
+        ooxml_types::drawings::TextVerticalType::Vertical270 => {
+            domain_types::chart::ChartTextVerticalType::Vertical270
+        }
+        ooxml_types::drawings::TextVerticalType::WordArtVert => {
+            domain_types::chart::ChartTextVerticalType::WordArtVert
+        }
+        ooxml_types::drawings::TextVerticalType::EastAsianVert => {
+            domain_types::chart::ChartTextVerticalType::EastAsianVert
+        }
+        ooxml_types::drawings::TextVerticalType::MongolianVert => {
+            domain_types::chart::ChartTextVerticalType::MongolianVert
+        }
+        ooxml_types::drawings::TextVerticalType::WordArtVertRtl => {
+            domain_types::chart::ChartTextVerticalType::WordArtVertRtl
+        }
+    }
 }
 
 /// Extract ChartColorData from a DrawingColor.
@@ -388,6 +532,77 @@ mod tests {
         assert_close(
             tint_shade_for(vec![ColorTransform::Shade { val: 60000 }]),
             -0.4,
+        );
+    }
+
+    #[test]
+    fn extracts_font_from_run_properties_when_default_run_properties_are_absent() {
+        let body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:r>
+                        <a:rPr sz="1200" b="1">
+                            <a:latin typeface="+mn-lt"/>
+                        </a:rPr>
+                        <a:t>Title</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+
+        let format = extract_chart_format(None, Some(&body)).expect("expected text format");
+        let font = format.font.expect("expected font");
+        assert_eq!(font.size, Some(12.0));
+        assert_eq!(font.bold, Some(true));
+        assert_eq!(font.name.as_deref(), Some("+mn-lt"));
+    }
+
+    #[test]
+    fn extracts_title_font_from_rich_text_when_title_tx_pr_is_absent() {
+        let body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr rot="-5400000"/>
+                <a:p>
+                    <a:pPr>
+                        <a:defRPr sz="1400" b="1"/>
+                    </a:pPr>
+                    <a:r>
+                        <a:rPr lang="en-US"/>
+                        <a:t>Capital Capable Media LLC</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let title = ooxml_types::charts::Title {
+            tx: Some(ooxml_types::charts::ChartText::Rich(body)),
+            ..Default::default()
+        };
+
+        let format = extract_title_chart_format(&title).expect("expected title format");
+        let font = format.font.expect("expected title font");
+        assert_eq!(font.size, Some(14.0));
+        assert_eq!(font.bold, Some(true));
+        assert_eq!(format.text_rotation, Some(-90.0));
+    }
+
+    #[test]
+    fn extracts_text_vertical_type_separately_from_rotation() {
+        let body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr rot="-60000000" vert="horz"/>
+                <a:p/>
+            </c:rich>"#,
+        );
+
+        let format = extract_chart_format(None, Some(&body)).expect("expected text format");
+        assert_eq!(format.text_rotation, Some(-1000.0));
+        assert_eq!(
+            format.text_vertical_type,
+            Some(domain_types::chart::ChartTextVerticalType::Horizontal)
         );
     }
 }

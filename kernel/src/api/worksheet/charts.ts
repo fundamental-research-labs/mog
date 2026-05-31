@@ -84,6 +84,10 @@ function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 
 
 type AnyAxisConfig = Record<string, unknown>;
 
+function isDegreeTextRotation(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 90;
+}
+
 /**
  * Derive OfficeJS-compatible axis fields on read.
  * E.g., scaleType = 'logarithmic' when axisType === 'log', isBetweenCategories from crossBetween.
@@ -111,9 +115,11 @@ function deriveAxisFieldsForRead(axis: unknown): typeof axis {
     } else if (s.crossBetween === 'midCat') {
       derived.isBetweenCategories = false;
     }
-    // textOrientation from format.textRotation
+    // textOrientation is a degree rotation field. OOXML vertical text mode is
+    // carried separately as format.textVerticalType and large Excel sentinel
+    // values like -1000 are not label rotation degrees.
     const fmt = s.format as AnyAxisConfig | undefined;
-    if (fmt?.textRotation != null) {
+    if (isDegreeTextRotation(fmt?.textRotation)) {
       derived.textOrientation = fmt.textRotation;
     }
     // alignment from labelAlignment
@@ -162,8 +168,8 @@ function syncAxisFieldsToInternal(axis: unknown): typeof axis {
     } else if (s.isBetweenCategories === false) {
       s.crossBetween = 'midCat';
     }
-    // textOrientation → format.textRotation
-    if (s.textOrientation != null) {
+    // textOrientation → format.textRotation only for true degree rotations.
+    if (isDegreeTextRotation(s.textOrientation)) {
       const fmt = (s.format ?? {}) as AnyAxisConfig;
       s.format = { ...fmt, textRotation: s.textOrientation };
     }

@@ -5,6 +5,7 @@
  */
 
 import type { TextAlign, TextBaseline, TextMark } from '../types';
+import { buildCanvasFontString } from '../font';
 import { applyStyle } from './rect';
 
 /**
@@ -21,8 +22,7 @@ export function createText(props: Omit<TextMark, 'type'>): TextMark {
  * Build font string for canvas context.
  */
 function buildFontString(mark: TextMark): string {
-  const weight = mark.fontWeight ?? 'normal';
-  return `${weight} ${mark.fontSize}px ${mark.fontFamily}`;
+  return buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily);
 }
 
 /**

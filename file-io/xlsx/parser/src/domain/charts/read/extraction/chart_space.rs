@@ -1,7 +1,7 @@
 use super::axes::extract_axes_from_chart_space;
 use super::common::{chart_import_status_for_renderability, map_ooxml_chart_type_to_domain};
 use super::data_refs::reconstruct_data_range_from_chart_space;
-use super::formatting::extract_chart_format;
+use super::formatting::{extract_chart_format, extract_title_chart_format};
 use super::labels::extract_data_label_data;
 use super::legend::extract_legend_from_chart_space;
 use super::series::extract_series_from_chart_space;
@@ -62,10 +62,7 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     let chart_format = extract_chart_format(cs.sp_pr.as_ref(), cs.tx_pr.as_ref());
     let plot_format = extract_chart_format(plot_area.sp_pr.as_ref(), None);
-    let title_format = chart
-        .title
-        .as_ref()
-        .and_then(|t| extract_chart_format(t.sp_pr.as_ref(), t.tx_pr.as_ref()));
+    let title_format = chart.title.as_ref().and_then(extract_title_chart_format);
 
     // -------------------------------------------------------------------------
     // (i) scalar fields from first chart group's config

@@ -179,7 +179,7 @@ describe('configToSpec imported Excel date category axes', () => {
     );
   });
 
-  it('maps imported vertical chart text orientation and reserves bottom label space', () => {
+  it('maps imported chart text rotation even when vertical text mode is horizontal', () => {
     const config = makeDateAxisConfig('line');
     config.height = 16;
     config.axis = {
@@ -187,7 +187,7 @@ describe('configToSpec imported Excel date category axes', () => {
       categoryAxis: {
         ...config.axis?.categoryAxis,
         textOrientation: -1000,
-        format: { font: { size: 20 } },
+        format: { font: { size: 20 }, textRotation: -1000, textVerticalType: 'horz' },
       },
     };
 
@@ -201,6 +201,27 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(spec.encoding?.x?.axis).toMatchObject({ labelAngle: -90 });
     expect(xAxisLabels.every((mark) => mark.rotation === -Math.PI / 2)).toBe(true);
     expect(result.layout.margin.bottom).toBeGreaterThanOrEqual(160);
+  });
+
+  it('maps OOXML vertical text modes to label angles', () => {
+    const config = makeDateAxisConfig('line');
+    config.axis = {
+      ...config.axis,
+      categoryAxis: {
+        ...config.axis?.categoryAxis,
+        format: { textVerticalType: 'vert270' },
+      },
+    };
+
+    const spec = asUnitSpec(configToSpec(config, makeData()));
+    const result = compile(spec);
+    const xAxisLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { role?: string; axisPart?: string } | undefined;
+      return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
+    });
+
+    expect(spec.encoding?.x?.axis).toMatchObject({ labelAngle: -90 });
+    expect(xAxisLabels.every((mark) => mark.rotation === -Math.PI / 2)).toBe(true);
   });
 
   it('reserves enough left margin for large imported currency axis labels', () => {
@@ -252,6 +273,7 @@ describe('configToSpec imported Excel date category axes', () => {
         visible: true,
         min: 0,
         max: 50_000_000,
+        numberFormat: '"$"#,##0',
       },
       secondaryValueAxis: {
         visible: true,
@@ -275,8 +297,12 @@ describe('configToSpec imported Excel date category axes', () => {
       domain: [-0.2, 0.3],
       nice: false,
     });
+    expect(spec.config?.layoutHints?.leftYAxisLabelWidth).toBeGreaterThanOrEqual(
+      spec.config?.layoutHints?.rightYAxisLabelWidth ?? 0,
+    );
 
     const result = compile(spec);
+    expect(result.layout.margin.left).toBeGreaterThanOrEqual(result.layout.margin.right);
     const secondaryBars = result.marks.filter((mark): mark is RectMark => {
       const datum = mark.datum as { series?: string } | undefined;
       return mark.type === 'rect' && datum?.series === 'Percent';
@@ -433,6 +459,7 @@ describe('configToSpec imported Excel date category axes', () => {
         visible: true,
         min: 0,
         max: 50_000_000,
+        numberFormat: '"$"#,##0',
       },
       secondaryValueAxis: {
         visible: true,
@@ -477,8 +504,12 @@ describe('configToSpec imported Excel date category axes', () => {
       unit: 'month',
       step: 2,
     });
+    expect(spec.config?.layoutHints?.leftYAxisLabelWidth).toBeGreaterThanOrEqual(
+      spec.config?.layoutHints?.rightYAxisLabelWidth ?? 0,
+    );
 
     const result = compile(spec);
+    expect(result.layout.margin.left).toBeGreaterThanOrEqual(result.layout.margin.right);
     expect(result.legends).toHaveLength(0);
 
     const plotClip = result.layout.plotArea;

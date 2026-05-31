@@ -227,12 +227,25 @@ export interface ChartShadow {
   transparency?: number;
 }
 
+/** OOXML DrawingML text vertical mode (`a:bodyPr@vert`). */
+export type ChartTextVerticalType =
+  | 'horz'
+  | 'vert'
+  | 'vert270'
+  | 'wordArtVert'
+  | 'eaVert'
+  | 'mongolianVert'
+  | 'wordArtVertRtl';
+
 /** Composite format for a chart element. */
 export interface ChartFormat {
   fill?: ChartFill;
   line?: ChartLineFormat;
   font?: ChartFont;
+  /** Text rotation angle in degrees (`a:bodyPr@rot`, OOXML angle / 60000). */
   textRotation?: number;
+  /** DrawingML vertical text mode. This is separate from textRotation. */
+  textVerticalType?: ChartTextVerticalType;
   shadow?: ChartShadow;
 }
 
@@ -267,7 +280,7 @@ export interface TitleConfig {
   font?: ChartFont;
   format?: ChartFormat;
   overlay?: boolean;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on format.textVerticalType. */
   textOrientation?: number;
   richText?: ChartFormatString[];
   formula?: string;
@@ -476,7 +489,7 @@ export interface SingleAxisConfig {
   linkNumberFormat?: boolean;
   /** Whether tick marks are between categories (true) or on categories (false) */
   isBetweenCategories?: boolean;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on format.textVerticalType. */
   textOrientation?: number;
   /** Label alignment (alias for labelAlignment) */
   alignment?: string;
@@ -544,7 +557,7 @@ export interface DataLabelConfig {
   text?: string;
   visualFormat?: ChartFormat;
   numberFormat?: string;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on visualFormat.textVerticalType. */
   textOrientation?: number;
   richText?: ChartFormatString[];
   // Additional data label properties

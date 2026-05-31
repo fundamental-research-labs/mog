@@ -599,6 +599,7 @@ describe('buildEncoding - axis config', () => {
           format: {
             font: { size: 9, color: { theme: 'tx1' } },
             textRotation: -1000,
+            textVerticalType: 'horz',
           },
         },
         yAxis: {
@@ -615,9 +616,9 @@ describe('buildEncoding - axis config', () => {
       expect.objectContaining({
         title: null,
         format: '"FY3/"0',
-        labelFontSize: 12,
+        labelFontSize: 18,
+        labelAngle: -90,
         labelColor: '#595959',
-        labelAngle: -45,
         crossesAt: 'automatic',
       }),
     );
@@ -625,9 +626,10 @@ describe('buildEncoding - axis config', () => {
       expect.objectContaining({
         title: null,
         domain: false,
+        ticks: false,
         grid: true,
-        gridColor: '#D9D9D9',
-        gridWidth: 1,
+        gridColor: '#000000',
+        gridWidth: 1.5,
         gridOpacity: 1,
       }),
     );
@@ -648,8 +650,8 @@ describe('buildEncoding - axis config', () => {
     expect(encoding.y!.axis).toEqual(
       expect.objectContaining({
         grid: true,
-        gridWidth: 1,
-        gridDash: [4, 2, 1, 2],
+        gridWidth: 1.5,
+        gridDash: [6, 3, 1.5, 3],
         gridOpacity: 0.75,
       }),
     );
@@ -709,7 +711,7 @@ describe('buildEncoding - legend config', () => {
     expect(encoding.color!.legend).toEqual({
       orient: 'right',
       title: null,
-      labelFontSize: 12,
+      labelFontSize: 18,
       labelColor: '#595959',
     });
   });
@@ -819,7 +821,7 @@ describe('buildConfigSpec - colors', () => {
     expect(longConfigSpec?.layoutHints?.yAxisLabelWidth).toBeGreaterThan(
       shortConfigSpec?.layoutHints?.yAxisLabelWidth ?? 0,
     );
-    expect(shortConfigSpec?.layoutHints?.yAxisLabelWidth).toBeLessThan(62);
+    expect(shortConfigSpec?.layoutHints?.yAxisLabelWidth).toBeLessThan(80);
   });
 
   it('estimates an Excel-like bottom gutter for imported zero-crossing category axes', () => {
@@ -831,7 +833,7 @@ describe('buildConfigSpec - colors', () => {
           type: 'category',
           tickMarks: 'none',
           crossesAt: 'automatic',
-          format: { font: { size: 9 }, textRotation: -1000 },
+          format: { font: { size: 9 }, textRotation: -1000, textVerticalType: 'horz' },
         },
         yAxis: {
           type: 'value',
@@ -852,11 +854,11 @@ describe('buildConfigSpec - colors', () => {
     expect(encoding.x?.axis).toEqual(
       expect.objectContaining({
         crossesAt: 'automatic',
-        labelAngle: -45,
+        labelAngle: -90,
         labelPadding: 14,
       }),
     );
-    expect(configSpec?.layoutHints?.bottomMargin).toBe(29);
+    expect(configSpec?.layoutHints?.bottomMargin).toBe(166);
   });
 
   it('should derive category colors from imported series theme fills', () => {
@@ -924,7 +926,7 @@ describe('buildTitle', () => {
     );
     expect(result).toEqual({
       text: 'Revenue (mn)',
-      fontSize: 14.4,
+      fontSize: 21.6,
       color: '#595959',
     });
   });
@@ -1147,7 +1149,7 @@ describe('buildComboLayers', () => {
     const data = makeData(1);
     const layers = buildComboLayers(config, data, []);
     const mark = layers[0].mark as MarkSpec;
-    expect(mark.strokeWidth).toBe(3);
+    expect(mark.strokeWidth).toBe(6);
     expect(mark.point).toBe(true);
   });
 });
@@ -1314,7 +1316,11 @@ describe('configToSpec - integration', () => {
     expect((spec.encoding!.y!.scale as { domain: [number, number] }).domain).toEqual([0, 1000]);
 
     // Legend
-    expect(spec.encoding!.color!.legend).toEqual({ orient: 'top', title: null });
+    expect(spec.encoding!.color!.legend).toEqual({
+      orient: 'top',
+      title: null,
+      symbolType: 'line',
+    });
   });
 
   it('should default width/height when not provided', () => {
@@ -1551,7 +1557,7 @@ describe('buildComboLayers - per-series overrides', () => {
     });
     const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
     const mark = layers[0].mark as MarkSpec;
-    expect(mark.strokeWidth).toBe(4);
+    expect(mark.strokeWidth).toBe(8);
   });
 
   it('should add data label layer for series with dataLabels.show', () => {

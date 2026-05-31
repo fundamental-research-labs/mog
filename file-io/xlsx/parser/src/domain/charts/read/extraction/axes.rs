@@ -1,4 +1,4 @@
-use super::formatting::{extract_chart_format, extract_chart_line};
+use super::formatting::{extract_chart_format, extract_chart_line, extract_title_chart_format};
 use super::text::{extract_chart_text_string, extract_title_text_from_title};
 
 pub(super) fn extract_axes_from_chart_space(
@@ -467,10 +467,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
 
     // Formatting
     let format = extract_chart_format(ax.sp_pr.as_ref(), ax.tx_pr.as_ref());
-    let title_format = ax
-        .title
-        .as_ref()
-        .and_then(|t| extract_chart_format(t.sp_pr.as_ref(), t.tx_pr.as_ref()));
+    let title_format = ax.title.as_ref().and_then(extract_title_chart_format);
     let gridline_format = ax
         .major_gridlines
         .as_ref()

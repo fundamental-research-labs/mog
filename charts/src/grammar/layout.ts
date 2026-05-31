@@ -181,9 +181,15 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     });
     if (hasLabels) {
       if (side === 'right') {
-        margin.right += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
+        margin.right +=
+          layoutHints?.rightYAxisLabelWidth ??
+          layoutHints?.yAxisLabelWidth ??
+          DEFAULT_LAYOUT.yAxisLabelSpace;
       } else {
-        margin.left += layoutHints?.yAxisLabelWidth ?? DEFAULT_LAYOUT.yAxisLabelSpace;
+        margin.left +=
+          layoutHints?.leftYAxisLabelWidth ??
+          layoutHints?.yAxisLabelWidth ??
+          DEFAULT_LAYOUT.yAxisLabelSpace;
       }
     }
     // Add space for title

@@ -631,6 +631,9 @@ export interface ConfigSpec {
   range?: { category?: string[]; ordinal?: string[]; ramp?: string[] };
   /** Layout hints computed from imported workbook chart semantics. */
   layoutHints?: {
+    leftYAxisLabelWidth?: number;
+    rightYAxisLabelWidth?: number;
+    /** @deprecated Use side-specific y-axis label widths. */
     yAxisLabelWidth?: number;
     bottomMargin?: number;
   };

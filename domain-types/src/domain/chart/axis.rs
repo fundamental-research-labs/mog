@@ -105,7 +105,8 @@ pub struct SingleAxisData {
     /// Whether tick marks are between categories (true) or on categories (false).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_between_categories: Option<bool>,
-    /// Text orientation angle in degrees (-90 to 90).
+    /// Text orientation angle in degrees (-90 to 90). OOXML vertical text mode
+    /// is carried separately on ChartFormatData::text_vertical_type.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub text_orientation: Option<f64>,
     /// Horizontal alignment for axis labels: "left", "center", "right", etc.

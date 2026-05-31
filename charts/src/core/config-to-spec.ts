@@ -307,6 +307,24 @@ function resolvedCategoryColors(config: ChartConfig): string[] | undefined {
 function normalizeAxisLabelAngle(
   axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
 ): number | undefined {
+  const textVerticalType = (
+    axisConf.format as (ChartFormat & { textVerticalType?: string }) | undefined
+  )?.textVerticalType;
+  switch (textVerticalType) {
+    case 'vert':
+    case 'wordArtVert':
+    case 'eaVert':
+    case 'mongolianVert':
+      return 90;
+    case 'vert270':
+    case 'wordArtVertRtl':
+      return -90;
+    case 'horz':
+      break;
+    default:
+      break;
+  }
+
   const raw = axisConf.textOrientation ?? axisConf.format?.textRotation;
   if (raw === undefined) return undefined;
   if (raw === 0) return 0;
@@ -645,17 +663,18 @@ function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec {
   if (labelColor) spec.labelColor = labelColor;
 
   const labelAngle = normalizeAxisLabelAngle(axisConf);
+  const isCategoryAxis = axisConf.axisType === 'catAx' || axisConf.type === 'category';
+  if (isCategoryAxis && axisConf.tickMarks === 'none') {
+    spec.labelPadding = 14;
+  }
   if (labelAngle !== undefined) {
     spec.labelAngle = labelAngle;
-    const isCategoryAxis = axisConf.axisType === 'catAx' || axisConf.type === 'category';
-    if (isCategoryAxis && axisConf.tickMarks === 'none') {
-      spec.labelPadding = 14;
-    }
   }
 
   const axisLine = axisConf.format?.line;
   if (axisLine && !hasVisibleLineStyle(axisLine)) {
     spec.domain = false;
+    spec.ticks = false;
   }
   const axisLineColor = resolveChartTextColor(axisLine?.color);
   if (axisLineColor) {
@@ -1422,12 +1441,20 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const yAxisLabelWidth =
+  const leftYAxisLabelWidth =
     estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
+  const rightYAxisLabelWidth = estimateSecondaryYAxisLabelWidth(config, data);
   const bottomMargin = estimateXAxisBottomMargin(encoding);
-  if (yAxisLabelWidth !== undefined || bottomMargin !== undefined) {
+  if (
+    leftYAxisLabelWidth !== undefined ||
+    rightYAxisLabelWidth !== undefined ||
+    bottomMargin !== undefined
+  ) {
     configSpec.layoutHints = {
-      ...(yAxisLabelWidth !== undefined ? { yAxisLabelWidth } : {}),
+      ...(leftYAxisLabelWidth !== undefined
+        ? { leftYAxisLabelWidth, yAxisLabelWidth: leftYAxisLabelWidth }
+        : {}),
+      ...(rightYAxisLabelWidth !== undefined ? { rightYAxisLabelWidth } : {}),
       ...(bottomMargin !== undefined ? { bottomMargin } : {}),
     };
     hasConfig = true;
@@ -1462,22 +1489,44 @@ function estimateYAxisLabelWidth(encoding: EncodingSpec | undefined): number | u
     return undefined;
   }
 
-  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
+  return estimateQuantitativeAxisLabelWidth(y.axis, y.scale, y.format);
+}
+
+function estimateSecondaryYAxisLabelWidth(
+  config: ChartConfig,
+  data: ChartData | undefined,
+): number | undefined {
+  if (!hasSecondaryYAxis(config, data)) return undefined;
+  const secondaryAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
+  if (!secondaryAxis) return undefined;
+
+  const axis = mapAxisConfigToAxisSpec(secondaryAxis);
+  const scale = buildAxisScaleSpec(secondaryAxis, false);
+  return estimateQuantitativeAxisLabelWidth(axis, scale, axis.format);
+}
+
+function estimateQuantitativeAxisLabelWidth(
+  axis: AxisSpec | undefined,
+  scale: ScaleSpec | null | undefined,
+  format: string | undefined,
+): number | undefined {
+  if (axis?.labels === false) return undefined;
+
+  const scaleDomain = Array.isArray(scale?.domain) ? scale.domain : undefined;
   const min = explicitDomainBound(scaleDomain, 0);
   const max = explicitDomainBound(scaleDomain, 1);
   if (min === undefined || max === undefined) return undefined;
 
-  const axis = y.axis;
   const tickCount = axis?.tickCount ?? 10;
   const domain =
-    y.scale?.nice === false
+    scale?.nice === false
       ? ([min, max] as [number, number])
-      : niceLinear(min, max, typeof y.scale?.nice === 'number' ? y.scale.nice : tickCount);
+      : niceLinear(min, max, typeof scale?.nice === 'number' ? scale.nice : tickCount);
   const ticks = generateTicks(domain[0], domain[1], tickCount);
   const values = ticks.length > 0 ? ticks : domain;
   const maxLabelLength = Math.max(
     0,
-    ...values.map((value) => formatTickValue(value, y.format ?? axis?.format).length),
+    ...values.map((value) => formatTickValue(value, format ?? axis?.format).length),
   );
   if (maxLabelLength === 0) return undefined;
 
@@ -1620,7 +1669,9 @@ export function buildComboLayers(
   for (let i = 0; i < data.series.length; i++) {
     const series = data.series[i];
     const seriesConf = seriesConfigs[i];
-    const seriesType = (seriesConf?.type ?? series.type ?? config.type ?? 'line') as ChartType;
+    const fallbackComboType =
+      config.type === 'combo' ? (i === 0 ? 'column' : 'line') : (config.type ?? 'line');
+    const seriesType = (seriesConf?.type ?? series.type ?? fallbackComboType) as ChartType;
     const markType = MARK_TYPE_MAP[seriesType] ?? 'bar';
     const yAxisIndex = seriesConf?.yAxisIndex ?? series.yAxisIndex;
 

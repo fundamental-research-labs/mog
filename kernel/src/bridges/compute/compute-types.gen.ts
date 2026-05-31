@@ -606,6 +606,16 @@ export interface CameraData {
   error?: string;
 }
 
+export interface CategoryLabelFormatData {
+  formatCode?: string;
+  points?: CategoryPointLabelFormatData[];
+}
+
+export interface CategoryPointLabelFormatData {
+  idx: number;
+  formatCode?: string;
+}
+
 export interface CellCFResult {
   row: number;
   col: number;
@@ -967,6 +977,7 @@ export interface ChartFormatData {
   line?: ChartLineData;
   font?: ChartFontData;
   textRotation?: number;
+  textVerticalType?: ChartTextVerticalType;
   shadow?: ChartShadowData;
 }
 
@@ -997,16 +1008,6 @@ export interface ChartLineData {
   transparency?: number;
 }
 
-export interface CategoryLabelFormatData {
-  formatCode?: string;
-  points?: CategoryPointLabelFormatData[];
-}
-
-export interface CategoryPointLabelFormatData {
-  idx: number;
-  formatCode?: string;
-}
-
 export interface ChartOoxmlProps {
   definition?: unknown;
   drawingFrame?: ChartDrawingFrameOoxmlProps;
@@ -1023,18 +1024,6 @@ export interface ChartRelationshipData {
   relationshipType?: string;
   target?: string;
   targetMode?: string;
-}
-
-export interface ChartSeriesPointCachePointData {
-  idx: number;
-  value: string;
-  formatCode?: string;
-}
-
-export interface ChartSeriesPointCacheData {
-  pointCount?: number;
-  formatCode?: string;
-  points: ChartSeriesPointCachePointData[];
 }
 
 export interface ChartSeriesData {
@@ -1074,6 +1063,18 @@ export interface ChartSeriesData {
   showConnectorLines?: boolean;
   leaderLineFormat?: ChartFormatData;
   showLeaderLines?: boolean;
+}
+
+export interface ChartSeriesPointCacheData {
+  pointCount?: number;
+  formatCode?: string;
+  points: ChartSeriesPointCachePointData[];
+}
+
+export interface ChartSeriesPointCachePointData {
+  idx: number;
+  value: string;
+  formatCode?: string;
 }
 
 export interface ChartShadowData {
@@ -1186,6 +1187,8 @@ export interface ChartStatistics {
 }
 
 export type ChartStrikeStyle = "single" | "double";
+
+export type ChartTextVerticalType = "horz" | "vert" | "vert270" | "wordArtVert" | "eaVert" | "mongolianVert" | "wordArtVertRtl";
 
 export type ChartUnderlineStyle = "none" | "single" | "double" | "singleAccountant" | "doubleAccountant" | "dash" | "dashLong" | "dotDash" | "dotDotDash" | "dotted" | "heavy" | "wavy" | "wavyDouble" | "wavyHeavy" | "words";
 

@@ -1,7 +1,7 @@
-use ooxml_types::drawings::ColorTransform;
+use ooxml_types::drawings::{ColorTransform, TextRunContent};
 
 /// Extract hex RGB color from chart ShapeProperties fill.
-pub(super) fn extract_fill_color(sp_pr: &ooxml_types::charts::ShapeProperties) -> Option<String> {
+pub(crate) fn extract_fill_color(sp_pr: &ooxml_types::charts::ShapeProperties) -> Option<String> {
     use ooxml_types::drawings::DrawingFill;
 
     match &sp_pr.fill {
@@ -15,7 +15,7 @@ pub(super) fn extract_fill_color(sp_pr: &ooxml_types::charts::ShapeProperties) -
     }
 }
 
-pub(super) fn extract_chart_format(
+pub(crate) fn extract_chart_format(
     sp_pr: Option<&ooxml_types::charts::ShapeProperties>,
     tx_pr: Option<&ooxml_types::drawings::TextBody>,
 ) -> Option<domain_types::chart::ChartFormatData> {
@@ -167,7 +167,7 @@ fn extract_chart_fill(
 }
 
 /// Extract ChartLineData from an Outline.
-pub(super) fn extract_chart_line(
+pub(crate) fn extract_chart_line(
     outline: &ooxml_types::drawings::Outline,
 ) -> domain_types::chart::ChartLineData {
     use ooxml_types::drawings::{LineDash, LineFill};
@@ -220,8 +220,6 @@ pub(super) fn extract_chart_line(
 fn extract_chart_font(
     tx_pr: &ooxml_types::drawings::TextBody,
 ) -> Option<domain_types::chart::ChartFontData> {
-    use ooxml_types::drawings::TextRunContent;
-
     for paragraph in &tx_pr.paragraphs {
         let default_font = paragraph
             .props
@@ -258,6 +256,57 @@ fn extract_chart_font(
     }
 
     None
+}
+
+pub(crate) fn extract_chart_rich_text(
+    tx_pr: &ooxml_types::drawings::TextBody,
+) -> Option<Vec<domain_types::chart::ChartFormatStringData>> {
+    let mut runs = Vec::new();
+    for paragraph in &tx_pr.paragraphs {
+        let default_font = paragraph
+            .props
+            .def_run_props
+            .as_deref()
+            .and_then(extract_chart_font_from_run_properties);
+
+        for run_content in &paragraph.runs {
+            match run_content {
+                TextRunContent::Run(run) if !run.text.is_empty() => {
+                    runs.push(domain_types::chart::ChartFormatStringData {
+                        text: run.text.clone(),
+                        font: merge_chart_font(
+                            default_font.clone(),
+                            extract_chart_font_from_run_properties(&run.props),
+                        ),
+                    });
+                }
+                TextRunContent::Field {
+                    text: Some(text),
+                    run_props,
+                    ..
+                } if !text.is_empty() => {
+                    runs.push(domain_types::chart::ChartFormatStringData {
+                        text: text.clone(),
+                        font: merge_chart_font(
+                            default_font.clone(),
+                            run_props
+                                .as_ref()
+                                .and_then(extract_chart_font_from_run_properties),
+                        ),
+                    });
+                }
+                TextRunContent::LineBreak { .. } => {
+                    runs.push(domain_types::chart::ChartFormatStringData {
+                        text: "\n".to_string(),
+                        font: default_font.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    (!runs.is_empty()).then_some(runs)
 }
 
 fn extract_chart_font_from_run_properties(

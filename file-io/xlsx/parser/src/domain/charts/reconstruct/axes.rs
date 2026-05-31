@@ -182,9 +182,9 @@ pub(super) fn build_single_axis_with_ids(
         })
         .unwrap_or(axis_type);
 
-    let log_base = sad.log_base.or_else(|| {
-        matches!(sad.scale_type.as_deref(), Some("logarithmic")).then_some(10.0)
-    });
+    let log_base = sad
+        .log_base
+        .or_else(|| matches!(sad.scale_type.as_deref(), Some("logarithmic")).then_some(10.0));
 
     let scaling = Scaling {
         orientation: if sad.reverse == Some(true) {

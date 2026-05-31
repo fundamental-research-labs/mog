@@ -289,7 +289,9 @@ impl ChartType {
     /// OOXML-only aliases such as `paretoLine` and `boxWhisker` are normalized
     /// to the public tokens `pareto` and `boxplot`. Layout IDs that are not
     /// supported as semantic ChartEx families return `None`.
-    pub fn from_chart_ex_layout_id(layout_id: &ooxml_types::chart_ex::ChartExLayoutId) -> Option<Self> {
+    pub fn from_chart_ex_layout_id(
+        layout_id: &ooxml_types::chart_ex::ChartExLayoutId,
+    ) -> Option<Self> {
         layout_id.to_public_chart_type().map(ChartType::from_str)
     }
 

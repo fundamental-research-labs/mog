@@ -23,6 +23,10 @@ use conversion::convert_chart_to_chart_spec;
 pub use chart_ex::parse_chart_ex_for_sheet;
 pub use connectors::parse_connectors_for_sheet;
 pub use extraction::extract_chart_spec_from_chart_space;
+pub(crate) use extraction::{
+    extract_chart_format, extract_chart_line, extract_chart_rich_text, parse_chart_a1_ref,
+    synthesize_rectangular_data_range,
+};
 pub use smartart::parse_smartart_for_sheet;
 pub use xml_parsing::ChartRefInfo;
 

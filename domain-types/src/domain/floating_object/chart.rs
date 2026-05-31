@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use super::ChartOoxmlProps;
 use crate::domain::chart::{
-    AxisData, ChartDataTableData, ChartFormatData, ChartFormatStringData, ChartSeriesData,
-    ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData, PieSliceData,
-    PivotChartOptionsData, SeriesOrientation, TrendlineData, WaterfallOptions,
-    BoxplotConfigData, HierarchyChartConfigData, HistogramConfigData, RegionMapConfigData,
+    AxisData, BoxplotConfigData, ChartDataTableData, ChartFormatData, ChartFormatStringData,
+    ChartSeriesData, ChartSubType, ChartType, ChartView3DData, DataLabelData,
+    HierarchyChartConfigData, HistogramConfigData, LegendData, PieSliceData, PivotChartOptionsData,
+    RegionMapConfigData, SeriesOrientation, TrendlineData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
 

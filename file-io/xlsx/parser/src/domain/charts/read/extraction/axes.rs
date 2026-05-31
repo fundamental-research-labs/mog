@@ -482,7 +482,9 @@ mod tests {
             Some(1.0)
         );
         assert_eq!(
-            axes.secondary_category_axis.as_ref().and_then(|axis| axis.min),
+            axes.secondary_category_axis
+                .as_ref()
+                .and_then(|axis| axis.min),
             Some(30.0)
         );
     }

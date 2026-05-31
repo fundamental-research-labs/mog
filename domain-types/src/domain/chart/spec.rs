@@ -3,10 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::ImportObjectStatus;
 
-use super::{
-    BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
-    RegionMapConfigData,
-};
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
@@ -16,6 +12,10 @@ use super::{
     ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
     ChartView3DData, DataLabelData, LegendData, ObjectSize, StandardChartExportAuthority,
     StandardChartProvenance, WaterfallOptions,
+};
+use super::{
+    BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
+    RegionMapConfigData,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]

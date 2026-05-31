@@ -6,14 +6,8 @@
  *
  * Pure function - no DOM dependencies.
  */
-import type { ChartSpec, EncodingSpec, LayerSpec, Transform, UnitSpec } from '../../grammar/spec';
+import type { ChartSpec, Transform } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
-import {
-  DEFAULT_CHART_HEIGHT,
-  DEFAULT_CHART_WIDTH,
-  PIXELS_PER_COLUMN,
-  PIXELS_PER_ROW,
-} from './constants';
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
@@ -21,9 +15,14 @@ import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildStockLayers } from './layers/stock';
 import { buildWaterfallLayers } from './layers/waterfall';
-import { isLegendShown } from './legend';
 import { buildMark } from './marks';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
+import {
+  buildChartDimensions,
+  buildLayerSpec,
+  buildUnitSpec,
+  sharedLayerEncodingForLegend,
+} from './spec-assembly';
 import { resolveStackMode, resolveSubTypeMarkProps } from './subtypes';
 import { buildTitle } from './title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './transforms';
@@ -74,8 +73,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   // 7. Build dimensions (cell units -> pixels)
-  const width = config.width ? config.width * PIXELS_PER_COLUMN : DEFAULT_CHART_WIDTH;
-  const height = config.height ? config.height * PIXELS_PER_ROW : DEFAULT_CHART_HEIGHT;
+  const dimensions = buildChartDimensions(config);
 
   // 8. Handle layered chart types (combo, stock, waterfall, dual-axis)
   if (config.type === 'combo' || hasSecondaryYAxis(config, data)) {
@@ -88,77 +86,64 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     }
 
     const resolve = buildResolve(config, data);
-    const sharedEncoding: EncodingSpec | undefined =
-      encoding.color && isLegendShown(config.legend) ? { color: { ...encoding.color } } : undefined;
-    const spec: LayerSpec = {
-      width,
-      height,
-      data: { values: rows },
-      layer: layers,
-      ...(sharedEncoding ? { encoding: sharedEncoding } : {}),
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
+      encoding: sharedLayerEncodingForLegend(encoding, config.legend),
       title,
       config: configSpec,
-      ...(resolve ? { resolve } : {}),
-    };
-    return spec;
+      resolve,
+    });
   }
 
   if (config.type === 'stock') {
     const layers = buildStockLayers(config, data, rows);
-    const spec: LayerSpec = {
-      width,
-      height,
-      data: { values: rows },
-      layer: layers,
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
       title,
       config: configSpec,
-    };
-    return spec;
+    });
   }
 
   if (config.type === 'waterfall') {
     const layers = buildWaterfallLayers(config, data, rows);
-    const spec: LayerSpec = {
-      width,
-      height,
-      data: { values: rows },
-      layer: layers,
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
       title,
       config: configSpec,
-    };
-    return spec;
+    });
   }
 
   // 9. Handle data labels as overlay layer
   if (config.dataLabels?.show) {
-    const mainLayer: UnitSpec = { mark, encoding };
+    const mainLayer: ChartSpec = { mark, encoding };
     const labelLayer = buildDataLabelLayer(config.dataLabels, encoding);
     const layers: ChartSpec[] = [mainLayer];
     if (labelLayer) layers.push(labelLayer);
 
-    const spec: LayerSpec = {
-      width,
-      height,
-      data: { values: rows },
-      layer: layers,
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
       title,
       config: configSpec,
-      ...(transforms.length > 0 ? { transform: transforms } : {}),
-    };
-    return spec;
+      transforms,
+    });
   }
 
   // 10. Simple single-mark spec
-  const spec: UnitSpec = {
-    width,
-    height,
+  return buildUnitSpec({
+    dimensions,
+    rows,
     mark,
-    data: { values: rows },
     encoding,
     title,
-    ...(configSpec ? { config: configSpec } : {}),
-    ...(transforms.length > 0 ? { transform: transforms } : {}),
-  };
-
-  return spec;
+    config: configSpec,
+    transforms,
+  });
 }

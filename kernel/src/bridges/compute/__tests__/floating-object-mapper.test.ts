@@ -511,6 +511,30 @@ describe('toFloatingObject — ChartObject', () => {
       );
     }
   });
+
+  it('preserves imported chart status and does not default missing imported type to column', () => {
+    const importStatus = {
+      source: 'xlsx',
+      featureKind: 'chart',
+      recoverability: 'preservedNotRenderable',
+      renderability: 'notRenderable',
+      editability: 'partiallyEditable',
+      diagnostics: [],
+    } as const;
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: '',
+        importStatus,
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.importStatus).toBe(importStatus);
+      expect(obj.chartType).toBe('');
+    }
+  });
 });
 
 // =============================================================================

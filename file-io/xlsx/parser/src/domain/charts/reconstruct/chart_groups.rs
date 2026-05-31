@@ -51,6 +51,8 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                         d_lbls,
                         ax_id: group.ax_id.clone(),
                         raw_chart_type_attr: group.raw_chart_type_attr.clone(),
+                        raw_chart_element_name: group.raw_chart_element_name.clone(),
+                        raw_chart_group_xml: group.raw_chart_group_xml.clone(),
                     }
                 })
                 .collect();
@@ -78,6 +80,8 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         d_lbls,
         ax_id,
         raw_chart_type_attr: None,
+        raw_chart_element_name: None,
+        raw_chart_group_xml: None,
     }]
 }
 

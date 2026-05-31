@@ -307,6 +307,8 @@ mod tests {
             d_lbls: None,
             ax_id,
             raw_chart_type_attr: None,
+            raw_chart_element_name: None,
+            raw_chart_group_xml: None,
         }
     }
 

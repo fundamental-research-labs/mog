@@ -1,5 +1,8 @@
 use super::axes::extract_axes_from_chart_space;
-use super::common::{chart_import_status_for_renderability, map_ooxml_chart_type_to_domain};
+use super::common::{
+    chart_import_status_for_renderability, chart_import_status_for_unsupported_chart_type,
+    map_ooxml_chart_type_to_domain,
+};
 use super::data_refs::reconstruct_data_range_from_chart_space;
 use super::formatting::{extract_chart_format, extract_title_chart_format};
 use super::labels::extract_data_label_data;
@@ -129,12 +132,27 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     let display_blanks_as = chart.disp_blanks_as.map(|d| d.to_ooxml().to_string());
     let plot_visible_only = chart.plot_vis_only;
-    let import_status = chart_import_status_for_renderability(
-        &series,
-        data_range.as_deref(),
-        None,
-        anchor.cnv_pr_name.as_deref(),
-    );
+    let import_status = match &chart_type {
+        domain_types::ChartType::Unknown(raw) => chart_import_status_for_unsupported_chart_type(
+            raw,
+            Some(anchor.target.as_str()),
+            anchor.cnv_pr_name.as_deref(),
+        )
+        .or_else(|| {
+            chart_import_status_for_renderability(
+                &series,
+                data_range.as_deref(),
+                Some(anchor.target.as_str()),
+                anchor.cnv_pr_name.as_deref(),
+            )
+        }),
+        _ => chart_import_status_for_renderability(
+            &series,
+            data_range.as_deref(),
+            Some(anchor.target.as_str()),
+            anchor.cnv_pr_name.as_deref(),
+        ),
+    };
 
     // -------------------------------------------------------------------------
     // (l) Anchor metadata
@@ -253,17 +271,25 @@ pub fn extract_chart_spec_from_chart_space(
 fn chart_type_for_plot_area(plot_area: &ooxml_types::charts::PlotArea) -> domain_types::ChartType {
     let mut groups = plot_area.chart_groups.iter();
     let Some(first_group) = groups.next() else {
-        return domain_types::ChartType::Column;
+        return domain_types::ChartType::Unknown(String::new());
     };
 
-    let first_type = map_ooxml_chart_type_to_domain(first_group.chart_type, &first_group.config);
-    if groups
-        .any(|group| map_ooxml_chart_type_to_domain(group.chart_type, &group.config) != first_type)
-    {
+    let first_type = chart_type_for_group(first_group);
+    if groups.any(|group| chart_type_for_group(group) != first_type) {
         domain_types::ChartType::Combo
     } else {
         first_type
     }
+}
+
+fn chart_type_for_group(group: &ooxml_types::charts::ChartGroup) -> domain_types::ChartType {
+    if group.chart_type == ooxml_types::charts::ChartType::Unknown {
+        if let Some(token) = group.raw_chart_element_name.as_deref() {
+            return domain_types::ChartType::Unknown(token.to_string());
+        }
+    }
+
+    map_ooxml_chart_type_to_domain(group.chart_type, &group.config)
 }
 
 fn extract_chart_title_text(chart: &ooxml_types::charts::Chart) -> Option<String> {
@@ -389,6 +415,21 @@ mod tests {
             d_lbls: None,
             ax_id: Vec::new(),
             raw_chart_type_attr: None,
+            raw_chart_element_name: None,
+            raw_chart_group_xml: None,
+        }
+    }
+
+    fn unknown_group(raw_element_name: &str) -> ChartGroup {
+        ChartGroup {
+            chart_type: ChartType::Unknown,
+            config: ChartTypeConfig::Combo,
+            series: Vec::new(),
+            d_lbls: None,
+            ax_id: Vec::new(),
+            raw_chart_type_attr: None,
+            raw_chart_element_name: Some(raw_element_name.to_string()),
+            raw_chart_group_xml: Some(format!("<c:{raw_element_name}/>")),
         }
     }
 
@@ -433,6 +474,56 @@ mod tests {
         assert_eq!(
             chart_type_for_plot_area(&plot_area),
             domain_types::ChartType::Combo
+        );
+    }
+
+    #[test]
+    fn unknown_standard_chart_group_preserves_raw_token_and_status() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![unknown_group("fooChart")],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(
+            spec.chart_type,
+            domain_types::ChartType::Unknown("fooChart".to_string())
+        );
+        let status = spec.import_status.expect("unsupported chart status");
+        assert_eq!(
+            status.recoverability,
+            domain_types::ImportRecoverability::PreservedNotRenderable
+        );
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+        let diagnostic = status.diagnostics.first().expect("diagnostic ref");
+        assert_eq!(
+            diagnostic.code,
+            Some(domain_types::ImportDiagnosticCode::UnsupportedChartType)
+        );
+        assert_eq!(
+            diagnostic.message.as_deref(),
+            Some("Standard chart type `fooChart` is not supported for rendering")
+        );
+        assert_eq!(diagnostic.part.as_deref(), Some("charts/chart1.xml"));
+    }
+
+    #[test]
+    fn no_chart_groups_do_not_default_to_column() {
+        let plot_area = PlotArea::default();
+
+        assert_eq!(
+            chart_type_for_plot_area(&plot_area),
+            domain_types::ChartType::Unknown(String::new())
         );
     }
 

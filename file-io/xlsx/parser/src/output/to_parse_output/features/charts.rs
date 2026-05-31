@@ -21,7 +21,11 @@ fn chart_ex_import_status(
                     code: domain_types::ImportDiagnosticCode::UnsupportedChartType,
                     message: format!(
                         "ChartEx chart type `{}` is not supported for rendering",
-                        if raw.is_empty() { "unknown" } else { raw.as_str() }
+                        if raw.is_empty() {
+                            "unknown"
+                        } else {
+                            raw.as_str()
+                        }
                     ),
                     recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
                     renderability: domain_types::ImportRenderability::NotRenderable,
@@ -971,12 +975,21 @@ mod tests {
     #[test]
     fn chart_ex_layout_ids_map_to_public_chart_types_without_prefixes() {
         for (layout_id, expected) in [
-            (ChartExLayoutId::Waterfall, domain_types::ChartType::Waterfall),
+            (
+                ChartExLayoutId::Waterfall,
+                domain_types::ChartType::Waterfall,
+            ),
             (ChartExLayoutId::Treemap, domain_types::ChartType::Treemap),
             (ChartExLayoutId::Sunburst, domain_types::ChartType::Sunburst),
             (ChartExLayoutId::Funnel, domain_types::ChartType::Funnel),
-            (ChartExLayoutId::RegionMap, domain_types::ChartType::RegionMap),
-            (ChartExLayoutId::Histogram, domain_types::ChartType::Histogram),
+            (
+                ChartExLayoutId::RegionMap,
+                domain_types::ChartType::RegionMap,
+            ),
+            (
+                ChartExLayoutId::Histogram,
+                domain_types::ChartType::Histogram,
+            ),
             (ChartExLayoutId::Pareto, domain_types::ChartType::Pareto),
             (
                 ChartExLayoutId::BoxWhisker,
@@ -996,9 +1009,7 @@ mod tests {
             domain_types::ChartType::Unknown("clusteredBar".to_string())
         );
         assert_eq!(
-            chart_type_from_chart_ex_layout_id(&ChartExLayoutId::Other(
-                "futureLayout".to_string()
-            )),
+            chart_type_from_chart_ex_layout_id(&ChartExLayoutId::Other("futureLayout".to_string())),
             domain_types::ChartType::Unknown("futureLayout".to_string())
         );
     }

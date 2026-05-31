@@ -636,6 +636,7 @@ function buildBaseFields(data: WireFloatingObject) {
       'lockAspectRatio' in data ? (data.lockAspectRatio as boolean | undefined) : undefined,
     altTextTitle: 'altTextTitle' in data ? (data.altTextTitle as string | undefined) : undefined,
     displayName: 'displayName' in data ? (data.displayName as string | undefined) : undefined,
+    importStatus: 'importStatus' in data ? data.importStatus : undefined,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -753,12 +754,17 @@ function toChartObject(d: WireChart): ChartObject {
     tableColumnNames: chart.tableColumnNames,
     ooxml: chart.ooxml,
   };
+  const hasImportStatus = chart.importStatus !== undefined;
+  const chartType =
+    chart.chartType && chart.chartType !== 'undefined'
+      ? chart.chartType
+      : hasImportStatus
+        ? ''
+        : 'column';
   return {
     ...buildBaseFields(d),
     type: 'chart' as const,
-    chartType: (chart.chartType && chart.chartType !== 'undefined'
-      ? chart.chartType
-      : 'column') as ChartObjectType,
+    chartType: chartType as ChartObjectType,
     anchorMode: (chart.anchor.anchorMode === 'twoCell'
       ? 'twoCell'
       : 'oneCell') as ChartObject['anchorMode'],

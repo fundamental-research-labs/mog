@@ -22,6 +22,30 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
     ))
 }
 
+pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart_type(
+    raw_chart_type: &str,
+    part_path: Option<&str>,
+    object_name: Option<&str>,
+) -> Option<domain_types::ImportObjectStatus> {
+    let token = raw_chart_type.trim();
+    if token.is_empty() {
+        return None;
+    }
+
+    Some(crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: domain_types::ImportDiagnosticCode::UnsupportedChartType,
+            message: format!("Standard chart type `{token}` is not supported for rendering"),
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::NotRenderable,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id: None,
+        },
+    ))
+}
+
 /// Map ooxml ChartType + config to domain ChartType.
 pub(super) fn map_ooxml_chart_type_to_domain(
     ct: ooxml_types::charts::ChartType,

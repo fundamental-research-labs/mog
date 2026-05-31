@@ -131,6 +131,14 @@ pub struct ChartGroup {
     /// Non-standard `chartType` attribute (Google Sheets) — preserved for round-trip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_chart_type_attr: Option<String>,
+    /// Raw OOXML chart group element name when the parser does not recognize the
+    /// standard chart family, e.g. `fooChart`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_chart_element_name: Option<String>,
+    /// Raw XML for an unsupported chart group. Used only as preserve-only
+    /// authority; known chart groups remain modeled through `config` + `series`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_chart_group_xml: Option<String>,
 }
 
 /// Chart title (CT_Title).

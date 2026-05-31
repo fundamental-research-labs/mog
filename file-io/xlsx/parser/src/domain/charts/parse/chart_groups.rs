@@ -1,7 +1,8 @@
 //! Chart type group detection and combo chart grouping.
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_tag_simd,
+    StartTagEnd, extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd,
+    find_lt_simd, find_start_tag_end_quoted, find_tag_simd,
 };
 
 use super::super::xml_helpers::{find_pos_after_last_ser, parse_ax_ids};
@@ -112,6 +113,8 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
                 d_lbls,
                 ax_id: ax_ids,
                 raw_chart_type_attr: raw_attr,
+                raw_chart_element_name: None,
+                raw_chart_group_xml: None,
             });
         }
 
@@ -171,6 +174,42 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
         );
     }
 
+    if let Some(unknown) = find_unknown_standard_chart_group(xml, chart_types) {
+        let type_bytes = &xml[unknown.start..unknown.end];
+        let series = parse_all_series(type_bytes);
+        let chart_dlbls = if let Some(dlbls_start) =
+            find_tag_simd(type_bytes, b"dLbls", find_pos_after_last_ser(type_bytes))
+        {
+            let dlbls_end =
+                find_closing_tag(type_bytes, b"dLbls", dlbls_start).unwrap_or(type_bytes.len());
+            Some(parse_data_labels(&type_bytes[dlbls_start..dlbls_end]))
+        } else {
+            None
+        };
+        let chart_ax_ids = parse_ax_ids(type_bytes);
+        let raw_chart_type_attr = attrs::parse_string_attr(type_bytes, b"chartType=\"");
+
+        return (
+            ChartType::Unknown,
+            false,
+            series.clone(),
+            Some(ChartTypeConfig::Combo),
+            chart_dlbls.clone(),
+            chart_ax_ids.clone(),
+            raw_chart_type_attr.clone(),
+            vec![oc::ChartGroup {
+                chart_type: ChartType::Unknown,
+                config: ChartTypeConfig::Combo,
+                series,
+                d_lbls: chart_dlbls,
+                ax_id: chart_ax_ids,
+                raw_chart_type_attr,
+                raw_chart_element_name: Some(unknown.element_name),
+                raw_chart_group_xml: Some(String::from_utf8_lossy(type_bytes).into_owned()),
+            }],
+        );
+    }
+
     (
         ChartType::Unknown,
         false,
@@ -181,6 +220,146 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
         None,
         Vec::new(),
     )
+}
+
+struct UnknownChartGroup {
+    element_name: String,
+    start: usize,
+    end: usize,
+}
+
+fn find_unknown_standard_chart_group(
+    xml: &[u8],
+    known_chart_types: &[(&[u8], ChartType, bool)],
+) -> Option<UnknownChartGroup> {
+    let mut pos = 0;
+    let mut depth = 0usize;
+
+    while let Some(lt) = find_lt_simd(xml, pos) {
+        let &next = xml.get(lt + 1)?;
+        if matches!(next, b'!' | b'?') {
+            pos = find_gt_simd(xml, lt).map_or(xml.len(), |gt| gt + 1);
+            continue;
+        }
+
+        let closing = next == b'/';
+        let name_start = lt + if closing { 2 } else { 1 };
+        let mut name_end = name_start;
+        while name_end < xml.len() {
+            let b = xml[name_end];
+            if matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
+                break;
+            }
+            name_end += 1;
+        }
+        let name = &xml[name_start..name_end];
+        let local_name = local_xml_name(name);
+        let start_tag_end = match find_start_tag_end_quoted(xml, lt) {
+            StartTagEnd::Found(gt) => gt,
+            StartTagEnd::UnterminatedQuote { fallback_gt, .. } => fallback_gt.unwrap_or(lt),
+            StartTagEnd::Missing => lt,
+        };
+
+        if closing {
+            depth = depth.saturating_sub(1);
+            pos = start_tag_end.saturating_add(1);
+            continue;
+        }
+
+        let self_closing = start_tag_end > lt && xml[start_tag_end.saturating_sub(1)] == b'/';
+        if depth == 1 && is_unknown_chart_group_name(local_name, known_chart_types) {
+            let end = if self_closing {
+                start_tag_end + 1
+            } else {
+                let close_lt = find_closing_tag(xml, local_name, lt)?;
+                find_gt_simd(xml, close_lt).map_or(close_lt, |gt| gt + 1)
+            };
+            return Some(UnknownChartGroup {
+                element_name: String::from_utf8_lossy(local_name).into_owned(),
+                start: lt,
+                end,
+            });
+        }
+
+        if !self_closing {
+            depth = depth.saturating_add(1);
+        }
+        pos = start_tag_end.saturating_add(1);
+    }
+
+    None
+}
+
+fn local_xml_name(name: &[u8]) -> &[u8] {
+    name.iter()
+        .rposition(|b| *b == b':')
+        .map_or(name, |idx| &name[idx + 1..])
+}
+
+fn is_unknown_chart_group_name(
+    local_name: &[u8],
+    known_chart_types: &[(&[u8], ChartType, bool)],
+) -> bool {
+    local_name.ends_with(b"Chart")
+        && known_chart_types
+            .iter()
+            .all(|(known_name, _, _)| *known_name != local_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_direct_chart_group_preserves_raw_element_identity() {
+        let xml = br#"
+            <c:plotArea>
+              <c:fooChart>
+                <c:ser><c:idx val="0"/><c:order val="0"/></c:ser>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:fooChart>
+              <c:catAx><c:axId val="1"/></c:catAx>
+              <c:valAx><c:axId val="2"/></c:valAx>
+            </c:plotArea>
+        "#;
+
+        let (chart_type, _, series, config, _, axis_ids, _, groups) =
+            parse_chart_type_and_series(xml);
+
+        assert_eq!(chart_type, ChartType::Unknown);
+        assert!(matches!(config, Some(ChartTypeConfig::Combo)));
+        assert_eq!(series.len(), 1);
+        assert_eq!(axis_ids, vec![1, 2]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].raw_chart_element_name.as_deref(),
+            Some("fooChart")
+        );
+        assert!(
+            groups[0]
+                .raw_chart_group_xml
+                .as_deref()
+                .is_some_and(|raw| raw.contains("<c:fooChart>"))
+        );
+    }
+
+    #[test]
+    fn known_chart_group_raw_chart_type_attr_is_not_unknown_family_identity() {
+        let xml = br#"
+            <c:plotArea>
+              <c:barChart chartType="googleCombo">
+                <c:barDir val="col"/>
+                <c:axId val="1"/><c:axId val="2"/>
+              </c:barChart>
+            </c:plotArea>
+        "#;
+
+        let (chart_type, _, _, _, _, _, raw_attr, groups) = parse_chart_type_and_series(xml);
+
+        assert_eq!(chart_type, ChartType::Bar);
+        assert_eq!(raw_attr.as_deref(), Some("googleCombo"));
+        assert!(groups.is_empty());
+    }
 }
 
 /// Check bar chart direction to determine if it's actually a column chart.

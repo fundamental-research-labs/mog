@@ -28,6 +28,8 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
             d_lbls: chart.data_labels.clone(),
             ax_id: ax_ids,
             raw_chart_type_attr: chart.raw_chart_type_attr.clone(),
+            raw_chart_element_name: None,
+            raw_chart_group_xml: None,
         }]
     } else {
         Vec::new()

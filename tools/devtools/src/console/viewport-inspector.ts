@@ -676,7 +676,19 @@ export function readCellValue(
 
   const states: ReadonlyMap<string, any> | undefined = bridge.getPerViewportStates?.();
   if (!states) return null;
+  // Restrict the search to viewports belonging to the active sheet. Viewport
+  // IDs are sheet-scoped ("main:<sheetId>"), and a stale coordinator for a
+  // previously-viewed sheet can linger in this map after a sheet switch — its
+  // TS-side teardown is async (an awaited IPC round-trip) and races the next
+  // read. Without this filter the loop returns that stale sheet's cell: e.g.
+  // reading Sheet1 A1 right after switching from Sheet2 yields Sheet2's value,
+  // because the Sheet2 coordinator was inserted first. Mirrors the sheet-scoped
+  // resolution in kernel viewport-reader.ts (`binaryCellReader`). When the
+  // active sheet can't be resolved (no open document), fall back to the prior
+  // any-viewport behavior.
+  const activeSheetId = getActiveSheetId();
   for (const [vpId] of states) {
+    if (activeSheetId && !vpId.endsWith(':' + activeSheetId)) continue;
     const result = tryRead(vpId);
     if (result) return result;
   }

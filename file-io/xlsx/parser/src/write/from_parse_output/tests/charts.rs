@@ -755,6 +755,154 @@ fn modeled_chart_export_omits_stale_ref_caches_and_reports_diagnostic() {
 }
 
 #[test]
+fn modeled_chart_export_reconstructs_literal_and_fallback_cache_sources() {
+    use domain_types::chart::{
+        ChartSeriesDimensionSourceKindData as SourceKind, ChartSeriesPointCacheData,
+        ChartSeriesPointCachePointData,
+    };
+
+    let mut literal_chart = make_chart(ChartType::Column, "Data!A1:B3");
+    literal_chart.data_range = None;
+    literal_chart.title = Some("Literal Sources".to_string());
+    let mut literal_series = chart_ex_projected_series();
+    literal_series.r#type = None;
+    literal_series.values = None;
+    literal_series.value_source_kind = Some(SourceKind::Literal);
+    literal_series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "10".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "20".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    literal_series.categories = None;
+    literal_series.category_source_kind = Some(SourceKind::Literal);
+    literal_series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "North".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "South".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    literal_chart.series = vec![literal_series];
+
+    let mut fallback_chart = make_chart(ChartType::Line, "Data!D1:E4");
+    fallback_chart.data_range = None;
+    fallback_chart.title = Some("Fallback Sources".to_string());
+    let mut fallback_series = chart_ex_projected_series();
+    fallback_series.r#type = None;
+    fallback_series.values = Some("Missing!B2:B4".to_string());
+    fallback_series.value_source_kind = Some(SourceKind::CacheFallback);
+    fallback_series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: Some("General".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "5".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 2,
+                value: "15".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    fallback_series.categories = Some("Missing!A2:A4".to_string());
+    fallback_series.category_source_kind = Some(SourceKind::CacheFallback);
+    fallback_series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: None,
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "A".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 2,
+                value: "C".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    fallback_chart.series = vec![fallback_series];
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![],
+        charts: vec![literal_chart, fallback_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let literal_xml =
+        String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let fallback_xml =
+        String::from_utf8(archive.read_file("xl/charts/chart2.xml").unwrap()).unwrap();
+
+    assert!(literal_xml.contains("<c:strLit>"), "{literal_xml}");
+    assert!(literal_xml.contains("<c:numLit>"), "{literal_xml}");
+    assert!(
+        literal_xml.contains("<c:formatCode>General</c:formatCode>"),
+        "{literal_xml}"
+    );
+    assert!(literal_xml.contains("<c:v>North</c:v>"), "{literal_xml}");
+    assert!(literal_xml.contains("<c:v>20</c:v>"), "{literal_xml}");
+    assert!(!literal_xml.contains("<c:f>"), "{literal_xml}");
+
+    assert!(
+        fallback_xml.contains("<c:f>Missing!A2:A4</c:f>"),
+        "{fallback_xml}"
+    );
+    assert!(
+        fallback_xml.contains("<c:f>Missing!B2:B4</c:f>"),
+        "{fallback_xml}"
+    );
+    assert!(fallback_xml.contains("<c:strCache>"), "{fallback_xml}");
+    assert!(fallback_xml.contains("<c:numCache>"), "{fallback_xml}");
+    assert_eq!(fallback_xml.matches("<c:ptCount val=\"3\"/>").count(), 2);
+    assert!(
+        fallback_xml.contains("<c:pt idx=\"0\"><c:v>A</c:v></c:pt>"),
+        "{fallback_xml}"
+    );
+    assert!(
+        fallback_xml.contains("<c:pt idx=\"2\"><c:v>C</c:v></c:pt>"),
+        "{fallback_xml}"
+    );
+    assert!(
+        fallback_xml.contains("<c:pt idx=\"0\"><c:v>5</c:v></c:pt>"),
+        "{fallback_xml}"
+    );
+    assert!(
+        fallback_xml.contains("<c:pt idx=\"2\"><c:v>15</c:v></c:pt>"),
+        "{fallback_xml}"
+    );
+    assert!(!fallback_xml.contains("<c:pt idx=\"1\">"), "{fallback_xml}");
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
     let mut level_chart = make_chart(ChartType::Column, "Data!A1:C3");
     level_chart.data_range = None;

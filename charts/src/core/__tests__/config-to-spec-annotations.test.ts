@@ -1,4 +1,5 @@
 import { isLayerSpec, type LayerSpec } from '../../grammar/spec';
+import { compile } from '../../grammar/compiler';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
 import {
@@ -279,6 +280,15 @@ describe('configToSpec annotation layers', () => {
           mark: expect.objectContaining({ type: 'rule', xField: DATA_LABEL_ANCHOR_X_FIELD }),
         }),
       ]),
+    );
+
+    const compiled = compile(spec, undefined, { skipAxes: true, skipLegend: true, skipTitle: true });
+    const arcMarks = compiled.marks.filter((mark) => mark.type === 'arc');
+    const explodedArc = arcMarks.find((mark) => mark.datum?.[POINT_EXPLOSION_FIELD] === 12)!;
+    const centerX = compiled.layout.plotArea.x + compiled.layout.plotArea.width / 2;
+    const centerY = compiled.layout.plotArea.y + compiled.layout.plotArea.height / 2;
+    expect(Math.hypot(explodedArc.x - centerX, explodedArc.y - centerY)).toBeCloseTo(
+      Math.min(explodedArc.outerRadius * 0.25, 12),
     );
   });
 });

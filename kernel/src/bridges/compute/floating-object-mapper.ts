@@ -746,6 +746,8 @@ function toChartObject(d: WireChart): ChartObject {
     doughnutHoleSize: chart.doughnutHoleSize,
     firstSliceAngle: chart.firstSliceAngle,
     bubbleScale: chart.bubbleScale,
+    showNegBubbles: chart.showNegBubbles,
+    sizeRepresents: chart.sizeRepresents,
     splitType: chart.splitType,
     splitValue: chart.splitValue,
     dataLabels: chart.dataLabels,

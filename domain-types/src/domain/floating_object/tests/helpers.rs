@@ -252,6 +252,8 @@ pub(super) fn chart_data_with_optional_keys() -> ChartData {
         doughnut_hole_size: Some(50),
         first_slice_angle: Some(0),
         bubble_scale: Some(100),
+        show_neg_bubbles: Some(true),
+        size_represents: Some("area".to_string()),
         split_type: Some("auto".to_string()),
         split_value: Some(1.0),
         category_label_level: Some(0),

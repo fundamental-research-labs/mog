@@ -170,6 +170,10 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   if (!narrowedType.type && !isNativeMissingChartType(normalizedChart)) {
     throw new Error(narrowedType.diagnostics[0]?.message ?? 'Imported chart type is not supported');
   }
+  const sizeRepresents =
+    normalizedChart.sizeRepresents === 'area' || normalizedChart.sizeRepresents === 'w'
+      ? normalizedChart.sizeRepresents
+      : undefined;
 
   return {
     type: narrowedType.type ?? 'bar',
@@ -213,6 +217,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     doughnutHoleSize: normalizedChart.doughnutHoleSize,
     firstSliceAngle: normalizedChart.firstSliceAngle,
     bubbleScale: normalizedChart.bubbleScale,
+    showNegBubbles: normalizedChart.showNegBubbles,
+    sizeRepresents,
     bubble3DEffect: normalizedChart.bubble3dEffect,
     splitType: normalizedChart.splitType as ChartConfig['splitType'],
     splitValue: normalizedChart.splitValue,

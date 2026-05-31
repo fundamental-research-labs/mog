@@ -886,6 +886,8 @@ export interface ChartData {
   doughnutHoleSize?: number;
   firstSliceAngle?: number;
   bubbleScale?: number;
+  showNegBubbles?: boolean;
+  sizeRepresents?: string;
   splitType?: string;
   splitValue?: number;
   categoryLabelLevel?: number;
@@ -1191,6 +1193,8 @@ export interface ChartSpec {
   doughnutHoleSize?: number;
   firstSliceAngle?: number;
   bubbleScale?: number;
+  showNegBubbles?: boolean;
+  sizeRepresents?: string;
   splitType?: string;
   splitValue?: number;
   barShape?: string;

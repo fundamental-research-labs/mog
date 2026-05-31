@@ -520,6 +520,8 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     doughnutHoleSize: config.doughnutHoleSize,
     firstSliceAngle: config.firstSliceAngle,
     bubbleScale: config.bubbleScale,
+    showNegBubbles: config.showNegBubbles,
+    sizeRepresents: config.sizeRepresents,
     splitType: config.splitType,
     splitValue: config.splitValue,
     widthCells: config.width,
@@ -645,6 +647,8 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.doughnutHoleSize !== undefined) result.doughnutHoleSize = updates.doughnutHoleSize;
   if (updates.firstSliceAngle !== undefined) result.firstSliceAngle = updates.firstSliceAngle;
   if (updates.bubbleScale !== undefined) result.bubbleScale = updates.bubbleScale;
+  if (updates.showNegBubbles !== undefined) result.showNegBubbles = updates.showNegBubbles;
+  if (updates.sizeRepresents !== undefined) result.sizeRepresents = updates.sizeRepresents;
   if (updates.splitType !== undefined) result.splitType = updates.splitType;
   if (updates.splitValue !== undefined) result.splitValue = updates.splitValue;
 
@@ -769,6 +773,8 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     doughnutHoleSize: chart.doughnutHoleSize,
     firstSliceAngle: chart.firstSliceAngle,
     bubbleScale: chart.bubbleScale,
+    showNegBubbles: chart.showNegBubbles,
+    sizeRepresents: chart.sizeRepresents as Chart['sizeRepresents'],
     splitType: chart.splitType as Chart['splitType'],
     splitValue: chart.splitValue,
     name: chart.name || undefined,

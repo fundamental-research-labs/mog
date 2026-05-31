@@ -106,6 +106,10 @@ describe('chart config normalizer', () => {
         titleLayout: { xMode: 'factor', x: 0.15, y: 0.05 },
         dataTable: { visible: true, showHorzBorder: true },
         pivotOptions: { showAxisFieldButtons: false },
+        bubbleScale: 175,
+        showNegBubbles: true,
+        sizeRepresents: 'w',
+        bubble3dEffect: true,
         view3d: { rotX: 30, rotY: 20, depthPercent: 150 },
         floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
         colorScheme: 12,
@@ -131,6 +135,10 @@ describe('chart config normalizer', () => {
     expect(config.titleLayout).toEqual({ xMode: 'factor', x: 0.15, y: 0.05 });
     expect(config.dataTable).toMatchObject({ visible: true, showHorzBorder: true });
     expect(config.pivotOptions).toEqual({ showAxisFieldButtons: false });
+    expect(config.bubbleScale).toBe(175);
+    expect(config.showNegBubbles).toBe(true);
+    expect(config.sizeRepresents).toBe('w');
+    expect(config.bubble3DEffect).toBe(true);
     expect(config.view3d).toEqual({ rotX: 30, rotY: 20, depthPercent: 150 });
     expect(config.floorFormat).toEqual({ fill: { type: 'solid', color: '#eeeeee' } });
     expect(config.colorScheme).toBe(12);

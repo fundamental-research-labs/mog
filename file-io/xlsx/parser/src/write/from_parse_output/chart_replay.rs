@@ -74,6 +74,8 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.doughnut_hole_size.is_some()
         || chart_spec.first_slice_angle.is_some()
         || chart_spec.bubble_scale.is_some()
+        || chart_spec.show_neg_bubbles.is_some()
+        || chart_spec.size_represents.is_some()
         || chart_spec.split_type.is_some()
         || chart_spec.split_value.is_some()
         || chart_spec.bar_shape.is_some()
@@ -139,6 +141,8 @@ pub(super) fn standard_chart_projection_fingerprint(
     fingerprint.write_json(&chart_spec.doughnut_hole_size);
     fingerprint.write_json(&chart_spec.first_slice_angle);
     fingerprint.write_json(&chart_spec.bubble_scale);
+    fingerprint.write_json(&chart_spec.show_neg_bubbles);
+    fingerprint.write_json(&chart_spec.size_represents);
     fingerprint.write_json(&chart_spec.split_type);
     fingerprint.write_json(&chart_spec.split_value);
     fingerprint.write_json(&chart_spec.category_label_level);

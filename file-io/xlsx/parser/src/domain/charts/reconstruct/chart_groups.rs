@@ -184,6 +184,12 @@ pub(super) fn build_default_config(
         OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig::default()),
         OoxmlChartType::Bubble => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
             bubble_scale: spec.bubble_scale,
+            show_neg_bubbles: spec.show_neg_bubbles,
+            size_represents: spec
+                .size_represents
+                .as_deref()
+                .map(charts::SizeRepresents::from_ooxml),
+            bubble_3d: spec.bubble_3d_effect,
             ..Default::default()
         }),
         OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig::default()),
@@ -292,6 +298,13 @@ pub(super) fn inject_series_into_config(
         ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(c.clone()),
         ChartTypeConfig::Bubble(c) => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
             bubble_scale: spec.bubble_scale.or(c.bubble_scale),
+            show_neg_bubbles: spec.show_neg_bubbles.or(c.show_neg_bubbles),
+            size_represents: spec
+                .size_represents
+                .as_deref()
+                .map(charts::SizeRepresents::from_ooxml)
+                .or(c.size_represents),
+            bubble_3d: spec.bubble_3d_effect.or(c.bubble_3d),
             ..c.clone()
         }),
         ChartTypeConfig::Radar(c) => ChartTypeConfig::Radar(c.clone()),

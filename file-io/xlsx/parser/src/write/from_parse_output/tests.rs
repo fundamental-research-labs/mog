@@ -783,6 +783,8 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         bar_shape: None,

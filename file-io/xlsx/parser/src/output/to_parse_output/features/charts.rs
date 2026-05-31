@@ -402,6 +402,8 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.doughnut_hole_size);
     fingerprint.write_json(&spec.first_slice_angle);
     fingerprint.write_json(&spec.bubble_scale);
+    fingerprint.write_json(&spec.show_neg_bubbles);
+    fingerprint.write_json(&spec.size_represents);
     fingerprint.write_json(&spec.split_type);
     fingerprint.write_json(&spec.split_value);
     fingerprint.write_json(&spec.category_label_level);
@@ -913,6 +915,8 @@ pub(crate) fn build_fallback_chart_spec(
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -1046,6 +1050,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 doughnut_hole_size: None,
                 first_slice_angle: None,
                 bubble_scale: None,
+                show_neg_bubbles: None,
+                size_represents: None,
                 split_type: None,
                 split_value: None,
                 category_label_level: None,

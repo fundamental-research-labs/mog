@@ -98,6 +98,12 @@ pub struct ChartData {
     /// Bubble scale percentage (0-300%)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bubble_scale: Option<u32>,
+    /// Whether negative or zero bubble sizes should render.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_neg_bubbles: Option<bool>,
+    /// Whether bubble values represent area or width/diameter ("area" or "w").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_represents: Option<String>,
     /// Split type for of-pie charts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub split_type: Option<String>,

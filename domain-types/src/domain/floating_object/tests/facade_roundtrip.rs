@@ -138,6 +138,8 @@ fn test_chart_round_trip() {
             doughnut_hole_size: None,
             first_slice_angle: None,
             bubble_scale: None,
+            show_neg_bubbles: None,
+            size_represents: None,
             split_type: None,
             split_value: None,
             category_label_level: None,

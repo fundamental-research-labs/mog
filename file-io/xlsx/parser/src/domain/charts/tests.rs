@@ -800,6 +800,33 @@ fn test_parse_bubble_chart_with_config() {
 }
 
 #[test]
+fn test_project_bubble_chart_scalars() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+            <c:chart>
+                <c:plotArea>
+                    <c:bubbleChart>
+                        <c:bubbleScale val="150"/>
+                        <c:bubble3D val="1"/>
+                        <c:showNegBubbles val="0"/>
+                        <c:sizeRepresents val="w"/>
+                        <c:ser>
+                            <c:idx val="0"/>
+                        </c:ser>
+                    </c:bubbleChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+
+    assert_eq!(spec.bubble_scale, Some(150));
+    assert_eq!(spec.bubble_3d_effect, Some(true));
+    assert_eq!(spec.show_neg_bubbles, Some(false));
+    assert_eq!(spec.size_represents.as_deref(), Some("w"));
+}
+
+#[test]
 fn test_parse_view_3d() {
     let xml = br#"<?xml version="1.0"?>
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">

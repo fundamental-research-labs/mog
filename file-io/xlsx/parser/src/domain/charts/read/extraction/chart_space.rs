@@ -75,15 +75,7 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (i) scalar fields from first chart group's config
     // -------------------------------------------------------------------------
-    let (
-        gap_width,
-        overlap,
-        doughnut_hole_size,
-        first_slice_angle,
-        bubble_scale,
-        split_type,
-        split_value,
-    ) = first_group
+    let scalar_fields = first_group
         .map(|g| extract_scalar_fields_from_config(&g.config))
         .unwrap_or_default();
     let (drop_lines, high_low_lines, series_lines, up_down_bars) = first_group
@@ -242,13 +234,15 @@ pub fn extract_chart_spec_from_chart_space(
         region_map: None,
         display_blanks_as,
         plot_visible_only,
-        gap_width,
-        overlap,
-        doughnut_hole_size,
-        first_slice_angle,
-        bubble_scale,
-        split_type,
-        split_value,
+        gap_width: scalar_fields.gap_width,
+        overlap: scalar_fields.overlap,
+        doughnut_hole_size: scalar_fields.doughnut_hole_size,
+        first_slice_angle: scalar_fields.first_slice_angle,
+        bubble_scale: scalar_fields.bubble_scale,
+        show_neg_bubbles: scalar_fields.show_neg_bubbles,
+        size_represents: scalar_fields.size_represents,
+        split_type: scalar_fields.split_type,
+        split_value: scalar_fields.split_value,
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
@@ -259,7 +253,7 @@ pub fn extract_chart_spec_from_chart_space(
         title_show_shadow: None,
         pivot_options: None,
         bar_shape: None,
-        bubble_3d_effect: None,
+        bubble_3d_effect: scalar_fields.bubble_3d_effect,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
@@ -629,15 +623,19 @@ fn extract_sub_type_from_config(
     }
 }
 
-type ScalarChartFields = (
-    Option<u32>,
-    Option<i32>,
-    Option<u32>,
-    Option<u32>,
-    Option<u32>,
-    Option<String>,
-    Option<f64>,
-);
+#[derive(Default)]
+struct ScalarChartFields {
+    gap_width: Option<u32>,
+    overlap: Option<i32>,
+    doughnut_hole_size: Option<u32>,
+    first_slice_angle: Option<u32>,
+    bubble_scale: Option<u32>,
+    show_neg_bubbles: Option<bool>,
+    size_represents: Option<String>,
+    bubble_3d_effect: Option<bool>,
+    split_type: Option<String>,
+    split_value: Option<f64>,
+}
 
 fn extract_scalar_fields_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
@@ -645,18 +643,43 @@ fn extract_scalar_fields_from_config(
     use ooxml_types::charts::ChartTypeConfig as CTC;
 
     match config {
-        CTC::Bar(c) => (c.gap_width, c.overlap, None, None, None, None, None),
-        CTC::Bar3D(c) => (c.gap_width, None, None, None, None, None, None),
-        CTC::Pie(c) => (None, None, None, c.first_slice_ang, None, None, None),
-        CTC::Pie3D(_) => (None, None, None, None, None, None, None),
-        CTC::Doughnut(c) => (None, None, c.hole_size, c.first_slice_ang, None, None, None),
-        CTC::Bubble(c) => (None, None, None, None, c.bubble_scale, None, None),
+        CTC::Bar(c) => ScalarChartFields {
+            gap_width: c.gap_width,
+            overlap: c.overlap,
+            ..Default::default()
+        },
+        CTC::Bar3D(c) => ScalarChartFields {
+            gap_width: c.gap_width,
+            ..Default::default()
+        },
+        CTC::Pie(c) => ScalarChartFields {
+            first_slice_angle: c.first_slice_ang,
+            ..Default::default()
+        },
+        CTC::Pie3D(_) => ScalarChartFields::default(),
+        CTC::Doughnut(c) => ScalarChartFields {
+            doughnut_hole_size: c.hole_size,
+            first_slice_angle: c.first_slice_ang,
+            ..Default::default()
+        },
+        CTC::Bubble(c) => ScalarChartFields {
+            bubble_scale: c.bubble_scale,
+            show_neg_bubbles: c.show_neg_bubbles,
+            size_represents: c.size_represents.map(|sr| sr.to_ooxml().to_string()),
+            bubble_3d_effect: c.bubble_3d,
+            ..Default::default()
+        },
         CTC::OfPie(c) => {
             let split_type = c.split_type.map(|st| st.to_ooxml().to_string());
             let split_value = c.split_pos;
-            (c.gap_width, None, None, None, None, split_type, split_value)
+            ScalarChartFields {
+                gap_width: c.gap_width,
+                split_type,
+                split_value,
+                ..Default::default()
+            }
         }
-        _ => (None, None, None, None, None, None, None),
+        _ => ScalarChartFields::default(),
     }
 }
 

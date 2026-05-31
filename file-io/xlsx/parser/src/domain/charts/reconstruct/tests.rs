@@ -52,6 +52,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         bar_shape: None,
@@ -135,6 +137,23 @@ fn data_range_chart_reconstructs_series_and_axes() {
     assert!(xml.contains("<c:valAx>"));
     assert!(xml.contains("<c:crossAx val=\"222222222\"/>"));
     assert!(xml.contains("<c:crossAx val=\"111111111\"/>"));
+}
+
+#[test]
+fn bubble_scalars_reconstruct_into_modeled_chart_group() {
+    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
+    spec.bubble_scale = Some(175);
+    spec.show_neg_bubbles = Some(true);
+    spec.size_represents = Some("w".to_string());
+    spec.bubble_3d_effect = Some(true);
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:bubbleChart>"), "{xml}");
+    assert!(xml.contains("<c:bubbleScale val=\"175\"/>"), "{xml}");
+    assert!(xml.contains("<c:showNegBubbles val=\"1\"/>"), "{xml}");
+    assert!(xml.contains("<c:sizeRepresents val=\"w\"/>"), "{xml}");
+    assert!(xml.contains("<c:bubble3D val=\"1\"/>"), "{xml}");
 }
 
 #[test]

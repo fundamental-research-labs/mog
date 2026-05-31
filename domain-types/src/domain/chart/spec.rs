@@ -141,6 +141,10 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bubble_scale: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_neg_bubbles: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub size_represents: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub split_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub split_value: Option<f64>,
@@ -521,6 +525,8 @@ impl ChartSpec {
             doughnut_hole_size: chart_data.doughnut_hole_size,
             first_slice_angle: chart_data.first_slice_angle,
             bubble_scale: chart_data.bubble_scale,
+            show_neg_bubbles: chart_data.show_neg_bubbles,
+            size_represents: chart_data.size_represents.clone(),
             split_type: chart_data.split_type.clone(),
             split_value: chart_data.split_value,
             // Simple config properties
@@ -775,6 +781,8 @@ impl ChartSpec {
             doughnut_hole_size: self.doughnut_hole_size,
             first_slice_angle: self.first_slice_angle,
             bubble_scale: self.bubble_scale,
+            show_neg_bubbles: self.show_neg_bubbles,
+            size_represents: self.size_represents.clone(),
             split_type: self.split_type.clone(),
             split_value: self.split_value,
             // Simple config properties

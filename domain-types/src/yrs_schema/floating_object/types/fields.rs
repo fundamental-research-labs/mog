@@ -106,6 +106,8 @@ pub fn known_fields(object_type: &str) -> (Vec<&'static str>, Vec<&'static str>)
                 "doughnutHoleSize",
                 "firstSliceAngle",
                 "bubbleScale",
+                "showNegBubbles",
+                "sizeRepresents",
                 "splitType",
                 "splitValue",
                 "bubble3dEffect",

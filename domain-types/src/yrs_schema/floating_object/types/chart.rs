@@ -118,6 +118,12 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(v) = d.bubble_scale {
         entries.push(("bubbleScale".into(), Any::Number(v as f64)));
     }
+    if let Some(v) = d.show_neg_bubbles {
+        entries.push(("showNegBubbles".into(), Any::Bool(v)));
+    }
+    if let Some(ref v) = d.size_represents {
+        entries.push(("sizeRepresents".into(), Any::String(Arc::from(v.as_str()))));
+    }
     if let Some(ref v) = d.split_type {
         entries.push(("splitType".into(), Any::String(Arc::from(v.as_str()))));
     }
@@ -316,6 +322,8 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         doughnut_hole_size: read_number(map, txn, "doughnutHoleSize").map(|n| n as u32),
         first_slice_angle: read_number(map, txn, "firstSliceAngle").map(|n| n as u32),
         bubble_scale: read_number(map, txn, "bubbleScale").map(|n| n as u32),
+        show_neg_bubbles: read_bool(map, txn, "showNegBubbles"),
+        size_represents: read_string(map, txn, "sizeRepresents"),
         split_type: read_string(map, txn, "splitType"),
         split_value: read_number(map, txn, "splitValue"),
         category_label_level: read_number(map, txn, "categoryLabelLevel").map(|n| n as u32),

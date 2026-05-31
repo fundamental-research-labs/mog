@@ -14,7 +14,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
-import { RAW_BUBBLE_SIZE_FIELD } from '../../core/chart-ir/fields';
+import { RAW_BUBBLE_SIZE_FIELD, SERIES_FIELD } from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   ExportOptions,
@@ -359,13 +359,14 @@ function extractScatterSeriesData(data: DataRow[], encoding: EncodingSpec): Scat
   const xField = encoding.x?.field;
   const yField = encoding.y?.field;
   const colorField = encoding.color?.field;
+  const seriesField = exportSeriesField(data, colorField);
 
   if (!xField || !yField) {
     throw new Error('Scatter chart requires both x and y fields');
   }
 
-  // If no color encoding, single series
-  if (!colorField) {
+  // If rows carry no series identity, export a single default series.
+  if (!seriesField) {
     const points: XYPoint[] = data.map((row) => ({
       x: Number(row[xField]) || 0,
       y: Number(row[yField]) || 0,
@@ -380,8 +381,8 @@ function extractScatterSeriesData(data: DataRow[], encoding: EncodingSpec): Scat
     ];
   }
 
-  // Group by color field using shared algebra module
-  const groups = groupBy(data, colorField);
+  // Group by color/series field using shared algebra module
+  const groups = groupBy(data, seriesField);
 
   // Convert to series array
   const series: ScatterSeriesData[] = [];
@@ -410,13 +411,14 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
   const yField = encoding.y?.field;
   const sizeField = encoding.size?.field;
   const colorField = encoding.color?.field;
+  const seriesField = exportSeriesField(data, colorField);
 
   if (!xField || !yField) {
     throw new Error('Bubble chart requires both x and y fields');
   }
 
-  // If no color encoding, single series
-  if (!colorField) {
+  // If rows carry no series identity, export a single default series.
+  if (!seriesField) {
     const points: XYPoint[] = data.map((row) => ({
       x: Number(row[xField]) || 0,
       y: Number(row[yField]) || 0,
@@ -432,8 +434,8 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
     ];
   }
 
-  // Group by color field using shared algebra module
-  const groups = groupBy(data, colorField);
+  // Group by color/series field using shared algebra module
+  const groups = groupBy(data, seriesField);
 
   // Convert to series array
   const series: ScatterSeriesData[] = [];
@@ -460,6 +462,11 @@ function bubbleExportSize(row: DataRow, sizeField: string | undefined): number {
   if (Number.isFinite(rawSize)) return rawSize;
   const encodedSize = sizeField ? Number(row[sizeField]) : NaN;
   return Number.isFinite(encodedSize) ? encodedSize : 10;
+}
+
+function exportSeriesField(data: DataRow[], colorField: string | undefined): string | undefined {
+  if (colorField) return colorField;
+  return data.some((row) => row[SERIES_FIELD] !== undefined) ? SERIES_FIELD : undefined;
 }
 
 // =============================================================================

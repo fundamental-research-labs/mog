@@ -10,8 +10,16 @@ function inlineRows(spec: ChartSpec) {
 describe('scatter and bubble OOXML export', () => {
   it('exports bubble scalar settings from ChartSpec config', () => {
     const data: ChartData = {
-      categories: [1],
-      series: [{ name: 'Bubbles', data: [{ x: 1, y: 10, size: 20 }] }],
+      categories: [1, 2],
+      series: [
+        {
+          name: 'Bubbles',
+          data: [
+            { x: 1, y: 30, size: 7 },
+            { x: 2, y: 40, size: 20 },
+          ],
+        },
+      ],
     };
     const config: ChartConfig = {
       type: 'bubble',
@@ -38,6 +46,8 @@ describe('scatter and bubble OOXML export', () => {
     expect(chartXml).toContain('<c:showNegBubbles val="1"/>');
     expect(chartXml).toContain('<c:sizeRepresents val="w"/>');
     expect(chartXml).toContain('<c:bubble3D val="1"/>');
+    expect(chartXml).toContain('<c:v>Bubbles</c:v>');
+    expect(chartXml).toContain('<c:pt idx="0"><c:v>7</c:v></c:pt>');
   });
 
   it('clamps exported bubbleScale to OOXML bounds', () => {

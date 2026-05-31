@@ -154,7 +154,7 @@ function buildAnnotationLayers(
 ): ChartSpec[] {
   return [
     ...buildAnalysisLineLayers(config, encoding),
-    ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding) : []),
+    ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
     ...buildTrendlineLayers(config, data, encoding),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
     ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),

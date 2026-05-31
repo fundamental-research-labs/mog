@@ -293,10 +293,85 @@ export function createConsoleAPI(
           return { row: r.row, col: r.col };
         }
       }
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      const dims = geometry?.getPositionDimensions?.();
+      const snapped = snapCellFromPositionDimensions(dims, docX, docY);
+      if (snapped) return snapped;
     } catch {
       // fall through
     }
     return null;
+  }
+
+  type PositionDimensionsLike = {
+    totalRows?: unknown;
+    totalCols?: unknown;
+    getRowTop?: (row: number) => unknown;
+    getRowHeight?: (row: number) => unknown;
+    getColLeft?: (col: number) => unknown;
+    getColWidth?: (col: number) => unknown;
+  };
+
+  function finiteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function snapAxisFromPositionDimensions(
+    point: number,
+    total: unknown,
+    getStart: ((index: number) => unknown) | undefined,
+    getSize: ((index: number) => unknown) | undefined,
+  ): number | null {
+    const countValue = finiteNumber(total);
+    if (!countValue || countValue <= 0 || typeof getStart !== 'function') return null;
+
+    const count = Math.floor(countValue);
+    const firstStart = finiteNumber(getStart(0));
+    if (firstStart == null) return null;
+    if (point <= firstStart) return 0;
+
+    let lo = 0;
+    let hi = count - 1;
+    let best = 0;
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      const start = finiteNumber(getStart(mid));
+      if (start == null) return null;
+      if (start <= point) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    if (typeof getSize === 'function') {
+      const size = finiteNumber(getSize(best));
+      if (size != null && size <= 0) {
+        return Math.max(0, Math.min(best, count - 1));
+      }
+    }
+    return Math.max(0, Math.min(best, count - 1));
+  }
+
+  function snapCellFromPositionDimensions(
+    dims: PositionDimensionsLike | null | undefined,
+    docX: number,
+    docY: number,
+  ): { row: number; col: number } | null {
+    const row = snapAxisFromPositionDimensions(
+      docY,
+      dims?.totalRows,
+      dims?.getRowTop?.bind(dims),
+      dims?.getRowHeight?.bind(dims),
+    );
+    const col = snapAxisFromPositionDimensions(
+      docX,
+      dims?.totalCols,
+      dims?.getColLeft?.bind(dims),
+      dims?.getColWidth?.bind(dims),
+    );
+    return row == null || col == null ? null : { row, col };
   }
 
   /** Pull a "src"-like field from an arbitrary scene object's data. */

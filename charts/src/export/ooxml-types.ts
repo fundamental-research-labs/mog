@@ -75,6 +75,10 @@ export interface ChartXMLOptions {
   axes?: string[];
   /** Legend configuration */
   legend?: LegendPosition;
+  /** Excel blank-cell plotting mode */
+  displayBlanksAs?: 'gap' | 'zero' | 'span';
+  /** Whether Excel should plot only visible source cells */
+  plotVisibleOnly?: boolean;
 }
 
 /**

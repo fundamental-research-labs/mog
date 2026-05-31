@@ -85,6 +85,8 @@ export function generateLineChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -308,6 +310,8 @@ export function generateStockChartXML(
     title,
     axes,
     legend: { position: 'r' },
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

@@ -36,6 +36,18 @@ export function buildConfigSpec(
     configSpec.overlap = config.overlap;
     hasConfig = true;
   }
+  if (
+    config.displayBlanksAs === 'gap' ||
+    config.displayBlanksAs === 'zero' ||
+    config.displayBlanksAs === 'span'
+  ) {
+    configSpec.displayBlanksAs = config.displayBlanksAs;
+    hasConfig = true;
+  }
+  if (typeof config.plotVisibleOnly === 'boolean') {
+    configSpec.plotVisibleOnly = config.plotVisibleOnly;
+    hasConfig = true;
+  }
 
   const barGeometry = effectiveBarGeometry(config);
   if (barGeometry) {

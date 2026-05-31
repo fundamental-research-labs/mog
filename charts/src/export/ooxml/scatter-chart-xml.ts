@@ -86,6 +86,8 @@ export function generateScatterChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -134,6 +136,8 @@ export function generateBubbleChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

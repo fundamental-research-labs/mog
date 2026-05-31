@@ -41,6 +41,8 @@ export const CHART_NAMESPACES = {
  */
 export function wrapChartXML(content: string, options: ChartXMLOptions): string {
   const { title, axes, legend } = options;
+  const displayBlanksAs = normalizeDisplayBlanksAs(options.displayBlanksAs);
+  const plotVisibleOnly = options.plotVisibleOnly === false ? '0' : '1';
 
   // Generate title XML
   const titleXML = title ? generateChartTitleXML(title) : '';
@@ -68,12 +70,18 @@ export function wrapChartXML(content: string, options: ChartXMLOptions): string 
       ${axesXML}
     </c:plotArea>
     ${legendXML}
-    <c:plotVisOnly val="1"/>
-    <c:dispBlanksAs val="gap"/>
+    <c:plotVisOnly val="${plotVisibleOnly}"/>
+    <c:dispBlanksAs val="${displayBlanksAs}"/>
     <c:showDLblsOverMax val="0"/>
   </c:chart>
   ${generateChartSpaceStyleXML()}
 </c:chartSpace>`;
+}
+
+function normalizeDisplayBlanksAs(
+  value: ChartXMLOptions['displayBlanksAs'],
+): 'gap' | 'zero' | 'span' {
+  return value === 'zero' || value === 'span' ? value : 'gap';
 }
 
 /**
@@ -106,6 +114,8 @@ export function wrapChartXMLFromSpec(content: string, spec: ChartSpec, axes?: st
     title,
     axes: finalAxes,
     legend,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 }
 

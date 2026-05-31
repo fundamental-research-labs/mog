@@ -777,6 +777,10 @@ export interface BarGeometrySpec {
 export interface ConfigSpec {
   /** Stack mode for bar/area charts */
   stack?: StackMode;
+  /** Excel blank-cell plotting mode. */
+  displayBlanksAs?: 'gap' | 'zero' | 'span';
+  /** Whether hidden rows/columns are excluded from chart plots. */
+  plotVisibleOnly?: boolean;
   /** Excel/OOXML bar-category gap width as a percentage of one bar width */
   gapWidth?: number;
   /** Excel/OOXML intra-category series overlap percentage (-100 to 100) */

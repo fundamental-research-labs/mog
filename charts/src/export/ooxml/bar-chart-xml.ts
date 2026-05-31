@@ -81,6 +81,8 @@ export function generateBarChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -324,6 +326,8 @@ export function generateBoxWhiskerChartXML(
   const chartXml = wrapChartXML(chartContent, {
     title,
     axes,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

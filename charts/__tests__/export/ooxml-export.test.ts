@@ -168,6 +168,43 @@ describe('toOOXML', () => {
 
       expect(result.chartXml).toContain('<c:smooth val="1"/>');
     });
+
+    it('exports chart-level blank and hidden-cell settings from configToSpec', () => {
+      const data: ChartData = {
+        categories: ['A', 'B', 'C'],
+        series: [
+          {
+            name: 'Series 1',
+            data: [
+              { x: 'A', y: 10 },
+              { x: 'B', y: 0, valueState: 'blank' },
+              { x: 'C', y: 30 },
+            ],
+          },
+        ],
+      };
+      const config: StoredChartConfig = {
+        id: 'blank-export-test',
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 8,
+        height: 5,
+        displayBlanksAs: 'span',
+        plotVisibleOnly: false,
+      };
+
+      const spec = configToSpec(config, data);
+      const rows = chartDataToRows(data, config);
+      const result = toOOXML(spec, rows);
+
+      expect(spec.config).toMatchObject({
+        displayBlanksAs: 'span',
+        plotVisibleOnly: false,
+      });
+      expect(result.chartXml).toContain('<c:plotVisOnly val="0"/>');
+      expect(result.chartXml).toContain('<c:dispBlanksAs val="span"/>');
+    });
   });
 
   describe('pie chart', () => {

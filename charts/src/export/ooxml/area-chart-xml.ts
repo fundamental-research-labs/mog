@@ -78,6 +78,8 @@ export function generateAreaChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -213,6 +215,8 @@ export function generateRadarChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

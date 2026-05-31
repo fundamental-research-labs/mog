@@ -1,8 +1,10 @@
 use cell_types::{CellId, SheetId};
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::identity::GridIndex;
+use compute_document::schema::KEY_FORMULA;
+use compute_parser::{ASTNode, FormulaSource};
 use domain_types::domain::hyperlink::Hyperlink;
-use yrs::{Doc, Map, MapRef, Out, Transact};
+use yrs::{Any, Doc, Map, MapRef, Out, Transact};
 
 use crate::range_manager::pos_to_a1;
 use crate::storage::infra::grid_helpers::get_cells_map;
@@ -31,7 +33,7 @@ pub fn get_hyperlink(
         _ => return None,
     };
 
-    read_hyperlink_url(&txn, &cell_map)
+    read_hyperlink_url(&txn, &cell_map).or_else(|| read_hyperlink_formula_url(&txn, &cell_map))
 }
 
 /// Get the full hyperlink metadata for a cell at the given position.
@@ -59,7 +61,13 @@ pub fn get_hyperlink_full(
         _ => return None,
     };
 
-    decode_full_hyperlink(&txn, &cell_map, String::new())
+    decode_full_hyperlink(&txn, &cell_map, String::new()).or_else(|| {
+        read_hyperlink_formula_url(&txn, &cell_map).map(|url| Hyperlink {
+            cell_ref: String::new(),
+            target: Some(url),
+            ..Default::default()
+        })
+    })
 }
 
 /// Batch-read all cell-level hyperlinks for a sheet in a single transaction.
@@ -99,4 +107,57 @@ pub fn get_all_hyperlinks(
 
     result.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cell_ref.cmp(&b.1.cell_ref)));
     result.into_iter().map(|(_, h)| h).collect()
+}
+
+fn read_hyperlink_formula_url<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef) -> Option<String> {
+    let formula = match cell_map.get(txn, KEY_FORMULA) {
+        Some(Out::Any(Any::String(formula))) => formula,
+        _ => return None,
+    };
+
+    hyperlink_formula_url(formula.as_ref())
+}
+
+fn hyperlink_formula_url(formula: &str) -> Option<String> {
+    let formula = formula.trim();
+    if formula.is_empty() {
+        return None;
+    }
+
+    let parsed = FormulaSource::parse(formula);
+    let ASTNode::Function { name, args } = parsed.ast else {
+        return None;
+    };
+
+    if !name.eq_ignore_ascii_case("HYPERLINK") {
+        return None;
+    }
+
+    match args.first() {
+        Some(ASTNode::Text(url)) => Some(url.clone()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod formula_tests {
+    use super::hyperlink_formula_url;
+
+    #[test]
+    fn extracts_literal_hyperlink_function_url() {
+        assert_eq!(
+            hyperlink_formula_url(r#"HYPERLINK("https://example.com","Example")"#),
+            Some("https://example.com".to_string())
+        );
+        assert_eq!(
+            hyperlink_formula_url(r#"=hyperlink("https://example.com")"#),
+            Some("https://example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_non_literal_or_non_hyperlink_formulas() {
+        assert_eq!(hyperlink_formula_url(r#""Example""#), None);
+        assert_eq!(hyperlink_formula_url(r#"HYPERLINK(A1,"Example")"#), None);
+    }
 }

@@ -48,6 +48,19 @@ interface FilterHeaderInfoRange {
   endCol: number;
 }
 
+function rangesEqual(
+  a: FilterHeaderInfoRange | null | undefined,
+  b: FilterHeaderInfoRange,
+): boolean {
+  if (!a) return false;
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol
+  );
+}
+
 function parseTableRange(table: TableInfo): FilterHeaderInfoRange | null {
   const a1Range = table.range.replace(/\$/g, '').split('!').pop() ?? table.range;
   const match = a1Range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
@@ -82,6 +95,7 @@ export function useFilterHeaderCache({
 
   // Cache: Map<"row,col", FilterHeaderInfo> for O(1) sync lookups
   const cacheRef = useRef(new Map<string, FilterHeaderInfo>());
+  const tableRangeCacheRef = useRef(new Map<string, FilterHeaderInfoRange>());
 
   // Refresh cache: fetch filter details via ONE API, build lookup map
   const refresh = useCallback(async () => {
@@ -96,7 +110,18 @@ export function useFilterHeaderCache({
     try {
       const ws = wb.getSheetById(activeSheetId);
       const [filterDetails, tables] = await Promise.all([ws.filters.list(), ws.tables.list()]);
-      const tablesById = new Map(tables.map((table) => [table.id, table]));
+      const previousTableRanges = tableRangeCacheRef.current;
+      const tablesById = new Map<string, TableInfo>();
+      const tableRanges = new Map<string, FilterHeaderInfoRange>();
+      for (const table of tables) {
+        tablesById.set(table.id, table);
+        tablesById.set(table.name, table);
+        const range = parseTableRange(table);
+        if (!range) continue;
+        tableRanges.set(table.id, range);
+        tableRanges.set(table.name, range);
+      }
+      tableRangeCacheRef.current = tableRanges;
 
       if (filterDetails.length === 0) {
         cacheRef.current = newCache;
@@ -108,7 +133,13 @@ export function useFilterHeaderCache({
         if (detail.filterKind === 'advancedFilter') continue;
         const owningTable =
           (detail.tableId ? tablesById.get(detail.tableId) : undefined) ??
-          tables.find((table) => tableContainsFilterRange(table, detail.range));
+          tables.find((table) => tableContainsFilterRange(table, detail.range)) ??
+          tables.find((table) =>
+            rangesEqual(
+              previousTableRanges.get(table.id) ?? previousTableRanges.get(table.name),
+              detail.range,
+            ),
+          );
         if (owningTable && (!owningTable.hasHeaderRow || !owningTable.showFilterButtons)) {
           continue;
         }
@@ -145,6 +176,39 @@ export function useFilterHeaderCache({
     onCacheUpdate?.();
   }, [wb, activeSheetId, onCacheUpdate]);
 
+  const applyTableRangeMove = useCallback(
+    (event: unknown): boolean => {
+      const tableEvent = event as
+        | {
+            tableId?: string;
+            changes?: { range?: FilterHeaderInfoRange };
+          }
+        | undefined;
+      const tableId = tableEvent?.tableId;
+      const nextRange = tableEvent?.changes?.range;
+      if (!tableId || !nextRange) return false;
+
+      const previousRange = tableRangeCacheRef.current.get(tableId);
+      if (!previousRange) return false;
+
+      const currentCache = cacheRef.current;
+      const newCache = new Map(currentCache);
+      for (let col = previousRange.startCol; col <= previousRange.endCol; col++) {
+        const info = currentCache.get(`${previousRange.startRow},${col}`);
+        if (!info) continue;
+        newCache.delete(`${previousRange.startRow},${col}`);
+        const nextCol = nextRange.startCol + (col - previousRange.startCol);
+        newCache.set(`${nextRange.startRow},${nextCol}`, info);
+      }
+
+      cacheRef.current = newCache;
+      tableRangeCacheRef.current.set(tableId, nextRange);
+      onCacheUpdate?.();
+      return true;
+    },
+    [onCacheUpdate],
+  );
+
   // Fetch on mount and when sheetId changes
   useEffect(() => {
     void refresh();
@@ -158,6 +222,10 @@ export function useFilterHeaderCache({
     const handler = () => {
       void refresh();
     };
+    const tableUpdatedHandler = (event: unknown) => {
+      applyTableRangeMove(event);
+      void refresh();
+    };
 
     const unsubscribers: Array<() => void> = [];
     unsubscribers.push(ws.on('filter:created', handler));
@@ -166,7 +234,7 @@ export function useFilterHeaderCache({
     unsubscribers.push(ws.on('filter:cleared', handler));
     unsubscribers.push(ws.on('filter:applied', handler));
     unsubscribers.push(ws.on('table:created', handler));
-    unsubscribers.push(ws.on('table:updated', handler));
+    unsubscribers.push(ws.on('table:updated', tableUpdatedHandler));
     unsubscribers.push(ws.on('table:deleted', handler));
     unsubscribers.push(ws.on('table:resized', handler));
     unsubscribers.push(ws.on('table:column-deleted', handler));
@@ -178,7 +246,7 @@ export function useFilterHeaderCache({
         unsub();
       }
     };
-  }, [wb, activeSheetId, refresh]);
+  }, [wb, activeSheetId, refresh, applyTableRangeMove]);
 
   // Sync lookup callback matching CellDataSource.getFilterHeaderInfo signature
   const getFilterHeaderInfo = useCallback(

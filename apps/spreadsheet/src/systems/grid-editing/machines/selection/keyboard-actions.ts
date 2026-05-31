@@ -35,10 +35,13 @@ import {
   getMovingEdge,
   moveCellSkipHidden,
   normalizeRange,
+  rangeFromAnchorAndCell,
+  singleCellRange,
 } from '../../../shared/types';
 import { getNextCellInSelection, hasCyclableStops } from './cycle';
 import {
   buildExtendUpdate,
+  computeDirection,
   getEffectiveRanges,
   getSelectAllRange,
   moveInAdditive,
@@ -77,6 +80,22 @@ const moveActiveCell = assign(
     // Excel's additive arrow always moves the active cell to a single cell,
     // regardless of pending range size.
     if (isMultiCellSelection && !context.modes.additive) {
+      const hasDistinctAnchor =
+        context.anchor !== null &&
+        (context.activeCell.row !== context.anchor.row ||
+          context.activeCell.col !== context.anchor.col);
+      if (hasDistinctAnchor) {
+        const stepped = moveCellSkipHidden(
+          context.activeCell,
+          event.direction,
+          1,
+          context.isRowHidden,
+          context.isColHidden,
+        );
+        const newCell = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+        return moveTo(newCell);
+      }
+
       let newCell: { row: number; col: number };
       const normalizedRange = normalizeRange(lastRange);
 
@@ -151,7 +170,64 @@ const extendSelection = assign(
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.extend && !event.shiftKey ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
+  },
+);
+
+/**
+ * Move the picked formula reference without moving the cell being edited.
+ *
+ * Formula point-mode visually moves the highlighted reference range (B1, C1,
+ * etc.) while the dark active cell and typing destination remain the original
+ * editing cell. The normal moveActiveCell action cannot be reused here because
+ * it replaces activeCell with the referenced cell.
+ */
+const moveFormulaRange = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'KEY_ARROW') return {};
+    const currentFormulaCell = context.anchor ?? context.activeCell;
+    const stepped = moveCellSkipHidden(
+      currentFormulaCell,
+      event.direction,
+      1,
+      context.isRowHidden,
+      context.isColHidden,
+    );
+    const newCell = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+    return {
+      pendingRange: singleCellRange(newCell),
+      committedRanges: [],
+      anchor: newCell,
+      direction: 'down-right' as const,
+      tabOriginCol: null,
+    };
+  },
+);
+
+/**
+ * Extend the picked formula range while preserving the editing active cell.
+ */
+const extendFormulaRange = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'KEY_ARROW') return {};
+    const anchor = context.anchor ?? context.activeCell;
+    const movingEdge = getMovingEdge(context.pendingRange, anchor);
+    const stepped = moveCellSkipHidden(
+      movingEdge,
+      event.direction,
+      1,
+      context.isRowHidden,
+      context.isColHidden,
+    );
+    const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+    return {
+      pendingRange: rangeFromAnchorAndCell(anchor, newEnd),
+      committedRanges: [],
+      anchor,
+      direction: computeDirection(anchor, newEnd),
+      tabOriginCol: null,
+    };
   },
 );
 
@@ -536,13 +612,15 @@ const tabNavigate = assign(
  * The handler uses Cells.getCurrentRegion() from the kernel and UIStore's CtrlAStateSlice
  * for the multi-press timing logic.
  */
-const selectAll = assign(() => {
+const selectAll = assign(({ context }: { context: SelectionContext }) => {
   const range = getSelectAllRange();
+  const activeCell = context.activeCell;
+  const anchor = context.anchor ?? activeCell;
   return {
     pendingRange: range,
     committedRanges: [],
-    activeCell: { row: range.startRow, col: range.startCol },
-    anchor: { row: range.startRow, col: range.startCol },
+    activeCell,
+    anchor,
     tabOriginCol: null, // Clear tab-enter tracking
   };
 });
@@ -554,6 +632,8 @@ const selectAll = assign(() => {
 export const keyboardActions = {
   moveActiveCell,
   extendSelection,
+  moveFormulaRange,
+  extendFormulaRange,
   // End-mode fallbacks: KEY_ARROW under modes.end.
   endModeMoveToEdge,
   endModeExtendToEdge,

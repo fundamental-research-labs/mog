@@ -11,6 +11,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 import type { ObjectBounds } from '@mog-sdk/contracts/kernel';
+import type { FloatingObject } from '@mog-sdk/contracts/floating-objects';
 import type { TextWarpPreset } from '@mog-sdk/contracts/text-effects';
 
 import type { WorksheetObjectsImpl } from '../objects';
@@ -30,6 +31,10 @@ export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection 
 
   async getInfo(id: string): Promise<FloatingObjectInfo | null> {
     return this.objectsImpl.get(id);
+  }
+
+  async getFullObject(id: string): Promise<FloatingObject | null> {
+    return this.objectsImpl.getFullObject(id);
   }
 
   async list(): Promise<FloatingObjectHandle[]> {

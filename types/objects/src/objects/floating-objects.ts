@@ -516,6 +516,23 @@ export interface EquationObject extends FloatingObjectBase {
 }
 
 // ============================================================================
+// Form Control Object
+// ============================================================================
+
+/**
+ * Form control floating object.
+ *
+ * The visual control is rendered by the DOM overlay layer from the form-control
+ * model. This object keeps the shared floating-object storage/projection layer
+ * from downgrading form controls to generic shapes.
+ */
+export interface FormControlObject extends FloatingObjectBase {
+  type: 'formControl';
+  /** Form control subtype, e.g. checkbox or comboBox. */
+  controlType?: string;
+}
+
+// ============================================================================
 // diagram Object
 // ============================================================================
 
@@ -591,6 +608,7 @@ export type FloatingObject =
   | ChartObject
   | DrawingObject
   | EquationObject
+  | FormControlObject
   | DiagramObject
   | OleObjectObject;
 

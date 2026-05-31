@@ -543,6 +543,24 @@ impl YrsComputeEngine {
         Ok((serialize_multi_viewport_patches(&[]), result))
     }
 
+    /// Set the totals-row function metadata for a table column.
+    #[bridge::write(scope = "workbook")]
+    pub fn set_table_totals_function(
+        &mut self,
+        table_name: &str,
+        column_id: &str,
+        func: compute_table::types::TotalsFunction,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let result = services::tables::set_table_totals_function(
+            &mut self.stores,
+            &mut self.mirror,
+            table_name,
+            column_id,
+            func,
+        )?;
+        Ok((serialize_multi_viewport_patches(&[]), result))
+    }
+
     /// Add a data row to a table. Returns the absolute row index where a worksheet
     /// row should be inserted (encoded in MutationResult.data).
     #[bridge::write(scope = "workbook")]

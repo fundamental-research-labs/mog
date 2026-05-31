@@ -12,6 +12,7 @@ function createBridge(overrides?: Partial<Record<string, jest.Mock>>) {
     registerViewportRegion: jest.fn().mockResolvedValue(undefined),
     unregisterViewportRegion: jest.fn().mockResolvedValue(undefined),
     refreshViewportForRegion: jest.fn().mockResolvedValue(undefined),
+    updateViewportVisibleWindow: jest.fn(),
     resetSheetViewportRegions: jest.fn().mockResolvedValue(undefined),
     setRenderScheduler: jest.fn(),
     subscribeToViewportEvents: jest.fn(() => jest.fn()),
@@ -66,5 +67,19 @@ describe('ViewportRegionImpl async cleanup ordering', () => {
     resolveRegistration();
     await flushMicrotasks();
     expect(bridge.unregisterViewportRegion).toHaveBeenCalledTimes(1);
+  });
+
+  it('mirrors visible bounds synchronously when bounds update', () => {
+    const bridge = createBridge();
+    const region = new ViewportRegionImpl('sheet-1' as any, bounds, bridge, 'vp-1');
+    const nextBounds = { startRow: 0, startCol: 25, endRow: 10, endCol: 50 };
+
+    region.updateBounds(nextBounds);
+
+    expect(bridge.updateViewportVisibleWindow).toHaveBeenCalledWith(
+      'vp-1',
+      'sheet-1',
+      nextBounds,
+    );
   });
 });

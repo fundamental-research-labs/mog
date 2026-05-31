@@ -131,6 +131,12 @@ export const RIBBON_SHORTCUTS: KeyboardShortcut[] = [
     description: 'Switch to View tab',
     tabId: 'view',
   }),
+  ribbonTabShortcut({
+    id: 'ribbon.switch-help',
+    bindings: altBinding('KeyX'),
+    description: 'Switch to Help tab',
+    tabId: 'help',
+  }),
   // Contextual two-key chords (J → table-design / chart-design).
   ribbonTabShortcut({
     id: 'ribbon.switch-table-design',

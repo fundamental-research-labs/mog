@@ -17,12 +17,12 @@ describe('unsupported macro ribbon affordances', () => {
 });
 
 describe('removed ribbon tabs', () => {
-  test('Automate, Experimental, and Help ribbons are not exported from the toolbar surface', () => {
+  test('Automate and Experimental ribbons are not exported from the toolbar surface', () => {
     const source = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
 
     expect(source).not.toContain('AutomateRibbon');
     expect(source).not.toContain('ExperimentalRibbon');
-    expect(source).not.toContain('HelpRibbon');
+    expect(source).toContain('HelpRibbon');
   });
 
   test('TabbedToolbar does not render removed base ribbons', () => {
@@ -33,7 +33,7 @@ describe('removed ribbon tabs', () => {
 
     expect(source).not.toContain('<AutomateRibbon');
     expect(source).not.toContain('<ExperimentalRibbon');
-    expect(source).not.toContain('<HelpRibbon');
+    expect(source).toContain('<HelpRibbon');
   });
 
   test('ribbon tab keytips do not register removed base tabs', () => {
@@ -44,7 +44,7 @@ describe('removed ribbon tabs', () => {
 
     expect(source).not.toContain("tabId: 'automate'");
     expect(source).not.toContain("tabId: 'experimental'");
-    expect(source).not.toContain("tabId: 'help'");
+    expect(source).toContain("tabId: 'help'");
   });
 });
 

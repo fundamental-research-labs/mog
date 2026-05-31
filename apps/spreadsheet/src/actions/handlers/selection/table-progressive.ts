@@ -16,7 +16,7 @@
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import type { TableInfo } from '@mog-sdk/contracts/api';
 import { getUIStore, handled } from './helpers';
-import { selectCurrentRegion } from './current-region';
+import { cycleCurrentRegionSelection } from './current-region';
 
 // =============================================================================
 // A1 Range Parsing
@@ -214,8 +214,8 @@ export const CYCLE_TABLE_SELECTION: AsyncActionHandler = async (deps) => {
   const table = await ws.tables.getAtCell(activeCell.row, activeCell.col);
 
   if (!table) {
-    // Not in a table - fall back to SELECT_CURRENT_REGION (which handles two-press)
-    return selectCurrentRegion(deps);
+    // Not in a table - fall back to the Ctrl+A current-region cycle.
+    return cycleCurrentRegionSelection(deps);
   }
 
   // Get UIStore for tracking table selection cycle

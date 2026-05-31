@@ -123,4 +123,13 @@ describe('WorkbookCellStylesImpl', () => {
     expect(style?.builtIn).toBe(true);
     expect(format).toEqual(style?.format);
   });
+
+  it('defines Heading 1 with its expected bottom border', () => {
+    const heading1 = getBuiltInStyleById('heading-1');
+
+    expect(heading1?.format.borders?.bottom).toEqual({
+      style: 'thin',
+      color: '#44546a',
+    });
+  });
 });

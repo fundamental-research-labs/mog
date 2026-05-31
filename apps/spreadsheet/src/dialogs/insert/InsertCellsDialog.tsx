@@ -116,12 +116,13 @@ export function InsertCellsDialog() {
 
   const options = mode === 'insert' ? INSERT_OPTIONS : DELETE_OPTIONS;
   const title = mode === 'insert' ? 'Insert' : 'Delete';
+  const dialogId = mode === 'insert' ? 'insert-cells-dialog' : 'delete-cells-dialog';
 
   return (
     <Dialog
       open={isOpen}
       onClose={closeDialog}
-      dialogId="insert-cells-dialog"
+      dialogId={dialogId}
       width={280}
       initialFocusRef={okButtonRef}
       onEnterKeyDown={handleOk}

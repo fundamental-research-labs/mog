@@ -150,7 +150,7 @@ describe('TabContextMenu — workbook structure protection', () => {
 
   it('does NOT disable Protect Sheet when workbook structure is protected', () => {
     render(<TabContextMenu {...defaultProps} isWorkbookStructureProtected={true} />);
-    const protectSheet = findMenuItem('Protect Sheet...');
+    const protectSheet = findMenuItem('Protect Sheet');
     expect(protectSheet).toBeDefined();
     expect(protectSheet!.disabled).toBeFalsy();
   });

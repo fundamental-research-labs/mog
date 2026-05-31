@@ -214,6 +214,13 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     commentActor ? asSelector(commentSelectors.draftContent) : () => [] as RichText,
   );
 
+  const composeCommentType = useSelector(
+    commentActor,
+    commentActor
+      ? asSelector(commentSelectors.composeCommentType)
+      : () => 'threadedComment' as const,
+  );
+
   const editingCommentId = useSelector(
     commentActor,
     commentActor ? asSelector(commentSelectors.editingCommentId) : () => null,
@@ -385,9 +392,13 @@ export function useCommentPopover(): UseCommentPopoverReturn {
       if (!ws) return;
 
       const text = typeof content === 'string' ? content : toPlainText(content);
-      await ws.comments.add(target.row, target.col, text, currentAuthor);
+      if (composeCommentType === 'note') {
+        await ws.comments.addNote(target.row, target.col, { text, author: currentAuthor });
+      } else {
+        await ws.comments.add(target.row, target.col, { text, author: currentAuthor });
+      }
     },
-    [wb, target, currentAuthor],
+    [wb, target, currentAuthor, composeCommentType],
   );
 
   const updateComment = useCallback(

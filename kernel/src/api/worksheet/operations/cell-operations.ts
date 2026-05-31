@@ -257,6 +257,16 @@ export async function getCellIdAt(
 // Cell Write Operations
 // =============================================================================
 
+async function reapplyActiveFiltersAfterWrite(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+): Promise<void> {
+  const activeFilters = await ctx.computeBridge.getActiveFilters(sheetId);
+  for (const filter of activeFilters) {
+    await ctx.computeBridge.applyFilter(sheetId, filter.id);
+  }
+}
+
 /**
  * Set a cell's value.
  *
@@ -299,6 +309,7 @@ export async function setCell(
   // locale-aware date format inference (e.g. "3/15/2024" → number value +
   // M/d/yyyy format applied atomically inside the mutation pipeline).
   await ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }]);
+  await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
 /**
@@ -504,6 +515,7 @@ export async function setCells(
         parts.day,
       );
     }
+    await reapplyActiveFiltersAfterWrite(ctx, sheetId);
   }
 
   // --- Build result ---
@@ -544,6 +556,7 @@ export async function setDateValue(
   date: { year: number; month: number; day: number },
 ): Promise<void> {
   await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day);
+  await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
 /**
@@ -565,6 +578,7 @@ export async function setTimeValue(
   time: { hours: number; minutes: number; seconds: number },
 ): Promise<void> {
   await ctx.computeBridge.setTimeValue(sheetId, row, col, time.hours, time.minutes, time.seconds);
+  await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
 // =============================================================================

@@ -223,6 +223,80 @@ describe('DebugRecorder', () => {
     expect(parsed.devtools.logs.length).toBe(1);
   });
 
+  test('serializes viewport buffers from the live bridge accessor', () => {
+    let currentCell = { row: 0, col: 0 };
+    const buffer = {
+      hasBuffer: () => true,
+      getStartRow: () => 0,
+      getStartCol: () => 0,
+      getRows: () => 5,
+      getCols: () => 5,
+      getCellCount: () => 25,
+      getGeneration: () => 7,
+    };
+    const accessor = {
+      moveTo: (row: number, col: number) => {
+        currentCell = { row, col };
+        return row >= 0 && row < 5 && col >= 0 && col < 5;
+      },
+      get displayText() {
+        return `R${currentCell.row}C${currentCell.col}`;
+      },
+      get valueType() {
+        return 1;
+      },
+      get format() {
+        return {
+          fontWeight: 'bold',
+          row: currentCell.row,
+          col: currentCell.col,
+        };
+      },
+      getBgColorOverride: () => null,
+      getFontColorOverride: () => null,
+    };
+    const bridge = {
+      getPerViewportStates: () => new Map([['main:sheet-1', { lastVisibleBounds: {} }]]),
+      getViewportBuffer: (viewportId: string) =>
+        viewportId === 'main:sheet-1' ? buffer : undefined,
+      getAccessorForViewport: () => accessor,
+    };
+    const win = (globalThis as any).window;
+    win.__SHELL__ = {
+      store: { getState: () => ({ activeFileId: 'file-1' }) },
+      documentManager: {
+        getDocument: () => ({ context: { computeBridge: bridge } }),
+      },
+    };
+    win.__COORDINATOR__ = {
+      grid: {
+        access: {
+          accessors: {
+            selection: { getActiveCell: () => ({ row: 2, col: 2 }) },
+          },
+        },
+      },
+    };
+
+    const json = api.toJSON() as any;
+    const viewport = json.viewportBuffers['main:sheet-1'];
+
+    expect(viewport.bounds).toEqual({ startRow: 0, startCol: 0, rows: 5, cols: 5 });
+    expect(viewport.cellCount).toBe(25);
+    expect(viewport.generation).toBe(7);
+    expect(viewport.sampleCells.length).toBe(25);
+    expect(viewport.sampleCells[12]).toEqual({
+      row: 2,
+      col: 2,
+      displayText: 'R2C2',
+      valueType: 1,
+      format: { fontWeight: 'bold', row: 2, col: 2 },
+    });
+    expect(viewport.sampleCells.every((cell: any) => cell.format?.fontWeight === 'bold')).toBe(
+      true,
+    );
+  });
+
   test('events are scoped to the recording window (pre-recording events excluded)', () => {
     // Push events BEFORE recording starts
     store.push({

@@ -11,12 +11,15 @@
  * composed text and validates.
  */
 import { createGridSimulator, type GridSimulator } from '../grid-simulator';
+import { createActor } from 'xstate';
+import { editorMachine } from '../../machines/grid-editor-machine';
 
 describe('BLUR machine event', () => {
-  let sim: GridSimulator;
+  let sim: GridSimulator | undefined;
 
   afterEach(() => {
-    sim.destroy();
+    sim?.destroy();
+    sim = undefined;
   });
 
   it('BLUR during editing does not transition (blur is a side effect)', async () => {
@@ -65,14 +68,6 @@ describe('BLUR machine event', () => {
     editorActor.send({ type: 'BLUR' });
     await sim.flush();
 
-    // Coordinator does NOT auto-complete from imeComposing→validating
-    // (wasEditing checks editing/formulaEditing only); machine reaches
-    // validating, then we complete the cycle manually for the test.
-    expect(editorActor.getSnapshot().value).toBe('validating');
-
-    editorActor.send({ type: 'VALIDATION_SUCCESS' });
-    editorActor.send({ type: 'COMMIT_COMPLETE' });
-    await sim.flush();
     expect(editorActor.getSnapshot().value).toBe('inactive');
   });
 
@@ -89,26 +84,23 @@ describe('BLUR machine event', () => {
   });
 
   it('BLUR in error state stays in error', async () => {
-    sim = createGridSimulator({ activeCell: { row: 0, col: 0 }, sheetId: 'sheet-1' });
-
-    sim.startEditing('invalid');
-    const editorActor = sim.system.access.actors.editor;
-
-    // Reach error state via IME path (coordinator doesn't auto-complete)
-    editorActor.send({ type: 'IME_START' });
-    editorActor.send({ type: 'IME_UPDATE', compositionText: 'x' });
-    editorActor.send({ type: 'BLUR' });
-    await sim.flush();
-    expect(editorActor.getSnapshot().value).toBe('validating');
-
+    const editorActor = createActor(editorMachine);
+    editorActor.start();
+    editorActor.send({
+      type: 'START_EDITING',
+      cell: { row: 0, col: 0 },
+      sheetId: 'sheet-1',
+      initialValue: 'invalid',
+      entryMode: 'typing',
+    });
+    editorActor.send({ type: 'COMMIT', direction: 'none' });
     editorActor.send({ type: 'VALIDATION_ERROR', message: 'test error' });
-    await sim.flush();
     expect(editorActor.getSnapshot().value).toBe('error');
 
     // BLUR while in error state should stay in error
     editorActor.send({ type: 'BLUR' });
-    await sim.flush();
 
     expect(editorActor.getSnapshot().value).toBe('error');
+    editorActor.stop();
   });
 });

@@ -476,10 +476,12 @@ export function createProjectService(deps: ProjectServiceDeps) {
   function switchToFile(fileId: string): void {
     const state = getState();
     const file = state.files[fileId];
-    if (file) {
-      state.setActiveFileId(fileId);
-      platform.shell.setWindowTitle(`${file.displayName} - Spreadsheet OS`);
-    }
+    const hasOpenDocument =
+      state.openFileIds.includes(fileId) && documentManager.getDocument(fileId) != null;
+    if (!file && !hasOpenDocument) return;
+
+    state.setActiveFileId(fileId);
+    platform.shell.setWindowTitle(`${file?.displayName ?? fileId} - Spreadsheet OS`);
   }
 
   /**

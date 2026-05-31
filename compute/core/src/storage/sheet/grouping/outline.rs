@@ -5,6 +5,14 @@ use super::queries::get_groups;
 use super::types::{GroupAxis, GroupDefinition, OutlineLevel};
 use super::yrs_io::get_sheet_grouping_config;
 
+fn summary_index(start: u32, end: u32, summary_after: bool) -> Option<u32> {
+    if summary_after {
+        end.checked_add(1)
+    } else {
+        start.checked_sub(1)
+    }
+}
+
 pub fn get_row_outline_levels(
     doc: &Doc,
     sheets: &MapRef,
@@ -21,18 +29,15 @@ pub fn get_row_outline_levels(
             .iter()
             .filter(|g| row >= g.start && row <= g.end)
             .collect();
-        let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
-        let visible = !containing.iter().any(|g| {
-            if !g.collapsed {
-                return false;
-            }
-            let is_sum = if sb { row == g.end } else { row == g.start };
-            !is_sum
-        });
-        let is_summary = containing
+        let summary_groups: Vec<&GroupDefinition> = groups
             .iter()
-            .any(|g| if sb { row == g.end } else { row == g.start });
+            .filter(|g| summary_index(g.start, g.end, sb) == Some(row))
+            .collect();
+        let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
+        let visible = !containing.iter().any(|g| g.collapsed);
+        let is_summary = !summary_groups.is_empty();
         let mut sc = containing;
+        sc.extend(summary_groups);
         sc.sort_by(|a, b| b.level.cmp(&a.level));
         let group_ids = sc.iter().map(|g| g.id.clone()).collect();
         result.push(OutlineLevel {
@@ -62,18 +67,15 @@ pub fn get_column_outline_levels(
             .iter()
             .filter(|g| col >= g.start && col <= g.end)
             .collect();
-        let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
-        let visible = !containing.iter().any(|g| {
-            if !g.collapsed {
-                return false;
-            }
-            let is_sum = if sr { col == g.end } else { col == g.start };
-            !is_sum
-        });
-        let is_summary = containing
+        let summary_groups: Vec<&GroupDefinition> = groups
             .iter()
-            .any(|g| if sr { col == g.end } else { col == g.start });
+            .filter(|g| summary_index(g.start, g.end, sr) == Some(col))
+            .collect();
+        let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
+        let visible = !containing.iter().any(|g| g.collapsed);
+        let is_summary = !summary_groups.is_empty();
         let mut sc = containing;
+        sc.extend(summary_groups);
         sc.sort_by(|a, b| b.level.cmp(&a.level));
         let group_ids = sc.iter().map(|g| g.id.clone()).collect();
         result.push(OutlineLevel {

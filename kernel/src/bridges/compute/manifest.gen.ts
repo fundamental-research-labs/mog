@@ -411,6 +411,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   setTableBoolOption: 'write',
   setTableAutoExpand: 'write',
   setTableAutoCalculatedColumns: 'write',
+  setTableTotalsFunction: 'write',
   addTableDataRow: 'write',
   removeTableDataRow: 'write',
   addTableColumn: 'write',

@@ -356,6 +356,7 @@ export type EditorEvent =
   | { type: 'COMMIT_COMPLETE' }
   | { type: 'COMMIT_REJECTED'; reason: string }
   | { type: 'RETRY' }
+  | { type: 'RETRY_SELECT_ALL' }
   | { type: 'REMOTE_CELL_CHANGED'; cell: CellCoord; newValue: unknown }
   | { type: 'REMOTE_CELL_DELETED'; cell: CellCoord }
   | { type: 'REMOTE_SHEET_DELETED'; sheetId: string }
@@ -394,7 +395,7 @@ export type EditorEvent =
   | { type: 'SHOW_SUGGESTIONS' }
   | { type: 'HIDE_SUGGESTIONS' }
   | { type: 'SELECT_SUGGESTION'; index: number }
-  | { type: 'ACCEPT_SUGGESTION'; name: string }
+  | { type: 'ACCEPT_SUGGESTION'; name: string; appendOpeningParen?: boolean }
   | { type: 'NAVIGATE_SUGGESTION'; direction: 'up' | 'down' }
   // Toggle between Enter Mode and Edit Mode
   | { type: 'TOGGLE_EDIT_MODE' }

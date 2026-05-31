@@ -302,6 +302,29 @@ function downloadPdf(blob: Blob, filename: string): void {
   URL.revokeObjectURL(href);
 }
 
+async function waitForExportingStatePaint(): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function getPdfExportErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    if (err.message.includes('TauriFontBridge') && err.message.includes('Tauri runtime')) {
+      return 'PDF export is unavailable in this browser environment.';
+    }
+    return err.message;
+  }
+  return 'PDF export failed';
+}
+
 async function getPdfExportSheetName(wb: Workbook, exportSheetIds: string[]): Promise<string> {
   const firstSheetId = exportSheetIds[0];
   if (!firstSheetId) return 'Sheet';
@@ -333,6 +356,8 @@ export function usePdfExport(
       onExportStart?.();
 
       try {
+        await waitForExportingStatePaint();
+
         // Pre-fetch row heights and column widths for sync provider lookups.
         // ws.getUsedRange() returns a structured `CellRange | null` —
         // 0-based fields go straight into the batch APIs.
@@ -415,7 +440,7 @@ export function usePdfExport(
         onExportComplete?.(result);
         return true;
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'PDF export failed';
+        const errorMsg = getPdfExportErrorMessage(err);
         setState((prev) => ({ ...prev, isExporting: false, error: errorMsg, message: errorMsg }));
         onExportError?.(errorMsg);
         return false;

@@ -89,7 +89,7 @@ pub(super) fn replace_sheet_name_in_template(
 }
 
 /// Replace sheet name in an A1 formula string.
-pub(super) fn replace_sheet_name_in_a1_formula(
+pub(crate) fn replace_sheet_name_in_a1_formula(
     formula: &str,
     old_name: &str,
     new_name: &str,

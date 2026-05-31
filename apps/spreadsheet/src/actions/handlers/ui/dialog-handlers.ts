@@ -943,6 +943,7 @@ export const CLOSE_PRINT_PDF_DIALOG: ActionHandler = (deps): ActionResult => {
  * - headings: boolean
  */
 type PageSetupPayload = Partial<PrintSettings> & {
+  printArea?: string | null;
   printTitles?: PrintTitles;
 };
 
@@ -966,8 +967,15 @@ export const APPLY_PAGE_SETUP: AsyncActionHandler = async (
   }
 
   const ws = deps.workbook.getSheetById(activeSheetId);
-  const { printTitles, ...settings } = payload;
+  const { printArea, printTitles, ...settings } = payload;
   await ws.print.setSettings(settings);
+  if (printArea !== undefined) {
+    if (printArea === null || printArea.trim() === '') {
+      await ws.print.clearArea();
+    } else {
+      await ws.print.setArea(printArea.trim());
+    }
+  }
   if (printTitles) {
     await ws.print.clearPrintTitles();
     if (printTitles.repeatRows) {

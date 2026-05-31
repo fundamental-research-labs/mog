@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::storage::engine::mutation::CellInput;
+use formula_types::WorkbookLookup;
 
 /// Trust level for value-typed `set_cells_raw` writes.
 ///
@@ -912,6 +913,34 @@ impl ComputeCore {
         }
     }
 
+    /// Regenerate display formula text while a sheet is still present in the
+    /// mirror, but render references to that sheet as a deleted-sheet `#REF!`
+    /// prefix. This preserves the referenced row/column body (`#REF!$A$1`)
+    /// before the mirror loses the deleted sheet's position mappings.
+    pub(crate) fn regenerate_formula_strings_for_sheet_delete(
+        &mut self,
+        mirror: &CellMirror,
+        deleted_sheet_id: &SheetId,
+    ) {
+        self.formula_strings.clear();
+        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        for sheet_id in sheet_ids {
+            if sheet_id == *deleted_sheet_id {
+                continue;
+            }
+            if let Some(sheet) = mirror.get_sheet(&sheet_id) {
+                let lookup = DeletedSheetDisplayLookup::new(mirror, sheet_id, *deleted_sheet_id);
+                for (cell_id, entry) in sheet.cells_iter() {
+                    if let Some(formula) = &entry.formula {
+                        let a1 = compute_parser::to_a1_string(formula, &lookup);
+                        self.formula_strings.insert(*cell_id, a1.clone());
+                        self.cell_formula_text.insert(*cell_id, a1);
+                    }
+                }
+            }
+        }
+    }
+
     /// Rebuild the dependency graph from the cached ASTs.
     ///
     /// Clears the graph and re-extracts dependencies from all cached ASTs.
@@ -987,5 +1016,45 @@ impl ComputeCore {
         for cell_id in volatile_cells {
             self.graph.mark_volatile(&cell_id);
         }
+    }
+}
+
+struct DeletedSheetDisplayLookup<'a> {
+    inner: MirrorPositionLookup<'a>,
+    deleted_sheet_id: SheetId,
+}
+
+impl<'a> DeletedSheetDisplayLookup<'a> {
+    fn new(mirror: &'a CellMirror, formula_sheet: SheetId, deleted_sheet_id: SheetId) -> Self {
+        Self {
+            inner: MirrorPositionLookup::new(mirror, formula_sheet),
+            deleted_sheet_id,
+        }
+    }
+}
+
+impl WorkbookLookup for DeletedSheetDisplayLookup<'_> {
+    fn cell_position(&self, cell_id: &CellId) -> Option<(SheetId, u32, u32)> {
+        self.inner.cell_position(cell_id)
+    }
+
+    fn row_index(&self, row_id: &RowId) -> Option<(SheetId, u32)> {
+        self.inner.row_index(row_id)
+    }
+
+    fn col_index(&self, col_id: &ColId) -> Option<(SheetId, u32)> {
+        self.inner.col_index(col_id)
+    }
+
+    fn sheet_name(&self, sheet_id: &SheetId) -> Option<&str> {
+        if *sheet_id == self.deleted_sheet_id {
+            None
+        } else {
+            self.inner.sheet_name(sheet_id)
+        }
+    }
+
+    fn formula_sheet(&self) -> SheetId {
+        self.inner.formula_sheet()
     }
 }

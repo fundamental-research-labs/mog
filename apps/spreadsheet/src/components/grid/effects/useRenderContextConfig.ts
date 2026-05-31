@@ -420,6 +420,53 @@ export function useRenderContextConfig(options: UseRenderContextConfigOptions): 
     });
   }, [coordinator, options.getTraceArrows, options.getCellPositionForTrace]);
 
+  // Push page-break preview state directly. Ribbon toggles update UIStore and
+  // may not coincide with actor transitions that trigger the main context path.
+  useEffect(() => {
+    let cancelled = false;
+    const read = <T,>(reader: () => T | Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return Promise.resolve(reader()).then((value) => value ?? fallback);
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    };
+
+    coordinator.renderer.updateContext({
+      pageBreakPreviewMode: options.pageBreakPreviewMode,
+    });
+
+    void Promise.all([
+      read(options.getPageBreaks, { rowBreaks: [], colBreaks: [] }),
+      read(options.getAutoPageBreaks, { rowBreaks: [], colBreaks: [] }),
+      read(options.getPrintArea, null),
+    ])
+      .then(([pageBreaks, autoPageBreaks, printArea]) => {
+        if (cancelled) return;
+        coordinator.renderer.updateContext({
+          pageBreakPreviewMode: optionsRef.current.pageBreakPreviewMode,
+          pageBreaks,
+          autoPageBreaks,
+          printArea,
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn('[useRenderContextConfig] page-break context refresh failed', err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    coordinator,
+    options.pageBreakPreviewMode,
+    options.getPageBreaks,
+    options.getAutoPageBreaks,
+    options.getPrintArea,
+  ]);
+
   // Push remote cursor updates directly to the renderer.
   // The main sendContextUpdate() only fires on actor state changes
   // (selection/editor/clipboard), so remote cursor changes from the

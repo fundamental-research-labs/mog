@@ -45,6 +45,32 @@ function DotIcon({ className }: { className?: string }) {
   return <CircleSvg className={className} style={{ width: 8, height: 8 }} />;
 }
 
+function toAriaKeyShortcuts(shortcut: string): string {
+  const replacements: Record<string, string> = {
+    alt: 'Alt',
+    cmd: 'Meta',
+    command: 'Meta',
+    control: 'Control',
+    ctrl: 'Control',
+    del: 'Delete',
+    delete: 'Delete',
+    esc: 'Escape',
+    escape: 'Escape',
+    meta: 'Meta',
+    opt: 'Alt',
+    option: 'Alt',
+    shift: 'Shift',
+  };
+
+  return shortcut
+    .split('+')
+    .map((token) => {
+      const trimmed = token.trim();
+      return replacements[trimmed.toLowerCase()] ?? trimmed;
+    })
+    .join('+');
+}
+
 // =============================================================================
 // ROOT & TRIGGER
 // =============================================================================
@@ -171,12 +197,17 @@ export const ContextMenuItem = forwardRef<HTMLDivElement, ContextMenuItemProps>(
         destructive && 'text-ss-error data-[highlighted]:bg-ss-error-bg',
         className,
       )}
+      aria-keyshortcuts={shortcut ? toAriaKeyShortcuts(shortcut) : undefined}
       {...props}
     >
       {icon && <span className="w-4 h-4 flex items-center justify-center shrink-0">{icon}</span>}
       <span className="flex-1">{children}</span>
       {shortcut && (
-        <kbd className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary">{shortcut}</kbd>
+        <kbd
+          aria-hidden="true"
+          data-shortcut={shortcut}
+          className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary before:content-[attr(data-shortcut)]"
+        />
       )}
     </RadixContextMenu.Item>
   ),

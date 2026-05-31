@@ -2,10 +2,11 @@
 //!
 //! ## What this crate does
 //!
-//! Decode raw CSV bytes (any common encoding, any line terminator, RFC 4180
-//! quoting), infer per-cell types per the locked policy table, and emit a
-//! single-sheet `domain_types::ParseOutput` that the engine can hydrate
-//! through the same `hydrate_from_parse_output` /
+//! Decode raw CSV bytes (UTF-8 by default, BOM-detected Unicode encodings, or
+//! a caller-specified encoding; any line terminator, RFC 4180 quoting), infer
+//! per-cell types per the locked policy table, and emit a single-sheet
+//! `domain_types::ParseOutput` that the engine can hydrate through the same
+//! `hydrate_from_parse_output` /
 //! `parse_output_to_workbook_snapshot` path that XLSX uses.
 //!
 //! ## Public surface

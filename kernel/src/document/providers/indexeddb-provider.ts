@@ -1108,7 +1108,7 @@ export class IndexedDBProvider implements Provider {
   /**
    * Eviction sweep. Called from `attach`. Rules:
    *   - Cap `recentDocs` at the 50 newest entries.
-   *   - Soft-evict any beyond age threshold (90 days).
+   *   - Soft-evict at most one aged eligible doc per attach.
    *   - Exempt: `lastActiveDocId`, the currently-attaching `selfDocId`.
    *
    * Eviction deletes `snapshots[docId]` + `updates[docId, *]` + the
@@ -1123,21 +1123,23 @@ export class IndexedDBProvider implements Provider {
     const now = Date.now();
     const sortedRecent = [...meta.recentDocs].sort((a, b) => b.lastTouchedAt - a.lastTouchedAt);
 
-    const toEvict: string[] = [];
-    const keep: RecentDoc[] = [];
-    for (let i = 0; i < sortedRecent.length; i++) {
-      const entry = sortedRecent[i]!;
-      const overCap = i >= EVICT_MAX_RECENT_DOCS;
-      const overAge = now - entry.lastTouchedAt > EVICT_SOFT_AGE_MS;
-      const exemptThis = exempt.has(entry.docId);
-      if (!exemptThis && (overCap || overAge)) {
-        toEvict.push(entry.docId);
-      } else {
-        keep.push(entry);
-      }
-    }
+    const eligibleOldestFirst = sortedRecent
+      .filter((entry) => !exempt.has(entry.docId))
+      .sort((a, b) => a.lastTouchedAt - b.lastTouchedAt);
+    const overCapCount = Math.max(0, sortedRecent.length - EVICT_MAX_RECENT_DOCS);
+    const hasAgedEligibleDoc = eligibleOldestFirst.some(
+      (entry) => now - entry.lastTouchedAt > EVICT_SOFT_AGE_MS,
+    );
+    const evictCount = Math.min(
+      eligibleOldestFirst.length,
+      Math.max(overCapCount, hasAgedEligibleDoc ? 1 : 0),
+    );
+    const toEvict = eligibleOldestFirst.slice(0, evictCount).map((entry) => entry.docId);
 
     if (toEvict.length === 0) return;
+
+    const evictSet = new Set(toEvict);
+    const keep: RecentDoc[] = sortedRecent.filter((entry) => !evictSet.has(entry.docId));
 
     // Atomic delete: snapshots[evictId] + updates[evictId, *] + meta.recentDocs.
     await new Promise<void>((resolve, reject) => {

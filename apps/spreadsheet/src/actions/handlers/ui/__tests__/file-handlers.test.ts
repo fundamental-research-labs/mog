@@ -38,6 +38,9 @@ function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
   const workbook = {
     toXlsx: jest.fn(async () => xlsxBytes),
     calculate: jest.fn(async () => undefined),
+    notifications: {
+      info: jest.fn(),
+    },
     getSheetById: jest.fn(() => ({
       toCSV: jest.fn(async () => csv),
     })),
@@ -404,15 +407,15 @@ describe('file handler migrations', () => {
   });
 
   describe('SHARE_DOCUMENT', () => {
-    it('calls UIStore.showNotification (no onUIAction fallback)', async () => {
-      const showNotification = jest.fn();
+    it('shows a workbook notification (no onUIAction fallback)', async () => {
       const deps = createMockDeps();
-      (deps.uiStore as any).getState = () => ({ showNotification });
       (deps as any).onUIAction = jest.fn();
 
       const result = await FileHandlers.SHARE_DOCUMENT(deps);
       expect(result.handled).toBe(true);
-      expect(showNotification).toHaveBeenCalled();
+      expect(deps.workbook.notifications.info).toHaveBeenCalledWith(
+        'Sharing requires a connected workspace. Coming soon.',
+      );
       expect((deps as any).onUIAction).not.toHaveBeenCalled();
     });
   });

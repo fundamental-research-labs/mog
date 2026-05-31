@@ -708,6 +708,22 @@ describe('ProjectService', () => {
 
       expect(store.getState().activeFileId).toBe(fileId);
     });
+
+    it('switches to an open document that has no file metadata', () => {
+      const { deps, store, documentManager, platform } = createTestDeps();
+      const service = createProjectService(deps);
+      const fileId = 'metadata-less-doc';
+
+      store.getState().addOpenFileId(fileId);
+      (documentManager.getDocument as jest.Mock).mockReturnValue({ dispose: jest.fn() });
+
+      service.switchToFile(fileId);
+
+      expect(store.getState().activeFileId).toBe(fileId);
+      expect(platform.shell.setWindowTitle).toHaveBeenLastCalledWith(
+        'metadata-less-doc - Spreadsheet OS',
+      );
+    });
   });
 
   describe('switchToNextTab', () => {

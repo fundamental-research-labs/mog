@@ -44,6 +44,7 @@ import { Tooltip } from '@mog/shell';
 import { NUMBER_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { NumberFormatPanel } from '../../../dialogs/formatting/NumberFormatPanel';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
+import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
 import { useGroupRenderMode } from '../collapse';
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
@@ -143,6 +144,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
   // sampleValue: read from viewport for the format-preview panel.
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
+  const canFormatCells = useSheetProtectionPermissions(activeSheetId).formatCells;
   const ws = wb.getSheetById(activeSheetId);
   const sampleValue = useMemo((): number | string | undefined => {
     const activeCellData = ws.viewport.getActiveCellData();
@@ -176,15 +178,23 @@ export const NumberGroup = React.memo(function NumberGroup() {
   const setNumberFormatOpen = useCallback(
     (open: boolean) => {
       if (open) {
+        if (!canFormatCells) return;
         dispatch('OPEN_NUMBER_FORMAT_DROPDOWN');
       } else {
         closeNumberFormatDropdown();
       }
     },
-    [dispatch, closeNumberFormatDropdown],
+    [canFormatCells, dispatch, closeNumberFormatDropdown],
   );
 
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canFormatCells) {
+      if (numberFormatOpen) closeNumberFormatDropdown();
+      if (currencyDropdownOpen) setCurrencyDropdownOpen(false);
+    }
+  }, [canFormatCells, closeNumberFormatDropdown, currencyDropdownOpen, numberFormatOpen]);
 
   // ===========================================================================
   // KeyTip registration
@@ -264,6 +274,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
                   onClick={() => setNumberFormatOpen(!numberFormatOpen)}
                   isOpen={numberFormatOpen}
                   hasDropdown
+                  disabled={!canFormatCells}
                   aria-label="Number format"
                   aria-expanded={numberFormatOpen}
                   aria-haspopup="listbox"
@@ -276,12 +287,13 @@ export const NumberGroup = React.memo(function NumberGroup() {
                   type="button"
                   data-testid="ribbon-dropdown-number-format"
                   onClick={() => setNumberFormatOpen(!numberFormatOpen)}
+                  disabled={!canFormatCells}
                   className={`
  h-7 px-2 ${isCompactMode ? 'min-w-[70px]' : 'min-w-[90px]'}
  flex items-center justify-between gap-1
  border rounded
  text-ss-text-secondary text-ribbon
- cursor-pointer outline-none
+ cursor-pointer outline-none disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none
  transition-colors duration-ss-fast
  ${
    numberFormatOpen
@@ -307,6 +319,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
                   sampleValue={sampleValue}
                   recentFormats={recentNumberFormats}
                   onApply={(formatCode) => {
+                    if (!canFormatCells) return;
                     dispatch('SET_NUMBER_FORMAT', { format: formatCode });
                     setNumberFormatOpen(false);
                   }}
@@ -326,8 +339,13 @@ export const NumberGroup = React.memo(function NumberGroup() {
                 variant="small"
                 isOpen={currencyDropdownOpen}
                 aria-label="Currency format"
-                onMainClick={() => dispatch('FORMAT_CURRENCY')}
-                onDropdownClick={() => setCurrencyDropdownOpen(!currencyDropdownOpen)}
+                disabled={!canFormatCells}
+                onMainClick={() => {
+                  if (canFormatCells) dispatch('FORMAT_CURRENCY');
+                }}
+                onDropdownClick={() => {
+                  if (canFormatCells) setCurrencyDropdownOpen(!currencyDropdownOpen);
+                }}
               />
             </Tooltip>
             <RibbonDropdownPanel
@@ -337,7 +355,9 @@ export const NumberGroup = React.memo(function NumberGroup() {
               <div role="menu" className="py-1">
                 <RibbonDropdownItem
                   closeOnClick={false}
+                  disabled={!canFormatCells}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_NUMBER_FORMAT', { format: '$#,##0.00' });
                     setCurrencyDropdownOpen(false);
                   }}
@@ -346,7 +366,9 @@ export const NumberGroup = React.memo(function NumberGroup() {
                 </RibbonDropdownItem>
                 <RibbonDropdownItem
                   closeOnClick={false}
+                  disabled={!canFormatCells}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_NUMBER_FORMAT', { format: '£#,##0.00' });
                     setCurrencyDropdownOpen(false);
                   }}
@@ -355,7 +377,9 @@ export const NumberGroup = React.memo(function NumberGroup() {
                 </RibbonDropdownItem>
                 <RibbonDropdownItem
                   closeOnClick={false}
+                  disabled={!canFormatCells}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_NUMBER_FORMAT', { format: '€#,##0.00' });
                     setCurrencyDropdownOpen(false);
                   }}
@@ -364,7 +388,9 @@ export const NumberGroup = React.memo(function NumberGroup() {
                 </RibbonDropdownItem>
                 <RibbonDropdownItem
                   closeOnClick={false}
+                  disabled={!canFormatCells}
                   onClick={() => {
+                    if (!canFormatCells) return;
                     dispatch('SET_NUMBER_FORMAT', { format: '¥#,##0' });
                     setCurrencyDropdownOpen(false);
                   }}
@@ -380,7 +406,10 @@ export const NumberGroup = React.memo(function NumberGroup() {
               id="percent-format"
               layout="icon-only"
               icon={<PercentIcon />}
-              onClick={() => dispatch('FORMAT_PERCENTAGE')}
+              onClick={() => {
+                if (canFormatCells) dispatch('FORMAT_PERCENTAGE');
+              }}
+              disabled={!canFormatCells}
               aria-label="Percent format"
             />
           </Tooltip>
@@ -390,7 +419,10 @@ export const NumberGroup = React.memo(function NumberGroup() {
               id="comma-format"
               layout="icon-only"
               icon={<CommaStyleIcon />}
-              onClick={() => dispatch('FORMAT_COMMA')}
+              onClick={() => {
+                if (canFormatCells) dispatch('FORMAT_COMMA');
+              }}
+              disabled={!canFormatCells}
               aria-label="Comma format"
             />
           </Tooltip>
@@ -403,7 +435,10 @@ export const NumberGroup = React.memo(function NumberGroup() {
               id="increase-decimals"
               layout="icon-only"
               icon={<DecimalIncreaseIcon />}
-              onClick={() => dispatch('INCREASE_DECIMALS')}
+              onClick={() => {
+                if (canFormatCells) dispatch('INCREASE_DECIMALS');
+              }}
+              disabled={!canFormatCells}
               aria-label="Increase decimal places"
             />
           </Tooltip>
@@ -413,7 +448,10 @@ export const NumberGroup = React.memo(function NumberGroup() {
               id="decrease-decimals"
               layout="icon-only"
               icon={<DecimalDecreaseIcon />}
-              onClick={() => dispatch('DECREASE_DECIMALS')}
+              onClick={() => {
+                if (canFormatCells) dispatch('DECREASE_DECIMALS');
+              }}
+              disabled={!canFormatCells}
               aria-label="Decrease decimal places"
             />
           </Tooltip>

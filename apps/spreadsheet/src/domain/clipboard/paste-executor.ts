@@ -774,6 +774,45 @@ function checkPastedValuesAgainstValidation(
   return violations;
 }
 
+function isBlankSourceCell(
+  cell: ReturnType<PasteStoreOperations['getCellData']>,
+): boolean {
+  if (!cell) return true;
+  const hasFormula = cell.formula !== undefined && cell.formula !== null && cell.formula !== '';
+  const hasRaw = cell.raw !== undefined && cell.raw !== null && cell.raw !== '';
+  const hasComputed =
+    cell.computed !== undefined && cell.computed !== null && cell.computed !== '';
+  return !hasFormula && !hasRaw && !hasComputed;
+}
+
+function collectCoreCopyBlankClears(
+  store: PasteStoreOperations,
+  sourceSheetId: SheetId,
+  sourceRange: CellRange,
+  target: CellCoord,
+  transpose: boolean,
+): Array<{ row: number; col: number; value: null }> {
+  const clears: Array<{ row: number; col: number; value: null }> = [];
+
+  for (let relRow = 0; relRow <= sourceRange.endRow - sourceRange.startRow; relRow++) {
+    for (let relCol = 0; relCol <= sourceRange.endCol - sourceRange.startCol; relCol++) {
+      const sourceRow = sourceRange.startRow + relRow;
+      const sourceCol = sourceRange.startCol + relCol;
+      if (!isBlankSourceCell(store.getCellData(sourceSheetId, sourceRow, sourceCol))) {
+        continue;
+      }
+
+      clears.push({
+        row: target.row + (transpose ? relCol : relRow),
+        col: target.col + (transpose ? relRow : relCol),
+        value: null,
+      });
+    }
+  }
+
+  return clears;
+}
+
 // =============================================================================
 // Main Executor
 // =============================================================================
@@ -1112,6 +1151,16 @@ export async function executePaste(
     // still go through TS below.
     if (useCoreCopyRange && store.copyRange) {
       const originalSource = data.sourceRanges[0];
+      const blankClears =
+        !options.skipBlanks && coreCopyType !== 'formats'
+          ? collectCoreCopyBlankClears(
+              store,
+              toSheetId(data.sourceSheetId),
+              originalSource,
+              target,
+              options.transpose ?? false,
+            )
+          : [];
       await store.copyRange(
         toSheetId(data.sourceSheetId),
         originalSource,
@@ -1122,6 +1171,9 @@ export async function executePaste(
         options.skipBlanks ?? false,
         options.transpose ?? false,
       );
+      if (blankClears.length > 0) {
+        await store.setCellValues(sheetId, blankClears);
+      }
     } else if (valueUpdates.length > 0) {
       await store.setCellValues(sheetId, valueUpdates);
     }

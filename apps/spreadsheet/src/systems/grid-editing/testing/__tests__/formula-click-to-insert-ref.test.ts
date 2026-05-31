@@ -45,7 +45,7 @@ describe('Formula Click-to-Insert Reference', () => {
     expect(sim.editorValue()).toBe('=B2');
   });
 
-  it('clicking a cell inserts reference and active cell stays at the formula cell', async () => {
+  it('clicking a cell inserts reference and anchors formula point-mode selection there', async () => {
     sim = createGridSimulator({ activeCell: { row: 3, col: 2 }, sheetId: 'sheet-1' });
 
     sim.startEditing('=');
@@ -54,9 +54,30 @@ describe('Formula Click-to-Insert Reference', () => {
     // Click cell A1 (row 0, col 0)
     sim.clickCell(0, 0);
 
-    // Active cell should remain at the formula cell (3, 2), not navigate to (0, 0)
-    expect(sim.activeCell()).toEqual({ row: 3, col: 2 });
+    // The editor still owns the original formula cell, while selection point-mode
+    // moves to the referenced cell so subsequent Shift+Arrow extends from A1.
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+    expect(sim.anchor()).toEqual({ row: 0, col: 0 });
+    expect(sim.selectionRanges()).toEqual([{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }]);
     expect(sim.editorValue()).toBe('=A1');
+  });
+
+  it('Shift+Arrow after a clicked reference extends from the clicked cell', async () => {
+    sim = createGridSimulator({ activeCell: { row: 3, col: 0 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=SUM(');
+    await sim.flush();
+
+    sim.clickCell(0, 0);
+    expect(sim.editorValue()).toBe('=SUM(A1');
+
+    sim.arrow('down', { shift: true });
+    sim.arrow('down', { shift: true });
+
+    expect(sim.editorValue()).toBe('=SUM(A1:A3');
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+    expect(sim.anchor()).toEqual({ row: 0, col: 0 });
+    expect(sim.selectionRanges()).toEqual([{ startRow: 0, startCol: 0, endRow: 2, endCol: 0 }]);
   });
 
   it('clicking multiple cells inserts multiple references', async () => {

@@ -28,7 +28,7 @@ import type {
   WorkbookProtectionOptions,
 } from '@mog-sdk/contracts/protection';
 import { DEFAULT_WORKBOOK_PROTECTION_OPTIONS } from '@mog-sdk/contracts/protection';
-import { hashExcelPassword, verifyExcelPassword } from '@mog/spreadsheet-utils/protection';
+import { hashExcelPassword } from '@mog/spreadsheet-utils/protection';
 
 import type { DocumentContext } from '../../context/types';
 import { toComputeWorkbookSettings } from './workbook-settings-wire';
@@ -375,16 +375,7 @@ export async function hasMultipleSheetSelection(
  * @returns Promise resolving to true if workbook structure is protected
  */
 export async function isProtected(ctx: DocumentContext): Promise<boolean> {
-  // Read the flat "isWorkbookProtected" key directly from Yjs settings.
-  // We cannot use getSettings() here because Rust's get_settings reads
-  // protection from a nested "protection" sub-map, while patchWorkbookSettings
-  // writes it as a flat key. Reading the flat key matches the write path.
-  const raw = await ctx.computeBridge.getWorkbookSetting('isWorkbookProtected');
-  if (typeof raw === 'boolean') return raw;
-  // Fallback: also check the nested path via getSettings for protection set
-  // through other means (e.g., XLSX import hydration which writes the nested map)
-  const settings = await getSettings(ctx);
-  return settings.isWorkbookProtected ?? false;
+  return ctx.computeBridge.isWorkbookProtected();
 }
 
 /**
@@ -396,12 +387,7 @@ export async function isProtected(ctx: DocumentContext): Promise<boolean> {
 export async function getProtectionOptions(
   ctx: DocumentContext,
 ): Promise<WorkbookProtectionOptions> {
-  // Read the flat key directly (matches patchWorkbookSettings write path)
-  const raw = await ctx.computeBridge.getWorkbookSetting('workbookProtectionOptions');
-  const options =
-    raw != null && typeof raw === 'object'
-      ? (raw as Partial<WorkbookProtectionOptions>)
-      : undefined;
+  const options = await ctx.computeBridge.getWorkbookProtectionOptions();
 
   return {
     ...DEFAULT_WORKBOOK_PROTECTION_OPTIONS,
@@ -416,9 +402,7 @@ export async function getProtectionOptions(
  * @returns Promise resolving to true if password protection is set
  */
 export async function hasProtectionPassword(ctx: DocumentContext): Promise<boolean> {
-  // Read the flat key directly (matches patchWorkbookSettings write path)
-  const hash = await ctx.computeBridge.getWorkbookSetting('workbookProtectionPasswordHash');
-  return typeof hash === 'string' && hash.length > 0;
+  return ctx.computeBridge.hasWorkbookProtectionPassword();
 }
 
 /**
@@ -461,26 +445,14 @@ export async function unprotect(
   password?: string,
   _origin: string = 'user',
 ): Promise<boolean> {
-  const settings = await getSettings(ctx);
-
   // Check if workbook is even protected
-  if (!settings.isWorkbookProtected) {
+  if (!(await isProtected(ctx))) {
     return true; // Already unprotected
   }
 
-  // Verify password if set
-  const storedHash = settings.workbookProtectionPasswordHash;
-  if (storedHash && !verifyExcelPassword(password ?? '', storedHash)) {
-    return false; // Wrong password
-  }
-
-  void ctx.computeBridge.patchWorkbookSettings({
-    isWorkbookProtected: false,
-    workbookProtectionPasswordHash: undefined,
-    workbookProtectionOptions: undefined,
-  });
-
-  return true;
+  const passwordHash = password ? hashExcelPassword(password) : null;
+  const result = await ctx.computeBridge.unprotectWorkbook(passwordHash);
+  return result.data !== false;
 }
 
 /**

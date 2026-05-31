@@ -183,6 +183,7 @@ describe('ActiveRibbonTabSlice', () => {
       expect(visible).toContain('formulas');
       expect(visible).toContain('data');
       expect(visible).not.toContain('page');
+      expect(visible).not.toContain('help');
       expect(visible).toContain('review');
       expect(visible).toContain('view');
     });
@@ -201,15 +202,15 @@ describe('ActiveRibbonTabSlice', () => {
       expect(visible).not.toContain('draw');
       expect(visible).not.toContain('automate');
       expect(visible).not.toContain('experimental');
-      expect(visible).not.toContain('help');
+      expect(visible).toContain('help');
       expect(visible).toContain('view');
     });
 
-    it('does not register removed Automate, Experimental, or Help base tabs', () => {
+    it('does not register removed Automate or Experimental base tabs', () => {
       const ids = RIBBON_BASE_TABS.map((tab) => tab.id);
       expect(ids).not.toContain('automate');
       expect(ids).not.toContain('experimental');
-      expect(ids).not.toContain('help');
+      expect(ids).toContain('help');
     });
   });
 });

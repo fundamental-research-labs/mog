@@ -393,7 +393,11 @@ export const editorMachine = setup({
         CYCLE_REFERENCE: { actions: ['cycleReference', 'computeFormulaContext'] },
         COMMIT: {
           target: 'validating',
-          actions: ['storeCommitDirection', 'resetAutocompleteState'],
+          actions: [
+            'completePointModeFormulaForCommit',
+            'storeCommitDirection',
+            'resetAutocompleteState',
+          ],
         },
         // Ctrl+Shift+Enter to commit as array formula (CSE)
         ENTER_ARRAY_FORMULA: {
@@ -653,6 +657,11 @@ export const editorMachine = setup({
           actions: ['commitIMEComposition', 'storeBlurAsCommit'],
         },
 
+        COMMIT: {
+          target: 'validating',
+          actions: ['commitIMEComposition', 'storeCommitDirection'],
+        },
+
         // IME must complete before these actions can happen
         // In practice, browser enforces this, but we model it explicitly
         // CANCEL (second ESC) cancels the entire edit
@@ -716,6 +725,24 @@ export const editorMachine = setup({
           { guard: 'isInEditMode', target: 'editing.editMode' },
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode' },
+        ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          { target: 'editing.enterMode', actions: 'selectCurrentValue' },
         ],
 
         // Remote events - guards removed, coordinator filters
@@ -821,6 +848,24 @@ export const editorMachine = setup({
           { guard: 'isInEditMode', target: 'editing.editMode', actions: 'clearError' },
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode', actions: 'clearError' },
+        ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          { target: 'editing.enterMode', actions: ['clearError', 'selectCurrentValue'] },
         ],
         CANCEL: { target: 'inactive', actions: 'resetContext' },
         INPUT: [

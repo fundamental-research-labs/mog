@@ -238,7 +238,7 @@ export function TabContextMenu({
             onClose();
           }}
         >
-          {isSheetProtected ? 'Unprotect Sheet' : 'Protect Sheet...'}
+          {isSheetProtected ? 'Unprotect Sheet' : 'Protect Sheet'}
         </MenuItem>
 
         <MenuDivider />

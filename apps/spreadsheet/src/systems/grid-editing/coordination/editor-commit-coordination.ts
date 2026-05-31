@@ -207,8 +207,9 @@ export interface EditorCommitCoordinationConfig {
   ) => void;
   /**
    * Optional callback for direct circular-reference warnings.
-   * Enable proceeds with commit after the host enables iterative calculation;
-   * cancel abandons the edit without mutating workbook state.
+   * Circular references are warning-only for interactive commits: the formula
+   * is committed while the host shows the warning and can optionally enable
+   * iterative calculation.
    */
   onCircularReferenceWarning?: (
     cellAddress: string,
@@ -275,7 +276,9 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
 
   const subscription = editorActor.subscribe((state) => {
     const wasEditing =
-      previousState?.matches('editing') || previousState?.matches('formulaEditing');
+      previousState?.matches('editing') ||
+      previousState?.matches('formulaEditing') ||
+      previousState?.matches('imeComposing');
     const isValidating = state.matches('validating');
     const didCommit = previousState?.matches('committing') && state.matches('inactive');
     if (didCommit) {
@@ -399,15 +402,11 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
               onCircularReferenceWarning(
                 circularReferenceResult.cellAddress,
                 circularReferenceResult.formula,
-                () => editorActor.send({ type: 'VALIDATION_SUCCESS' }),
-                () => editorActor.send({ type: 'CANCEL' }),
+                () => {},
+                () => {},
               );
-            } else {
-              editorActor.send({
-                type: 'VALIDATION_ERROR',
-                message: `Circular reference detected in cell ${circularReferenceResult.cellAddress}`,
-              });
             }
+            editorActor.send({ type: 'VALIDATION_SUCCESS' });
             return;
           }
         }
@@ -449,7 +448,7 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
               onValidationError(
                 errorMessage,
                 errorTitle,
-                () => editorActor.send({ type: 'RETRY' }), // User chose "Retry" - return to edit mode
+                () => editorActor.send({ type: 'RETRY_SELECT_ALL' }), // Retry selects rejected text
                 () => editorActor.send({ type: 'CANCEL' }), // User chose "Cancel" - discard edit
               );
             }
@@ -464,7 +463,7 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
                 errorTitle,
                 () => editorActor.send({ type: 'VALIDATION_SUCCESS' }), // User chose "Yes" - proceed with invalid value
                 () => editorActor.send({ type: 'CANCEL' }), // User chose "Cancel" - exit editing, revert to original
-                () => editorActor.send({ type: 'RETRY' }), // User chose "No" - return to edit mode to correct
+                () => editorActor.send({ type: 'RETRY_SELECT_ALL' }), // No selects rejected text
               );
             } else {
               // No warning handler - treat as info (allow)

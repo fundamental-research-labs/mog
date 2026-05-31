@@ -163,6 +163,8 @@ export const applyDatePickerCommit = assign({
 export const updateValue = assign({
   value: ({ event }) => (event.type === 'INPUT' ? event.value : ''),
   cursorPosition: ({ event }) => (event.type === 'INPUT' ? event.cursorPosition : 0),
+  selectionAnchor: ({ event }) => (event.type === 'INPUT' ? event.cursorPosition : 0),
+  hasSelection: false,
   // Clear formula point mode tracking — user typed something (operator, letter, etc.)
   // so the next arrow key should insert a NEW reference, not replace the previous one.
   formulaRefInsertStart: null,
@@ -175,6 +177,8 @@ export const updateValue = assign({
  */
 export const setCursor = assign({
   cursorPosition: ({ event }) => (event.type === 'SET_CURSOR' ? event.position : 0),
+  selectionAnchor: ({ event }) => (event.type === 'SET_CURSOR' ? event.position : 0),
+  hasSelection: false,
 });
 
 /**
@@ -340,6 +344,12 @@ export const clearError = assign({
   errorMessage: null,
 });
 
+export const selectCurrentValue = assign({
+  cursorPosition: ({ context }) => context.value.length,
+  selectionAnchor: 0,
+  hasSelection: ({ context }) => context.value.length > 0,
+});
+
 // =============================================================================
 // MODE CONTROL ACTIONS
 // =============================================================================
@@ -407,6 +417,7 @@ export const coreActions = {
   // Error Handling
   setValidationError,
   clearError,
+  selectCurrentValue,
 
   // Mode Control
   setEnterMode,

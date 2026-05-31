@@ -535,6 +535,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       return {
         isFormulaEditing: editorSelectors.isFormulaEditing(state),
         value: editorSelectors.value(state),
+        sheetId: state.context.sheetId,
       };
     },
     getActiveSheetName: () => wb.getSheetById(activeSheetId).name,

@@ -240,6 +240,81 @@ describe('IndexedDBProvider — IDB-specific scenarios', () => {
     void ageBase;
   });
 
+  it('evicts only the oldest eligible stale doc when many old docs exist', async () => {
+    const { readMeta } = await import('../indexeddb-meta');
+    const now = Date.now();
+    const staleAgeMs = 91 * 24 * 60 * 60 * 1000;
+    const recentDocs = Array.from({ length: 51 }, (_, i) => ({
+      docId: `quota-synth-${String(i).padStart(3, '0')}`,
+      lastTouchedAt: now - staleAgeMs - (51 - i) * 1000,
+    }));
+
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([META_STORE, SNAPSHOTS_STORE, UPDATES_STORE], 'readwrite');
+      const meta = tx.objectStore(META_STORE);
+      const snapshots = tx.objectStore(SNAPSHOTS_STORE);
+      const updates = tx.objectStore(UPDATES_STORE);
+
+      meta.put(recentDocs, 'recentDocs');
+      meta.put('quota-synth-000', 'lastActiveDocId');
+      for (const entry of recentDocs) {
+        snapshots.put(new Uint8Array([0xa1]), entry.docId);
+        updates.put(new Uint8Array([0xb2]), [entry.docId, 1]);
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    db.close();
+
+    const provider = new IndexedDBProvider('quota-active-doc');
+    await provider.attach(buildMockProviderDoc('quota-active-doc'));
+    await provider.detach();
+
+    const afterDb = await openDb();
+    const stores = await new Promise<{
+      snapshots: string[];
+      updates: string[];
+    }>((resolve, reject) => {
+      const tx = afterDb.transaction([SNAPSHOTS_STORE, UPDATES_STORE], 'readonly');
+      const snapshotReq = tx.objectStore(SNAPSHOTS_STORE).getAllKeys();
+      const updateReq = tx.objectStore(UPDATES_STORE).getAllKeys();
+      tx.oncomplete = () => {
+        resolve({
+          snapshots: (snapshotReq.result as IDBValidKey[]).filter(
+            (key): key is string => typeof key === 'string',
+          ),
+          updates: Array.from(
+            new Set(
+              (updateReq.result as IDBValidKey[])
+                .map((key) => (Array.isArray(key) ? key[0] : key))
+                .filter((key): key is string => typeof key === 'string'),
+            ),
+          ),
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    afterDb.close();
+
+    const meta = await readMeta();
+    const metaDocIds = meta.recentDocs.map((entry) => entry.docId);
+
+    expect(stores.snapshots).toContain('quota-synth-000');
+    expect(stores.updates).toContain('quota-synth-000');
+    expect(stores.snapshots).not.toContain('quota-synth-001');
+    expect(stores.updates).not.toContain('quota-synth-001');
+    expect(stores.snapshots).toContain('quota-synth-002');
+    expect(stores.updates).toContain('quota-synth-002');
+    expect(metaDocIds).toContain('quota-synth-000');
+    expect(metaDocIds).not.toContain('quota-synth-001');
+    expect(metaDocIds).toContain('quota-synth-002');
+    expect(meta.lastActiveDocId).toBe('quota-synth-000');
+  });
+
   // -------------------------------------------------------------------------
   // hasPersistedSnapshot — boot-precedence helper (§6.2)
   // -------------------------------------------------------------------------

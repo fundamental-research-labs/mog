@@ -13,7 +13,8 @@
 //! | Pure ASCII digits, leading `0`, len ≥ 2        | Text            | `@`          |
 //! | Integer / decimal / scientific                 | Number          | `General`    |
 //! | `TRUE` / `FALSE` (case-insensitive)            | Boolean         | `General`    |
-//! | ISO date (`YYYY-MM-DD`) / en-US (`M/D/YYYY`)   | Number (serial) | `m/d/yyyy`   |
+//! | ISO date (`YYYY-MM-DD`)                        | Number (serial) | `yyyy-mm-dd` |
+//! | en-US date (`M/D/YYYY`)                        | Number (serial) | `m/d/yyyy`   |
 //! | Time `HH:MM[:SS]`                              | Number (frac)   | `h:mm:ss`    |
 //! | Begins with `=`/`+`/`-`/`@`/`\t` (no opt-in)   | Text            | `@`          |
 //! | Begins with `=` and `evaluate_formulas: true`  | (formula entry) | `General`    |
@@ -32,22 +33,25 @@ pub(crate) struct StylePalette {
     pub date: u32,
     pub time: u32,
     pub text: u32,
+    pub iso_date: u32,
 }
 
 impl StylePalette {
-    /// The palette's order is **(General, m/d/yyyy, h:mm:ss, @)** — locked
-    /// by the plan. Don't reorder; downstream tests assert on indices.
+    /// The palette's first four entries are **(General, m/d/yyyy, h:mm:ss, @)**.
+    /// Keep them in that order; downstream tests assert on indices.
     pub(crate) fn new() -> (Self, Vec<domain_types::DocumentFormat>) {
         let general = make_format(None);
         let date = make_format(Some("m/d/yyyy"));
         let time = make_format(Some("h:mm:ss"));
         let text = make_format(Some("@"));
-        let entries = vec![general, date, time, text];
+        let iso_date = make_format(Some("yyyy-mm-dd"));
+        let entries = vec![general, date, time, text, iso_date];
         let palette = Self {
             general: 0,
             date: 1,
             time: 2,
             text: 3,
+            iso_date: 4,
         };
         (palette, entries)
     }
@@ -150,8 +154,16 @@ pub(crate) fn infer_cell(
         });
     }
 
-    // 5. Date / time. ISO and en-US slash only.
-    if let Some(serial) = parse_date_serial(field) {
+    // 5. Date / time. ISO and en-US slash only. Preserve the source-visible
+    //    ISO shape by using a matching format code.
+    if let Some(serial) = parse_date_serial(field, "%Y-%m-%d") {
+        return Some(InferredCell {
+            value: CellValue::number(serial),
+            style_id: Some(palette.iso_date),
+            formula: None,
+        });
+    }
+    if let Some(serial) = parse_date_serial(field, "%m/%d/%Y") {
         return Some(InferredCell {
             value: CellValue::number(serial),
             style_id: Some(palette.date),
@@ -212,22 +224,14 @@ fn parse_number(s: &str) -> Option<f64> {
 /// the wire format). Returns `None` for non-date input.
 ///
 /// Accepts:
-/// - ISO `YYYY-MM-DD` (year ≥ 1900, month 1-12, day 1-31)
-/// - en-US `M/D/YYYY` or `MM/DD/YYYY`
-fn parse_date_serial(s: &str) -> Option<f64> {
+fn parse_date_serial(s: &str, format: &str) -> Option<f64> {
     // Reject anything containing a space — that's date+time, not a pure
     // date, and Excel imports those differently.
     if s.contains(' ') {
         return None;
     }
-    // Avoid wasting work on obvious non-dates: must contain a `-` or `/`.
-    if !s.contains('-') && !s.contains('/') {
-        return None;
-    }
 
-    let date = NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .or_else(|_| NaiveDate::parse_from_str(s, "%m/%d/%Y"))
-        .ok()?;
+    let date = NaiveDate::parse_from_str(s, format).ok()?;
     Some(naive_date_to_excel_serial(date))
 }
 
@@ -356,7 +360,7 @@ mod tests {
             _ => panic!(),
         };
         assert!((n - 45306.0).abs() < 0.5, "got {n}");
-        assert_eq!(r.style_id, Some(p.date));
+        assert_eq!(r.style_id, Some(p.iso_date));
     }
 
     #[test]

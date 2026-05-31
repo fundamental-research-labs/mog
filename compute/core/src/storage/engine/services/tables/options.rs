@@ -87,6 +87,27 @@ pub(in crate::storage::engine) fn set_table_auto_calculated_columns(
     Ok(MutationResult::empty())
 }
 
+/// Set totals-row function metadata for a table column.
+pub(in crate::storage::engine) fn set_table_totals_function(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    table_name: &str,
+    column_id: &str,
+    func: compute_table::types::TotalsFunction,
+) -> Result<MutationResult, ComputeError> {
+    let table = mirror
+        .get_table(table_name)
+        .cloned()
+        .ok_or_else(|| ComputeError::Eval {
+            message: format!("Table not found: {}", table_name),
+        })?;
+
+    let updated = compute_table::table::set_totals_function(&table, column_id, func);
+    stores.compute.set_table(mirror, updated.clone());
+    persist_table_to_yrs(stores, &updated);
+    Ok(MutationResult::empty())
+}
+
 /// Add a data row to a table at the given relative position.
 pub(in crate::storage::engine) fn add_table_data_row(
     stores: &mut EngineStores,

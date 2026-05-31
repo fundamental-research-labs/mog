@@ -53,14 +53,17 @@ const setAnchorAndSelect = assign(
 
 /**
  * Extend selection to clicked cell (shift+click).
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
- * the clicked cell as the moving edge.
+ * Mouse Shift+click keeps the original anchor for subsequent Shift+clicks,
+ * while the clicked cell becomes the active edge.
  */
 const extendToCell = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_DOWN') return {};
     const anchor = context.anchor ?? context.activeCell;
-    return buildExtendUpdate(anchor, event.cell);
+    return {
+      ...buildExtendUpdate(anchor, event.cell),
+      activeCell: event.cell,
+    };
   },
 );
 
@@ -104,9 +107,38 @@ const startMultiSelectAndExtend = assign(
     return {
       committedRanges: [...context.committedRanges, context.pendingRange],
       pendingRange: newRange,
-      activeCell: priorAnchor,
+      activeCell: event.cell,
       anchor: priorAnchor,
       direction: computeDirection(priorAnchor, event.cell),
+    };
+  },
+);
+
+/**
+ * Shift+F8 additive mode plus a raw Shift+click adds the clicked cell as a
+ * disjoint single-cell range, then exits additive mode. Without this special
+ * case the effective Ctrl+Shift composition extends from the previous anchor.
+ */
+const addSingleCellToSelectionAndExitAdditive = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'MOUSE_DOWN') return {};
+    const newRange = {
+      startRow: event.cell.row,
+      startCol: event.cell.col,
+      endRow: event.cell.row,
+      endCol: event.cell.col,
+    };
+    return {
+      committedRanges: [...context.committedRanges, context.pendingRange],
+      pendingRange: newRange,
+      activeCell: event.cell,
+      anchor: event.cell,
+      direction: 'down-right' as const,
+      modes: {
+        ...context.modes,
+        additive: false,
+      },
+      tabOriginCol: null,
     };
   },
 );
@@ -152,6 +184,7 @@ export const mouseActions = {
   extendToCell,
   startMultiSelect,
   startMultiSelectAndExtend,
+  addSingleCellToSelectionAndExitAdditive,
   updateDragSelection,
   finalizeDrag,
 } as const;

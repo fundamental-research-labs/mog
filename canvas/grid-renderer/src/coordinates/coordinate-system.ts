@@ -235,6 +235,24 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     return this.colGutterHeight + colHeaderHeight;
   }
 
+  private clipScrollableAxis(
+    position: number,
+    size: number,
+    frozenBoundary: number,
+  ): { position: number; size: number } | null {
+    if (frozenBoundary <= 0 || position >= frozenBoundary) {
+      return { position, size };
+    }
+
+    const hiddenSize = frozenBoundary - position;
+    if (hiddenSize >= size) return null;
+
+    return {
+      position: frozenBoundary,
+      size: size - hiddenSize,
+    };
+  }
+
   // ===========================================================================
   // CELL -> DOCUMENT
   // ===========================================================================
@@ -431,6 +449,8 @@ export class CoordinateSystemImpl implements CoordinateSystem {
 
     let vpX: number;
     let vpY: number;
+    let visibleWidth = rect.width;
+    let visibleHeight = rect.height;
 
     if (isFrozenCol) {
       // Frozen columns don't scroll horizontally
@@ -438,11 +458,10 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     } else {
       // Non-frozen: subtract scroll, but position after frozen area
       vpX = rect.x - this.viewport.scrollLeft;
-      // If scrolled, non-frozen content appears after frozen columns
-      if (frozenColsWidth > 0 && vpX < frozenColsWidth) {
-        // Check if entirely hidden behind frozen area
-        if (vpX + rect.width <= 0) return null;
-      }
+      const clipped = this.clipScrollableAxis(vpX, visibleWidth, frozenColsWidth);
+      if (!clipped) return null;
+      vpX = clipped.position;
+      visibleWidth = clipped.size;
     }
 
     if (isFrozenRow) {
@@ -451,9 +470,10 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     } else {
       // Non-frozen: subtract scroll
       vpY = rect.y - this.viewport.scrollTop;
-      if (frozenRowsHeight > 0 && vpY < frozenRowsHeight) {
-        if (vpY + rect.height <= 0) return null;
-      }
+      const clipped = this.clipScrollableAxis(vpY, visibleHeight, frozenRowsHeight);
+      if (!clipped) return null;
+      vpY = clipped.position;
+      visibleHeight = clipped.size;
     }
 
     // Apply zoom and add header offsets
@@ -462,8 +482,8 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     const cellAreaTop = this.getCellAreaTop();
     const resultX = vpX * this.zoom + cellAreaLeft;
     const resultY = vpY * this.zoom + cellAreaTop;
-    const resultWidth = rect.width * this.zoom;
-    const resultHeight = rect.height * this.zoom;
+    const resultWidth = visibleWidth * this.zoom;
+    const resultHeight = visibleHeight * this.zoom;
 
     // Check if visible in viewport (accounting for header area).
     // Use <= / >= so cells exactly at the boundary (zero visible area) are not visible.
@@ -496,6 +516,8 @@ export class CoordinateSystemImpl implements CoordinateSystem {
 
     let layerX: number;
     let layerY: number;
+    let visibleWidth = rect.width;
+    let visibleHeight = rect.height;
 
     if (isFrozenCol) {
       // Frozen columns don't scroll horizontally
@@ -503,11 +525,10 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     } else {
       // Non-frozen: subtract scroll, but position after frozen area
       layerX = rect.x - this.viewport.scrollLeft;
-      // If scrolled, non-frozen content appears after frozen columns
-      if (frozenColsWidth > 0 && layerX < frozenColsWidth) {
-        // Check if entirely hidden behind frozen area
-        if (layerX + rect.width <= 0) return null;
-      }
+      const clipped = this.clipScrollableAxis(layerX, visibleWidth, frozenColsWidth);
+      if (!clipped) return null;
+      layerX = clipped.position;
+      visibleWidth = clipped.size;
     }
 
     if (isFrozenRow) {
@@ -516,17 +537,18 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     } else {
       // Non-frozen: subtract scroll
       layerY = rect.y - this.viewport.scrollTop;
-      if (frozenRowsHeight > 0 && layerY < frozenRowsHeight) {
-        if (layerY + rect.height <= 0) return null;
-      }
+      const clipped = this.clipScrollableAxis(layerY, visibleHeight, frozenRowsHeight);
+      if (!clipped) return null;
+      layerY = clipped.position;
+      visibleHeight = clipped.size;
     }
 
     // Apply zoom but NO header offsets (canvas translation handles headers)
     // This is the key difference from documentToViewport()
     const resultX = layerX * this.zoom;
     const resultY = layerY * this.zoom;
-    const resultWidth = rect.width * this.zoom;
-    const resultHeight = rect.height * this.zoom;
+    const resultWidth = visibleWidth * this.zoom;
+    const resultHeight = visibleHeight * this.zoom;
 
     // Visibility check: use viewport cell area dimensions (excluding headers)
     // The viewport.width/height includes headers, so we subtract them for the cell area

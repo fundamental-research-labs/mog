@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { FunctionInfo } from '../../internal-api';
-import type { NameSuggestion } from '../../domain/editor/name-completion';
+import { formatNameForInsertion, type NameSuggestion } from '../../domain/editor/name-completion';
 
 // =============================================================================
 // Types
@@ -30,7 +30,7 @@ export interface FunctionSuggestionsProps {
   /** Currently selected index (from editor machine) */
   selectedIndex: number;
   /** Callback when a function is selected */
-  onSelect: (name: string) => void;
+  onSelect: (name: string, appendOpeningParen?: boolean) => void;
   /** Callback for keyboard navigation */
   onNavigate: (direction: 'up' | 'down') => void;
   /** Callback to dismiss suggestions */
@@ -190,10 +190,10 @@ export function FunctionSuggestions({
           e.stopPropagation();
           const fnItem = filteredFunctions[clampedIndex];
           if (fnItem) {
-            onSelect(fnItem.fn.name);
+            onSelect(fnItem.fn.name, true);
           } else {
             const nameItem = nameSuggestions[clampedIndex - filteredFunctions.length];
-            if (nameItem) onSelect(nameItem.name);
+            if (nameItem) onSelect(formatNameForInsertion(nameItem), false);
           }
           break;
         }
@@ -209,8 +209,8 @@ export function FunctionSuggestions({
 
   // Handle item click
   const handleItemClick = useCallback(
-    (name: string) => {
-      onSelect(name);
+    (name: string, appendOpeningParen: boolean) => {
+      onSelect(name, appendOpeningParen);
     },
     [onSelect],
   );
@@ -244,7 +244,7 @@ export function FunctionSuggestions({
  px-3 py-2 cursor-pointer flex items-start gap-3
  ${index === clampedIndex ? 'bg-ss-primary-lighter text-ss-primary' : 'hover:bg-ss-surface-hover'}
  `}
-            onClick={() => handleItemClick(item.fn.name)}
+            onClick={() => handleItemClick(item.fn.name, true)}
             onMouseEnter={() => {
               // Could optionally update selection on hover
             }}
@@ -273,7 +273,7 @@ export function FunctionSuggestions({
  px-3 py-2 cursor-pointer flex items-start gap-3
  ${globalIndex === clampedIndex ? 'bg-ss-primary-lighter text-ss-primary' : 'hover:bg-ss-surface-hover'}
  `}
-              onClick={() => handleItemClick(ns.name)}
+              onClick={() => handleItemClick(formatNameForInsertion(ns), false)}
             >
               <div className="flex-1 min-w-0">
                 <div className="font-ss-mono font-medium text-body">{ns.name}</div>

@@ -115,6 +115,7 @@ export function setupEditorToSelectionCoordination(
     isRowHidden?: (row: number) => boolean;
     isColHidden?: (col: number) => boolean;
   },
+  getCurrentSheetId?: () => string,
 ): () => void {
   let previousState: EditorState | null = null;
 
@@ -133,6 +134,33 @@ export function setupEditorToSelectionCoordination(
     // Editor exited formula mode
     if (wasFormulaEditing && !isFormulaEditing) {
       selectionActor.send({ type: 'EXIT_FORMULA_RANGE_MODE' });
+
+      const exitedViaNormalCancel =
+        state.matches('inactive') &&
+        !state.context.wasRemotelyDeleted &&
+        !state.context.wasSheetDeleted &&
+        !state.context.wasStructurallyCancelled;
+      const previousContext = previousState?.context;
+      const editingCell = previousContext?.editingCell;
+
+      if (exitedViaNormalCancel && editingCell) {
+        const restoreRanges = previousContext.editStartSelectionRanges?.length
+          ? previousContext.editStartSelectionRanges.map((range) => ({ ...range }))
+          : [
+              {
+                startRow: editingCell.row,
+                startCol: editingCell.col,
+                endRow: editingCell.row,
+                endCol: editingCell.col,
+              },
+            ];
+
+        selectionActor.send({
+          type: 'SET_SELECTION',
+          ranges: restoreRanges,
+          activeCell: { ...editingCell },
+        });
+      }
     }
 
     // Editor is committing - move selection based on direction
@@ -142,6 +170,13 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const editingSheetId = previousState.context.sheetId;
+      const currentSheetId = getCurrentSheetId?.();
+
+      if (editingSheetId && currentSheetId && editingSheetId !== currentSheetId) {
+        previousState = state;
+        return;
+      }
 
       if (direction !== 'none') {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
@@ -497,17 +532,12 @@ export function setupEditingInputInterception(
 ): EditingInputInterceptionResult {
   const {
     editorActor,
-    selectionActor: _selectionActor,
+    selectionActor,
     onCommitAndMove,
-    getCurrentSheetId,
-    getSheetName,
   } = config;
 
   // Pending selection target after commit completes
   let pendingSelection: { cell: CellCoord; shiftKey: boolean; ctrlKey: boolean } | null = null;
-
-  // Anchor cell for formula range selection (shift+click extends from here)
-  let formulaRangeAnchor: CellCoord | null = null;
 
   // Track previous state to detect commit completion
   let previousState: EditorState | null = null;
@@ -521,7 +551,6 @@ export function setupEditingInputInterception(
     if (wasCommitting && isNowInactive && pendingSelection) {
       const { cell, shiftKey, ctrlKey } = pendingSelection;
       pendingSelection = null;
-      formulaRangeAnchor = null;
 
       // Now it's safe to change selection - editing is done
       onCommitAndMove(cell, shiftKey, ctrlKey);
@@ -535,7 +564,6 @@ export function setupEditingInputInterception(
     if (wasEditing && isNowInactive && !wasCommitting) {
       // Editing was cancelled, clear pending selection
       pendingSelection = null;
-      formulaRangeAnchor = null;
     }
 
     previousState = state;
@@ -561,39 +589,13 @@ export function setupEditingInputInterception(
       const isInEnterMode = !editorState.context.isEditMode;
 
       if (isFormulaEditing && isInEnterMode) {
-        const targetSheetId = getCurrentSheetId?.();
-        const targetSheetName = targetSheetId ? getSheetName?.(targetSheetId) : undefined;
-
-        let range: CellRange;
-
-        if (shiftKey && formulaRangeAnchor) {
-          // Shift+click: extend from anchor to clicked cell, forming a range reference
-          // This replaces the last inserted single-cell ref with e.g. A1:A5
-          range = {
-            startRow: formulaRangeAnchor.row,
-            startCol: formulaRangeAnchor.col,
-            endRow: cell.row,
-            endCol: cell.col,
-          };
-        } else {
-          // Normal click: insert single cell reference, set as new anchor
-          range = {
-            startRow: cell.row,
-            startCol: cell.col,
-            endRow: cell.row,
-            endCol: cell.col,
-          };
-          formulaRangeAnchor = cell;
-        }
-
-        editorActor.send({
-          type: 'FORMULA_RANGE_SELECTED',
-          range,
-          color: editorState.context.currentRangeColor ?? '#4285f4',
-          ...(targetSheetId ? { sheetId: targetSheetId } : {}),
-          ...(targetSheetName ? { sheetName: targetSheetName } : {}),
+        selectionActor.send({
+          type: 'MOUSE_DOWN',
+          cell,
+          shiftKey,
+          ctrlKey,
         });
-
+        selectionActor.send({ type: 'MOUSE_UP' });
         return true;
       }
 
@@ -650,6 +652,7 @@ export function setupCrossCoordination(config: CrossCoordinationConfig): () => v
       selectionActor,
       () => selectionActor.getSnapshot().context.activeCell,
       config.getVisibilityCallbacks,
+      getCurrentSheetId,
     ),
   );
 

@@ -18,7 +18,37 @@ function isAllCellsSelected(ranges: CellRange[]): boolean {
 }
 
 /**
- * SELECT_CURRENT_REGION - Ctrl+A progressive selection (Excel behavior)
+ * SELECT_CURRENT_REGION - literal Ctrl+Shift+* current-region selection.
+ *
+ * Unlike Ctrl+A, this command is not progressive. It always selects the
+ * kernel-reported current region around the active cell and resets any stale
+ * Ctrl+A cycle state so the next Ctrl+A starts fresh.
+ */
+export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
+  const sheetId = deps.getActiveSheetId();
+  const activeCell = deps.accessors.selection.getActiveCell();
+
+  const ws = deps.workbook.getSheetById(sheetId);
+  const region = await ws.getCurrentRegion(activeCell.row, activeCell.col);
+
+  deps.commands.selection.setSelection(
+    [
+      {
+        startRow: region.startRow,
+        startCol: region.startCol,
+        endRow: region.endRow,
+        endCol: region.endCol,
+      },
+    ],
+    activeCell,
+  );
+
+  getUIStore(deps)?.getState()?.resetCtrlAState?.();
+  return handled();
+};
+
+/**
+ * Ctrl+A progressive current-region cycle.
  *
  * Excel Parity 2.2:
  * - First press: Select current data region (contiguous cells around active cell)
@@ -26,10 +56,8 @@ function isAllCellsSelected(ranges: CellRange[]): boolean {
  * - If active cell is empty but surrounded by data, select the surrounding region
  * - Second press (within 500ms): Select entire sheet
  * - Third press (within 500ms, when all cells selected): Select all floating objects
- *
- * Uses UIStore's CtrlAStateSlice for state management instead of module-level variables.
  */
-export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
+export const cycleCurrentRegionSelection: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const ranges = deps.accessors.selection.getRanges();

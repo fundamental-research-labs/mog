@@ -50,7 +50,13 @@ import { getRelativeCommandColumn, resolveDataCommandTarget } from '../data-comm
 import { guardBridgeMutation } from './bridge-error-guard';
 import { beginEditSessionFromAction } from './edit-entry';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
-import { getUIStore, handled, notHandled } from './handler-utils';
+import {
+  getUIStore,
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 import { hasMultiCellSelection } from './selection/helpers';
 
 /**
@@ -432,17 +438,25 @@ export const CLEAR_CONTENTS: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  await deps.workbook.undoGroup(async () => {
-    for (const sheetId of targetSheetIds) {
-      const ws = getWorksheet(deps, sheetId);
-      for (const range of ranges) {
-        const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
-        if (!ok) {
-          return;
+  try {
+    await deps.workbook.undoGroup(async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = getWorksheet(deps, sheetId);
+        for (const range of ranges) {
+          const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
+          if (!ok) {
+            return;
+          }
         }
       }
+    });
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('blocked');
     }
-  });
+    throw err;
+  }
 
   requestFormulaBarRefresh({ sheetIds: targetSheetIds, ranges });
 

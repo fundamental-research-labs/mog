@@ -21,8 +21,9 @@ fn read_fixture(name: &str) -> Vec<u8> {
         }
         "mixed-line-endings.csv" => b"a,b,c\n1,2,3\r\n4,5,6\r7,8,9\n".to_vec(),
         "mixed-types-in-column.csv" => {
-            b"mixed_col\n42\n3.14\nhello\n2026-05-26\nTRUE\n42\n".to_vec()
+            b"mixed_col\n42\n3.14\nhello\n2024-01-15\nTRUE\n42\n".to_vec()
         }
+        "unclosed-quote-eof.csv" => b"name,value\nalice,\"hello\nbob,\"world".to_vec(),
         "empty-trailing-newlines.csv" => b"a,b,c\n1,2,3\n4,5,6\n\n\n".to_vec(),
         "utf8-bom.csv" => b"\xEF\xBB\xBFname,value\nalpha,1\n".to_vec(),
         "utf16-le-bom.csv" => {
@@ -32,6 +33,7 @@ fn read_fixture(name: &str) -> Vec<u8> {
             }
             bytes
         }
+        "bad-utf8.csv" => b"name,value\nfoo,1\nbar,\xFF\xFE\xFD invalid bytes\nbaz,3\n".to_vec(),
         "large-90kb.csv" => large_csv(3_000).into_bytes(),
         "large-2mb.csv" => large_csv(60_000).into_bytes(),
         other => panic!("unknown CSV fixture {other}"),
@@ -52,7 +54,7 @@ fn parse(name: &str) -> csv_parser::CsvParseResult {
         .unwrap_or_else(|e| panic!("parse fixture {name}: {e}"))
 }
 
-fn cell_at<'a>(output: &'a ParseOutput, sheet: usize, row: u32, col: u32) -> Option<&'a CellData> {
+fn cell_at(output: &ParseOutput, sheet: usize, row: u32, col: u32) -> Option<&CellData> {
     output
         .sheets
         .get(sheet)?
@@ -168,6 +170,18 @@ fn fixture_quote_escaping_unquotes_and_keeps_payload() {
     assert_text(&r.output, 3, 1, "newline\nhere");
 }
 
+#[test]
+fn fixture_unclosed_quote_eof_preserves_literal_inner_quote() {
+    let r = parse("unclosed-quote-eof.csv");
+    assert_text(&r.output, 0, 0, "name");
+    assert_text(&r.output, 0, 1, "value");
+    assert_text(&r.output, 1, 0, "alice");
+    assert_text(&r.output, 1, 1, "hello\nbob,\"world");
+    assert_eq!(r.output.sheets[0].rows, 2);
+    assert!(cell_at(&r.output, 0, 2, 0).is_none());
+    assert!(cell_at(&r.output, 0, 2, 1).is_none());
+}
+
 // =========================================================================
 // 4. Mixed line endings (\n / \r\n / \r in the same file).
 // =========================================================================
@@ -193,12 +207,11 @@ fn fixture_mixed_types_per_cell_inference() {
     let r = parse("mixed-types-in-column.csv");
     assert_text(&r.output, 0, 0, "mixed_col");
     assert_number(&r.output, 1, 0, 42.0);
-    assert_number(&r.output, 2, 0, 3.14);
+    assert_number(&r.output, 2, 0, 314.0 / 100.0);
     assert_text(&r.output, 3, 0, "hello");
-    // Date row 4 → m/d/yyyy format
-    let c = cell_at(&r.output, 0, 4, 0).unwrap();
-    assert!(matches!(c.value, CellValue::Number(_)));
-    assert_eq!(style_format_code(&r.output, 4, 0), "m/d/yyyy");
+    // Date row 4 stays numeric, but keeps the ISO display shape.
+    assert_number(&r.output, 4, 0, 45306.0);
+    assert_eq!(style_format_code(&r.output, 4, 0), "yyyy-mm-dd");
     assert_bool(&r.output, 5, 0, true);
     assert_number(&r.output, 6, 0, 42.0);
 }
@@ -242,7 +255,25 @@ fn fixture_utf16_le_bom_decodes() {
 }
 
 // =========================================================================
-// 9. 90 KB scale fixture parses cleanly.
+// 9. Malformed UTF-8 bytes are kept visible as replacement characters.
+// =========================================================================
+#[test]
+fn fixture_bad_utf8_decodes_with_replacement_chars() {
+    let r = parse("bad-utf8.csv");
+    assert_eq!(r.detected_encoding, "UTF-8");
+    assert_eq!(r.warnings, vec![CsvWarning::MalformedUtf8]);
+    assert_text(&r.output, 0, 0, "name");
+    assert_text(&r.output, 0, 1, "value");
+    assert_text(&r.output, 1, 0, "foo");
+    assert_number(&r.output, 1, 1, 1.0);
+    assert_text(&r.output, 2, 0, "bar");
+    assert_text(&r.output, 2, 1, "\u{FFFD}\u{FFFD}\u{FFFD} invalid bytes");
+    assert_text(&r.output, 3, 0, "baz");
+    assert_number(&r.output, 3, 1, 3.0);
+}
+
+// =========================================================================
+// 10. 90 KB scale fixture parses cleanly.
 // =========================================================================
 #[test]
 fn fixture_large_90kb_parses() {
@@ -257,7 +288,7 @@ fn fixture_large_90kb_parses() {
 }
 
 // =========================================================================
-// 10. 2 MB scale fixture parses cleanly (release-tier perf check).
+// 11. 2 MB scale fixture parses cleanly (release-tier perf check).
 // =========================================================================
 #[test]
 fn fixture_large_2mb_parses() {

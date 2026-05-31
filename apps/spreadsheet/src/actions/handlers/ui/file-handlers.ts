@@ -39,6 +39,7 @@ import type { TraceArrow } from '@mog-sdk/contracts/trace-arrows';
 import { parseA1 } from '@mog/spreadsheet-utils/a1';
 
 import type { BackstagePanelType } from '../../../ui-store/slices/ribbon/backstage';
+import { getTracePrecedentSources } from '../../../utils/formula-auditing';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 
 // =============================================================================
@@ -417,9 +418,8 @@ export const TRACE_PRECEDENTS: AsyncActionHandler = async (deps): Promise<Action
   // Get the CellId for the target cell
   const targetCellId = await getCellIdForPosition(deps, sheetId, row, col);
 
-  // Get precedent cells using Worksheet API (returns A1 strings, same-sheet only)
   const ws = deps.workbook.getSheetById(sheetId);
-  const precedents = await ws.getPrecedents(row, col);
+  const precedents = await getTracePrecedentSources(ws, row, col);
 
   if (precedents.length === 0) {
     // No precedents - cell doesn't have a formula or formula has no cell refs
@@ -428,9 +428,8 @@ export const TRACE_PRECEDENTS: AsyncActionHandler = async (deps): Promise<Action
 
   // Convert A1 strings to TraceArrow format
   const arrows: TraceArrow[] = await Promise.all(
-    precedents.map(async (precAddr: string, index: number) => {
-      // getPrecedents returns A1 strings (same-sheet only)
-      const { row: precRow, col: precCol } = parseA1(precAddr);
+    precedents.map(async (precedent, index: number) => {
+      const { row: precRow, col: precCol } = precedent;
       const fromCellId = await getCellIdForPosition(deps, sheetId, precRow, precCol);
 
       return {
@@ -731,15 +730,12 @@ export const SHARE_DOCUMENT: AsyncActionHandler = async (deps): Promise<ActionRe
   const hostResult = await routeHostCommand(deps, 'share', { source: 'file-menu' });
   if (hostResult) return hostResult;
 
-  const uiStore = getUIStore(deps);
-  const showNotification = (uiStore.getState() as { showNotification?: (msg: string) => void })
-    .showNotification;
-  if (showNotification) {
-    showNotification('Sharing requires a connected workspace. Coming soon.');
-  } else {
-    // No notification system available — last-resort path that still produces
-    // an observable effect (window-scoped event the test harness can listen
-    // for, and that a future toast implementation can subscribe to).
+  const message = 'Sharing requires a connected workspace. Coming soon.';
+  if (deps.workbook.notifications) {
+    deps.workbook.notifications.info(message);
+  } else if (typeof window !== 'undefined') {
+    // Malformed test dependency fallback: keep the observable event for
+    // harnesses that inject a workbook without the notification sub-API.
     window.dispatchEvent(
       new CustomEvent('mog:share-requested', { detail: { source: 'file-menu' } }),
     );

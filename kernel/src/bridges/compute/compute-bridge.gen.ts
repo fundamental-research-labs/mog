@@ -418,6 +418,7 @@ export interface GeneratedBridgeMethods {
   setTableBoolOption(tableName: string, option: string, value: boolean): Promise<MutationResult>;
   setTableAutoExpand(tableName: string, enabled: boolean): Promise<MutationResult>;
   setTableAutoCalculatedColumns(tableName: string, enabled: boolean): Promise<MutationResult>;
+  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction): Promise<MutationResult>;
   addTableDataRow(tableName: string, relativeRow: number | null): Promise<MutationResult>;
   removeTableDataRow(tableName: string, relativeRow: number): Promise<MutationResult>;
   addTableColumn(tableName: string, columnName: string, position: number): Promise<MutationResult>;
@@ -2271,6 +2272,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   setTableAutoCalculatedColumns(tableName: string, enabled: boolean): Promise<MutationResult> {
     return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_auto_calculated_columns', { docId: this.core.docId, tableName, enabled }));
+  }
+
+  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction): Promise<MutationResult> {
+    return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_totals_function', { docId: this.core.docId, tableName, columnId, func }));
   }
 
   addTableDataRow(tableName: string, relativeRow: number | null): Promise<MutationResult> {

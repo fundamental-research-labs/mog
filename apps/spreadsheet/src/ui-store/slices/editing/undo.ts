@@ -29,8 +29,12 @@ export interface UndoSlice {
   redoStackSize: number;
   /** Whether the undo dropdown is open */
   undoDropdownOpen: boolean;
+  /** Whether the next undo gesture should be consumed as a no-op. */
+  shouldSuppressNextUndo: boolean;
   setUndoStackSize: (size: number) => void;
   setRedoStackSize: (size: number) => void;
+  suppressNextUndo: () => void;
+  consumeSuppressNextUndo: () => boolean;
   openUndoDropdown: () => void;
   closeUndoDropdown: () => void;
 }
@@ -40,6 +44,7 @@ export const createUndoSlice: StateCreator<UndoSlice, [], [], UndoSlice> = (set)
   undoStackSize: 0,
   redoStackSize: 0,
   undoDropdownOpen: false,
+  shouldSuppressNextUndo: false,
 
   setUndoStackSize: (size: number) => {
     set({ undoStackSize: size });
@@ -47,6 +52,19 @@ export const createUndoSlice: StateCreator<UndoSlice, [], [], UndoSlice> = (set)
 
   setRedoStackSize: (size: number) => {
     set({ redoStackSize: size });
+  },
+
+  suppressNextUndo: () => {
+    set({ shouldSuppressNextUndo: true });
+  },
+
+  consumeSuppressNextUndo: () => {
+    let shouldSuppress = false;
+    set((state) => {
+      shouldSuppress = state.shouldSuppressNextUndo;
+      return shouldSuppress ? { shouldSuppressNextUndo: false } : state;
+    });
+    return shouldSuppress;
   },
 
   // NOTE: Undo history is read directly from SpreadsheetStore.getUndoHistory()

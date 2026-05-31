@@ -12,7 +12,7 @@
  * @module components/canvas-overlays/form-controls
  */
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, type SyntheticEvent } from 'react';
 
 import type { CheckboxControl } from '@mog-sdk/contracts/form-controls';
 
@@ -84,6 +84,10 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
     onCellValueChange,
   ]);
 
+  const stopGridEventPropagation = useCallback((event: SyntheticEvent) => {
+    event.stopPropagation();
+  }, []);
+
   return (
     <div
       className={hasLabel ? 'flex items-center gap-1' : 'flex items-center justify-center'}
@@ -100,6 +104,12 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
         type="checkbox"
         checked={checked}
         onChange={handleChange}
+        onPointerDown={stopGridEventPropagation}
+        onMouseDown={stopGridEventPropagation}
+        onMouseUp={stopGridEventPropagation}
+        onClick={stopGridEventPropagation}
+        onDoubleClick={stopGridEventPropagation}
+        onKeyDown={stopGridEventPropagation}
         disabled={!control.enabled}
         style={{
           width: 14,

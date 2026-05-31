@@ -65,9 +65,9 @@ const setSelection = assign(
     // Determine modes + committed/pending split.
     //
     // - Non-user source ('remote' / 'agent' / 'restore'): clear all modes,
-    // then split the input ranges into committed + pending. Preserves the
-    // geometry of multi-range agent/restore payloads while the
-    // mode-clearing rule kills the F8/Shift+F8 indicator-leak bug.
+    // drop committed ranges, and keep only the trailing range pending. This
+    // prevents sheet-switch restore from resurrecting stale additive ranges
+    // after the mode flags have been cleared.
     // - User source: preserve current modes; the input ranges always populate
     // committed (leading) + pending (trailing). Multi-range setSelection
     // from Go-To-Special / formula auditing therefore produces a real
@@ -75,7 +75,7 @@ const setSelection = assign(
     // (which would surprise the user with an "ADD" status indicator on a
     // programmatic action).
     const nextModes: SelectionModes = isUser ? context.modes : initialSelectionModes;
-    const nextCommitted: CellRange[] = leading;
+    const nextCommitted: CellRange[] = isUser ? leading : [];
     const nextPending: CellRange = trailing;
 
     return {
@@ -331,6 +331,16 @@ const exitAllModes = assign(({ context }: { context: SelectionContext }) => {
   const newActiveCell = context.modes.extend
     ? getMovingEdge(context.pendingRange, context.anchor ?? context.activeCell)
     : context.activeCell;
+  if (context.modes.extend) {
+    return {
+      modes: initialSelectionModes,
+      committedRanges: [],
+      pendingRange: context.pendingRange,
+      activeCell: newActiveCell,
+      anchor: context.anchor ?? context.activeCell,
+    };
+  }
+
   return {
     modes: initialSelectionModes,
     committedRanges: [],

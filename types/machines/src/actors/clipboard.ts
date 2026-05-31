@@ -250,6 +250,8 @@ export interface ClipboardState {
     skipSizeCheck: boolean;
     /** Whether clipboard data is stale (app lost focus) */
     isStale: boolean;
+    /** App-owned clipboard text that was canceled/consumed and should not paste as external text. */
+    suppressedTextSignature?: string | null;
   };
   // Use `any` for state parameter to be compatible with XState's specific union type
   matches(state: any): boolean;

@@ -108,7 +108,7 @@ describe('ViewportFetchManager', () => {
 
       transport.call.mockClear();
 
-      // Smaller bounds within prefetch region (prefetch = visible + 50 rows + 20 cols)
+      // Smaller bounds within prefetch region.
       await manager.refresh('main', 'sheet-1', {
         startRow: 5,
         startCol: 5,
@@ -171,8 +171,8 @@ describe('ViewportFetchManager', () => {
       await manager.refresh('main', 'sheet-1', {
         startRow: 0,
         endRow: 50,
-        startCol: 54,
-        endCol: 80,
+        startCol: 90,
+        endCol: 116,
       });
 
       const registerCall = transport.call.mock.calls.find(
@@ -182,8 +182,66 @@ describe('ViewportFetchManager', () => {
       const [, args] = registerCall!;
       expect(args.startRow).toBe(0);
       expect(args.endRow).toBe(82);
-      expect(args.startCol).toBe(0);
-      expect(args.endCol).toBe(144);
+      expect(args.startCol).toBe(26);
+      expect(args.endCol).toBe(180);
+    });
+
+    it('mirrors visible-window updates without fetching', async () => {
+      const transport = makeMockTransport();
+      const { manager } = createManager(transport);
+
+      await manager.refresh('main', 'sheet-1', bounds);
+      transport.call.mockClear();
+
+      const visibleBounds = {
+        startRow: 0,
+        startCol: 49,
+        endRow: 50,
+        endCol: 74,
+      };
+      manager.updateVisibleWindow('main', 'sheet-1', visibleBounds);
+
+      expect(transport.call).not.toHaveBeenCalled();
+      expect(manager.getBuffer('main')!.getVisibleWindow()).toEqual({
+        sheetId: 'sheet-1',
+        ...visibleBounds,
+      });
+    });
+
+    it('preserves a newer visible window when an older fetch commits', async () => {
+      let resolveFetch: ((value: Uint8Array) => void) | null = null;
+      const transport = {
+        call: jest.fn((cmd: string) => {
+          if (cmd === 'compute_register_viewport') return Promise.resolve();
+          return new Promise<Uint8Array>((resolve) => {
+            resolveFetch = resolve;
+          });
+        }) as any,
+      } as BridgeTransport & { call: jest.Mock };
+      const { manager } = createManager(transport);
+
+      const refresh = manager.refresh('main', 'sheet-1', bounds);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const latestBounds = {
+        startRow: 0,
+        startCol: 49,
+        endRow: 50,
+        endCol: 74,
+      };
+      manager.updateVisibleWindow('main', 'sheet-1', latestBounds);
+
+      resolveFetch!(makeBuffer());
+      await refresh;
+
+      expect(manager.getBuffer('main')!.getVisibleWindow()).toEqual({
+        sheetId: 'sheet-1',
+        ...latestBounds,
+      });
+      expect(manager.getPerViewportStates().get('main')!.lastVisibleBounds).toEqual(
+        latestBounds,
+      );
     });
   });
 

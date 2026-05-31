@@ -191,6 +191,10 @@ function createMockComputeBridge() {
     setWorkbookSettings: jest.fn().mockResolvedValue(undefined),
     patchWorkbookSettings: jest.fn().mockResolvedValue(undefined),
     protectWorkbook: jest.fn().mockResolvedValue(undefined),
+    unprotectWorkbook: jest.fn().mockResolvedValue({ data: true }),
+    getWorkbookProtectionOptions: jest.fn().mockResolvedValue({ structure: true }),
+    hasWorkbookProtectionPassword: jest.fn().mockResolvedValue(false),
+    isWorkbookProtected: jest.fn().mockResolvedValue(false),
     createScenario: jest.fn().mockResolvedValue({ scenarioId: 'sc1' }),
     getAllNamedRanges: jest.fn().mockResolvedValue([]),
     setNamedRange: jest.fn().mockResolvedValue(undefined),
@@ -373,6 +377,50 @@ describe('WorkbookImpl - Initialization', () => {
     const name = sheet.getName();
     // Must be a display name like "Sheet1", not a raw sheetId like "sheet1"
     expect(name).toBe('Sheet1');
+  });
+});
+
+describe('WorkbookImpl - Workbook Protection', () => {
+  async function createWorkbookWithBridge(bridge: ReturnType<typeof createMockComputeBridge>) {
+    setupSheetMetaMocks();
+    const ctx = createMockCtx(bridge);
+    const wb = new WorkbookImpl({
+      ctx,
+      eventBus: createMockEventBus(),
+    });
+    await wb._init();
+    return { wb, ctx };
+  }
+
+  it('reads workbook protection through the structured compute bridge', async () => {
+    const bridge = createMockComputeBridge();
+    bridge.isWorkbookProtected.mockResolvedValue(true);
+    bridge.getWorkbookProtectionOptions.mockResolvedValue({ structure: true });
+    const { wb } = await createWorkbookWithBridge(bridge);
+
+    await expect(wb.protection.isProtected()).resolves.toBe(true);
+    await expect(wb.protection.getOptions()).resolves.toEqual(
+      expect.objectContaining({ structure: true }),
+    );
+
+    expect(bridge.isWorkbookProtected).toHaveBeenCalledTimes(2);
+    expect(bridge.getWorkbookProtectionOptions).toHaveBeenCalledTimes(1);
+    expect(bridge.getWorkbookSetting).not.toHaveBeenCalledWith('isWorkbookProtected');
+    expect(bridge.getWorkbookSetting).not.toHaveBeenCalledWith('workbookProtectionOptions');
+  });
+
+  it('unprotects through compute_unprotect_workbook instead of flat settings patches', async () => {
+    const bridge = createMockComputeBridge();
+    bridge.isWorkbookProtected.mockResolvedValue(true);
+    bridge.unprotectWorkbook.mockResolvedValue({ data: true });
+    const { wb } = await createWorkbookWithBridge(bridge);
+
+    await expect(wb.protection.unprotect()).resolves.toBe(true);
+
+    expect(bridge.unprotectWorkbook).toHaveBeenCalledWith(null);
+    expect(bridge.patchWorkbookSettings).not.toHaveBeenCalledWith(
+      expect.objectContaining({ isWorkbookProtected: false }),
+    );
   });
 });
 

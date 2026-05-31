@@ -655,7 +655,7 @@ export function ViewRibbon({
               <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
                 <RulerIcon />
               </span>
-              <Checkbox disabled />
+              <Checkbox disabled aria-label="Ruler" />
               <span className="text-ribbon-compact text-ss-text-secondary">Ruler</span>
             </label>
           </RibbonVisibilityItem>
@@ -671,6 +671,7 @@ export function ViewRibbon({
                 checked={showHeadings}
                 onChange={() => onToggleHeadings?.()}
                 disabled={!onToggleHeadings}
+                aria-label="Headings"
               />
               <span className="text-ribbon-compact text-ss-text-secondary">Headings</span>
             </label>
@@ -689,6 +690,7 @@ export function ViewRibbon({
                 checked={showGridlines}
                 onChange={() => onToggleGridlines?.()}
                 disabled={!onToggleGridlines}
+                aria-label="Gridlines"
               />
               <span className="text-ribbon-compact text-ss-text-secondary">Gridlines</span>
             </label>
@@ -711,6 +713,7 @@ export function ViewRibbon({
                 checked={showFormulaBar}
                 onChange={() => onToggleFormulaBar?.()}
                 disabled={!onToggleFormulaBar}
+                aria-label="Formula Bar"
               />
               <span className="text-ribbon-compact text-ss-text-secondary">Formula</span>
             </label>
@@ -729,6 +732,7 @@ export function ViewRibbon({
                 checked={showHorizontalScrollbar}
                 onChange={() => onToggleHorizontalScrollbar?.()}
                 disabled={!onToggleHorizontalScrollbar}
+                aria-label="Horizontal Scrollbar"
               />
               <span className="text-ribbon-compact text-ss-text-secondary">H-Scroll</span>
             </label>
@@ -745,6 +749,7 @@ export function ViewRibbon({
                 checked={showVerticalScrollbar}
                 onChange={() => onToggleVerticalScrollbar?.()}
                 disabled={!onToggleVerticalScrollbar}
+                aria-label="Vertical Scrollbar"
               />
               <span className="text-ribbon-compact text-ss-text-secondary">V-Scroll</span>
             </label>

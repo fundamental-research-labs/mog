@@ -109,21 +109,16 @@ fn collapsed_outline_group_returns_zero_row_height() {
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
 
-    // Excel collapse semantics: with `summary_rows_below=true` (the default),
-    // the last row of the group is the summary row and stays visible.
-    // Rows 2..=3 (the non-summary members) become hidden.
-    for row in 2..=3 {
+    // Excel collapse semantics: group.start..=group.end are detail rows.
+    // With `summary_rows_below=true` (the default), the summary row is the
+    // adjacent row after the group and every grouped detail row is hidden.
+    for row in 2..=4 {
         let h = engine.get_row_height_query(&sid, row);
         assert_eq!(
             h, 0.0,
             "row {row} should have zero rendered height when its outline group is collapsed (got {h})"
         );
     }
-    // The summary row (4 = group.end) remains visible.
-    assert!(
-        engine.get_row_height_query(&sid, 4) > 0.0,
-        "summary row 4 should remain visible when its group is collapsed"
-    );
 
     // Row 1 (above the group) and row 5 (below the group) must remain visible.
     assert!(
@@ -159,20 +154,15 @@ fn collapsed_outline_column_group_returns_zero_col_width() {
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
 
-    // With `summary_columns_right=true` (default), the rightmost column of
-    // the group is the summary column and stays visible. Cols 3..=5 (the
-    // non-summary members) become hidden.
-    for col in 3..=5 {
+    // With `summary_columns_right=true` (default), the summary column is the
+    // adjacent column after the group and every grouped detail column is hidden.
+    for col in 3..=6 {
         let w = engine.get_col_width_query(&sid, col);
         assert_eq!(
             w, 0.0,
             "col {col} should have zero rendered width when its outline group is collapsed (got {w})"
         );
     }
-    assert!(
-        engine.get_col_width_query(&sid, 6) > 0.0,
-        "summary column 6 should remain visible when its group is collapsed"
-    );
 
     assert!(
         engine.get_col_width_query(&sid, 2) > 0.0,
@@ -237,12 +227,12 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
     let layout = engine.layout_index(&sid).expect("layout index");
     assert_eq!(layout.get_row_height(2).0, 0.0);
     assert_eq!(layout.get_row_height(3).0, 0.0);
-    assert!(layout.get_row_height(4).0 > 0.0);
+    assert_eq!(layout.get_row_height(4).0, 0.0);
 
     let render_data = engine.build_viewport_render_data(&sid, 0, 0, 8, 6);
     assert_eq!(render_data.row_dimensions[2].height, 0.0);
     assert_eq!(render_data.row_dimensions[3].height, 0.0);
-    assert!(render_data.row_dimensions[4].height > 0.0);
+    assert_eq!(render_data.row_dimensions[4].height, 0.0);
     assert!(
         !render_data.row_dimensions[2].hidden,
         "outline collapse affects effective height, not explicit hidden state"
@@ -252,7 +242,7 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
         extract_first_viewport_mutation(&collapse_patches).expect("viewport patch");
     assert_eq!(viewport_row_height(&viewport_bytes, 2), Some(0.0));
     assert_eq!(viewport_row_height(&viewport_bytes, 3), Some(0.0));
-    assert!(viewport_row_height(&viewport_bytes, 4).is_some_and(|height| height > 0.0));
+    assert_eq!(viewport_row_height(&viewport_bytes, 4), Some(0.0));
 
     let (expand_patches, _) = engine
         .set_group_collapsed(&sid, &group_id, false)
@@ -260,10 +250,12 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
     let layout = engine.layout_index(&sid).expect("layout index");
     assert!(layout.get_row_height(2).0 > 0.0);
     assert!(layout.get_row_height(3).0 > 0.0);
+    assert!(layout.get_row_height(4).0 > 0.0);
 
     let viewport_bytes = extract_first_viewport_mutation(&expand_patches).expect("viewport patch");
     assert!(viewport_row_height(&viewport_bytes, 2).is_some_and(|height| height > 0.0));
     assert!(viewport_row_height(&viewport_bytes, 3).is_some_and(|height| height > 0.0));
+    assert!(viewport_row_height(&viewport_bytes, 4).is_some_and(|height| height > 0.0));
 }
 
 #[test]
@@ -287,13 +279,13 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_columns() {
     assert_eq!(layout.get_col_width(3).0, 0.0);
     assert_eq!(layout.get_col_width(4).0, 0.0);
     assert_eq!(layout.get_col_width(5).0, 0.0);
-    assert!(layout.get_col_width(6).0 > 0.0);
+    assert_eq!(layout.get_col_width(6).0, 0.0);
 
     let render_data = engine.build_viewport_render_data(&sid, 0, 0, 8, 8);
     assert_eq!(render_data.col_dimensions[3].width, 0.0);
     assert_eq!(render_data.col_dimensions[4].width, 0.0);
     assert_eq!(render_data.col_dimensions[5].width, 0.0);
-    assert!(render_data.col_dimensions[6].width > 0.0);
+    assert_eq!(render_data.col_dimensions[6].width, 0.0);
     assert!(
         !render_data.col_dimensions[3].hidden,
         "outline collapse affects effective width, not explicit hidden state"
@@ -304,5 +296,5 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_columns() {
     assert_eq!(viewport_col_width(&viewport_bytes, 3), Some(0.0));
     assert_eq!(viewport_col_width(&viewport_bytes, 4), Some(0.0));
     assert_eq!(viewport_col_width(&viewport_bytes, 5), Some(0.0));
-    assert!(viewport_col_width(&viewport_bytes, 6).is_some_and(|width| width > 0.0));
+    assert_eq!(viewport_col_width(&viewport_bytes, 6), Some(0.0));
 }

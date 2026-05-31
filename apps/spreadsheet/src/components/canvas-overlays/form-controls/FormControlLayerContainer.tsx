@@ -75,14 +75,33 @@ export function FormControlLayerContainer() {
       ws.on('formControl:updated', bump),
       ws.on('formControl:deleted', bump),
       ws.on('cellChanged', bump),
-      ws.on('row:height-changed', bump),
-      ws.on('column:width-changed', bump),
     ];
 
     return () => {
       for (const dispose of disposers) dispose();
     };
   }, [sheetId, ws]);
+
+  useEffect(() => {
+    if (!geometry?.observe || resolvedControls.length === 0) return;
+
+    let disposed = false;
+    const bump = () => {
+      if (!disposed) {
+        setRefreshVersion((version) => version + 1);
+      }
+    };
+    const disposers = resolvedControls.map((resolved) =>
+      geometry.observe!(resolved.anchorPosition, bump),
+    );
+
+    return () => {
+      disposed = true;
+      for (const dispose of disposers) {
+        dispose.dispose();
+      }
+    };
+  }, [geometry, resolvedControls]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CELL VALUE CHANGE HANDLER
@@ -170,6 +189,10 @@ interface GeometryLike {
     width: number;
     height: number;
   } | null;
+  observe?: (
+    anchor: { row: number; col: number },
+    listener: (rect: { x: number; y: number; width: number; height: number } | null) => void,
+  ) => { dispose: () => void };
 }
 
 interface ViewportLike {
@@ -258,6 +281,7 @@ async function resolveControlPositions(
       y,
       width,
       height,
+      anchorPosition,
       cellValue,
       linkedCellPosition,
       resolvedItems,

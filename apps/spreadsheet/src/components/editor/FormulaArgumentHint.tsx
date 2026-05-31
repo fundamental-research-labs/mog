@@ -65,7 +65,7 @@ export function FormulaArgumentHint({
   if (args.length === 0) {
     return (
       <div
-        className="fixed z-ss-popover bg-ss-surface border border-ss-border rounded shadow-ss-lg p-3 text-body"
+        className="fixed z-ss-popover pointer-events-none bg-ss-surface border border-ss-border rounded shadow-ss-lg p-3 text-body"
         style={{
           left: position.x,
           top: position.y,
@@ -92,7 +92,7 @@ export function FormulaArgumentHint({
 
   return (
     <div
-      className="fixed z-ss-popover bg-ss-surface border border-ss-border rounded shadow-ss-lg p-3 text-body"
+      className="fixed z-ss-popover pointer-events-none bg-ss-surface border border-ss-border rounded shadow-ss-lg p-3 text-body"
       style={{
         left: position.x,
         top: position.y,

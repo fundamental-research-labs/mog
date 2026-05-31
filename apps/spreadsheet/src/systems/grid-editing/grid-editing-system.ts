@@ -79,6 +79,7 @@ import { setupClipboardPasteIntegration } from './coordination/paste-integration
 import { setupValidationCirclesCoordination } from './features/validation';
 import { setupTableSelectionCoordination } from './features/table';
 import { setupPivotSelectionCoordination } from './features/pivot';
+import { setupStructureCoordination } from './features/structure';
 import {
   setupCommentHoverCoordination,
   setupCommentSelectionCoordination,
@@ -686,6 +687,9 @@ export class GridEditingSystem implements IGridEditingSystem {
 
     // 2. Wire tightly-coupled trio coordination (selection <-> editor <-> clipboard)
     this.setupTrioCoordination();
+
+    // 2a. Wire structural row/column changes into selection/editor/clipboard.
+    this.setupStructureCoordination();
 
     // 2b. Wire clipboard paste integration (pasting state → executePaste)
     this.setupClipboardPasteIntegration();
@@ -1376,6 +1380,24 @@ export class GridEditingSystem implements IGridEditingSystem {
     });
 
     this.cleanupFns.push(cleanupCrossCoordination);
+  }
+
+  private setupStructureCoordination(): void {
+    const workbook = this.config.workbook;
+    if (!workbook) return;
+
+    const coordination = setupStructureCoordination({
+      workbook,
+      selectionActor: this.selectionActor,
+      editorActor: this.editorActor,
+      clipboardActor: this.clipboardActor,
+      getCurrentSheetId: () =>
+        (this.config.getActiveSheetId ?? (() => this.config.initialSheetId))(),
+      getEditingCell: () => this.getEditorSnapshot().editingCell,
+      getEditingSheetId: () => this.getEditorSnapshot().sheetId,
+    });
+
+    this.cleanupFns.push(coordination.cleanup);
   }
 
   /**

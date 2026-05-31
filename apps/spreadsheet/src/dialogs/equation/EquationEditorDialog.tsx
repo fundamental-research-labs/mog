@@ -123,6 +123,7 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
 
   const [activeTab, setActiveTab] = useState<string>('editor');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const shouldSelectTemplateTextRef = useRef(false);
 
   // Cell reference for display
   const cellRef = `${colToLetter(targetCol)}${targetRow + 1}`;
@@ -135,9 +136,12 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
   // Focus textarea when dialog opens
   useEffect(() => {
     if (isOpen && activeTab === 'editor') {
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 100);
+      const textarea = textareaRef.current;
+      textarea?.focus();
+      if (textarea && shouldSelectTemplateTextRef.current) {
+        textarea.select();
+        shouldSelectTemplateTextRef.current = false;
+      }
     }
   }, [isOpen, activeTab]);
 
@@ -172,13 +176,8 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
       applyTemplate(template);
       addRecentTemplate(template.id);
       // Switch to editor tab to show the inserted template
+      shouldSelectTemplateTextRef.current = true;
       setActiveTab('editor');
-      // Focus textarea
-      setTimeout(() => {
-        textareaRef.current?.focus();
-        // Select all text so user can easily replace
-        textareaRef.current?.select();
-      }, 100);
     },
     [applyTemplate, addRecentTemplate],
   );
@@ -241,6 +240,7 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
       onClose={handleCancel}
       dialogId="equation-editor-dialog"
       width={600}
+      initialFocusRef={textareaRef}
     >
       <DialogHeader onClose={handleCancel}>
         {isEditMode ? 'Edit Equation' : 'Insert Equation'}
@@ -268,6 +268,7 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
                 <Textarea
                   ref={textareaRef}
                   id="equation-latex-input"
+                  aria-label="LaTeX Equation"
                   value={latex}
                   onChange={handleLatexChange}
                   placeholder="\\frac{a}{b}"

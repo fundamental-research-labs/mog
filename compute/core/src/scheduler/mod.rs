@@ -52,6 +52,7 @@ use crate::snapshot::{
     CalcMode, CellChange, CellEdit, CellErrorInfo, ProjectionCellData, ProjectionChange,
     RecalcMetrics, RecalcResult, SheetSnapshot, WorkbookSnapshot,
 };
+use crate::storage::cells::formula_updater::replace_sheet_name_in_a1_formula;
 use cell_types::RangePos;
 use cell_types::{CellId, ColId, IdAllocator, RowId, SheetId, SheetPos};
 use compute_functions::helpers::sumifs_result_cache::{
@@ -510,6 +511,8 @@ impl ComputeCore {
         }
         let external_dependents: Vec<CellId> = ext_dep_set.into_iter().collect();
 
+        self.regenerate_formula_strings_for_sheet_delete(mirror, sheet_id);
+
         // Remove from graph and caches
         for cell_id in &cell_ids {
             self.graph.remove_cell(cell_id);
@@ -530,9 +533,8 @@ impl ComputeCore {
         self.sheet_order.remove(sheet_id);
         self.rebuild_ordered_sheets_cache();
 
-        mirror.remove_sheet(sheet_id);
-
         // Recalc external dependents so they pick up #REF! from the missing sheet.
+        mirror.remove_sheet(sheet_id);
         if external_dependents.is_empty() {
             Ok(RecalcResult::empty())
         } else {
@@ -542,11 +544,27 @@ impl ComputeCore {
 
     /// Rename a sheet. May need to reparse formulas that reference the old name.
     pub fn rename_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId, name: &str) {
+        let old_name = mirror.get_sheet(sheet_id).map(|sheet| sheet.name.clone());
+        let authored_formula_text = self.cell_formula_text.clone();
+
         mirror.rename_sheet(sheet_id, name);
         // Formulas use resolved SheetIds internally, so no reparsing needed.
         // But formula_strings (A1 display cache) contain sheet names, so we
         // must regenerate them to reflect the new name.
         self.regenerate_formula_strings(mirror);
+
+        let Some(old_name) = old_name else {
+            return;
+        };
+        if old_name == name {
+            return;
+        }
+
+        for (cell_id, formula) in authored_formula_text {
+            let updated = replace_sheet_name_in_a1_formula(&formula, &old_name, name);
+            self.cell_formula_text.insert(cell_id, updated.clone());
+            self.formula_strings.insert(cell_id, updated);
+        }
     }
 
     // -----------------------------------------------------------------------

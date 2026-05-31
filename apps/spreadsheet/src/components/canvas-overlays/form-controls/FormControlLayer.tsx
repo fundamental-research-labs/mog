@@ -47,6 +47,8 @@ export interface ResolvedFormControl {
   height: number;
   /** Linked cell position, when the control stores its value in a cell. */
   linkedCellPosition?: { row: number; col: number };
+  /** Anchor cell position used to track geometry changes after resize/layout settles. */
+  anchorPosition: { row: number; col: number };
   /** Resolved items for comboBox controls (from static or dynamic source) */
   resolvedItems?: string[];
 }

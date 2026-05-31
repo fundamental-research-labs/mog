@@ -955,13 +955,13 @@ impl YrsComputeEngine {
         grouping::should_render_outlines(self, sheet_id)
     }
 
-    /// Get rows affected by a group (excludes summary row).
+    /// Get detail rows affected by a group.
     #[bridge::read(scope = "sheet")]
     pub fn get_affected_rows_by_group(&self, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
         grouping::get_affected_rows_by_group(self, sheet_id, group_id)
     }
 
-    /// Get columns affected by a group (excludes summary column).
+    /// Get detail columns affected by a group.
     #[bridge::read(scope = "sheet")]
     pub fn get_affected_columns_by_group(&self, sheet_id: &SheetId, group_id: &str) -> Vec<u32> {
         grouping::get_affected_columns_by_group(self, sheet_id, group_id)

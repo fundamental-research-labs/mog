@@ -14,7 +14,9 @@
  */
 
 import { assign } from 'xstate';
+import { singleCellRange } from '../../../shared/types';
 import type { SelectionContext, SelectionEvent } from './types';
+import { buildExtendUpdate, moveTo } from './helpers';
 
 // =============================================================================
 // FORMULA RANGE MODE ACTIONS
@@ -35,8 +37,11 @@ const enterFormulaMode = assign(
 /**
  * Exit formula range selection mode.
  */
-const exitFormulaMode = assign(() => ({
+const exitFormulaMode = assign(({ context }: { context: SelectionContext }) => ({
   formulaRangeColor: null,
+  pendingRange: singleCellRange(context.activeCell),
+  committedRanges: [],
+  anchor: context.activeCell,
 }));
 
 /**
@@ -59,11 +64,7 @@ const exitRangeSelectionMode = assign(() => ({
 const setFormulaRange = assign(
   ({ event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_DOWN') return {};
-    return {
-      anchor: event.cell,
-      // In formula mode, we don't replace the main selection
-      // The coordinator will read this and insert into the formula
-    };
+    return moveTo(event.cell);
   },
 );
 
@@ -73,11 +74,7 @@ const setFormulaRange = assign(
 const updateFormulaRange = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_MOVE' || !context.anchor) return {};
-    // In formula mode, we track the range being selected for the formula
-    // but don't modify the main selection
-    return {
-      // The coordinator will read anchor + current cell to get the range
-    };
+    return buildExtendUpdate(context.anchor, event.cell);
   },
 );
 

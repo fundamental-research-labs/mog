@@ -13,7 +13,7 @@ fn test_outline_symbols() {
     };
     let sy = get_outline_symbols(s.doc(), &s.sheets_ref(), &id, &vp);
     assert_eq!(sy.len(), 1);
-    assert_eq!(sy[0].index, 5);
+    assert_eq!(sy[0].index, 6);
     assert_eq!(sy[0].group_id, g.id);
 }
 

@@ -273,11 +273,11 @@ describe('commitCellValue invoke awaits bridge call', () => {
   });
 
   it.each(['=A1', '=$A$1', '=SUM(A1)', '=A1:A1', '=Sheet1!A1', "='Sheet1'!A1"])(
-    'blocks direct self-reference %s until iterative calculation is enabled',
+    'commits direct self-reference %s while showing a warning',
     async (value) => {
       const setCellValue = jest.fn();
       let enableIterative!: () => void;
-      let cancelEdit!: () => void;
+      let dismissWarning!: () => void;
       const onCircularReferenceWarning = jest.fn(
         (
           _cellAddress: string,
@@ -286,7 +286,7 @@ describe('commitCellValue invoke awaits bridge call', () => {
           onCancel: () => void,
         ) => {
           enableIterative = onEnableIterative;
-          cancelEdit = onCancel;
+          dismissWarning = onCancel;
         },
       );
       const validateCircularReference = jest.fn(
@@ -316,23 +316,24 @@ describe('commitCellValue invoke awaits bridge call', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      expect(editorActor.getSnapshot().matches('validating')).toBe(true);
-      expect(setCellValue).not.toHaveBeenCalled();
+      expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+      expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, value);
 
-      expect(cancelEdit).toEqual(expect.any(Function));
+      expect(dismissWarning).toEqual(expect.any(Function));
       enableIterative();
+      dismissWarning();
       await flushMicrotasks();
 
       expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
-      expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, value);
+      expect(setCellValue).toHaveBeenCalledTimes(1);
 
       cleanup();
     },
   );
 
-  it('cancels a direct self-reference warning without writing the formula', async () => {
+  it('dismisses a direct self-reference warning without reverting the committed formula', async () => {
     const setCellValue = jest.fn();
-    let cancelEdit!: () => void;
+    let dismissWarning!: () => void;
     const onCircularReferenceWarning = jest.fn(
       (
         _cellAddress: string,
@@ -340,7 +341,7 @@ describe('commitCellValue invoke awaits bridge call', () => {
         _onEnableIterative: () => void,
         onCancel: () => void,
       ) => {
-        cancelEdit = onCancel;
+        dismissWarning = onCancel;
       },
     );
 
@@ -356,14 +357,38 @@ describe('commitCellValue invoke awaits bridge call', () => {
 
     await flushMicrotasks();
 
-    expect(editorActor.getSnapshot().matches('validating')).toBe(true);
-    expect(setCellValue).not.toHaveBeenCalled();
+    expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+    expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, '=A1');
 
-    cancelEdit();
+    dismissWarning();
     await flushMicrotasks();
 
     expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
-    expect(setCellValue).not.toHaveBeenCalled();
+    expect(setCellValue).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it('commits direct self-reference formulas when no warning handler is installed', async () => {
+    const setCellValue = jest.fn();
+    const validateCircularReference = jest
+      .fn()
+      .mockResolvedValue({ cellAddress: 'A1', formula: '=A1' });
+
+    const { system, sheetId, editorActor, cleanup } = createSystemWithAsyncCellWrite(setCellValue, {
+      validateFormulaSyntax: jest.fn().mockResolvedValue(null),
+      validateCircularReference,
+    });
+
+    const cell = system.access.accessors.selection.getActiveCell();
+    system.startEditing(cell, sheetId, '=A1');
+    system.commitEdit('none');
+
+    await flushMicrotasks();
+
+    expect(validateCircularReference).toHaveBeenCalledWith(sheetId, 0, 0, '=A1');
+    expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+    expect(setCellValue).toHaveBeenCalledWith('test-sheet', 0, 0, '=A1');
 
     cleanup();
   });

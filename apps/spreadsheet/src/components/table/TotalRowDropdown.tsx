@@ -83,6 +83,11 @@ export function TotalRowDropdown(): React.ReactElement | null {
 
   // Track hovered function for formula preview
   const [hoveredFunction, setHoveredFunction] = useState<TotalFunction | null>(null);
+  const [ignoreInitialOutsideEvent, setIgnoreInitialOutsideEvent] = useState(false);
+
+  useEffect(() => {
+    setIgnoreInitialOutsideEvent(isOpen);
+  }, [isOpen, tableId, columnIndex]);
 
   // Get table and column info for formula preview via Workbook/Worksheet API (async)
   const [tableInfo, setTableInfo] = useState<{ columnName: string } | null>(null);
@@ -136,6 +141,15 @@ export function TotalRowDropdown(): React.ReactElement | null {
     [tableId, columnIndex, closeTotalRowDropdown, deps],
   );
 
+  const handleInitialOutsideEvent = useCallback(
+    (event: { preventDefault: () => void }) => {
+      if (!ignoreInitialOutsideEvent) return;
+      event.preventDefault();
+      setIgnoreInitialOutsideEvent(false);
+    },
+    [ignoreInitialOutsideEvent],
+  );
+
   // Don't render if not open
   if (!isOpen || !position) {
     return null;
@@ -150,6 +164,8 @@ export function TotalRowDropdown(): React.ReactElement | null {
         shadow="lg"
         closeOnClickOutside={true}
         closeOnEscape={true}
+        onPointerDownOutside={handleInitialOutsideEvent}
+        onFocusOutside={handleInitialOutsideEvent}
         width={180}
         role="listbox"
         aria-label="Select total function for column"

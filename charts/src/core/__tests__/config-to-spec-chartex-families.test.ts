@@ -14,6 +14,79 @@ function asLayerSpec(spec: ChartSpec): LayerSpec {
 }
 
 describe('configToSpec ChartEx-family semantics', () => {
+  it('renders Pareto as sorted bars plus a cumulative percentage line', () => {
+    const data: ChartData = {
+      categories: ['B', 'A', 'C'],
+      series: [
+        {
+          name: 'Defects',
+          data: [
+            { x: 'B', y: 2 },
+            { x: 'A', y: 5 },
+            { x: 'C', y: 3 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'pareto',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 6,
+      height: 4,
+    };
+
+    const spec = asLayerSpec(configToSpec(config, data));
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+
+    expect(rows.map((row) => [row.category, row.value, row.__mogParetoCumulativePercent])).toEqual(
+      [
+        ['A', 5, 50],
+        ['C', 3, 80],
+        ['B', 2, 100],
+      ],
+    );
+    expect(spec.resolve).toEqual({
+      scale: { y: 'independent' },
+      axis: { y: 'independent' },
+    });
+    expect(spec.layer).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ mark: expect.objectContaining({ type: 'bar' }) }),
+        expect.objectContaining({
+          mark: expect.objectContaining({ type: 'line' }),
+          encoding: expect.objectContaining({
+            y: expect.objectContaining({
+              field: '__mogParetoCumulativePercent',
+              axis: expect.objectContaining({ orient: 'right' }),
+            }),
+          }),
+        }),
+      ]),
+    );
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const barValues = compiled.marks
+      .filter((mark) => mark.type === 'rect')
+      .map((mark) => mark.datum?.value);
+    const cumulativeLine = compiled.marks.find((mark) => mark.type === 'path');
+
+    expect(barValues).toEqual([5, 3, 2]);
+    expect(cumulativeLine?.datum).toEqual(
+      rows.map((row) =>
+        expect.objectContaining({
+          __mogParetoCumulativePercent: row.__mogParetoCumulativePercent,
+        }),
+      ),
+    );
+  });
+
   it('projects waterfall subtotal rows and connector visibility into render layers', () => {
     const data: ChartData = {
       categories: ['Start', 'Loss', 'Subtotal'],

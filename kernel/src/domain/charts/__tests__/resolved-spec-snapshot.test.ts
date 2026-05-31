@@ -395,7 +395,6 @@ describe('resolved spec snapshot helpers', () => {
   });
 
   it.each([
-    ['pareto', 'pareto rendering requires cumulative percentage line semantics'],
     ['treemap', 'treemap rendering requires hierarchy layout semantics'],
     ['sunburst', 'sunburst rendering requires hierarchy layout semantics'],
     ['regionMap', 'region map rendering uses placeholder geometry'],

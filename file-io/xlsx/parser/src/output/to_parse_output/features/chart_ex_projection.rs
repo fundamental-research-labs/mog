@@ -387,7 +387,7 @@ pub(super) fn chart_ex_import_status(
                 title,
             ));
         }
-        ChartType::Treemap | ChartType::Sunburst | ChartType::RegionMap | ChartType::Pareto => {
+        ChartType::Treemap | ChartType::Sunburst | ChartType::RegionMap => {
             return Some(chart_import_status(
                 domain_types::ImportDiagnosticCode::UnsupportedFeature,
                 format!(
@@ -454,7 +454,7 @@ pub(super) fn chart_ex_import_status(
 fn chart_type_requires_categories(chart_type: &ChartType) -> bool {
     matches!(
         chart_type,
-        ChartType::Waterfall | ChartType::Funnel | ChartType::Boxplot
+        ChartType::Waterfall | ChartType::Funnel | ChartType::Pareto | ChartType::Boxplot
     )
 }
 
@@ -2113,7 +2113,12 @@ mod tests {
 
     #[test]
     fn supported_category_families_missing_categories_are_not_renderable() {
-        for chart_type in [ChartType::Waterfall, ChartType::Funnel, ChartType::Boxplot] {
+        for chart_type in [
+            ChartType::Waterfall,
+            ChartType::Funnel,
+            ChartType::Pareto,
+            ChartType::Boxplot,
+        ] {
             let status = chart_ex_import_status(
                 &chart_type,
                 &[chart_series(chart_type.clone(), None, Some("Sheet1!B1:B3"))],
@@ -2191,7 +2196,7 @@ mod tests {
     }
 
     #[test]
-    fn pareto_projects_data_but_remains_preserved_not_renderable() {
+    fn pareto_projects_renderable_data_for_cumulative_line_renderer() {
         let chart_space =
             chart_space_with_series(ChartExLayoutId::Pareto, cat_val_dimensions(), None);
         let projected =
@@ -2199,18 +2204,12 @@ mod tests {
 
         assert_eq!(projected.chart_type, ChartType::Pareto);
         assert_eq!(projected.series.len(), 1);
+        assert_eq!(
+            projected.series[0].categories.as_deref(),
+            Some("Sheet1!A1:A3")
+        );
         assert_eq!(projected.series[0].values.as_deref(), Some("Sheet1!B1:B3"));
-        let status = projected
-            .import_status
-            .expect("pareto is projected for preservation but not rendered as plain bars");
-        assert_eq!(
-            status.renderability,
-            domain_types::ImportRenderability::NotRenderable
-        );
-        assert_eq!(
-            status.diagnostics[0].code,
-            Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
-        );
+        assert!(projected.import_status.is_none());
     }
 
     #[test]

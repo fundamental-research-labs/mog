@@ -401,8 +401,6 @@ function unsupportedFeatureDiagnostics(
     unsupported.push('surface wireframe rendering is not fully semantic');
   if (config.type === 'regionMap')
     unsupported.push('region map rendering uses placeholder geometry');
-  if (config.type === 'pareto')
-    unsupported.push('pareto rendering requires cumulative percentage line semantics');
   if (config.type === 'treemap')
     unsupported.push('treemap rendering requires hierarchy layout semantics');
   if (config.type === 'sunburst')

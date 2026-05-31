@@ -17,6 +17,7 @@ import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from
 import { buildDataTableLayers } from './layers/data-table';
 import { buildErrorBarLayers } from './layers/error-bars';
 import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
+import { buildParetoLayers } from './layers/pareto';
 import { buildStockLayers } from './layers/stock';
 import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
@@ -46,6 +47,7 @@ export {
   buildEncoding,
   buildDataLabelLayer,
   buildMark,
+  buildParetoLayers,
   buildStockLayers,
   buildTitle,
   buildTrendlineTransform,
@@ -122,6 +124,22 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       layers,
       title,
       config: configSpec,
+    });
+  }
+
+  if (config.type === 'pareto') {
+    const pareto = buildParetoLayers(config, data);
+    pareto.layers.push(...buildAnnotationLayers(config, data, encoding, pareto.rows));
+    return buildLayerSpec({
+      dimensions,
+      rows: pareto.rows,
+      layers: pareto.layers,
+      title,
+      config: configSpec,
+      resolve: {
+        scale: { y: 'independent' },
+        axis: { y: 'independent' },
+      },
     });
   }
 

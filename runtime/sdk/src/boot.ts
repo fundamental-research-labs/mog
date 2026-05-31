@@ -312,6 +312,15 @@ export async function createWorkbook(
     throw new Error('[createWorkbook] host-backed document creation did not return a handle');
   }
   const readyHandle = handle;
+
+  // Node SDK callers expect imported workbooks to be fully queryable when
+  // createWorkbook resolves. Browser hosts may defer this after first paint,
+  // but headless imports need charts, objects, and other projections before
+  // the caller starts enumerating workbook state.
+  if (xlsxBytes) {
+    await readyHandle.awaitImportDurability();
+  }
+
   readyHandle.registerChartImageExporter(
     createNodeChartImageExporterFactory(loadNodeSdkNapiAddon()),
   );

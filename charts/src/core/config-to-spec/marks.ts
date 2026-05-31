@@ -27,6 +27,7 @@ import {
 } from './fields';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
+import { barOrientationForChartType } from './bar-geometry';
 
 export { applyImportedBarOutline } from './mark-format';
 
@@ -54,10 +55,56 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   const baseType = MARK_TYPE_MAP[config.type] ?? 'bar';
   const subProps = resolveSubTypeMarkProps(config);
 
-  // Pie3D: same as pie (3D is visual-only)
-  if (config.type === 'pie3d') {
+  if (baseType === 'bar3d') {
     const mark: MarkSpec = {
-      type: 'arc',
+      type: 'bar3d',
+      fillField: SERIES_FILL_FIELD,
+      strokeField: SERIES_STROKE_FIELD,
+      strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      chart3d: {
+        family: 'bar',
+        orientation: barOrientationForChartType(config.type),
+        barShape: resolveBar3DShape(config),
+        gapDepth: config.gapDepth,
+        view3d: config.view3d,
+      },
+    };
+    applyPrimarySeriesFormat(mark, config);
+    applyImportedBarOutline(mark, config);
+    applyPointStyleFields(mark, config);
+    return mark;
+  }
+
+  if (baseType === 'line3d') {
+    const mark: MarkSpec = {
+      type: 'line3d',
+      chart3d: { family: 'line', gapDepth: config.gapDepth, view3d: config.view3d },
+    };
+    const series = config.series?.find((item) => !isNoFillNoLineSeries(item));
+    if (hasExplicitNoLine(series)) {
+      mark.opacity = 0;
+      mark.strokeWidth = 0;
+    }
+    if (config.subType === 'smooth') {
+      mark.interpolate = 'monotone';
+    } else if (config.subType === 'stepped') {
+      mark.interpolate = 'step';
+    }
+    return mark;
+  }
+
+  if (baseType === 'area3d') {
+    const mark: MarkSpec = {
+      type: 'area3d',
+      chart3d: { family: 'area', gapDepth: config.gapDepth, view3d: config.view3d },
+    };
+    return mark;
+  }
+
+  if (config.type === 'pie3d' || config.type === 'pie3dExploded') {
+    const mark: MarkSpec = {
+      type: 'arc3d',
+      chart3d: { family: 'pie', view3d: config.view3d },
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
@@ -230,6 +277,14 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Simple mark type string
   return baseType;
+}
+
+function resolveBar3DShape(config: ChartConfig): NonNullable<NonNullable<MarkSpec['chart3d']>['barShape']> {
+  if (config.barShape) return config.barShape;
+  if (String(config.type).startsWith('cylinder')) return 'cylinder';
+  if (String(config.type).startsWith('cone')) return 'cone';
+  if (String(config.type).startsWith('pyramid')) return 'pyramid';
+  return 'box';
 }
 
 /**

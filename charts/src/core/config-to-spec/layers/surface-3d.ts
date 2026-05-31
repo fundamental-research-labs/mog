@@ -42,6 +42,7 @@ function normalizeSurfaceView3D(config: ChartConfig['view3d']) {
     rotX: finiteNumber(config.rotX),
     rotY: finiteNumber(config.rotY),
     depthPercent: finiteNumber(config.depthPercent),
+    rAngAx: typeof config.rAngAx === 'boolean' ? config.rAngAx : undefined,
     perspective: finiteNumber(config.perspective),
     heightPercent: finiteNumber(config.heightPercent),
   };

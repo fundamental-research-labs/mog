@@ -45,17 +45,20 @@ export function unsupportedFeatureDiagnostics(input: {
   const unsupported: string[] = [];
   const isSurfaceFamily = isSurfaceFamilyConfig(config);
   const isSurfaceTopView = isSurfaceTopViewConfig(config);
+  const isRendered3D = isRendered3DPlotConfig(config);
   unsupported.push(...importStatusUnsupportedDiagnostics(chart.importStatus));
   unsupported.push(...packageAuthorityDiagnostics(chart));
-  if (config.type === 'bar3d' || config.type === 'column3d') {
-    unsupported.push('3-D bar chart rendered as 2-D bar/column approximation');
-    for (const shape of barShapeDiagnostics(config)) {
-      unsupported.push(`3-D bar shape "${shape}" is preserved but rendered as rectangular bars`);
+  if (!isRendered3D) {
+    if (config.type === 'bar3d' || config.type === 'column3d') {
+      unsupported.push('3-D bar chart rendered as 2-D bar/column approximation');
+      for (const shape of barShapeDiagnostics(config)) {
+        unsupported.push(`3-D bar shape "${shape}" is preserved but rendered as rectangular bars`);
+      }
+      if (chartGapDepth(config) !== undefined)
+        unsupported.push('3-D bar gapDepth is preserved but not rendered');
+    } else if (String(config.type).endsWith('3d') && config.type !== 'surface3d') {
+      unsupported.push('3-D chart rendering is approximated by the 2-D chart backend');
     }
-    if (chartGapDepth(config) !== undefined)
-      unsupported.push('3-D bar gapDepth is preserved but not rendered');
-  } else if (String(config.type).endsWith('3d') && config.type !== 'surface3d') {
-    unsupported.push('3-D chart rendering is approximated by the 2-D chart backend');
   }
   unsupported.push(...surfaceFamilyDiagnostics(config));
   if (config.type === 'regionMap')
@@ -98,11 +101,46 @@ export function unsupportedFeatureDiagnostics(input: {
     unsupported.push(
       'of-pie series lines require secondary-plot geometry and are preserved for export only',
     );
-  if (config.view3d && !isSurfaceFamily)
+  if (config.view3d && !isSurfaceFamily && !isRendered3D)
     unsupported.push('view3D camera/depth is preserved but rendered as a 2-D approximation');
   if ((config.floorFormat || config.sideWallFormat || config.backWallFormat) && !isSurfaceTopView)
     unsupported.push('floor/sideWall/backWall surfaces are preserved but not rendered');
   unsupported.push(...input.sourceLinkedAxisNumberFormatDiagnostics);
   if (!isSurfaceTopView) unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
   return unsupported;
+}
+
+function isRendered3DPlotConfig(config: ChartConfig): boolean {
+  switch (config.type) {
+    case 'bar3d':
+    case 'column3d':
+    case 'line3d':
+    case 'pie3d':
+    case 'pie3dExploded':
+    case 'area3d':
+    case 'cylinderColClustered':
+    case 'cylinderColStacked':
+    case 'cylinderColStacked100':
+    case 'cylinderBarClustered':
+    case 'cylinderBarStacked':
+    case 'cylinderBarStacked100':
+    case 'cylinderCol':
+    case 'coneColClustered':
+    case 'coneColStacked':
+    case 'coneColStacked100':
+    case 'coneBarClustered':
+    case 'coneBarStacked':
+    case 'coneBarStacked100':
+    case 'coneCol':
+    case 'pyramidColClustered':
+    case 'pyramidColStacked':
+    case 'pyramidColStacked100':
+    case 'pyramidBarClustered':
+    case 'pyramidBarStacked':
+    case 'pyramidBarStacked100':
+    case 'pyramidCol':
+      return true;
+    default:
+      return false;
+  }
 }

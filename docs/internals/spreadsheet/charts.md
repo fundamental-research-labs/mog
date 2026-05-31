@@ -244,7 +244,7 @@ ChartConfig + ChartData
   -> ChartMark[]
 ```
 
-Unit specs cover the standard single-mark families plus specialized mark generators for histogram, boxplot, violin, surface/contour, and radar charts. Radar charts compile to a polar `radar` mark that draws radial grid rings, spokes, category labels, value labels, closed series polygons, optional fills, and optional markers.
+Unit specs cover the standard single-mark families plus specialized mark generators for histogram, boxplot, violin, surface/contour, 3-D plot projections, and radar charts. Non-surface 3-D chart families (`bar3d`/`column3d`, decorative cylinder/cone/pyramid bars, `line3d`, `area3d`, and `pie3d`) compile to projected `path` faces with 3-D metadata; wall/floor surfaces and series/depth axes are still reported as unsupported render features. Radar charts compile to a polar `radar` mark that draws radial grid rings, spokes, category labels, value labels, closed series polygons, optional fills, and optional markers.
 
 Layered specs cover combo charts, stock charts, waterfall, funnel, Pareto, data labels, data tables, markers, trendlines, error bars, and annotation lines. Some imported ChartEx families such as treemap, sunburst, and region maps currently preserve typed/imported state while rendering as empty/preserved-only specs.
 

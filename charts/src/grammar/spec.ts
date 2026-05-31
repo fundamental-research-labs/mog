@@ -13,7 +13,13 @@
  * Pure types only - no runtime code (except type guards).
  */
 
-import type { EffectSpec, LineStyleSpec, PaintSpec, ShadowSpec, TextRunSpec } from '../primitives/types';
+import type {
+  EffectSpec,
+  LineStyleSpec,
+  PaintSpec,
+  ShadowSpec,
+  TextRunSpec,
+} from '../primitives/types';
 
 // =============================================================================
 // Data Types
@@ -518,12 +524,16 @@ export interface EncodingSpec {
  */
 export type MarkType =
   | 'bar'
+  | 'bar3d'
   | 'line'
+  | 'line3d'
   | 'area'
+  | 'area3d'
   | 'point'
   | 'circle'
   | 'square'
   | 'arc'
+  | 'arc3d'
   | 'rect'
   | 'rule'
   | 'text'
@@ -553,8 +563,17 @@ export interface SurfaceView3DSpec {
   rotX?: number;
   rotY?: number;
   depthPercent?: number;
+  rAngAx?: boolean;
   perspective?: number;
   heightPercent?: number;
+}
+
+export interface Plot3DSpec {
+  family?: 'bar' | 'line' | 'area' | 'pie';
+  orientation?: 'horizontal' | 'vertical';
+  barShape?: 'box' | 'cylinder' | 'cone' | 'coneToMax' | 'pyramid' | 'pyramidToMax';
+  gapDepth?: number;
+  view3d?: SurfaceView3DSpec;
 }
 
 /**
@@ -693,6 +712,8 @@ export interface MarkSpec {
   contourWireframe?: boolean;
   /** Projected 3-D view settings for surface marks. */
   surfaceView3d?: SurfaceView3DSpec;
+  /** Projected 3-D plot settings for non-surface chart families. */
+  chart3d?: Plot3DSpec;
   /** Imported histogram bin count. */
   binCount?: number;
   /** Imported histogram bin width. */

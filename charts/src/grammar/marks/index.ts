@@ -13,9 +13,11 @@ import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec, MarkType } from '../spec';
 import { generateArcMarks } from './arc';
 import { generateAreaMarks } from './area';
+import { generateBar3DMarks } from './bar-3d';
 import { generateBarMarks } from './bar';
 import { generateBoxPlotMarks } from './boxplot';
 import { generateContourMarks } from './contour';
+import { depthEnhanceArcMarks, depthEnhanceAreaPathMarks, depthEnhanceLinePathMarks } from './depth-3d';
 import { generateHistogramMarks } from './histogram';
 import { generateLineMarks } from './line';
 import { generatePointMarks } from './point';
@@ -26,6 +28,7 @@ import { generateSurface3DMarks } from './surface-3d';
 import { generateTextMarks } from './text';
 import { generateTickMarks } from './tick';
 import { generateViolinMarks } from './violin';
+import { depthOptionsFor3DPlot, with3DMetadata } from './plot-3d';
 
 /**
  * Generate marks based on mark type.
@@ -43,16 +46,51 @@ export function generateMarks(
   switch (markType) {
     case 'bar':
       return generateBarMarks(markSpec, data, scales, encodings, layout, encoding, config);
+    case 'bar3d':
+      return generateBar3DMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'line':
       return generateLineMarks(markSpec, data, scales, encodings, layout, encoding);
+    case 'line3d': {
+      const lineMarks = generateLineMarks(
+        { ...markSpec, type: 'line' },
+        data,
+        scales,
+        encodings,
+        layout,
+        encoding,
+      );
+      return depthEnhanceLinePathMarks(lineMarks, depthOptionsFor3DPlot(markSpec, layout)).map(
+        (mark) => with3DMetadata(mark, markSpec.chart3d, 'back'),
+      );
+    }
     case 'area':
       return generateAreaMarks(markSpec, data, scales, encodings, layout, encoding, config);
+    case 'area3d': {
+      const areaMarks = generateAreaMarks(
+        { ...markSpec, type: 'area' },
+        data,
+        scales,
+        encodings,
+        layout,
+        encoding,
+        config,
+      );
+      return depthEnhanceAreaPathMarks(areaMarks, depthOptionsFor3DPlot(markSpec, layout)).map(
+        (mark) => with3DMetadata(mark, markSpec.chart3d, 'back'),
+      );
+    }
     case 'point':
     case 'circle':
     case 'square':
       return generatePointMarks(markSpec, data, scales, encodings, layout);
     case 'arc':
       return generateArcMarks(markSpec, data, scales, encodings, layout);
+    case 'arc3d': {
+      const arcMarks = generateArcMarks({ ...markSpec, type: 'arc' }, data, scales, encodings, layout);
+      return depthEnhanceArcMarks(arcMarks, depthOptionsFor3DPlot(markSpec, layout)).map((mark) =>
+        with3DMetadata(mark, markSpec.chart3d, 'outer'),
+      );
+    }
     case 'rect':
       return generateRectMarks(markSpec, data, scales, encodings, layout);
     case 'rule':
@@ -81,6 +119,7 @@ export function generateMarks(
 // Re-export individual generators for direct access
 export { generateArcMarks } from './arc';
 export { generateAreaMarks } from './area';
+export { generateBar3DMarks } from './bar-3d';
 export { generateBarMarks } from './bar';
 export { generateBoxPlotMarks } from './boxplot';
 export { generateContourMarks } from './contour';

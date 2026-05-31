@@ -12,6 +12,7 @@ import {
   hasExcelBarGeometrySpec,
 } from '../../core/chart-ir/bar-geometry';
 import {
+  SERIES_FILL_FIELD,
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
 } from '../../core/chart-ir/fields';
@@ -431,6 +432,10 @@ export function generateBarMarks(
     if (!isFinite(width)) width = 0;
     if (!isFinite(height)) height = 0;
 
+    const datumFill =
+      datumString(datum, markSpec.fillField) ?? datumString(datum, SERIES_FILL_FIELD);
+    const hasDatumFill = datumFill !== undefined;
+
     // Get color
     const color = resolveColor({
       colorScale: scales.color ?? scales.fill,
@@ -448,7 +453,7 @@ export function generateBarMarks(
       height: Math.max(0, height),
       datum,
       style: {
-        fill: datumString(datum, markSpec.fillField) ?? color,
+        fill: datumFill ?? color,
         stroke:
           datumString(datum, markSpec.strokeField) ??
           datumString(datum, SERIES_STROKE_FIELD) ??
@@ -460,7 +465,7 @@ export function generateBarMarks(
         opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
         ...definedStyle({
-          fillPaint: markSpec.fillPaint,
+          fillPaint: hasDatumFill ? undefined : markSpec.fillPaint,
           strokePaint: markSpec.strokePaint,
           line: markSpec.line,
           effects: markSpec.effects,

@@ -1,5 +1,5 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartConfig, PointFormat, SeriesConfig } from '../../types';
+import type { ChartConfig, ChartDataPointValueState, PointFormat, SeriesConfig } from '../../types';
 import type { PieLabelGeometry } from './data-label-geometry';
 import {
   DATA_LABEL_ALIGN_FIELD,
@@ -30,6 +30,7 @@ export interface ApplyDataLabelContext {
   pointIndex: number;
   category: string | number;
   value: number;
+  valueState?: ChartDataPointValueState;
   bubbleSize?: number;
   percentage?: number;
   pieLabelGeometry?: PieLabelGeometry;
@@ -46,6 +47,7 @@ export function applyDataLabelToRow(
     pointFormat?.dataLabel,
   );
   if (!label || label.delete === true || label.show === false) return;
+  if (context.valueState !== undefined && context.valueState !== 'value') return;
 
   const labelText = composeLabelText(label, context);
   if (!labelText.text) return;

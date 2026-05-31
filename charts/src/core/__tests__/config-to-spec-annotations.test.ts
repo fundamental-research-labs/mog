@@ -607,6 +607,99 @@ describe('configToSpec annotation layers', () => {
     expect(leaderLayer).toBeDefined();
   });
 
+  it('keeps imported column data-label layers out of the category domain', () => {
+    const categories = ['Bridge A', 'Bridge B', 'Bridge C'];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Good',
+          color: '#70AD47',
+          data: [
+            { x: 'Bridge A', y: 91 },
+            { x: 'Bridge B', y: 0, valueState: 'blank' },
+            { x: 'Bridge C', y: 0, valueState: 'blank' },
+          ],
+        },
+        {
+          name: 'Watch',
+          color: '#FFC000',
+          data: [
+            { x: 'Bridge A', y: 0, valueState: 'blank' },
+            { x: 'Bridge B', y: 64 },
+            { x: 'Bridge C', y: 0, valueState: 'blank' },
+          ],
+        },
+        {
+          name: 'Critical',
+          color: '#C00000',
+          data: [
+            { x: 'Bridge A', y: 0, valueState: 'blank' },
+            { x: 'Bridge B', y: 0, valueState: 'blank' },
+            { x: 'Bridge C', y: 38 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'column',
+      subType: 'clustered',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 10,
+      height: 8,
+      displayBlanksAs: 'zero',
+      dataLabels: {
+        show: true,
+        showValue: true,
+      },
+      series: [
+        { name: 'Good', color: '#70AD47', format: { fill: { type: 'solid', color: '#70AD47' } } },
+        { name: 'Watch', color: '#FFC000', format: { fill: { type: 'solid', color: '#FFC000' } } },
+        {
+          name: 'Critical',
+          color: '#C00000',
+          format: { fill: { type: 'solid', color: '#C00000' } },
+        },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const compiled = compile(spec, undefined, { width: 640, height: 360 });
+
+    expect(compiled.scales.x?.domain?.()).toEqual(categories);
+    expect(compiled.scales.color?.domain?.()).toEqual(['Good', 'Watch', 'Critical']);
+
+    const xAxisLabels = compiled.axes
+      .filter((mark) => {
+        const datum = mark.datum as Record<string, unknown> | undefined;
+        return mark.type === 'text' && datum?.role === 'x-axis' && datum.axisPart === 'label';
+      })
+      .map((mark) => (mark.type === 'text' ? mark.text : ''));
+    expect(xAxisLabels).toEqual(categories);
+
+    const positiveBars = compiled.marks.filter((mark) => {
+      const datum = mark.datum as Record<string, unknown> | undefined;
+      return mark.type === 'rect' && typeof datum?.value === 'number' && datum.value > 0;
+    });
+    expect(positiveBars.map((mark) => (mark.type === 'rect' ? mark.style.fill : undefined))).toEqual([
+      '#70AD47',
+      '#FFC000',
+      '#C00000',
+    ]);
+    expect(
+      positiveBars.every((mark) => mark.type === 'rect' && mark.style.fillPaint === undefined),
+    ).toBe(true);
+
+    const dataLabelTexts = compiled.marks
+      .filter((mark) => {
+        const datum = mark.datum as Record<string, unknown> | undefined;
+        return mark.type === 'text' && datum?.[DATA_LABEL_TEXT_FIELD] !== undefined;
+      })
+      .map((mark) => (mark.type === 'text' ? mark.text : ''));
+    expect(dataLabelTexts).toEqual(['91', '64', '38']);
+  });
+
   it('carries imported manual layouts into render layout hints', () => {
     const data: ChartData = {
       categories: ['A'],

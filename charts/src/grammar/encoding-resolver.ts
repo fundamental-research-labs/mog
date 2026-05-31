@@ -63,6 +63,22 @@ function stringRange(range: unknown[]): string[] {
   return range.filter((v): v is string => typeof v === 'string');
 }
 
+function categoricalDomainValues(values: unknown[], scaleSpec?: ScaleSpec | null): string[] {
+  const source = Array.isArray(scaleSpec?.domain) ? scaleSpec.domain : values;
+  const domain: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of source) {
+    if (value === undefined || value === null) continue;
+    const key = String(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    domain.push(key);
+  }
+
+  return domain;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -509,9 +525,7 @@ function createBandScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const domainValues = Array.isArray(scaleSpec?.domain)
-    ? scaleSpec.domain.map(String)
-    : [...new Set(values.map(String))];
+  const domainValues = categoricalDomainValues(values, scaleSpec);
   const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.1;
   const paddingInner = scaleSpec?.paddingInner ?? padding;
@@ -534,8 +548,9 @@ function createBandScale(
 
   const bandScale: ChartScale = Object.assign(
     (value: unknown): number => {
+      if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
-      if (index === -1) return rangeStart;
+      if (index === -1) return NaN;
       const start = rangeStart + paddingOuter * step + index * step;
       return start;
     },
@@ -567,9 +582,7 @@ function createPointScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const domainValues = Array.isArray(scaleSpec?.domain)
-    ? scaleSpec.domain.map(String)
-    : [...new Set(values.map(String))];
+  const domainValues = categoricalDomainValues(values, scaleSpec);
   const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.5;
 
@@ -582,8 +595,9 @@ function createPointScale(
 
   const pointScale: ChartScale = Object.assign(
     (value: unknown): number => {
+      if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
-      if (index === -1) return rangeStart + absExtent / 2;
+      if (index === -1) return NaN;
       return rangeStart + padding * step + index * step;
     },
     {
@@ -683,9 +697,7 @@ function createSequentialColorScale(values: number[], scaleSpec?: ScaleSpec | nu
  * Create a categorical color scale.
  */
 function createCategoricalColorScale(values: unknown[], scaleSpec?: ScaleSpec | null): ChartScale {
-  const uniqueValues = Array.isArray(scaleSpec?.domain)
-    ? scaleSpec.domain.map(String)
-    : [...new Set(values.map(String))];
+  const uniqueValues = categoricalDomainValues(values, scaleSpec);
   const colors =
     (scaleSpec?.range ? stringRange(scaleSpec.range) : undefined) ?? DEFAULT_CATEGORY_COLORS;
 
@@ -788,9 +800,10 @@ function createShapeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = data.map((d) => d[field]);
-  const uniqueValues = [...new Set(values.map(String))];
+  const uniqueValues = categoricalDomainValues(values);
 
   return Object.assign((value: unknown): string => {
+    if (value === undefined || value === null) return DEFAULT_SHAPES[0];
     const index = uniqueValues.indexOf(String(value));
     if (index === -1) return DEFAULT_SHAPES[0];
     return DEFAULT_SHAPES[index % DEFAULT_SHAPES.length];

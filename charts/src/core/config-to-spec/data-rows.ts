@@ -1,5 +1,5 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartConfig, ChartData } from '../../types';
+import type { ChartConfig, ChartData, ChartDataPointValueState } from '../../types';
 import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
@@ -142,6 +142,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           pointIndex: i,
           category: rawCategory,
           value: point.y,
+          valueState: point.valueState,
           xValue: isQuantitativeX ? scatterXValue(point) : undefined,
           bubbleSize: point.size,
           percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
@@ -181,6 +182,7 @@ function applyPointAnnotations(
     pointIndex: number;
     category: string | number;
     value: number;
+    valueState?: ChartDataPointValueState;
     xValue?: number;
     bubbleSize?: number;
     percentage?: number;

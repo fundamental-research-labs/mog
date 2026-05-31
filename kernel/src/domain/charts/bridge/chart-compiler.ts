@@ -143,9 +143,8 @@ function buildCompileInput(spec: ChartSpec): {
   spec: ChartSpec;
   compilerPathId: ChartCompilerPathId;
 } {
-  const specDataValues = spec.data && 'values' in spec.data ? (spec.data.values as DataRow[]) : [];
-  const wasmData = spec.transform ? tryWasmTransforms(specDataValues, spec.transform) : null;
-  if (!wasmData) {
+  const wasmSpec = tryWasmTransformSpec(spec);
+  if (!wasmSpec?.applied) {
     return {
       spec,
       compilerPathId: 'ts-grammar',
@@ -153,7 +152,7 @@ function buildCompileInput(spec: ChartSpec): {
   }
 
   return {
-    spec: { ...spec, transform: undefined, data: { values: wasmData } },
+    spec: wasmSpec.spec,
     compilerPathId: 'wasm-transforms+ts-grammar',
   };
 }
@@ -162,16 +161,50 @@ function isChartWasmAvailable(): boolean {
   return chartWasmExports !== null;
 }
 
-function tryWasmTransforms(data: DataRow[], transforms: unknown[]): DataRow[] | null {
+function tryWasmTransformSpec(spec: ChartSpec): { spec: ChartSpec; applied: boolean } | null {
   if (!isChartWasmAvailable()) return null;
 
   try {
-    const result = chartWasmExports!.chart_apply_transforms(data, transforms);
-    return result as DataRow[];
+    return applyWasmTransformsToSpec(spec);
   } catch (err) {
     console.warn('[ChartBridge] WASM transform failed, falling back to TS:', err);
     return null;
   }
+}
+
+function applyWasmTransformsToSpec(
+  spec: ChartSpec,
+  inheritedData?: DataRow[],
+): { spec: ChartSpec; applied: boolean } {
+  const localData = inlineDataRows(spec.data) ?? inheritedData;
+  let nextSpec = spec;
+  let nextData = localData;
+  let applied = false;
+
+  if (spec.transform && spec.transform.length > 0 && localData) {
+    const { transform: _transform, ...withoutTransform } = nextSpec;
+    nextData = chartWasmExports!.chart_apply_transforms(localData, spec.transform) as DataRow[];
+    nextSpec = { ...withoutTransform, data: { values: nextData } };
+    applied = true;
+  }
+
+  if ('layer' in nextSpec && nextSpec.layer) {
+    const transformedLayers = nextSpec.layer.map((layer) =>
+      applyWasmTransformsToSpec(layer, nextData),
+    );
+    if (transformedLayers.some((layer) => layer.applied)) {
+      nextSpec = { ...nextSpec, layer: transformedLayers.map((layer) => layer.spec) };
+      applied = true;
+    }
+  }
+
+  return { spec: nextSpec, applied };
+}
+
+function inlineDataRows(data: ChartSpec['data']): DataRow[] | undefined {
+  return data && 'values' in data && Array.isArray(data.values)
+    ? (data.values as DataRow[])
+    : undefined;
 }
 
 /**

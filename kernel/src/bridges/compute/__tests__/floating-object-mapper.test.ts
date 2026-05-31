@@ -497,6 +497,13 @@ describe('toFloatingObject — ChartObject', () => {
         gapWidth: 150,
         overlap: 100,
         plotVisibleOnly: true,
+        plotLayout: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+        titleLayout: { x: 0.2, y: 0.05 },
+        dataTable: { visible: true, showKeys: true },
+        pivotOptions: { showAxisFieldButtons: false },
+        showAllFieldButtons: true,
+        view3d: { rotX: 30, rotY: 20 },
+        sideWallFormat: { fill: { type: 'solid', color: '#dddddd' } },
       } as Partial<WireFloatingObject>),
     );
 
@@ -507,6 +514,13 @@ describe('toFloatingObject — ChartObject', () => {
           gapWidth: 150,
           overlap: 100,
           plotVisibleOnly: true,
+          plotLayout: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+          titleLayout: { x: 0.2, y: 0.05 },
+          dataTable: { visible: true, showKeys: true },
+          pivotOptions: { showAxisFieldButtons: false },
+          showAllFieldButtons: true,
+          view3d: { rotX: 30, rotY: 20 },
+          sideWallFormat: { fill: { type: 'solid', color: '#dddddd' } },
         }),
       );
     }

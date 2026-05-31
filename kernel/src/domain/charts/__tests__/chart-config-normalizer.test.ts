@@ -102,7 +102,12 @@ describe('chart config normalizer', () => {
         autoTitleDeleted: false,
         showDataLabelsOverMax: true,
         titleRichText: [{ text: 'Revenue', font: { bold: true } }],
+        plotLayout: { layoutTarget: 'inner', x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+        titleLayout: { xMode: 'factor', x: 0.15, y: 0.05 },
         dataTable: { visible: true, showHorzBorder: true },
+        pivotOptions: { showAxisFieldButtons: false },
+        view3d: { rotX: 30, rotY: 20, depthPercent: 150 },
+        floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
         colorScheme: 12,
         ooxml: {
           definition: {
@@ -122,7 +127,12 @@ describe('chart config normalizer', () => {
     expect(config.roundedCorners).toBe(true);
     expect(config.showDataLabelsOverMaximum).toBe(true);
     expect(config.titleRichText).toEqual([{ text: 'Revenue', font: { bold: true } }]);
+    expect(config.plotLayout).toEqual({ layoutTarget: 'inner', x: 0.1, y: 0.2, w: 0.7, h: 0.6 });
+    expect(config.titleLayout).toEqual({ xMode: 'factor', x: 0.15, y: 0.05 });
     expect(config.dataTable).toMatchObject({ visible: true, showHorzBorder: true });
+    expect(config.pivotOptions).toEqual({ showAxisFieldButtons: false });
+    expect(config.view3d).toEqual({ rotX: 30, rotY: 20, depthPercent: 150 });
+    expect(config.floorFormat).toEqual({ fill: { type: 'solid', color: '#eeeeee' } });
     expect(config.colorScheme).toBe(12);
     expect(config.chartStyleContext?.colorMapOverride).toEqual({
       type: 'override',

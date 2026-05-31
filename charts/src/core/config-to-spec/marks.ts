@@ -4,6 +4,11 @@ import { resolveFormatFillOpacity, resolveLineColor } from '../../utils/chart-co
 import { resolveChartFillPaint, resolveChartLineStyle, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import {
+  POINT_FILL_FIELD,
+  POINT_STROKE_FIELD,
+  POINT_STROKE_WIDTH_FIELD,
+} from './fields';
+import {
   applySeriesLineFormat,
   hasExplicitNoLine,
   hasVisibleLineStyle,
@@ -31,6 +36,26 @@ function applyPrimarySeriesFormat(mark: MarkSpec, config: ChartConfig): void {
     if (line.width !== undefined) mark.strokeWidth = line.width;
     if (line.dash) mark.strokeDash = line.dash;
   }
+}
+
+function applyPointStyleFields(mark: MarkSpec, config: ChartConfig): void {
+  if (!hasPointStyleOverrides(config)) return;
+  mark.fillField = POINT_FILL_FIELD;
+  mark.strokeField = POINT_STROKE_FIELD;
+  mark.strokeWidthField = POINT_STROKE_WIDTH_FIELD;
+}
+
+function hasPointStyleOverrides(config: ChartConfig): boolean {
+  return (config.series ?? []).some((series) =>
+    (series.points ?? []).some(
+      (point) =>
+        point.fill !== undefined ||
+        point.border !== undefined ||
+        point.lineFormat !== undefined ||
+        point.visualFormat?.fill !== undefined ||
+        point.visualFormat?.line !== undefined,
+    ),
+  );
 }
 
 /**
@@ -76,6 +101,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
+    applyPointStyleFields(mark, config);
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
     }
@@ -90,6 +116,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
+    applyPointStyleFields(mark, config);
     return mark;
   }
 
@@ -101,6 +128,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
+    applyPointStyleFields(mark, config);
     // Pie slice explosion
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
@@ -117,6 +145,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
+    applyPointStyleFields(mark, config);
     if (config.pieSlice?.explodeOffset) {
       mark.padAngle = config.pieSlice.explodeOffset;
     }
@@ -191,7 +220,20 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     const mark: MarkSpec = { type: baseType };
     applyPrimarySeriesFormat(mark, config);
     applyImportedBarOutline(mark, config);
-    return mark.stroke || mark.strokeWidth !== undefined || mark.fillPaint ? mark : baseType;
+    applyPointStyleFields(mark, config);
+    return mark.stroke ||
+      mark.strokeWidth !== undefined ||
+      mark.fillPaint ||
+      mark.fillField ||
+      mark.strokeField
+      ? mark
+      : baseType;
+  }
+
+  if (baseType === 'point') {
+    const mark: MarkSpec = { type: baseType };
+    applyPointStyleFields(mark, config);
+    return hasPointStyleOverrides(config) ? mark : baseType;
   }
 
   if (baseType === 'line') {

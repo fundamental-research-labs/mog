@@ -167,7 +167,7 @@ impl DrawingPathAllocator {
         chart_spec: &domain_types::ChartSpec,
         chart_path: &str,
     ) {
-        if !chart_replay::chart_allows_auxiliary_replay(chart_spec) {
+        if !chart_replay::chart_allows_current_auxiliary_replay(chart_spec, chart_path) {
             return;
         }
         let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) else {
@@ -782,10 +782,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     let default_cx_target = format!("../charts/chartEx{}.xml", cx_entry.global_idx);
                     let cx_path = format!("xl/charts/chartEx{}.xml", cx_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                            && chart_auxiliary::chart_frame_identity_matches_path(
-                                chart_spec, &cx_path,
-                            );
+                        chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &cx_path);
                     let cx_target = if use_imported_relationship_identity {
                         chart_frame
                             .and_then(|frame| frame.relationship_target.clone())
@@ -928,11 +925,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         format!("../charts/chart{}.xml", chart_entry.global_idx);
                     let chart_path = format!("xl/charts/chart{}.xml", chart_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                            && chart_auxiliary::chart_frame_identity_matches_path(
-                                chart_spec,
-                                &chart_path,
-                            );
+                        chart_replay::chart_allows_current_auxiliary_replay(
+                            chart_spec,
+                            &chart_path,
+                        );
                     let chart_target = if use_imported_relationship_identity {
                         chart_frame
                             .and_then(|frame| frame.relationship_target.clone())
@@ -1385,7 +1381,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
@@ -1443,7 +1439,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =

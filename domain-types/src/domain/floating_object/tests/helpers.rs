@@ -268,6 +268,7 @@ pub(super) fn chart_data_with_optional_keys() -> ChartData {
         wireframe: Some(false),
         surface_top_view: Some(false),
         color_scheme: Some(1),
+        chart_style_context: None,
         height_pt: Some(100.0),
         width_pt: Some(200.0),
         left_pt: Some(10.0),

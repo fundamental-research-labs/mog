@@ -67,8 +67,20 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             spec.chart_auxiliary_parts =
                 chart_auxiliary_parts(&spec.chart_relationships, &spec.chart_auxiliary_files);
             let projection_fingerprint = standard_chart_projection_fingerprint(&spec);
-            let relationship_closure_current =
-                standard_chart_relationship_closure_current(&spec.chart_relationships);
+            let relationship_closure = standard_chart_relationship_closure(
+                chart.original_path.as_deref(),
+                chart_space,
+                &spec.chart_relationships,
+                &spec.chart_auxiliary_files,
+                spec.title.as_deref(),
+            );
+            if !relationship_closure.diagnostics.is_empty() {
+                append_chart_import_status_diagnostics(
+                    &mut spec.import_status,
+                    relationship_closure.diagnostics.clone(),
+                );
+            }
+            let relationship_closure_current = relationship_closure.current;
             spec.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
                 original_path: chart.original_path.clone(),
                 rels_path: chart
@@ -86,7 +98,7 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             });
             spec.standard_chart_export_authority =
                 Some(domain_types::chart::StandardChartExportAuthority {
-                    schema_version: 1,
+                    schema_version: STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
                     validity: if relationship_closure_current {
                         domain_types::chart::StandardChartAuthorityValidity::Current
                     } else {
@@ -97,8 +109,13 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                     relationship_closure_current,
                     projection_fingerprint: Some(projection_fingerprint),
                     invalidated_owner_ids: Vec::new(),
-                    stale_reason: (!relationship_closure_current)
-                        .then(|| "chart relationship graph is not closed".to_string()),
+                    stale_reason: (!relationship_closure_current).then(|| {
+                        relationship_closure
+                            .diagnostics
+                            .first()
+                            .and_then(|diagnostic| diagnostic.message.clone())
+                            .unwrap_or_else(|| "chart relationship graph is not closed".to_string())
+                    }),
                 });
 
             spec
@@ -106,15 +123,246 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
         .collect()
 }
 
-fn standard_chart_relationship_closure_current(
-    relationships: &[domain_types::chart::ChartRelationshipData],
-) -> bool {
-    relationships.iter().all(|rel| {
-        !crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
-    })
+const REL_CHART_STYLE: &str = "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
+const REL_CHART_COLOR_STYLE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
+const REL_CHART_USER_SHAPES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+
+#[derive(Debug, Clone)]
+struct ChartRelationshipClosure {
+    current: bool,
+    diagnostics: Vec<domain_types::ImportDiagnosticRef>,
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;
+fn standard_chart_relationship_closure(
+    chart_path: Option<&str>,
+    chart_space: &ooxml_types::charts::ChartSpace,
+    relationships: &[domain_types::chart::ChartRelationshipData],
+    auxiliary_files: &[(String, Vec<u8>)],
+    object_name: Option<&str>,
+) -> ChartRelationshipClosure {
+    let external_data_r_id = chart_space
+        .external_data
+        .as_ref()
+        .map(|external_data| external_data.r_id.as_str());
+    let user_shapes_r_id = chart_space.user_shapes.as_deref();
+    let mut diagnostics = Vec::new();
+
+    if let Some(r_id) = external_data_r_id
+        && !relationships.iter().any(|rel| rel.r_id == r_id)
+    {
+        diagnostics.push(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+            format!("Chart externalData references missing relationship `{r_id}`"),
+            chart_path,
+            object_name,
+            Some(r_id),
+        ));
+    }
+    if let Some(r_id) = user_shapes_r_id
+        && !relationships.iter().any(|rel| rel.r_id == r_id)
+    {
+        diagnostics.push(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+            format!("Chart userShapes references missing relationship `{r_id}`"),
+            chart_path,
+            object_name,
+            Some(r_id),
+        ));
+    }
+
+    for rel in relationships {
+        if let Some(diagnostic) = validate_standard_chart_relationship(
+            rel,
+            chart_path,
+            external_data_r_id,
+            user_shapes_r_id,
+            auxiliary_files,
+            object_name,
+        ) {
+            diagnostics.push(diagnostic);
+        }
+    }
+
+    ChartRelationshipClosure {
+        current: diagnostics.is_empty(),
+        diagnostics,
+    }
+}
+
+fn validate_standard_chart_relationship(
+    rel: &domain_types::chart::ChartRelationshipData,
+    chart_path: Option<&str>,
+    external_data_r_id: Option<&str>,
+    user_shapes_r_id: Option<&str>,
+    auxiliary_files: &[(String, Vec<u8>)],
+    object_name: Option<&str>,
+) -> Option<domain_types::ImportDiagnosticRef> {
+    let r_id = rel.r_id.as_str();
+    let Some(rel_type) = rel.relationship_type.as_deref() else {
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::InvalidRelationship,
+            format!("Chart relationship `{r_id}` is missing a relationship type"),
+            chart_path,
+            object_name,
+            Some(r_id),
+        ));
+    };
+    let Some(target) = rel.target.as_deref() else {
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+            format!("Chart relationship `{r_id}` is missing a target"),
+            chart_path,
+            object_name,
+            Some(r_id),
+        ));
+    };
+
+    if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref()) {
+        if external_data_r_id == Some(r_id)
+            && rel_type == crate::infra::opc::REL_EXTERNAL_LINK
+            && !target.trim().is_empty()
+        {
+            return None;
+        }
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::ExternalReference,
+            format!(
+                "Chart relationship `{r_id}` uses unsupported external target mode for `{rel_type}`"
+            ),
+            chart_path,
+            object_name,
+            Some(r_id),
+        ));
+    }
+
+    let Some(chart_path) = chart_path else {
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MalformedRelationshipTarget,
+            format!("Chart relationship `{r_id}` cannot be resolved without a chart part path"),
+            None,
+            object_name,
+            Some(r_id),
+        ));
+    };
+    let Some(target_path) =
+        crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
+            .ok()
+            .map(|path| path.trim_start_matches('/').to_string())
+    else {
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MalformedRelationshipTarget,
+            format!("Chart relationship `{r_id}` has malformed target `{target}`"),
+            Some(chart_path),
+            object_name,
+            Some(r_id),
+        ));
+    };
+
+    if supported_chart_auxiliary_relationship(rel_type, &target_path) {
+        if rel_type == REL_CHART_USER_SHAPES && user_shapes_r_id != Some(r_id) {
+            return Some(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::InvalidRelationship,
+                format!("Chart userShapes relationship `{r_id}` is not referenced by c:userShapes"),
+                Some(chart_path),
+                object_name,
+                Some(r_id),
+            ));
+        }
+        if auxiliary_files
+            .iter()
+            .any(|(path, _)| path.trim_start_matches('/') == target_path)
+        {
+            return None;
+        }
+        return Some(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+            format!("Chart relationship `{r_id}` targets missing part `{target_path}`"),
+            Some(chart_path),
+            object_name,
+            Some(r_id),
+        ));
+    }
+
+    Some(chart_relationship_diagnostic(
+        domain_types::ImportDiagnosticCode::UnsupportedFeature,
+        format!("Chart relationship `{r_id}` has unsupported type `{rel_type}`"),
+        Some(chart_path),
+        object_name,
+        Some(r_id),
+    ))
+}
+
+fn chart_relationship_diagnostic(
+    code: domain_types::ImportDiagnosticCode,
+    message: String,
+    part_path: Option<&str>,
+    object_name: Option<&str>,
+    object_id: Option<&str>,
+) -> domain_types::ImportDiagnosticRef {
+    crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code,
+            message,
+            recoverability: domain_types::ImportRecoverability::PartiallySupported,
+            renderability: domain_types::ImportRenderability::Renderable,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id,
+        },
+    )
+    .reference
+    .expect("chart import diagnostic helper always sets reference")
+}
+
+fn append_chart_import_status_diagnostics(
+    status: &mut Option<domain_types::ImportObjectStatus>,
+    mut diagnostics: Vec<domain_types::ImportDiagnosticRef>,
+) {
+    if diagnostics.is_empty() {
+        return;
+    }
+    if let Some(status) = status {
+        if status.reference.is_none() {
+            status.reference = diagnostics.first().cloned();
+        }
+        status.diagnostics.append(&mut diagnostics);
+        return;
+    }
+
+    *status = Some(domain_types::ImportObjectStatus {
+        source: domain_types::ImportSource::Xlsx,
+        feature_kind: domain_types::ImportFeatureKind::Chart,
+        recoverability: domain_types::ImportRecoverability::PartiallySupported,
+        renderability: domain_types::ImportRenderability::Renderable,
+        editability: domain_types::ImportEditability::PartiallyEditable,
+        reference: diagnostics.first().cloned(),
+        diagnostics,
+    });
+}
+
+fn supported_chart_auxiliary_relationship(rel_type: &str, target_path: &str) -> bool {
+    let file_name = target_path.rsplit('/').next().unwrap_or(target_path);
+    if target_path.starts_with("xl/charts/")
+        && file_name.starts_with("style")
+        && file_name.ends_with(".xml")
+    {
+        rel_type == REL_CHART_STYLE
+    } else if target_path.starts_with("xl/charts/")
+        && (file_name.starts_with("color") || file_name.starts_with("colors"))
+        && file_name.ends_with(".xml")
+    {
+        rel_type == REL_CHART_COLOR_STYLE
+    } else if target_path.starts_with("xl/drawings/") && file_name.ends_with(".xml") {
+        rel_type == REL_CHART_USER_SHAPES
+    } else {
+        false
+    }
+}
+
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 3;
 
 fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     let mut fingerprint = Fnv1a64::default();
@@ -138,6 +386,10 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.plot_layout);
     fingerprint.write_json(&spec.title_layout);
     fingerprint.write_json(&spec.data_table);
+    fingerprint.write_json(&spec.drop_lines);
+    fingerprint.write_json(&spec.high_low_lines);
+    fingerprint.write_json(&spec.series_lines);
+    fingerprint.write_json(&spec.up_down_bars);
     fingerprint.write_json(&spec.waterfall);
     fingerprint.write_json(&spec.histogram);
     fingerprint.write_json(&spec.boxplot);
@@ -166,6 +418,7 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.wireframe);
     fingerprint.write_json(&spec.surface_top_view);
     fingerprint.write_json(&spec.color_scheme);
+    fingerprint.write_json(&spec.chart_style_context);
     fingerprint.write_json(&spec.view_3d);
     fingerprint.write_json(&spec.floor_format);
     fingerprint.write_json(&spec.side_wall_format);
@@ -224,13 +477,6 @@ fn chart_auxiliary_parts(
     relationships: &[domain_types::chart::ChartRelationshipData],
     files: &[(String, Vec<u8>)],
 ) -> Vec<domain_types::chart::ChartAuxiliaryPart> {
-    const REL_CHART_STYLE: &str =
-        "http://schemas.microsoft.com/office/2011/relationships/chartStyle";
-    const REL_CHART_COLOR_STYLE: &str =
-        "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
-    const REL_CHART_USER_SHAPES: &str =
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
-
     relationships
         .iter()
         .filter_map(|rel| {
@@ -683,6 +929,7 @@ pub(crate) fn build_fallback_chart_spec(
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -815,6 +1062,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 wireframe: None,
                 surface_top_view: None,
                 color_scheme: None,
+                chart_style_context: None,
                 view_3d: None,
                 floor_format: None,
                 side_wall_format: None,
@@ -1004,5 +1252,72 @@ mod tests {
             unknown.diagnostics[0].code,
             Some(domain_types::ImportDiagnosticCode::UnsupportedChartType)
         );
+    }
+
+    #[test]
+    fn standard_chart_relationship_closure_allows_referenced_external_data() {
+        let chart_space = ooxml_types::charts::ChartSpace {
+            external_data: Some(ooxml_types::charts::ExternalData {
+                r_id: "rIdExternalData".to_string(),
+                auto_update: Some(false),
+            }),
+            ..Default::default()
+        };
+        let relationships = vec![domain_types::chart::ChartRelationshipData {
+            r_id: "rIdExternalData".to_string(),
+            relationship_type: Some(crate::infra::opc::REL_EXTERNAL_LINK.to_string()),
+            target: Some("externalLinks/externalLink1.xml".to_string()),
+            target_mode: Some("External".to_string()),
+        }];
+
+        let closure = standard_chart_relationship_closure(
+            Some("xl/charts/chart1.xml"),
+            &chart_space,
+            &relationships,
+            &[],
+            Some("Revenue"),
+        );
+
+        assert!(closure.current);
+        assert!(closure.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn standard_chart_relationship_closure_reports_unsupported_relationships() {
+        let chart_space = ooxml_types::charts::ChartSpace {
+            user_shapes: Some("rIdUserShapes".to_string()),
+            ..Default::default()
+        };
+        let relationships = vec![
+            domain_types::chart::ChartRelationshipData {
+                r_id: "rIdUserShapes".to_string(),
+                relationship_type: Some(crate::infra::opc::REL_CHART_USER_SHAPES.to_string()),
+                target: Some("../drawings/userShapeDrawing1.xml".to_string()),
+                target_mode: None,
+            },
+            domain_types::chart::ChartRelationshipData {
+                r_id: "rIdVendor".to_string(),
+                relationship_type: Some("http://example.com/vendorChartSidecar".to_string()),
+                target: Some("vendor1.xml".to_string()),
+                target_mode: None,
+            },
+        ];
+
+        let closure = standard_chart_relationship_closure(
+            Some("xl/charts/chart1.xml"),
+            &chart_space,
+            &relationships,
+            &[],
+            Some("Revenue"),
+        );
+        let codes = closure
+            .diagnostics
+            .iter()
+            .filter_map(|diagnostic| diagnostic.code.clone())
+            .collect::<Vec<_>>();
+
+        assert!(!closure.current);
+        assert!(codes.contains(&domain_types::ImportDiagnosticCode::MissingRelationshipTarget));
+        assert!(codes.contains(&domain_types::ImportDiagnosticCode::UnsupportedFeature));
     }
 }

@@ -57,7 +57,7 @@ fn imported_chart_with_modeled_state_does_not_replay_stale_raw_chart_xml() {
 
 #[test]
 fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
-    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    let imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -151,6 +151,88 @@ fn imported_chart_definition_exports_chart_owned_relationships_without_rt_xml_au
     assert!(chart_rels.contains(r#"TargetMode="External""#));
     assert!(chart_rels.contains(r#"Id="rIdUserShapes""#));
     assert!(archive.contains("xl/drawings/userShapeDrawing1.xml"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn reconstructed_external_data_requires_supported_relationship_policy() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace {
+            external_data: Some(ooxml_types::charts::ExternalData {
+                r_id: "rIdExternalData".to_string(),
+                auto_update: Some(false),
+            }),
+            ..Default::default()
+        },
+    ));
+    imported_chart.chart_relationships = vec![domain_types::chart::ChartRelationshipData {
+        r_id: "rIdExternalData".to_string(),
+        relationship_type: Some("http://example.com/notExternalLink".to_string()),
+        target: Some("externalLinks/externalLink1.xml".to_string()),
+        target_mode: Some("External".to_string()),
+    }];
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(!chart_xml.contains("<c:externalData"));
+    assert!(!chart_xml.contains("rIdExternalData"));
+    assert!(!archive.contains("xl/charts/_rels/chart1.xml.rels"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn reconstructed_user_shapes_requires_supported_auxiliary_target() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace {
+            user_shapes: Some("rIdUserShapes".to_string()),
+            ..Default::default()
+        },
+    ));
+    imported_chart.chart_relationships = vec![domain_types::chart::ChartRelationshipData {
+        r_id: "rIdUserShapes".to_string(),
+        relationship_type: Some(
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes"
+                .to_string(),
+        ),
+        target: Some("../drawings/userShapeDrawing1.xml".to_string()),
+        target_mode: None,
+    }];
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(!chart_xml.contains("<c:userShapes"));
+    assert!(!chart_xml.contains("rIdUserShapes"));
+    assert!(!archive.contains("xl/charts/_rels/chart1.xml.rels"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -337,6 +419,7 @@ fn imported_chart_allocates_new_relationship_id_when_preferred_id_is_taken() {
             ..Default::default()
         },
     );
+    let imported_chart = with_current_standard_chart_authority(imported_chart);
 
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
@@ -411,10 +494,10 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    let imported_chart = with_chart_auxiliary(
+    let imported_chart = with_current_standard_chart_authority(with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
-    );
+    ));
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -450,7 +533,55 @@ fn imported_chart_auxiliary_parts_replay_only_with_imported_chart_identity() {
 }
 
 #[test]
-fn reconstructed_imported_chart_replays_stored_auxiliary_parts() {
+fn stale_standard_chart_authority_suppresses_auxiliary_numbering_and_relationship_identity() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.title = None;
+    imported_chart.data_range = None;
+    let mut imported_chart = with_current_standard_chart_authority(with_chart_auxiliary(
+        with_chart_identity(imported_chart, "../charts/chart9.xml"),
+        9,
+    ));
+    let authority = imported_chart
+        .standard_chart_export_authority
+        .as_mut()
+        .expect("test helper should grant authority");
+    authority.validity = domain_types::chart::StandardChartAuthorityValidity::Stale;
+    authority.stale_reason = Some("modeled chart changed".to_string());
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_rels_bytes = archive
+        .read_file("xl/drawings/_rels/drawing1.xml.rels")
+        .unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(&drawing_rels_bytes);
+    let chart_rel = drawing_rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_CHART)
+        .expect("chart relationship should be present");
+
+    assert!(archive.contains("xl/charts/chart1.xml"));
+    assert!(!archive.contains("xl/charts/chart9.xml"));
+    assert!(!archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
+    assert_eq!(chart_rel.target, "../charts/chart1.xml");
+    assert_ne!(chart_rel.id, "rId9");
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn reconstructed_imported_chart_suppresses_stale_auxiliary_parts() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
@@ -474,18 +605,13 @@ fn reconstructed_imported_chart_replays_stored_auxiliary_parts() {
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart9.xml").unwrap()).unwrap();
-    let chart_rels = String::from_utf8(
-        archive
-            .read_file("xl/charts/_rels/chart9.xml.rels")
-            .unwrap(),
-    )
-    .unwrap();
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
 
     assert!(chart_xml.contains("Modeled Revenue"));
     assert!(!chart_xml.contains("Stale Revenue"));
-    assert!(archive.contains("xl/charts/style9.xml"));
-    assert!(chart_rels.contains(r#"Target="style9.xml""#));
+    assert!(!archive.contains("xl/charts/chart9.xml"));
+    assert!(!archive.contains("xl/charts/style9.xml"));
+    assert!(!archive.contains("xl/charts/_rels/chart9.xml.rels"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
@@ -500,6 +626,7 @@ fn imported_chart_auxiliary_part_requires_supported_relationship_type() {
     );
     imported_chart.chart_relationships[0].relationship_type =
         Some("http://example.com/notChartStyle".to_string());
+    let imported_chart = with_current_standard_chart_authority(imported_chart);
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -537,6 +664,7 @@ fn imported_chart_auxiliary_part_requires_chart_auxiliary_path() {
         b"<c:styleSheet/>".to_vec(),
     )];
     imported_chart.chart_relationships[0].target = Some("../worksheets/style9.xml".to_string());
+    let imported_chart = with_current_standard_chart_authority(imported_chart);
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![
@@ -565,10 +693,10 @@ fn imported_chart_auxiliary_parts_follow_original_chart_identity_after_deleting_
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = None;
     imported_chart.data_range = None;
-    let imported_chart = with_chart_auxiliary(
+    let imported_chart = with_current_standard_chart_authority(with_chart_auxiliary(
         with_chart_identity(imported_chart, "../charts/chart9.xml"),
         9,
-    );
+    ));
     let output = make_parse_output(vec![SheetData {
         name: "Data".to_string(),
         cells: vec![

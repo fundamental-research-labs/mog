@@ -81,6 +81,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.wireframe.is_some()
         || chart_spec.surface_top_view.is_some()
         || chart_spec.color_scheme.is_some()
+        || chart_spec.chart_style_context.is_some()
         || chart_spec.category_label_level.is_some()
         || chart_spec.series_name_level.is_some()
         || chart_spec.show_all_field_buttons.is_some()
@@ -96,9 +97,11 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.back_wall_format.is_some()
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;
+pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 3;
 
-fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -> String {
+pub(super) fn standard_chart_projection_fingerprint(
+    chart_spec: &domain_types::ChartSpec,
+) -> String {
     let mut fingerprint = Fnv1a64::default();
     fingerprint.write_str(chart_spec.chart_type.as_str());
     fingerprint.write_json(&chart_spec.title);
@@ -120,6 +123,15 @@ fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -
     fingerprint.write_json(&chart_spec.plot_layout);
     fingerprint.write_json(&chart_spec.title_layout);
     fingerprint.write_json(&chart_spec.data_table);
+    fingerprint.write_json(&chart_spec.drop_lines);
+    fingerprint.write_json(&chart_spec.high_low_lines);
+    fingerprint.write_json(&chart_spec.series_lines);
+    fingerprint.write_json(&chart_spec.up_down_bars);
+    fingerprint.write_json(&chart_spec.waterfall);
+    fingerprint.write_json(&chart_spec.histogram);
+    fingerprint.write_json(&chart_spec.boxplot);
+    fingerprint.write_json(&chart_spec.hierarchy);
+    fingerprint.write_json(&chart_spec.region_map);
     fingerprint.write_json(&chart_spec.display_blanks_as);
     fingerprint.write_json(&chart_spec.plot_visible_only);
     fingerprint.write_json(&chart_spec.gap_width);
@@ -143,6 +155,7 @@ fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -
     fingerprint.write_json(&chart_spec.wireframe);
     fingerprint.write_json(&chart_spec.surface_top_view);
     fingerprint.write_json(&chart_spec.color_scheme);
+    fingerprint.write_json(&chart_spec.chart_style_context);
     fingerprint.write_json(&chart_spec.view_3d);
     fingerprint.write_json(&chart_spec.floor_format);
     fingerprint.write_json(&chart_spec.side_wall_format);
@@ -185,8 +198,42 @@ impl Fnv1a64 {
     }
 }
 
-pub(super) fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
+pub(super) fn chart_allows_current_auxiliary_replay(
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+) -> bool {
     chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
+        && chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path)
+        && if chart_spec.is_chart_ex {
+            chart_ex_allows_opaque_replay(chart_spec, chart_path)
+        } else {
+            can_serialize_current_imported_chart_space(chart_spec)
+        }
+}
+
+pub(super) fn standard_chart_original_number_with_current_auxiliary_replay(
+    chart_spec: &domain_types::ChartSpec,
+) -> Option<usize> {
+    let aux = chart_auxiliary::chart_auxiliary_data(chart_spec)?;
+    let original_number = chart_auxiliary::standard_chart_number(&aux)?;
+    let chart_path = format!("xl/charts/chart{original_number}.xml");
+    chart_allows_current_auxiliary_replay(chart_spec, &chart_path).then_some(original_number)
+}
+
+pub(super) fn chart_ex_original_number_with_current_replay(
+    chart_spec: &domain_types::ChartSpec,
+) -> Option<usize> {
+    let original_number = chart_ex_original_number(chart_spec).or_else(|| {
+        let aux = chart_auxiliary::chart_auxiliary_data(chart_spec)?;
+        chart_auxiliary::chart_ex_number(&aux)
+    })?;
+    let chart_path = format!("xl/charts/chartEx{original_number}.xml");
+    let current = if chart_spec.chart_ex_replay.is_some() {
+        chart_ex_allows_opaque_replay(chart_spec, &chart_path)
+    } else {
+        chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+    };
+    current.then_some(original_number)
 }
 
 pub(super) fn chart_ex_allows_opaque_replay(
@@ -386,7 +433,7 @@ pub(super) fn register_chart_owned_external_relationships(
     chart_spec: &domain_types::ChartSpec,
 ) -> Result<(), WriteError> {
     if let Some((_, rel)) = chart_auxiliary::chart_external_data_relationship(chart_spec) {
-        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+        if chart_auxiliary::chart_external_data_relationship_is_supported(rel)
             && let (Some(rel_type), Some(target)) =
                 (rel.relationship_type.as_deref(), rel.target.as_deref())
         {

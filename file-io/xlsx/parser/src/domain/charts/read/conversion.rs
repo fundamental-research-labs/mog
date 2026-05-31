@@ -132,6 +132,7 @@ pub(super) fn convert_chart_to_chart_spec(
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,

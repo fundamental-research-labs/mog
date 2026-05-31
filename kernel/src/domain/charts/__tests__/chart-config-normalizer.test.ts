@@ -140,6 +140,30 @@ describe('chart config normalizer', () => {
     });
   });
 
+  it('prefers generated chart style context over the OOXML compatibility fallback', () => {
+    const config = toChartConfig(
+      chart({
+        chartStyleContext: {
+          colorMapOverride: { type: 'master' },
+          owners: [{ ownerKey: 'title', richText: [{ text: 'Generated' }] }],
+        },
+        ooxml: {
+          definition: {
+            _kind: 'chart',
+            clr_map_ovr: {
+              OverrideClrMapping: { tx1: 'Accent2' },
+            },
+          },
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.chartStyleContext).toEqual({
+      colorMapOverride: { type: 'master' },
+      owners: [{ ownerKey: 'title', richText: [{ text: 'Generated' }] }],
+    });
+  });
+
   it('normalizes imported combo chart metadata before narrowing the chart type', () => {
     const config = toChartConfig(
       chart({

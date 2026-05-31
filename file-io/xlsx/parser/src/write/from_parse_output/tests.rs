@@ -2,7 +2,6 @@ use super::styles::hex_to_color_def;
 use super::*;
 use crate::domain::styles::write::ColorDef;
 use crate::infra::package_integrity::validate_archive_package_integrity;
-use crate::write::REL_PIVOT_TABLE;
 use domain_types::{
     AnchorPosition, AuthoredStyleRun, BorderFormat, BorderSide as DomainBorderSide, CFCellRange,
     CFRule, CFStyle, CellData as DomainCellData, CellValue as DomainValue, ChartSpec, ChartType,
@@ -629,6 +628,47 @@ fn with_chart_identity(mut chart: ChartSpec, target: &str) -> ChartSpec {
     chart
 }
 
+fn with_current_standard_chart_authority(mut chart: ChartSpec) -> ChartSpec {
+    let original_path = chart
+        .chart_frame
+        .as_ref()
+        .and_then(|frame| frame.relationship_target.as_deref())
+        .map(|target| crate::infra::opc::opc_target_to_zip_path(target, "xl/drawings"))
+        .unwrap_or_else(|| "xl/charts/chart1.xml".to_string());
+    let fingerprint = chart_replay::standard_chart_projection_fingerprint(&chart);
+    chart.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
+        original_path: Some(original_path.clone()),
+        rels_path: Some(rels_path_for_part(&original_path)),
+        projection_schema_version: chart_replay::STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
+        projection_fingerprint: Some(fingerprint.clone()),
+        relationships: chart.chart_relationships.clone(),
+        auxiliary_paths: chart
+            .chart_auxiliary_files
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect(),
+    });
+    chart.standard_chart_export_authority =
+        Some(domain_types::chart::StandardChartExportAuthority {
+            schema_version: chart_replay::STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
+            validity: domain_types::chart::StandardChartAuthorityValidity::Current,
+            chart_part_revision: 0,
+            package_owner: Some(original_path),
+            relationship_closure_current: true,
+            projection_fingerprint: Some(fingerprint),
+            invalidated_owner_ids: Vec::new(),
+            stale_reason: None,
+        });
+    chart
+}
+
+fn rels_path_for_part(part_path: &str) -> String {
+    let Some((dir, file_name)) = part_path.rsplit_once('/') else {
+        return format!("_rels/{part_path}.rels");
+    };
+    format!("{dir}/_rels/{file_name}.rels")
+}
+
 fn with_chart_auxiliary(mut chart: ChartSpec, chart_num: usize) -> ChartSpec {
     let (relationships, auxiliary_files) = chart_auxiliary_data(chart_num);
     chart.chart_relationships = relationships;
@@ -750,6 +790,7 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,

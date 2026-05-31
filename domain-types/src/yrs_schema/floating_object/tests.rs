@@ -437,7 +437,9 @@ fn test_textbox_roundtrip() {
 #[test]
 fn test_chart_roundtrip() {
     use crate::domain::chart::{
-        ChartFormatStringData, ChartSubType, ChartType, PivotChartOptionsData, SeriesOrientation,
+        ChartColorMapOverrideData, ChartColorMappingData, ChartFormatStringData,
+        ChartStyleContextData, ChartStyleOwnerData, ChartSubType, ChartType,
+        PivotChartOptionsData, SeriesOrientation,
     };
     use crate::domain::conditional_format::CellIdRange;
 
@@ -547,6 +549,19 @@ fn test_chart_roundtrip() {
             wireframe: None,
             surface_top_view: None,
             color_scheme: None,
+            chart_style_context: Some(ChartStyleContextData {
+                color_map_override: Some(ChartColorMapOverrideData::Override {
+                    mapping: ChartColorMappingData {
+                        tx1: Some("Accent2".to_string()),
+                        ..Default::default()
+                    },
+                }),
+                owners: vec![ChartStyleOwnerData {
+                    owner_key: "title".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
             // Position in points
             height_pt: None,
             width_pt: None,
@@ -618,6 +633,12 @@ fn test_chart_roundtrip() {
                 .and_then(|opts| opts.show_axis_field_buttons),
             Some(true)
         );
+        assert!(matches!(
+            c.chart_style_context
+                .as_ref()
+                .and_then(|ctx| ctx.color_map_override.as_ref()),
+            Some(ChartColorMapOverrideData::Override { .. })
+        ));
         assert_eq!(
             c.title_rich_text
                 .as_ref()

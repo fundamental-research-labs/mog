@@ -154,6 +154,12 @@ function chartStyleContextFromOoxml(
   return colorMapOverride ? { colorMapOverride } : undefined;
 }
 
+function wireToChartStyleContext(
+  context: ChartFloatingObject['chartStyleContext'],
+): ChartConfig['chartStyleContext'] | undefined {
+  return context as ChartConfig['chartStyleContext'] | undefined;
+}
+
 /**
  * Convert a ChartFloatingObject to a ChartConfig for passing to the charts library.
  * Provides defaults for required fields that are optional in the gen type.
@@ -246,8 +252,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     backWallFormat: normalizedChart.backWallFormat as ChartConfig['backWallFormat'],
     subType: normalizedChart.subType as ChartConfig['subType'],
     chartStyleContext:
-      (normalizedChart as { chartStyleContext?: ChartConfig['chartStyleContext'] })
-        .chartStyleContext ?? chartStyleContextFromOoxml(normalizedChart.ooxml),
+      wireToChartStyleContext(normalizedChart.chartStyleContext) ??
+      chartStyleContextFromOoxml(normalizedChart.ooxml),
     extra: normalizedChart.ooxml,
   };
 }

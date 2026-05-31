@@ -58,6 +58,7 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,

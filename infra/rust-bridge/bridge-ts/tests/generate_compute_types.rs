@@ -450,6 +450,7 @@ fn all_snapshot_files_parse_without_error() {
             "{manifest_dir}/../../../compute/core/crates/compute-stats/src/regression_types.rs"
         ),
         format!("{manifest_dir}/../../../compute/core/crates/compute-charts/src/types.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/chart/style_context.rs"),
         format!("{manifest_dir}/../../../compute/core/crates/compute-cf/src/types/mod.rs"),
         format!("{manifest_dir}/../../../compute/core/crates/compute-table/src/types.rs"),
         // domain-types custom_table_style (canonical, moved from compute-table/src/custom_styles.rs)
@@ -754,6 +755,7 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/legend.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/position.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/series.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/chart/style_context.rs"),
         format!(
             "{manifest_dir}/../../../domain-types/src/domain/chart/ooxml_mirror_types/waterfall.rs"
         ),

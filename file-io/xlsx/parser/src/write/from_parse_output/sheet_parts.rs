@@ -1,7 +1,6 @@
 use domain_types::Hyperlink;
 
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
-use super::chart_auxiliary;
 use super::form_control_export_plan::build_form_control_export_plan;
 use super::form_controls::convert_unified_form_controls;
 use super::ole_objects::convert_unified_ole_objects;
@@ -356,12 +355,10 @@ pub(super) fn build_sheet_parts(
             // Preserve original chart number from the imported chart object when available.
             // E.g., if original was "xl/charts/chart2.xml", extract 2 instead of using
             // the sequential counter (which would produce chart1.xml).
-            let original_idx = chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                .then(|| {
-                    chart_auxiliary::chart_auxiliary_data(chart_spec)
-                        .and_then(|aux| chart_auxiliary::standard_chart_number(&aux))
-                })
-                .flatten();
+            let original_idx =
+                chart_replay::standard_chart_original_number_with_current_auxiliary_replay(
+                    chart_spec,
+                );
             let idx = if let Some(orig) = original_idx {
                 // Track the highest index we've used so sequential fallback
                 // doesn't collide with preserved original numbers.
@@ -395,14 +392,8 @@ pub(super) fn build_sheet_parts(
                 _ => continue, // not a chartEx
             };
             // Preserve original chartEx number from the imported chart object when available.
-            let original_idx = chart_replay::chart_ex_original_number(chart_spec).or_else(|| {
-                chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                    .then(|| {
-                        chart_auxiliary::chart_auxiliary_data(chart_spec)
-                            .and_then(|aux| chart_auxiliary::chart_ex_number(&aux))
-                    })
-                    .flatten()
-            });
+            let original_idx =
+                chart_replay::chart_ex_original_number_with_current_replay(chart_spec);
             let idx = if let Some(orig) = original_idx {
                 if orig > global_chart_ex_idx {
                     global_chart_ex_idx = orig;

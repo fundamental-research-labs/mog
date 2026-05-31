@@ -11,7 +11,7 @@ use super::floating_object::{
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData, ChartSubType,
-    ChartType, ChartView3DData, DataLabelData, LegendData, ObjectSize,
+    ChartStyleContextData, ChartType, ChartView3DData, DataLabelData, LegendData, ObjectSize,
     StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
 };
 use super::{
@@ -167,6 +167,9 @@ pub struct ChartSpec {
     /// Chart color scheme index (1-based).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub color_scheme: Option<u8>,
+    /// Imported chart style sidecar used by theme/style/text resolution.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chart_style_context: Option<ChartStyleContextData>,
 
     // -- Simple config properties --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -540,6 +543,7 @@ impl ChartSpec {
             wireframe: chart_data.wireframe,
             surface_top_view: chart_data.surface_top_view,
             color_scheme: chart_data.color_scheme,
+            chart_style_context: chart_data.chart_style_context.clone(),
             // 3D
             view_3d: chart_data.view_3d.clone(),
             floor_format: chart_data.floor_format.clone(),
@@ -791,6 +795,7 @@ impl ChartSpec {
             wireframe: self.wireframe,
             surface_top_view: self.surface_top_view,
             color_scheme: self.color_scheme,
+            chart_style_context: self.chart_style_context.clone(),
             // Position in points
             height_pt: self.size.height_pt,
             width_pt: self.size.width_pt,

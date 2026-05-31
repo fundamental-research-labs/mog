@@ -4,7 +4,7 @@ use super::ChartOoxmlProps;
 use crate::domain::chart::{
     AxisData, BoxplotConfigData, ChartDataTableData, ChartFormatData, ChartFormatStringData,
     ChartLineSettingsData, ChartSeriesData, ChartSubType, ChartType, ChartView3DData,
-    DataLabelData,
+    ChartStyleContextData, DataLabelData,
     HierarchyChartConfigData, HistogramConfigData, LegendData, PieSliceData, PivotChartOptionsData,
     RegionMapConfigData, SeriesOrientation, TrendlineData, UpDownBarsData, WaterfallOptions,
 };
@@ -144,6 +144,9 @@ pub struct ChartData {
     /// Chart color scheme index (1-based).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub color_scheme: Option<u8>,
+    /// Imported chart style sidecar used by theme/style/text resolution.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chart_style_context: Option<ChartStyleContextData>,
 
     // ── Position in points ──
     /// Height in points.

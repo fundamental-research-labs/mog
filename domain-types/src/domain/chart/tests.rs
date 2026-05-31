@@ -133,6 +133,26 @@ fn series_orientation_roundtrip() {
     assert_eq!(back, SeriesOrientation::Columns);
 }
 
+fn sample_chart_style_context() -> ChartStyleContextData {
+    ChartStyleContextData {
+        color_map_override: Some(ChartColorMapOverrideData::Override {
+            mapping: ChartColorMappingData {
+                tx1: Some("Accent2".to_string()),
+                ..Default::default()
+            },
+        }),
+        owners: vec![ChartStyleOwnerData {
+            owner_key: "title".to_string(),
+            rich_text: Some(vec![ChartFormatStringData {
+                text: "Revenue".to_string(),
+                font: None,
+            }]),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
 #[test]
 fn chart_spec_to_floating_object_preserves_fields() {
     use crate::domain::floating_object::{AnchorMode, FloatingObjectData};
@@ -216,6 +236,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -276,6 +297,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
     if let FloatingObjectData::Chart(ref cd) = fo.data {
         assert_eq!(cd.chart_type, ChartType::Line);
         assert_eq!(cd.title.as_deref(), Some("Revenue"));
+        assert_eq!(cd.chart_style_context, spec.chart_style_context);
         let ooxml = cd.ooxml.as_ref().expect("ooxml should be Some");
         assert!(matches!(
             ooxml.definition,
@@ -409,6 +431,7 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -537,6 +560,7 @@ fn chart_spec_roundtrip_via_floating_object() {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -584,6 +608,7 @@ fn chart_spec_roundtrip_via_floating_object() {
     assert_eq!(recovered.axes, original.axes);
     assert_eq!(recovered.data_labels, original.data_labels);
     assert_eq!(recovered.data_range, original.data_range);
+    assert_eq!(recovered.chart_style_context, original.chart_style_context);
     assert_eq!(recovered.is_chart_ex, original.is_chart_ex);
     assert_eq!(recovered.cnv_pr_name, original.cnv_pr_name);
     assert_eq!(recovered.cnv_pr_id, original.cnv_pr_id);
@@ -678,6 +703,7 @@ fn chart_spec_roundtrip_minimal() {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -926,6 +952,7 @@ fn chart_data_serde_roundtrip() {
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         height_pt: None,
         width_pt: None,
         left_pt: None,
@@ -976,6 +1003,10 @@ fn chart_data_serde_roundtrip() {
         serde_json::json!("id-d10")
     );
     assert_eq!(json_val["sourceTableId"], serde_json::json!("table-42"));
+    assert_eq!(
+        json_val["chartStyleContext"]["colorMapOverride"]["type"],
+        serde_json::json!("override")
+    );
 
     // Verify typed fields serialize correctly
     assert_eq!(json_val["legend"]["position"], serde_json::json!("bottom"));
@@ -1010,6 +1041,7 @@ fn chart_data_serde_roundtrip() {
     assert_eq!(recovered.colors, original.colors);
     assert_eq!(recovered.show_lines, original.show_lines);
     assert_eq!(recovered.smooth_lines, original.smooth_lines);
+    assert_eq!(recovered.chart_style_context, original.chart_style_context);
     assert_eq!(recovered.source_table_id, original.source_table_id);
     assert_eq!(recovered.table_data_columns, original.table_data_columns);
     assert_eq!(recovered.width_cells, original.width_cells);

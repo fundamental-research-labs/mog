@@ -826,6 +826,29 @@ export interface ChartColorData_Theme {
   tint_shade?: number;
 }
 
+export type ChartColorMapOverrideData =
+  | { type: "master" }
+  | { type: "override" } & ChartColorMapOverrideData_override;
+
+export interface ChartColorMapOverrideData_override {
+  mapping: ChartColorMappingData;
+}
+
+export interface ChartColorMappingData {
+  bg1?: string;
+  tx1?: string;
+  bg2?: string;
+  tx2?: string;
+  accent1?: string;
+  accent2?: string;
+  accent3?: string;
+  accent4?: string;
+  accent5?: string;
+  accent6?: string;
+  hlink?: string;
+  folHlink?: string;
+}
+
 export type ChartDashStyle = "solid" | "dot" | "dash" | "dashDot" | "longDash" | "longDashDot" | "longDashDotDot";
 
 export interface ChartData {
@@ -878,6 +901,7 @@ export interface ChartData {
   wireframe?: boolean;
   surfaceTopView?: boolean;
   colorScheme?: number;
+  chartStyleContext?: ChartStyleContextData;
   heightPt?: number;
   widthPt?: number;
   leftPt?: number;
@@ -1169,6 +1193,7 @@ export interface ChartSpec {
   wireframe?: boolean;
   surfaceTopView?: boolean;
   colorScheme?: number;
+  chartStyleContext?: ChartStyleContextData;
   categoryLabelLevel?: number;
   seriesNameLevel?: number;
   showAllFieldButtons?: boolean;
@@ -1226,6 +1251,36 @@ export interface ChartStatistics {
 }
 
 export type ChartStrikeStyle = "single" | "double";
+
+export interface ChartStyleContextData {
+  colorMapOverride?: ChartColorMapOverrideData;
+  diagnostics?: ChartStyleDiagnosticData[];
+  owners?: ChartStyleOwnerData[];
+}
+
+export interface ChartStyleDiagnosticData {
+  category: string;
+  ownerKey: string;
+  ooxmlPath?: string;
+  severity: ChartStyleDiagnosticSeverityData;
+  disposition: ChartStyleDiagnosticDispositionData;
+  feature: string;
+  message?: string;
+}
+
+export type ChartStyleDiagnosticDispositionData = "rendered" | "approximated" | "preservedForExportOnly" | "droppedUnsupported" | "droppedStale";
+
+export type ChartStyleDiagnosticSeverityData = "info" | "warning" | "error";
+
+export interface ChartStyleOwnerData {
+  ownerKey: string;
+  sourcePath?: string;
+  editOwnerId?: string;
+  format?: ChartFormatData;
+  richText?: ChartFormatStringData[];
+  diagnostics?: ChartStyleDiagnosticData[];
+  importedDrawingMl?: unknown;
+}
 
 export type ChartTextVerticalType = "horz" | "vert" | "vert270" | "wordArtVert" | "eaVert" | "mongolianVert" | "wordArtVertRtl";
 

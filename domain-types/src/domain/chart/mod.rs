@@ -7,6 +7,7 @@ mod ooxml_mirror_types;
 mod position;
 mod series;
 mod spec;
+mod style_context;
 mod view_3d;
 
 #[cfg(test)]
@@ -21,6 +22,7 @@ pub use ooxml_mirror_types::*;
 pub use position::*;
 pub use series::*;
 pub use spec::*;
+pub use style_context::*;
 pub use view_3d::*;
 
 use serde::{Deserialize, Serialize};

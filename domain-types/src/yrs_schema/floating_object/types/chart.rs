@@ -166,6 +166,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(v) = d.color_scheme {
         entries.push(("colorScheme".into(), Any::Number(v as f64)));
     }
+    if let Some(a) = option_sub_object(&d.chart_style_context) {
+        entries.push(("chartStyleContext".into(), a));
+    }
     if let Some(v) = d.height_pt {
         entries.push(("heightPt".into(), Any::Number(v)));
     }
@@ -329,6 +332,7 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         wireframe: read_bool(map, txn, "wireframe"),
         surface_top_view: read_bool(map, txn, "surfaceTopView"),
         color_scheme: read_number(map, txn, "colorScheme").map(|n| n as u8),
+        chart_style_context: read_sub_object(map, txn, "chartStyleContext"),
         height_pt: read_number(map, txn, "heightPt"),
         width_pt: read_number(map, txn, "widthPt"),
         left_pt: read_number(map, txn, "leftPt"),

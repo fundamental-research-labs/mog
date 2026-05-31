@@ -143,6 +143,13 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     let display_blanks_as = chart.disp_blanks_as.map(|d| d.to_ooxml().to_string());
     let plot_visible_only = chart.plot_vis_only;
+    let chart_style_context = cs
+        .clr_map_ovr
+        .as_ref()
+        .map(|color_map_override| domain_types::ChartStyleContextData {
+            color_map_override: Some(color_map_override.into()),
+            ..Default::default()
+        });
     let import_status = match &chart_type {
         domain_types::ChartType::Unknown(raw) => chart_import_status_for_unsupported_chart_type(
             raw,
@@ -253,6 +260,7 @@ pub fn extract_chart_spec_from_chart_space(
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context,
         view_3d,
         floor_format,
         side_wall_format,
@@ -676,6 +684,38 @@ mod tests {
         let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
 
         assert_eq!(spec.title, None);
+    }
+
+    #[test]
+    fn color_map_override_projects_to_style_context() {
+        let cs = ChartSpace {
+            clr_map_ovr: Some(ooxml_types::themes::ColorMappingOverride::OverrideClrMapping(
+                ooxml_types::themes::ColorMapping {
+                    bg1: ooxml_types::themes::ColorSchemeIndex::Dk2,
+                    tx1: ooxml_types::themes::ColorSchemeIndex::Accent2,
+                    ..Default::default()
+                },
+            )),
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert!(matches!(
+            spec.chart_style_context
+                .as_ref()
+                .and_then(|context| context.color_map_override.as_ref()),
+            Some(domain_types::ChartColorMapOverrideData::Override { .. })
+        ));
+        let Some(domain_types::ChartColorMapOverrideData::Override { mapping }) = spec
+            .chart_style_context
+            .as_ref()
+            .and_then(|context| context.color_map_override.as_ref())
+        else {
+            panic!("expected override color mapping");
+        };
+        assert_eq!(mapping.bg1.as_deref(), Some("Dk2"));
+        assert_eq!(mapping.tx1.as_deref(), Some("Accent2"));
     }
 
     #[test]

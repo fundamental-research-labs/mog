@@ -154,6 +154,7 @@ fn test_chart_round_trip() {
             wireframe: None,
             surface_top_view: None,
             color_scheme: None,
+            chart_style_context: None,
             height_pt: None,
             width_pt: None,
             left_pt: None,

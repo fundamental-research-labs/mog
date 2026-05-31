@@ -35,11 +35,6 @@ import {
   type CompileResult,
   type DataRow,
 } from '@mog/charts';
-import {
-  applyWorkbookThemePalette,
-  createChartWorkbookThemeColorPalette,
-  type ChartWorkbookThemeColorPalette,
-} from '@mog/charts/utils';
 import type {
   ChartBounds,
   ChartDataResult,
@@ -79,7 +74,6 @@ import {
   type ResolvedChartRangeReferences,
 } from './chart-range-references';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
-import type { ThemeData } from '../../bridges/compute/compute-types.gen';
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import {
   wireToAxisConfig,
@@ -106,6 +100,19 @@ import {
   renderChartPlaceholder,
 } from './bridge/chart-renderer';
 import { ChartSheetIndex } from './bridge/chart-sheet-index';
+import {
+  applyWorkbookThemeColors,
+  loadWorkbookThemeColorPalette,
+  type ChartWorkbookThemeColorPalette,
+  type WorkbookThemeBridge,
+} from './bridge/theme-colors';
+import {
+  isCellHidden,
+  loadHiddenVisibility,
+  withHiddenSeriesFiltered,
+  type HiddenCellVisibility,
+  type HiddenDimensionBridge,
+} from './bridge/hidden-visibility';
 
 import type { DocumentContext } from '../../context/types';
 
@@ -132,39 +139,6 @@ function normalizeAxisForRendering(axis: NonNullable<ChartConfig['axis']>): Char
     yAxis: normAxis(axis.valueAxis ?? axis.yAxis),
     secondaryYAxis: normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis),
   };
-}
-
-type HiddenCellVisibility = {
-  hiddenRowsBySheet: Map<string, Set<number>>;
-  hiddenColsBySheet: Map<string, Set<number>>;
-};
-
-type HiddenDimensionBridge = {
-  getHiddenRows?: (sheetId: SheetId) => Promise<number[]>;
-  getHiddenColumns?: (sheetId: SheetId) => Promise<number[]>;
-};
-
-function isCellHidden(
-  sheetId: string | undefined,
-  row: number,
-  col: number,
-  visibility: HiddenCellVisibility | undefined,
-): boolean {
-  if (!sheetId || !visibility) return false;
-  const key = String(sheetId);
-  return (
-    (visibility.hiddenRowsBySheet.get(key)?.has(row) ?? false) ||
-    (visibility.hiddenColsBySheet.get(key)?.has(col) ?? false)
-  );
-}
-
-function isRangeFullyHidden(range: CellRange, visibility: HiddenCellVisibility): boolean {
-  for (let row = range.startRow; row <= range.endRow; row++) {
-    for (let col = range.startCol; col <= range.endCol; col++) {
-      if (!isCellHidden(range.sheetId, row, col, visibility)) return false;
-    }
-  }
-  return true;
 }
 
 /**
@@ -1362,10 +1336,13 @@ export class ChartBridge implements IChartBridge {
         series.categories?.range,
       ]);
       const hiddenVisibility = config.plotVisibleOnly
-        ? await this.loadHiddenVisibility(seriesRanges)
+        ? await loadHiddenVisibility(
+            seriesRanges,
+            this.ctx.computeBridge as HiddenDimensionBridge | undefined,
+          )
         : undefined;
       const renderConfig = hiddenVisibility
-        ? this.withHiddenSeriesFiltered(config, resolvedRanges, hiddenVisibility)
+        ? withHiddenSeriesFiltered(config, resolvedRanges, hiddenVisibility)
         : config;
       const valueRanges = resolvedRanges.seriesReferences
         .map((series) => series.values?.range)
@@ -1408,7 +1385,10 @@ export class ChartBridge implements IChartBridge {
       resolvedRanges.seriesRange?.range,
     ];
     const hiddenVisibility = config.plotVisibleOnly
-      ? await this.loadHiddenVisibility(dataRanges)
+      ? await loadHiddenVisibility(
+          dataRanges,
+          this.ctx.computeBridge as HiddenDimensionBridge | undefined,
+        )
       : undefined;
     const cellAccessor = await this.createCellAccessor(dataRanges, { hiddenVisibility });
     const data = extractChartDataFromRange(cellAccessor, dataRange, {
@@ -1424,69 +1404,14 @@ export class ChartBridge implements IChartBridge {
   }
 
   private async withWorkbookThemeColors(config: ChartConfig): Promise<ChartConfig> {
-    const palette = await this.getWorkbookThemeColorPalette();
-    if (!palette) return config;
-    return applyWorkbookThemePalette(config, palette);
+    return applyWorkbookThemeColors(config, () => this.getWorkbookThemeColorPalette());
   }
 
   private async getWorkbookThemeColorPalette(): Promise<ChartWorkbookThemeColorPalette | null> {
-    this.workbookThemeColorPalettePromise ??= this.loadWorkbookThemeColorPalette();
-    return this.workbookThemeColorPalettePromise;
-  }
-
-  private async loadWorkbookThemeColorPalette(): Promise<ChartWorkbookThemeColorPalette | null> {
-    const bridge = this.ctx.computeBridge as {
-      getWorkbookTheme?: () => Promise<ThemeData | null | undefined>;
-    };
-    if (!bridge.getWorkbookTheme) return null;
-
-    try {
-      return createChartWorkbookThemeColorPalette((await bridge.getWorkbookTheme())?.colors);
-    } catch {
-      return null;
-    }
-  }
-
-  private async loadHiddenVisibility(
-    ranges: Array<CellRange | null | undefined>,
-  ): Promise<HiddenCellVisibility | undefined> {
-    const sheetIds = new Set<string>();
-    for (const range of ranges) {
-      if (range?.sheetId) sheetIds.add(String(range.sheetId));
-    }
-    if (sheetIds.size === 0) return undefined;
-
-    const bridge = this.ctx.computeBridge as HiddenDimensionBridge | undefined;
-    if (!bridge?.getHiddenRows && !bridge?.getHiddenColumns) return undefined;
-
-    const hiddenRowsBySheet = new Map<string, Set<number>>();
-    const hiddenColsBySheet = new Map<string, Set<number>>();
-    await Promise.all(
-      [...sheetIds].map(async (id) => {
-        const sheet = toSheetId(id);
-        const [rows, cols] = await Promise.all([
-          bridge.getHiddenRows?.(sheet) ?? Promise.resolve([]),
-          bridge.getHiddenColumns?.(sheet) ?? Promise.resolve([]),
-        ]);
-        hiddenRowsBySheet.set(id, new Set(rows));
-        hiddenColsBySheet.set(id, new Set(cols));
-      }),
+    this.workbookThemeColorPalettePromise ??= loadWorkbookThemeColorPalette(
+      this.ctx.computeBridge as WorkbookThemeBridge | undefined,
     );
-
-    return { hiddenRowsBySheet, hiddenColsBySheet };
-  }
-
-  private withHiddenSeriesFiltered(
-    config: ChartConfig,
-    resolvedRanges: ResolvedChartRangeReferences,
-    hiddenVisibility: HiddenCellVisibility,
-  ): ChartConfig {
-    if (!config.series?.length) return config;
-    const series = config.series.filter((_, index) => {
-      const valuesRange = resolvedRanges.seriesReferences[index]?.values?.range;
-      return !valuesRange || !isRangeFullyHidden(valuesRange, hiddenVisibility);
-    });
-    return series.length === config.series.length ? config : { ...config, series };
+    return this.workbookThemeColorPalettePromise;
   }
 
   private seriesSheetAliases(

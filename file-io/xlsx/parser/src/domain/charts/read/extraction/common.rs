@@ -8,31 +8,18 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
         return None;
     }
 
-    let diagnostic_id = domain_types::deterministic_diagnostic_id(
-        &domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
-        part_path,
-        None,
-        None,
-        None,
-        object_name,
-    );
-    let reference = domain_types::ImportDiagnosticRef {
-        id: Some(diagnostic_id),
-        part: part_path.map(str::to_string),
-        object_name: object_name.map(str::to_string),
-        feature_kind: Some(domain_types::ImportFeatureKind::Chart),
-        ..domain_types::ImportDiagnosticRef::default()
-    };
-
-    Some(domain_types::ImportObjectStatus {
-        source: domain_types::ImportSource::Xlsx,
-        feature_kind: domain_types::ImportFeatureKind::Chart,
-        recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
-        renderability: domain_types::ImportRenderability::Placeholder,
-        editability: domain_types::ImportEditability::PartiallyEditable,
-        diagnostics: vec![reference.clone()],
-        reference: Some(reference),
-    })
+    Some(crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
+            message: "Imported chart was preserved but has no renderable series data".to_string(),
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::Placeholder,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id: None,
+        },
+    ))
 }
 
 /// Map ooxml ChartType + config to domain ChartType.
@@ -66,6 +53,6 @@ pub(super) fn map_ooxml_chart_type_to_domain(
         OT::Surface3D => domain_types::ChartType::Surface3D,
         OT::OfPie => domain_types::ChartType::OfPie,
         OT::Combo => domain_types::ChartType::Combo,
-        OT::Unknown => domain_types::ChartType::Column,
+        OT::Unknown => domain_types::ChartType::Unknown(String::new()),
     }
 }

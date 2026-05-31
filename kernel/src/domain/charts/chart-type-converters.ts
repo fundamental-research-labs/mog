@@ -41,6 +41,7 @@ import type {
 import type {
   AxisConfig,
   ChartLeaderLinesFormat,
+  ChartType,
   DataLabelConfig,
   LegendConfig,
   MarkerStyle,
@@ -103,6 +104,101 @@ const MARKER_STYLES = [
   'auto',
 ] as const;
 
+const CHART_TYPES = [
+  'bar',
+  'column',
+  'line',
+  'area',
+  'pie',
+  'doughnut',
+  'scatter',
+  'bubble',
+  'combo',
+  'radar',
+  'stock',
+  'funnel',
+  'waterfall',
+  'surface',
+  'surface3d',
+  'ofPie',
+  'bar3d',
+  'column3d',
+  'line3d',
+  'pie3d',
+  'area3d',
+  'histogram',
+  'boxplot',
+  'heatmap',
+  'violin',
+  'pareto',
+  'treemap',
+  'sunburst',
+  'regionMap',
+  'pieExploded',
+  'pie3dExploded',
+  'doughnutExploded',
+  'bubble3DEffect',
+  'surfaceWireframe',
+  'surfaceTopView',
+  'surfaceTopViewWireframe',
+  'lineMarkers',
+  'lineMarkersStacked',
+  'lineMarkersStacked100',
+  'cylinderColClustered',
+  'cylinderColStacked',
+  'cylinderColStacked100',
+  'cylinderBarClustered',
+  'cylinderBarStacked',
+  'cylinderBarStacked100',
+  'cylinderCol',
+  'coneColClustered',
+  'coneColStacked',
+  'coneColStacked100',
+  'coneBarClustered',
+  'coneBarStacked',
+  'coneBarStacked100',
+  'coneCol',
+  'pyramidColClustered',
+  'pyramidColStacked',
+  'pyramidColStacked100',
+  'pyramidBarClustered',
+  'pyramidBarStacked',
+  'pyramidBarStacked100',
+  'pyramidCol',
+] as const satisfies readonly ChartType[];
+
+export type ChartTypeNarrowingDiagnostic = {
+  code: 'acceptedChartTypeAlias' | 'unsupportedChartType';
+  message: string;
+  rawType: string;
+  canonicalType?: ChartType;
+};
+
+export type WireChartTypeToConfigResult =
+  | { type: ChartType; diagnostics: ChartTypeNarrowingDiagnostic[] }
+  | { type: undefined; diagnostics: ChartTypeNarrowingDiagnostic[] };
+
+const CHART_TYPE_ALIASES: Record<string, ChartType> = {
+  bar3D: 'bar3d',
+  column3D: 'column3d',
+  line3D: 'line3d',
+  pie3D: 'pie3d',
+  area3D: 'area3d',
+  surface3D: 'surface3d',
+  boxWhisker: 'boxplot',
+  paretoLine: 'pareto',
+  'chartEx:waterfall': 'waterfall',
+  'chartEx:treemap': 'treemap',
+  'chartEx:sunburst': 'sunburst',
+  'chartEx:funnel': 'funnel',
+  'chartEx:regionMap': 'regionMap',
+  'chartEx:histogram': 'histogram',
+  'chartEx:pareto': 'pareto',
+  'chartEx:paretoLine': 'pareto',
+  'chartEx:boxWhisker': 'boxplot',
+  'chartEx:boxplot': 'boxplot',
+};
+
 /**
  * Narrow a loose wire string into one of the allowed literals, or
  * `undefined` if the wire value is absent or violates the contract.
@@ -129,6 +225,43 @@ function narrowEnum<T extends string>(
     );
   }
   return undefined;
+}
+
+export function wireChartTypeToConfig(
+  value: string | null | undefined,
+): WireChartTypeToConfigResult {
+  const rawType = value?.trim();
+  if (!rawType) return { type: undefined, diagnostics: [] };
+
+  if ((CHART_TYPES as readonly string[]).includes(rawType)) {
+    return { type: rawType as ChartType, diagnostics: [] };
+  }
+
+  const alias = CHART_TYPE_ALIASES[rawType];
+  if (alias) {
+    return {
+      type: alias,
+      diagnostics: [
+        {
+          code: 'acceptedChartTypeAlias',
+          message: `Imported chart type "${rawType}" was canonicalized to "${alias}"`,
+          rawType,
+          canonicalType: alias,
+        },
+      ],
+    };
+  }
+
+  return {
+    type: undefined,
+    diagnostics: [
+      {
+        code: 'unsupportedChartType',
+        message: `Imported chart type "${rawType}" is not supported`,
+        rawType,
+      },
+    ],
+  };
 }
 
 // =============================================================================

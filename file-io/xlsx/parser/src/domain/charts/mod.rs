@@ -32,8 +32,10 @@ pub mod reconstruct;
 pub mod series;
 pub mod types;
 pub mod write_canonical;
+mod import_diagnostics;
 mod xml_helpers;
 
+pub(crate) use import_diagnostics::*;
 pub use axes::*;
 pub use model::*;
 pub use series::*;

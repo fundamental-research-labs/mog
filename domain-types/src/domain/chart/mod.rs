@@ -125,7 +125,8 @@ impl Default for StandardChartAuthorityValidity {
 /// every OOXML read-side chart-type variant (including 3-D variants
 /// and `ofPie`) has a direct mapping here. It also covers the ChartEx
 /// (cx:chartSpace) chart types not yet handled by the parser's OOXML
-/// enum (waterfall, treemap, sunburst, funnel, regionMap).
+/// enum (waterfall, treemap, sunburst, funnel, regionMap, histogram,
+/// pareto, box/whisker).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ChartType {
     #[default]
@@ -153,6 +154,10 @@ pub enum ChartType {
     /// Of-pie chart (pie of pie / bar of pie).
     OfPie,
     RegionMap,
+    Histogram,
+    Pareto,
+    /// ChartEx `boxWhisker`, serialized using the public TS/API spelling.
+    BoxWhisker,
     /// Fallback — preserves the original string for round-trip fidelity.
     ///
     /// Holds the OOXML element name token (e.g. `"histogramChart"`,
@@ -203,6 +208,9 @@ impl ChartType {
             ChartType::Surface3D => "surface3D",
             ChartType::OfPie => "ofPie",
             ChartType::RegionMap => "regionMap",
+            ChartType::Histogram => "histogram",
+            ChartType::Pareto => "pareto",
+            ChartType::BoxWhisker => "boxplot",
             ChartType::Unknown(s) => s.as_str(),
         }
     }
@@ -241,6 +249,9 @@ impl ChartType {
             "surface3D" | "surface3d" => ChartType::Surface3D,
             "ofPie" => ChartType::OfPie,
             "regionMap" => ChartType::RegionMap,
+            "histogram" => ChartType::Histogram,
+            "pareto" | "paretoLine" => ChartType::Pareto,
+            "boxplot" | "boxWhisker" => ChartType::BoxWhisker,
             other => ChartType::Unknown(other.to_string()),
         }
     }
@@ -275,8 +286,9 @@ impl ChartType {
 
     /// Convert to the OOXML chart-type enum. Variants that don't have a
     /// direct OOXML mapping (ChartEx-only types — waterfall/treemap/
-    /// sunburst/funnel/regionMap, plus `Column` which OOXML expresses via
-    /// `Bar` + `BarDirection`, and `Unknown` which carries its own token)
+    /// sunburst/funnel/regionMap/histogram/pareto/boxplot, plus `Column`
+    /// which OOXML expresses via `Bar` + `BarDirection`, and `Unknown`
+    /// which carries its own token)
     /// map to `OoxmlChartType::Unknown`.
     pub fn to_ooxml(&self) -> ooxml_types::charts::ChartType {
         use ooxml_types::charts::ChartType as Oct;
@@ -303,6 +315,9 @@ impl ChartType {
             | ChartType::Sunburst
             | ChartType::Funnel
             | ChartType::RegionMap
+            | ChartType::Histogram
+            | ChartType::Pareto
+            | ChartType::BoxWhisker
             | ChartType::Unknown(_) => Oct::Unknown,
         }
     }

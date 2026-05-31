@@ -6,7 +6,7 @@ import {
 } from '@mog/charts';
 import type { ChartDataResult, ChartError } from '@mog-sdk/contracts/bridges';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { AxisType, ChartConfig, ChartType } from '@mog-sdk/contracts/data/charts';
+import type { AxisType, ChartConfig } from '@mog-sdk/contracts/data/charts';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
@@ -22,6 +22,7 @@ import {
   wireToAxisConfig,
   wireToDataLabelConfig,
   wireToLegendConfig,
+  wireChartTypeToConfig,
   wireToSeriesConfigArray,
 } from '../chart-type-converters';
 import { normalizeChartDataForRendering } from './chart-render-data-normalizer';
@@ -58,14 +59,49 @@ export function normalizeAxisForRendering(
   };
 }
 
+function isNativeMissingChartType(
+  chart: Pick<ChartFloatingObject, 'chartType' | 'importStatus'>,
+): boolean {
+  return (
+    (chart.chartType === undefined || chart.chartType === null || chart.chartType === '') &&
+    chart.importStatus === undefined
+  );
+}
+
+export function unsupportedChartTypeError(
+  chart: ChartFloatingObject,
+  chartId: string = chart.id,
+): ChartError | null {
+  const normalizedChart = normalizeImportedComboChart(chart);
+  const narrowedType = wireChartTypeToConfig(normalizedChart.chartType);
+  if (narrowedType.type || isNativeMissingChartType(normalizedChart)) {
+    return null;
+  }
+
+  return {
+    code: 'INVALID_SPEC',
+    message: narrowedType.diagnostics[0]?.message ?? 'Imported chart type is not supported',
+    chartId,
+    details: {
+      chartType: normalizedChart.chartType,
+      diagnostics: narrowedType.diagnostics,
+    },
+  };
+}
+
 /**
  * Convert a ChartFloatingObject to a ChartConfig for passing to the charts library.
  * Provides defaults for required fields that are optional in the gen type.
  */
 export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const normalizedChart = normalizeImportedComboChart(chart);
+  const narrowedType = wireChartTypeToConfig(normalizedChart.chartType);
+  if (!narrowedType.type && !isNativeMissingChartType(normalizedChart)) {
+    throw new Error(narrowedType.diagnostics[0]?.message ?? 'Imported chart type is not supported');
+  }
+
   return {
-    type: (normalizedChart.chartType ?? 'bar') as ChartType,
+    type: narrowedType.type ?? 'bar',
     anchorRow: normalizedChart.anchor.anchorRow,
     anchorCol: normalizedChart.anchor.anchorCol,
     width: normalizedChart.widthCells ?? normalizedChart.width ?? 4,
@@ -286,6 +322,9 @@ export class ChartDataResolver {
     resolvedRanges: ResolvedChartRangeReferences,
     chartId: string,
   ): Promise<ChartRenderData | ChartError> {
+    const chartTypeError = unsupportedChartTypeError(chart, chartId);
+    if (chartTypeError) return chartTypeError;
+
     const config = toChartConfig(chart);
     const hasExplicitSeriesValues = config.series?.some((series) => series.values?.trim());
 

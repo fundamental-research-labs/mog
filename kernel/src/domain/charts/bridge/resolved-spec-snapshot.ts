@@ -298,12 +298,88 @@ function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
   const unsupported: string[] = [];
   if (String(config.type).endsWith('3d'))
     unsupported.push('3d chart rendering is approximated by the 2d chart backend');
-  if (config.type === 'surface' || config.type === 'surface3d')
+  if (
+    config.type === 'surface' ||
+    config.type === 'surface3d' ||
+    config.type === 'surfaceTopView'
+  )
     unsupported.push('surface chart rendering is not fully semantic');
-  if (config.wireframe) unsupported.push('surface wireframe rendering is not fully semantic');
+  if (
+    config.wireframe ||
+    config.type === 'surfaceWireframe' ||
+    config.type === 'surfaceTopViewWireframe'
+  )
+    unsupported.push('surface wireframe rendering is not fully semantic');
+  if (config.type === 'regionMap')
+    unsupported.push('region map rendering uses placeholder geometry');
+  const isChartEx = (config.extra as { isChartEx?: boolean } | undefined)?.isChartEx === true;
+  if (
+    isChartEx &&
+    !config.dataRange &&
+    !config.series?.some((series) => series.values?.trim() || series.valueCache?.points?.length)
+  ) {
+    unsupported.push(`ChartEx ${config.type} data projection is not implemented`);
+  }
   if (config.pivotOptions || config.showAllFieldButtons)
     unsupported.push('pivot chart field buttons are not rendered');
+  unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis));
   return unsupported;
+}
+
+function axisUnsupportedFeatureDiagnostics(axis: ChartConfig['axis']): string[] {
+  if (!axis) return [];
+  const diagnostics = new Set<string>();
+  const entries: Array<[string, NonNullable<ChartConfig['axis']>['categoryAxis']]> = [
+    ['category', axis.categoryAxis ?? axis.xAxis],
+    ['value', axis.valueAxis ?? axis.yAxis],
+    ['secondary category', axis.secondaryCategoryAxis],
+    ['series/depth', axis.seriesAxis],
+  ];
+
+  for (const [label, axisConfig] of entries) {
+    if (!axisConfig) continue;
+    if (label === 'secondary category') {
+      diagnostics.add('secondary category axes are preserved but not rendered');
+    }
+    if (label === 'series/depth') {
+      diagnostics.add('series/depth axes are preserved but not rendered');
+    }
+    if (axisConfig.scaleType === 'logarithmic' || axisConfig.logBase !== undefined) {
+      diagnostics.add(`${label} log axis scale is not fully rendered`);
+    }
+    if (
+      axisConfig.displayUnit ||
+      axisConfig.customDisplayUnit !== undefined ||
+      axisConfig.displayUnitLabel
+    ) {
+      diagnostics.add(`${label} axis display units are not rendered`);
+    }
+    if (axisConfig.tickLabelSpacing !== undefined || axisConfig.tickMarkSpacing !== undefined) {
+      diagnostics.add(`${label} axis explicit tick skipping is not rendered`);
+    }
+    if (axisConfig.linkNumberFormat) {
+      diagnostics.add(`${label} axis source-linked number format is not resolved`);
+    }
+    if (axisConfig.tickLabelPosition && axisConfig.tickLabelPosition !== 'nextTo') {
+      diagnostics.add(`${label} axis tick label position is not fully rendered`);
+    }
+    if (
+      axisConfig.crossBetween ||
+      axisConfig.isBetweenCategories !== undefined ||
+      axisConfig.crossesAt === 'custom'
+    ) {
+      diagnostics.add(`${label} axis crossing semantics are not fully rendered`);
+    }
+    if (
+      axisConfig.minorUnit !== undefined ||
+      axisConfig.minorGridLines ||
+      axisConfig.minorTickMarks
+    ) {
+      diagnostics.add(`${label} axis minor ticks/gridlines are approximate`);
+    }
+  }
+
+  return Array.from(diagnostics);
 }
 
 export function hashJson(value: unknown): string {

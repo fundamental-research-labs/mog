@@ -2393,6 +2393,8 @@ export type ImportDiagnosticCode =
 
 export interface ImportDiagnosticRef {
   id?: string;
+  code?: ImportDiagnosticCode;
+  message?: string;
   part?: string;
   relationshipId?: string;
   relationshipTarget?: string;

@@ -1,5 +1,55 @@
 use super::*;
 
+fn chart_type_from_chart_ex_layout_id(
+    layout_id: &ooxml_types::chart_ex::ChartExLayoutId,
+) -> domain_types::ChartType {
+    layout_id
+        .to_public_chart_type()
+        .map(domain_types::ChartType::from_str)
+        .unwrap_or_else(|| domain_types::ChartType::Unknown(layout_id.to_ooxml().to_string()))
+}
+
+fn chart_ex_import_status(
+    chart_type: &domain_types::ChartType,
+    original_path: &str,
+    title: Option<&str>,
+) -> domain_types::ImportObjectStatus {
+    match chart_type {
+        domain_types::ChartType::Unknown(raw) => {
+            crate::domain::charts::chart_import_status_with_diagnostic(
+                crate::domain::charts::ChartImportDiagnosticInput {
+                    code: domain_types::ImportDiagnosticCode::UnsupportedChartType,
+                    message: format!(
+                        "ChartEx chart type `{}` is not supported for rendering",
+                        if raw.is_empty() { "unknown" } else { raw.as_str() }
+                    ),
+                    recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+                    renderability: domain_types::ImportRenderability::NotRenderable,
+                    editability: domain_types::ImportEditability::PartiallyEditable,
+                    part_path: Some(original_path),
+                    object_name: title,
+                    object_id: None,
+                },
+            )
+        }
+        known => crate::domain::charts::chart_import_status_with_diagnostic(
+            crate::domain::charts::ChartImportDiagnosticInput {
+                code: domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                message: format!(
+                    "ChartEx `{}` data projection is not implemented",
+                    known.as_str()
+                ),
+                recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+                renderability: domain_types::ImportRenderability::NotRenderable,
+                editability: domain_types::ImportEditability::PartiallyEditable,
+                part_path: Some(original_path),
+                object_name: title,
+                object_id: None,
+            },
+        ),
+    }
+}
+
 // =============================================================================
 // Domain conversions: Charts and Pivots
 // =============================================================================
@@ -728,7 +778,9 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 .and_then(|tx| tx.tx_data.as_ref())
                 .and_then(|td| td.value.clone());
 
-            // Extract chart type from first series layout_id.
+            // Extract canonical chart type from the first ChartEx series layout_id.
+            // The OOXML layout ID remains replay authority; runtime chart config
+            // must use public chart type strings, never `chartEx:*` prefixes.
             let chart_type = cx
                 .chart_space
                 .chart
@@ -736,8 +788,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 .plot_area_region
                 .series
                 .first()
-                .map(|s| format!("chartEx:{}", s.layout_id.to_ooxml()))
-                .unwrap_or_else(|| "chartEx:unknown".to_string());
+                .map(|s| chart_type_from_chart_ex_layout_id(&s.layout_id))
+                .unwrap_or_else(|| domain_types::ChartType::Unknown("unknown".to_string()));
 
             // Position from matched drawing anchor, or default.
             let matched_frame = chartex_frames_by_target
@@ -754,9 +806,11 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 .unwrap_or_default();
             let chart_auxiliary_parts =
                 chart_auxiliary_parts(&chart_relationships, &cx.auxiliary_files);
+            let import_status =
+                chart_ex_import_status(&chart_type, &cx.original_path, title.as_deref());
 
             let mut spec = ChartSpec {
-                chart_type: domain_types::ChartType::from_str(&chart_type),
+                chart_type: chart_type.clone(),
                 title,
                 position: position.clone(),
                 size: ObjectSize {
@@ -846,7 +900,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 client_data_locks_with_sheet: None,
                 client_data_prints_with_sheet: None,
                 anchor_index: None,
-                import_status: None,
+                import_status: Some(import_status),
             };
             if let Some((_, frame)) = matched_frame {
                 apply_chart_frame_to_spec(&mut spec, frame);
@@ -906,5 +960,81 @@ pub(crate) fn chart_ex_anchor_position(anchor: &DrawingAnchor) -> Option<AnchorP
             extent_cy: Some(oc.extent.cy),
         }),
         DrawingAnchor::Absolute(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ooxml_types::chart_ex::ChartExLayoutId;
+
+    #[test]
+    fn chart_ex_layout_ids_map_to_public_chart_types_without_prefixes() {
+        for (layout_id, expected) in [
+            (ChartExLayoutId::Waterfall, domain_types::ChartType::Waterfall),
+            (ChartExLayoutId::Treemap, domain_types::ChartType::Treemap),
+            (ChartExLayoutId::Sunburst, domain_types::ChartType::Sunburst),
+            (ChartExLayoutId::Funnel, domain_types::ChartType::Funnel),
+            (ChartExLayoutId::RegionMap, domain_types::ChartType::RegionMap),
+            (ChartExLayoutId::Histogram, domain_types::ChartType::Histogram),
+            (ChartExLayoutId::Pareto, domain_types::ChartType::Pareto),
+            (
+                ChartExLayoutId::BoxWhisker,
+                domain_types::ChartType::BoxWhisker,
+            ),
+        ] {
+            let chart_type = chart_type_from_chart_ex_layout_id(&layout_id);
+            assert_eq!(chart_type, expected);
+            assert!(!chart_type.as_str().starts_with("chartEx:"));
+        }
+    }
+
+    #[test]
+    fn chart_ex_unknown_layout_ids_remain_unsupported_chart_types() {
+        assert_eq!(
+            chart_type_from_chart_ex_layout_id(&ChartExLayoutId::ClusteredBar),
+            domain_types::ChartType::Unknown("clusteredBar".to_string())
+        );
+        assert_eq!(
+            chart_type_from_chart_ex_layout_id(&ChartExLayoutId::Other(
+                "futureLayout".to_string()
+            )),
+            domain_types::ChartType::Unknown("futureLayout".to_string())
+        );
+    }
+
+    #[test]
+    fn chart_ex_status_distinguishes_missing_projection_from_unknown_family() {
+        let no_projection = chart_ex_import_status(
+            &domain_types::ChartType::Funnel,
+            "xl/charts/chartEx1.xml",
+            Some("Funnel"),
+        );
+        assert_eq!(
+            no_projection.recoverability,
+            domain_types::ImportRecoverability::PreservedNotRenderable
+        );
+        assert_eq!(
+            no_projection.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+        assert_eq!(
+            no_projection.diagnostics[0].code,
+            Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
+        );
+        assert_eq!(
+            no_projection.diagnostics[0].message.as_deref(),
+            Some("ChartEx `funnel` data projection is not implemented")
+        );
+
+        let unknown = chart_ex_import_status(
+            &domain_types::ChartType::Unknown("futureLayout".to_string()),
+            "xl/charts/chartEx2.xml",
+            None,
+        );
+        assert_eq!(
+            unknown.diagnostics[0].code,
+            Some(domain_types::ImportDiagnosticCode::UnsupportedChartType)
+        );
     }
 }

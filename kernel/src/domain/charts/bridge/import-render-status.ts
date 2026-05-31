@@ -39,6 +39,24 @@ function booleanField(value: unknown, keys: string[]): boolean | undefined {
   return undefined;
 }
 
+function token(value: string | undefined): string | undefined {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '');
+}
+
+function firstDiagnosticMessage(status: unknown): string | undefined {
+  if (typeof status !== 'object' || status === null) return undefined;
+  const diagnostics = (status as { diagnostics?: unknown }).diagnostics;
+  if (!Array.isArray(diagnostics)) return undefined;
+  for (const diagnostic of diagnostics) {
+    const message = stringField(diagnostic, ['message', 'description', 'reason']);
+    if (message) return message;
+  }
+  return undefined;
+}
+
 export function importStatusToTerminalRenderStatus(
   status: unknown,
 ): ImportedChartRenderStatus | null {
@@ -56,10 +74,9 @@ export function importStatusToTerminalRenderStatus(
           'recoverability',
           'renderability',
         ]);
-  const token = tokenSource
-    ?.trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, '');
+  const statusToken = token(tokenSource);
+  const recoverabilityToken = token(stringField(status, ['recoverability']));
+  const renderabilityToken = token(stringField(status, ['renderability']));
   const renderable = booleanField(status, ['renderable', 'canRender']);
   const terminal = booleanField(status, ['terminal', 'isTerminal']);
   const normalTokens = ['renderable', 'ready', 'ok', 'success', 'loaded', 'native'];
@@ -75,15 +92,27 @@ export function importStatusToTerminalRenderStatus(
     'failed',
     'error',
   ];
+  const terminalRecoverabilityTokens = [
+    'preservednotrenderable',
+    'unsupportedpreserved',
+    'unsupporteddropped',
+    'malformeddropped',
+    'securitydisabled',
+  ];
+  const terminalRenderabilityTokens = ['placeholder', 'notrenderable'];
 
   const isTerminal =
     renderable === false ||
-    (terminal === true && token !== undefined && !normalTokens.includes(token)) ||
-    (token !== undefined && terminalTokens.includes(token));
+    (terminal === true && statusToken !== undefined && !normalTokens.includes(statusToken)) ||
+    (statusToken !== undefined && terminalTokens.includes(statusToken)) ||
+    (recoverabilityToken !== undefined &&
+      terminalRecoverabilityTokens.includes(recoverabilityToken)) ||
+    (renderabilityToken !== undefined && terminalRenderabilityTokens.includes(renderabilityToken));
   if (!isTerminal) return null;
 
   const message =
     stringField(status, ['message', 'label', 'reason', 'description']) ??
+    firstDiagnosticMessage(status) ??
     'Imported chart cannot be rendered';
   return { terminal: true, message, raw: status };
 }

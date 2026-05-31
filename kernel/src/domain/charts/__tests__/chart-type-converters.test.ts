@@ -1,10 +1,47 @@
 import {
   seriesConfigToWire,
+  wireChartTypeToConfig,
   wireToLegendConfig,
   wireToSeriesConfig,
 } from '../chart-type-converters';
 
 describe('chart-type-converters', () => {
+  it('narrows canonical and aliased chart type strings at the wire boundary', () => {
+    expect(wireChartTypeToConfig('funnel')).toEqual({ type: 'funnel', diagnostics: [] });
+    expect(wireChartTypeToConfig('surface3D')).toEqual({
+      type: 'surface3d',
+      diagnostics: [
+        {
+          code: 'acceptedChartTypeAlias',
+          message: 'Imported chart type "surface3D" was canonicalized to "surface3d"',
+          rawType: 'surface3D',
+          canonicalType: 'surface3d',
+        },
+      ],
+    });
+    expect(wireChartTypeToConfig('boxWhisker')).toMatchObject({
+      type: 'boxplot',
+      diagnostics: [{ code: 'acceptedChartTypeAlias', canonicalType: 'boxplot' }],
+    });
+    expect(wireChartTypeToConfig('chartEx:funnel')).toMatchObject({
+      type: 'funnel',
+      diagnostics: [{ code: 'acceptedChartTypeAlias', canonicalType: 'funnel' }],
+    });
+  });
+
+  it('rejects unknown chart type strings instead of smuggling them into ChartConfig', () => {
+    expect(wireChartTypeToConfig('chartEx:unknown')).toEqual({
+      type: undefined,
+      diagnostics: [
+        {
+          code: 'unsupportedChartType',
+          message: 'Imported chart type "chartEx:unknown" is not supported',
+          rawType: 'chartEx:unknown',
+        },
+      ],
+    });
+  });
+
   it('reconciles imported legend visibility when OOXML preserved visible=true with show=false', () => {
     expect(
       wireToLegendConfig({

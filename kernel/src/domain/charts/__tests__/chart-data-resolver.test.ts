@@ -12,6 +12,7 @@ import {
   createCellAccessor,
   seriesSheetAliases,
   toChartConfig,
+  unsupportedChartTypeError,
 } from '../bridge/chart-data-resolver';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
@@ -101,6 +102,37 @@ describe('chart data resolver helpers', () => {
     expect(config.height).toBe(3);
     expect(config.axis?.xAxis).toMatchObject({ type: 'dateAxis', show: false });
     expect(config.axis?.yAxis).toMatchObject({ type: 'value', show: true });
+  });
+
+  it('canonicalizes imported chart type aliases before rendering', () => {
+    expect(toChartConfig(chart({ chartType: 'surface3D' })).type).toBe('surface3d');
+    expect(toChartConfig(chart({ chartType: 'chartEx:funnel' })).type).toBe('funnel');
+    expect(toChartConfig(chart({ chartType: 'boxWhisker' })).type).toBe('boxplot');
+  });
+
+  it('rejects unsupported imported chart types before ChartConfig construction', () => {
+    const importedUnknown = chart({
+      chartType: 'chartEx:unknown',
+      importStatus: {
+        source: 'xlsx',
+        featureKind: 'chart',
+        recoverability: 'preservedNotRenderable',
+        renderability: 'notRenderable',
+        editability: 'partiallyEditable',
+      },
+    } as unknown as Partial<ChartFloatingObject>);
+
+    expect(unsupportedChartTypeError(importedUnknown)).toMatchObject({
+      code: 'INVALID_SPEC',
+      message: 'Imported chart type "chartEx:unknown" is not supported',
+      details: {
+        chartType: 'chartEx:unknown',
+        diagnostics: [{ code: 'unsupportedChartType' }],
+      },
+    });
+    expect(() => toChartConfig(importedUnknown)).toThrow(
+      'Imported chart type "chartEx:unknown" is not supported',
+    );
   });
 
   it('flattens extracted chart data rows for the public resolveChartData facade', () => {

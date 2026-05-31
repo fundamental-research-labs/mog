@@ -208,4 +208,99 @@ describe('resolved spec snapshot helpers', () => {
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
   });
+
+  it('reports deterministic chart type and axis unsupported feature diagnostics', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'regionMap',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        extra: { isChartEx: true },
+        axis: {
+          secondaryCategoryAxis: { visible: true, tickLabelSpacing: 2 },
+          valueAxis: {
+            visible: true,
+            scaleType: 'logarithmic',
+            displayUnit: 'millions',
+            linkNumberFormat: true,
+          },
+          secondaryValueAxis: { visible: true },
+        },
+      } as ChartConfig,
+      chartData: { categories: [], series: [] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'region map rendering uses placeholder geometry',
+      'ChartEx regionMap data projection is not implemented',
+      'value log axis scale is not fully rendered',
+      'value axis display units are not rendered',
+      'value axis source-linked number format is not resolved',
+      'secondary category axes are preserved but not rendered',
+      'secondary category axis explicit tick skipping is not rendered',
+    ]);
+  });
+
+  it('does not flag supported secondary value axes as unsupported', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'combo',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        axis: {
+          valueAxis: { visible: true },
+          secondaryValueAxis: { visible: true },
+        },
+        series: [{ name: 'Percent', yAxisIndex: 1 }],
+      } as ChartConfig,
+      chartData: {
+        categories: ['A'],
+        series: [{ name: 'Percent', yAxisIndex: 1, data: [{ x: 'A', y: 0.2 }] }],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
+  });
 });

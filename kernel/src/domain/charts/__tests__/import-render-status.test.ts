@@ -70,6 +70,50 @@ describe('importStatusToTerminalRenderStatus', () => {
     });
   });
 
+  it('handles generated ImportObjectStatus recoverability and renderability independently', () => {
+    expect(
+      importStatusToTerminalRenderStatus({
+        source: 'xlsx',
+        featureKind: 'chart',
+        recoverability: 'partiallySupported',
+        renderability: 'notRenderable',
+        editability: 'partiallyEditable',
+        diagnostics: [{ message: 'ChartEx funnel data projection is not implemented' }],
+      }),
+    ).toEqual({
+      terminal: true,
+      message: 'ChartEx funnel data projection is not implemented',
+      raw: {
+        source: 'xlsx',
+        featureKind: 'chart',
+        recoverability: 'partiallySupported',
+        renderability: 'notRenderable',
+        editability: 'partiallyEditable',
+        diagnostics: [{ message: 'ChartEx funnel data projection is not implemented' }],
+      },
+    });
+
+    expect(
+      importStatusToTerminalRenderStatus({
+        source: 'xlsx',
+        featureKind: 'chart',
+        recoverability: 'unsupportedPreserved',
+        renderability: 'renderable',
+        editability: 'partiallyEditable',
+      }),
+    ).toEqual({
+      terminal: true,
+      message: 'Imported chart cannot be rendered',
+      raw: {
+        source: 'xlsx',
+        featureKind: 'chart',
+        recoverability: 'unsupportedPreserved',
+        renderability: 'renderable',
+        editability: 'partiallyEditable',
+      },
+    });
+  });
+
   it('ignores absent, ready, and renderable statuses', () => {
     expect(importStatusToTerminalRenderStatus(null)).toBeNull();
     expect(importStatusToTerminalRenderStatus(undefined)).toBeNull();

@@ -14,11 +14,30 @@ fn chart_type_known_roundtrip() {
 
 #[test]
 fn chart_type_unknown_roundtrip() {
-    let json = r#""histogram""#;
+    let json = r#""unknownModernChart""#;
     let ct: ChartType = serde_json::from_str(json).unwrap();
-    assert_eq!(ct, ChartType::Unknown("histogram".to_string()));
+    assert_eq!(ct, ChartType::Unknown("unknownModernChart".to_string()));
     let back = serde_json::to_string(&ct).unwrap();
     assert_eq!(back, json);
+}
+
+#[test]
+fn chart_type_modern_statistical_roundtrip() {
+    for (input, variant, canonical) in [
+        ("histogram", ChartType::Histogram, "histogram"),
+        ("pareto", ChartType::Pareto, "pareto"),
+        ("paretoLine", ChartType::Pareto, "pareto"),
+        ("boxplot", ChartType::BoxWhisker, "boxplot"),
+        ("boxWhisker", ChartType::BoxWhisker, "boxplot"),
+    ] {
+        let ct = ChartType::from_str(input);
+        assert_eq!(ct, variant);
+        assert_eq!(ct.as_str(), canonical);
+        let json = serde_json::to_string(&ct).unwrap();
+        assert_eq!(json, format!(r#""{canonical}""#));
+        let back: ChartType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, variant);
+    }
 }
 
 #[test]

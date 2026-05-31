@@ -66,17 +66,6 @@ function isCellInCutRange(
   );
 }
 
-async function isProjectedMember(
-  ws: ReturnType<WorkbookInternal['getSheetById']>,
-  cell: CellCoord,
-) {
-  const projectionSource = await ws.bindings.getProjectionSource(cell.row, cell.col);
-  return (
-    projectionSource != null &&
-    (projectionSource.row !== cell.row || projectionSource.col !== cell.col)
-  );
-}
-
 export function createEditEntryService(options: EditEntryServiceOptions): EditEntryService {
   let generation = 0;
 
@@ -125,10 +114,16 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
 
       const preEditSelectionRanges = options.getPreEditSelectionRanges?.();
       const ws = wb.getSheetById(request.sheetId);
-      if (await isProjectedMember(ws, request.cell)) {
-        if (!isCurrent(requestGeneration)) return protectionError('Edit session was superseded');
-        return protectionError('You cannot change part of an array formula.');
-      }
+
+      // No TS-side projection-membership pre-check here. CSE array-member
+      // partial-write rejection lives in Rust compute-core
+      // (`ComputeError::PartialArrayWrite`) and is surfaced at commit time;
+      // dynamic-array spill members must remain editable so a literal write
+      // creates a blocker and raises `#SPILL!` at the anchor. Blocking the
+      // edit session here suppressed both: the editor never opened, the
+      // keystroke was dropped, and the spill never tore down. See
+      // apps/spreadsheet/src/actions/handlers/editor.ts (EDIT_CELL) for the
+      // matching commit-time error path.
 
       const fastEditability = ws.protection.canEditCellFast(request.cell.row, request.cell.col);
       if (fastEditability === 'unknown') {

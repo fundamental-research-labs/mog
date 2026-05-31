@@ -5,7 +5,7 @@
  * - Insert: Add new sheet
  * - Delete: Remove sheet (disabled if last sheet)
  * - Rename: Start inline edit
- * - Copy: Duplicate sheet
+ * - Duplicate: Duplicate sheet
  * - Hide: Hide sheet (disabled if last visible)
  * - Unhide...: Show unhide dialog (disabled if no hidden sheets)
  * - Tab Color: Color picker submenu
@@ -243,9 +243,9 @@ export function TabContextMenu({
 
         <MenuDivider />
 
-        {/* Copy - show plural when grouped. Disabled when workbook structure is protected */}
+        {/* Duplicate - show plural when grouped. Disabled when workbook structure is protected */}
         <MenuItem onClick={() => handleAction(onCopy)} disabled={isWorkbookStructureProtected}>
-          {isGrouped ? `Copy ${selectedSheetCount} Sheets` : 'Copy'}
+          {isGrouped ? `Duplicate ${selectedSheetCount} Sheets` : 'Duplicate'}
         </MenuItem>
 
         <MenuDivider />

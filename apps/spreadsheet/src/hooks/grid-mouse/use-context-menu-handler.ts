@@ -220,8 +220,11 @@ export function useContextMenuHandler(
           targetCol = hit.col;
           target = 'column-header';
 
-          // If column is not in selection, select it
-          if (!isColumnInSelection(hit.col, selection.ranges)) {
+          // Only keep the existing selection if it is already a full-column selection
+          // that includes the right-clicked column. A single cell like A1 contains
+          // column A, but should not satisfy a column-header context-menu target.
+          const hasFullColumnSelection = selection.ranges.some((r) => r.isFullColumn);
+          if (!hasFullColumnSelection || !isColumnInSelection(hit.col, selection.ranges)) {
             selection.selectColumn(hit.col, false, false);
           }
           break;

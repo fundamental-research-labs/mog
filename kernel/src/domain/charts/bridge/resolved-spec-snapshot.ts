@@ -18,6 +18,10 @@ import {
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
 type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']>;
+type SingleAxisConfig = NonNullable<NonNullable<ChartConfig['axis']>['categoryAxis']>;
+type AxisDiagnosticRole = 'category' | 'value' | 'series';
+type AxisOrientation = 'horizontal' | 'vertical';
+type AxisPosition = 'bottom' | 'top' | 'left' | 'right';
 
 export function defaultExportOptionsForSize(
   width: number,
@@ -364,7 +368,7 @@ function unsupportedFeatureDiagnostics(
   if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
     unsupported.push('floor/sideWall/backWall surfaces are preserved but not rendered');
   unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
-  unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis, series));
+  unsupported.push(...axisUnsupportedFeatureDiagnostics(config, series));
   return unsupported;
 }
 
@@ -407,29 +411,55 @@ function hasTrendlineLabelLayout(config: ChartConfig): boolean {
 }
 
 function axisUnsupportedFeatureDiagnostics(
-  axis: ChartConfig['axis'],
+  config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
 ): string[] {
+  const axis = config.axis;
   if (!axis) return [];
   const diagnostics = new Set<string>();
-  const entries: Array<[string, NonNullable<ChartConfig['axis']>['categoryAxis']]> = [
-    ['category', axis.categoryAxis ?? axis.xAxis],
-    ['value', axis.valueAxis ?? axis.yAxis],
-    ['secondary category', axis.secondaryCategoryAxis],
-    ['secondary value', axis.secondaryValueAxis ?? axis.secondaryYAxis],
-    ['series/depth', axis.seriesAxis],
+  const isChartEx = (config.extra as { isChartEx?: boolean } | undefined)?.isChartEx === true;
+  const isHorizontal = isHorizontalChartType(config.type);
+  const entries: Array<{
+    label: string;
+    role: AxisDiagnosticRole;
+    axisConfig: SingleAxisConfig | undefined;
+    secondary?: boolean;
+  }> = [
+    { label: 'category', role: 'category', axisConfig: axis.categoryAxis ?? axis.xAxis },
+    { label: 'value', role: 'value', axisConfig: axis.valueAxis ?? axis.yAxis },
+    {
+      label: 'secondary category',
+      role: 'category',
+      axisConfig: axis.secondaryCategoryAxis,
+      secondary: true,
+    },
+    {
+      label: 'secondary value',
+      role: 'value',
+      axisConfig: axis.secondaryValueAxis ?? axis.secondaryYAxis,
+      secondary: true,
+    },
+    { label: 'series/depth', role: 'series', axisConfig: axis.seriesAxis },
   ];
 
-  for (const [label, axisConfig] of entries) {
+  for (const { label, role, axisConfig, secondary } of entries) {
     if (!axisConfig) continue;
-    if (label === 'series/depth') {
+    if (role === 'series') {
       diagnostics.add('series/depth axes are preserved but not rendered');
     }
-    if (
-      axisConfig.crossBetween ||
-      axisConfig.isBetweenCategories !== undefined
-    ) {
+    if (isChartEx) {
+      diagnostics.add(
+        `ChartEx ${label} axis metadata is preserved but rendered through the standard chart axis backend`,
+      );
+    }
+    const positionDiagnostic = axisPositionDiagnostic(label, role, axisConfig, isHorizontal);
+    if (positionDiagnostic) diagnostics.add(positionDiagnostic);
+    if (axisConfig.crossBetween || axisConfig.isBetweenCategories !== undefined) {
       diagnostics.add(`${label} axis category crossing policy is approximate`);
+    }
+    if (secondary && role === 'category') {
+      const scaleDiagnostic = secondaryCategoryIndependentScaleDiagnostic(label, axisConfig);
+      if (scaleDiagnostic) diagnostics.add(scaleDiagnostic);
     }
     for (const diagnostic of logAxisDiagnostics(label, axisConfig, series)) {
       diagnostics.add(diagnostic);
@@ -439,9 +469,99 @@ function axisUnsupportedFeatureDiagnostics(
   return Array.from(diagnostics);
 }
 
+function axisPositionDiagnostic(
+  label: string,
+  role: AxisDiagnosticRole,
+  axisConfig: SingleAxisConfig,
+  isHorizontalChart: boolean,
+): string | undefined {
+  if (!axisConfig.position) return undefined;
+  const position = normalizeAxisPosition(axisConfig.position);
+  if (!position) {
+    return `${label} axis position "${axisConfig.position}" is not recognized`;
+  }
+  const expectedOrientation = expectedAxisOrientation(role, isHorizontalChart);
+  if (!expectedOrientation) return undefined;
+  const allowed =
+    expectedOrientation === 'horizontal'
+      ? new Set<AxisPosition>(['bottom', 'top'])
+      : new Set<AxisPosition>(['left', 'right']);
+  return allowed.has(position)
+    ? undefined
+    : `${label} axis position "${axisConfig.position}" does not match ${expectedOrientation} axis geometry`;
+}
+
+function expectedAxisOrientation(
+  role: AxisDiagnosticRole,
+  isHorizontalChart: boolean,
+): AxisOrientation | undefined {
+  if (role === 'series') return undefined;
+  if (role === 'category') return isHorizontalChart ? 'vertical' : 'horizontal';
+  return isHorizontalChart ? 'horizontal' : 'vertical';
+}
+
+function normalizeAxisPosition(position: string): AxisPosition | undefined {
+  switch (position.toLowerCase()) {
+    case 'b':
+    case 'bottom':
+      return 'bottom';
+    case 't':
+    case 'top':
+      return 'top';
+    case 'l':
+    case 'left':
+      return 'left';
+    case 'r':
+    case 'right':
+      return 'right';
+    default:
+      return undefined;
+  }
+}
+
+function secondaryCategoryIndependentScaleDiagnostic(
+  label: string,
+  axisConfig: SingleAxisConfig,
+): string | undefined {
+  const fields = [
+    axisConfig.min !== undefined ? 'min' : undefined,
+    axisConfig.max !== undefined ? 'max' : undefined,
+    axisConfig.logBase !== undefined ? 'logBase' : undefined,
+    axisConfig.scaleType !== undefined ? 'scaleType' : undefined,
+    axisConfig.reverse !== undefined ? 'reverse' : undefined,
+    axisConfig.majorUnit !== undefined ? 'majorUnit' : undefined,
+    axisConfig.minorUnit !== undefined ? 'minorUnit' : undefined,
+    axisConfig.categoryType !== undefined ? 'categoryType' : undefined,
+    axisConfig.baseTimeUnit !== undefined ? 'baseTimeUnit' : undefined,
+    axisConfig.majorTimeUnit !== undefined ? 'majorTimeUnit' : undefined,
+    axisConfig.minorTimeUnit !== undefined ? 'minorTimeUnit' : undefined,
+  ].filter(Boolean);
+  if (fields.length === 0) return undefined;
+  return `${label} axis independent scale/domain is preserved but rendered on the primary category scale (${fields.join(', ')})`;
+}
+
+function isHorizontalChartType(chartType: ChartConfig['type']): boolean {
+  switch (chartType) {
+    case 'bar':
+    case 'bar3d':
+    case 'cylinderBarClustered':
+    case 'cylinderBarStacked':
+    case 'cylinderBarStacked100':
+    case 'coneBarClustered':
+    case 'coneBarStacked':
+    case 'coneBarStacked100':
+    case 'pyramidBarClustered':
+    case 'pyramidBarStacked':
+    case 'pyramidBarStacked100':
+      return true;
+    default:
+      return false;
+  }
+}
+
 function logAxisDiagnostics(
   label: string,
-  axisConfig: NonNullable<NonNullable<ChartConfig['axis']>['categoryAxis']>,
+  axisConfig: SingleAxisConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
 ): string[] {
   const isLogAxis = axisConfig.scaleType === 'logarithmic' || axisConfig.logBase !== undefined;

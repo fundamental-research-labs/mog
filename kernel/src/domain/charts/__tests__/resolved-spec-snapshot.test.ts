@@ -269,6 +269,9 @@ describe('resolved spec snapshot helpers', () => {
       'region map rendering uses placeholder geometry',
       'ChartEx regionMap data projection is not implemented',
       'value axis source-linked number format has no source format; using General',
+      'ChartEx value axis metadata is preserved but rendered through the standard chart axis backend',
+      'ChartEx secondary category axis metadata is preserved but rendered through the standard chart axis backend',
+      'ChartEx secondary value axis metadata is preserved but rendered through the standard chart axis backend',
     ]);
     expect(snapshot.resolved.axes.secondaryCategory).toMatchObject({
       present: true,
@@ -281,6 +284,56 @@ describe('resolved spec snapshot helpers', () => {
       displayUnit: 'millions',
       linkNumberFormat: true,
     });
+  });
+
+  it('reports mismatched axis positions and secondary category independent domains', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'column',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        axis: {
+          categoryAxis: { visible: true, position: 'l' },
+          valueAxis: { visible: true, position: 't' },
+          secondaryCategoryAxis: {
+            visible: true,
+            position: 'r',
+            min: 1,
+            max: 12,
+            reverse: true,
+          },
+        },
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'category axis position "l" does not match horizontal axis geometry',
+      'value axis position "t" does not match vertical axis geometry',
+      'secondary category axis position "r" does not match horizontal axis geometry',
+      'secondary category axis independent scale/domain is preserved but rendered on the primary category scale (min, max, reverse)',
+    ]);
   });
 
   it('reports preserve-only imported layout, data-table, 3D, and pivot surfaces', () => {

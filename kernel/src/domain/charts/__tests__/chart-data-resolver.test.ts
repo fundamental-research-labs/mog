@@ -700,6 +700,73 @@ describe('ChartDataResolver', () => {
     expect(chartDataToRows(result.data).map((row) => row.size)).toEqual([100, 300]);
   });
 
+  it('keeps hidden category source cells from falling back to imported caches', async () => {
+    const getCellData = jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+      const raw = row === 0 ? [10, 20, 30][col] : ['Live A', 'Live B', 'Live C'][col];
+      return {
+        value:
+          typeof raw === 'number'
+            ? { type: 'number', value: raw }
+            : { type: 'text', value: raw },
+      };
+    });
+    const resolver = new ChartDataResolver(
+      ctx({
+        getCellData,
+        getHiddenRows: jest.fn(async () => []),
+        getHiddenColumns: jest.fn(async () => [1]),
+      }),
+    );
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        dataRange: undefined,
+        plotVisibleOnly: true,
+        series: [
+          {
+            name: 'Revenue',
+            values: 'A1:C1',
+            categories: 'A2:C2',
+            categoryCache: {
+              pointCount: 3,
+              points: [{ idx: 1, value: 'Stale B' }],
+            },
+          },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        seriesReferences: [
+          {
+            index: 0,
+            values: {
+              kind: 'seriesValues',
+              source: 'a1',
+              ref: 'A1:C1',
+              range: range(SHEET_A, 0, 0, 0, 2),
+            },
+            categories: {
+              kind: 'seriesCategories',
+              source: 'a1',
+              ref: 'A2:C2',
+              range: range(SHEET_A, 1, 0, 1, 2),
+            },
+          },
+        ],
+      }),
+      CHART_ID,
+    );
+
+    expect('code' in result).toBe(false);
+    if ('code' in result) return;
+    const points = result.data.series[0].data;
+    expect(points.map((point) => point.valueState)).toEqual([undefined, 'hidden', undefined]);
+    expect(points.map((point) => point.x)).toEqual(['Live A', 2, 'Live C']);
+    expect(result.data.categories).toEqual(['Live A', 2, 'Live C']);
+    expect(result.data.categories).not.toContain('Stale B');
+    expect(chartDataToRows(result.data).map((row) => row.category)).toEqual(['Live A', 'Live C']);
+  });
+
   it('caches workbook theme palette loads until the resolver cache is cleared', async () => {
     const getWorkbookTheme = jest.fn(async () => ({
       colors: [{ name: 'accent1', color: '123456' }],

@@ -239,4 +239,63 @@ describe('ChartDataResolver', () => {
 
     expect(getWorkbookTheme).toHaveBeenCalledTimes(2);
   });
+
+  it('resolves source-linked value axis formats from live series source cells', async () => {
+    const getCellData = jest.fn(async (_sheetId, row: number, col: number) => ({
+      value: { type: 'number', value: row === 0 ? [1200, 1300, 1400][col] : [0.1, 0.2, 0.3][col] },
+    }));
+    const getResolvedFormat = jest.fn(async (_sheetId, row: number) => ({
+      numberFormat: row === 0 ? '$#,##0' : '0.0%',
+    }));
+    const resolver = new ChartDataResolver(ctx({ getCellData, getResolvedFormat }));
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        dataRange: undefined,
+        axis: {
+          valueAxis: { visible: true, linkNumberFormat: true },
+          secondaryValueAxis: { visible: true, linkNumberFormat: true },
+        },
+        series: [
+          { name: 'Revenue', values: 'A1:C1' },
+          { name: 'Margin', values: 'A2:C2', yAxisIndex: 1 },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        seriesReferences: [
+          {
+            index: 0,
+            values: {
+              kind: 'seriesValues',
+              source: 'a1',
+              ref: 'A1:C1',
+              range: range(SHEET_A, 0, 0, 0, 2),
+            },
+            categories: null,
+          },
+          {
+            index: 1,
+            values: {
+              kind: 'seriesValues',
+              source: 'a1',
+              ref: 'A2:C2',
+              range: range(SHEET_A, 1, 0, 1, 2),
+            },
+            categories: null,
+          },
+        ],
+      }),
+      CHART_ID,
+    );
+
+    expect('code' in result).toBe(false);
+    if ('code' in result) return;
+    expect(result.config.axis?.valueAxis?.numberFormat).toBe('$#,##0');
+    expect(result.config.axis?.yAxis?.numberFormat).toBe('$#,##0');
+    expect(result.config.axis?.secondaryValueAxis?.numberFormat).toBe('0.0%');
+    expect(result.config.axis?.secondaryYAxis?.numberFormat).toBe('0.0%');
+    expect(getResolvedFormat).toHaveBeenCalledWith(SHEET_A, 0, 0);
+    expect(getResolvedFormat).toHaveBeenCalledWith(SHEET_A, 1, 0);
+  });
 });

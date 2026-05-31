@@ -6,15 +6,30 @@ import type {
   SingleAxisConfig,
 } from '@mog-sdk/contracts/data/charts';
 
-type AxisRole = 'category' | 'secondary category' | 'value' | 'secondary value';
+export type SourceLinkedAxisRole =
+  | 'category'
+  | 'secondary category'
+  | 'value'
+  | 'secondary value';
 
-type AxisSourceFormatResolution = {
+export type SourceLinkedAxisNumberFormatResolution = {
   formatCode?: string;
   missingSource: boolean;
   conflictingFormats: boolean;
 };
 
+export type SourceLinkedAxisNumberFormatResolutions = Partial<
+  Record<SourceLinkedAxisRole, SourceLinkedAxisNumberFormatResolution>
+>;
+
 const GENERAL_FORMAT = 'General';
+const SOURCE_LINKED_AXIS_FORMATS_EXTRA_KEY = 'sourceLinkedAxisNumberFormats';
+const SOURCE_LINKED_AXIS_ROLES: SourceLinkedAxisRole[] = [
+  'category',
+  'secondary category',
+  'value',
+  'secondary value',
+];
 
 export function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
   const categoryLabelFormat = config.series?.find(
@@ -44,7 +59,57 @@ function cacheFormatCode(cache: ChartSeriesPointCache | undefined): string | und
   );
 }
 
-function firstCategorySourceFormat(config: ChartConfig): AxisSourceFormatResolution {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSourceLinkedAxisNumberFormatResolution(
+  value: unknown,
+): value is SourceLinkedAxisNumberFormatResolution {
+  if (!isRecord(value)) return false;
+  return (
+    (value.formatCode === undefined || typeof value.formatCode === 'string') &&
+    typeof value.missingSource === 'boolean' &&
+    typeof value.conflictingFormats === 'boolean'
+  );
+}
+
+function hasSourceLinkedAxisNumberFormatResolutions(
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
+): resolutions is SourceLinkedAxisNumberFormatResolutions {
+  return Boolean(resolutions && SOURCE_LINKED_AXIS_ROLES.some((role) => resolutions[role]));
+}
+
+function sourceLinkedAxisNumberFormatResolutionsFromConfig(
+  config: ChartConfig,
+): SourceLinkedAxisNumberFormatResolutions | undefined {
+  if (!isRecord(config.extra)) return undefined;
+  const raw = config.extra[SOURCE_LINKED_AXIS_FORMATS_EXTRA_KEY];
+  if (!isRecord(raw)) return undefined;
+
+  const resolutions: SourceLinkedAxisNumberFormatResolutions = {};
+  for (const role of SOURCE_LINKED_AXIS_ROLES) {
+    const resolution = raw[role];
+    if (isSourceLinkedAxisNumberFormatResolution(resolution)) {
+      resolutions[role] = resolution;
+    }
+  }
+  return hasSourceLinkedAxisNumberFormatResolutions(resolutions) ? resolutions : undefined;
+}
+
+function withSourceLinkedAxisNumberFormatExtra(
+  config: ChartConfig,
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
+): ChartConfig['extra'] {
+  if (!hasSourceLinkedAxisNumberFormatResolutions(resolutions)) return config.extra;
+  const extra = isRecord(config.extra) ? config.extra : {};
+  return {
+    ...extra,
+    [SOURCE_LINKED_AXIS_FORMATS_EXTRA_KEY]: resolutions,
+  };
+}
+
+function firstCategorySourceFormat(config: ChartConfig): SourceLinkedAxisNumberFormatResolution {
   const formatCode = config.series
     ?.map((series) => {
       const categoryLabelFormat = series.categoryLabelFormat;
@@ -61,7 +126,7 @@ function firstCategorySourceFormat(config: ChartConfig): AxisSourceFormatResolut
   return { formatCode, missingSource: !formatCode, conflictingFormats: false };
 }
 
-function valueAxisGroup(role: AxisRole): 0 | 1 | undefined {
+function valueAxisGroup(role: SourceLinkedAxisRole): 0 | 1 | undefined {
   if (role === 'value') return 0;
   if (role === 'secondary value') return 1;
   return undefined;
@@ -74,7 +139,7 @@ function isSeriesBoundToAxis(series: SeriesConfig, axisGroup: 0 | 1): boolean {
 function firstValueSourceFormat(
   config: ChartConfig,
   axisGroup: 0 | 1,
-): AxisSourceFormatResolution {
+): SourceLinkedAxisNumberFormatResolution {
   const sourceFormats =
     config.series
       ?.filter((series) => isSeriesBoundToAxis(series, axisGroup))
@@ -88,8 +153,11 @@ function firstValueSourceFormat(
 
 function sourceLinkedAxisFormat(
   config: ChartConfig,
-  role: AxisRole,
-): AxisSourceFormatResolution {
+  role: SourceLinkedAxisRole,
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
+): SourceLinkedAxisNumberFormatResolution {
+  const explicitResolution = resolutions?.[role];
+  if (explicitResolution) return explicitResolution;
   const axisGroup = valueAxisGroup(role);
   if (axisGroup !== undefined) return firstValueSourceFormat(config, axisGroup);
   return firstCategorySourceFormat(config);
@@ -98,10 +166,11 @@ function sourceLinkedAxisFormat(
 function axisWithResolvedNumberFormat(
   axis: SingleAxisConfig | undefined,
   config: ChartConfig,
-  role: AxisRole,
+  role: SourceLinkedAxisRole,
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
 ): SingleAxisConfig | undefined {
   if (!axis?.linkNumberFormat) return axis;
-  const resolution = sourceLinkedAxisFormat(config, role);
+  const resolution = sourceLinkedAxisFormat(config, role, resolutions);
   const numberFormat = resolution.formatCode ?? normalizeFormatCode(axis.numberFormat);
   if (!numberFormat || numberFormat === axis.numberFormat) return axis;
   return { ...axis, numberFormat };
@@ -110,10 +179,11 @@ function axisWithResolvedNumberFormat(
 function axisSourceFormatDiagnostic(
   axis: SingleAxisConfig | undefined,
   config: ChartConfig,
-  role: AxisRole,
+  role: SourceLinkedAxisRole,
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
 ): string | undefined {
   if (!axis?.linkNumberFormat) return undefined;
-  const resolution = sourceLinkedAxisFormat(config, role);
+  const resolution = sourceLinkedAxisFormat(config, role, resolutions);
   if (resolution.missingSource) {
     return `${role} axis source-linked number format has no source format; using ${
       normalizeFormatCode(axis.numberFormat) ?? GENERAL_FORMAT
@@ -133,38 +203,54 @@ function axisSourceFormatDiagnostic(
  * keeps primary and secondary value axes independent while preserving the
  * original linkNumberFormat contract for export.
  */
-export function withSourceLinkedAxisNumberFormats(config: ChartConfig): ChartConfig {
+export function withSourceLinkedAxisNumberFormats(
+  config: ChartConfig,
+  resolutions?: SourceLinkedAxisNumberFormatResolutions,
+): ChartConfig {
   const axis = config.axis;
   if (!axis) return config;
+  const effectiveResolutions =
+    resolutions ?? sourceLinkedAxisNumberFormatResolutionsFromConfig(config);
+  const extra = withSourceLinkedAxisNumberFormatExtra(config, resolutions);
 
   const categoryAxis = axisWithResolvedNumberFormat(
     axis.categoryAxis ?? axis.xAxis,
     config,
     'category',
+    effectiveResolutions,
   );
   const secondaryCategoryAxis = axisWithResolvedNumberFormat(
     axis.secondaryCategoryAxis,
     config,
     'secondary category',
+    effectiveResolutions,
   );
-  const valueAxis = axisWithResolvedNumberFormat(axis.valueAxis ?? axis.yAxis, config, 'value');
+  const valueAxis = axisWithResolvedNumberFormat(
+    axis.valueAxis ?? axis.yAxis,
+    config,
+    'value',
+    effectiveResolutions,
+  );
   const secondaryValueAxis = axisWithResolvedNumberFormat(
     axis.secondaryValueAxis ?? axis.secondaryYAxis,
     config,
     'secondary value',
+    effectiveResolutions,
   );
 
   if (
     categoryAxis === (axis.categoryAxis ?? axis.xAxis) &&
     secondaryCategoryAxis === axis.secondaryCategoryAxis &&
     valueAxis === (axis.valueAxis ?? axis.yAxis) &&
-    secondaryValueAxis === (axis.secondaryValueAxis ?? axis.secondaryYAxis)
+    secondaryValueAxis === (axis.secondaryValueAxis ?? axis.secondaryYAxis) &&
+    extra === config.extra
   ) {
     return config;
   }
 
   return {
     ...config,
+    ...(extra === config.extra ? {} : { extra }),
     axis: {
       ...axis,
       ...(categoryAxis ? { categoryAxis, xAxis: categoryAxis } : {}),

@@ -228,4 +228,34 @@ describe('chart render data normalizer', () => {
       'value axis source-linked number format uses first bound series format due to conflicting source formats',
     ]);
   });
+
+  it('uses explicit live source-linked axis format resolutions for rendering and diagnostics', () => {
+    const config = {
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 4,
+      extra: { owner: 'chart-import' },
+      axis: {
+        valueAxis: { visible: true, linkNumberFormat: true, numberFormat: '0%' },
+      },
+      series: [],
+    } as ChartConfig;
+
+    const resolved = withSourceLinkedAxisNumberFormats(config, {
+      value: {
+        formatCode: '$#,##0',
+        missingSource: false,
+        conflictingFormats: true,
+      },
+    });
+
+    expect(resolved.axis?.valueAxis?.numberFormat).toBe('$#,##0');
+    expect(resolved.axis?.yAxis?.numberFormat).toBe('$#,##0');
+    expect(resolved.extra).toMatchObject({ owner: 'chart-import' });
+    expect(sourceLinkedAxisNumberFormatDiagnostics(resolved)).toEqual([
+      'value axis source-linked number format uses first bound series format due to conflicting source formats',
+    ]);
+  });
 });

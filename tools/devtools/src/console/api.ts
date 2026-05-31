@@ -829,7 +829,7 @@ export function createConsoleAPI(
           const states: ReadonlyMap<string, any> | undefined = bridge.getPerViewportStates?.();
           if (states) {
             for (const [vpId, vpState] of states) {
-              const buf = vpState?.buffer;
+              const buf = bridge.getViewportBuffer?.(vpId) ?? vpState?.buffer;
               if (buf?.hasBuffer?.()) {
                 const startRow = buf.getStartRow?.() ?? 0;
                 const startCol = buf.getStartCol?.() ?? 0;

@@ -1804,6 +1804,7 @@ describe('configToSpec - integration', () => {
       title: null,
       values: ['Series 1', 'Series 2'],
       symbolType: 'line',
+      labelFontSize: 18,
     });
   });
 

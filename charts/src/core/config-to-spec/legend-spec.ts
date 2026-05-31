@@ -4,6 +4,10 @@ import { resolveChartTextColor } from '../../utils/chart-colors';
 import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { pointsToCanvasPx } from './units';
 
+export const EXCEL_LEGEND_LABEL_FONT_SIZE_PT = 9;
+export const EXCEL_LEGEND_LABEL_FONT_SIZE_PX =
+  pointsToCanvasPx(EXCEL_LEGEND_LABEL_FONT_SIZE_PT) ?? 18;
+
 /**
  * Map LegendConfig.position to LegendOrient.
  */
@@ -66,7 +70,10 @@ export function buildLegendSpec(
     ...(options.reverse ? { reverse: true } : {}),
     ...(options.symbolType ? { symbolType: options.symbolType } : {}),
     ...(options.symbolTypeByValue ? { symbolTypeByValue: options.symbolTypeByValue } : {}),
-    ...(legendFont?.size !== undefined ? { labelFontSize: pointsToCanvasPx(legendFont.size) } : {}),
+    labelFontSize:
+      legendFont?.size !== undefined
+        ? pointsToCanvasPx(legendFont.size)
+        : EXCEL_LEGEND_LABEL_FONT_SIZE_PX,
     ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
     ...(labelColor ? { labelColor } : {}),
   };

@@ -15,6 +15,7 @@ import type {
   EncodingSpec,
   Layout,
   LegendSpec,
+  LegendSymbolType,
   ManualLayoutSpec,
 } from './spec';
 
@@ -67,6 +68,11 @@ const BOTTOM_LEGEND_RESERVED_SPACE =
 const TOP_LEGEND_HEIGHT = 30;
 const TOP_LEGEND_RESERVED_SPACE = TOP_LEGEND_HEIGHT + 8;
 const SIDE_LEGEND_GAP = 10;
+const DEFAULT_SIDE_LEGEND_HEIGHT = 180;
+const LEGEND_ITEM_SPACING = 18;
+const DEFAULT_LEGEND_SYMBOL_SIZE = 10;
+const LINE_LEGEND_SYMBOL_SIZE = 28;
+const AREA_LEGEND_SYMBOL_SIZE = 28;
 const DATA_TABLE_TOP_PADDING = 6;
 
 // =============================================================================
@@ -464,7 +470,7 @@ function calculateLegendArea(
 
   const orient = legendSpec?.orient ?? 'right';
   const legendWidth = estimateLegendWidth(encoding, legendSpec);
-  const legendHeight = 180; // Estimated, depends on items
+  const legendHeight = estimateLegendHeight(encoding, legendSpec);
   const centeredLegendY = Math.max(margin.top + 10, height / 2 - legendHeight / 2);
 
   // Position based on orientation
@@ -478,8 +484,8 @@ function calculateLegendArea(
       };
     case 'left':
       return {
-        x: margin.left + 10,
-        y: margin.top + 10,
+        x: SIDE_LEGEND_GAP,
+        y: centeredLegendY,
         width: legendWidth,
         height: legendHeight,
       };
@@ -571,18 +577,90 @@ function estimateLegendWidth(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
 ): number {
-  const labels =
-    legendSpec?.values ??
-    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size);
+  const labels = legendLabels(encoding, legendSpec);
   if (labels.length === 0) return DEFAULT_LAYOUT.legendWidth;
 
   const labelFontSize = legendSpec?.labelFontSize ?? 11;
-  const symbolSize = legendSpec?.symbolSize ?? 10;
-  const maxLabelWidth = labels.reduce(
-    (max, label) => Math.max(max, label.length * labelFontSize * 0.6),
+  const maxEntryWidth = labels.reduce(
+    (max, label) =>
+      Math.max(
+        max,
+        estimateLegendSymbolWidth(legendSpec, label) + 6 + label.length * labelFontSize * 0.6,
+      ),
     0,
   );
-  return Math.max(DEFAULT_LAYOUT.legendWidth, Math.ceil(symbolSize + 6 + maxLabelWidth + 20));
+  return Math.max(DEFAULT_LAYOUT.legendWidth, Math.ceil(maxEntryWidth + 20));
+}
+
+function estimateLegendHeight(
+  encoding: EncodingSpec | undefined,
+  legendSpec: LegendSpec | undefined,
+): number {
+  const orient = legendSpec?.orient ?? 'right';
+  if (orient === 'top') return TOP_LEGEND_HEIGHT;
+  if (orient === 'bottom') return BOTTOM_LEGEND_HEIGHT;
+
+  const labels = legendLabels(encoding, legendSpec);
+  if (labels.length === 0) return DEFAULT_SIDE_LEGEND_HEIGHT;
+
+  const labelFontSize = legendSpec?.labelFontSize ?? 11;
+  const maxSymbolHeight = labels.reduce(
+    (max, label) => Math.max(max, estimateLegendSymbolHeight(legendSpec, label)),
+    0,
+  );
+  const entryHeight = Math.max(maxSymbolHeight, labelFontSize);
+  const itemSpacing = Math.max(
+    LEGEND_ITEM_SPACING,
+    maxSymbolHeight + 8,
+    Math.ceil(labelFontSize + 7),
+  );
+  const titleHeight = legendSpec?.title ? 20 : 0;
+  return titleHeight + entryHeight + Math.max(0, labels.length - 1) * itemSpacing;
+}
+
+function legendLabels(
+  encoding: EncodingSpec | undefined,
+  legendSpec: LegendSpec | undefined,
+): string[] {
+  return (
+    legendSpec?.values ??
+    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size)
+  );
+}
+
+function estimateLegendSymbolWidth(
+  legendSpec: LegendSpec | undefined,
+  label: string,
+): number {
+  return (
+    legendSpec?.symbolSize ?? defaultLegendSymbolWidth(legendSymbolTypeForLabel(legendSpec, label))
+  );
+}
+
+function estimateLegendSymbolHeight(
+  legendSpec: LegendSpec | undefined,
+  label: string,
+): number {
+  const size = legendSpec?.symbolSize;
+  const symbolType = legendSymbolTypeForLabel(legendSpec, label);
+  if (symbolType === 'line' || symbolType === 'area') {
+    const width = size ?? defaultLegendSymbolWidth(symbolType);
+    return Math.max(8, Math.min(12, Math.round(width * 0.4)));
+  }
+  return size ?? DEFAULT_LEGEND_SYMBOL_SIZE;
+}
+
+function legendSymbolTypeForLabel(
+  legendSpec: LegendSpec | undefined,
+  label: string,
+): LegendSymbolType {
+  return legendSpec?.symbolTypeByValue?.[label] ?? legendSpec?.symbolType ?? 'square';
+}
+
+function defaultLegendSymbolWidth(symbolType: LegendSymbolType): number {
+  if (symbolType === 'line') return LINE_LEGEND_SYMBOL_SIZE;
+  if (symbolType === 'area') return AREA_LEGEND_SYMBOL_SIZE;
+  return DEFAULT_LEGEND_SYMBOL_SIZE;
 }
 
 function legendDomainLabels(channel: ChannelSpec | undefined): string[] {

@@ -65,6 +65,7 @@ export const TAB_KEYTIP_MAP: Record<string, string> = {
   data: 'A',
   review: 'R',
   view: 'W',
+  help: 'X',
   'table-design': 'JT', // Multi-key sequence (J followed by T)
   'chart-design': 'JC', // Multi-key sequence (J followed by C)
   'chart-format': 'JF', // Multi-key sequence (J followed by F)
@@ -172,6 +173,7 @@ function TabBarImpl<T extends string>({
   const deps = useActionDependencies();
   const { uiStore } = useDocumentContext();
   const displayMode = useStore(uiStore, (s) => s.displayMode);
+  const ribbonCollapsed = useStore(uiStore, (s) => s.ribbonCollapsed);
 
   // Double-click tracking for tabs toggle
   const lastClickTimeRef = useRef<number>(0);
@@ -205,13 +207,18 @@ function TabBarImpl<T extends string>({
         // Single click: switch tab
         onTabChange(tabId);
 
+        if (ribbonCollapsed) {
+          dispatch('TOGGLE_RIBBON', deps);
+          return;
+        }
+
         // In tabs-only mode, also show ribbon temporarily
         if (displayMode === 'tabs-only') {
           dispatch('SHOW_RIBBON_TEMPORARILY', deps);
         }
       }
     },
-    [displayMode, onTabChange, deps],
+    [displayMode, ribbonCollapsed, onTabChange, deps],
   );
 
   const handleUndoClick = () => {

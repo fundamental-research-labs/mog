@@ -730,15 +730,12 @@ export const SHARE_DOCUMENT: AsyncActionHandler = async (deps): Promise<ActionRe
   const hostResult = await routeHostCommand(deps, 'share', { source: 'file-menu' });
   if (hostResult) return hostResult;
 
-  const uiStore = getUIStore(deps);
-  const showNotification = (uiStore.getState() as { showNotification?: (msg: string) => void })
-    .showNotification;
-  if (showNotification) {
-    showNotification('Sharing requires a connected workspace. Coming soon.');
-  } else {
-    // No notification system available — last-resort path that still produces
-    // an observable effect (window-scoped event the test harness can listen
-    // for, and that a future toast implementation can subscribe to).
+  const message = 'Sharing requires a connected workspace. Coming soon.';
+  if (deps.workbook.notifications) {
+    deps.workbook.notifications.info(message);
+  } else if (typeof window !== 'undefined') {
+    // Malformed test dependency fallback: keep the observable event for
+    // harnesses that inject a workbook without the notification sub-API.
     window.dispatchEvent(
       new CustomEvent('mog:share-requested', { detail: { source: 'file-menu' } }),
     );

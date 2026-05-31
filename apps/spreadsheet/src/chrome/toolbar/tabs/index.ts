@@ -2,6 +2,7 @@ export * from './DataRibbon';
 export * from './DrawRibbon';
 export * from './FormatObjectRibbon';
 export * from './FormulasRibbon';
+export * from './HelpRibbon';
 export * from './HomeRibbon';
 export * from './InkToolbar';
 export * from './InsertRibbon';

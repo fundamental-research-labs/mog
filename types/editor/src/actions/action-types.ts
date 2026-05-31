@@ -49,6 +49,7 @@ export type RibbonTabId =
   | 'data'
   | 'review'
   | 'view'
+  | 'help'
   | 'table-design'
   | 'chart-design'
   | 'chart-format'

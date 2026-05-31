@@ -40,6 +40,7 @@ import { SparklineToolsRibbon } from '../contextual/SparklineToolsRibbon';
 import { KeyTipOverlay, KeyTipProvider } from '../keytips';
 import { DataRibbon } from '../tabs/DataRibbon';
 import { FormulasRibbon } from '../tabs/FormulasRibbon';
+import { HelpRibbon } from '../tabs/HelpRibbon';
 import { HomeRibbon } from '../tabs/HomeRibbon';
 import { InsertRibbon } from '../tabs/InsertRibbon';
 import { PageLayoutRibbon } from '../tabs/PageLayoutRibbon';
@@ -63,6 +64,7 @@ type TabId =
   | 'data'
   | 'review'
   | 'view'
+  | 'help'
   | 'table-design'
   | 'chart-design'
   | 'chart-format'
@@ -546,6 +548,12 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
                     pageBreakPreviewMode={pageBreakPreviewMode}
                     onTogglePageBreakPreview={onTogglePageBreakPreview}
                   />
+                </RibbonVisibilityTab>
+              )}
+
+              {activeTab === 'help' && (
+                <RibbonVisibilityTab tab="help">
+                  <HelpRibbon />
                 </RibbonVisibilityTab>
               )}
 

@@ -351,6 +351,11 @@ export const RIBBON_VISIBILITY_SCHEMA = {
       find: true,
     },
   },
+  help: {
+    help: {
+      help: true,
+    },
+  },
   tableDesign: {
     tableProperties: {
       tableName: true,
@@ -594,6 +599,7 @@ export const PUBLIC_RIBBON_VISIBILITY_CONFIG = {
     text: false,
   },
   pageLayout: false,
+  help: false,
   formulaBar: {
     controls: {
       toggleAiFormulaBar: false,
@@ -610,6 +616,7 @@ export const APP_EVAL_RIBBON_VISIBILITY_CONFIG = {
   data: true,
   review: true,
   view: true,
+  help: true,
   tableDesign: true,
   chartDesign: true,
   pictureTools: true,

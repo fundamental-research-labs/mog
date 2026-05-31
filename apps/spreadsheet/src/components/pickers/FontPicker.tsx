@@ -167,7 +167,7 @@ export interface FontPickerProps {
   onChange: (fontFamily: string) => void;
   /**
    * Called when any font selection is made (theme font or concrete font).
-   * When provided, this is called instead of onChange for theme font selections.
+   * When provided, this is called instead of onChange for committed selections.
    */
   onSelect?: (result: FontPickerResult) => void;
   /** Called when the picker should close */
@@ -398,7 +398,6 @@ export function FontPicker({
       // Clear preview font before committing
       clearPreviewFont();
 
-      // Notify parent via new API if available
       if (onSelect) {
         onSelect({ type: 'font', fontFamily });
       } else {

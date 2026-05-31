@@ -188,6 +188,9 @@ export const BUILT_IN_STYLES: readonly CellStyle[] = [
       fontSize: 15,
       bold: true,
       fontColor: 'theme:dark2',
+      borders: {
+        bottom: { style: 'thin', color: '#44546a' },
+      },
     },
   },
   {

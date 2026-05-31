@@ -1319,10 +1319,15 @@ export function createConsoleAPI(
       }
 
       // Auto-fit affected row when font-size or wrap-text changes (Excel behavior).
-      // These format changes affect the required row height, so we trigger layout
-      // immediately so that readRowHeight() returns the updated value.
-      const affectsRowHeight = 'fontSize' in nonNullFormat || 'wrapText' in nonNullFormat;
-      if (affectsRowHeight) {
+      // Disabling wrap should clear the explicit wrapped row height instead of
+      // measuring and persisting a custom single-line height.
+      if (nonNullFormat['wrapText'] === false) {
+        try {
+          await ws.layout.resetRowHeight(row);
+        } catch {
+          // Non-fatal: row height reset is best-effort
+        }
+      } else if ('fontSize' in nonNullFormat || nonNullFormat['wrapText'] === true) {
         try {
           await ws.layout.autoFitRows([row]);
         } catch {

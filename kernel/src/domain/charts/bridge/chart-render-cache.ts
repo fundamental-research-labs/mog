@@ -8,6 +8,7 @@ import {
 } from './import-render-status';
 import { ChartSheetIndex } from './chart-sheet-index';
 import { chartRenderFrameCacheSuffix, type NormalizedChartRenderFrame } from './chart-render-frame';
+import { matchingChartRenderCacheKeys } from './chart-render-cache-keys';
 
 type CacheUpdateListener = (chartId: string) => void;
 
@@ -388,40 +389,14 @@ export class ChartRenderCache {
 
   private matchingCacheKeys(chartId: string, sheetId?: SheetId): Set<string> {
     const baseKey = this.cacheKey(chartId, sheetId);
-    const keys = new Set([chartId, baseKey]);
-    const framePrefix = `${baseKey}::frame=`;
-    for (const map of [
-      this.markCache,
-      this.layoutCache,
-      this.errorCache,
-      this.chartImportRenderStatus,
-    ]) {
-      for (const key of map.keys()) {
-        if (this.isMatchingCacheKey(key, chartId, baseKey, framePrefix, sheetId)) {
-          keys.add(key);
-        }
-      }
-    }
-    for (const set of [this.dirtyCharts, this.pendingCompilations]) {
-      for (const key of set) {
-        if (this.isMatchingCacheKey(key, chartId, baseKey, framePrefix, sheetId)) {
-          keys.add(key);
-        }
-      }
-    }
-    return keys;
-  }
-
-  private isMatchingCacheKey(
-    key: string,
-    chartId: string,
-    baseKey: string,
-    framePrefix: string,
-    sheetId?: SheetId,
-  ): boolean {
-    if (key === baseKey || key.startsWith(framePrefix)) return true;
-    if (sheetId !== undefined) return false;
-    return key.endsWith(`::${chartId}`) || key.includes(`::${chartId}::frame=`);
+    return matchingChartRenderCacheKeys(chartId, baseKey, sheetId, [
+      this.markCache.keys(),
+      this.layoutCache.keys(),
+      this.errorCache.keys(),
+      this.chartImportRenderStatus.keys(),
+      this.dirtyCharts,
+      this.pendingCompilations,
+    ]);
   }
 
   /**

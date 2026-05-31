@@ -1,6 +1,6 @@
 import type { MarkSpec, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartType, SeriesConfig } from '../../types';
-import { resolveFormatFillOpacity, resolveLineColor } from '../../utils/chart-colors';
+import { resolveFormatFillOpacity } from '../../utils/chart-colors';
 import {
   resolveChartFillPaint,
   resolveChartLineStyle,
@@ -9,60 +9,21 @@ import {
 } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import {
-  POINT_FILL_FIELD,
-  POINT_STROKE_FIELD,
-  POINT_STROKE_WIDTH_FIELD,
-} from './fields';
-import {
   applySeriesLineFormat,
   hasExplicitNoLine,
-  hasVisibleLineStyle,
   isNoFillNoLineSeries,
   resolveSeriesColor,
 } from './style';
+import {
+  applyImportedBarOutline,
+  applyPointStyleFields,
+  applyPrimarySeriesFormat,
+  hasPointStyleOverrides,
+} from './mark-format';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 
-function applyPrimarySeriesFormat(mark: MarkSpec, config: ChartConfig): void {
-  const seriesIndex = config.series?.findIndex((item) => !isNoFillNoLineSeries(item)) ?? -1;
-  if (seriesIndex < 0) return;
-
-  const series = config.series?.[seriesIndex];
-  const format = resolveChartOwnerFormat(config, `series(${seriesIndex})`, series?.format);
-  if (!format) return;
-  const context = resolverContextFromConfig(config, `series(${seriesIndex})`);
-  const fillPaint = resolveChartFillPaint(format.fill, context);
-  if (fillPaint) mark.fillPaint = fillPaint;
-  const line = resolveChartLineStyle(format.line, context, {
-    widthToPx: linePointsToCanvasPx,
-  });
-  if (line) {
-    mark.line = line;
-    if (line.paint?.type === 'solid') mark.stroke = line.paint.color;
-    if (line.width !== undefined) mark.strokeWidth = line.width;
-    if (line.dash) mark.strokeDash = line.dash;
-  }
-}
-
-function applyPointStyleFields(mark: MarkSpec, config: ChartConfig): void {
-  if (!hasPointStyleOverrides(config)) return;
-  mark.fillField = POINT_FILL_FIELD;
-  mark.strokeField = POINT_STROKE_FIELD;
-  mark.strokeWidthField = POINT_STROKE_WIDTH_FIELD;
-}
-
-function hasPointStyleOverrides(config: ChartConfig): boolean {
-  return (config.series ?? []).some((series) =>
-    (series.points ?? []).some(
-      (point) =>
-        point.fill !== undefined ||
-        point.border !== undefined ||
-        point.lineFormat !== undefined ||
-        point.visualFormat?.fill !== undefined ||
-        point.visualFormat?.line !== undefined,
-    ),
-  );
-}
+export { applyImportedBarOutline } from './mark-format';
 
 /**
  * Attach pie slice explosion indices as metadata on the mark spec.
@@ -78,18 +39,6 @@ export function applyPieSliceExplosion(mark: MarkSpec, config: ChartConfig): voi
   if (pieSlice.explodedIndices !== undefined && pieSlice.explodedIndices.length > 0) {
     mark._explodedIndices = pieSlice.explodedIndices;
   }
-}
-
-export function applyImportedBarOutline(mark: MarkSpec, config: ChartConfig): void {
-  if (MARK_TYPE_MAP[config.type] !== 'bar') return;
-  const line = config.series?.find(
-    (series) => !isNoFillNoLineSeries(series) && hasVisibleLineStyle(series.format?.line),
-  )?.format?.line;
-  if (!line) return;
-
-  mark.stroke = resolveLineColor(line, resolverContextFromConfig(config, 'series')) ?? mark.stroke ?? '#000000';
-  const strokeWidth = linePointsToCanvasPx(line.width);
-  if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
 }
 
 /**
@@ -162,8 +111,10 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Scatter with lines
   if (config.type === 'scatter') {
-    const showLines = config.showLines ?? config.series?.some((series) => series.showLines === true);
-    const smoothLines = config.smoothLines ?? config.series?.some((series) => series.smooth === true);
+    const showLines =
+      config.showLines ?? config.series?.some((series) => series.showLines === true);
+    const smoothLines =
+      config.smoothLines ?? config.series?.some((series) => series.smooth === true);
     if (showLines) {
       const mark: MarkSpec = { type: 'line' };
       if (smoothLines) {
@@ -243,7 +194,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   if (baseType === 'point') {
     const mark: MarkSpec = {
       type: baseType,
-      ...((config.type === 'scatter' || config.type === 'bubble')
+      ...(config.type === 'scatter' || config.type === 'bubble'
         ? { skipInvalidPositions: true }
         : {}),
     };

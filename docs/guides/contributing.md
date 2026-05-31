@@ -1,9 +1,8 @@
 # Contributing
 
 This guide covers the local development workflow for public changes in this
-repository. For contribution policies, DCO/sign-off rules, trademarks, and issue
-reporting, see the root
-[CONTRIBUTING.md](../../CONTRIBUTING.md).
+repository. For the preferred public contribution path and issue reporting
+guidance, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## Prerequisites
 

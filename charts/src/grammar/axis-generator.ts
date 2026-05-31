@@ -88,6 +88,14 @@ function multiLevelAxisDatum(
   return { ...axisDatum(role, 'multiLevelLabel'), level };
 }
 
+function multiLevelYAxisColumnWidth(
+  labels: Array<{ text: string; level: number }>,
+  fontSize: number,
+): number {
+  const maxLabelLength = Math.max(1, ...labels.map((label) => label.text.length));
+  return Math.max(32, Math.ceil(maxLabelLength * fontSize * 0.52) + 12);
+}
+
 /**
  * Generate axis marks.
  */
@@ -694,21 +702,46 @@ export function generateYAxis(
       const tickSize = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? 3;
       const labelLayout = yLabelLayout(axisSpec, x, tickSize, labelPadding, layout, orient);
-      marks.push({
-        type: 'text',
-        x: labelLayout.x,
-        y,
-        text: labelText,
-        datum: axisDatum(role, 'label'),
-        fontSize: yFontSize,
-        fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
-        textAlign: labelLayout.align,
-        textBaseline: 'middle',
-        rotation: axisSpec.labelAngle ? (axisSpec.labelAngle * Math.PI) / 180 : undefined,
-        style: {
-          fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
-        },
-      } as TextMark);
+      const labelAngle = axisSpec.labelAngle ?? 0;
+      const multiLevelLabels = labelAngle === 0 ? axisMultiLevelLabels(axisSpec, tick) : undefined;
+      if (multiLevelLabels) {
+        const outward = yAxisLabelSide(axisSpec, orient) === 'right' ? 1 : -1;
+        const columnWidth = multiLevelYAxisColumnWidth(multiLevelLabels, yFontSize);
+        const orderedLabels = [...multiLevelLabels].reverse();
+        for (let levelIndex = 0; levelIndex < orderedLabels.length; levelIndex += 1) {
+          const levelLabel = orderedLabels[levelIndex];
+          marks.push({
+            type: 'text',
+            x: labelLayout.x + outward * columnWidth * levelIndex,
+            y,
+            text: levelLabel.text,
+            datum: multiLevelAxisDatum(role, levelLabel.level),
+            fontSize: yFontSize,
+            fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
+            textAlign: labelLayout.align,
+            textBaseline: 'middle',
+            style: {
+              fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
+            },
+          } as TextMark);
+        }
+      } else {
+        marks.push({
+          type: 'text',
+          x: labelLayout.x,
+          y,
+          text: labelText,
+          datum: axisDatum(role, 'label'),
+          fontSize: yFontSize,
+          fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
+          textAlign: labelLayout.align,
+          textBaseline: 'middle',
+          rotation: labelAngle ? (labelAngle * Math.PI) / 180 : undefined,
+          style: {
+            fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
+          },
+        } as TextMark);
+      }
     }
     yLabelIndex++;
 

@@ -259,6 +259,60 @@ describe('configToSpec invisible stacked bar series', () => {
     expect(spec.config?.layoutHints?.bottomMargin).toBeGreaterThanOrEqual(43);
   });
 
+  it('renders multi-level category labels on horizontal bar y-axes', () => {
+    const multiLevelData: ChartData = {
+      categories: ['North / Q1', 'North / Q1', ''],
+      categoryLevels: [
+        { level: 0, labels: ['North', 'North', 'South'] },
+        { level: 1, labels: ['Q1', 'Q1', null] },
+      ],
+      series: [
+        {
+          name: 'Visible',
+          data: [
+            { x: 'North / Q1', y: 10 },
+            { x: 'North / Q1', y: 20 },
+            { x: '', y: 30 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'bar',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+    };
+
+    const spec = asUnitSpec(configToSpec(config, multiLevelData));
+
+    expect(spec.encoding?.y?.axis).toMatchObject({
+      multiLevelLabelsByValue: {
+        '__mogCategory:0': ['North', 'Q1'],
+        '__mogCategory:1': ['North', 'Q1'],
+        '__mogCategory:2': ['South', ''],
+      },
+    });
+
+    const result = compile(spec);
+    const axisLevelLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { axisPart?: string; role?: string } | undefined;
+      return mark.type === 'text' && datum?.role === 'y-axis' && datum.axisPart === 'multiLevelLabel';
+    });
+    expect(axisLevelLabels.map((mark) => mark.text)).toEqual([
+      'Q1',
+      'North',
+      'Q1',
+      'North',
+      '',
+      'South',
+    ]);
+    expect(axisLevelLabels.map((mark) => (mark.datum as { level: number }).level)).toEqual([
+      1, 0, 1, 0, 1, 0,
+    ]);
+  });
+
   it('reserves enough y-axis margin for long imported category labels with chart fonts', () => {
     const longLabelData: ChartData = {
       categories: ['13.5% - 15.5% Discount Rate, 2.0% - 4.0% Terminal FCF Growth Rate:'],

@@ -16,9 +16,18 @@ import { renderMark } from '../marks';
 import { buildCanvasFontString } from '../font';
 import type { PathCommand } from '../marks/path';
 import { applyPathCommands, parsePath } from '../marks/path';
-import { applyStyle, roundRect } from '../marks/rect';
+import { applyStyle, hasRenderableFill, hasRenderableStroke, roundRect } from '../marks/rect';
 import { drawSymbolShape } from '../marks/symbol';
-import type { AnyMark, ArcMark, MarkClip, PathMark, RectMark, SymbolMark, TextMark } from '../types';
+import type {
+  AnyMark,
+  ArcMark,
+  MarkClip,
+  PaintSpec,
+  PathMark,
+  RectMark,
+  SymbolMark,
+  TextMark,
+} from '../types';
 
 // =============================================================================
 // Renderer Interface
@@ -62,14 +71,49 @@ function clipKey(clip: MarkClip | undefined): string {
 function styleKey(mark: AnyMark): string {
   const s = mark.style;
   const clip = clipKey(mark.clip);
+  const richKey =
+    mark.type === 'text'
+      ? `|${(mark as TextMark).fontStyle ?? ''}|${(mark as TextMark).underline ?? ''}|${(mark as TextMark).strikethrough ?? ''}|${JSON.stringify((mark as TextMark).richText ?? null)}`
+      : '';
+  const paintKey = `${JSON.stringify(s.fillPaint ?? null)}|${JSON.stringify(s.strokePaint ?? null)}|${JSON.stringify(s.line ?? null)}|${JSON.stringify(s.shadow ?? s.effects ?? null)}`;
+  const paintBoundsKey = needsMarkBoundsForPaint(s.fillPaint) || needsMarkBoundsForPaint(s.strokePaint)
+    ? `|bounds:${boundsKey(mark)}`
+    : '';
   // Text marks need per-mark font/alignment, so we include those properties
   // in the key to ensure correct rendering within a batch.
   if (mark.type === 'text') {
     const t = mark as TextMark;
-    const font = buildCanvasFontString(t.fontWeight, t.fontSize, t.fontFamily);
-    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${font}|${t.textAlign}|${t.textBaseline}${clip}`;
+    const font = buildCanvasFontString(t.fontWeight, t.fontSize, t.fontFamily, t.fontStyle);
+    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${paintKey}|${font}|${t.textAlign}|${t.textBaseline}${richKey}${paintBoundsKey}${clip}`;
   }
-  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}${clip}`;
+  return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}|${paintKey}${paintBoundsKey}${clip}`;
+}
+
+function needsMarkBoundsForPaint(paint: PaintSpec | undefined): boolean {
+  return Boolean(
+    paint &&
+      (paint.type === 'linearGradient' ||
+        paint.type === 'radialGradient' ||
+        paint.type === 'rectangularGradient'),
+  );
+}
+
+function boundsKey(mark: AnyMark): string {
+  if (mark.type === 'rect') return `${mark.x},${mark.y},${mark.width},${mark.height}`;
+  if (mark.type === 'arc') {
+    const size = mark.outerRadius * 2;
+    return `${mark.x - mark.outerRadius},${mark.y - mark.outerRadius},${size},${size}`;
+  }
+  return `${mark.x},${mark.y},1,1`;
+}
+
+function boundsForMark(mark: AnyMark): { x: number; y: number; width: number; height: number } {
+  if (mark.type === 'rect') return mark;
+  if (mark.type === 'arc') {
+    const size = mark.outerRadius * 2;
+    return { x: mark.x - mark.outerRadius, y: mark.y - mark.outerRadius, width: size, height: size };
+  }
+  return { x: mark.x, y: mark.y, width: 1, height: 1 };
 }
 
 // =============================================================================
@@ -81,11 +125,11 @@ function drawRect(ctx: CanvasRenderingContext2D, mark: RectMark): void {
   const hasCornerRadius = mark.style.cornerRadius !== undefined && mark.style.cornerRadius > 0;
   if (hasCornerRadius) {
     roundRect(ctx, mark.x, mark.y, mark.width, mark.height, mark.style.cornerRadius!);
-    if (mark.style.fill) ctx.fill();
-    if (mark.style.stroke) ctx.stroke();
+    if (hasRenderableFill(mark.style)) ctx.fill();
+    if (hasRenderableStroke(mark.style)) ctx.stroke();
   } else {
-    if (mark.style.fill) ctx.fillRect(mark.x, mark.y, mark.width, mark.height);
-    if (mark.style.stroke) ctx.strokeRect(mark.x, mark.y, mark.width, mark.height);
+    if (hasRenderableFill(mark.style)) ctx.fillRect(mark.x, mark.y, mark.width, mark.height);
+    if (hasRenderableStroke(mark.style)) ctx.strokeRect(mark.x, mark.y, mark.width, mark.height);
   }
 }
 
@@ -103,38 +147,42 @@ function drawArc(ctx: CanvasRenderingContext2D, mark: ArcMark): void {
     ctx.arc(mark.x, mark.y, mark.outerRadius, canvasStartAngle, canvasEndAngle, false);
     ctx.closePath();
   }
-  if (mark.style.fill) ctx.fill();
-  if (mark.style.stroke) ctx.stroke();
+  if (hasRenderableFill(mark.style)) ctx.fill();
+  if (hasRenderableStroke(mark.style)) ctx.stroke();
 }
 
 /** Draw a path mark without save/restore/applyStyle. */
 function drawPath(ctx: CanvasRenderingContext2D, mark: PathMark): void {
   const commands = parsePath(mark.path) as PathCommand[];
   applyPathCommands(ctx, commands, mark.x, mark.y);
-  if (mark.style.fill) ctx.fill();
-  if (mark.style.stroke) ctx.stroke();
+  if (hasRenderableFill(mark.style)) ctx.fill();
+  if (hasRenderableStroke(mark.style)) ctx.stroke();
 }
 
 /** Draw symbol geometry without save/restore/applyStyle. */
 function drawSymbol(ctx: CanvasRenderingContext2D, mark: SymbolMark): void {
   drawSymbolShape(ctx, mark.shape, mark.x, mark.y, mark.size);
-  if (mark.style.fill) ctx.fill();
-  if (mark.style.stroke) ctx.stroke();
+  if (hasRenderableFill(mark.style)) ctx.fill();
+  if (hasRenderableStroke(mark.style)) ctx.stroke();
 }
 
 /** Draw a text mark without save/restore/applyStyle (font/align already set by batch). */
 function drawText(ctx: CanvasRenderingContext2D, mark: TextMark): void {
+  if (mark.richText?.length || mark.underline || mark.strikethrough || mark.rotation) {
+    renderMark(ctx, mark);
+    return;
+  }
   if (mark.rotation) {
     // Rotation requires its own save/restore for the transform
     ctx.save();
     ctx.translate(mark.x, mark.y);
     ctx.rotate(mark.rotation);
-    if (mark.style.fill) ctx.fillText(mark.text, 0, 0);
-    if (mark.style.stroke) ctx.strokeText(mark.text, 0, 0);
+    if (hasRenderableFill(mark.style)) ctx.fillText(mark.text, 0, 0);
+    if (hasRenderableStroke(mark.style)) ctx.strokeText(mark.text, 0, 0);
     ctx.restore();
   } else {
-    if (mark.style.fill) ctx.fillText(mark.text, mark.x, mark.y);
-    if (mark.style.stroke) ctx.strokeText(mark.text, mark.x, mark.y);
+    if (hasRenderableFill(mark.style)) ctx.fillText(mark.text, mark.x, mark.y);
+    if (hasRenderableStroke(mark.style)) ctx.strokeText(mark.text, mark.x, mark.y);
   }
 }
 
@@ -170,7 +218,7 @@ function drawMarkBatched(ctx: CanvasRenderingContext2D, mark: AnyMark): void {
  * Apply text-specific context state (font, alignment) for a text-mark batch.
  */
 function applyTextState(ctx: CanvasRenderingContext2D, mark: TextMark): void {
-  ctx.font = buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily);
+  ctx.font = buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily, mark.fontStyle);
   ctx.textAlign = mark.textAlign;
   ctx.textBaseline = mark.textBaseline;
 }
@@ -278,7 +326,7 @@ export class CanvasRenderer implements Renderer {
       const firstMark = batch.marks[0];
 
       ctx.save();
-      applyStyle(ctx, firstMark.style);
+      applyStyle(ctx, firstMark.style, boundsForMark(firstMark));
       if (firstMark.clip) {
         applyClip(ctx, firstMark.clip);
       }

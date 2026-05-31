@@ -245,3 +245,45 @@ pub struct BoxplotConfigData {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub quartile_method: Option<String>,
 }
+
+/// One imported hierarchy row for ChartEx treemap/sunburst projection.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HierarchyChartRowData {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub parent_id: Option<String>,
+    pub label: String,
+    #[serde(default)]
+    pub level: u32,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value_formula: Option<String>,
+}
+
+/// Typed ChartEx hierarchy projection for treemap/sunburst families.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HierarchyChartConfigData {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<HierarchyChartRowData>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub category_formulas: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value_formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub parent_label_layout: Option<String>,
+}
+
+/// Typed ChartEx region-map projection contract.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionMapConfigData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub region_formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub value_formula: Option<String>,
+}

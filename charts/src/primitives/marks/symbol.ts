@@ -6,7 +6,7 @@
  */
 
 import type { SymbolMark, SymbolShape } from '../types';
-import { applyStyle } from './rect';
+import { applyStyle, hasRenderableFill, hasRenderableStroke } from './rect';
 
 /**
  * Create a symbol mark.
@@ -163,10 +163,10 @@ export function renderSymbol(ctx: CanvasRenderingContext2D, mark: SymbolMark): v
 
   drawSymbolShape(ctx, mark.shape, mark.x, mark.y, mark.size);
 
-  if (mark.style.fill) {
+  if (hasRenderableFill(mark.style)) {
     ctx.fill();
   }
-  if (mark.style.stroke) {
+  if (hasRenderableStroke(mark.style)) {
     ctx.stroke();
   }
 

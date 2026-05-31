@@ -3,9 +3,7 @@ use super::*;
 fn chart_type_from_chart_ex_layout_id(
     layout_id: &ooxml_types::chart_ex::ChartExLayoutId,
 ) -> domain_types::ChartType {
-    layout_id
-        .to_public_chart_type()
-        .map(domain_types::ChartType::from_str)
+    domain_types::ChartType::from_chart_ex_layout_id(layout_id)
         .unwrap_or_else(|| domain_types::ChartType::Unknown(layout_id.to_ooxml().to_string()))
 }
 
@@ -695,6 +693,11 @@ pub(crate) fn build_fallback_chart_spec(
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
@@ -840,6 +843,11 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 title_rich_text: None,
                 title_formula: None,
                 data_table: None,
+                waterfall: None,
+                histogram: None,
+                boxplot: None,
+                hierarchy: None,
+                region_map: None,
                 display_blanks_as: None,
                 plot_visible_only: None,
                 gap_width: None,
@@ -993,7 +1001,7 @@ mod tests {
             (ChartExLayoutId::Pareto, domain_types::ChartType::Pareto),
             (
                 ChartExLayoutId::BoxWhisker,
-                domain_types::ChartType::BoxWhisker,
+                domain_types::ChartType::Boxplot,
             ),
         ] {
             let chart_type = chart_type_from_chart_ex_layout_id(&layout_id);

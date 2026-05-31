@@ -23,11 +23,19 @@ export type {
   Chart,
   ChartAnchorMode,
   ChartColor,
+  ChartColorMapOverride,
+  ChartColorMapping,
   ChartConfig,
   ChartFill,
   ChartFormat,
+  ChartSeriesDimensionSourceKind,
   ChartSeriesPointCache,
   ChartSeriesPointCachePoint,
+  ChartStyleContext,
+  ChartStyleDiagnostic,
+  ChartStyleOwner,
+  ChartWorkbookThemeColor,
+  ChartWorkbookThemeData,
   ChartType,
   DataLabelConfig,
   ImageExportFormat,
@@ -304,7 +312,7 @@ export type CreateChartInput = Omit<StoredChartConfig, 'id'> & { id?: string };
  * data cannot produce a real finite value, extracted chart data preserves why
  * the point was rendered with a fallback value.
  */
-export type ChartDataPointValueState = 'value' | 'blank' | 'nonFinite' | 'nonNumeric';
+export type ChartDataPointValueState = 'value' | 'blank' | 'nonFinite' | 'nonNumeric' | 'hidden';
 
 /**
  * Chart data point
@@ -329,6 +337,7 @@ export interface ChartDataPoint {
   high?: number;
   low?: number;
   close?: number;
+  volume?: number;
 }
 
 /**

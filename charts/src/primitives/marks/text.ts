@@ -4,9 +4,9 @@
  * Pure functions, no side effects outside canvas drawing.
  */
 
-import type { TextAlign, TextBaseline, TextMark } from '../types';
+import type { TextAlign, TextBaseline, TextMark, TextRunSpec } from '../types';
 import { buildCanvasFontString } from '../font';
-import { applyStyle } from './rect';
+import { applyStyle, hasRenderableFill, hasRenderableStroke } from './rect';
 
 /**
  * Create a text mark.
@@ -22,7 +22,97 @@ export function createText(props: Omit<TextMark, 'type'>): TextMark {
  * Build font string for canvas context.
  */
 function buildFontString(mark: TextMark): string {
-  return buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily);
+  return buildCanvasFontString(mark.fontWeight, mark.fontSize, mark.fontFamily, mark.fontStyle);
+}
+
+function runFontString(mark: TextMark, run: TextRunSpec): string {
+  return buildCanvasFontString(
+    run.fontWeight ?? mark.fontWeight,
+    run.fontSize ?? mark.fontSize,
+    run.fontFamily ?? mark.fontFamily,
+    run.fontStyle ?? mark.fontStyle,
+  );
+}
+
+function decorationY(mark: TextMark, kind: 'underline' | 'strikethrough'): number {
+  switch (mark.textBaseline) {
+    case 'middle':
+      return kind === 'underline' ? mark.fontSize * 0.38 : 0;
+    case 'bottom':
+      return kind === 'underline' ? -mark.fontSize * 0.1 : -mark.fontSize * 0.45;
+    case 'top':
+    default:
+      return kind === 'underline' ? mark.fontSize * 0.9 : mark.fontSize * 0.55;
+  }
+}
+
+function drawDecoration(
+  ctx: CanvasRenderingContext2D,
+  mark: TextMark,
+  x: number,
+  width: number,
+  kind: 'underline' | 'strikethrough',
+): void {
+  const y = decorationY(mark, kind);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width, y);
+  ctx.stroke();
+}
+
+function measureRichText(ctx: CanvasRenderingContext2D, mark: TextMark): number {
+  let width = 0;
+  for (const run of mark.richText ?? []) {
+    ctx.font = runFontString(mark, run);
+    width += ctx.measureText(run.text).width;
+  }
+  return width;
+}
+
+function richTextStartX(totalWidth: number, align: TextAlign): number {
+  if (align === 'center') return -totalWidth / 2;
+  if (align === 'right') return -totalWidth;
+  return 0;
+}
+
+function renderTextAtOrigin(ctx: CanvasRenderingContext2D, mark: TextMark): void {
+  if (mark.richText && mark.richText.length > 0) {
+    const totalWidth = measureRichText(ctx, mark);
+    let cursor = richTextStartX(totalWidth, mark.textAlign);
+    ctx.textAlign = 'left';
+    for (const run of mark.richText) {
+      ctx.font = runFontString(mark, run);
+      const width = ctx.measureText(run.text).width;
+      applyStyle(ctx, {
+        ...mark.style,
+        ...(run.fill ? { fillPaint: run.fill } : {}),
+        ...(run.stroke ? { strokePaint: run.stroke } : {}),
+      });
+      if (hasRenderableFill({ ...mark.style, ...(run.fill ? { fillPaint: run.fill } : {}) })) {
+        ctx.fillText(run.text, cursor, 0);
+      }
+      if (hasRenderableStroke({ ...mark.style, ...(run.stroke ? { strokePaint: run.stroke } : {}) })) {
+        ctx.strokeText(run.text, cursor, 0);
+      }
+      if (run.underline ?? mark.underline) drawDecoration(ctx, mark, cursor, width, 'underline');
+      if (run.strikethrough ?? mark.strikethrough) {
+        drawDecoration(ctx, mark, cursor, width, 'strikethrough');
+      }
+      cursor += width;
+    }
+    return;
+  }
+
+  if (hasRenderableFill(mark.style)) {
+    ctx.fillText(mark.text, 0, 0);
+  }
+  if (hasRenderableStroke(mark.style)) {
+    ctx.strokeText(mark.text, 0, 0);
+  }
+  const width = ctx.measureText(mark.text).width;
+  const x = richTextStartX(width, mark.textAlign);
+  if (mark.underline) drawDecoration(ctx, mark, x, width, 'underline');
+  if (mark.strikethrough) drawDecoration(ctx, mark, x, width, 'strikethrough');
 }
 
 /**
@@ -43,19 +133,10 @@ export function renderText(ctx: CanvasRenderingContext2D, mark: TextMark): void 
   if (mark.rotation) {
     ctx.translate(mark.x, mark.y);
     ctx.rotate(mark.rotation);
-    if (mark.style.fill) {
-      ctx.fillText(mark.text, 0, 0);
-    }
-    if (mark.style.stroke) {
-      ctx.strokeText(mark.text, 0, 0);
-    }
+    renderTextAtOrigin(ctx, mark);
   } else {
-    if (mark.style.fill) {
-      ctx.fillText(mark.text, mark.x, mark.y);
-    }
-    if (mark.style.stroke) {
-      ctx.strokeText(mark.text, mark.x, mark.y);
-    }
+    ctx.translate(mark.x, mark.y);
+    renderTextAtOrigin(ctx, mark);
   }
 
   ctx.restore();
@@ -70,10 +151,14 @@ export function renderText(ctx: CanvasRenderingContext2D, mark: TextMark): void 
  */
 export function measureTextWidth(ctx: CanvasRenderingContext2D, mark: TextMark): number {
   ctx.save();
-  ctx.font = buildFontString(mark);
-  const metrics = ctx.measureText(mark.text);
+  const width = mark.richText?.length
+    ? measureRichText(ctx, mark)
+    : (() => {
+        ctx.font = buildFontString(mark);
+        return ctx.measureText(mark.text).width;
+      })();
   ctx.restore();
-  return metrics.width;
+  return width;
 }
 
 /**
@@ -89,10 +174,9 @@ export function getTextBounds(
 ): { x: number; y: number; width: number; height: number } {
   ctx.save();
   ctx.font = buildFontString(mark);
-  const metrics = ctx.measureText(mark.text);
+  const width = mark.richText?.length ? measureRichText(ctx, mark) : ctx.measureText(mark.text).width;
   ctx.restore();
 
-  const width = metrics.width;
   // Approximate height from font size (actual depends on font metrics)
   const height = mark.fontSize;
 

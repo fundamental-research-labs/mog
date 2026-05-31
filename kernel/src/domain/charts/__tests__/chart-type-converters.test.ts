@@ -1,5 +1,7 @@
 import {
+  axisConfigToWire,
   seriesConfigToWire,
+  wireToAxisConfig,
   wireChartTypeToConfig,
   wireToLegendConfig,
   wireToSeriesConfig,
@@ -116,5 +118,69 @@ describe('chart-type-converters', () => {
         bubbleSizeCache: seriesConfig.bubbleSizeCache,
       }),
     );
+  });
+
+  it('round-trips extended axis render contract fields', () => {
+    const axisConfig = wireToAxisConfig({
+      secondaryCategoryAxis: {
+        visible: true,
+        axisType: 'dateAx',
+        position: 't',
+        tickLabelSpacing: 2,
+        tickMarkSpacing: 3,
+        tickLabelPosition: 'high',
+      },
+      valueAxis: {
+        visible: true,
+        scaleType: 'logarithmic',
+        logBase: 2,
+        displayUnit: 'millions',
+        displayUnitLabel: 'Millions',
+        linkNumberFormat: true,
+        crossBetween: 'midCat',
+        crossesAt: 'custom',
+        crossesAtValue: 7.5,
+        minorGridLines: true,
+        minorTickMarks: 'cross',
+      },
+      seriesAxis: {
+        visible: true,
+        axisType: 'serAx',
+      },
+    });
+
+    expect(axisConfig.secondaryCategoryAxis).toMatchObject({
+      axisType: 'dateAx',
+      tickLabelSpacing: 2,
+      tickMarkSpacing: 3,
+      tickLabelPosition: 'high',
+    });
+    expect(axisConfig.valueAxis).toMatchObject({
+      scaleType: 'logarithmic',
+      logBase: 2,
+      displayUnit: 'millions',
+      displayUnitLabel: 'Millions',
+      linkNumberFormat: true,
+      crossBetween: 'midCat',
+      crossesAt: 'custom',
+      crossesAtValue: 7.5,
+      minorGridLines: true,
+      minorTickMarks: 'cross',
+    });
+    expect(axisConfigToWire(axisConfig)).toMatchObject({
+      secondaryCategoryAxis: {
+        tickLabelSpacing: 2,
+        tickMarkSpacing: 3,
+        tickLabelPosition: 'high',
+      },
+      valueAxis: {
+        scaleType: 'logarithmic',
+        displayUnit: 'millions',
+        linkNumberFormat: true,
+        crossesAt: 'custom',
+        crossesAtValue: 7.5,
+      },
+      seriesAxis: { axisType: 'serAx' },
+    });
   });
 });

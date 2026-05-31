@@ -721,8 +721,9 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   const values = extractNumericValues(data, field);
   const max = values.length > 0 ? safeMax(values) : 1;
 
-  // Size range (area in pixels)
-  const maxSize = 400;
+  // Size range is symbol area in pixels.
+  const minSize = numericDomainBound(channel.scale?.range, 0) ?? 0;
+  const maxSize = numericDomainBound(channel.scale?.range, 1) ?? 400;
 
   // Proportional mapping: size = value * (maxSize / maxValue)
   // This ensures size(a)/size(b) = a/b for all positive values,
@@ -731,7 +732,7 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
 
   return Object.assign((value: unknown): number => {
     const v = typeof value === 'number' ? value : parseFloat(String(value));
-    if (!isFinite(v) || v <= 0) return 4; // minimum visible size for non-finite/zero/negative
+    if (!isFinite(v) || v <= 0) return minSize;
     // Use pure linear mapping for positive values to preserve proportionality.
     // Do NOT clamp to a minimum -- the linear relationship must hold exactly
     // so that size(a)/size(b) = a/b for any pair of positive values.

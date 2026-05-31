@@ -275,8 +275,9 @@ fn same_axis(
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AxisType, BarChartConfig, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace,
-        ChartType, ChartTypeConfig, LineChartConfig, PlotArea, Scaling,
+        AxisCrosses, AxisType, BarChartConfig, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
+        ChartSpace, ChartType, ChartTypeConfig, CrossBetween, LineChartConfig, NumFmt, PlotArea,
+        Scaling,
     };
 
     fn axis(
@@ -398,11 +399,98 @@ mod tests {
             Some(20.0)
         );
     }
+
+    #[test]
+    fn extraction_projects_axis_render_contract_fields() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    axes: vec![
+                        ChartAxis {
+                            axis_type: AxisType::Category,
+                            ax_id: 10,
+                            cross_ax: 20,
+                            ax_pos: ChartAxisPosition::Bottom,
+                            crosses: AxisCrosses::Min,
+                            tick_lbl_skip: Some(2),
+                            tick_mark_skip: Some(3),
+                            ..Default::default()
+                        },
+                        ChartAxis {
+                            axis_type: AxisType::Value,
+                            ax_id: 20,
+                            cross_ax: 10,
+                            ax_pos: ChartAxisPosition::Left,
+                            scaling: Scaling {
+                                log_base: Some(10.0),
+                                ..Default::default()
+                            },
+                            crosses: AxisCrosses::Max,
+                            crosses_at: Some(7.5),
+                            num_fmt: Some(NumFmt {
+                                format_code: "$#,##0".to_string(),
+                                source_linked: Some(true),
+                            }),
+                            cross_between: Some(CrossBetween::MidCat),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+        let category = axes.category_axis.expect("category axis");
+        let value = axes.value_axis.expect("value axis");
+
+        assert_eq!(category.crosses_at.as_deref(), Some("min"));
+        assert_eq!(category.tick_label_spacing, Some(2));
+        assert_eq!(category.tick_mark_spacing, Some(3));
+
+        assert_eq!(value.crosses_at.as_deref(), Some("custom"));
+        assert_eq!(value.crosses_at_value, Some(7.5));
+        assert_eq!(value.link_number_format, Some(true));
+        assert_eq!(value.scale_type.as_deref(), Some("logarithmic"));
+        assert_eq!(value.cross_between.as_deref(), Some("midCat"));
+        assert_eq!(value.is_between_categories, Some(false));
+    }
+
+    #[test]
+    fn secondary_date_axis_is_projected_as_secondary_category_axis() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    axes: vec![
+                        axis(AxisType::Date, 10, 20, ChartAxisPosition::Bottom, 1.0),
+                        axis(AxisType::Value, 20, 10, ChartAxisPosition::Left, 20.0),
+                        axis(AxisType::Date, 30, 20, ChartAxisPosition::Top, 30.0),
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+
+        assert_eq!(
+            axes.category_axis.as_ref().and_then(|axis| axis.min),
+            Some(1.0)
+        );
+        assert_eq!(
+            axes.secondary_category_axis.as_ref().and_then(|axis| axis.min),
+            Some(30.0)
+        );
+    }
 }
 
 /// Extract a single axis to SingleAxisData.
 fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::chart::SingleAxisData {
-    use ooxml_types::charts::{DisplayUnitKind, Orientation, TickMark};
+    use ooxml_types::charts::{AxisCrosses, CrossBetween, DisplayUnitKind, Orientation, TickMark};
 
     let title = ax
         .title
@@ -435,6 +523,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     };
 
     let number_format = ax.num_fmt.as_ref().map(|nf| nf.format_code.clone());
+    let link_number_format = ax.num_fmt.as_ref().and_then(|nf| nf.source_linked);
 
     let axis_type = Some(ax.axis_type.to_ooxml().to_string());
 
@@ -485,6 +574,25 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
 
     // Cross between
     let cross_between = ax.cross_between.map(|cb| cb.to_ooxml().to_string());
+    let is_between_categories = ax.cross_between.map(|cb| match cb {
+        CrossBetween::Between => true,
+        CrossBetween::MidCat => false,
+    });
+
+    let (crosses_at, crosses_at_value) = if let Some(value) = ax.crosses_at {
+        (Some("custom".to_string()), Some(value))
+    } else {
+        let crosses = match ax.crosses {
+            AxisCrosses::AutoZero => "automatic",
+            AxisCrosses::Min => "min",
+            AxisCrosses::Max => "max",
+        };
+        (Some(crosses.to_string()), None)
+    };
+
+    let scale_type = log_base
+        .filter(|base| base.is_finite() && *base > 1.0)
+        .map(|_| "logarithmic".to_string());
 
     // Tick label position
     let tick_label_position = {
@@ -536,6 +644,13 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
         label_alignment,
         label_offset,
         no_multi_level_labels,
+        tick_label_spacing: ax.tick_lbl_skip,
+        tick_mark_spacing: ax.tick_mark_skip,
+        link_number_format,
+        scale_type,
+        crosses_at,
+        crosses_at_value,
+        is_between_categories,
         ..Default::default()
     }
 }

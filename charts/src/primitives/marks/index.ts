@@ -9,20 +9,33 @@
 export type {
   AnyMark,
   ArcMark,
+  EffectSpec,
+  LineStyleSpec,
   Mark,
   MarkClip,
   MarkStyle,
   PathMark,
+  PaintSpec,
   RectMark,
+  ShadowSpec,
   SymbolMark,
   SymbolShape,
   TextAlign,
   TextBaseline,
   TextMark,
+  TextRunSpec,
 } from '../types';
 
 // Rectangle mark
-export { applyStyle, createRect, hitTestRect, renderRect, roundRect } from './rect';
+export {
+  applyStyle,
+  createRect,
+  hasRenderableFill,
+  hasRenderableStroke,
+  hitTestRect,
+  renderRect,
+  roundRect,
+} from './rect';
 
 // Path mark
 export {

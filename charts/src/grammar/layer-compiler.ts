@@ -128,7 +128,13 @@ export function compileLayered(
         const orient = yAxisOrient(layerUnit.encoding);
         if (!emittedIndependentYAxes.has(orient) && layerScales.y) {
           independentYAxes.push(
-            ...generateYAxis(layerUnit.encoding.y, layerScales.y, layout, spec.config?.axis),
+            ...generateYAxis(
+              layerUnit.encoding.y,
+              layerScales.y,
+              layout,
+              spec.config?.axis,
+              scales.x,
+            ),
           );
           emittedIndependentYAxes.add(orient);
         }

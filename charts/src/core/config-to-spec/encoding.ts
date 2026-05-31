@@ -1,9 +1,10 @@
 import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartData } from '../../types';
+import type { ChartConfig, ChartData, SingleAxisConfig } from '../../types';
 import {
   buildAxisScaleSpec,
   isHorizontalBarType,
   mapAxisConfigToAxisSpec,
+  normalizeAxisOrient,
   resolveAxisConfigForChannel,
 } from './axis';
 import {
@@ -111,6 +112,9 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       encoding.size = {
         field: BUBBLE_SIZE_FIELD,
         type: 'quantitative',
+        scale: {
+          range: [0, bubbleMaxArea(config)],
+        },
       };
     }
   } else if (isHorizontal) {
@@ -137,6 +141,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     }
   }
 
+  applySecondaryCategoryAxis(config, encoding, isHorizontal);
   applyBarCategorySpacingScale(config, encoding, isHorizontal);
   if (!isXYChart) {
     applyCategoryAxisLabels(data, encoding, isHorizontal, useStableCategoryKeys);
@@ -168,4 +173,33 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
+}
+
+function bubbleMaxArea(config: ChartConfig): number {
+  const scale = typeof config.bubbleScale === 'number' ? config.bubbleScale : 100;
+  return 400 * (Math.max(0, Math.min(300, scale)) / 100);
+}
+
+function applySecondaryCategoryAxis(
+  config: ChartConfig,
+  encoding: EncodingSpec,
+  isHorizontal: boolean,
+): void {
+  const secondaryCategoryAxis = config.axis?.secondaryCategoryAxis;
+  if (!isVisibleAxis(secondaryCategoryAxis)) return;
+
+  const categoryChannel = isHorizontal ? encoding.y : encoding.x;
+  if (!categoryChannel) return;
+
+  const axisSpec = mapAxisConfigToAxisSpec(secondaryCategoryAxis);
+  const explicitOrient = normalizeAxisOrient(secondaryCategoryAxis.position);
+  categoryChannel.secondaryAxis = {
+    ...axisSpec,
+    orient: explicitOrient ?? (isHorizontal ? 'right' : 'top'),
+    title: axisSpec.title ?? secondaryCategoryAxis.title ?? null,
+  };
+}
+
+function isVisibleAxis(axis: SingleAxisConfig | undefined): axis is SingleAxisConfig {
+  return Boolean(axis && (axis.show ?? axis.visible) !== false);
 }

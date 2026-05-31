@@ -13,6 +13,8 @@
  * Pure types only - no runtime code (except type guards).
  */
 
+import type { EffectSpec, LineStyleSpec, PaintSpec, ShadowSpec, TextRunSpec } from '../primitives/types';
+
 // =============================================================================
 // Data Types
 // =============================================================================
@@ -267,6 +269,9 @@ export interface ScaleSpec {
  * Axis orientation options.
  */
 export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
+export type AxisLabelPosition = 'nextTo' | 'low' | 'high' | 'none';
+export type AxisTickMark = 'none' | 'out' | 'in' | 'cross';
+export type AxisCategoryCrossing = 'between' | 'midCat';
 
 export type AxisTickIntervalUnit = 'day' | 'month' | 'year';
 
@@ -291,7 +296,11 @@ export interface AxisSpec {
   labelAngle?: number;
   labelPadding?: number;
   labelOverlap?: boolean | 'parity' | 'greedy';
+  labelPosition?: AxisLabelPosition;
+  tickLabelSkip?: number;
   ticks?: boolean;
+  tickMark?: AxisTickMark;
+  tickMarkSkip?: number;
   tickCount?: number;
   tickSize?: number;
   tickColor?: string;
@@ -303,9 +312,25 @@ export interface AxisSpec {
   gridWidth?: number;
   gridOpacity?: number;
   gridDash?: number[];
+  minorTicks?: boolean;
+  minorTickMark?: AxisTickMark;
+  minorTickSize?: number;
+  minorTickColor?: string;
+  minorTickWidth?: number;
+  minorTickStep?: number;
+  minorTickInterval?: AxisTickInterval;
+  minorGrid?: boolean;
+  minorGridColor?: string;
+  minorGridWidth?: number;
+  minorGridOpacity?: number;
+  minorGridDash?: number[];
   crossesAt?: 'automatic' | 'min' | 'max' | 'custom';
   crossesAtValue?: number;
+  categoryCrossing?: AxisCategoryCrossing;
   format?: string;
+  displayUnitFactor?: number;
+  displayUnitLabel?: string;
+  linkNumberFormat?: boolean;
   /** Per-category format code keyed by the raw category value. */
   labelFormatByValue?: Record<string, string>;
   /** Per-category display text keyed by the raw category value. */
@@ -416,6 +441,8 @@ export interface ChannelSpec {
   scale?: ScaleSpec | null;
   /** Axis specification (null to hide) */
   axis?: AxisSpec | null;
+  /** Secondary axis sharing this channel's scale. */
+  secondaryAxis?: AxisSpec | null;
   /** Legend specification (null to hide) */
   legend?: LegendSpec | null;
   /** Channel title */
@@ -522,10 +549,16 @@ export interface MarkSpec {
   color?: string;
   /** Fill color */
   fill?: string;
+  /** Fill paint */
+  fillPaint?: PaintSpec;
   /** Stroke color */
   stroke?: string;
+  /** Stroke paint */
+  strokePaint?: PaintSpec;
   /** Stroke width */
   strokeWidth?: number;
+  /** Full line style */
+  line?: LineStyleSpec;
   /** Stroke dash pattern */
   strokeDash?: number[];
   /** Opacity (0-1) */
@@ -556,6 +589,8 @@ export interface MarkSpec {
   tension?: number;
   /** Line baseline for areas */
   baseline?: number;
+  /** Canvas-renderable effects */
+  effects?: EffectSpec;
   /** Show points on lines */
   point?: boolean | { color?: string; size?: number; filled?: boolean };
   /** Inner radius for arc marks (0-1 ratio or pixels) */
@@ -583,12 +618,17 @@ export interface MarkSpec {
  */
 export interface TitleSpec {
   text: string;
+  richText?: TextRunSpec[];
   anchor?: 'start' | 'middle' | 'end';
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
   color?: string;
+  fill?: PaintSpec;
+  shadow?: ShadowSpec;
+  underline?: boolean;
+  strikethrough?: boolean;
   offset?: number;
   orient?: 'top' | 'bottom';
   subtitle?: string;
@@ -605,6 +645,14 @@ export interface TitleSpec {
  */
 export type StackMode = 'zero' | 'normalize' | 'center' | false;
 
+export interface ChartFrameSpec {
+  fill?: PaintSpec;
+  line?: LineStyleSpec;
+  shadow?: ShadowSpec;
+  cornerRadius?: number;
+  diagnostics?: string[];
+}
+
 /**
  * Chart configuration options.
  */
@@ -617,6 +665,10 @@ export interface ConfigSpec {
   overlap?: number;
   /** Background color */
   background?: string;
+  /** Paint-aware chart frame rendered behind all chart content. */
+  chartFrame?: ChartFrameSpec;
+  /** Paint-aware plot-area frame rendered behind data/grid content. */
+  plotFrame?: ChartFrameSpec;
   /** Padding around the chart */
   padding?: number | { top?: number; right?: number; bottom?: number; left?: number };
   /** Default mark styles */

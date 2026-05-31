@@ -18,6 +18,7 @@ import {
   STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
+  STOCK_VOLUME_FIELD,
   VALUE_FIELD,
 } from './fields';
 import { isNoFillNoLineSeries } from './series-style';
@@ -41,6 +42,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
     useExcelDateSerialCategories,
   );
   const seriesConfigs = config?.series ?? [];
+  const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
   for (let i = 0; i < categories.length; i++) {
     const rawCategory = categories[i];
     const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
@@ -57,10 +59,10 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           [SERIES_FIELD]: series.name,
         };
         if (isScatterLikeChart(config)) {
-          row[SCATTER_X_FIELD] = scatterXValue(point, i);
+          row[SCATTER_X_FIELD] = scatterXValue(point);
         }
         if (config?.type === 'bubble') {
-          row[BUBBLE_SIZE_FIELD] = bubbleSizeValue(point);
+          row[BUBBLE_SIZE_FIELD] = bubbleSizeValue(point, config, maxBubbleMagnitude);
         }
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
@@ -74,6 +76,9 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (point[STOCK_CLOSE_FIELD] !== undefined) {
           row[STOCK_CLOSE_FIELD] = point[STOCK_CLOSE_FIELD];
         }
+        if (point[STOCK_VOLUME_FIELD] !== undefined) {
+          row[STOCK_VOLUME_FIELD] = point[STOCK_VOLUME_FIELD];
+        }
         rows.push(row);
       }
     }
@@ -85,18 +90,55 @@ function isScatterLikeChart(config?: ChartConfig): boolean {
   return config?.type === 'scatter' || config?.type === 'bubble';
 }
 
-function scatterXValue(point: ChartDataPoint, pointIndex: number): number {
-  return toFiniteNumber(point.x) ?? pointIndex + 1;
+function scatterXValue(point: ChartDataPoint): number {
+  return toFiniteNumber(point.x)!;
 }
 
-function bubbleSizeValue(point: ChartDataPoint): number {
-  return toFiniteNumber(point.size) ?? 1;
+function bubbleSizeValue(
+  point: ChartDataPoint,
+  config: ChartConfig,
+  maxBubbleMagnitude: number,
+): number {
+  const rawSize = toFiniteNumber(point.size)!;
+  const magnitude = Math.abs(rawSize);
+  if (config.sizeRepresents === 'w' && maxBubbleMagnitude > 0) {
+    return (magnitude * magnitude) / maxBubbleMagnitude;
+  }
+  return magnitude;
 }
 
 function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
+  if (point.valueState === 'hidden') return false;
+  if (isScatterLikeChart(config) && toFiniteNumber(point.x) === undefined) return false;
+  if (config?.type === 'bubble') {
+    const size = toFiniteNumber(point.size);
+    if (size === undefined) return false;
+    if (size <= 0 && config.showNegBubbles !== true) return false;
+  }
+  if (isScatterLikeChart(config) && point.valueState) return false;
   if (!point.valueState || point.valueState === 'value') return true;
   if (point.valueState === 'blank') {
     return config?.displayBlanksAs === 'zero';
   }
   return false;
+}
+
+function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {
+  if (config?.type !== 'bubble') return 0;
+  let max = 0;
+  for (const series of data.series) {
+    for (const point of series.data) {
+      if (!shouldBubbleSizeParticipate(point, config)) continue;
+      const size = toFiniteNumber(point.size);
+      if (size !== undefined) max = Math.max(max, Math.abs(size));
+    }
+  }
+  return max;
+}
+
+function shouldBubbleSizeParticipate(point: ChartDataPoint, config: ChartConfig): boolean {
+  if (point.valueState === 'hidden') return false;
+  const size = toFiniteNumber(point.size);
+  if (size === undefined) return false;
+  return size > 0 || config.showNegBubbles === true;
 }

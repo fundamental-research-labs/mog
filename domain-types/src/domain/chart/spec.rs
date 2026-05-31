@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::ImportObjectStatus;
 
-use super::ChartSeriesData;
+use super::{
+    BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
+    RegionMapConfigData,
+};
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
@@ -12,7 +15,7 @@ use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
     ChartView3DData, DataLabelData, LegendData, ObjectSize, StandardChartExportAuthority,
-    StandardChartProvenance,
+    StandardChartProvenance, WaterfallOptions,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
@@ -74,6 +77,18 @@ pub struct ChartSpec {
     pub title_formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
+
+    // -- ChartEx family-specific config/data projections --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub waterfall: Option<WaterfallOptions>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub histogram: Option<HistogramConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub boxplot: Option<BoxplotConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hierarchy: Option<HierarchyChartConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub region_map: Option<RegionMapConfigData>,
 
     // -- Chart-level properties --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -404,6 +419,11 @@ impl ChartSpec {
             title_rich_text: chart_data.title_rich_text.clone(),
             title_formula: chart_data.title_formula.clone(),
             data_table: chart_data.data_table.clone(),
+            waterfall: chart_data.waterfall.clone(),
+            histogram: chart_data.histogram.clone(),
+            boxplot: chart_data.boxplot.clone(),
+            hierarchy: chart_data.hierarchy.clone(),
+            region_map: chart_data.region_map.clone(),
             // Chart-level properties
             display_blanks_as: chart_data.display_blanks_as.clone(),
             plot_visible_only: chart_data.plot_visible_only,
@@ -652,7 +672,11 @@ impl ChartSpec {
             smooth_lines: None,
             radar_filled: None,
             radar_markers: None,
-            waterfall: None,
+            waterfall: self.waterfall.clone(),
+            histogram: self.histogram.clone(),
+            boxplot: self.boxplot.clone(),
+            hierarchy: self.hierarchy.clone(),
+            region_map: self.region_map.clone(),
             display_blanks_as: self.display_blanks_as.clone(),
             plot_visible_only: self.plot_visible_only,
             gap_width: self.gap_width,

@@ -269,9 +269,21 @@ export async function resolveChartRangeReferences(
 ): Promise<ResolvedChartRangeReferences> {
   const chartSheetId = chart.sheetId ? toSheetId(chart.sheetId) : null;
   const diagnostics: ChartRangeDiagnostic[] = [];
-  const hasExplicitSeriesValues = chart.series?.some((series) => series.values?.trim()) ?? false;
+  const hasRenderableSeriesData = chart.series?.some((series) => {
+    if (series.values?.trim()) return true;
+    const cache = series.valueCache;
+    if (!cache) return false;
+    if (
+      typeof cache.pointCount === 'number' &&
+      Number.isInteger(cache.pointCount) &&
+      cache.pointCount > 0
+    ) {
+      return true;
+    }
+    return cache.points.some((point) => point.idx >= 0);
+  }) ?? false;
   const [dataRange, categoryRange, seriesRange, seriesReferences] = await Promise.all([
-    hasExplicitSeriesValues && !chart.dataRange?.trim()
+    hasRenderableSeriesData && !chart.dataRange?.trim()
       ? Promise.resolve(null)
       : resolveChartRangeReference(ctx, chartSheetId, chart, 'dataRange', diagnostics),
     resolveChartRangeReference(ctx, chartSheetId, chart, 'categoryRange', diagnostics),

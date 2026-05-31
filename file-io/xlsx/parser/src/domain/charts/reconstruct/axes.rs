@@ -3,8 +3,8 @@ use domain_types::{
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
 };
 use ooxml_types::charts::{
-    self, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween, LabelAlignment, NumFmt,
-    Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
+    self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
+    LabelAlignment, NumFmt, Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
 };
 use ooxml_types::drawings::ShapeProperties;
 
@@ -182,6 +182,10 @@ pub(super) fn build_single_axis_with_ids(
         })
         .unwrap_or(axis_type);
 
+    let log_base = sad.log_base.or_else(|| {
+        matches!(sad.scale_type.as_deref(), Some("logarithmic")).then_some(10.0)
+    });
+
     let scaling = Scaling {
         orientation: if sad.reverse == Some(true) {
             Orientation::MaxMin
@@ -190,7 +194,7 @@ pub(super) fn build_single_axis_with_ids(
         },
         min: sad.min,
         max: sad.max,
-        log_base: sad.log_base,
+        log_base,
         ..Default::default()
     };
 
@@ -201,7 +205,7 @@ pub(super) fn build_single_axis_with_ids(
 
     let num_fmt = sad.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
-        source_linked: Some(false),
+        source_linked: sad.link_number_format,
     });
 
     let major_gridlines = sad.grid_lines.and_then(|show| {
@@ -272,6 +276,8 @@ pub(super) fn build_single_axis_with_ids(
     let major_time_unit = sad.major_time_unit.as_deref().map(TimeUnit::from_ooxml);
     let minor_time_unit = sad.minor_time_unit.as_deref().map(TimeUnit::from_ooxml);
 
+    let (crosses, crosses_at) = reconstruct_crossing(sad);
+
     let sp_pr = sad.format.as_ref().and_then(build_shape_properties);
     let tx_pr = sad.format.as_ref().and_then(build_text_body);
 
@@ -294,7 +300,11 @@ pub(super) fn build_single_axis_with_ids(
         sp_pr,
         tx_pr,
         cross_ax,
+        crosses,
+        crosses_at,
         cross_between,
+        tick_lbl_skip: sad.tick_label_spacing,
+        tick_mark_skip: sad.tick_mark_spacing,
         major_unit: sad.major_unit,
         minor_unit: sad.minor_unit,
         disp_units,
@@ -305,6 +315,22 @@ pub(super) fn build_single_axis_with_ids(
         major_time_unit,
         minor_time_unit,
         ..Default::default()
+    }
+}
+
+fn reconstruct_crossing(sad: &SingleAxisData) -> (AxisCrosses, Option<f64>) {
+    match sad.crosses_at.as_deref() {
+        Some("custom") => (AxisCrosses::AutoZero, sad.crosses_at_value),
+        Some("min") => (AxisCrosses::Min, None),
+        Some("max") => (AxisCrosses::Max, None),
+        Some("automatic") | None => {
+            if sad.crosses_at_value.is_some() {
+                (AxisCrosses::AutoZero, sad.crosses_at_value)
+            } else {
+                (AxisCrosses::AutoZero, None)
+            }
+        }
+        Some(_) => (AxisCrosses::AutoZero, None),
     }
 }
 

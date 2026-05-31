@@ -5,6 +5,7 @@ use crate::domain::chart::{
     AxisData, ChartDataTableData, ChartFormatData, ChartFormatStringData, ChartSeriesData,
     ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData, PieSliceData,
     PivotChartOptionsData, SeriesOrientation, TrendlineData, WaterfallOptions,
+    BoxplotConfigData, HierarchyChartConfigData, HistogramConfigData, RegionMapConfigData,
 };
 use crate::domain::conditional_format::CellIdRange;
 
@@ -64,6 +65,14 @@ pub struct ChartData {
     pub radar_markers: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waterfall: Option<WaterfallOptions>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub histogram: Option<HistogramConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub boxplot: Option<BoxplotConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hierarchy: Option<HierarchyChartConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub region_map: Option<RegionMapConfigData>,
 
     // -- Chart-level display properties (OOXML threading) --
     /// How blank cells are plotted: "gap", "zero", or "span"

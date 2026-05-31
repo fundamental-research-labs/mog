@@ -28,7 +28,9 @@ export type { CellAddress, CellRange };
  *
  * @see `@mog-sdk/contracts/core` for the canonical `CellValue` type.
  */
-export type ChartCellValue = string | number | boolean | null | undefined;
+export const HIDDEN_CHART_CELL = Symbol.for('mog.chart.hiddenCell');
+export type HiddenChartCellValue = typeof HIDDEN_CHART_CELL;
+export type ChartCellValue = string | number | boolean | null | undefined | HiddenChartCellValue;
 
 /**
  * Generic cell data accessor interface
@@ -82,7 +84,7 @@ function tryParseRange(range: string | undefined): CellRange | null {
  * Convert a value to a number, returning NaN for non-numeric values
  */
 function toNumber(value: ChartCellValue): number {
-  if (value === null || value === undefined || value === '') {
+  if (isHiddenChartCellValue(value) || value === null || value === undefined || value === '') {
     return NaN;
   }
   if (typeof value === 'number') {
@@ -95,6 +97,14 @@ function toNumber(value: ChartCellValue): number {
   return num;
 }
 
+export function isHiddenChartCellValue(value: ChartCellValue): value is HiddenChartCellValue {
+  return value === HIDDEN_CHART_CELL;
+}
+
+function isBlankChartCellValue(value: ChartCellValue): boolean {
+  return value === null || value === undefined || value === '';
+}
+
 function isNumericLike(value: ChartCellValue): boolean {
   return !Number.isNaN(toNumber(value));
 }
@@ -103,7 +113,11 @@ function getValueState(
   rawValue: ChartCellValue,
   numericValue: number,
 ): ChartDataPointValueState | undefined {
-  if (rawValue === null || rawValue === undefined || rawValue === '') {
+  if (isHiddenChartCellValue(rawValue)) {
+    return 'hidden';
+  }
+
+  if (isBlankChartCellValue(rawValue)) {
     return 'blank';
   }
 
@@ -125,10 +139,16 @@ function createDataPoint(
   x: string | number,
   rawValue: ChartCellValue,
   name: string,
-  rawSize?: ChartCellValue,
+  options?: {
+    rawSize?: ChartCellValue;
+    hidden?: boolean;
+  },
 ): ChartDataPoint {
-  const numericValue = toNumber(rawValue);
-  const valueState = getValueState(rawValue, numericValue);
+  const pointHidden = options?.hidden || isHiddenChartCellValue(rawValue);
+  const numericValue = pointHidden ? NaN : toNumber(rawValue);
+  const valueState: ChartDataPointValueState | undefined = pointHidden
+    ? 'hidden'
+    : getValueState(rawValue, numericValue);
   const point: ChartDataPoint = {
     x,
     y: Number.isFinite(numericValue) ? numericValue : 0,
@@ -137,19 +157,12 @@ function createDataPoint(
   if (valueState) {
     point.valueState = valueState;
   }
-  const numericSize = toNumber(rawSize);
+  const rawSize = options?.rawSize;
+  const numericSize = pointHidden || isHiddenChartCellValue(rawSize) ? NaN : toNumber(rawSize);
   if (Number.isFinite(numericSize)) {
     point.size = numericSize;
   }
   return point;
-}
-
-function cachedPointValueAt(
-  cache: ChartSeriesPointCache | undefined,
-  pointIndex: number,
-): ChartCellValue {
-  const point = cache?.points?.find((candidate) => candidate.idx === pointIndex);
-  return point !== undefined ? point.value : undefined;
 }
 
 function importedCachePointState(
@@ -173,29 +186,66 @@ function importedCachePointState(
   return { kind: 'absent' };
 }
 
-function cachedLabelValueAt(
-  cache: ChartSeriesPointCache | undefined,
-  pointIndex: number,
-): string | number | undefined {
-  const value = cachedPointValueAt(cache, pointIndex);
-  if (value === undefined || value === null || value === '') return undefined;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : String(value);
+function cachePointCardinality(cache: ChartSeriesPointCache | undefined): number {
+  if (!cache) return 0;
+  if (
+    typeof cache.pointCount === 'number' &&
+    Number.isInteger(cache.pointCount) &&
+    cache.pointCount >= 0
+  ) {
+    return cache.pointCount;
+  }
+  return cache.points.reduce((max, point) => Math.max(max, point.idx + 1), 0);
 }
 
-function valueWithImportedCacheFallback(
-  rawValue: ChartCellValue,
+function cacheValueAt(cache: ChartSeriesPointCache | undefined, pointIndex: number): ChartCellValue {
+  const cached = importedCachePointState(cache, pointIndex);
+  return cached.kind === 'explicit' ? cached.value : undefined;
+}
+
+function cacheLabelAt(
   cache: ChartSeriesPointCache | undefined,
   pointIndex: number,
-): ChartCellValue {
-  const cached = importedCachePointState(cache, pointIndex);
-  if (cached.kind === 'explicit') return cached.value;
-  if (cached.kind === 'omitted') return undefined;
-  return rawValue;
+  fallback: string | number,
+): string | number {
+  const value = cacheValueAt(cache, pointIndex);
+  const label = labelValue(value, fallback);
+  if (typeof label === 'string' && label.trim() !== '') {
+    const numeric = Number(label);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return label;
+}
+
+function hasRenderableCachedDimension(cache: ChartSeriesPointCache | undefined): boolean {
+  return cachePointCardinality(cache) > 0;
+}
+
+function pointFormatCodeAt(
+  cache: ChartSeriesPointCache | undefined,
+  pointIndex: number,
+): string | undefined {
+  return cache?.points.find((point) => point.idx === pointIndex)?.formatCode ?? cache?.formatCode;
+}
+
+function categoryFormatCodeAt(
+  seriesConfig: SeriesConfig,
+  pointIndex: number,
+): string | undefined {
+  return (
+    seriesConfig.categoryLabelFormat?.points?.find((point) => point.idx === pointIndex)
+      ?.formatCode ??
+    seriesConfig.categoryLabelFormat?.formatCode ??
+    pointFormatCodeAt(seriesConfig.categoryCache, pointIndex)
+  );
+}
+
+function hasCellValue(value: ChartCellValue): boolean {
+  return !isHiddenChartCellValue(value) && !isBlankChartCellValue(value);
 }
 
 function labelValue(value: ChartCellValue, fallback: string | number): string | number {
-  if (value === null || value === undefined || value === '') {
+  if (isHiddenChartCellValue(value) || isBlankChartCellValue(value)) {
     return fallback;
   }
   return typeof value === 'number' ? value : String(value);
@@ -210,7 +260,7 @@ function hasExcelTableShape(accessor: CellDataAccessor, range: CellRange): boole
   let headerLabelCount = 0;
   for (let col = range.startCol + 1; col <= range.endCol; col++) {
     const value = getRangeValue(accessor, range, range.startRow, col);
-    if (value !== null && value !== undefined && value !== '' && !isNumericLike(value)) {
+    if (hasCellValue(value) && !isNumericLike(value)) {
       headerLabelCount++;
     }
   }
@@ -219,7 +269,7 @@ function hasExcelTableShape(accessor: CellDataAccessor, range: CellRange): boole
   let numericBodyCount = 0;
   for (let row = range.startRow + 1; row <= range.endRow; row++) {
     const category = getRangeValue(accessor, range, row, range.startCol);
-    if (category !== null && category !== undefined && category !== '') {
+    if (hasCellValue(category)) {
       categoryLabelCount++;
     }
 
@@ -298,7 +348,7 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
  * @returns Extracted chart data ready for rendering
  */
 export function extractChartData(accessor: CellDataAccessor, config: ChartConfig): ChartData {
-  const importedSeries = config.series?.filter((series) => Boolean(series.values));
+  const importedSeries = config.series?.filter(hasRenderableImportedSeriesData);
   if (importedSeries?.length) {
     return extractChartDataFromSeriesRefs(accessor, importedSeries);
   }
@@ -370,13 +420,13 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
       // First row contains categories
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const value = getRangeValue(accessor, dataRange, dataRange.startRow, col);
-        categories.push(value != null ? String(value) : `Col ${col + 1}`);
+        categories.push(hasCellValue(value) ? String(value) : `Col ${col + 1}`);
       }
     } else {
       // First column contains categories
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const value = getRangeValue(accessor, dataRange, row, dataRange.startCol);
-        categories.push(value != null ? String(value) : `Row ${row + 1}`);
+        categories.push(hasCellValue(value) ? String(value) : `Row ${row + 1}`);
       }
     }
   }
@@ -443,20 +493,20 @@ function extractLabels(accessor: CellDataAccessor, range: CellRange): (string | 
     // Extract from columns in a single row
     for (let col = range.startCol; col <= range.endCol; col++) {
       const value = getRangeValue(accessor, range, range.startRow, col);
-      labels.push(value != null ? (typeof value === 'number' ? value : String(value)) : '');
+      labels.push(labelValue(value, ''));
     }
   } else if (isColRange) {
     // Extract from rows in a single column
     for (let row = range.startRow; row <= range.endRow; row++) {
       const value = getRangeValue(accessor, range, row, range.startCol);
-      labels.push(value != null ? (typeof value === 'number' ? value : String(value)) : '');
+      labels.push(labelValue(value, ''));
     }
   } else {
     // For multi-row/col ranges, flatten by reading row by row
     for (let row = range.startRow; row <= range.endRow; row++) {
       for (let col = range.startCol; col <= range.endCol; col++) {
         const value = getRangeValue(accessor, range, row, col);
-        labels.push(value != null ? (typeof value === 'number' ? value : String(value)) : '');
+        labels.push(labelValue(value, ''));
       }
     }
   }
@@ -494,43 +544,109 @@ function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): str
   return `Series ${seriesIndex + 1}`;
 }
 
+function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boolean {
+  return Boolean(seriesConfig.values?.trim()) || hasRenderableCachedDimension(seriesConfig.valueCache);
+}
+
+type ImportedDimension = {
+  values: ChartCellValue[];
+  hasLiveRange: boolean;
+};
+
+function extractImportedDimension(
+  accessor: CellDataAccessor,
+  ref: string | undefined,
+  cache: ChartSeriesPointCache | undefined,
+  sourceKind: SeriesConfig['valueSourceKind'] | undefined,
+): ImportedDimension {
+  const shouldUseLiveRange = sourceKind !== 'literal' && sourceKind !== 'cacheFallback';
+  const range = shouldUseLiveRange ? tryParseRange(ref) : null;
+  if (range) {
+    return { values: extractValues(accessor, range), hasLiveRange: true };
+  }
+
+  const pointCount = cachePointCardinality(cache);
+  if (pointCount === 0) {
+    return { values: [], hasLiveRange: false };
+  }
+
+  return {
+    values: Array.from({ length: pointCount }, (_, pointIndex) =>
+      cacheValueAt(cache, pointIndex),
+    ),
+    hasLiveRange: false,
+  };
+}
+
 function extractChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
 ): ChartData {
   const series: ChartDataSeries[] = [];
   let categories: (string | number)[] = [];
+  const categoryFormatCodes: Array<string | null | undefined> = [];
 
   for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
     const seriesConfig = seriesConfigs[seriesIndex];
-    const valueRange = tryParseRange(seriesConfig.values);
-    if (!valueRange) continue;
+    const valueDimension = extractImportedDimension(
+      accessor,
+      seriesConfig.values,
+      seriesConfig.valueCache,
+      seriesConfig.valueSourceKind,
+    );
+    if (valueDimension.values.length === 0) continue;
 
-    const valueItems = extractValues(accessor, valueRange);
-    const categoryRange = tryParseRange(seriesConfig.categories);
-    const categoryItems = categoryRange ? extractLabels(accessor, categoryRange) : [];
-    const bubbleSizeRange = tryParseRange(seriesConfig.bubbleSize);
-    const bubbleSizeItems = bubbleSizeRange ? extractValues(accessor, bubbleSizeRange) : [];
+    const categoryDimension = extractImportedDimension(
+      accessor,
+      seriesConfig.categories,
+      seriesConfig.categoryCache,
+      seriesConfig.categorySourceKind,
+    );
+    const bubbleSizeDimension = extractImportedDimension(
+      accessor,
+      seriesConfig.bubbleSize,
+      seriesConfig.bubbleSizeCache,
+      seriesConfig.bubbleSizeSourceKind,
+    );
 
-    const data: ChartDataPoint[] = valueItems.map((rawValue, pointIndex) => {
-      const liveCategory = categoryItems[pointIndex];
-      const cachedCategory = cachedLabelValueAt(seriesConfig.categoryCache, pointIndex);
+    const data: ChartDataPoint[] = [];
+    for (let pointIndex = 0; pointIndex < valueDimension.values.length; pointIndex += 1) {
+      const rawValue = valueDimension.values[pointIndex];
+      const rawCategory = categoryDimension.values[pointIndex];
       const category =
-        cachedCategory ??
-        (liveCategory !== undefined && liveCategory !== ''
-          ? liveCategory
-          : (categories[pointIndex] ?? pointIndex + 1));
-      const value = valueWithImportedCacheFallback(rawValue, seriesConfig.valueCache, pointIndex);
-      const bubbleSize = valueWithImportedCacheFallback(
-        bubbleSizeItems[pointIndex],
-        seriesConfig.bubbleSizeCache,
-        pointIndex,
-      );
-      return createDataPoint(category, value, String(category), bubbleSize);
-    });
+        categoryDimension.values.length > pointIndex
+          ? categoryDimension.hasLiveRange
+            ? labelValue(rawCategory, categories[pointIndex] ?? pointIndex + 1)
+            : cacheLabelAt(
+                seriesConfig.categoryCache,
+                pointIndex,
+                categories[pointIndex] ?? pointIndex + 1,
+              )
+          : cacheLabelAt(
+              seriesConfig.categoryCache,
+              pointIndex,
+              categories[pointIndex] ?? pointIndex + 1,
+            );
+      const rawSize =
+        bubbleSizeDimension.values.length > pointIndex
+          ? bubbleSizeDimension.values[pointIndex]
+          : undefined;
+      const pointHidden =
+        isHiddenChartCellValue(rawValue) ||
+        isHiddenChartCellValue(rawCategory) ||
+        isHiddenChartCellValue(rawSize);
+      const point = createDataPoint(category, rawValue, String(category), {
+        rawSize,
+        hidden: pointHidden,
+      });
+      data.push(point);
 
-    if (series.length === 0 || categories.length === 0) {
-      categories = data.map((point) => point.x);
+      if (categories[pointIndex] === undefined) {
+        categories[pointIndex] = point.x;
+      }
+      if (categoryFormatCodes[pointIndex] === undefined) {
+        categoryFormatCodes[pointIndex] = categoryFormatCodeAt(seriesConfig, pointIndex);
+      }
     }
 
     series.push({
@@ -544,7 +660,11 @@ function extractChartDataFromSeriesRefs(
     });
   }
 
-  return { categories, series };
+  return {
+    categories,
+    ...(categoryFormatCodes.some(Boolean) ? { categoryFormatCodes } : {}),
+    series,
+  };
 }
 
 /**
@@ -625,13 +745,13 @@ export function extractChartDataFromRange(
       // First row contains categories
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const value = getRangeValue(accessor, dataRange, dataRange.startRow, col);
-        categories.push(value != null ? String(value) : `Col ${col + 1}`);
+        categories.push(hasCellValue(value) ? String(value) : `Col ${col + 1}`);
       }
     } else {
       // First column contains categories
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
         const value = getRangeValue(accessor, dataRange, row, dataRange.startCol);
-        categories.push(value != null ? String(value) : `Row ${row + 1}`);
+        categories.push(hasCellValue(value) ? String(value) : `Row ${row + 1}`);
       }
     }
   }

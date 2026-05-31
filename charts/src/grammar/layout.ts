@@ -148,31 +148,27 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     }
   }
 
-  const xAxisEncoding = encodings.find((encoding) => encoding.x && encoding.x.axis !== null);
-  if (xAxisEncoding?.x) {
-    const xAxis = xAxisEncoding.x.axis;
-    // Add space for labels
-    if (xAxis?.labels !== false) {
-      margin.bottom += DEFAULT_LAYOUT.xAxisLabelSpace;
+  const xAxes = collectChannelAxes(encodings, 'x');
+  for (const { axis, channel } of xAxes) {
+    const side = axis?.orient === 'top' ? 'top' : 'bottom';
+    if (axis?.labels !== false) {
+      margin[side] += DEFAULT_LAYOUT.xAxisLabelSpace;
     }
-    // Add space for title
-    if (xAxis?.title || xAxisEncoding.x.title) {
-      margin.bottom += DEFAULT_LAYOUT.axisTitleSpace;
+    if (axis?.title || channel.title) {
+      margin[side] += DEFAULT_LAYOUT.axisTitleSpace;
     }
-    // Handle rotated labels
-    if (xAxis?.labelAngle && Math.abs(xAxis.labelAngle) > 45) {
-      margin.bottom += 20;
+    if (axis?.labelAngle && Math.abs(axis.labelAngle) > 45) {
+      margin[side] += 20;
     }
   }
 
   const yAxisSides = new Set<'left' | 'right'>();
   const yAxisTitles = new Set<'left' | 'right'>();
-  for (const encoding of encodings) {
-    if (!encoding.y || encoding.y.axis === null) continue;
-    const yAxis = encoding.y.axis;
-    const side = yAxis?.orient === 'right' ? 'right' : 'left';
+  const yAxes = collectChannelAxes(encodings, 'y');
+  for (const { axis, channel } of yAxes) {
+    const side = axis?.orient === 'right' ? 'right' : 'left';
     yAxisSides.add(side);
-    if (yAxis?.title || encoding.y.title) {
+    if (axis?.title || channel.title) {
       yAxisTitles.add(side);
     }
   }
@@ -180,9 +176,11 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   for (const side of yAxisSides) {
     // Add space for labels
     const hasLabels = encodings.some((encoding) => {
-      const yAxis = encoding.y?.axis;
-      const axisSide = yAxis?.orient === 'right' ? 'right' : 'left';
-      return encoding.y && yAxis !== null && axisSide === side && yAxis?.labels !== false;
+      const axes = axisEntriesForChannel(encoding.y);
+      return axes.some((axis) => {
+        const axisSide = axis?.orient === 'right' ? 'right' : 'left';
+        return axisSide === side && axis?.labels !== false;
+      });
     });
     if (hasLabels) {
       if (side === 'right') {
@@ -212,6 +210,31 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   }
 
   return margin;
+}
+
+function collectChannelAxes(
+  encodings: EncodingSpec[],
+  channelName: 'x' | 'y',
+): Array<{ channel: ChannelSpec; axis: ChannelSpec['axis'] }> {
+  const axes: Array<{ channel: ChannelSpec; axis: ChannelSpec['axis'] }> = [];
+  for (const encoding of encodings) {
+    const channel = encoding[channelName];
+    if (!channel) continue;
+    for (const axis of axisEntriesForChannel(channel)) {
+      axes.push({ channel, axis });
+    }
+  }
+  return axes;
+}
+
+function axisEntriesForChannel(channel: ChannelSpec | undefined): Array<ChannelSpec['axis']> {
+  if (!channel) return [];
+  const axes: Array<ChannelSpec['axis']> = [];
+  if (channel.axis !== null) axes.push(channel.axis);
+  if (channel.secondaryAxis !== null && channel.secondaryAxis !== undefined) {
+    axes.push(channel.secondaryAxis);
+  }
+  return axes;
 }
 
 /**

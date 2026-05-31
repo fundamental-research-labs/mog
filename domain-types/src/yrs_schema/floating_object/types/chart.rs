@@ -85,6 +85,18 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.waterfall) {
         entries.push(("waterfall".into(), a));
     }
+    if let Some(a) = option_sub_object(&d.histogram) {
+        entries.push(("histogram".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.boxplot) {
+        entries.push(("boxplot".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.hierarchy) {
+        entries.push(("hierarchy".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.region_map) {
+        entries.push(("regionMap".into(), a));
+    }
     if let Some(ref v) = d.display_blanks_as {
         entries.push(("displayBlanksAs".into(), Any::String(Arc::from(v.as_str()))));
     }
@@ -272,6 +284,10 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         radar_filled: read_bool(map, txn, "radarFilled"),
         radar_markers: read_bool(map, txn, "radarMarkers"),
         waterfall: read_sub_object(map, txn, "waterfall"),
+        histogram: read_sub_object(map, txn, "histogram"),
+        boxplot: read_sub_object(map, txn, "boxplot"),
+        hierarchy: read_sub_object(map, txn, "hierarchy"),
+        region_map: read_sub_object(map, txn, "regionMap"),
         display_blanks_as: read_string(map, txn, "displayBlanksAs"),
         plot_visible_only: read_bool(map, txn, "plotVisibleOnly"),
         gap_width: read_number(map, txn, "gapWidth").map(|n| n as u32),

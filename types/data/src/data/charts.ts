@@ -227,6 +227,102 @@ export interface ChartShadow {
   transparency?: number;
 }
 
+/** Theme color entry exposed by workbook theme data. */
+export interface ChartWorkbookThemeColor {
+  /** OOXML theme slot name, e.g. `dk1`, `lt1`, `accent1`, `hlink`. */
+  name: string;
+  /** Resolved RGB color, normally `#RRGGBB`. */
+  color: string;
+  /** Lossless source payload from import, when available. */
+  source?: unknown;
+}
+
+/**
+ * Workbook theme context passed to the chart style resolver.
+ *
+ * The public `colors` projection is stable and ergonomic. The optional scheme
+ * payloads are deliberately structural so the chart renderer can consume the
+ * generated OOXML bridge objects without making contracts depend on generated
+ * implementation modules.
+ */
+export interface ChartWorkbookThemeData {
+  colors: ChartWorkbookThemeColor[];
+  majorFont?: string | null;
+  minorFont?: string | null;
+  themePartPath?: string;
+  themeRelationshipIdHint?: string;
+  themeRelationshipType?: string;
+  name?: string;
+  colorScheme?: unknown;
+  fontScheme?: unknown;
+  formatScheme?: unknown;
+}
+
+export type ChartStyleDiagnosticDisposition =
+  | 'rendered'
+  | 'approximated'
+  | 'preservedForExportOnly'
+  | 'droppedUnsupported'
+  | 'droppedStale';
+
+export type ChartStyleDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+/** Style/import diagnostic emitted by the chart style resolver. */
+export interface ChartStyleDiagnostic {
+  category: string;
+  ownerKey: string;
+  ooxmlPath?: string;
+  severity: ChartStyleDiagnosticSeverity;
+  disposition: ChartStyleDiagnosticDisposition;
+  feature: string;
+  message?: string;
+}
+
+/**
+ * Chart-local color mapping override. Values are OOXML color-scheme slots such
+ * as `Dk1`, `Lt1`, `Accent1`, `Hlink`, and `FolHlink`.
+ */
+export interface ChartColorMapping {
+  bg1?: string;
+  tx1?: string;
+  bg2?: string;
+  tx2?: string;
+  accent1?: string;
+  accent2?: string;
+  accent3?: string;
+  accent4?: string;
+  accent5?: string;
+  accent6?: string;
+  hlink?: string;
+  folHlink?: string;
+}
+
+export type ChartColorMapOverride =
+  | { type: 'master' }
+  | { type: 'override'; mapping: ChartColorMapping };
+
+/**
+ * Unresolved imported chart style sidecar. Rust import will widen this with
+ * owner-level DrawingML payloads; TS render code already treats it as the style
+ * resolver input and keeps the ergonomic `ChartFormat` fields separate.
+ */
+export interface ChartStyleContext {
+  colorMapOverride?: ChartColorMapOverride;
+  diagnostics?: ChartStyleDiagnostic[];
+  owners?: ChartStyleOwner[];
+}
+
+export interface ChartStyleOwner {
+  ownerKey: string;
+  sourcePath?: string;
+  editOwnerId?: string;
+  format?: ChartFormat;
+  richText?: ChartFormatString[];
+  diagnostics?: ChartStyleDiagnostic[];
+  /** Lossless imported DrawingML payload for future resolver/export use. */
+  importedDrawingMl?: unknown;
+}
+
 /** OOXML DrawingML text vertical mode (`a:bodyPr@vert`). */
 export type ChartTextVerticalType =
   | 'horz'
@@ -656,6 +752,9 @@ export interface ChartSeriesPointCachePoint {
   formatCode?: string;
 }
 
+/** Imported chart dimension source authority. */
+export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback';
+
 /**
  * Individual series configuration (matches ChartSeriesData wire type)
  */
@@ -665,11 +764,14 @@ export interface SeriesConfig {
   color?: string;
   values?: string;
   valueCache?: ChartSeriesPointCache;
+  valueSourceKind?: ChartSeriesDimensionSourceKind;
   categories?: string;
   categoryCache?: ChartSeriesPointCache;
+  categorySourceKind?: ChartSeriesDimensionSourceKind;
   categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCache;
+  bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
   smooth?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
@@ -850,9 +952,25 @@ export interface ResolvedChartAxisSnapshot {
   majorUnit?: number;
   minorUnit?: number;
   logBase?: number;
+  displayUnit?: string;
+  customDisplayUnit?: number;
+  displayUnitLabel?: string;
   numberFormat?: string;
+  linkNumberFormat?: boolean;
   position?: string;
   reverse?: boolean;
+  tickMarks?: string;
+  minorTickMarks?: string;
+  tickLabelPosition?: string;
+  tickLabelSpacing?: number;
+  tickMarkSpacing?: number;
+  crossBetween?: string;
+  crossesAt?: 'automatic' | 'max' | 'min' | 'custom';
+  crossesAtValue?: number;
+  isBetweenCategories?: boolean;
+  minorGridLines?: boolean;
+  minorGridlineFormat?: ChartLineFormat;
+  textOrientation?: number;
 }
 
 export interface ResolvedChartLegendSnapshot {
@@ -917,6 +1035,7 @@ export interface ResolvedChartSpecSnapshot {
       value?: ResolvedChartAxisSnapshot;
       secondaryCategory?: ResolvedChartAxisSnapshot;
       secondaryValue?: ResolvedChartAxisSnapshot;
+      series?: ResolvedChartAxisSnapshot;
     };
     series: ResolvedChartSeriesSnapshot[];
     categories: Array<string | number | null>;
@@ -1065,6 +1184,10 @@ export interface ChartConfig {
   firstSliceAngle?: number;
   /** Bubble scale for bubble charts as percentage (0-300) */
   bubbleScale?: number;
+  /** Whether to render negative/zero bubble sizes. */
+  showNegBubbles?: boolean;
+  /** Whether bubble values represent area or width/diameter. */
+  sizeRepresents?: 'area' | 'w';
   /** Split type for of-pie charts (pie-of-pie, bar-of-pie) */
   splitType?: 'auto' | 'value' | 'percent' | 'position' | 'custom';
   /** Split value threshold for of-pie charts */
@@ -1168,6 +1291,16 @@ export interface ChartConfig {
   // Color scheme (Group L)
   /** Chart color scheme index */
   colorScheme?: number;
+
+  /**
+   * Workbook theme context for chart rendering. Kernel attaches this before
+   * compilation so charts-core can resolve theme references after chart style
+   * and color-map precedence, instead of receiving pre-mutated CSS strings.
+   */
+  workbookTheme?: ChartWorkbookThemeData;
+
+  /** Unresolved imported style context consumed by the chart style resolver. */
+  chartStyleContext?: ChartStyleContext;
 }
 
 /**

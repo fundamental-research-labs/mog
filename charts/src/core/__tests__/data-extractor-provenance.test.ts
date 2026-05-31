@@ -1,4 +1,5 @@
 import {
+  HIDDEN_CHART_CELL,
   extractChartData,
   extractChartDataFromRange,
   ObjectCellAccessor,
@@ -124,7 +125,88 @@ describe('chart data point value provenance', () => {
     expect(data.series.map((series) => series.name)).toEqual(['Series 2', 'Series 1', 'Series 3']);
   });
 
-  it('uses imported sparse value caches to distinguish blanks from explicit zeroes', () => {
+  it('uses live imported series values before stale caches', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [99, null, 77, 'bad'],
+      ['A', 'B', 'C', 'D'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'imported-live-wins-chart',
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:D1',
+          categories: 'A2:D2',
+          valueCache: {
+            pointCount: 4,
+            points: [
+              { idx: 0, value: '1' },
+              { idx: 1, value: '2' },
+              { idx: 2, value: '3' },
+              { idx: 3, value: '4' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.series[0].data.map((point) => point.y)).toEqual([99, 0, 77, 0]);
+    expect(data.series[0].data.map((point) => point.valueState)).toEqual([
+      undefined,
+      'blank',
+      undefined,
+      'nonNumeric',
+    ]);
+  });
+
+  it('does not reintroduce hidden live points from imported caches', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, HIDDEN_CHART_CELL, null],
+      ['A', 'B', 'C'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'hidden-live-wins-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:C1',
+          categories: 'A2:C2',
+          valueCache: {
+            pointCount: 3,
+            points: [
+              { idx: 1, value: '200' },
+              { idx: 2, value: '300' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.series[0].data.map((point) => point.y)).toEqual([10, 0, 0]);
+    expect(data.series[0].data.map((point) => point.valueState)).toEqual([
+      undefined,
+      'hidden',
+      'blank',
+    ]);
+  });
+
+  it('uses imported sparse value caches for literal/cache-backed series without live ranges', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [99, 'na', 77, null],
       ['A', 'B', 'C', 'D'],
@@ -140,8 +222,8 @@ describe('chart data point value provenance', () => {
       series: [
         {
           name: 'Imported',
-          values: 'A1:D1',
           categories: 'A2:D2',
+          valueSourceKind: 'literal',
           valueCache: {
             pointCount: 4,
             points: [
@@ -164,7 +246,7 @@ describe('chart data point value provenance', () => {
     ]);
   });
 
-  it('uses imported category caches as chart-domain labels when present', () => {
+  it('uses live category labels before stale imported category caches', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [1, 2],
       ['Live A', 'Live B'],
@@ -195,11 +277,43 @@ describe('chart data point value provenance', () => {
 
     const data = extractChartData(accessor, config);
 
+    expect(data.categories).toEqual(['Live A', 'Live B']);
+    expect(data.series[0].data.map((point) => point.x)).toEqual(['Live A', 'Live B']);
+  });
+
+  it('uses imported category caches as chart-domain labels when no live category range exists', () => {
+    const accessor = ObjectCellAccessor.fromArray([[1, 2]]);
+    const config: StoredChartConfig = {
+      id: 'imported-category-cache-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:B1',
+          categorySourceKind: 'literal',
+          categoryCache: {
+            pointCount: 2,
+            points: [
+              { idx: 0, value: '45292' },
+              { idx: 1, value: 'Cached B' },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
     expect(data.categories).toEqual([45292, 'Cached B']);
     expect(data.series[0].data.map((point) => point.x)).toEqual([45292, 'Cached B']);
   });
 
-  it('uses imported bubble size ranges and sparse caches for bubble point sizes', () => {
+  it('uses live bubble size ranges before stale caches', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [10, 20, 30],
       [1, 2, 3],
@@ -228,6 +342,38 @@ describe('chart data point value provenance', () => {
 
     const data = extractChartData(accessor, config);
 
-    expect(data.series[0].data.map((point) => point.size)).toEqual([100, 200, 300]);
+    expect(data.series[0].data.map((point) => point.size)).toEqual([100, undefined, 300]);
+  });
+
+  it('uses imported bubble size caches when no live size range exists', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 20, 30],
+      [1, 2, 3],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'bubble-size-cache-chart',
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Bubbles',
+          values: 'A1:C1',
+          categories: 'A2:C2',
+          bubbleSizeSourceKind: 'literal',
+          bubbleSizeCache: {
+            pointCount: 3,
+            points: [{ idx: 1, value: '200' }],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.series[0].data.map((point) => point.size)).toEqual([undefined, 200, undefined]);
   });
 });

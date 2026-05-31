@@ -89,6 +89,7 @@ export function buildResolvedChartSpecSnapshot(input: {
         secondaryValue: snapshotAxis(
           input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis,
         ),
+        series: snapshotAxis(input.config.axis?.seriesAxis),
       },
       series,
       categories,
@@ -144,9 +145,25 @@ function snapshotAxis(
     majorUnit: axis.majorUnit,
     minorUnit: axis.minorUnit,
     logBase: axis.logBase,
+    displayUnit: axis.displayUnit,
+    customDisplayUnit: axis.customDisplayUnit,
+    displayUnitLabel: axis.displayUnitLabel,
     numberFormat: axis.numberFormat,
+    linkNumberFormat: axis.linkNumberFormat,
     position: axis.position,
     reverse: axis.reverse,
+    tickMarks: axis.tickMarks,
+    minorTickMarks: axis.minorTickMarks,
+    tickLabelPosition: axis.tickLabelPosition,
+    tickLabelSpacing: axis.tickLabelSpacing,
+    tickMarkSpacing: axis.tickMarkSpacing,
+    crossBetween: axis.crossBetween,
+    crossesAt: axis.crossesAt,
+    crossesAtValue: axis.crossesAtValue,
+    isBetweenCategories: axis.isBetweenCategories,
+    minorGridLines: axis.minorGridLines,
+    minorGridlineFormat: axis.minorGridlineFormat,
+    textOrientation: axis.textOrientation,
   };
 }
 
@@ -339,44 +356,17 @@ function axisUnsupportedFeatureDiagnostics(axis: ChartConfig['axis']): string[] 
 
   for (const [label, axisConfig] of entries) {
     if (!axisConfig) continue;
-    if (label === 'secondary category') {
-      diagnostics.add('secondary category axes are preserved but not rendered');
-    }
     if (label === 'series/depth') {
       diagnostics.add('series/depth axes are preserved but not rendered');
-    }
-    if (axisConfig.scaleType === 'logarithmic' || axisConfig.logBase !== undefined) {
-      diagnostics.add(`${label} log axis scale is not fully rendered`);
-    }
-    if (
-      axisConfig.displayUnit ||
-      axisConfig.customDisplayUnit !== undefined ||
-      axisConfig.displayUnitLabel
-    ) {
-      diagnostics.add(`${label} axis display units are not rendered`);
-    }
-    if (axisConfig.tickLabelSpacing !== undefined || axisConfig.tickMarkSpacing !== undefined) {
-      diagnostics.add(`${label} axis explicit tick skipping is not rendered`);
     }
     if (axisConfig.linkNumberFormat) {
       diagnostics.add(`${label} axis source-linked number format is not resolved`);
     }
-    if (axisConfig.tickLabelPosition && axisConfig.tickLabelPosition !== 'nextTo') {
-      diagnostics.add(`${label} axis tick label position is not fully rendered`);
-    }
     if (
       axisConfig.crossBetween ||
-      axisConfig.isBetweenCategories !== undefined ||
-      axisConfig.crossesAt === 'custom'
+      axisConfig.isBetweenCategories !== undefined
     ) {
-      diagnostics.add(`${label} axis crossing semantics are not fully rendered`);
-    }
-    if (
-      axisConfig.minorUnit !== undefined ||
-      axisConfig.minorGridLines ||
-      axisConfig.minorTickMarks
-    ) {
-      diagnostics.add(`${label} axis minor ticks/gridlines are approximate`);
+      diagnostics.add(`${label} axis category crossing policy is approximate`);
     }
   }
 

@@ -125,7 +125,9 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
     const current = seriesConfig.categories
       ? (configuredSeriesCategory ?? fallbackCategory)
       : fallbackCategory;
-    const next = cached ?? (isOmittedCachedPoint || isBeyondCachedDomain ? '' : current);
+    const next = seriesConfig.categories
+      ? current
+      : (cached ?? (isOmittedCachedPoint || isBeyondCachedDomain ? '' : current));
     categories.push(next);
     if (next !== data.categories[pointIndex]) changed = true;
   }

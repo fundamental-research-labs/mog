@@ -60,6 +60,13 @@ export function applyCategoryAxisLabels(
     ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
     ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
   };
+  if (categoryChannel.secondaryAxis !== null && categoryChannel.secondaryAxis !== undefined) {
+    categoryChannel.secondaryAxis = {
+      ...categoryChannel.secondaryAxis,
+      ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
+      ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
+    };
+  }
 }
 
 export function applyStackedValueDomain(

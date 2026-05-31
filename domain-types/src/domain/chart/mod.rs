@@ -157,7 +157,7 @@ pub enum ChartType {
     Histogram,
     Pareto,
     /// ChartEx `boxWhisker`, serialized using the public TS/API spelling.
-    BoxWhisker,
+    Boxplot,
     /// Fallback — preserves the original string for round-trip fidelity.
     ///
     /// Holds the OOXML element name token (e.g. `"histogramChart"`,
@@ -210,7 +210,7 @@ impl ChartType {
             ChartType::RegionMap => "regionMap",
             ChartType::Histogram => "histogram",
             ChartType::Pareto => "pareto",
-            ChartType::BoxWhisker => "boxplot",
+            ChartType::Boxplot => "boxplot",
             ChartType::Unknown(s) => s.as_str(),
         }
     }
@@ -251,7 +251,7 @@ impl ChartType {
             "regionMap" => ChartType::RegionMap,
             "histogram" => ChartType::Histogram,
             "pareto" | "paretoLine" => ChartType::Pareto,
-            "boxplot" | "boxWhisker" => ChartType::BoxWhisker,
+            "boxplot" | "boxWhisker" => ChartType::Boxplot,
             other => ChartType::Unknown(other.to_string()),
         }
     }
@@ -282,6 +282,15 @@ impl ChartType {
             Oct::OfPie => ChartType::OfPie,
             Oct::Combo => ChartType::Combo,
         }
+    }
+
+    /// Convert a ChartEx OOXML layout id into a public runtime chart type.
+    ///
+    /// OOXML-only aliases such as `paretoLine` and `boxWhisker` are normalized
+    /// to the public tokens `pareto` and `boxplot`. Layout IDs that are not
+    /// supported as semantic ChartEx families return `None`.
+    pub fn from_chart_ex_layout_id(layout_id: &ooxml_types::chart_ex::ChartExLayoutId) -> Option<Self> {
+        layout_id.to_public_chart_type().map(ChartType::from_str)
     }
 
     /// Convert to the OOXML chart-type enum. Variants that don't have a
@@ -317,7 +326,7 @@ impl ChartType {
             | ChartType::RegionMap
             | ChartType::Histogram
             | ChartType::Pareto
-            | ChartType::BoxWhisker
+            | ChartType::Boxplot
             | ChartType::Unknown(_) => Oct::Unknown,
         }
     }

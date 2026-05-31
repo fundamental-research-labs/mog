@@ -1,5 +1,7 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use domain_types::chart::{AnchorPosition, ChartSpec, ChartType as DomainChartType, ObjectSize};
+use domain_types::chart::{
+    AnchorPosition, AxisData, ChartSpec, ChartType as DomainChartType, ObjectSize, SingleAxisData,
+};
 
 use super::{ranges, reconstruct_chart_space};
 
@@ -27,6 +29,11 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
@@ -197,4 +204,39 @@ fn data_range_preserves_quoted_sheet_names_and_escaped_quotes() {
     assert_eq!(xml.matches("<c:ser>").count(), 1);
     assert!(xml.contains("<c:f>'Bob''s Data'!A2:A3</c:f>"));
     assert!(xml.contains("<c:f>'Bob''s Data'!B2:B3</c:f>"));
+}
+
+#[test]
+fn modeled_axes_reconstruct_render_contract_fields() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            number_format: Some("0".to_string()),
+            link_number_format: Some(true),
+            tick_label_spacing: Some(2),
+            tick_mark_spacing: Some(3),
+            crosses_at: Some("min".to_string()),
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            scale_type: Some("logarithmic".to_string()),
+            crosses_at: Some("custom".to_string()),
+            crosses_at_value: Some(7.5),
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:numFmt formatCode=\"0\" sourceLinked=\"1\"/>"));
+    assert!(xml.contains("<c:tickLblSkip val=\"2\"/>"));
+    assert!(xml.contains("<c:tickMarkSkip val=\"3\"/>"));
+    assert!(xml.contains("<c:crosses val=\"min\"/>"));
+    assert!(xml.contains("<c:logBase val=\"10\"/>"));
+    assert!(xml.contains("<c:crossesAt val=\"7.5\"/>"));
 }

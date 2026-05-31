@@ -268,12 +268,19 @@ describe('resolved spec snapshot helpers', () => {
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
       'region map rendering uses placeholder geometry',
       'ChartEx regionMap data projection is not implemented',
-      'value log axis scale is not fully rendered',
-      'value axis display units are not rendered',
       'value axis source-linked number format is not resolved',
-      'secondary category axes are preserved but not rendered',
-      'secondary category axis explicit tick skipping is not rendered',
     ]);
+    expect(snapshot.resolved.axes.secondaryCategory).toMatchObject({
+      present: true,
+      visible: true,
+      tickLabelSpacing: 2,
+    });
+    expect(snapshot.resolved.axes.value).toMatchObject({
+      present: true,
+      scaleType: 'logarithmic',
+      displayUnit: 'millions',
+      linkNumberFormat: true,
+    });
   });
 
   it('does not flag supported secondary value axes as unsupported', () => {

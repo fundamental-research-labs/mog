@@ -21,6 +21,7 @@ export {
   type TrendlineResult,
 } from '../math/trendlines';
 export { collectMarks, configToSpec } from './chart-engine';
+export * from './style-resolver';
 export {
   rustToTsChartType,
   tsToRustChartType,
@@ -30,9 +31,11 @@ export {
 } from './chart-type-bridge';
 export {
   ObjectCellAccessor,
+  HIDDEN_CHART_CELL,
   detectSeriesOrientation,
   extractChartData,
   extractChartDataFromRange,
+  isHiddenChartCellValue,
   parseRange,
   type CellDataAccessor,
   type CellRange,

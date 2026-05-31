@@ -16,6 +16,7 @@
  * - Use '@mog/charts/export' for OOXML export
  * - Use '@mog/charts/interaction' for pick, tooltip, brush, zoom
  * - Use '@mog/charts/math' for statistics, regression, geometry
+ * - Use '@mog/charts/utils' for chart color and OOXML theme color utilities
  */
 
 // Types - chart config, serialization, and data types
@@ -61,11 +62,13 @@ export {
 // Core - pure computation functions
 export {
   ObjectCellAccessor,
+  HIDDEN_CHART_CELL,
   collectMarks,
   configToSpec,
   detectSeriesOrientation,
   extractChartData,
   extractChartDataFromRange,
+  isHiddenChartCellValue,
   parseRange,
   rustToTsChartType,
   tsToRustChartType,
@@ -76,6 +79,7 @@ export {
   type RustChartType,
   type RustChartTypeResult,
 } from './core';
+export * from './core/style-resolver';
 
 // DOM - chart engine and instance management (requires browser environment)
 export { ChartEngine, createChart, createChartEngine } from './dom';
@@ -92,15 +96,18 @@ export {
   type Mark,
   type MarkStyle,
   type PathMark,
+  type PaintSpec,
   type RectMark,
+  type ShadowSpec,
   type SymbolMark,
   type SymbolShape,
   type TextAlign,
   type TextBaseline,
   type TextMark,
+  type TextRunSpec,
 } from './primitives';
 
-// Utils - excluding hexToRgb and rgbToHex which are in primitives/scales
+// Utils - common color helpers; chart theme/color resolvers live in '@mog/charts/utils'
 export { darkenColor, generateGradient, getDefaultColor, lightenColor, withOpacity } from './utils';
 
 // Grammar - Vega-Lite compatible spec types and compiler

@@ -329,6 +329,11 @@ describe('resolved spec snapshot helpers', () => {
         bubbleSize: 'literal',
       },
     });
+    expect(snapshot.diagnostics.compiler).toEqual([
+      'Series 1 values rendered from fallback cache because live source "Missing!B2:C2" is unavailable.',
+      'Series 1 categories rendered from literal chart data.',
+      'Series 1 bubbleSize rendered from literal chart data.',
+    ]);
   });
 
   it('does not report render authority from sparse cache points outside explicit zero pointCount', () => {

@@ -58,7 +58,7 @@ function richTextToPlainText(comment: Comment): string {
 function normalizeComment(comment: Comment): Comment {
   const content = richTextToPlainText(comment);
   if (!content || (comment as { content?: unknown }).content === content) {
-    return normalizeComment(comment);
+    return comment;
   }
   return { ...comment, content };
 }

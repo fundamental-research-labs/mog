@@ -413,8 +413,8 @@ fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
     }
 }
 
-fn default_series_name(idx: u32, order: u32) -> String {
-    let ordinal = if idx > 0 { idx } else { order + 1 };
+fn default_series_name(idx: u32, _order: u32) -> String {
+    let ordinal = idx.saturating_add(1);
     format!("Series {ordinal}")
 }
 
@@ -1056,9 +1056,9 @@ mod tests {
     }
 
     #[test]
-    fn defaults_series_name_from_ooxml_idx_when_text_is_missing() {
+    fn defaults_series_name_from_zero_based_ooxml_idx_when_text_is_missing() {
         let series = ooxml_types::charts::ChartSeries {
-            idx: 2,
+            idx: 1,
             order: 1,
             ..Default::default()
         };
@@ -1069,7 +1069,7 @@ mod tests {
     }
 
     #[test]
-    fn defaults_zero_idx_series_name_from_plot_order() {
+    fn defaults_zero_idx_series_name_as_first_series() {
         let series = ooxml_types::charts::ChartSeries {
             idx: 0,
             order: 3,
@@ -1078,7 +1078,7 @@ mod tests {
 
         let extracted = extract_single_series(&series, None, None);
 
-        assert_eq!(extracted.name.as_deref(), Some("Series 4"));
+        assert_eq!(extracted.name.as_deref(), Some("Series 1"));
     }
 }
 

@@ -42,9 +42,9 @@ function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): str
   if (
     typeof seriesConfig.idx === 'number' &&
     Number.isInteger(seriesConfig.idx) &&
-    seriesConfig.idx > 0
+    seriesConfig.idx >= 0
   ) {
-    return `Series ${seriesConfig.idx}`;
+    return `Series ${seriesConfig.idx + 1}`;
   }
 
   if (

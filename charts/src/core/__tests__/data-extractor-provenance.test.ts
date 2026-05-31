@@ -106,7 +106,7 @@ describe('chart data point value provenance', () => {
     ]);
   });
 
-  it('uses OOXML idx and order for unnamed imported series labels', () => {
+  it('uses zero-based OOXML idx and order for unnamed imported series labels', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [10, 20],
       [30, 40],
@@ -122,13 +122,13 @@ describe('chart data point value provenance', () => {
       series: [
         {
           values: 'A1:B1',
-          idx: 2,
-          order: 1,
+          idx: 0,
+          order: 0,
         },
         {
           values: 'A2:B2',
           idx: 1,
-          order: 0,
+          order: 1,
         },
         {
           values: 'A1:A2',
@@ -139,7 +139,7 @@ describe('chart data point value provenance', () => {
 
     const data = extractChartData(accessor, config);
 
-    expect(data.series.map((series) => series.name)).toEqual(['Series 2', 'Series 1', 'Series 3']);
+    expect(data.series.map((series) => series.name)).toEqual(['Series 1', 'Series 2', 'Series 3']);
   });
 
   it('uses live imported series values before stale caches', () => {

@@ -115,6 +115,7 @@ export function setupEditorToSelectionCoordination(
     isRowHidden?: (row: number) => boolean;
     isColHidden?: (col: number) => boolean;
   },
+  getCurrentSheetId?: () => string,
 ): () => void {
   let previousState: EditorState | null = null;
 
@@ -169,6 +170,13 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const editingSheetId = previousState.context.sheetId;
+      const currentSheetId = getCurrentSheetId?.();
+
+      if (editingSheetId && currentSheetId && editingSheetId !== currentSheetId) {
+        previousState = state;
+        return;
+      }
 
       if (direction !== 'none') {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
@@ -644,6 +652,7 @@ export function setupCrossCoordination(config: CrossCoordinationConfig): () => v
       selectionActor,
       () => selectionActor.getSnapshot().context.activeCell,
       config.getVisibilityCallbacks,
+      getCurrentSheetId,
     ),
   );
 

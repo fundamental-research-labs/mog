@@ -657,6 +657,11 @@ export const editorMachine = setup({
           actions: ['commitIMEComposition', 'storeBlurAsCommit'],
         },
 
+        COMMIT: {
+          target: 'validating',
+          actions: ['commitIMEComposition', 'storeCommitDirection'],
+        },
+
         // IME must complete before these actions can happen
         // In practice, browser enforces this, but we model it explicitly
         // CANCEL (second ESC) cancels the entire edit

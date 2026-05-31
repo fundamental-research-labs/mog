@@ -141,6 +141,9 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   // We use local state rather than editor.isIMEComposing to avoid
   // React re-renders during rapid composition updates.
   const [isComposing, setIsComposing] = useState(false);
+  const [imeDisplayValue, setImeDisplayValue] = useState<string | null>(null);
+  const imeBaseRef = useRef<{ value: string; cursorPosition: number } | null>(null);
+  const isComposingRef = useRef(false);
 
   // Format change reactivity: when a cell's format changes while editing (e.g.
   // user changes font via toolbar), the viewport buffer updates but nothing in
@@ -175,12 +178,14 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   // renders, since the cell-text formula scenario demands the overlay
   // grow horizontally past cell boundaries (Excel parity, /
   //
+  const editorDisplayValue = imeDisplayValue ?? value;
+
   useLayoutEffect(() => {
     if (!inputRef.current) return;
 
     // Measure the longest line of `value` against the editor's current
     // font. Reuse a module-level canvas to avoid per-render allocation.
-    const lines = value.length === 0 ? [''] : value.split('\n');
+    const lines = editorDisplayValue.length === 0 ? [''] : editorDisplayValue.split('\n');
     let maxLineWidth = 0;
     const fontStr = window.getComputedStyle(inputRef.current).font;
     const ctx = getMeasurementContext();
@@ -220,7 +225,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // re-running on every cell-rect identity change would itself be a thrash.
     // The closure captures the latest effectiveCellRect from each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, expandedWidth]);
+  }, [editorDisplayValue, expandedWidth]);
 
   // Sync textarea cursor position from editor state.
   //
@@ -343,7 +348,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // Pass zoom level so DOM editor font scales to match canvas rendering
     const textMeasurementService = getTextMeasurementService();
     return textMeasurementService.computeTextPosition({
-      text: value,
+      text: editorDisplayValue,
       value: cellValue,
       format: cellFormat,
       cellBounds: effectiveCellRect,
@@ -351,7 +356,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       zoom,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveCellRect, value, editingCell, ws, theme, zoom, formatVersion]);
+  }, [effectiveCellRect, editorDisplayValue, editingCell, ws, theme, zoom, formatVersion]);
 
   // Compute suggestions position below the cell being edited
   // Must be before early return to satisfy Rules of Hooks
@@ -403,7 +408,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   // Compute paddingTop for vertical alignment in textarea
   // Textarea is a replaced element — display:flex/alignItems has no effect on its
   // internal text positioning. We use paddingTop to push text to the correct position.
-  const lineCount = (value.match(/\n/g) || []).length + 1;
+  const lineCount = (editorDisplayValue.match(/\n/g) || []).length + 1;
   const scaledFontSize = textPosition ? textPosition.scaledFontSize : style.fontSize;
   const scaledLineHeight = scaledFontSize * 1.2; // DEFAULT_LINE_HEIGHT_FACTOR
   const totalTextHeight = lineCount * scaledLineHeight;
@@ -428,6 +433,27 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   }
 
   // Common props for both input and textarea
+  const deriveCompositionText = (nextValue: string): string => {
+    const base = imeBaseRef.current;
+    if (!base) return nextValue;
+
+    const before = base.value.slice(0, base.cursorPosition);
+    const after = base.value.slice(base.cursorPosition);
+    if (nextValue.startsWith(before) && nextValue.endsWith(after)) {
+      return nextValue.slice(before.length, nextValue.length - after.length);
+    }
+    return nextValue;
+  };
+
+  const renderCompositionValue = (compositionText: string): string => {
+    const base = imeBaseRef.current ?? { value, cursorPosition };
+    return (
+      base.value.slice(0, base.cursorPosition) +
+      compositionText +
+      base.value.slice(base.cursorPosition)
+    );
+  };
+
   const editorProps = {
     // A.5: Add ref for measuring content width + autocomplete positioning
     ref: handleInputRef,
@@ -440,9 +466,17 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // Only auto-focus when not editing via formula bar
     // When formula bar has focus, show the editor but don't steal focus
     autoFocus: !isFormulaBarFocused,
-    value: value,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      editorActions.input(e.target.value, e.target.selectionStart ?? e.target.value.length),
+    value: editorDisplayValue,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (isComposingRef.current) {
+        const nextValue = e.target.value;
+        const compositionText = deriveCompositionText(nextValue);
+        setImeDisplayValue(nextValue);
+        editorActions.imeUpdate(compositionText);
+        return;
+      }
+      editorActions.input(e.target.value, e.target.selectionStart ?? e.target.value.length);
+    },
     onSelect: (e: React.SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const el = e.currentTarget;
       const pos = el.selectionStart;
@@ -468,13 +502,26 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // 2. Track composition text for cross-browser consistency
     // F.1: Also update local isComposing state for CSS styling
     onCompositionStart: () => {
+      isComposingRef.current = true;
       setIsComposing(true);
+      imeBaseRef.current = { value, cursorPosition };
+      setImeDisplayValue(value);
       editorActions.imeStart();
     },
-    onCompositionUpdate: (e: React.CompositionEvent) => editorActions.imeUpdate(e.data),
-    onCompositionEnd: (e: React.CompositionEvent) => {
+    onCompositionUpdate: (e: React.CompositionEvent) => {
+      if (typeof e.data === 'string' && e.data.length > 0) {
+        setImeDisplayValue(renderCompositionValue(e.data));
+        editorActions.imeUpdate(e.data);
+      }
+    },
+    onCompositionEnd: (e: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const finalText = e.data || deriveCompositionText(e.currentTarget.value);
+      isComposingRef.current = false;
       setIsComposing(false);
-      editorActions.imeEnd(e.data);
+      setImeDisplayValue(null);
+      imeBaseRef.current = null;
+      editorActions.imeUpdate(finalText);
+      editorActions.imeEnd(finalText);
     },
     // ARCHITECTURE: Canvas owns all cell border rendering (selection-layer.ts)
     // The InlineCellEditor is a "transparent text overlay" with no visual border.

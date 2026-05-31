@@ -218,6 +218,26 @@ describe('useFormulaRangeDrag', () => {
       expect(started).toBe(false);
     });
 
+    it('should return false for an unqualified origin-sheet range while another sheet is active', () => {
+      const options = createMockOptions({
+        activeSheetId: sheetId('sheet-2'),
+        getEditorState: () => ({
+          isFormulaEditing: true,
+          value: '=A1',
+          sheetId: sheetId('sheet-1'),
+        }),
+        getActiveSheetName: () => 'Sheet2',
+      });
+      const { result } = renderHook(() => useFormulaRangeDrag(options));
+
+      let started: boolean = false;
+      act(() => {
+        started = result.current.tryStartFormulaRangeDrag(50, 12);
+      });
+
+      expect(started).toBe(false);
+    });
+
     it('should start drag for same-sheet ref regardless of other cross-sheet refs', () => {
       // Formula =Sheet2!A1+B2: Sheet2!A1 belongs to Sheet2, B2 belongs to Sheet1.
       // When active sheet is Sheet1, clicking at B2 (col=1, row=1 -> x=150, y=37)

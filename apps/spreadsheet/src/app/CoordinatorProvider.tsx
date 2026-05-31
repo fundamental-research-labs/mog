@@ -385,6 +385,24 @@ function KeyboardCaptureSetup({
       const isSheetSwitch =
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
       if (!isNavigationKey && !isSheetSwitch) {
+        const target = keyboardEventTargetElement(e);
+        const isPrintableFormulaInput =
+          editorSnapshot.matches('formulaEditing.enterMode') &&
+          e.key.length === 1 &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey &&
+          !isEditableKeyboardTarget(target) &&
+          !isDialogKeyboardTarget(target);
+
+        if (isPrintableFormulaInput) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+
         // Not a navigation key - let it through for text input
         return;
       }

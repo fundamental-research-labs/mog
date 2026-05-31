@@ -44,6 +44,8 @@ export interface FormulaEditorState {
   isFormulaEditing: boolean;
   /** Current editor value */
   value: string;
+  /** Origin sheet for the formula being edited */
+  sheetId?: SheetId | string | null;
 }
 
 /**
@@ -217,8 +219,9 @@ export function useFormulaRangeDrag(
       const activeSheetRanges = parsedRanges.filter((ref) => {
         const bangIndex = ref.text.indexOf('!');
         if (bangIndex === -1) {
-          // No sheet prefix — belongs to the active sheet
-          return true;
+          // No sheet prefix belongs to the formula's origin sheet, not whichever
+          // sheet is currently visible while building a cross-sheet formula.
+          return !editorState.sheetId || editorState.sheetId === activeSheetId;
         }
         const refSheetName = ref.text.slice(0, bangIndex).replace(/^'|'$/g, '');
         return refSheetName.toLowerCase() === activeSheetName.toLowerCase();

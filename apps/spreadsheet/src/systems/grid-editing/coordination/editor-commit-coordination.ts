@@ -276,7 +276,9 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
 
   const subscription = editorActor.subscribe((state) => {
     const wasEditing =
-      previousState?.matches('editing') || previousState?.matches('formulaEditing');
+      previousState?.matches('editing') ||
+      previousState?.matches('formulaEditing') ||
+      previousState?.matches('imeComposing');
     const isValidating = state.matches('validating');
     const didCommit = previousState?.matches('committing') && state.matches('inactive');
     if (didCommit) {

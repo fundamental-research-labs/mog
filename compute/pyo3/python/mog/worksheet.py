@@ -265,6 +265,21 @@ class Worksheet:
     # Cell write operations
     # ------------------------------------------------------------------
 
+    def _uses_text_number_format(self, row: int, col: int) -> bool:
+        try:
+            fmt = self._bridge.call_json(
+                "compute_get_resolved_format", self._sheet_id_json, row, col
+            )
+            if isinstance(fmt, str):
+                fmt = json.loads(fmt)
+        except Exception:
+            return False
+        if not isinstance(fmt, dict):
+            return False
+        number_format = fmt.get("numberFormat") or fmt.get("number_format")
+        number_format_type = fmt.get("numberFormatType") or fmt.get("number_format_type")
+        return number_format == "@" or number_format_type == "text"
+
     def set_cell(
         self,
         address_or_row: Union[str, Tuple[int, int], int],
@@ -290,18 +305,21 @@ class Worksheet:
         if value is not None:
             # 3-arg form: (row, col, value)
             row, col = int(address_or_row), int(value_or_col)
-            input_str = normalize_value(value)
+            write_value = value
         else:
             row, col = self._resolve_address(address_or_row)
-            input_str = normalize_value(value_or_col)
+            write_value = value_or_col
         # Check sheet protection before writing
         if self._protection_api is not None and self._protection_api.is_protected():
             if not self._protection_api.can_edit_cell(row, col):
                 from mog.errors import MogError
                 raise MogError("Cannot edit cell: sheet is protected and cell is locked")
-        self._bridge.set_cell_value_parsed(
-            self._sheet_id_json, row, col, input_str
-        )
+        if isinstance(write_value, str) and self._uses_text_number_format(row, col):
+            self._bridge.set_cell_value_as_text(self._sheet_id_json, row, col, write_value)
+        else:
+            self._bridge.set_cell_value_parsed(
+                self._sheet_id_json, row, col, normalize_value(write_value)
+            )
 
     def set_range(
         self,
@@ -1925,8 +1943,8 @@ class _ChangeTracker:
                             "address": addr,
                             "row": r,
                             "col": c,
-                            "oldValue": old_value,
-                            "newValue": value,
+                            "oldValue": _change_record_value(old_value, old_raw, was_formula),
+                            "newValue": _change_record_value(value, raw, is_formula),
                             "origin": origin,
                         })
 
@@ -1939,7 +1957,11 @@ class _ChangeTracker:
                         "address": addr,
                         "row": r,
                         "col": c,
-                        "oldValue": old["value"],
+                        "oldValue": _change_record_value(
+                            old["value"],
+                            old.get("raw"),
+                            old.get("is_formula", False),
+                        ),
                         "newValue": None,
                         "origin": "direct",
                     })
@@ -1949,6 +1971,12 @@ class _ChangeTracker:
     def close(self) -> None:
         """No-op (nothing to restore)."""
         pass
+
+
+def _change_record_value(value: Any, raw: Any, is_formula: bool) -> Any:
+    if isinstance(value, str) and not is_formula:
+        return None
+    return value
 
 
 class _SheetScopedNamesAPI:

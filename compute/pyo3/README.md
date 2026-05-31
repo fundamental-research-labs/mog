@@ -13,7 +13,7 @@ cd ../mog
 pnpm check:python-sdk
 ```
 
-## Example
+## Examples
 
 ```python
 import mog
@@ -25,6 +25,23 @@ ws.set_cell("A2", "=A1*3")
 wb.calculate()
 assert ws.get_value("A2") == 6
 wb.dispose()
+```
+
+Load and export XLSX data through the native-backed package:
+
+```python
+from pathlib import Path
+
+import mog
+
+wb = mog.load_workbook("input.xlsx")
+try:
+    ws = wb.active_sheet
+    ws.set_cell("B2", "=SUM(A1:A10)")
+    wb.calculate()
+    Path("output.xlsx").write_bytes(wb.to_xlsx())
+finally:
+    wb.dispose()
 ```
 
 ## API Parity Policy
@@ -43,11 +60,12 @@ compute/pyo3/.venv/bin/python -m mog._tools.audit_stubs --strict
 
 Round 1 removes fake-success behavior. Public paths that are not yet backed by
 production workbook state raise `mog.UnsupportedApiError` with `api_path`,
-`python_path`, `reason_code`, and `owner_package`. Known breaking changes
-include placeholder XLSX export removal and explicit unsupported failures for
-workbook bindings/theme/viewport, worksheet settings/data-table/scenarios,
-pictures, form controls, text boxes, chart image export, validation error
-queries, and table filter/auto-expansion no-ops.
+`python_path`, `reason_code`, and `owner_package`.
+
+The supported/renamed/unsupported surface is generated from
+`mog/api_dispositions.json`; do not maintain a separate README list. Check the
+installed package or run the surface tools above to inspect the current
+disposition state.
 
 ## Wheel Contents
 

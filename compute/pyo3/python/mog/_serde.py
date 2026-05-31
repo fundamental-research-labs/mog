@@ -161,6 +161,8 @@ def deserialize_cell_value(raw: Any) -> CellValue:
         try:
             raw = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
+            if raw == "":
+                return None
             if raw == "\x00":
                 return ""
             return raw

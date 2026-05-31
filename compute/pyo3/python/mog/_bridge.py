@@ -108,6 +108,16 @@ class Bridge:
             "compute_set_cell_value_parsed", sheet_id_json, row, col, input_str
         )
 
+    def set_cell_value_as_text(
+        self, sheet_id_json: str, row: int, col: int, value: str
+    ) -> Any:
+        """Set a cell as literal text, bypassing rich input parsing."""
+        if not hasattr(self._engine, "compute_set_cell_value_as_text"):
+            return self.set_cell_value_parsed(sheet_id_json, row, col, f"'{value}")
+        return self.call_json(
+            "compute_set_cell_value_as_text", sheet_id_json, row, col, value
+        )
+
     def set_cell_values_parsed(
         self, sheet_id_json: str, updates_json: str
     ) -> Any:

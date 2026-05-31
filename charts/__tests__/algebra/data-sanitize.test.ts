@@ -248,6 +248,33 @@ describe('extendDataForLayerFields', () => {
     expect(result[3]).toEqual({ bar_value: 300 });
   });
 
+  it('maps y2 fields into the shared y scale domain', () => {
+    const data: DataRow[] = [
+      { category: 'Day1', low: 90, high: 110 },
+      { category: 'Day2', low: 98, high: 115 },
+    ];
+    const encoding: EncodingSpec = {
+      x: { field: 'category', type: 'nominal' },
+      y: { field: 'low', type: 'quantitative' },
+    };
+    const layers: ChartSpec[] = [
+      {
+        mark: 'rule',
+        encoding: {
+          x: { field: 'category' },
+          x2: { field: 'category' },
+          y: { field: 'low' },
+          y2: { field: 'high' },
+        },
+      },
+    ];
+
+    const result = extendDataForLayerFields(data, encoding, layers);
+
+    expect(result).toHaveLength(4);
+    expect(result.slice(2)).toEqual([{ low: 110 }, { low: 115 }]);
+  });
+
   it('empty layers array', () => {
     const data: DataRow[] = [{ x: 1, y: 10 }];
     const encoding: EncodingSpec = {

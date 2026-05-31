@@ -27,6 +27,7 @@ import {
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_TEXT_FIELD,
   LINE_SEGMENT_FIELD,
+  STOCK_DIRECTION_FIELD,
 } from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
@@ -222,7 +223,7 @@ describe('chartDataToRows', () => {
             name: 'Stock',
             data: [
               { x: 'Day1', y: 100, open: 95, high: 110, low: 90, close: 105 },
-              { x: 'Day2', y: 102, open: 105, high: 115, low: 98, close: 108 },
+              { x: 'Day2', y: 102, open: 105, high: 115, low: 98, close: 100 },
             ],
           },
         ],
@@ -239,6 +240,7 @@ describe('chartDataToRows', () => {
         high: 110,
         low: 90,
         close: 105,
+        [STOCK_DIRECTION_FIELD]: 'up',
       },
       {
         category: 'Day2',
@@ -247,7 +249,8 @@ describe('chartDataToRows', () => {
         open: 105,
         high: 115,
         low: 98,
-        close: 108,
+        close: 100,
+        [STOCK_DIRECTION_FIELD]: 'down',
       },
     ]);
   });
@@ -2033,12 +2036,11 @@ describe('configToSpec - stock chart', () => {
     expect(spec.layer!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('should have a rule layer and a bar layer', () => {
+  it('should have high-low and open-close rule layers', () => {
     const config = makeConfig({ type: 'stock' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     const markTypes = spec.layer!.map((l) => (l.mark as MarkSpec).type);
-    expect(markTypes).toContain('rule');
-    expect(markTypes).toContain('bar');
+    expect(markTypes).toEqual(['rule', 'rule']);
   });
 });
 
@@ -2048,7 +2050,7 @@ describe('buildStockLayers', () => {
     const layers = buildStockLayers(config, SINGLE_SERIES_DATA, []);
     expect(layers).toHaveLength(2);
     expect((layers[0].mark as MarkSpec).type).toBe('rule');
-    expect((layers[1].mark as MarkSpec).type).toBe('bar');
+    expect((layers[1].mark as MarkSpec).type).toBe('rule');
   });
 });
 
@@ -2740,6 +2742,12 @@ describe('configToSpec dropped fields', () => {
       ],
     };
 
+    function pathCoordinates(mark: PathMark): [number, number, number, number] {
+      const values = mark.path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+      expect(values).toHaveLength(4);
+      return values as [number, number, number, number];
+    }
+
     it('creates HLC layers (rule + tick) for hlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'hlc' });
       const rows = [{ category: 'Day1', high: 110, low: 90, close: 105 }];
@@ -2752,16 +2760,48 @@ describe('configToSpec dropped fields', () => {
       expect((layers[1].mark as MarkSpec).type).toBe('tick');
     });
 
-    it('creates OHLC layers (rule + bar) for ohlc sub-type', () => {
+    it('renders HLC high-low wicks from low to high instead of full-height rules', () => {
+      const config = makeConfig({ type: 'stock', subType: 'hlc' });
+      const result = compile(configToSpec(config, stockData), undefined, {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      });
+      const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
+      const [, lowY, , highY] = pathCoordinates(paths[0]);
+
+      expect(lowY).toBeCloseTo(result.scales.y!(90) as number);
+      expect(highY).toBeCloseTo(result.scales.y!(110) as number);
+      expect(Math.abs(lowY - highY)).toBeGreaterThan(0);
+      expect(Math.abs(lowY - highY)).toBeLessThan(result.layout.plotArea.height);
+    });
+
+    it('creates OHLC layers (wick rule + body rule) for ohlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'ohlc' });
       const rows = [{ category: 'Day1', open: 95, high: 110, low: 90, close: 105 }];
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 2 layers: rule (wick) + bar (body)
+      // Should have 2 layers: rule (wick) + rule (body)
       expect(layers.length).toBe(2);
       expect((layers[0].mark as MarkSpec).type).toBe('rule');
-      expect((layers[1].mark as MarkSpec).type).toBe('bar');
+      expect((layers[1].mark as MarkSpec).type).toBe('rule');
+    });
+
+    it('renders OHLC bodies from open to close on the same value scale', () => {
+      const config = makeConfig({ type: 'stock', subType: 'ohlc' });
+      const result = compile(configToSpec(config, stockData), undefined, {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      });
+      const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
+      const body = paths[2];
+      const [, openY, , closeY] = pathCoordinates(body);
+
+      expect(openY).toBeCloseTo(result.scales.y!(95) as number);
+      expect(closeY).toBeCloseTo(result.scales.y!(105) as number);
+      expect(body.style.strokeWidth).toBe(14);
     });
 
     it('adds volume layer for volume-ohlc sub-type', () => {
@@ -2770,12 +2810,12 @@ describe('configToSpec dropped fields', () => {
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 3 layers: volume bar + rule (wick) + bar (body)
+      // Should have 3 layers: volume bar + rule (wick) + rule (body)
       expect(layers.length).toBe(3);
       expect((layers[0].mark as MarkSpec).type).toBe('bar');
       expect((layers[0].mark as MarkSpec).opacity).toBe(0.3);
       expect((layers[1].mark as MarkSpec).type).toBe('rule');
-      expect((layers[2].mark as MarkSpec).type).toBe('bar');
+      expect((layers[2].mark as MarkSpec).type).toBe('rule');
     });
 
     it('adds volume layer for volume-hlc sub-type', () => {

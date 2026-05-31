@@ -5,6 +5,7 @@ import {
   CATEGORY_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
+  STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
   STOCK_VOLUME_FIELD,
@@ -48,10 +49,9 @@ export function buildStockLayers(
     mark: { type: 'rule' },
     encoding: {
       x: { field: CATEGORY_FIELD, type: 'nominal' },
+      x2: { field: CATEGORY_FIELD, type: 'nominal' },
       y: { field: STOCK_LOW_FIELD, type: 'quantitative' },
-      // y2 via a separate channel is not directly supported in our spec,
-      // so we use the value field as a proxy for the range
-      size: { value: 1 },
+      y2: { field: STOCK_HIGH_FIELD, type: 'quantitative' },
     },
   };
   layers.push(wickLayer);
@@ -67,16 +67,17 @@ export function buildStockLayers(
     };
     layers.push(closeLayer);
   } else {
-    // OHLC: Open-Close bar (the body)
+    // OHLC: Open-Close body
     const bodyLayer: UnitSpec = {
       mark: {
-        type: 'bar',
-        // Use a narrow bar width for candlestick appearance
-        size: CANDLESTICK_BAR_WIDTH,
+        type: 'rule',
+        strokeWidth: CANDLESTICK_BAR_WIDTH,
       },
       encoding: {
         x: { field: CATEGORY_FIELD, type: 'nominal' },
+        x2: { field: CATEGORY_FIELD, type: 'nominal' },
         y: { field: STOCK_OPEN_FIELD, type: 'quantitative' },
+        y2: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
         color: {
           field: STOCK_DIRECTION_FIELD,
           type: 'nominal',

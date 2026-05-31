@@ -8,6 +8,7 @@
  */
 
 import type { PathMark } from '../../primitives/types';
+import { resolveStrokeColor } from '../../algebra/color';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
@@ -85,6 +86,13 @@ export function generateRuleMarks(
       continue;
     }
 
+    const colorValue = encodings.color?.accessor(datum);
+    const stroke =
+      datumString(datum, markSpec.strokeField) ??
+      (encodings.color
+        ? resolveStrokeColor(scales.color, colorValue, markSpec.color, markSpec.stroke, marks.length)
+        : (markSpec.color ?? markSpec.stroke ?? '#888'));
+
     marks.push({
       type: 'path',
       x: 0,
@@ -92,7 +100,7 @@ export function generateRuleMarks(
       path: `M${x1},${y1} L${x2},${y2}`,
       datum,
       style: {
-        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.color ?? markSpec.stroke ?? '#888',
+        stroke,
         strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
         ...definedStyle({

@@ -60,6 +60,7 @@ import {
   SERIES_ORDER_FIELD,
   SERIES_OPACITY_FIELD,
   STOCK_CLOSE_FIELD,
+  STOCK_DIRECTION_FIELD,
   STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
@@ -184,6 +185,11 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (point[STOCK_LOW_FIELD] !== undefined) row[STOCK_LOW_FIELD] = point[STOCK_LOW_FIELD];
         if (point[STOCK_CLOSE_FIELD] !== undefined) {
           row[STOCK_CLOSE_FIELD] = point[STOCK_CLOSE_FIELD];
+        }
+        const stockOpen = toFiniteNumber(point[STOCK_OPEN_FIELD]);
+        const stockClose = toFiniteNumber(point[STOCK_CLOSE_FIELD]);
+        if (stockOpen !== undefined && stockClose !== undefined) {
+          row[STOCK_DIRECTION_FIELD] = stockClose >= stockOpen ? 'up' : 'down';
         }
         if (point[STOCK_VOLUME_FIELD] !== undefined) {
           row[STOCK_VOLUME_FIELD] = point[STOCK_VOLUME_FIELD];

@@ -755,6 +755,155 @@ fn modeled_chart_export_omits_stale_ref_caches_and_reports_diagnostic() {
 }
 
 #[test]
+fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
+    let mut level_chart = make_chart(ChartType::Column, "Data!A1:C3");
+    level_chart.data_range = None;
+    level_chart.title = Some("Modeled Multi-Level Categories".to_string());
+    let mut level_series = chart_ex_projected_series();
+    level_series.r#type = None;
+    level_series.values = Some("Data!C2:C3".to_string());
+    level_series.value_source_kind =
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+    level_series.value_cache = None;
+    level_series.categories = Some("Data!A2:B3".to_string());
+    level_series.category_source_kind =
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+    level_series.category_cache = None;
+    level_series.category_levels = Some(domain_types::chart::ChartSeriesCategoryLevelsCacheData {
+        point_count: Some(2),
+        levels: vec![
+            domain_types::chart::ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(2),
+                points: vec![domain_types::chart::ChartSeriesPointCachePointData {
+                    idx: 0,
+                    value: "Stale Region".to_string(),
+                    format_code: None,
+                }],
+            },
+            domain_types::chart::ChartSeriesCategoryLevelCacheData {
+                level: 1,
+                point_count: Some(2),
+                points: vec![domain_types::chart::ChartSeriesPointCachePointData {
+                    idx: 1,
+                    value: "Stale Quarter".to_string(),
+                    format_code: None,
+                }],
+            },
+        ],
+    });
+    level_chart.series = vec![level_series];
+
+    let mut bubble_chart = make_chart(ChartType::Bubble, "Data!D1:F3");
+    bubble_chart.data_range = None;
+    bubble_chart.title = Some("Modeled Bubbles".to_string());
+    let mut bubble_series = chart_ex_projected_series();
+    bubble_series.r#type = None;
+    bubble_series.name = Some("Bubbles".to_string());
+    bubble_series.values = Some("Data!E2:E3".to_string());
+    bubble_series.value_source_kind =
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+    bubble_series.value_cache = None;
+    bubble_series.categories = Some("Data!D2:D3".to_string());
+    bubble_series.x_role = Some(domain_types::chart::ChartSeriesXRoleData::Quantitative);
+    bubble_series.category_source_kind =
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+    bubble_series.category_cache = None;
+    bubble_series.category_levels = None;
+    bubble_series.bubble_size = Some("Data!F2:F3".to_string());
+    bubble_series.bubble_size_source_kind =
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+    bubble_series.bubble_size_cache = Some(domain_types::chart::ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![domain_types::chart::ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "999".to_string(),
+            format_code: None,
+        }],
+    });
+    bubble_chart.series = vec![bubble_series];
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Region"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 2, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("North"))),
+            make_cell(1, 1, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 2, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+            make_cell(2, 0, DomainValue::Text(Arc::from("South"))),
+            make_cell(2, 1, DomainValue::Text(Arc::from("Q2"))),
+            make_cell(2, 2, DomainValue::Number(FiniteF64::new(200.0).unwrap())),
+            make_cell(0, 3, DomainValue::Text(Arc::from("X"))),
+            make_cell(0, 4, DomainValue::Text(Arc::from("Y"))),
+            make_cell(0, 5, DomainValue::Text(Arc::from("Size"))),
+            make_cell(1, 3, DomainValue::Number(FiniteF64::new(1.0).unwrap())),
+            make_cell(1, 4, DomainValue::Number(FiniteF64::new(10.0).unwrap())),
+            make_cell(1, 5, DomainValue::Number(FiniteF64::new(20.0).unwrap())),
+            make_cell(2, 3, DomainValue::Number(FiniteF64::new(2.0).unwrap())),
+            make_cell(2, 4, DomainValue::Number(FiniteF64::new(20.0).unwrap())),
+            make_cell(2, 5, DomainValue::Number(FiniteF64::new(30.0).unwrap())),
+        ],
+        charts: vec![level_chart, bubble_chart],
+        ..Default::default()
+    }]);
+
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let level_chart_xml =
+        String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+    let bubble_chart_xml =
+        String::from_utf8(archive.read_file("xl/charts/chart2.xml").unwrap()).unwrap();
+
+    assert!(
+        level_chart_xml.contains("<c:multiLvlStrRef>"),
+        "{level_chart_xml}"
+    );
+    assert!(
+        level_chart_xml.contains("<c:f>Data!A2:B3</c:f>"),
+        "{level_chart_xml}"
+    );
+    assert!(
+        !level_chart_xml.contains("<c:multiLvlStrCache>"),
+        "{level_chart_xml}"
+    );
+    assert!(
+        !level_chart_xml.contains("Stale Region"),
+        "{level_chart_xml}"
+    );
+    assert!(
+        !level_chart_xml.contains("Stale Quarter"),
+        "{level_chart_xml}"
+    );
+    assert!(
+        bubble_chart_xml.contains("<c:bubbleSize>"),
+        "{bubble_chart_xml}"
+    );
+    assert!(
+        bubble_chart_xml.contains("<c:f>Data!F2:F3</c:f>"),
+        "{bubble_chart_xml}"
+    );
+    assert!(
+        !bubble_chart_xml.contains("<c:numCache>"),
+        "{bubble_chart_xml}"
+    );
+    assert!(!bubble_chart_xml.contains("999"), "{bubble_chart_xml}");
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartSourceCacheOmitted,
+        "series 1 categoryLevels",
+    );
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartSourceCacheOmitted,
+        "series 1 bubbleSize",
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn reconstructed_imported_chart_suppresses_stale_auxiliary_parts() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.title = Some("Modeled Revenue".to_string());

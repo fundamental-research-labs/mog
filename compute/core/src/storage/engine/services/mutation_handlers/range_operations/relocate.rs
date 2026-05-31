@@ -325,8 +325,14 @@ fn relocate_whole_tables(
     for mut table in tables_to_move {
         let row_offset = table.range.start_row().saturating_sub(src_start_row);
         let col_offset = table.range.start_col().saturating_sub(src_start_col);
-        let table_row_span = table.range.end_row().saturating_sub(table.range.start_row());
-        let table_col_span = table.range.end_col().saturating_sub(table.range.start_col());
+        let table_row_span = table
+            .range
+            .end_row()
+            .saturating_sub(table.range.start_row());
+        let table_col_span = table
+            .range
+            .end_col()
+            .saturating_sub(table.range.start_col());
         let target_start_row = target_row + row_offset;
         let target_start_col = target_col + col_offset;
 

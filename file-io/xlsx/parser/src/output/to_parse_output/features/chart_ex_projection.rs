@@ -1097,6 +1097,77 @@ mod tests {
         }
     }
 
+    fn sheet_cell(row: u32, col: u32, value: &str) -> FullCellData {
+        FullCellData {
+            row,
+            col,
+            cell_type: crate::output::results::CELL_TYPE_VAL_STRING,
+            style_idx: 0,
+            value: Some(value.to_string()),
+            formula: None,
+            force_recalc: false,
+            array_ref: None,
+            cell_metadata_index: None,
+            phonetic: false,
+            vm: None,
+            date_lexical_value: None,
+            cached_value_type: 0,
+            cell_formula: None,
+            preserve_space_formula: false,
+            preserve_space_value: false,
+            sst_index: None,
+            has_explicit_style: false,
+        }
+    }
+
+    fn sheet_with_cells(cells: Vec<FullCellData>) -> FullParsedSheet {
+        FullParsedSheet {
+            name: "Sheet1".to_string(),
+            cells,
+            ..Default::default()
+        }
+    }
+
+    fn cat_val_dimensions() -> Vec<ChartExDimension> {
+        vec![
+            ChartExDimension::String {
+                dim_type: "cat".to_string(),
+                formula: formula("Sheet1!A1:A3"),
+            },
+            ChartExDimension::Numeric {
+                dim_type: "val".to_string(),
+                formula: formula("Sheet1!B1:B3"),
+            },
+        ]
+    }
+
+    fn chart_space_with_series(
+        layout_id: ChartExLayoutId,
+        dimensions: Vec<ChartExDimension>,
+        layout_pr: Option<ChartExLayoutProperties>,
+    ) -> ChartExSpace {
+        let mut chart_space = ChartExSpace::default();
+        chart_space.chart_data = ChartExChartData {
+            data: vec![ChartExData { id: 0, dimensions }],
+        };
+        chart_space.chart = ChartExChart {
+            plot_area: ChartExPlotArea {
+                plot_area_region: ChartExPlotAreaRegion {
+                    series: vec![ChartExSeries {
+                        layout_id,
+                        data_id: Some(0),
+                        layout_pr,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        chart_space
+    }
+
     fn chart_series(
         chart_type: ChartType,
         categories: Option<&str>,
@@ -1259,6 +1330,30 @@ mod tests {
     }
 
     #[test]
+    fn projects_supported_chart_ex_family_series_data() {
+        for (layout_id, expected_chart_type) in [
+            (ChartExLayoutId::Funnel, ChartType::Funnel),
+            (ChartExLayoutId::Histogram, ChartType::Histogram),
+            (ChartExLayoutId::BoxWhisker, ChartType::Boxplot),
+        ] {
+            let chart_space = chart_space_with_series(layout_id, cat_val_dimensions(), None);
+            let projected =
+                project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+            assert_eq!(projected.chart_type, expected_chart_type);
+            assert_eq!(projected.series.len(), 1);
+            assert_eq!(projected.series[0].r#type, Some(expected_chart_type));
+            assert_eq!(
+                projected.series[0].categories.as_deref(),
+                Some("Sheet1!A1:A3")
+            );
+            assert_eq!(projected.series[0].values.as_deref(), Some("Sheet1!B1:B3"));
+            assert_eq!(projected.data_range.as_deref(), Some("Sheet1!A1:B3"));
+            assert!(projected.import_status.is_none());
+        }
+    }
+
+    #[test]
     fn supported_category_families_missing_categories_are_not_renderable() {
         for chart_type in [ChartType::Waterfall, ChartType::Funnel, ChartType::Boxplot] {
             let status = chart_ex_import_status(
@@ -1335,6 +1430,93 @@ mod tests {
                 transparency: None,
             }
         );
+    }
+
+    #[test]
+    fn pareto_projects_data_but_remains_preserved_not_renderable() {
+        let chart_space =
+            chart_space_with_series(ChartExLayoutId::Pareto, cat_val_dimensions(), None);
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        assert_eq!(projected.chart_type, ChartType::Pareto);
+        assert_eq!(projected.series.len(), 1);
+        assert_eq!(projected.series[0].values.as_deref(), Some("Sheet1!B1:B3"));
+        let status = projected
+            .import_status
+            .expect("pareto is projected for preservation but not rendered as plain bars");
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+        assert_eq!(
+            status.diagnostics[0].code,
+            Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
+        );
+    }
+
+    #[test]
+    fn projects_hierarchy_rows_for_treemap_and_sunburst() {
+        let sheet = sheet_with_cells(vec![
+            sheet_cell(0, 0, "Americas"),
+            sheet_cell(1, 0, "Americas"),
+            sheet_cell(0, 1, "US"),
+            sheet_cell(1, 1, "CA"),
+            sheet_cell(0, 2, "10"),
+            sheet_cell(1, 2, "20"),
+        ]);
+
+        for (layout_id, expected_chart_type) in [
+            (ChartExLayoutId::Treemap, ChartType::Treemap),
+            (ChartExLayoutId::Sunburst, ChartType::Sunburst),
+        ] {
+            let chart_space = chart_space_with_series(
+                layout_id,
+                vec![
+                    ChartExDimension::String {
+                        dim_type: "cat".to_string(),
+                        formula: formula("Sheet1!A1:A2"),
+                    },
+                    ChartExDimension::String {
+                        dim_type: "cat".to_string(),
+                        formula: formula("Sheet1!B1:B2"),
+                    },
+                    ChartExDimension::Numeric {
+                        dim_type: "size".to_string(),
+                        formula: formula("Sheet1!C1:C2"),
+                    },
+                ],
+                Some(ChartExLayoutProperties {
+                    parent_label_layout: Some("banner".to_string()),
+                    ..Default::default()
+                }),
+            );
+            let projected = project_chart_ex_space(&chart_space, &sheet, "xl/charts/chartEx1.xml");
+
+            assert_eq!(projected.chart_type, expected_chart_type);
+            let hierarchy = projected
+                .hierarchy
+                .expect("hierarchy data should be projected");
+            assert_eq!(
+                hierarchy.category_formulas,
+                vec!["Sheet1!A1:A2".to_string(), "Sheet1!B1:B2".to_string()]
+            );
+            assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
+            assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
+            assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
+            assert_eq!(
+                projected.import_status.unwrap().renderability,
+                domain_types::ImportRenderability::NotRenderable
+            );
+        }
     }
 
     #[test]

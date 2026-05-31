@@ -13,6 +13,8 @@ import {
   CATEGORY_FIELD,
   CATEGORY_FORMAT_CODE_FIELD,
   DATA_LABEL_ALIGN_FIELD,
+  DATA_LABEL_ANCHOR_X_FIELD,
+  DATA_LABEL_ANCHOR_Y_FIELD,
   DATA_LABEL_BASELINE_FIELD,
   DATA_LABEL_COLOR_FIELD,
   DATA_LABEL_DX_FIELD,
@@ -25,6 +27,8 @@ import {
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VALUE_ANCHOR_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
+  DATA_LABEL_X_FIELD,
+  DATA_LABEL_Y_FIELD,
   ERROR_BAR_STROKE_FIELD,
   ERROR_BAR_STROKE_WIDTH_FIELD,
   ERROR_BAR_VISIBLE_FIELD,
@@ -41,6 +45,7 @@ import {
   MARKER_SIZE_FIELD,
   MARKER_STROKE_FIELD,
   MARKER_VISIBLE_FIELD,
+  POINT_EXPLOSION_FIELD,
   POINT_FILL_FIELD,
   POINT_INDEX_FIELD,
   POINT_STROKE_FIELD,
@@ -66,6 +71,11 @@ import { isNoFillNoLineSeries } from './series-style';
 import { linePointsToCanvasPx } from './units';
 import type { ChartFill, DataLabelConfig, ErrorBarConfig, PointFormat, SeriesConfig } from '../../types';
 
+interface PieLabelGeometry {
+  cos: number;
+  sin: number;
+}
+
 /**
  * Convert ChartData (categories + series) to flat DataRow[] for the grammar.
  * Each row gets { category, value, series } fields.
@@ -87,6 +97,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const seriesConfigs = config?.series ?? [];
   const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
   const totalsBySeries = data.series.map((series) => seriesTotal(series.data));
+  const pieLabelGeometries = buildPieLabelGeometries(data, config);
   let waterfallRunningTotal = 0;
   const waterfallTotalIndices = new Set([
     ...(config?.waterfall?.totalIndices ?? []),
@@ -130,6 +141,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           value: point.y,
           bubbleSize: point.size,
           percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
+          pieLabelGeometry: pieLabelGeometries[seriesIndex]?.[i],
           seriesValues: series.data.map((item) => item?.y),
         });
         if (config?.type === 'waterfall') {
@@ -173,6 +185,7 @@ function applyPointAnnotations(
     value: number;
     bubbleSize?: number;
     percentage?: number;
+    pieLabelGeometry?: PieLabelGeometry;
     seriesValues: Array<number | undefined>;
   },
 ): void {
@@ -196,6 +209,7 @@ function applyPointStyle(
   if (stroke) row[POINT_STROKE_FIELD] = stroke;
   const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
+  if (pointFormat?.explosion !== undefined) row[POINT_EXPLOSION_FIELD] = pointFormat.explosion;
 }
 
 function applyMarker(
@@ -217,8 +231,15 @@ function applyMarker(
   row[MARKER_VISIBLE_FIELD] = true;
   row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
   row[MARKER_SIZE_FIELD] = markerPointSizeToArea(pointFormat?.markerSize ?? seriesConfig?.markerSize);
-  const fill = colorToCss(pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor);
-  const stroke = colorToCss(pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor);
+  const pointLine = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
+  const fill =
+    colorToCss(pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor) ??
+    pointFormat?.fill ??
+    solidFillColor(pointFormat?.visualFormat?.fill);
+  const stroke =
+    colorToCss(pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor) ??
+    lineColor(pointLine) ??
+    pointFormat?.border?.color;
   if (fill) row[MARKER_FILL_FIELD] = fill;
   if (stroke) row[MARKER_STROKE_FIELD] = stroke;
 }
@@ -234,6 +255,7 @@ function applyDataLabel(
     value: number;
     bubbleSize?: number;
     percentage?: number;
+    pieLabelGeometry?: PieLabelGeometry;
   },
   pointFormat: PointFormat | undefined,
 ): void {
@@ -254,6 +276,13 @@ function applyDataLabel(
   row[DATA_LABEL_ALIGN_FIELD] = placement.align;
   row[DATA_LABEL_BASELINE_FIELD] = placement.baseline;
   row[DATA_LABEL_VALUE_ANCHOR_FIELD] = context.value + placement.valueDelta(context.value);
+  if (context.pieLabelGeometry) {
+    const coordinates = pieLabelCoordinates(context.pieLabelGeometry, label.position);
+    row[DATA_LABEL_ANCHOR_X_FIELD] = coordinates.anchorX;
+    row[DATA_LABEL_ANCHOR_Y_FIELD] = coordinates.anchorY;
+    row[DATA_LABEL_X_FIELD] = coordinates.labelX;
+    row[DATA_LABEL_Y_FIELD] = coordinates.labelY;
+  }
   const font = label.visualFormat?.font;
   const color = colorToCss(font?.color);
   if (color) row[DATA_LABEL_COLOR_FIELD] = color;
@@ -467,6 +496,46 @@ function seriesTotal(values: Array<{ y: number } | undefined>): number {
 function percentageForValue(value: number, total: number): number | undefined {
   if (!Number.isFinite(value) || !Number.isFinite(total) || total === 0) return undefined;
   return Math.abs(value) / total;
+}
+
+function buildPieLabelGeometries(data: ChartData, config?: ChartConfig): PieLabelGeometry[][] {
+  if (!config || !isPieLikeChart(config.type)) return [];
+
+  return data.series.map((series) => {
+    const total = seriesTotal(series.data);
+    let startAngle = -Math.PI / 2;
+    return series.data.map((point) => {
+      const value = total > 0 ? Math.abs(point?.y ?? 0) : 1;
+      const angle = total > 0 ? (value / total) * Math.PI * 2 : (Math.PI * 2) / Math.max(1, series.data.length);
+      const midAngle = startAngle + angle / 2;
+      startAngle += angle;
+      return { cos: Math.cos(midAngle), sin: Math.sin(midAngle) };
+    });
+  });
+}
+
+function pieLabelCoordinates(
+  geometry: PieLabelGeometry,
+  position: DataLabelConfig['position'],
+): { anchorX: number; anchorY: number; labelX: number; labelY: number } {
+  const outside =
+    position === 'outside' ||
+    position === 'outsideEnd' ||
+    position === 'bestFit' ||
+    position === 'callout';
+  const center = position === 'center';
+  const anchorRadius = 0.42;
+  const labelRadius = outside ? 0.56 : center ? 0.0 : 0.3;
+  return {
+    anchorX: 0.5 + geometry.cos * anchorRadius,
+    anchorY: 0.5 + geometry.sin * anchorRadius,
+    labelX: 0.5 + geometry.cos * labelRadius,
+    labelY: 0.5 + geometry.sin * labelRadius,
+  };
+}
+
+function isPieLikeChart(type?: ChartConfig['type']): boolean {
+  return type === 'pie' || type === 'doughnut' || type === 'pie3d';
 }
 
 function isMarkerDefaultChart(type?: ChartConfig['type']): boolean {

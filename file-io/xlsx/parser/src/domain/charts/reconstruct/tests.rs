@@ -1,7 +1,7 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartSpec, ChartType as DomainChartType, DataLabelData, LegendData,
-    ObjectSize, SingleAxisData,
+    AnchorPosition, AxisData, ChartFormatData, ChartSpec, ChartType as DomainChartType,
+    DataLabelData, LegendData, ObjectSize, SingleAxisData,
 };
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
 use domain_types::ChartDefinition;
@@ -330,6 +330,20 @@ fn modeled_axes_reconstruct_render_contract_fields() {
             scale_type: Some("logarithmic".to_string()),
             crosses_at: Some("custom".to_string()),
             crosses_at_value: Some(7.5),
+            custom_display_unit: Some(2500.0),
+            display_unit_label: Some("Custom Units".to_string()),
+            display_unit_label_layout: Some(ManualLayout {
+                x: Some(0.25),
+                ..Default::default()
+            }),
+            display_unit_label_format: Some(ChartFormatData {
+                fill: None,
+                line: None,
+                font: None,
+                text_rotation: Some(45.0),
+                text_vertical_type: None,
+                shadow: None,
+            }),
             ..Default::default()
         }),
         secondary_category_axis: None,
@@ -345,6 +359,11 @@ fn modeled_axes_reconstruct_render_contract_fields() {
     assert!(xml.contains("<c:crosses val=\"min\"/>"));
     assert!(xml.contains("<c:logBase val=\"10\"/>"));
     assert!(xml.contains("<c:crossesAt val=\"7.5\"/>"));
+    assert!(xml.contains("<c:custUnit val=\"2500\"/>"));
+    assert!(xml.contains("<c:dispUnitsLbl>"));
+    assert!(xml.contains("<c:x val=\"0.25\"/>"));
+    assert!(xml.contains("<a:t>Custom Units</a:t>"));
+    assert!(xml.contains("<a:bodyPr rot=\"2700000\"/>"));
 }
 
 #[test]

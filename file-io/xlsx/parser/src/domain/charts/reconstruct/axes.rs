@@ -1,6 +1,6 @@
 use domain_types::{
-    ChartDefinition,
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -435,17 +435,43 @@ pub(super) fn build_display_units(sad: &SingleAxisData) -> Option<charts::Displa
     let custom = sad.custom_display_unit.map(charts::DisplayUnitKind::Custom);
     let kind = built_in.or(custom);
 
-    if kind.is_none() && sad.display_unit_label.is_none() {
+    if kind.is_none()
+        && sad.display_unit_label.is_none()
+        && sad.display_unit_label_layout.is_none()
+        && sad.display_unit_label_format.is_none()
+    {
         return None;
     }
 
-    let disp_units_lbl = sad
-        .display_unit_label
-        .as_ref()
-        .map(|text| charts::DisplayUnitsLabel {
-            tx: Some(build_chart_text_rich(text, None)),
-            ..Default::default()
-        });
+    let disp_units_lbl = if sad.display_unit_label.is_some()
+        || sad.display_unit_label_layout.is_some()
+        || sad.display_unit_label_format.is_some()
+    {
+        let tx = sad
+            .display_unit_label
+            .as_ref()
+            .map(|text| build_chart_text_rich(text, None));
+        let layout = sad
+            .display_unit_label_layout
+            .as_ref()
+            .map(|layout| layout.clone().into());
+        let sp_pr = sad
+            .display_unit_label_format
+            .as_ref()
+            .and_then(build_shape_properties);
+        let tx_pr = sad
+            .display_unit_label_format
+            .as_ref()
+            .and_then(build_text_body);
+        Some(charts::DisplayUnitsLabel {
+            layout,
+            tx,
+            sp_pr,
+            tx_pr,
+        })
+    } else {
+        None
+    };
 
     Some(charts::DisplayUnits {
         kind,

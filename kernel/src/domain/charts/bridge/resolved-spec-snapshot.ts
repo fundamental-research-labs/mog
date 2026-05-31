@@ -151,6 +151,8 @@ function snapshotAxis(
     displayUnit: axis.displayUnit,
     customDisplayUnit: axis.customDisplayUnit,
     displayUnitLabel: axis.displayUnitLabel,
+    displayUnitLabelLayout: axis.displayUnitLabelLayout,
+    displayUnitLabelFormat: axis.displayUnitLabelFormat,
     numberFormat: axis.numberFormat,
     linkNumberFormat: axis.linkNumberFormat,
     position: axis.position,

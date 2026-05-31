@@ -276,9 +276,10 @@ mod tests {
     use super::*;
     use ooxml_types::charts::{
         AxisCrosses, AxisType, BarChartConfig, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
-        ChartSpace, ChartType, ChartTypeConfig, CrossBetween, LineChartConfig, NumFmt, PlotArea,
-        Scaling,
+        ChartSpace, ChartText, ChartType, ChartTypeConfig, CrossBetween, DisplayUnitKind,
+        DisplayUnits, DisplayUnitsLabel, LineChartConfig, ManualLayout, NumFmt, PlotArea, Scaling,
     };
+    use ooxml_types::drawings::{StAngle, TextBody, TextBodyProperties};
 
     fn axis(
         axis_type: AxisType,
@@ -431,6 +432,25 @@ mod tests {
                                 format_code: "$#,##0".to_string(),
                                 source_linked: Some(true),
                             }),
+                            disp_units: Some(DisplayUnits {
+                                kind: Some(DisplayUnitKind::Custom(2500.0)),
+                                disp_units_lbl: Some(DisplayUnitsLabel {
+                                    layout: Some(ManualLayout {
+                                        x: Some(0.25),
+                                        ..Default::default()
+                                    }),
+                                    tx: Some(ChartText::Rich(TextBody::default())),
+                                    tx_pr: Some(TextBody {
+                                        body_props: TextBodyProperties {
+                                            rot: Some(StAngle::new(5400000)),
+                                            ..Default::default()
+                                        },
+                                        ..Default::default()
+                                    }),
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            }),
                             cross_between: Some(CrossBetween::MidCat),
                             ..Default::default()
                         },
@@ -456,6 +476,21 @@ mod tests {
         assert_eq!(value.scale_type.as_deref(), Some("logarithmic"));
         assert_eq!(value.cross_between.as_deref(), Some("midCat"));
         assert_eq!(value.is_between_categories, Some(false));
+        assert_eq!(value.custom_display_unit, Some(2500.0));
+        assert_eq!(
+            value
+                .display_unit_label_layout
+                .as_ref()
+                .and_then(|layout| layout.x),
+            Some(0.25),
+        );
+        assert_eq!(
+            value
+                .display_unit_label_format
+                .as_ref()
+                .and_then(|format| format.text_rotation),
+            Some(90.0),
+        );
     }
 
     #[test]
@@ -541,7 +576,13 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     };
 
     // Display units
-    let (display_unit, custom_display_unit, display_unit_label) = ax
+    let (
+        display_unit,
+        custom_display_unit,
+        display_unit_label,
+        display_unit_label_layout,
+        display_unit_label_format,
+    ) = ax
         .disp_units
         .as_ref()
         .map(|du| {
@@ -554,9 +595,18 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
                 .disp_units_lbl
                 .as_ref()
                 .and_then(|lbl| lbl.tx.as_ref().and_then(|tx| extract_chart_text_string(tx)));
-            (bu, cu, label)
+            let label_layout = du
+                .disp_units_lbl
+                .as_ref()
+                .and_then(|lbl| lbl.layout.as_ref())
+                .map(Into::into);
+            let label_format = du
+                .disp_units_lbl
+                .as_ref()
+                .and_then(|lbl| extract_chart_format(lbl.sp_pr.as_ref(), lbl.tx_pr.as_ref()));
+            (bu, cu, label, label_layout, label_format)
         })
-        .unwrap_or((None, None, None));
+        .unwrap_or((None, None, None, None, None));
 
     // Formatting
     let format = extract_chart_format(ax.sp_pr.as_ref(), ax.tx_pr.as_ref());
@@ -643,6 +693,8 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
         minor_time_unit,
         custom_display_unit,
         display_unit_label,
+        display_unit_label_layout,
+        display_unit_label_format,
         label_alignment,
         label_offset,
         no_multi_level_labels,

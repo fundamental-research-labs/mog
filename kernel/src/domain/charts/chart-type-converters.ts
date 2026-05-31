@@ -287,6 +287,21 @@ export function wireToManualLayout(layout: unknown): ManualLayout | undefined {
   };
 }
 
+function manualLayoutToWire(layout: ManualLayout): ManualLayout {
+  return {
+    layoutTarget: layout.layoutTarget,
+    xMode: layout.xMode,
+    yMode: layout.yMode,
+    wMode: layout.wMode,
+    hMode: layout.hMode,
+    x: layout.x,
+    y: layout.y,
+    w: layout.w,
+    h: layout.h,
+    extLst: layout.extLst,
+  };
+}
+
 export function wireChartTypeToConfig(
   value: string | null | undefined,
 ): WireChartTypeToConfigResult {
@@ -359,6 +374,8 @@ export function wireToSingleAxisConfig(w: SingleAxisData): SingleAxisConfig {
     minorTimeUnit: w.minorTimeUnit,
     customDisplayUnit: w.customDisplayUnit,
     displayUnitLabel: w.displayUnitLabel,
+    displayUnitLabelLayout: wireToManualLayout(w.displayUnitLabelLayout),
+    displayUnitLabelFormat: w.displayUnitLabelFormat,
     labelAlignment: w.labelAlignment,
     labelOffset: w.labelOffset,
     noMultiLevelLabels: w.noMultiLevelLabels,
@@ -710,6 +727,10 @@ export function singleAxisConfigToWire(c: SingleAxisConfig): SingleAxisData {
     minorTimeUnit: c.minorTimeUnit,
     customDisplayUnit: c.customDisplayUnit,
     displayUnitLabel: c.displayUnitLabel,
+    displayUnitLabelLayout: c.displayUnitLabelLayout
+      ? manualLayoutToWire(c.displayUnitLabelLayout)
+      : undefined,
+    displayUnitLabelFormat: c.displayUnitLabelFormat,
     labelAlignment: c.labelAlignment,
     labelOffset: c.labelOffset,
     noMultiLevelLabels: c.noMultiLevelLabels,

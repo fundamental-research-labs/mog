@@ -634,6 +634,8 @@ export interface SingleAxisConfig {
   minorTimeUnit?: string;
   customDisplayUnit?: number;
   displayUnitLabel?: string;
+  displayUnitLabelLayout?: ManualLayout;
+  displayUnitLabelFormat?: ChartFormat;
   labelAlignment?: string;
   labelOffset?: number;
   noMultiLevelLabels?: boolean;
@@ -1054,6 +1056,8 @@ export interface ResolvedChartAxisSnapshot {
   displayUnit?: string;
   customDisplayUnit?: number;
   displayUnitLabel?: string;
+  displayUnitLabelLayout?: ManualLayout;
+  displayUnitLabelFormat?: ChartFormat;
   numberFormat?: string;
   linkNumberFormat?: boolean;
   position?: string;

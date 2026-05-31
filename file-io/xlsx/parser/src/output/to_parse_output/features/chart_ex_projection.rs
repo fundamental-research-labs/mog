@@ -728,6 +728,8 @@ fn project_chart_ex_axis(axis: &ChartExAxis, axis_type: &str) -> SingleAxisData 
         minor_time_unit: None,
         custom_display_unit: None,
         display_unit_label: None,
+        display_unit_label_layout: None,
+        display_unit_label_format: None,
         label_alignment: None,
         label_offset: None,
         no_multi_level_labels: None,

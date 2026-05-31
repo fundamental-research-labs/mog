@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::drawings::ManualLayout;
+
 use super::formatting::{ChartFormatData, ChartLineData};
 
 /// Chart axes configuration.
@@ -75,6 +77,10 @@ pub struct SingleAxisData {
     pub custom_display_unit: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub display_unit_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub display_unit_label_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub display_unit_label_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub label_alignment: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

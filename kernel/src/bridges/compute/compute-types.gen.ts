@@ -4419,6 +4419,8 @@ export interface SingleAxisData {
   minorTimeUnit?: string;
   customDisplayUnit?: number;
   displayUnitLabel?: string;
+  displayUnitLabelLayout?: ManualLayout;
+  displayUnitLabelFormat?: ChartFormatData;
   labelAlignment?: string;
   labelOffset?: number;
   noMultiLevelLabels?: boolean;

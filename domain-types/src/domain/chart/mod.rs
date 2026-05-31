@@ -348,6 +348,10 @@ pub enum ChartSubType {
     Markers,
     MarkersStacked,
     MarkersPercentStacked,
+    Hlc,
+    Ohlc,
+    VolumeHlc,
+    VolumeOhlc,
     /// Fallback — preserves the original string for round-trip fidelity.
     Unknown(String),
 }
@@ -377,6 +381,10 @@ impl ChartSubType {
             ChartSubType::Markers => "markers",
             ChartSubType::MarkersStacked => "markersStacked",
             ChartSubType::MarkersPercentStacked => "markersPercentStacked",
+            ChartSubType::Hlc => "hlc",
+            ChartSubType::Ohlc => "ohlc",
+            ChartSubType::VolumeHlc => "volume-hlc",
+            ChartSubType::VolumeOhlc => "volume-ohlc",
             ChartSubType::Unknown(s) => s.as_str(),
         }
     }
@@ -393,6 +401,10 @@ impl ChartSubType {
             "markers" => ChartSubType::Markers,
             "markersStacked" => ChartSubType::MarkersStacked,
             "markersPercentStacked" => ChartSubType::MarkersPercentStacked,
+            "hlc" => ChartSubType::Hlc,
+            "ohlc" => ChartSubType::Ohlc,
+            "volume-hlc" => ChartSubType::VolumeHlc,
+            "volume-ohlc" => ChartSubType::VolumeOhlc,
             other => ChartSubType::Unknown(other.to_string()),
         }
     }

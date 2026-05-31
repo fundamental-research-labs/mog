@@ -116,6 +116,22 @@ fn chart_sub_type_known_roundtrip() {
 }
 
 #[test]
+fn stock_chart_sub_types_roundtrip() {
+    for (sub_type, wire) in [
+        (ChartSubType::Hlc, "hlc"),
+        (ChartSubType::Ohlc, "ohlc"),
+        (ChartSubType::VolumeHlc, "volume-hlc"),
+        (ChartSubType::VolumeOhlc, "volume-ohlc"),
+    ] {
+        assert_eq!(sub_type.as_str(), wire);
+        let json = serde_json::to_string(&sub_type).unwrap();
+        assert_eq!(json, format!(r#""{wire}""#));
+        let back: ChartSubType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, sub_type);
+    }
+}
+
+#[test]
 fn chart_sub_type_unknown_roundtrip() {
     let json = r#""exploded""#;
     let st: ChartSubType = serde_json::from_str(json).unwrap();

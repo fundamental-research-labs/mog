@@ -31,7 +31,8 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (b) sub_type — from first chart group's config grouping
     // -------------------------------------------------------------------------
-    let sub_type = first_group.and_then(|g| extract_sub_type_from_config(&g.config));
+    let sub_type = extract_stock_sub_type_from_plot_area(plot_area)
+        .or_else(|| first_group.and_then(|g| extract_sub_type_from_config(&g.config)));
 
     // -------------------------------------------------------------------------
     // (c) title — from cs.chart.title
@@ -675,6 +676,52 @@ fn extract_sub_type_from_config(
     }
 }
 
+fn extract_stock_sub_type_from_plot_area(
+    plot_area: &ooxml_types::charts::PlotArea,
+) -> Option<domain_types::chart::ChartSubType> {
+    use domain_types::chart::ChartSubType;
+
+    let mut stock_series_count = None;
+    let mut volume_series_count = 0usize;
+
+    for group in &plot_area.chart_groups {
+        if is_stock_group(group) {
+            if stock_series_count.is_some() {
+                return None;
+            }
+            stock_series_count = Some(group.series.len());
+        } else if is_stock_volume_group(group) {
+            volume_series_count += group.series.len();
+        } else {
+            return None;
+        }
+    }
+
+    match (stock_series_count?, volume_series_count) {
+        (3, 0) => Some(ChartSubType::Hlc),
+        (4, 0) => Some(ChartSubType::Ohlc),
+        (3, 1) => Some(ChartSubType::VolumeHlc),
+        (4, 1) => Some(ChartSubType::VolumeOhlc),
+        _ => None,
+    }
+}
+
+fn is_stock_group(group: &ooxml_types::charts::ChartGroup) -> bool {
+    matches!(&group.config, ooxml_types::charts::ChartTypeConfig::Stock(_))
+        || group.chart_type == ooxml_types::charts::ChartType::Stock
+}
+
+fn is_stock_volume_group(group: &ooxml_types::charts::ChartGroup) -> bool {
+    matches!(
+        group.chart_type,
+        ooxml_types::charts::ChartType::Bar | ooxml_types::charts::ChartType::Bar3D
+    ) && matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Bar(_)
+            | ooxml_types::charts::ChartTypeConfig::Bar3D(_)
+    )
+}
+
 #[derive(Default)]
 struct ScalarChartFields {
     gap_width: Option<u32>,
@@ -793,9 +840,9 @@ fn extract_scalar_fields_from_config(
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, AxisType, Chart as OoxmlChart, ChartAxis, ChartAxisPosition, ChartGroup,
-        ChartSeries, ChartSpace, ChartText, ChartType, ChartTypeConfig, Legend, LineChartConfig,
-        PlotArea, Title,
+        AreaChartConfig, AxisType, BarChartConfig, Chart as OoxmlChart, ChartAxis,
+        ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
+        ChartTypeConfig, Legend, LineChartConfig, PlotArea, StockChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -844,6 +891,39 @@ mod tests {
             raw_chart_element_name: None,
             raw_chart_group_xml: None,
         }
+    }
+
+    fn group_with_series(
+        chart_type: ChartType,
+        config: ChartTypeConfig,
+        series_count: usize,
+    ) -> ChartGroup {
+        ChartGroup {
+            series: (0..series_count)
+                .map(|idx| ChartSeries {
+                    idx: idx as u32,
+                    order: idx as u32,
+                    ..Default::default()
+                })
+                .collect(),
+            ..group(chart_type, config)
+        }
+    }
+
+    fn stock_group(series_count: usize) -> ChartGroup {
+        group_with_series(
+            ChartType::Stock,
+            ChartTypeConfig::Stock(StockChartConfig::default()),
+            series_count,
+        )
+    }
+
+    fn volume_group(series_count: usize) -> ChartGroup {
+        group_with_series(
+            ChartType::Bar,
+            ChartTypeConfig::Bar(BarChartConfig::default()),
+            series_count,
+        )
     }
 
     fn unknown_group(raw_element_name: &str) -> ChartGroup {
@@ -944,6 +1024,59 @@ mod tests {
         assert_eq!(
             chart_type_for_plot_area(&plot_area),
             domain_types::ChartType::Combo
+        );
+    }
+
+    #[test]
+    fn stock_series_count_sets_hlc_and_ohlc_subtypes() {
+        for (series_count, expected) in [
+            (3, domain_types::chart::ChartSubType::Hlc),
+            (4, domain_types::chart::ChartSubType::Ohlc),
+        ] {
+            let cs = ChartSpace {
+                chart: OoxmlChart {
+                    plot_area: PlotArea {
+                        chart_groups: vec![stock_group(series_count)],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+
+            let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+            assert_eq!(spec.chart_type, domain_types::ChartType::Stock);
+            assert_eq!(spec.sub_type, Some(expected));
+        }
+    }
+
+    #[test]
+    fn stock_volume_combo_sets_volume_stock_subtype_and_series_roles() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![volume_group(1), stock_group(4)],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.chart_type, domain_types::ChartType::Combo);
+        assert_eq!(
+            spec.sub_type,
+            Some(domain_types::chart::ChartSubType::VolumeOhlc)
+        );
+        assert_eq!(spec.series.len(), 5);
+        assert_eq!(spec.series[0].r#type, Some(domain_types::ChartType::Column));
+        assert!(
+            spec.series[1..]
+                .iter()
+                .all(|series| series.r#type == Some(domain_types::ChartType::Stock))
         );
     }
 

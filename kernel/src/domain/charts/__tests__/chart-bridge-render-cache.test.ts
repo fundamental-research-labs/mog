@@ -223,6 +223,12 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+async function flushAsyncHandlers(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // sync paint contract
 // ---------------------------------------------------------------------------
@@ -1322,10 +1328,29 @@ describe('renderCached preserves rotation under withRenderContext-style wrap', (
 describe('chart invalidation event fanout', () => {
   it('cells:batch-changed scans affected charts once for the batch bounding range', async () => {
     const { ctx, eventBus } = createTestCtx();
+    const computeBridge = {
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getAllCharts: jest.fn(async () => [
+        { ...fakeChart, sheetId: SHEET_A as unknown as string, dataRange: 'B5:F11' },
+      ]),
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = computeBridge;
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: {
+        kind: 'dataRange',
+        source: 'a1',
+        range: { sheetId: SHEET_A, startRow: 4, startCol: 1, endRow: 10, endCol: 5 },
+      },
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [],
+      diagnostics: [],
+    });
     const bridge = new ChartBridge(ctx);
     bridge.start();
-
-    const affectedSpy = jest.spyOn(bridge, 'getChartsAffectedByRange').mockResolvedValue([CHART_1]);
 
     eventBus.emit({
       type: 'cells:batch-changed',
@@ -1338,16 +1363,10 @@ describe('chart invalidation event fanout', () => {
       ],
       source: 'formula',
     });
-    await Promise.resolve();
+    await flushAsyncHandlers();
 
-    expect(affectedSpy).toHaveBeenCalledTimes(1);
-    expect(affectedSpy).toHaveBeenCalledWith(SHEET_A, {
-      sheetId: SHEET_A,
-      startRow: 4,
-      startCol: 1,
-      endRow: 10,
-      endCol: 5,
-    });
+    expect(computeBridge.getAllCharts).toHaveBeenCalledTimes(1);
+    expect(computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_A);
     expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(CHART_1);
     bridge.stop();
   });

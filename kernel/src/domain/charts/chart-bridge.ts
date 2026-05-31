@@ -34,27 +34,8 @@ import type {
   ChartRenderSnapshot,
   IChartBridge,
 } from '@mog-sdk/contracts/bridges';
-import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { ChartExportOptionsSnapshot } from '@mog-sdk/contracts/data/charts';
-import type {
-  CellChangedEvent,
-  CellsBatchChangedEvent,
-  ChartUpdatedEvent,
-  FloatingObjectCreatedEvent,
-  FloatingObjectDeletedEvent,
-  FloatingObjectUpdatedEvent,
-  RowsInsertedEvent,
-  RowsDeletedEvent,
-  ColumnsInsertedEvent,
-  ColumnsDeletedEvent,
-  SheetDeletedEvent,
-} from '@mog-sdk/contracts/events';
-import { parseCellRange, cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
-import { getAll as getAllCharts, update as updateChart } from './chart-store';
-import { resolveChartRangeReferences } from './chart-range-references';
-import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
-import { hasImportStatus, isChartPayload } from './bridge/import-render-status';
-import { isPositionOnlyUpdate } from './bridge/position-only-update';
 import { defaultExportOptionsForSize } from './bridge/resolved-spec-snapshot';
 import {
   renderChartError,
@@ -63,6 +44,10 @@ import {
 } from './bridge/chart-renderer';
 import { ChartRenderCache } from './bridge/chart-render-cache';
 import { ChartDataResolver } from './bridge/chart-data-resolver';
+import {
+  getChartsAffectedByRange as getChartsAffectedByRangeForSubscriptions,
+  setupChartBridgeSubscriptions,
+} from './bridge/chart-bridge-subscriptions';
 import {
   compileChartMarks,
   compileChartRenderSnapshotAtSize as compileResolvedChartRenderSnapshotAtSize,
@@ -163,406 +148,15 @@ export class ChartBridge implements IChartBridge {
    * Set up EventBus subscriptions for reactive chart updates.
    */
   private setupSubscriptions(): void {
-    // Event-bus seam: event payloads carry sheetId as raw string (see
-    // CellChangedEvent / CellsBatchChangedEvent). Brand at subscription entry
-    // until a follow-up round migrates event types to SheetId.
-    const unsubCell = this.ctx.eventBus.on<CellChangedEvent>('cell:changed', (event) => {
-      void this.handleCellChange(toSheetId(event.sheetId), event.row, event.col);
-    });
-    this.cleanups.push(unsubCell);
-
-    const unsubBatch = this.ctx.eventBus.on<CellsBatchChangedEvent>(
-      'cells:batch-changed',
-      (event) => {
-        void this.handleCellsBatchChange(toSheetId(event.sheetId), event.changes);
-      },
+    this.cleanups.push(
+      setupChartBridgeSubscriptions({
+        ctx: this.ctx,
+        renderCache: this.renderCache,
+        isLive: () => this.started,
+        invalidateChart: (chartId, sheetId) => this.invalidateChart(chartId, sheetId),
+        clearAllCaches: () => this.clearAllCaches(),
+      }),
     );
-    this.cleanups.push(unsubBatch);
-
-    // Subscribe to chart updates (emitted by handleFloatingObjectChanges for chart config changes)
-    const unsubChart = this.ctx.eventBus.on<ChartUpdatedEvent>('chart:updated', (event) => {
-      this.invalidateChart(event.chartId, toSheetId(event.sheetId));
-    });
-    this.cleanups.push(unsubChart);
-
-    const unsubTheme = this.ctx.eventBus.on('workbook:theme-changed', () => {
-      this.clearAllCaches();
-    });
-    this.cleanups.push(unsubTheme);
-
-    // Subscribe to floating object events for chart-type objects.
-    // This handles the live mutation path: when charts are created or updated
-    // as floating objects, we invalidate the marks cache so the next render
-    // fetches fresh data from ComputeBridge.
-    //
-    // The handlers also maintain `chartSheetIndex` so the sync paint path
-    // (`renderCached`) can resolve chartId → sheetId in O(1) without awaiting.
-    const unsubFoCreated = this.ctx.eventBus.on<FloatingObjectCreatedEvent>(
-      'floatingObject:created',
-      (event) => {
-        if (event.objectType === 'chart' || isChartPayload(event.data)) {
-          const eventSheetId = toSheetId(event.sheetId);
-          this.renderCache.setSheetId(event.objectId, eventSheetId);
-          if (!this.syncImportRenderStatus(event.objectId, event.data, eventSheetId)) {
-            this.invalidateChart(event.objectId, eventSheetId);
-          }
-        }
-      },
-    );
-    this.cleanups.push(unsubFoCreated);
-
-    const unsubFoUpdated = this.ctx.eventBus.on<FloatingObjectUpdatedEvent>(
-      'floatingObject:updated',
-      (event) => {
-        if (isChartPayload(event.data)) {
-          // Forward-looking: charts cannot move between sheets in the current
-          // API (no setFloatingObjectSheetId surface), but if a cross-sheet
-          // move is added later it will arrive here as `event.sheetId !==
-          // chartSheetIndex.get(objectId)`. The conditional re-set costs
-          // nothing today and prevents silent index drift if that lands.
-          const eventSheetId = toSheetId(event.sheetId);
-          if (this.renderCache.getSheetId(event.objectId) !== eventSheetId) {
-            this.renderCache.setSheetId(event.objectId, eventSheetId);
-          }
-          const importStatusPayload = hasImportStatus(event.changes) ? event.changes : event.data;
-          const hasTerminalImportStatus = this.syncImportRenderStatus(
-            event.objectId,
-            importStatusPayload,
-            eventSheetId,
-          );
-          if (hasTerminalImportStatus) return;
-
-          // Skip cache invalidation for position-only changes (drag/resize).
-          // Position fields don't affect compiled marks (data, axes, series, etc.).
-          // changedFields comes from Rust via the JSON update keys —
-          // e.g. moveChart -> ["anchorRow", "anchorCol"], resizeChart -> ["width", "height"].
-          const fields = event.changedFields ?? [];
-          if (!isPositionOnlyUpdate(fields)) {
-            this.invalidateChart(event.objectId, eventSheetId);
-          }
-        }
-      },
-    );
-    this.cleanups.push(unsubFoUpdated);
-
-    // Cleanup on chart deletion: drop the index entry and every cache slot,
-    // otherwise renderCached's ensureCompiled would chase a vanished chart.
-    const unsubFoDeleted = this.ctx.eventBus.on<FloatingObjectDeletedEvent>(
-      'floatingObject:deleted',
-      (event) => {
-        if (event.objectType === 'chart') {
-          const eventSheetId = toSheetId(event.sheetId);
-          this.renderCache.deleteSheetId(event.objectId);
-          this.renderCache.deleteChartCaches(event.objectId, eventSheetId);
-        }
-      },
-    );
-    this.cleanups.push(unsubFoDeleted);
-
-    // Cascade clear on sheet deletion: every chart on the deleted sheet must
-    // be evicted from the index and from every cache. Without this, a stale
-    // chartId → vanished-sheetId entry survives and renderCached's
-    // ensureCompiled would call getMarks against a sheet that no longer
-    // exists.
-    const unsubSheetDeleted = this.ctx.eventBus.on<SheetDeletedEvent>('sheet:deleted', (event) => {
-      const deletedSheetId = toSheetId(event.sheetId);
-      const orphanedChartIds = this.renderCache.chartIdsForSheet(deletedSheetId);
-      for (const chartId of orphanedChartIds) {
-        this.renderCache.deleteSheetId(chartId);
-        this.renderCache.deleteChartCaches(chartId, deletedSheetId);
-      }
-    });
-    this.cleanups.push(unsubSheetDeleted);
-
-    // Subscribe to structural changes (row/column insert/delete) to keep A1-string
-    // dataRange references in sync. Charts that use dataRangeIdentity (CellIdRange)
-    // auto-expand via the Rust engine; only legacy A1-string dataRange charts need
-    // this JS-side adjustment.
-    const unsubRowsInserted = this.ctx.eventBus.on<RowsInsertedEvent>('rows:inserted', (event) => {
-      void this.handleRowsInserted(toSheetId(event.sheetId), event.startRow, event.count);
-    });
-    this.cleanups.push(unsubRowsInserted);
-
-    const unsubRowsDeleted = this.ctx.eventBus.on<RowsDeletedEvent>('rows:deleted', (event) => {
-      void this.handleRowsDeleted(toSheetId(event.sheetId), event.startRow, event.count);
-    });
-    this.cleanups.push(unsubRowsDeleted);
-
-    const unsubColsInserted = this.ctx.eventBus.on<ColumnsInsertedEvent>(
-      'columns:inserted',
-      (event) => {
-        void this.handleColumnsInserted(toSheetId(event.sheetId), event.startCol, event.count);
-      },
-    );
-    this.cleanups.push(unsubColsInserted);
-
-    const unsubColsDeleted = this.ctx.eventBus.on<ColumnsDeletedEvent>(
-      'columns:deleted',
-      (event) => {
-        void this.handleColumnsDeleted(toSheetId(event.sheetId), event.startCol, event.count);
-      },
-    );
-    this.cleanups.push(unsubColsDeleted);
-  }
-
-  /**
-   * Handle a cell change - invalidate any charts that reference this cell.
-   */
-  private async handleCellChange(sheetId: SheetId, row: number, col: number): Promise<void> {
-    // Guard: bail if the bridge was stopped (e.g., during document disposal)
-    // while this fire-and-forget handler was already dispatched.
-    if (!this.started) return;
-
-    const charts = await this.getAllChartsInWorkbook();
-    for (const chart of charts) {
-      if (await this.chartReferencesCell(chart, sheetId, row, col)) {
-        this.invalidateChart(chart.id, sheetId);
-      }
-    }
-  }
-
-  private async handleCellsBatchChange(
-    sheetId: SheetId,
-    changes: Array<{ row: number; col: number }>,
-  ): Promise<void> {
-    if (!this.started || changes.length === 0) return;
-
-    let startRow = Number.POSITIVE_INFINITY;
-    let startCol = Number.POSITIVE_INFINITY;
-    let endRow = Number.NEGATIVE_INFINITY;
-    let endCol = Number.NEGATIVE_INFINITY;
-
-    for (const change of changes) {
-      startRow = Math.min(startRow, change.row);
-      startCol = Math.min(startCol, change.col);
-      endRow = Math.max(endRow, change.row);
-      endCol = Math.max(endCol, change.col);
-    }
-
-    const affected = await this.getChartsAffectedByRange(sheetId, {
-      sheetId,
-      startRow,
-      startCol,
-      endRow,
-      endCol,
-    });
-    for (const chartId of affected) {
-      this.invalidateChart(chartId);
-    }
-  }
-
-  private async getAllChartsInWorkbook(): Promise<ChartFloatingObject[]> {
-    const sheetIds = await this.ctx.computeBridge.getSheetOrder();
-    const perSheet = await Promise.all(sheetIds.map((id) => getAllCharts(this.ctx, toSheetId(id))));
-    return perSheet.flat();
-  }
-
-  /**
-   * Check if a chart's data range includes a specific cell.
-   */
-  private async chartReferencesCell(
-    chart: ChartFloatingObject,
-    sheetId: SheetId,
-    row: number,
-    col: number,
-  ): Promise<boolean> {
-    const resolved = await resolveChartRangeReferences(this.ctx, chart);
-    const ranges = [
-      resolved.dataRange,
-      resolved.categoryRange,
-      resolved.seriesRange,
-      ...resolved.seriesReferences.flatMap((series) => [series.values, series.categories]),
-    ];
-
-    return ranges.some((entry) => {
-      const range = entry?.range;
-      return (
-        range?.sheetId === sheetId &&
-        row >= range.startRow &&
-        row <= range.endRow &&
-        col >= range.startCol &&
-        col <= range.endCol
-      );
-    });
-  }
-
-  /**
-   * Handle rows inserted — update A1-string dataRange for affected charts.
-   *
-   * Excel semantics:
-   *   at < startRow          → shift entire range down by count
-   *   startRow < at ≤ endRow → expand endRow by count (insertion strictly inside)
-   *   at > endRow            → no change
-   * Charts using dataRangeIdentity auto-expand via the Rust engine; skip them.
-   */
-  private async handleRowsInserted(
-    sheetId: SheetId,
-    startRow: number,
-    count: number,
-  ): Promise<void> {
-    if (!this.started) return;
-    const charts = await getAllCharts(this.ctx, sheetId);
-    for (const chart of charts) {
-      if (chart.dataRangeIdentity || !chart.dataRange) continue;
-      const range = parseCellRange(chart.dataRange);
-      if (!range) continue;
-
-      if (startRow < range.startRow) {
-        // Insertion before range — shift range down
-        const newRange = {
-          ...range,
-          startRow: range.startRow + count,
-          endRow: range.endRow + count,
-        };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      } else if (startRow > range.startRow && startRow <= range.endRow) {
-        // Insertion strictly inside range — expand endRow
-        const newRange = { ...range, endRow: range.endRow + count };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      }
-      // Insertion at startRow or after endRow: no change
-    }
-  }
-
-  /**
-   * Handle rows deleted — update A1-string dataRange for affected charts.
-   *
-   * Deleted rows: [startRow, startRow + count - 1] (inclusive, 0-indexed).
-   *   delEnd < rangeStart   → shift range up by count
-   *   delStart > rangeEnd   → no change
-   *   otherwise             → shrink range by the overlap, clip start if needed
-   */
-  private async handleRowsDeleted(
-    sheetId: SheetId,
-    startRow: number,
-    count: number,
-  ): Promise<void> {
-    if (!this.started) return;
-    const charts = await getAllCharts(this.ctx, sheetId);
-    for (const chart of charts) {
-      if (chart.dataRangeIdentity || !chart.dataRange) continue;
-      const range = parseCellRange(chart.dataRange);
-      if (!range) continue;
-
-      const delEnd = startRow + count - 1;
-
-      if (delEnd < range.startRow) {
-        // Deletion entirely before range — shift range up
-        const newRange = {
-          ...range,
-          startRow: range.startRow - count,
-          endRow: range.endRow - count,
-        };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
-      } else if (startRow > range.endRow) {
-        // Deletion entirely after range — no change
-      } else {
-        // Deletion overlaps range
-        const overlapStart = Math.max(startRow, range.startRow);
-        const overlapEnd = Math.min(delEnd, range.endRow);
-        const deletedWithin = overlapEnd - overlapStart + 1;
-
-        const newStartRow = startRow < range.startRow ? startRow : range.startRow;
-        const newEndRow = range.endRow - deletedWithin;
-
-        if (newEndRow < newStartRow) {
-          // Entire range was deleted — just invalidate, keep stale range
-          this.invalidateChart(chart.id, sheetId);
-          continue;
-        }
-
-        const newRange = { ...range, startRow: newStartRow, endRow: newEndRow };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      }
-    }
-  }
-
-  /**
-   * Handle columns inserted — update A1-string dataRange for affected charts.
-   * Same semantics as handleRowsInserted but for columns.
-   */
-  private async handleColumnsInserted(
-    sheetId: SheetId,
-    startCol: number,
-    count: number,
-  ): Promise<void> {
-    if (!this.started) return;
-    const charts = await getAllCharts(this.ctx, sheetId);
-    for (const chart of charts) {
-      if (chart.dataRangeIdentity || !chart.dataRange) continue;
-      const range = parseCellRange(chart.dataRange);
-      if (!range) continue;
-
-      if (startCol < range.startCol) {
-        // Insertion before range — shift range right
-        const newRange = {
-          ...range,
-          startCol: range.startCol + count,
-          endCol: range.endCol + count,
-        };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      } else if (startCol > range.startCol && startCol <= range.endCol) {
-        // Insertion strictly inside range — expand endCol
-        const newRange = { ...range, endCol: range.endCol + count };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      }
-    }
-  }
-
-  /**
-   * Handle columns deleted — update A1-string dataRange for affected charts.
-   * Same semantics as handleRowsDeleted but for columns.
-   */
-  private async handleColumnsDeleted(
-    sheetId: SheetId,
-    startCol: number,
-    count: number,
-  ): Promise<void> {
-    if (!this.started) return;
-    const charts = await getAllCharts(this.ctx, sheetId);
-    for (const chart of charts) {
-      if (chart.dataRangeIdentity || !chart.dataRange) continue;
-      const range = parseCellRange(chart.dataRange);
-      if (!range) continue;
-
-      const delEnd = startCol + count - 1;
-
-      if (delEnd < range.startCol) {
-        // Deletion entirely before range — shift range left
-        const newRange = {
-          ...range,
-          startCol: range.startCol - count,
-          endCol: range.endCol - count,
-        };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      } else if (startCol > range.endCol) {
-        // Deletion entirely after range — no change
-      } else {
-        // Deletion overlaps range
-        const overlapStart = Math.max(startCol, range.startCol);
-        const overlapEnd = Math.min(delEnd, range.endCol);
-        const deletedWithin = overlapEnd - overlapStart + 1;
-
-        const newStartCol = startCol < range.startCol ? startCol : range.startCol;
-        const newEndCol = range.endCol - deletedWithin;
-
-        if (newEndCol < newStartCol) {
-          this.invalidateChart(chart.id, sheetId);
-          continue;
-        }
-
-        const newRange = { ...range, startCol: newStartCol, endCol: newEndCol };
-        await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id, sheetId);
-      }
-    }
   }
 
   /**
@@ -711,10 +305,6 @@ export class ChartBridge implements IChartBridge {
    */
   private commitError(chartId: string, error: ChartError, sheetId?: SheetId): void {
     this.renderCache.commitError(chartId, error, sheetId);
-  }
-
-  private syncImportRenderStatus(chartId: string, payload: unknown, sheetId?: SheetId): boolean {
-    return this.renderCache.syncImportRenderStatus(chartId, payload, sheetId);
   }
 
   /**
@@ -924,29 +514,7 @@ export class ChartBridge implements IChartBridge {
    * Useful for determining which charts need re-rendering after a batch update.
    */
   async getChartsAffectedByRange(sheetId: SheetId, range: CellRange): Promise<string[]> {
-    const charts = await this.getAllChartsInWorkbook();
-    const affected: string[] = [];
-
-    for (const chart of charts) {
-      const resolved = await resolveChartRangeReferences(this.ctx, chart);
-      const ranges = [resolved.dataRange, resolved.categoryRange, resolved.seriesRange];
-      const overlaps = ranges.some((entry) => {
-        const chartRange = entry?.range;
-        return (
-          chartRange?.sheetId === sheetId &&
-          range.startRow <= chartRange.endRow &&
-          range.endRow >= chartRange.startRow &&
-          range.startCol <= chartRange.endCol &&
-          range.endCol >= chartRange.startCol
-        );
-      });
-
-      if (overlaps) {
-        affected.push(chart.id);
-      }
-    }
-
-    return affected;
+    return getChartsAffectedByRangeForSubscriptions(this.ctx, sheetId, range);
   }
 
   /**

@@ -749,7 +749,7 @@ impl YrsComputeEngine {
                 target_row,
                 target_col,
             } => {
-                let (mut recalc, relocate_result, table_changes) =
+                let (mut recalc, relocate_result, table_changes, pivot_changes) =
                     services::mutation_handlers::mutation_relocate_cells(
                         &mut self.stores,
                         &mut self.mirror,
@@ -766,6 +766,7 @@ impl YrsComputeEngine {
                 self.prepare_recalc_for_flush(&mut recalc);
                 let mut result = MutationResult::from_recalc(recalc).with_data(&relocate_result)?;
                 result.table_changes.extend(table_changes);
+                result.pivot_changes.extend(pivot_changes);
                 MutationOutput::Recalc(result)
             }
 

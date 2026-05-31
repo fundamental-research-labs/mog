@@ -4,7 +4,7 @@ use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
-use crate::snapshot::{ChangeKind, TableChange};
+use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::metadata_shift;
 use crate::storage::engine::stores::EngineStores;
@@ -34,6 +34,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         RecalcResult,
         crate::engine_types::RelocateResult,
         Vec<TableChange>,
+        Vec<PivotTableChange>,
     ),
     ComputeError,
 > {
@@ -145,6 +146,31 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         target_row,
         target_col,
     );
+
+    // Relocate any pivot whose entire output sits inside the moved range. This
+    // shifts the authoritative anchor; the returned changes signal the caller
+    // (apply_relocate_cells_yrs) to re-materialize and rebuild the sheet
+    // viewport so the old rendered region is cleared and the new one drawn.
+    let source_sheet_hex = source_sheet_id.to_uuid_string();
+    let pivot_changes: Vec<PivotTableChange> = metadata_shift::relocate_pivot_ranges(
+        stores,
+        mirror,
+        source_sheet_id,
+        src_start_row,
+        src_start_col,
+        src_end_row,
+        src_end_col,
+        target_sheet_id,
+        target_row,
+        target_col,
+    )
+    .into_iter()
+    .map(|pivot_id| PivotTableChange {
+        sheet_id: source_sheet_hex.clone(),
+        pivot_id,
+        kind: ChangeKind::Set,
+    })
+    .collect();
 
     // 2. Sync mirror and compute for all affected cells. The GridIndex is
     //    already in its final state post-relocation, so we can look up
@@ -290,7 +316,7 @@ pub(in crate::storage::engine) fn mutation_relocate_cells(
         error: result.error,
     };
 
-    Ok((recalc, relocate_result, table_changes))
+    Ok((recalc, relocate_result, table_changes, pivot_changes))
 }
 
 #[allow(clippy::too_many_arguments)]

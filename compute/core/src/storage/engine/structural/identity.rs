@@ -57,6 +57,15 @@ impl YrsComputeEngine {
             target_col,
         })? {
             MutationOutput::Recalc(result) => {
+                // A relocated pivot's output cells live in the mirror's
+                // `col_data` (written only by `materialize_all_pivots`), not in
+                // the grid index, so the cell-relocation patches don't cover
+                // them. Re-materialize here: this clears each pivot's stale
+                // rendered region and re-draws at its (now updated) anchor.
+                let pivots_moved = !result.pivot_changes.is_empty();
+                if pivots_moved {
+                    self.materialize_all_pivots();
+                }
                 // Flush incremental recalc patches (clears for source +
                 // writes for targets, both produced by
                 // `mutation_relocate_cells`).
@@ -70,6 +79,13 @@ impl YrsComputeEngine {
                     let source_full = self.produce_full_viewport_patches(source_sheet_id);
                     let target_full = self.produce_full_viewport_patches(target_sheet_id);
                     patches = concat_multi_viewport_patches(&[patches, source_full, target_full]);
+                } else if pivots_moved {
+                    // Same-sheet pivot move: the materialized `col_data` writes
+                    // (old region cleared, new region drawn) aren't in the
+                    // incremental patch stream. Rebuild the sheet's viewport so
+                    // both land in the binary the client applies.
+                    let source_full = self.produce_full_viewport_patches(source_sheet_id);
+                    patches = concat_multi_viewport_patches(&[patches, source_full]);
                 }
                 Ok((patches, result))
             }

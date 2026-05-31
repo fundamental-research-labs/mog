@@ -45,6 +45,7 @@ import {
   importedChartRenderStatusToError,
   importStatusToTerminalRenderStatus,
 } from './import-render-status';
+import { hasRenderableChartPointCache } from '../chart-point-cache';
 
 export type ChartRenderData = {
   config: ChartConfig;
@@ -264,15 +265,7 @@ function hasRenderableSeries(series: NonNullable<ChartConfig['series']>[number])
 function hasRenderablePointCache(
   cache: NonNullable<ChartConfig['series']>[number]['valueCache'],
 ): boolean {
-  if (!cache) return false;
-  if (
-    typeof cache.pointCount === 'number' &&
-    Number.isInteger(cache.pointCount) &&
-    cache.pointCount > 0
-  ) {
-    return true;
-  }
-  return cache.points.some((point) => point.idx >= 0);
+  return hasRenderableChartPointCache(cache);
 }
 
 function hasBubbleDimensionSource(

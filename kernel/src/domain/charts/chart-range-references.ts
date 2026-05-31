@@ -11,6 +11,7 @@ import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import { hasRenderableChartPointCache } from './chart-point-cache';
 
 export type ChartRangeKind =
   | 'dataRange'
@@ -267,16 +268,7 @@ export async function resolveChartRangeReferences(
   const diagnostics: ChartRangeDiagnostic[] = [];
   const hasRenderableSeriesData = chart.series?.some((series) => {
     if (series.values?.trim()) return true;
-    const cache = series.valueCache;
-    if (!cache) return false;
-    if (
-      typeof cache.pointCount === 'number' &&
-      Number.isInteger(cache.pointCount) &&
-      cache.pointCount > 0
-    ) {
-      return true;
-    }
-    return cache.points.some((point) => point.idx >= 0);
+    return hasRenderableChartPointCache(series.valueCache);
   }) ?? false;
   const [dataRange, categoryRange, seriesRange, seriesReferences] = await Promise.all([
     hasRenderableSeriesData && !chart.dataRange?.trim()

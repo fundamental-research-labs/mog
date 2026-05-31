@@ -29,6 +29,10 @@ import type {
   ResolvedChartRangeReferences,
 } from '../chart-range-references';
 import {
+  hasRenderableChartPointCache,
+  type ChartPointCacheLike,
+} from '../chart-point-cache';
+import {
   isNoFillNoLineSeriesConfig,
   sourceLinkedAxisNumberFormatDiagnostics,
 } from './chart-render-data-normalizer';
@@ -511,20 +515,20 @@ function droppedSeriesReason(
 }
 
 function dimensionRenderAuthority(input: {
-  cache: unknown;
+  cache: ChartPointCacheLike | null | undefined;
   sourceKind: ChartSeriesDimensionSourceKind | undefined;
   resolvedRange: ResolvedChartRangeReference | null | undefined;
 }): ChartSeriesDimensionRenderAuthority {
   if (input.sourceKind === 'literal') {
-    return input.cache ? 'literal' : 'unavailable';
+    return hasRenderableChartPointCache(input.cache) ? 'literal' : 'unavailable';
   }
   if (input.sourceKind === 'cacheFallback') {
-    return input.cache ? 'fallbackCache' : 'unavailable';
+    return hasRenderableChartPointCache(input.cache) ? 'fallbackCache' : 'unavailable';
   }
   if (input.resolvedRange) {
     return 'live';
   }
-  if (input.cache) {
+  if (hasRenderableChartPointCache(input.cache)) {
     return 'fallbackCache';
   }
   return 'unavailable';
@@ -773,7 +777,9 @@ function unsupportedFeatureDiagnostics(
   if (
     isChartEx &&
     !config.dataRange &&
-    !config.series?.some((series) => series.values?.trim() || series.valueCache?.points?.length)
+    !config.series?.some(
+      (series) => series.values?.trim() || hasRenderableChartPointCache(series.valueCache),
+    )
   ) {
     unsupported.push(`ChartEx ${config.type} data projection is not implemented`);
   }

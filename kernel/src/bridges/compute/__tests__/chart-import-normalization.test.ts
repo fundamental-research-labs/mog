@@ -165,6 +165,28 @@ describe('normalizeImportedComboChart', () => {
     expect(normalized.series?.[0]?.yAxisIndex).toBe(1);
   });
 
+  it('ignores sparse cached points outside explicit pointCount when inferring secondary axes', () => {
+    const normalized = normalizeImportedComboChart({
+      chartType: 'combo',
+      axis: {
+        valueAxis: { visible: true, min: 100, max: 200 },
+        secondaryValueAxis: { visible: true, min: 0, max: 1, numberFormat: '0%' },
+      },
+      series: [
+        {
+          name: 'Stale rate',
+          type: 'line',
+          valueCache: {
+            pointCount: 0,
+            points: [{ idx: 0, value: '0.5', formatCode: '0%' }],
+          },
+        },
+      ],
+    });
+
+    expect(normalized.series?.[0]?.yAxisIndex).toBeUndefined();
+  });
+
   it('preserves explicit series y-axis bindings', () => {
     const normalized = normalizeImportedComboChart({
       chartType: 'combo',

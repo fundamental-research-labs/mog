@@ -159,6 +159,31 @@ describe('resolveChartRangeReferences', () => {
     });
   });
 
+  it('does not treat sparse value cache points outside explicit zero pointCount as renderable data', async () => {
+    const resolved = await resolveChartRangeReferences(
+      createCtx(),
+      chart({
+        dataRange: '',
+        series: [
+          {
+            valueCache: {
+              pointCount: 0,
+              points: [{ idx: 0, value: '10' }],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(resolved.dataRange).toBeNull();
+    expect(resolved.diagnostics).toEqual([
+      expect.objectContaining({
+        kind: 'dataRange',
+        code: 'MISSING_REF',
+      }),
+    ]);
+  });
+
   it('prefers an explicit category range over series category references', async () => {
     const resolved = await resolveChartRangeReferences(
       createCtx(),

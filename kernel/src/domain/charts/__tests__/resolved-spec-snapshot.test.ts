@@ -331,6 +331,60 @@ describe('resolved spec snapshot helpers', () => {
     });
   });
 
+  it('does not report render authority from sparse cache points outside explicit zero pointCount', () => {
+    const sheetId = toSheetId('sheet-1');
+    const config: ChartConfig = {
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 4,
+      height: 5,
+      series: [
+        {
+          name: 'Stale cache',
+          valueSourceKind: 'cacheFallback',
+          valueCache: {
+            pointCount: 0,
+            points: [{ idx: 0, value: '10' }],
+          },
+          categorySourceKind: 'literal',
+          categoryCache: {
+            pointCount: 0,
+            points: [{ idx: 0, value: 'A' }],
+          },
+        },
+      ],
+    };
+
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config,
+      chartData: { categories: [], series: [{ name: 'Stale cache', data: [] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [{ index: 0, values: null, categories: null, bubbleSizes: null }],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.series[0].renderAuthority).toMatchObject({
+      values: 'unavailable',
+      categories: 'unavailable',
+    });
+  });
+
   it('uses sourceSeriesIndex as the dropped-series key fallback', () => {
     const sheetId = toSheetId('sheet-1');
     const snapshot = buildResolvedChartSpecSnapshot({

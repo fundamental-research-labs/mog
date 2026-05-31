@@ -250,6 +250,43 @@ describe('ChartDataResolver', () => {
     });
   });
 
+  it('does not enter imported-series rendering for sparse cache points outside explicit zero pointCount', async () => {
+    const getCellData = jest.fn(async () => ({ value: { type: 'number', value: 10 } }));
+    const resolver = new ChartDataResolver(ctx({ getCellData }));
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        dataRange: undefined,
+        series: [
+          {
+            valueCache: {
+              pointCount: 0,
+              points: [{ idx: 0, value: '10' }],
+            },
+          },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        diagnostics: [
+          {
+            kind: 'dataRange',
+            code: 'MISSING_REF',
+            message: 'Chart has no data range reference',
+          },
+        ],
+      }),
+      CHART_ID,
+    );
+
+    expect(result).toEqual({
+      code: 'DATA_UNAVAILABLE',
+      message: 'Chart has no data range reference',
+      chartId: CHART_ID,
+    });
+    expect(getCellData).not.toHaveBeenCalled();
+  });
+
   it('caches workbook theme palette loads until the resolver cache is cleared', async () => {
     const getWorkbookTheme = jest.fn(async () => ({
       colors: [{ name: 'accent1', color: '123456' }],

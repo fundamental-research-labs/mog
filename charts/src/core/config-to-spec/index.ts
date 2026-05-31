@@ -14,6 +14,7 @@ import { buildEncoding } from './encoding';
 import { buildAnalysisLineLayers } from './layers/analysis-lines';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from './layers/data-labels';
+import { buildDataTableLayers } from './layers/data-table';
 import { buildErrorBarLayers } from './layers/error-bars';
 import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
 import { buildStockLayers } from './layers/stock';
@@ -41,6 +42,7 @@ import { buildTrendlineTransform, buildWaterfallTransforms } from './transforms'
 export {
   buildConfigSpec,
   buildComboLayers,
+  buildDataTableLayers,
   buildEncoding,
   buildDataLabelLayer,
   buildMark,
@@ -113,6 +115,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 
   if (config.type === 'waterfall') {
     const layers = buildWaterfallLayers(config, data, rows);
+    layers.push(...buildDataTableLayers(config, data));
     return buildLayerSpec({
       dimensions,
       rows,
@@ -160,6 +163,7 @@ function buildAnnotationLayers(
     ...buildTrendlineLayers(config, data, encoding, rows),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
     ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
+    ...buildDataTableLayers(config, data),
     ...(isAreaChart(config.type) && hasRowFlag(rows, POINT_STYLE_VISIBLE_FIELD)
       ? buildPointStyleLayers(encoding)
       : []),

@@ -314,4 +314,21 @@ describe('extractChartLayout', () => {
     });
     expect(layout.dataLabels[0].width).toBeGreaterThan(0);
   });
+
+  it('includes data-table bounds when layout reserves a table band', () => {
+    const result = compile(
+      makeBarSpec({
+        config: {
+          layoutHints: {
+            dataTable: { rowCount: 3, height: 62 },
+          },
+        },
+      }),
+    );
+    const layout = extractChartLayout(result);
+
+    expect(layout.dataTable).toBeDefined();
+    expect(layout.dataTable!.top).toBeGreaterThan(layout.plotArea.top);
+    expect(layout.dataTable!.width).toBeCloseTo(layout.plotArea.width, 5);
+  });
 });

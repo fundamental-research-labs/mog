@@ -248,6 +248,7 @@ function extractLayoutSnapshot(result: CompileResult): ChartLayoutSnapshot | nul
     plotArea,
     legend: normalize(layout.legend),
     title: normalize(layout.title),
+    dataTable: normalize(layout.dataTable),
     dataLabels: normalize(dataLabelBounds(result.marks)),
   };
 }

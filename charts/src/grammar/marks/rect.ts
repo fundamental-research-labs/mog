@@ -11,6 +11,12 @@ import { DEFAULT_CATEGORY_COLORS, resolveEncodings, type ScaleMap } from '../enc
 import type { DataRow, Layout, MarkSpec } from '../spec';
 import { invokeScale } from './helpers';
 
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 /**
  * Generate rect marks (heatmap, etc.).
  */
@@ -19,15 +25,42 @@ export function generateRectMarks(
   data: DataRow[],
   scales: ScaleMap,
   encodings: ReturnType<typeof resolveEncodings>,
-  _layout: Layout,
+  layout: Layout,
 ): RectMark[] {
   const marks: RectMark[] = [];
   const xScale = scales.x;
   const yScale = scales.y;
 
-  if (!xScale || !yScale) return marks;
-
   for (const datum of data) {
+    const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
+    const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    const directX2 = directPosition(datum, markSpec.x2Field, layout, 'x', markSpec.coordinateSystem);
+    const directY2 = directPosition(datum, markSpec.y2Field, layout, 'y', markSpec.coordinateSystem);
+    if (
+      directX !== undefined &&
+      directY !== undefined &&
+      directX2 !== undefined &&
+      directY2 !== undefined
+    ) {
+      marks.push({
+        type: 'rect',
+        x: Math.min(directX, directX2),
+        y: Math.min(directY, directY2),
+        width: Math.abs(directX2 - directX),
+        height: Math.abs(directY2 - directY),
+        datum,
+        style: {
+          fill: datumString(datum, markSpec.fillField) ?? markSpec.fill ?? markSpec.color ?? DEFAULT_CATEGORY_COLORS[0],
+          stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke,
+          strokeWidth: markSpec.strokeWidth,
+          opacity: markSpec.opacity ?? 1,
+        },
+      });
+      continue;
+    }
+
+    if (!xScale || !yScale) continue;
+
     const xValue = encodings.x?.accessor(datum);
     const yValue = encodings.y?.accessor(datum);
 
@@ -60,4 +93,28 @@ export function generateRectMarks(
   }
 
   return marks;
+}
+
+function directPosition(
+  datum: DataRow,
+  field: string | undefined,
+  layout: Layout,
+  axis: 'x' | 'y',
+  coordinateSystem: MarkSpec['coordinateSystem'],
+): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  if (coordinateSystem === 'chartFraction') {
+    return axis === 'x' ? value * layout.width : value * layout.height;
+  }
+  if (coordinateSystem === 'dataTableFraction') {
+    const table = layout.dataTable;
+    if (!table) return undefined;
+    return axis === 'x' ? table.x + value * table.width : table.y + value * table.height;
+  }
+  if (coordinateSystem !== 'plotFraction') return value;
+  return axis === 'x'
+    ? layout.plotArea.x + value * layout.plotArea.width
+    : layout.plotArea.y + value * layout.plotArea.height;
 }

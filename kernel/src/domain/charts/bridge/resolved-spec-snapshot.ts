@@ -421,7 +421,7 @@ function unsupportedFeatureDiagnostics(
   }
   if (hasManualDataLabelLayout(config) && !layout?.dataLabels)
     unsupported.push('manual data-label layout is preserved but not rendered');
-  if (config.dataTable)
+  if (config.dataTable && !layout?.dataTable)
     unsupported.push('chart data table is preserved but not rendered');
   if (hasPictureMarkers(config))
     unsupported.push('picture markers are preserved for export but rendered as standard symbols');

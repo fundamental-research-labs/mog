@@ -151,6 +151,7 @@ export interface ChartLayout {
   plotArea: PlotAreaLayout;
   legend?: LegendLayout;
   title?: TitleLayout;
+  dataTable?: ElementBounds;
   axes: AxisLayout[];
   dataLabels: DataLabelLayout[];
 }
@@ -182,6 +183,7 @@ export interface ChartLayoutSnapshot {
   plotArea: ChartLayoutRect;
   legend?: ChartLayoutRect;
   title?: ChartLayoutRect;
+  dataTable?: ChartLayoutRect;
   dataLabels?: ChartLayoutRect;
 }
 

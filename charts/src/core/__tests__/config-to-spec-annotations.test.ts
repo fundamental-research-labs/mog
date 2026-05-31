@@ -11,6 +11,9 @@ import {
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
   DATA_LABEL_X_FIELD,
+  DATA_TABLE_FILL_FIELD,
+  DATA_TABLE_STROKE_FIELD,
+  DATA_TABLE_TEXT_FIELD,
   ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD,
   ERROR_BAR_X_MAX_FIELD,
   ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD,
@@ -628,6 +631,85 @@ describe('configToSpec annotation layers', () => {
         manualLegend: { layoutTarget: 'outer', yMode: 'factor', h: 0.2 },
       }),
     );
+  });
+
+  it('renders a chart data table band with text, borders, and legend keys', () => {
+    const data: ChartData = {
+      categories: ['Q1', 'Q2'],
+      series: [
+        { name: 'Revenue', data: [{ x: 'Q1', y: 10 }, { x: 'Q2', y: 20 }] },
+        { name: 'Cost', data: [{ x: 'Q1', y: 4 }, { x: 'Q2', y: 7 }] },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      dataTable: {
+        visible: true,
+        showHorzBorder: true,
+        showVertBorder: true,
+        showOutline: true,
+        showKeys: true,
+      },
+    };
+
+    const spec = asLayerSpec(config, data);
+    expect(spec.config?.layoutHints?.dataTable).toEqual(
+      expect.objectContaining({ rowCount: 3 }),
+    );
+    expect(spec.layer).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          mark: expect.objectContaining({
+            type: 'text',
+            coordinateSystem: 'dataTableFraction',
+          }),
+        }),
+        expect.objectContaining({
+          mark: expect.objectContaining({
+            type: 'rule',
+            coordinateSystem: 'dataTableFraction',
+          }),
+        }),
+        expect.objectContaining({
+          mark: expect.objectContaining({
+            type: 'rect',
+            coordinateSystem: 'dataTableFraction',
+          }),
+        }),
+      ]),
+    );
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    expect(compiled.layout.dataTable).toBeDefined();
+    const tableLabel = compiled.marks.find(
+      (mark) =>
+        mark.type === 'text' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_TEXT_FIELD] ===
+          'Revenue',
+    );
+    expect(tableLabel?.y).toBeGreaterThan(compiled.layout.plotArea.y + compiled.layout.plotArea.height);
+    const key = compiled.marks.find(
+      (mark) =>
+        mark.type === 'rect' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_FILL_FIELD],
+    );
+    expect(key?.clip).toBeUndefined();
+    const border = compiled.marks.find(
+      (mark) =>
+        mark.type === 'path' &&
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_STROKE_FIELD],
+    );
+    expect(border?.clip).toBeUndefined();
   });
 
   it('renders x error bars from xErrorBars defaults and preserves one-sided custom sources', () => {

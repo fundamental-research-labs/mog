@@ -201,7 +201,18 @@ function frameStyle(frame: ChartFrameSpec): RectMark['style'] {
 }
 
 function isPlotClippableMark(mark: AnyMark): boolean {
-  return mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol';
+  return (
+    (mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol') &&
+    !isPlotClipDisabled(mark.datum)
+  );
+}
+
+function isPlotClipDisabled(datum: unknown): boolean {
+  return (
+    datum != null &&
+    typeof datum === 'object' &&
+    (datum as Record<string, unknown>).__mogClipToPlotArea === false
+  );
 }
 
 function clipMarksToPlotArea(

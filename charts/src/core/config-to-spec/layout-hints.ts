@@ -14,6 +14,7 @@ import {
   explicitDomainBound,
   mapAxisConfigToAxisSpec,
 } from './axis';
+import { dataTableRowCount } from './layers/data-table';
 import { hasSecondaryYAxis } from './secondary-axis';
 
 type LayoutHints = NonNullable<ConfigSpec['layoutHints']>;
@@ -30,6 +31,7 @@ export function buildLayoutHints(
   const manualPlotArea = manualLayoutFromValue(config.plotLayout ?? config.plotArea?.layout);
   const manualTitle = manualLayoutFromValue(config.titleLayout ?? config.chartTitle?.layout);
   const manualLegend = manualLayoutFromValue(config.legend?.layout);
+  const dataTable = dataTableLayoutHint(config, data);
 
   if (
     leftYAxisLabelWidth === undefined &&
@@ -37,7 +39,8 @@ export function buildLayoutHints(
     bottomMargin === undefined &&
     manualPlotArea === undefined &&
     manualTitle === undefined &&
-    manualLegend === undefined
+    manualLegend === undefined &&
+    dataTable === undefined
   ) {
     return undefined;
   }
@@ -51,6 +54,19 @@ export function buildLayoutHints(
     ...(manualPlotArea !== undefined ? { manualPlotArea } : {}),
     ...(manualTitle !== undefined ? { manualTitle } : {}),
     ...(manualLegend !== undefined ? { manualLegend } : {}),
+    ...(dataTable !== undefined ? { dataTable } : {}),
+  };
+}
+
+function dataTableLayoutHint(
+  config: ChartConfig,
+  data: ChartData | undefined,
+): LayoutHints['dataTable'] | undefined {
+  const rowCount = dataTableRowCount(config, data);
+  if (rowCount === 0) return undefined;
+  return {
+    rowCount,
+    height: Math.max(34, Math.min(160, rowCount * 18 + 8)),
   };
 }
 

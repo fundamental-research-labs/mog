@@ -175,6 +175,11 @@ function buildTitleLayout(layout: Layout): TitleLayout | undefined {
   return boundsToPoints(layout.title);
 }
 
+function buildDataTableLayout(layout: Layout): TitleLayout | undefined {
+  if (!layout.dataTable) return undefined;
+  return boundsToPoints(layout.dataTable);
+}
+
 function buildLegendLayout(layout: Layout, legendMarks: AnyMark[]): LegendLayout | undefined {
   if (!layout.legend) return undefined;
 
@@ -289,6 +294,7 @@ export function extractChartLayout(result: CompileResult): ChartLayout {
   const plotArea = buildPlotAreaLayout(layout);
   const legend = buildLegendLayout(layout, result.legends);
   const title = buildTitleLayout(layout);
+  const dataTable = buildDataTableLayout(layout);
   const axes = buildAxisLayouts(result.axes);
   const dataLabels = buildDataLabelLayouts(result.marks);
 
@@ -302,6 +308,7 @@ export function extractChartLayout(result: CompileResult): ChartLayout {
     plotArea,
     legend,
     title,
+    dataTable,
     axes,
     dataLabels,
   };

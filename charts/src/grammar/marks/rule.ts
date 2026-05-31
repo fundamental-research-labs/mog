@@ -132,6 +132,11 @@ function directPosition(
   if (coordinateSystem === 'chartFraction') {
     return axis === 'x' ? value * layout.width : value * layout.height;
   }
+  if (coordinateSystem === 'dataTableFraction') {
+    const table = layout.dataTable;
+    if (!table) return undefined;
+    return axis === 'x' ? table.x + value * table.width : table.y + value * table.height;
+  }
   if (coordinateSystem !== 'plotFraction') return value;
   return axis === 'x'
     ? layout.plotArea.x + value * layout.plotArea.width

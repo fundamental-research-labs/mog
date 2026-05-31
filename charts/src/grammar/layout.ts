@@ -64,6 +64,7 @@ const BOTTOM_LEGEND_HEIGHT = 30;
 const BOTTOM_LEGEND_BOTTOM_PADDING = 8;
 const BOTTOM_LEGEND_RESERVED_SPACE =
   DEFAULT_LAYOUT.xAxisLabelSpace + BOTTOM_LEGEND_HEIGHT + BOTTOM_LEGEND_BOTTOM_PADDING;
+const DATA_TABLE_TOP_PADDING = 6;
 
 // =============================================================================
 // Layout Calculation
@@ -94,8 +95,11 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
 
   const legendEncoding = legendEncodingForSpec(spec);
   const legendOrient = legendOrientForEncoding(legendEncoding);
+  const layoutHints = spec.config?.layoutHints;
+  const dataTableReservedHeight = layoutHints?.dataTable?.height ?? 0;
   const adjustedMarginBottom =
-    legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom;
+    (legendOrient === 'bottom' ? margin.bottom + BOTTOM_LEGEND_RESERVED_SPACE : margin.bottom) +
+    dataTableReservedHeight;
 
   // Calculate legend area
   const autoLegendArea = calculateLegendArea(legendEncoding, width, height, {
@@ -119,7 +123,6 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
       height - adjustedMarginTop - adjustedMarginBottom,
     ),
   };
-  const layoutHints = spec.config?.layoutHints;
   const chartBounds = { x: 0, y: 0, width, height };
   const plotArea =
     applyManualLayout(layoutHints?.manualPlotArea, autoPlotArea, chartBounds, autoPlotArea, {
@@ -138,6 +141,15 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     chartBounds,
     plotArea,
   );
+  const dataTableArea =
+    layoutHints?.dataTable && dataTableReservedHeight > DATA_TABLE_TOP_PADDING
+      ? {
+          x: plotArea.x,
+          y: plotArea.y + plotArea.height + DATA_TABLE_TOP_PADDING,
+          width: plotArea.width,
+          height: dataTableReservedHeight - DATA_TABLE_TOP_PADDING,
+        }
+      : undefined;
 
   return {
     width,
@@ -151,6 +163,7 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     },
     title: titleArea,
     legend: legendArea,
+    dataTable: dataTableArea,
   };
 }
 

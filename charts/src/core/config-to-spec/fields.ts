@@ -75,6 +75,16 @@ export const TRENDLINE_LABEL_LAYOUT_Y_FIELD = '__mogTrendlineLabelLayoutY';
 export const TRENDLINE_LABEL_COLOR_FIELD = '__mogTrendlineLabelColor';
 export const TRENDLINE_LABEL_FONT_SIZE_FIELD = '__mogTrendlineLabelFontSize';
 
+export const DATA_TABLE_TEXT_FIELD = '__mogDataTableText';
+export const DATA_TABLE_X_FIELD = '__mogDataTableX';
+export const DATA_TABLE_Y_FIELD = '__mogDataTableY';
+export const DATA_TABLE_X2_FIELD = '__mogDataTableX2';
+export const DATA_TABLE_Y2_FIELD = '__mogDataTableY2';
+export const DATA_TABLE_FILL_FIELD = '__mogDataTableFill';
+export const DATA_TABLE_STROKE_FIELD = '__mogDataTableStroke';
+export const DATA_TABLE_STROKE_WIDTH_FIELD = '__mogDataTableStrokeWidth';
+export const CLIP_TO_PLOT_AREA_FIELD = '__mogClipToPlotArea';
+
 export const STOCK_OPEN_FIELD = 'open';
 export const STOCK_HIGH_FIELD = 'high';
 export const STOCK_LOW_FIELD = 'low';

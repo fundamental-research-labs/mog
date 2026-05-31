@@ -580,7 +580,7 @@ export interface MarkSpec {
   /** Datum field for direct secondary y position */
   y2Field?: string;
   /** Coordinate system for direct mark fields. */
-  coordinateSystem?: 'plotFraction' | 'chartFraction' | 'pixel';
+  coordinateSystem?: 'plotFraction' | 'chartFraction' | 'dataTableFraction' | 'pixel';
   /** Opacity (0-1) */
   opacity?: number;
   /** Fill opacity (0-1) */
@@ -784,6 +784,10 @@ export interface ConfigSpec {
     manualPlotArea?: ManualLayoutSpec;
     manualTitle?: ManualLayoutSpec;
     manualLegend?: ManualLayoutSpec;
+    dataTable?: {
+      rowCount: number;
+      height: number;
+    };
   };
 }
 
@@ -965,6 +969,13 @@ export interface Layout {
   };
   /** Legend area (if present) */
   legend?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  /** Data table area (if present) */
+  dataTable?: {
     x: number;
     y: number;
     width: number;

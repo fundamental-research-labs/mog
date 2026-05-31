@@ -254,6 +254,56 @@ describe('chart compiler bridge module', () => {
     });
   });
 
+  it('includes rendered data-table layout in resolved snapshots', async () => {
+    await withFreshCompiler(({ compileChartRenderSnapshotAtSize }) => {
+      const sheetId = toSheetId('sheet-1');
+      const chart = {
+        id: 'chart-1',
+        name: 'Chart 1',
+        width: 4,
+        height: 3,
+      } as unknown as ChartFloatingObject;
+      const config: ChartConfig = {
+        type: 'column',
+        width: 4,
+        height: 3,
+        dataTable: {
+          visible: true,
+          showHorzBorder: true,
+          showVertBorder: true,
+          showOutline: true,
+          showKeys: true,
+        },
+      };
+      const chartData: ChartData = {
+        categories: ['Q1', 'Q2'],
+        series: [
+          { name: 'Revenue', data: [{ x: 'Q1', y: 10 }, { x: 'Q2', y: 20 }] },
+        ],
+      };
+
+      const snapshot = compileChartRenderSnapshotAtSize({
+        chart,
+        sheetId,
+        chartId: 'chart-1',
+        config,
+        chartData,
+        resolvedRanges,
+        exportOptions: defaultExportOptionsForSize(400, 240),
+        width: 400,
+        height: 240,
+      });
+
+      expect(snapshot.resolvedChartSpec.resolved.layout?.dataTable).toBeDefined();
+      expect(snapshot.resolvedChartSpec.resolved.layout?.dataTable?.top).toBeGreaterThan(
+        snapshot.resolvedChartSpec.resolved.layout?.plotArea.top ?? 0,
+      );
+      expect(snapshot.resolvedChartSpec.diagnostics.unsupportedFeatures).not.toContain(
+        'chart data table is preserved but not rendered',
+      );
+    });
+  });
+
   it('uses injected WASM transforms before the TypeScript grammar compiler when available', async () => {
     await withFreshCompiler(({ compileChartMarks, initChartWasm }) => {
       const calls: Array<{ data: unknown; transforms: unknown }> = [];

@@ -1130,6 +1130,7 @@ export interface ResolvedChartLayoutSnapshot {
   plotArea: ResolvedChartLayoutRectSnapshot;
   legend?: ResolvedChartLayoutRectSnapshot;
   title?: ResolvedChartLayoutRectSnapshot;
+  dataTable?: ResolvedChartLayoutRectSnapshot;
   dataLabels?: ResolvedChartLayoutRectSnapshot;
 }
 

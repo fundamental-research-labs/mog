@@ -11,9 +11,10 @@ import type { PathMark } from '../../primitives/types';
 import { resolveStrokeColor } from '../../algebra/color';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
-import type { DataRow, Layout, MarkSpec } from '../spec';
+import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import { directPosition } from './direct-position';
 import { centeredScalePosition, definedStyle } from './helpers';
+import { barSlotCenterOffset, createBarSlotContext } from './bar-slot';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
@@ -36,12 +37,18 @@ export function generateRuleMarks(
   scales: ScaleMap,
   encodings: ReturnType<typeof resolveEncodings>,
   layout: Layout,
+  encoding?: EncodingSpec,
+  config?: ConfigSpec,
 ): PathMark[] {
   const marks: PathMark[] = [];
   const xScale = scales.x;
   const yScale = scales.y;
+  const barSlotContext = markSpec.alignToBarSlot
+    ? createBarSlotContext(data, encoding, config, scales, { preferScaleDomain: true })
+    : undefined;
 
-  for (const datum of data) {
+  for (let dataIndex = 0; dataIndex < data.length; dataIndex += 1) {
+    const datum = data[dataIndex];
     let x1: number, y1: number, x2: number, y2: number;
 
     const directX1 = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
@@ -72,14 +79,26 @@ export function generateRuleMarks(
       x2 = directX2;
       y2 = directY2;
     } else if (encodings.x && encodings.y && encodings.x2 && encodings.y2) {
-      const encodedX1 = xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0;
-      const encodedY1 = yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0;
-      const encodedX2 = xScale
-        ? centeredScalePosition(xScale, encodings.x2.accessor(datum))
-        : encodedX1;
-      const encodedY2 = yScale
-        ? centeredScalePosition(yScale, encodings.y2.accessor(datum))
-        : encodedY1;
+      const slotOffset = barSlotCenterOffset(
+        barSlotContext,
+        barSlotContext?.isHorizontal ? yScale : xScale,
+        datum,
+        dataIndex,
+      );
+      const categoryOffsetX = barSlotContext && !barSlotContext.isHorizontal ? slotOffset : 0;
+      const categoryOffsetY = barSlotContext?.isHorizontal ? slotOffset : 0;
+      const encodedX1 =
+        (xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0) +
+        categoryOffsetX;
+      const encodedY1 =
+        (yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0) +
+        categoryOffsetY;
+      const encodedX2 =
+        (xScale ? centeredScalePosition(xScale, encodings.x2.accessor(datum)) : encodedX1) +
+        categoryOffsetX;
+      const encodedY2 =
+        (yScale ? centeredScalePosition(yScale, encodings.y2.accessor(datum)) : encodedY1) +
+        categoryOffsetY;
       x1 = directX1 ?? encodedX1;
       y1 = directY1 ?? encodedY1;
       x2 = directX2 ?? encodedX2;

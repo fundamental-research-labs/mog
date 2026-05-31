@@ -5,7 +5,7 @@ import { buildLayoutHints } from './layout-hints';
 import { resolvedCategoryColors } from './style';
 import { resolveStackMode } from './subtypes';
 import { linePointsToCanvasPx } from './units';
-import { effectiveBarGeometry } from './bar-geometry';
+import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
 
 /**
  * Build the ConfigSpec from chart-level settings: stacking, colors, and layout hints.
@@ -48,7 +48,9 @@ export function buildConfigSpec(
 
   const barGeometry = effectiveBarGeometry(config);
   if (barGeometry) {
-    configSpec.barGeometry = barGeometry;
+    configSpec.barGeometry = shouldReverseImportedHorizontalBarSeries(config, barGeometry)
+      ? { ...barGeometry, seriesSlotOrder: 'reverse' }
+      : barGeometry;
     hasConfig = true;
   }
 

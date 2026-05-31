@@ -714,6 +714,8 @@ export interface MarkSpec {
   fontSizeField?: string;
   /** Datum field for text rotation angle */
   angleField?: string;
+  /** Align text/rule category coordinates to the clustered bar slot for the datum's series. */
+  alignToBarSlot?: boolean;
   /** Line interpolation method */
   interpolate?: Interpolate;
   /** Line tension (for cardinal interpolation) */
@@ -833,6 +835,8 @@ export type BarGeometryGrouping = 'standard' | 'clustered' | 'stacked' | 'percen
 
 export type BarGeometryOrientation = 'horizontal' | 'vertical';
 
+export type BarSeriesSlotOrder = 'source' | 'reverse';
+
 export interface BarGeometrySpec {
   /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
   orientation?: BarGeometryOrientation;
@@ -852,6 +856,8 @@ export interface BarGeometrySpec {
   overlapClamped?: boolean;
   /** Stable series indices owned by this geometry group when known. */
   seriesIndices?: number[];
+  /** Render order for clustered series slots within one category. */
+  seriesSlotOrder?: BarSeriesSlotOrder;
 }
 
 /**

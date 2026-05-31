@@ -248,7 +248,7 @@ describe('chart config normalizer', () => {
       type: 'override',
       mapping: { bg1: 'Dk2', tx1: 'Accent2', folHlink: 'Hlink' },
     });
-    expect(config.extra).toEqual({ imported: true });
+    expect(config.extra).toEqual({ imported: true, sourceDialect: 'ooxml' });
     expect(config.extra).not.toHaveProperty('definition');
   });
 

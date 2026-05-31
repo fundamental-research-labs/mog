@@ -9,9 +9,10 @@
 import type { TextAlign, TextBaseline, TextMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
-import type { DataRow, Layout, MarkSpec } from '../spec';
+import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import { centeredScalePosition, definedStyle } from './helpers';
 import { directPosition } from './direct-position';
+import { barSlotCenterOffset, createBarSlotContext } from './bar-slot';
 
 /**
  * Generate text marks.
@@ -22,12 +23,18 @@ export function generateTextMarks(
   scales: ScaleMap,
   encodings: ReturnType<typeof resolveEncodings>,
   layout: Layout,
+  encoding?: EncodingSpec,
+  config?: ConfigSpec,
 ): TextMark[] {
   const marks: TextMark[] = [];
   const xScale = scales.x;
   const yScale = scales.y;
+  const barSlotContext = markSpec.alignToBarSlot
+    ? createBarSlotContext(data, encoding, config, scales, { preferScaleDomain: true })
+    : undefined;
 
-  for (const datum of data) {
+  for (let dataIndex = 0; dataIndex < data.length; dataIndex += 1) {
+    const datum = data[dataIndex];
     const dx = numberField(datum, markSpec.dxField) ?? markSpec.dx ?? 0;
     const dy = numberField(datum, markSpec.dyField) ?? markSpec.dy ?? 0;
     const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
@@ -38,16 +45,26 @@ export function generateTextMarks(
     ) {
       continue;
     }
+    const slotOffset = barSlotCenterOffset(
+      barSlotContext,
+      barSlotContext?.isHorizontal ? yScale : xScale,
+      datum,
+      dataIndex,
+    );
     const x =
       (directX ??
         (xScale
           ? centeredScalePosition(xScale, encodings.x?.accessor(datum))
-          : layout.plotArea.x)) + dx;
+          : layout.plotArea.x)) +
+      (barSlotContext && !barSlotContext.isHorizontal ? slotOffset : 0) +
+      dx;
     const y =
       (directY ??
         (yScale
           ? centeredScalePosition(yScale, encodings.y?.accessor(datum))
-          : layout.plotArea.y)) + dy;
+          : layout.plotArea.y)) +
+      (barSlotContext?.isHorizontal ? slotOffset : 0) +
+      dy;
 
     const textValue = encodings.text?.accessor(datum);
     const text = textValue != null ? String(textValue) : '';

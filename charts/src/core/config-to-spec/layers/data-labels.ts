@@ -1,5 +1,6 @@
 import type { EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, DataLabelConfig } from '../../../types';
+import { isBarLikeChartType } from '../bar-geometry';
 import {
   CATEGORY_FIELD,
   DATA_LABEL_ALIGN_FIELD,
@@ -43,6 +44,7 @@ export function buildDataLabelLayer(
 export function buildDataLabelLayers(encoding: EncodingSpec, config?: ChartConfig): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
   const automaticCoordinateSystem = automaticLabelCoordinateSystem(position, config);
+  const alignToBarSlot = shouldAlignToBarSlot(position, config);
   const automaticTransform = [
     { type: 'filter' as const, filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } },
     { type: 'filter' as const, filter: `!${DATA_LABEL_LAYOUT_TARGET_FIELD}` },
@@ -57,6 +59,7 @@ export function buildDataLabelLayers(encoding: EncodingSpec, config?: ChartConfi
     colorField: DATA_LABEL_COLOR_FIELD,
     fontSizeField: DATA_LABEL_FONT_SIZE_FIELD,
     angleField: DATA_LABEL_ROTATION_FIELD,
+    ...(alignToBarSlot ? { alignToBarSlot: true } : {}),
     ...(!position
       ? {
           xField: DATA_LABEL_X_FIELD,
@@ -83,6 +86,7 @@ export function buildDataLabelLayers(encoding: EncodingSpec, config?: ChartConfi
 export function buildLeaderLineLayers(encoding: EncodingSpec, config?: ChartConfig): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
   const automaticCoordinateSystem = automaticLabelCoordinateSystem(position, config);
+  const alignToBarSlot = shouldAlignToBarSlot(position, config);
   const automaticTransform = [
     { type: 'filter' as const, filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } },
     { type: 'filter' as const, filter: { field: DATA_LABEL_LEADER_VISIBLE_FIELD, equal: true } },
@@ -99,6 +103,7 @@ export function buildLeaderLineLayers(encoding: EncodingSpec, config?: ChartConf
         strokeWidthField: DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
         dxField: DATA_LABEL_DX_FIELD,
         dyField: DATA_LABEL_DY_FIELD,
+        ...(alignToBarSlot ? { alignToBarSlot: true } : {}),
         ...(!position
           ? {
               xField: DATA_LABEL_ANCHOR_X_FIELD,
@@ -135,6 +140,14 @@ function automaticLabelCoordinateSystem(
 
 function isPieLikeChart(type: ChartConfig['type']): boolean {
   return type === 'pie' || type === 'doughnut' || type === 'pie3d' || type === 'ofPie';
+}
+
+function shouldAlignToBarSlot(
+  position: ReturnType<typeof dataLabelPositionEncoding>,
+  config: ChartConfig | undefined,
+): boolean {
+  if (!position || !config) return false;
+  return isBarLikeChartType(config.type);
 }
 
 function manualDataLabelLayer(

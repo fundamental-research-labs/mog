@@ -163,9 +163,21 @@ type ChartWithLayoutAuthority = ChartFloatingObject & {
 type ChartWithPivotProjection = ChartFloatingObject & {
   pivotProjection?: ChartConfig['pivotProjection'];
 };
+type ChartRenderExtra = {
+  imported: true;
+  sourceDialect: 'ooxml' | 'ooxml-chart-ex';
+};
 
 function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
-  return chart.ooxml || chart.importStatus ? { imported: true } : undefined;
+  if (chart.ooxml) {
+    return {
+      imported: true,
+      sourceDialect: chart.ooxml.isChartEx ? 'ooxml-chart-ex' : 'ooxml',
+    } satisfies ChartRenderExtra;
+  }
+  return chart.importStatus
+    ? ({ imported: true, sourceDialect: 'ooxml' } satisfies ChartRenderExtra)
+    : undefined;
 }
 
 /**

@@ -104,9 +104,9 @@ export function generateMarks(
     case 'rect':
       return generateRectMarks(markSpec, data, scales, encodings, layout);
     case 'rule':
-      return generateRuleMarks(markSpec, data, scales, encodings, layout);
+      return generateRuleMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'text':
-      return generateTextMarks(markSpec, data, scales, encodings, layout);
+      return generateTextMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'tick':
       return generateTickMarks(markSpec, data, scales, encodings, layout);
     case 'boxplot':

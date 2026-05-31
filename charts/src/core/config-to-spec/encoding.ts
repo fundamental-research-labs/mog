@@ -21,6 +21,7 @@ import {
   applyCategoryAxisLabels,
   applyStackedValueDomain,
 } from './encoding-adjustments';
+import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
 import {
   buildCategoryLegendDomain,
   buildColorEncoding,
@@ -267,7 +268,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       hasMultipleSeries,
       legend: config.legend,
       colors: resolvedCategoryColors(config, data),
-      reverseLegend: false,
+      reverseLegend: shouldReverseSeriesLegend(config),
       legendDomain,
       symbolType: legendSymbolType(config, data),
       legendEntries: seriesLegendDomain?.entries,
@@ -307,6 +308,11 @@ function applyCartesianValueAxisDefaults(
   if (encoding.y?.field === VALUE_FIELD) {
     applyAutoValueAxisTicks(encoding.y, { includeZero: options.includeZero });
   }
+}
+
+function shouldReverseSeriesLegend(config: ChartConfig): boolean {
+  const barGeometry = effectiveBarGeometry(config);
+  return barGeometry ? shouldReverseImportedHorizontalBarSeries(config, barGeometry) : false;
 }
 
 function bubbleMaxArea(config: ChartConfig): number {

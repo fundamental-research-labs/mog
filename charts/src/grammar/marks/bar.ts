@@ -7,11 +7,6 @@
 
 import { resolveColor } from '../../algebra/color';
 import {
-  effectiveBarGeometryFromSpec,
-  excelBarSlotGeometry,
-  hasExcelBarGeometrySpec,
-} from '../../core/chart-ir/bar-geometry';
-import {
   SERIES_FILL_FIELD,
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
@@ -20,9 +15,8 @@ import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
+import { barSlotForDatum, createBarSlotContext } from './bar-slot';
 import { definedStyle, renderableDataRows } from './helpers';
-
-const SERIES_ORDER_FIELD = '__mogSeriesOrder';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -47,29 +41,6 @@ function datumNumber(datum: DataRow, field: string | undefined): number | undefi
 
 function finitePosition(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function scaleStep(scale: AnyScale, fallback: number): number {
-  const raw = typeof scale.step === 'function' ? scale.step() : fallback;
-  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : fallback;
-}
-
-function orderedUniqueValues(data: DataRow[], field: string): string[] {
-  const values = new Map<string, { firstIndex: number; seriesOrder: number }>();
-
-  for (let index = 0; index < data.length; index += 1) {
-    const row = data[index];
-    const value = String(row[field]);
-    if (values.has(value)) continue;
-    values.set(value, {
-      firstIndex: index,
-      seriesOrder: datumNumber(row, SERIES_ORDER_FIELD) ?? index,
-    });
-  }
-
-  return [...values.entries()]
-    .sort(([, a], [, b]) => a.seriesOrder - b.seriesOrder || a.firstIndex - b.firstIndex)
-    .map(([value]) => value);
 }
 
 /**
@@ -97,7 +68,6 @@ export function generateBarMarks(
   const isHorizontal = encoding?.x?.type === 'quantitative' && encoding?.y?.type !== 'quantitative';
 
   // Determine if this is grouped/clustered (color encoding without stacking)
-  const colorField = encoding?.color?.field;
   const isStacked =
     config?.stack === 'normalize' || config?.stack === 'zero' || config?.stack === 'center';
   const isPercentStacked = config?.stack === 'normalize';
@@ -105,47 +75,6 @@ export function generateBarMarks(
   // Determine the category and value fields
   const catField = isHorizontal ? encoding?.y?.field : encoding?.x?.field;
   const valField = isHorizontal ? encoding?.x?.field : encoding?.y?.field;
-
-  const isGrouped = !!colorField && !isStacked;
-
-  // For grouped bars, compute group info (unique groups and their order)
-  let uniqueGroups: string[] = [];
-  if (isGrouped && colorField) {
-    uniqueGroups = orderedUniqueValues(renderData, colorField);
-  }
-
-  // Detect duplicate categories: when multiple data rows share the same category
-  // value, we may need to auto-group them to prevent overlap.
-  // This applies when:
-  // 1. No stacking AND no grouping: straightforward duplicate categories
-  // 2. Grouped by color but colorField === catField: color doesn't differentiate within category
-  let maxPerCategory = 1;
-  const catIndexTracker = new Map<string, number>(); // tracks how many bars placed per category
-  const colorMatchesCat = colorField === catField;
-  if (catField && !isStacked) {
-    if (!isGrouped || colorMatchesCat) {
-      const catCounts = new Map<string, number>();
-      for (const d of renderData) {
-        const cat = String(d[catField] ?? '');
-        catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
-      }
-      maxPerCategory = Math.max(1, ...[...catCounts.values()]);
-    }
-  }
-  const hasDuplicateCategories = maxPerCategory > 1;
-  // numGroups determines the bandwidth subdivision:
-  // - For properly grouped bars: use color-based group count
-  // - For auto-grouped duplicate categories: use max per category
-  // - When color matches cat WITH duplicates: override color grouping with auto-group count
-  // - When color matches cat WITHOUT duplicates: keep color grouping (e.g. waterfall charts)
-  const useAutoGrouping = hasDuplicateCategories && (!isGrouped || colorMatchesCat);
-  const numGroups = useAutoGrouping
-    ? maxPerCategory
-    : isGrouped
-      ? Math.max(uniqueGroups.length, 1)
-      : 1;
-  const useExcelGeometry = hasExcelBarGeometrySpec(config);
-  const barGeometry = useExcelGeometry ? effectiveBarGeometryFromSpec(config) : undefined;
 
   // For percent-stacked mode, normalize values per category group
   let normalizedData = renderData;
@@ -219,29 +148,8 @@ export function generateBarMarks(
   // Compute the zero position for the value axis (for proper baseline)
   const zeroPos = isHorizontal ? (effectiveXScale(0) as number) : (effectiveYScale(0) as number);
 
-  // When auto-grouping duplicate categories, sort data by category so
-  // bars for the same category are adjacent and visual order matches mark order.
-  // Build an index array for stable category-grouped ordering.
-  let processOrder: number[];
-  if (hasDuplicateCategories && catField) {
-    // Group indices by category, preserving category appearance order
-    const catGroups = new Map<string, number[]>();
-    const catOrder: string[] = [];
-    for (let i = 0; i < normalizedData.length; i++) {
-      const cat = String(normalizedData[i][catField] ?? '');
-      if (!catGroups.has(cat)) {
-        catGroups.set(cat, []);
-        catOrder.push(cat);
-      }
-      catGroups.get(cat)!.push(i);
-    }
-    processOrder = [];
-    for (const cat of catOrder) {
-      processOrder.push(...catGroups.get(cat)!);
-    }
-  } else {
-    processOrder = normalizedData.map((_, i) => i);
-  }
+  const slotContext = createBarSlotContext(normalizedData, encoding, config, scales);
+  const processOrder = slotContext?.processOrder ?? normalizedData.map((_, i) => i);
 
   for (const i of processOrder) {
     const normalizedDatum = normalizedData[i];
@@ -253,35 +161,15 @@ export function generateBarMarks(
     const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);
     const opacityValue = encodings.opacity?.accessor(datum);
 
-    // Compute group index for grouped bars
-    let groupIndex = 0;
-    if (useAutoGrouping && catField) {
-      // Auto-grouping: assign sequential index within each category
-      // Handles ungrouped duplicates and colorField===catField with duplicates
-      const catKey = String(normalizedDatum[catField] ?? '');
-      groupIndex = catIndexTracker.get(catKey) || 0;
-      catIndexTracker.set(catKey, groupIndex + 1);
-    } else if (isGrouped && colorField) {
-      // Standard color-based grouping: bars in same category get different sub-positions
-      const groupVal = String(datum[colorField] ?? '');
-      groupIndex = uniqueGroups.indexOf(groupVal);
-      if (groupIndex === -1) groupIndex = 0;
-    }
-
     let x: number, y: number, width: number, height: number;
 
     if (isHorizontal) {
       // Horizontal bar
       const barY = yScale(yValue) as number; // Category axis always uses original scale
       const fullBandHeight = typeof yScale.bandwidth === 'function' ? yScale.bandwidth() : 20;
-      const slot = barGeometry
-        ? excelBarSlotGeometry(
-            scaleStep(yScale, fullBandHeight),
-            numGroups,
-            groupIndex,
-            barGeometry,
-          )
-        : { offset: groupIndex * (fullBandHeight / numGroups), size: fullBandHeight / numGroups };
+      const slot = slotContext
+        ? barSlotForDatum(slotContext, yScale, fullBandHeight, normalizedDatum, i)
+        : { offset: 0, size: fullBandHeight };
       const barHeight = slot.size;
       const groupOffset = slot.offset;
 
@@ -351,9 +239,9 @@ export function generateBarMarks(
       // Vertical bar
       const barX = xScale(xValue) as number; // Category axis always uses original scale
       const fullBandWidth = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : 20;
-      const slot = barGeometry
-        ? excelBarSlotGeometry(scaleStep(xScale, fullBandWidth), numGroups, groupIndex, barGeometry)
-        : { offset: groupIndex * (fullBandWidth / numGroups), size: fullBandWidth / numGroups };
+      const slot = slotContext
+        ? barSlotForDatum(slotContext, xScale, fullBandWidth, normalizedDatum, i)
+        : { offset: 0, size: fullBandWidth };
       const barWidth = slot.size;
       const groupOffset = slot.offset;
 

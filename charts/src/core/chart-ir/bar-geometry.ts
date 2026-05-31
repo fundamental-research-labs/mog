@@ -77,6 +77,13 @@ export interface BarSlotGeometry {
   size: number;
 }
 
+type ChartImportSourceDialect = 'ooxml' | 'ooxml-chart-ex';
+
+type ChartRenderExtraMetadata = {
+  imported?: unknown;
+  sourceDialect?: unknown;
+};
+
 function finiteNumber(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -93,6 +100,14 @@ export function barOrientationForChartType(
   type: ChartType | string | undefined,
 ): BarGeometrySpec['orientation'] {
   return HORIZONTAL_BAR_TYPES.has(String(type)) ? 'horizontal' : 'vertical';
+}
+
+export function isHorizontalBarLikeChartType(type: ChartType | string | undefined): boolean {
+  return isBarLikeChartType(type) && barOrientationForChartType(type) === 'horizontal';
+}
+
+export function isVerticalBarLikeChartType(type: ChartType | string | undefined): boolean {
+  return isBarLikeChartType(type) && barOrientationForChartType(type) === 'vertical';
 }
 
 export function stackModeForChartType(type: ChartType | string | undefined): StackMode | undefined {
@@ -176,6 +191,36 @@ export function effectiveBarGeometry(
       : {}),
     ...(sourceOverlap !== undefined && sourceOverlap !== overlap ? { overlapClamped: true } : {}),
   };
+}
+
+export function chartImportSourceDialect(
+  config: Pick<ChartConfig, 'extra'>,
+): ChartImportSourceDialect | undefined {
+  if (typeof config.extra !== 'object' || config.extra === null) return undefined;
+
+  const extra = config.extra as ChartRenderExtraMetadata;
+  if (extra.sourceDialect === 'ooxml' || extra.sourceDialect === 'ooxml-chart-ex') {
+    return extra.sourceDialect;
+  }
+
+  // Compatibility for older normalized import payloads that only carried an
+  // imported sentinel. New normalizers should set sourceDialect explicitly.
+  return extra.imported === true ? 'ooxml' : undefined;
+}
+
+export function isImportedStandardOoxmlChart(config: Pick<ChartConfig, 'extra'>): boolean {
+  return chartImportSourceDialect(config) === 'ooxml';
+}
+
+export function shouldReverseImportedHorizontalBarSeries(
+  config: Pick<ChartConfig, 'extra'>,
+  barGeometry: BarGeometrySpec,
+): boolean {
+  return (
+    isImportedStandardOoxmlChart(config) &&
+    barGeometry.orientation === 'horizontal' &&
+    barGeometry.grouping === 'clustered'
+  );
 }
 
 export function hasExcelBarGeometrySpec(config: ConfigSpec | undefined): boolean {

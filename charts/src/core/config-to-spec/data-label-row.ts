@@ -53,7 +53,7 @@ export function applyDataLabelToRow(
   if (!labelText.text) return;
   row[DATA_LABEL_VISIBLE_FIELD] = true;
   row[DATA_LABEL_TEXT_FIELD] = labelText.text;
-  const placement = labelPlacement(label.position, context.config?.type);
+  const placement = labelPlacement(label.position, context.config?.type, context.value);
   const layout = manualLabelLayout(label);
   row[DATA_LABEL_DX_FIELD] = layout.hasManualPosition ? 0 : placement.dx;
   row[DATA_LABEL_DY_FIELD] = layout.hasManualPosition ? 0 : placement.dy;

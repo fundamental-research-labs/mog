@@ -708,7 +708,8 @@ describe('chart data point value provenance', () => {
     };
 
     const data = extractChartData(accessor, config);
-    const rows = specRows(configToSpec(config, data));
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
 
     expect(data.categories).toEqual(['Jan', 'Feb', 'Mar']);
     expect(data.series).toHaveLength(1);
@@ -723,6 +724,23 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
     expect(rows.map((row) => row[STOCK_DIRECTION_FIELD])).toEqual(['up', 'down', 'up']);
+    expect('layer' in spec ? spec.layer : []).toEqual([
+      expect.objectContaining({
+        mark: { type: 'rule' },
+        encoding: expect.objectContaining({
+          y: { field: STOCK_LOW_FIELD, type: 'quantitative' },
+          y2: { field: STOCK_HIGH_FIELD, type: 'quantitative' },
+        }),
+      }),
+      expect.objectContaining({
+        mark: expect.objectContaining({ type: 'rule' }),
+        encoding: expect.objectContaining({
+          y: { field: STOCK_OPEN_FIELD, type: 'quantitative' },
+          y2: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
+          color: { field: STOCK_DIRECTION_FIELD, type: 'nominal' },
+        }),
+      }),
+    ]);
   });
 
   it('maps imported HLC stock source series without requiring open values', () => {

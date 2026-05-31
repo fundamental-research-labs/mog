@@ -1354,16 +1354,16 @@ Properties:
 
 Examples:
   # Basic usage
-  pnpm xlsx-fidelity golden_lbo_60min.xlsx
+  pnpm xlsx-fidelity sample-model.xlsx
 
   # View specific cell
-  pnpm xlsx-fidelity golden_lbo_60min.xlsx cell B2
+  pnpm xlsx-fidelity sample-model.xlsx cell B2
 
   # Filter to formula accuracy
-  pnpm xlsx-fidelity golden_lbo_60min.xlsx --property formula
+  pnpm xlsx-fidelity sample-model.xlsx --property formula
 
   # JSON output for scripting
-  pnpm xlsx-fidelity golden_lbo_60min.xlsx --format json
+  pnpm xlsx-fidelity sample-model.xlsx --format json
 
 Ground Truth:
   The tool looks for <filename>_extracted.json in the same directory as the XLSX file.

@@ -10,11 +10,11 @@ Shared Phase 0 contracts for trustworthy file I/O testing.
 - Public gate adapters and parser/archive validation: `file-io/xlsx/parser/src/testing`
 - Stable gate command surface: `cargo run -p xlsx-parser --bin xlsx-gate --features cli -- <gate>`
 
-## Internal Locations
+## Private Artifact Boundaries
 
-- Raw private corpus inputs and corpus snapshots: `../mog-data`
-- Internal plans, private reports, private budget snapshots, and autonomous worker output: `../mog-internal`
-- Public examples and website repos must not depend on these internal artifacts.
+- Raw private inputs, snapshots, reports, budget baselines, plans, and
+  autonomous worker output must stay outside this public repository.
+- Public examples and website repos must not depend on private artifacts.
 
 ## Gate Names
 

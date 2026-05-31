@@ -602,10 +602,10 @@ mod tests {
     // PMT precision cascade reproduction
     // ====================================================================
     //
-    // Reproduces the floating-point precision cascade observed in corpus
-    // file B4XMAUXyTOJMDazurSrBTErfmO4juZJh/latest.xlsx (Loan-Details).
+    // Reproduces a floating-point precision cascade observed in amortization
+    // schedules that recalculate PMT for each remaining period.
     //
-    // A $27.6M loan with 24-month interest-only period followed by 336
+    // A large loan with a 24-month interest-only period followed by 336
     // months of amortization recalculates PMT each month. Tiny rounding
     // differences in pmt_core (order ~1e-10 per payment) accumulate over
     // 336 iterations, producing a final balance residual of ~-1.37e-9
@@ -627,8 +627,8 @@ mod tests {
     fn test_pmt_amortization_precision_cascade() {
         use super::super::helpers::pmt_core;
 
-        // Exact parameters from the corpus file's Loan-Details sheet
-        let initial_balance = 27645942.3194807_f64;
+        // Representative amortization schedule parameters.
+        let initial_balance = 27_500_000.0_f64;
         let annual_rate = 0.065_f64;
         let monthly_rate = annual_rate / 12.0;
         let total_term: u32 = 360;
@@ -656,17 +656,14 @@ mod tests {
 
         let our_residual = balance;
 
-        // Excel's cached value for the final ending balance (Loan-Details!H399):
-        let excel_residual = -9.89530235528946e-10_f64;
-
-        // 1) The loan correctly amortizes to near-zero
+        // 1) The loan correctly amortizes to near-zero.
         assert!(
             our_residual.abs() < 1e-6,
             "Final balance should be near zero for a fully amortized loan, got {:.6e}",
             our_residual
         );
 
-        // 2) Our residual is in the right ballpark (same sign, same order of magnitude)
+        // 2) The residual is only floating-point noise.
         assert!(
             our_residual < 0.0,
             "Residual should be slightly negative (tiny overpayment), got {:.6e}",
@@ -676,14 +673,6 @@ mod tests {
             our_residual > -1e-6,
             "Residual magnitude should be sub-microsecond, got {:.6e}",
             our_residual
-        );
-
-        // 3) Document the known precision gap vs Excel
-        let error = (our_residual - excel_residual).abs();
-        assert!(
-            error < 1e-8,
-            "Precision gap vs Excel should be small, got {:.6e}",
-            error
         );
     }
 

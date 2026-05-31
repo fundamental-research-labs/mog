@@ -109,7 +109,7 @@ pub(crate) fn run_indirect_arg_revert_case(variant: u8) -> Result<(), String> {
         .map_err(|e| format!("forward arg rewrite err: {:?}", e))?;
 
     // Inverse — use import_values with the captured Text value for
-    // lossless restore (FINDINGS.md Class-A fix direction).
+    // lossless restore path.
     engine
         .import_values(
             &dest,

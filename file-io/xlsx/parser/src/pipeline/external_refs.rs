@@ -780,17 +780,16 @@ mod tests {
     }
 
     #[test]
-    fn ccm_gaap_real_world() {
-        // From the privateco_turn6 benchmark.
-        let locals = make_local_sheets(&["CCM-GAAP", "Public Comps"]);
-        let el = ExtLinks::new(&[("1", &["CCM-GAAP"]), ("2", &["Public Comps"])]);
+    fn quoted_business_sheet_names() {
+        let locals = make_local_sheets(&["Source-GAAP", "Peer Analysis"]);
+        let el = ExtLinks::new(&[("1", &["Source-GAAP"]), ("2", &["Peer Analysis"])]);
         let ext = el.as_map();
 
-        let r1 = rewrite_formula_external_refs("'[1]CCM-GAAP'!$B$3", &locals, &ext);
-        assert_eq!(r1, "'CCM-GAAP'!$B$3");
+        let r1 = rewrite_formula_external_refs("'[1]Source-GAAP'!$B$3", &locals, &ext);
+        assert_eq!(r1, "'Source-GAAP'!$B$3");
 
-        let r2 = rewrite_formula_external_refs("'[2]Public Comps'!B8", &locals, &ext);
-        assert_eq!(r2, "'Public Comps'!B8");
+        let r2 = rewrite_formula_external_refs("'[2]Peer Analysis'!B8", &locals, &ext);
+        assert_eq!(r2, "'Peer Analysis'!B8");
     }
 
     #[test]

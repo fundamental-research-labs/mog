@@ -2,7 +2,7 @@ use super::*;
 
 /// H6a: Two horizontal TRANSPOSEs on different rows — no spill conflict.
 ///
-/// Mimics the Rev Build pattern from the XLSX file:
+/// Mimics an imported-workbook output pattern:
 ///   Column A, rows 0-4: source data 1 (monthly cohort sizes)
 ///   Column B, rows 0-4: source data 2 (annual cohort sizes)
 ///   C6 = TRANSPOSE(A1:A5) → spills into C6:G6  (row 5, horizontal)
@@ -132,10 +132,10 @@ fn test_two_horizontal_transposes_in_snapshot() {
     assert_mirror_number(&mirror, &d6, 70.0, "D6 SUM(D4:D5)");
 }
 
-/// H7: Cross-sheet TRANSPOSE — the exact pattern from the bYbEjX4h XLSX.
+/// H7: Cross-sheet TRANSPOSE with horizontal spill.
 ///
 /// Sheet "Source" has vertical data C1:C5.
-/// Sheet "Rev Build" has B1 = TRANSPOSE(Source!C1:C5) → horizontal spill B1:F1.
+/// Sheet "Output" has B1 = TRANSPOSE(Source!C1:C5) → horizontal spill B1:F1.
 /// Tests cross-sheet reference resolution for TRANSPOSE.
 #[test]
 fn test_transpose_cross_sheet_spill() {
@@ -153,9 +153,9 @@ fn test_transpose_cross_sheet_spill() {
                 (4, 2, CellValue::number(50.0), None), // C5
             ],
         ),
-        // Sheet 1: "Rev Build" with TRANSPOSE formula
+        // Sheet 1: "Output" with TRANSPOSE formula
         (
-            "Rev Build",
+            "Output",
             100,
             100,
             vec![
@@ -173,14 +173,14 @@ fn test_transpose_cross_sheet_spill() {
     let g1 = CellId::from_uuid_str(&cell_uuid(1, 0, 6)).expect("g1");
 
     // B1 source = 10 (first value)
-    assert_mirror_number(&mirror, &b1, 10.0, "Rev Build B1 TRANSPOSE source");
+    assert_mirror_number(&mirror, &b1, 10.0, "Output B1 TRANSPOSE source");
 
-    // Spill targets on Rev Build sheet
-    assert_col_data_number(&mirror, &sid1, 0, 2, 20.0, "Rev Build C1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 3, 30.0, "Rev Build D1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 4, 40.0, "Rev Build E1 spill");
-    assert_col_data_number(&mirror, &sid1, 0, 5, 50.0, "Rev Build F1 spill");
+    // Spill targets on Output sheet
+    assert_col_data_number(&mirror, &sid1, 0, 2, 20.0, "Output C1 spill");
+    assert_col_data_number(&mirror, &sid1, 0, 3, 30.0, "Output D1 spill");
+    assert_col_data_number(&mirror, &sid1, 0, 4, 40.0, "Output E1 spill");
+    assert_col_data_number(&mirror, &sid1, 0, 5, 50.0, "Output F1 spill");
 
     // SUM(B1:F1) = 10+20+30+40+50 = 150
-    assert_mirror_number(&mirror, &g1, 150.0, "Rev Build G1 SUM cross-sheet spill");
+    assert_mirror_number(&mirror, &g1, 150.0, "Output G1 SUM cross-sheet spill");
 }

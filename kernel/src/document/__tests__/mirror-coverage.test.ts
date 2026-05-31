@@ -21,10 +21,10 @@
  * unclassified field, and the two maps a maintainer can add the entry to.
  *
  * What this guard does NOT verify:
- *   - That the mirror's apply logic is *correct* — that's Guard 2's runtime
- *     invariant in `dev/app-eval/capture/invariants/registry.ts`.
+ *   - That the mirror's apply logic is *correct* — covered by runtime
+ *     invariants in the UI eval harness.
  *   - That selectors registered in `mirrorFieldCoverage` actually fire on
- *     the right changes — also Guard 2's job.
+ *     the right changes — also covered by runtime invariants.
  *
  */
 

@@ -6,7 +6,7 @@ use value_types::CellValue;
 
 /// Test 11: Cross-sheet INDEX/MATCH with whole-column refs should NOT produce #REF!.
 ///
-/// This is the core false-cycle pattern from the LBO financial model:
+/// This is the core false-cycle pattern from a large financial model:
 ///   Sheet A has INDEX(Sheet B!A:C, MATCH(..., Sheet B!A:A, 0), ...)
 ///   Sheet B has INDEX(Sheet A!A:C, MATCH(..., Sheet A!A:A, 0), ...)
 ///

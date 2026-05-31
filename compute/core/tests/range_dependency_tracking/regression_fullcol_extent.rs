@@ -3,24 +3,17 @@ use compute_core::storage::engine::YrsComputeEngine;
 use snapshot_types::WorkbookSnapshot;
 use value_types::CellValue;
 
-pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
-    // Build a workbook mimicking FINDINGS.md's `Ib6CYMnT` shape.
-    //
-    // FINDINGS.md pattern (from the run-46 path-0 step-4 reproducer):
-    // - Forward op: `{ row: 39187, col: 5, prior: "1", new: "85" }`
-    //   i.e. set SourceData!F39188 from 1 → 85.
-    // - Dependent `Ray Booth!D21` drifted from 1407 → 1491 (Δ=+84 =
-    //   new − prior), and stayed at 1491 after the inverse.
-    // - The Δ equalling (new - prior) says the dependent is SUMIFS-
-    //   shaped where the edited cell (F39188) is a value column hit
-    //   that passes its own criterion.
+pub(crate) fn regression_fullcol_bbox_extent_miss() {
+    // Build a workbook that exercises the full-column dynamic-extent shape:
+    // a sparse high-row value write contributes to a SUMIFS formula, then the
+    // inverse must remove that contribution.
     //
     // We reproduce by making a SUMIFS that sums `SourceData!$F:$F`
     // with a wildcard ">0" criterion. The edit at F39188 is inside
     // the populated-by-criteria set, so the forward op changes the
     // sum by exactly (new - prior). The inverse must reverse that.
     //
-    // Critical setup details that match the FINDINGS.md surface:
+    // Critical setup details:
     // 1. Initial extent on SourceData is *low* (a handful of cells at
     //    rows 0..=2). Row 39_187 is far outside that.
     // 2. The prior value at F39188 is `1` (non-null), matching the
@@ -35,7 +28,7 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
         value_cell(0, 2, 5, 300.0),
         // NOTE: F39188 is *not* pre-seeded in the snapshot. The initial
         // extent on SourceData is rows 0..=2 only; the SUMIFS initial
-        // value is exactly 1400. The Ib6CYMnT hypothesis: when the
+        // value is exactly 1400. The hypothesis: when the
         // forward op writes F39188=85, the full-column bbox cache
         // *grows* to cover row 39_187. When the inverse restores
         // F39188=<something-that-doesn't-contribute>, the bbox should
@@ -62,7 +55,7 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
     let dependent = cell_id(1, 0, 0);
 
     let before = read_value(&engine, &dependent);
-    eprintln!("[regression_ib6cymnt] before preamble: {:?}", before);
+    eprintln!("[regression_fullcol_extent] before preamble: {:?}", before);
 
     // Sanity: 500 + 600 + 300 = 1400.
     assert!(
@@ -91,7 +84,10 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
     }
 
     let after_preamble = read_value(&engine, &dependent);
-    eprintln!("[regression_ib6cymnt] after preamble: {:?}", after_preamble);
+    eprintln!(
+        "[regression_fullcol_extent] after preamble: {:?}",
+        after_preamble
+    );
     // Preamble should not have changed the SUMIFS total (all values
     // ≤ 0 fail the ">0" criterion).
     assert!(
@@ -107,7 +103,7 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
         .expect("forward set_cell value");
 
     let during = read_value(&engine, &dependent);
-    eprintln!("[regression_ib6cymnt] after forward op: {:?}", during);
+    eprintln!("[regression_fullcol_extent] after forward op: {:?}", during);
     assert!(
         matches!(&during, CellValue::Number(n) if (n.get() - 1485.0).abs() < 1e-9),
         "during-op SUMIFS should be 1485 (1400 + 85); got {:?}",
@@ -124,7 +120,7 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
         .expect("inverse import_values");
 
     let after = read_value(&engine, &dependent);
-    eprintln!("[regression_ib6cymnt] after inverse op: {:?}", after);
+    eprintln!("[regression_fullcol_extent] after inverse op: {:?}", after);
 
     // The identity check compares the dependent against the
     // post-preamble value (which was 1400), not the pre-preamble
@@ -134,7 +130,7 @@ pub(crate) fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
     assert_eq!(
         after_preamble,
         after,
-        "Ib6CYMnT regression pin: SUMIFS dependent failed to return \
+        "full-column extent regression pin: SUMIFS dependent failed to return \
          to pre-op value after op+inverse far-outside the populated \
          extent, following a preamble of scattered far-outside \
          writes. This test is expected to fail today; passing it \

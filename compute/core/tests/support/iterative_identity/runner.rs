@@ -65,7 +65,7 @@ pub(crate) fn run_case(case: &Class1Case) -> TestOutcome {
     }
 
     // Inverse op — use import_values to restore the prior raw CellValue
-    // (bypasses the parser, per FINDINGS.md Class-A fix).
+    // (bypasses the parser; this is the intended lossless restore path).
     if let Err(e) = engine.import_values(
         &sid,
         vec![(target_row, target_col, case.prior.clone(), None)],
@@ -383,10 +383,9 @@ fn cases_for_edit_pos_value(edit_pos: EditPosition, value_kind: ValueType) -> Ve
 /// incompatible / pending, emits a `[Class I V2 · <edit_pos>] ...`
 /// summary line, and panics on any failure.
 ///
-/// Failing tests ARE the bug tracker. Per the plan, `FarOutside` × full-col
-/// × SUMIFS cases may surface the unit-level `Ib6CYMnT` expression; those
-/// are **failures**, not `#[ignore]`s. The handoff records the specific
-/// failing entries as `regression_ib6cymnt_unit_*`.
+/// Failing tests ARE the bug tracker. `FarOutside` × full-col × SUMIFS cases
+/// may surface unit-level dynamic-extent regressions; those are **failures**,
+/// not `#[ignore]`s.
 #[allow(dead_code)] // Retained as the coarse-split entry; 5×13 fine split
 // is the default but this helper still works.
 fn run_edit_pos_split(label: &'static str, edit_pos: EditPosition) -> (usize, usize, usize, usize) {
@@ -397,16 +396,17 @@ fn run_edit_pos_split(label: &'static str, edit_pos: EditPosition) -> (usize, us
     let mut skipped_incompat = 0usize;
     let mut skipped_pending = 0usize;
     let mut failures: Vec<String> = Vec::new();
-    let mut ib6_hits: Vec<String> = Vec::new();
+    let mut dynamic_extent_hits: Vec<String> = Vec::new();
     let start = Instant::now();
     for case in &cases {
         match run_case_v2(case) {
             TestOutcome::Passed => passed += 1,
             TestOutcome::Failed(msg) => {
                 failed += 1;
-                // Tag potential Ib6CYMnT unit-level hits: FarOutside ×
+                // Tag potential full-column dynamic-extent unit-level hits:
+                // FarOutside × full-column × aggregate-family shape.
                 // full-col × SUMIFS-family shape.
-                let is_ib6_signature = edit_pos == EditPosition::FarOutside
+                let is_dynamic_extent_signature = edit_pos == EditPosition::FarOutside
                     && matches!(
                         case.range,
                         RangeType::FullCol | RangeType::FullColMulti | RangeType::FullRow
@@ -422,9 +422,9 @@ fn run_edit_pos_split(label: &'static str, edit_pos: EditPosition) -> (usize, us
                             | FormulaShape::Minifs
                             | FormulaShape::Maxifs
                     );
-                if is_ib6_signature {
-                    ib6_hits.push(format!(
-                        "  [ib6cymnt_unit] [{}] shape={:?} range={:?} value={:?}: {}",
+                if is_dynamic_extent_signature {
+                    dynamic_extent_hits.push(format!(
+                        "  [dynamic_extent_unit] [{}] shape={:?} range={:?} value={:?}: {}",
                         case.name, case.shape, case.range, case.value_kind, msg,
                     ));
                 }
@@ -447,13 +447,13 @@ fn run_edit_pos_split(label: &'static str, edit_pos: EditPosition) -> (usize, us
         elapsed,
         total,
     );
-    if !ib6_hits.is_empty() {
+    if !dynamic_extent_hits.is_empty() {
         eprintln!(
-            "[Class I V2 · {}] Ib6CYMnT unit-level hits ({}):",
+            "[Class I V2 · {}] dynamic-extent unit-level hits ({}):",
             label,
-            ib6_hits.len()
+            dynamic_extent_hits.len()
         );
-        for h in &ib6_hits {
+        for h in &dynamic_extent_hits {
             eprintln!("{}", h);
         }
     }
@@ -482,14 +482,14 @@ pub(crate) fn run_edit_pos_value_split(
     let mut skipped_incompat = 0usize;
     let mut skipped_pending = 0usize;
     let mut failures: Vec<String> = Vec::new();
-    let mut ib6_hits: Vec<String> = Vec::new();
+    let mut dynamic_extent_hits: Vec<String> = Vec::new();
     let start = Instant::now();
     for case in &cases {
         match run_case_v2(case) {
             TestOutcome::Passed => passed += 1,
             TestOutcome::Failed(msg) => {
                 failed += 1;
-                let is_ib6_signature = edit_pos == EditPosition::FarOutside
+                let is_dynamic_extent_signature = edit_pos == EditPosition::FarOutside
                     && matches!(
                         case.range,
                         RangeType::FullCol | RangeType::FullColMulti | RangeType::FullRow
@@ -505,9 +505,9 @@ pub(crate) fn run_edit_pos_value_split(
                             | FormulaShape::Minifs
                             | FormulaShape::Maxifs
                     );
-                if is_ib6_signature {
-                    ib6_hits.push(format!(
-                        "  [ib6cymnt_unit] [{}] shape={:?} range={:?} value={:?}: {}",
+                if is_dynamic_extent_signature {
+                    dynamic_extent_hits.push(format!(
+                        "  [dynamic_extent_unit] [{}] shape={:?} range={:?} value={:?}: {}",
                         case.name, case.shape, case.range, case.value_kind, msg,
                     ));
                 }
@@ -530,13 +530,13 @@ pub(crate) fn run_edit_pos_value_split(
         elapsed,
         total,
     );
-    if !ib6_hits.is_empty() {
+    if !dynamic_extent_hits.is_empty() {
         eprintln!(
-            "[Class I V2 · {}] Ib6CYMnT unit-level hits ({}):",
+            "[Class I V2 · {}] dynamic-extent unit-level hits ({}):",
             label,
-            ib6_hits.len()
+            dynamic_extent_hits.len()
         );
-        for h in &ib6_hits {
+        for h in &dynamic_extent_hits {
             eprintln!("{}", h);
         }
     }

@@ -24,11 +24,18 @@ Those scripts expand as follows:
 | `check:ci:format` | `pnpm format:check` |
 | `check:ci:lint` | `pnpm lint` |
 | `check:ci:typecheck` | `pnpm typecheck` |
-| `check:ci:public-boundaries` | `pnpm validate:packages && pnpm lint:boundaries && pnpm check:platform-dependencies && pnpm check-cycles && pnpm check:host-surface-disposition` |
+| `check:ci:public-boundaries` | `pnpm validate:packages && pnpm check:private-leaks && pnpm lint:boundaries && pnpm check:platform-dependencies && pnpm check-cycles && pnpm check:host-surface-disposition` |
 
 `pnpm lint` is currently the import-boundary lint aggregate. Broader package
 tests are available through `pnpm test`, but they are not part of the
 `check:ci:*` root aggregate.
+
+`pnpm check:private-leaks` scans committed public-repo text and fixture paths
+for local absolute paths, private sibling repo names, private workbook
+provenance, and corpus-derived reducer handles. Exact sensitive identifiers
+should not be committed to this repo; supply them through an untracked
+newline-delimited regex file via `MOG_PRIVATE_LEAK_PATTERNS` when a local or CI
+environment has access to that private list.
 
 ## Publish Readiness
 
@@ -78,6 +85,7 @@ publish-only:
 
 ```bash
 pnpm validate:packages
+pnpm check:private-leaks
 pnpm run build:public-artifacts -- --skip-native-build --skip-wasm-build
 pnpm check:binary-wrapper-surfaces
 pnpm check:contracts-declaration-identity

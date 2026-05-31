@@ -1,11 +1,12 @@
-//! Uses XLSX-hydration path, not from_snapshot, because iterative-recalc
-//! bugs don't reproduce on synthetic workbooks. The 16s idempotent regression
-//! lives on the hydration path.
+//! Uses the XLSX-hydration path, not from_snapshot, because this idempotent
+//! recalc regression only reproduced with a workbook imported from bytes.
 //!
 //! Gated by `#[cfg(feature = "corpus-tests")]` so the default test run stays
 //! synthetic and fast. Run explicitly with:
 //!   cargo test -p compute-core --features corpus-tests \
 //!     --test recalc_idempotent_corpus -- --nocapture
+//!
+//! Set `MOG_RECALC_IDEMPOTENT_XLSX` to the external workbook fixture path.
 
 #![cfg(feature = "corpus-tests")]
 
@@ -13,16 +14,14 @@ use compute_core::storage::engine::YrsComputeEngine;
 use snapshot_types::RecalcOptions;
 use std::path::PathBuf;
 
-/// The corpus fixture that surfaced the 16s idempotent-recalc regression
-/// in `drawing-import-roundtrip`.
 fn corpus_xlsx_path() -> PathBuf {
-    let corpus_dir = std::env::var_os("MOG_XLSX_CORPUS_DIR")
-        .expect("set MOG_XLSX_CORPUS_DIR to the XLSX corpus directory");
-    PathBuf::from(corpus_dir).join("0C4IrPq6aZzIQtKQfiFqUXMqvUiIOjna/latest.xlsx")
+    let fixture = std::env::var_os("MOG_RECALC_IDEMPOTENT_XLSX")
+        .expect("set MOG_RECALC_IDEMPOTENT_XLSX to the external XLSX fixture path");
+    PathBuf::from(fixture)
 }
 
 #[test]
-fn idempotent_recalc_on_drawing_import_roundtrip_corpus() {
+fn idempotent_recalc_on_external_xlsx_fixture() {
     let corpus_xlsx = corpus_xlsx_path();
     let bytes = std::fs::read(&corpus_xlsx).unwrap_or_else(|e| {
         panic!(

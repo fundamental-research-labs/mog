@@ -13,10 +13,10 @@ Public status notes:
   (`publish = false`) that implement the shipped runtime behavior.
 - `dd-precision` is implemented in public source as an opt-in compile feature,
   but it is not part of the default build profile.
-- The real-workbook corpus observations behind these cases are
-  workspace-internal. This public page intentionally omits workbook IDs, sheet
-  names, cell addresses, and private cached values that are not reproducible
-  from the public checkout.
+- The real-workbook observations behind these cases are external to the public
+  checkout. This page intentionally omits workbook IDs, sheet names, cell
+  addresses, and cached values that are not reproducible from the public
+  checkout.
 
 The standard evaluator stores numeric cell values as finite `f64` values, uses
 compensated aggregation where implemented, and applies a 15-significant-digit
@@ -30,8 +30,8 @@ double-double arithmetic types (`F64x2`, `DdSum`) are always present in
 ## KFD-001: Cancellation After SUM of Large Values
 
 **Status**: Accepted for the shipped default precision profile
-**Observation status**: workspace-internal corpus observation; no public XLSX
-fixture is committed
+**Observation status**: external workbook observation; no public XLSX fixture is
+committed
 **Impact**: Rare - requires two large aggregates that nearly cancel to a small
 result
 
@@ -64,10 +64,10 @@ recover low-order information that was not carried forward.
 
 ### Why Excel Can Differ
 
-The exact Excel calculation path for the private corpus workbook is outside this
-repository. The observed cached value is consistent with Excel carrying a
-different intermediate precision or rounding path across the aggregate and
-subtraction boundary than Mog's default profile carries.
+The exact Excel calculation path for the observed workbook is outside this
+repository. The cached value is consistent with Excel carrying a different
+intermediate precision or rounding path across the aggregate and subtraction
+boundary than Mog's default profile carries.
 
 ### Codebase Evidence
 
@@ -106,8 +106,8 @@ the shipped default profile.
 ## KFD-002: Balance-Check Branch Flip from Low-Order Drift
 
 **Status**: Accepted under the shipped 15-significant-digit comparison model
-**Observation status**: workspace-internal corpus observation; no public XLSX
-fixture is committed
+**Observation status**: external workbook observation; no public XLSX fixture is
+committed
 **Impact**: Rare - requires an equality branch over totals computed through
 independent arithmetic chains
 
@@ -118,7 +118,7 @@ independent arithmetic chains
 | Formula shape | `=IF(total_a=total_b,"OK",total_a-total_b)` |
 | Predicate operands | Two independently computed totals that agree at the 15-significant-digit comparison scale |
 | Default engine behavior | The comparison evaluates equal and `IF` returns the true branch |
-| Observed Excel cache shape | A private corpus workbook cached the residual numeric branch instead |
+| Observed Excel cache shape | An external workbook cached the residual numeric branch instead |
 | Public fixture | Not shipped |
 
 ### Root Cause

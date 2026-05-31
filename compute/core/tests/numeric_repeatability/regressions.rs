@@ -30,12 +30,12 @@ fn regression_single_pair(
     .map_err(|e| format!("{}: {}", topology, e))
 }
 
-// These qKjqZiEx tests are synthetic shape/signature pins around the
-// 0.4 -> 0.7000000000000001 drift class. They are not sufficient real-corpus
-// regression guards, and they intentionally report without panicking.
+// These tests are synthetic shape/signature pins around the
+// 0.4 -> 0.7000000000000001 drift class. They intentionally report without
+// panicking; the aggregate audit gate owns the failure count.
 
 #[test]
-fn regression_qkjqziex_float_cascade_chain() {
+fn regression_float_cascade_chain() {
     let r = regression_single_pair("chain", chain_snapshot, (0, 0));
     match r {
         Ok(()) => eprintln!("[Class III · regression chain] PASS"),
@@ -44,7 +44,7 @@ fn regression_qkjqziex_float_cascade_chain() {
 }
 
 #[test]
-fn regression_qkjqziex_float_cascade_fanin() {
+fn regression_float_cascade_fanin() {
     let r = regression_single_pair("fanin", fanin_snapshot, (0, 0));
     match r {
         Ok(()) => eprintln!("[Class III · regression fanin] PASS"),
@@ -53,7 +53,7 @@ fn regression_qkjqziex_float_cascade_fanin() {
 }
 
 #[test]
-fn regression_qkjqziex_float_cascade_diamond() {
+fn regression_float_cascade_diamond() {
     let r = regression_single_pair("diamond", diamond_snapshot, (0, 0));
     match r {
         Ok(()) => eprintln!("[Class III · regression diamond] PASS"),
@@ -62,7 +62,7 @@ fn regression_qkjqziex_float_cascade_diamond() {
 }
 
 #[test]
-fn regression_qkjqziex_float_cascade_sumproduct() {
+fn regression_float_cascade_sumproduct() {
     let r = regression_single_pair("sumproduct", sumproduct_snapshot, (0, 0));
     match r {
         Ok(()) => eprintln!("[Class III · regression sumproduct] PASS"),
@@ -71,7 +71,7 @@ fn regression_qkjqziex_float_cascade_sumproduct() {
 }
 
 #[test]
-fn regression_qkjqziex_float_cascade_mmult() {
+fn regression_float_cascade_mmult() {
     let r = regression_single_pair("mmult", mmult_like_snapshot, (0, 0));
     match r {
         Ok(()) => eprintln!("[Class III · regression mmult] PASS"),
@@ -80,7 +80,7 @@ fn regression_qkjqziex_float_cascade_mmult() {
 }
 
 #[test]
-fn regression_qkjqziex_float_cascade_rapid_revert() {
+fn regression_float_cascade_rapid_revert() {
     let sid = sheet_id();
     let seed = 0.4_f64;
     let (snapshot, dependent) = chain_snapshot(seed);

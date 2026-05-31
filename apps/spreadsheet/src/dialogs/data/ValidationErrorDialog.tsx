@@ -79,8 +79,7 @@ export function ValidationErrorDialog() {
       // So binding Enter to handleRetry is unconditionally correct here:
       // there is no code path where this component shows a Yes/No/OK button
       // set, so Enter cannot accidentally accept invalid input. Excel parity:
-      // Enter on the Stop alert reopens the editor for correction (see
-      // dev/app-eval/scenarios/data-validation/dv-error-stop.spec.ts).
+      // Enter on the Stop alert reopens the editor for correction.
       onEnterKeyDown={handleRetry}
       open={state.isOpen}
       onClose={handleCancel}

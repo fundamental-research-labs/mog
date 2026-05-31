@@ -5,9 +5,6 @@
  * The machine-side transition is covered by
  * `selection-modes.test.ts: additive_mode_second_toggle_commits_pending_and_starts_new`;
  * this file pins the handler-side dispatch contract that drives it.
- *
- * Literal-bug regression scenario:
- * `dev/app-eval/scenarios/selection/shift-f8-add-to-selection.spec.ts`.
  */
 
 import { jest } from '@jest/globals';

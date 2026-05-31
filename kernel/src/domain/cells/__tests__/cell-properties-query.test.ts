@@ -1,8 +1,7 @@
 /**
  * Regression tests for `queryByProperties` — guards against the empty-cellId
- * UUID-parse failure surfaced by the app-eval `real-files` round on
- * 2026-04-27 (FIX-004 cluster: `[compute_get_active_cell] Error: invalid
- * length: expected length 32 for simple format, found 0`).
+ * UUID-parse failure surfaced by format-only cells with no `CellMirror`
+ * entry.
  *
  * Background: `RangeQueryResult` returned by `compute_query_range` carries
  * `cell_id: String` for every visited cell, including format-only cells

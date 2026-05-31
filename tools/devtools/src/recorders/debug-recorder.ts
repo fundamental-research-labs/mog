@@ -257,8 +257,8 @@ function getAppVersion(): string {
 }
 
 /**
- * Capture a snapshot of app state at the current moment. Reuses patterns
- * from `dev/app-eval/capture/state.ts` but runs synchronously in-browser.
+ * Capture a snapshot of app state at the current moment. Reuses the
+ * eval-harness capture shape but runs synchronously in-browser.
  */
 export function captureAppState(
   api: DevToolsConsoleAPI,

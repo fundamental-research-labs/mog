@@ -5,8 +5,7 @@
 //! which should detect `"mmmm"` as a datetime format and render the full month name.
 //!
 //! Run:
-//!   cd /Users/robertyang/Code/shortcut_mono_repo/shortcut/os && \
-//!     cargo test -p compute-core --test formula_accuracy_text_format
+//!   cargo test -p compute-core --test formula_accuracy_text_format
 //!
 //! These tests exercise `format_number` directly (the public API used by FnText)
 //! as well as the full TEXT function pipeline via `FunctionRegistry::call`.
@@ -148,19 +147,17 @@ fn test_format_h_mm_ss_minutes_not_months() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 8: "mmmm" standalone — exact corpus pattern
+// Test 8: "mmmm" standalone
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_format_mmmm_standalone_corpus_pattern() {
-    // This is the EXACT pattern from the corpus:
-    //   IF(A8="","",TEXT(A8,"mmmm"))
-    // where A8 contains a date serial for January 1, 2025.
+fn test_format_mmmm_standalone_date_serial() {
+    // Mirrors formulas that wrap TEXT(date_serial, "mmmm") in conditionals.
     let serial = excel_serial(2025, 1, 1);
     let result = format_number(serial, "mmmm");
     assert_eq!(
         result, "January",
-        "Corpus pattern: TEXT(date_serial, \"mmmm\") should produce \"January\", got \"{}\"",
+        "TEXT(date_serial, \"mmmm\") should produce \"January\", got \"{}\"",
         result
     );
 }

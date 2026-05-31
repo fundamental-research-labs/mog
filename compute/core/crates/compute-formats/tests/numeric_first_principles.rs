@@ -670,8 +670,7 @@ mod fractions {
     // Right fix: emit numerator/denominator digits without padding when they
     // are non-zero. The literal space already provides the visual separator;
     // padding to the placeholder width was a column-alignment choice that did
-    // not match the test fixture
-    //   dev/app-eval/scenarios/formatting-deep/number-format-fraction.spec.ts.
+    // not match the UI fraction-formatting fixture.
     // ---------------------------------------------------------------------
 
     #[test]

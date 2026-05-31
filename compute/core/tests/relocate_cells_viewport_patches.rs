@@ -645,10 +645,10 @@ fn cut_clears_source_on_paste_only() {
     // query_range sanity: this is the production read path the kernel's
     // `getCellsViaBridge` fallback uses. The viewport-patch channel can
     // emit a Null patch for a vacated source position, but if the engine's
-    // `query_range` still surfaces the old value the app-eval capture
-    // layer (which prefers a non-null bridge result over a null buffer
+    // `query_range` still surfaces the old value the UI capture layer
+    // (which prefers a non-null bridge result over a null buffer
     // entry) will mask the fix and the cut-paste scenarios stay red.
-    // See `dev/app-eval/capture/state.ts` step 2 ("bridge fallback").
+    // Mirrors the UI harness bridge-fallback read path.
     let qr = engine.query_range(&sid, 0, 0, 2, 2);
     let cells_at = |r: u32, c: u32| qr.cells.iter().find(|cd| cd.row == r && cd.col == c);
     for (r, c) in [(0u32, 0u32), (1, 0), (2, 0)] {

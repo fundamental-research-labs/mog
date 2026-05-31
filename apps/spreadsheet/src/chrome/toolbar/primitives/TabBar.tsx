@@ -369,12 +369,11 @@ function TabBarImpl<T extends string>({
       {/* Tabs - Excel-like appearance where active tab connects to ribbon */}
       {/*
  Expose the ribbon tab strip via WAI-ARIA tablist semantics so `readActiveRibbonTab`
- (dev/app-eval/scenarios/alt-mode/top-level-tabs/_helpers.ts)
  resolves the *ribbon* active tab. Without `role="tab"` on the
- ribbon buttons, that helper would only find the *sheet* tab strip
+ ribbon buttons, scenario helpers would only find the *sheet* tab strip
  (chrome/sheet-tabs/Tab.tsx already uses role="tab") and return
- e.g. "Sheet1" instead of "Home", failing the seven
- top-level-tabs alt scenarios regardless of routing correctness.
+ e.g. "Sheet1" instead of "Home", failing top-level-tabs alt scenarios
+ regardless of routing correctness.
  Ribbon TabBar renders before the sheet-tab strip in TabbedToolbar,
  so the readback's first `aria-selected="true"` match wins for the
  ribbon. Existing data-testid attributes stay so the helper's

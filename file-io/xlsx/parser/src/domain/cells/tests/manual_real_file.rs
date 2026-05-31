@@ -6,7 +6,7 @@ use crate::domain::cells::{
 #[test]
 #[ignore] // Requires /tmp/xlsx_test_sheet.xml and /tmp/xlsx_test_ss.xml from manual extraction
 fn test_parse_real_xlsx_worksheet() {
-    // Load the actual worksheet XML from the golden LBO test file
+    // Load worksheet XML from a manually extracted workbook fixture.
     let xml = std::fs::read("/tmp/xlsx_test_sheet.xml")
         .expect("Failed to read test sheet XML - run python extraction first");
     let ss_xml =
@@ -124,7 +124,8 @@ fn test_parse_real_xlsx_worksheet() {
     }
     eprintln!("Style-only cells (no value, style > 0): {}", style_only);
 
-    // The file has ~2011 cells total, ~1378 with values
-    // At minimum we should parse significantly more than 70
+    // At minimum we should parse significantly more than the smallest smoke
+    // fixtures, which catches truncation without binding this ignored helper
+    // to a private workbook shape.
     assert!(count > 100, "Expected more than 100 cells, got {}", count);
 }

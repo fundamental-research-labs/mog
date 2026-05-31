@@ -197,7 +197,7 @@ export class FocusCoordination {
       // focus contract. Skip the DOM focus steal — otherwise the rAF would
       // steal DOM focus from the just-mounted input on its first frame,
       // fire onBlur, and unmount the input before the user can type.
-      // See dev/app-eval/scripts/repro-rename-dblclick.ts.
+      // Covered by the sheet-rename double-click repro.
       //
       // This is the layer-aware version of the stop-gap added in 017f0b73e
       // (which checked `instanceof HTMLInputElement` — too broad, at the

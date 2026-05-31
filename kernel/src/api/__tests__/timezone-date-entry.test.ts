@@ -9,8 +9,8 @@
  *
  * The fix routes every Date → calendar-parts conversion through
  * `Intl.DateTimeFormat(session.userTimezone)`. This test pins down that
- * resolver's behavior directly. The wider integration through `WorksheetImpl`
- * is exercised by the app-eval `sort-filter-tables` corpus end-to-end.
+ * resolver's behavior directly. Wider integration through `WorksheetImpl`
+ * is covered by UI-level date filtering scenarios.
  *
  * The host's `process.env.TZ` is irrelevant here because `Intl.DateTimeFormat`
  * with an explicit `timeZone` option ignores it — that is precisely the
@@ -96,10 +96,10 @@ describe('calendarPartsInTz', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 3. The exact regression: the failing app-eval scenario's input
+  // 3. Regression inputs: month-boundary dates
   // -------------------------------------------------------------------------
 
-  describe('failing-scenario regression — filter-date-last-month', () => {
+  describe('month-boundary date regression', () => {
     // The fixture wrote `new Date(Date.UTC(year, month-1, day))` and the API
     // decomposed via host-local getters, so on a Pacific host every literal
     // shifted back one day (e.g. "2026-03-01" stored as Feb 28). With

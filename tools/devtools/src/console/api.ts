@@ -1753,11 +1753,10 @@ export function createConsoleAPI(
     // ── Invariants (Round 7 I-0) ──
 
     invariants(): InvariantsRunOutput {
-      // Delegates to the runner installed by
-      // `dev/app-eval/capture/invariants/registry.ts`. Until the
-      // registry module loads, the slot returns an empty passing
-      // result so callers (snapshot capture, tests) can rely on the
-      // shape unconditionally.
+      // Delegates to the runner installed by the eval-harness registry.
+      // Until that registry module loads, the slot returns an empty
+      // passing result so callers (snapshot capture, tests) can rely on
+      // the shape unconditionally.
       return runInstalledInvariants();
     },
 
@@ -2320,8 +2319,8 @@ export function createConsoleAPI(
       // `OutlineToggleOverlay` only emits toggle <button>s for groups whose
       // anchor cell sits inside the *visible viewport* (see
       // `computeOutlineRects` in OutlineToggleOverlay.tsx — it bails on
-      // `coords.cellToViewport(...)` returning null). For the LBO Sample
-      // sheet's 15 row groups spanning rows 5..108, only the 1-2 groups whose
+      // `coords.cellToViewport(...)` returning null). For a large outline
+      // sheet with groups spanning beyond the first viewport, only groups whose
       // end-row lands in the initial viewport draw a toggle — the rest are
       // architecturally correct (off-screen) but invisible to a DOM
       // querySelector. Tests that verify *parser/import fidelity* want the

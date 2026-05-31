@@ -616,16 +616,15 @@ export interface DevToolsConsoleAPI {
    * Run all registered cross-source invariants in a single browser-side
    * pass. Returns timed results suitable for attaching to a snapshot.
    *
-   * Invariants are registered through
-   * `dev/app-eval/capture/invariants/registry.ts` (or the thin facade at
-   * `apps/spreadsheet/src/devtools/invariant-registry.ts`); the public
-   * `__dt` API does NOT expose the registry itself.
+   * Invariants are registered through the eval-harness registry (or the
+   * thin facade at `apps/spreadsheet/src/devtools/invariant-registry.ts`);
+   * the public `__dt` API does NOT expose the registry itself.
    */
   invariants(): InvariantsRunOutput;
 
   // ── Freeze panes ──
   /**
-   * Read freeze-pane state with rendering applied flag (app-eval / David §0.2).
+   * Read freeze-pane state with rendering applied flag.
    *
    * `frozenRows` / `frozenCols` come from the kernel's per-sheet view model
    * (the "logical" freeze count). `applied` indicates whether the renderer
@@ -942,9 +941,9 @@ export interface DevToolsConsoleAPI {
 
 // ── Invariants surface (Round 7 I-0) ──
 //
-// The full type definitions live in `dev/app-eval/capture/invariants/registry.ts`
-// (to keep registry implementation co-located with its consumers). The
-// public `__dt` surface only needs the return-shape type.
+// The full type definitions live with the eval-harness registry (to keep
+// registry implementation co-located with its consumers). The public `__dt`
+// surface only needs the return-shape type.
 
 export type InvariantSeverity = 'error' | 'warn';
 export type InvariantResult =
@@ -1083,8 +1082,7 @@ export interface ProgrammaticFlow {
    * `source` / `kind` / `tSinceStepStart` metadata. v2 flows always have
    * these populated on every entry — see {@link FlowEntryMeta}.
    *
-   * Use `dev/app-eval/capture/flow.ts → upgradeFlowV1ToV2()` to lift older
-   * fixtures.
+   * Use the eval-harness flow upgrader to lift older fixtures.
    */
   schemaVersion?: 1 | 2;
   correlationId: number;

@@ -22,7 +22,7 @@
 //! `compute/core/src/storage/cells/values.rs`.
 //!
 //! **State today:** many cases are expected to fail — they pin Class-A
-//! harness findings (whitespace collapse, etc.) from `FINDINGS.md`. Each
+//! harness findings (whitespace collapse, etc.). Each
 //! non-deferred case is a per-case `#[test]` in the runner modules —
 //! failing tests ARE the bug tracker. Do NOT silence failures with
 //! `#[ignore]` or failure budgets.

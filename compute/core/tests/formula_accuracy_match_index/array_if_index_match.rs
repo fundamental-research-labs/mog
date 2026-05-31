@@ -48,9 +48,9 @@ fn test_if_produces_array_for_match() {
     );
 }
 
-/// Test 8: Full corpus pattern — IFERROR(INDEX(C:C, MATCH(LARGE(IF(Q="X", K), 1), K:K, 0)), "--")
+/// Test 8: Representative array pattern.
 ///
-/// This is the exact formula from the corpus that causes 1,112+ errors.
+/// IFERROR(INDEX(C:C, MATCH(LARGE(IF(Q="X", K), 1), K:K, 0)), "--")
 #[test]
 fn test_iferror_index_match_with_array_if() {
     let query_cells = vec![

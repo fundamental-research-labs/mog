@@ -275,7 +275,7 @@ mod engine_mirror {
 /// be the *raw* path — values go in, values come back out, no coercion.
 /// For every non-Deferred case, the mirror value after `import_values(v)`
 /// must equal `v`. Each case in `cases()` becomes one `#[test]` that
-/// calls this with its name. Known bugs (FINDINGS.md Class-A: whitespace
+/// calls this with its name. Known bugs (whitespace
 /// collapse, leading apostrophe stripping, type coercion on strings,
 /// error values dropped to Null) surface as named failing tests. The fix
 /// direction is for `import_values` to skip render+reparse.

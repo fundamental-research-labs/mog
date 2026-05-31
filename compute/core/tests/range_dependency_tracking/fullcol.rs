@@ -19,8 +19,7 @@ pub(crate) fn fullcol_formula(shape: AggregatorShape) -> &'static str {
 /// `SourceData`.
 ///
 /// We use **two sheets** so the "target cell" in `SourceData` isn't the
-/// same sheet as the formula — which matches the `Ib6CYMnT` pattern
-/// (dependent on `Ray Booth!D21`, op on `SourceData!F39188`).
+/// same sheet as the formula, covering cross-sheet invalidation.
 pub(crate) fn fullcol_workbook(shape: AggregatorShape, extent: Extent) -> WorkbookSnapshot {
     let formula = fullcol_formula(shape);
     // SourceData = sheet 0; Dest = sheet 1.
@@ -86,7 +85,7 @@ pub(crate) fn run_fullcol_case(shape: AggregatorShape, extent: Extent) -> Result
     let dependent = cell_id(1, 0, 0);
 
     // Target the op at a cell deliberately *outside* the current
-    // extent. This is the single most important axis for `Ib6CYMnT`:
+    // extent. This is the key dynamic-extent axis:
     // the engine's bbox cache, if present, will not naturally cover a
     // row ≥ 39_187.
     let (target_row, target_col) = match extent {
@@ -189,9 +188,8 @@ pub(crate) fn class_ii_fullcol_family() {
         }
     }
     s.emit();
-    // Failing tests ARE the bug tracker — `Ib6CYMnT`'s extent × shape
-    // surface drifts surface as named failures in the stderr summary
-    // above. No silencing budget.
+    // Failing tests ARE the bug tracker. Extent × shape drifts surface as
+    // named failures in the stderr summary above. No silencing budget.
     assert_eq!(
         s.failed, 0,
         "fullcol family: {} failures — see named cases in stderr output above.",

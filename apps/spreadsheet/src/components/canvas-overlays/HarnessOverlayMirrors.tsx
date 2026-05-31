@@ -2,10 +2,8 @@
  * HarnessOverlayMirrors
  *
  * Some overlay surfaces (validation circles, flash-fill ghost preview) are
- * rendered exclusively on the canvas. The audit
- * (`dev/app-eval/audit/AUDIT-SUMMARY.md`) found that specs assert on these
- * surfaces by reading UIStore state directly inside `page.evaluate(...)`,
- * which the lint flags. The right fix is a Playwright observer
+ * rendered exclusively on the canvas. The eval harness asserts on these
+ * surfaces through Playwright observers
  * (`getValidationCircles`, `getFlashFillPreviewCells`) that reads the
  * RENDERED state through DOM — not UIStore.
  *

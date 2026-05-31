@@ -163,7 +163,7 @@ pub(super) fn workbook_for_case_v2(
     // Row/col choices:
     // - Inside: B5 (inside the A1:C10 block).
     // - OutsideNearby: B25 (past A10 / C10 but well below 50_000).
-    // - FarOutside: B55000 (matches the Ib6CYMnT signature, row >=39186).
+    // - FarOutside: B55000 (well beyond the initial populated extent).
     // - Boundary: B10 (last cell of A1:A10 / B1:B10).
     // - OtherSheet: Sheet2!B5 (for cross-sheet edit coverage).
     let (target_row, target_col, target_sheet_prefix) = match case.edit_pos {

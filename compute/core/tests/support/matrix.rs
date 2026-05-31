@@ -299,8 +299,7 @@ impl RangeType {
 
 /// Position of the edited cell relative to the referenced range.
 ///
-/// Plan axis 3. The `FarOutside` variant is the one that surfaces
-/// `Ib6CYMnT`.
+/// Plan axis 3. The `FarOutside` variant stresses dynamic-extent invalidation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EditPosition {
     /// Inside the populated extent (row < last populated row).
@@ -690,7 +689,7 @@ impl AxisSlug for ValueType {
 // ---------------------------------------------------------------------
 //
 // These axes capture "state of the populated extent" when the
-// op+inverse pair runs. The `Ib6CYMnT` hypothesis lives in the
+// op+inverse pair runs. The dynamic-extent hypothesis lives in the
 // interaction between `Extent::*` and a full-column / INDIRECT /
 // OFFSET-driven dependent range.
 
@@ -753,7 +752,7 @@ impl AxisSlug for Extent {
 
 /// Dependent-formula shape used by Class II. The Class II invariant is
 /// orthogonal to the graph topology in [`DependentShape`]; we need to
-/// vary the **aggregator** because the `Ib6CYMnT` hypothesis is sensitive
+/// vary the **aggregator** because the full-column invalidation path is sensitive
 /// to which dependency-extractor path the engine takes (SUMIFS / COUNTIFS
 /// route through criteria range, SUM is a single range sum, VLOOKUP hits
 /// the lookup-column specialisation).

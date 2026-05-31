@@ -419,6 +419,9 @@ jobs:
       - name: 'Publish readiness: package inventory'
         run: pnpm validate:packages
 
+      - name: 'Publish readiness: private leak scan'
+        run: pnpm check:private-leaks
+
       - name: 'Publish readiness: build public artifacts'
         run: |
           # tsc -b emits dist/ for composite packages even on type errors

@@ -2191,6 +2191,30 @@ export function createConsoleAPI(
       }
     },
 
+    getActiveSheetName(): string | null {
+      try {
+        const doc =
+          (typeof document !== 'undefined' ? document : null) ??
+          (globalThis as { window?: { document?: Document } }).window?.document ??
+          null;
+        const activeTab = doc?.querySelector(
+          '[role="tablist"][aria-label="Sheet tabs"] [role="tab"][aria-selected="true"]',
+        ) as HTMLElement | null;
+        const tabText = activeTab?.textContent?.trim();
+        if (tabText) return tabText;
+
+        const wb = getActiveWorkbook();
+        const ws = wb?.activeSheet as
+          | { name?: unknown; getName?: () => unknown }
+          | undefined;
+        if (typeof ws?.name === 'string' && ws.name) return ws.name;
+        const name = ws?.getName?.();
+        return typeof name === 'string' && name ? name : null;
+      } catch {
+        return null;
+      }
+    },
+
     gridlinesVisible(_sheetId: string): boolean {
       // Read the renderer's `sheetAdapter.showGridlines` flag. The
       // `BackgroundLayer.render` method consults this same field — so a

@@ -766,6 +766,13 @@ export interface DevToolsConsoleAPI {
   } | null>;
 
   /**
+   * Active sheet display name from the selected sheet tab, with a workbook
+   * fallback. Used by app-eval scenarios to prove a sheet-switch interaction
+   * landed before reading active-renderer state.
+   */
+  getActiveSheetName(): string | null;
+
+  /**
    * Per-sheet gridline visibility (David §0.2, #128).
    *
    * Reads the grid renderer's `sheetAdapter.showGridlines` flag — the

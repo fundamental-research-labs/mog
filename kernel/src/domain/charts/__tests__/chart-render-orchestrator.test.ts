@@ -64,6 +64,19 @@ const cachedLayout: ChartLayoutSnapshot = {
   plotArea: { left: 0.1, top: 0.2, width: 0.3, height: 0.4 },
 };
 
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 function createResolver(): ChartDataResolver {
   return {
     resolveForRendering: jest.fn(async () => ({
@@ -107,6 +120,45 @@ describe('ChartRenderOrchestrator', () => {
     expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(cachedMarks);
     expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(cachedLayout);
     expect(renderCache.getDirtyChartKeys()).toEqual(dirtyKeysBefore);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(cacheUpdates).toEqual([]);
+  });
+
+  it('does not repopulate render caches when a successful compile resolves after stop', async () => {
+    const renderCache = new ChartRenderCache();
+    renderCache.start();
+    renderCache.setSheetId(CHART_1, SHEET_A);
+    const cacheUpdates: string[] = [];
+    renderCache.onCacheUpdate((chartId) => cacheUpdates.push(chartId));
+    const renderData = deferred<Awaited<ReturnType<ChartDataResolver['resolveForRendering']>>>();
+    const resolver = {
+      resolveForRendering: jest.fn(() => renderData.promise),
+    } as unknown as ChartDataResolver;
+    const orchestrator = new ChartRenderOrchestrator({
+      renderCache,
+      dataResolver: resolver,
+      isLive: () => true,
+    });
+
+    const marksPromise = orchestrator.getMarks(SHEET_A, CHART_1);
+    await Promise.resolve();
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(true);
+
+    renderCache.stop();
+    renderData.resolve({
+      chart,
+      resolvedRanges,
+      config,
+      data: chartData,
+    });
+    const result = await marksPromise;
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getDirtyChartKeys()).toEqual([]);
     expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
     expect(cacheUpdates).toEqual([]);
   });

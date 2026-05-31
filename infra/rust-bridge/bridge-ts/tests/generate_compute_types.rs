@@ -606,7 +606,7 @@ fn build_import_config() -> ImportConfig {
                 ],
             },
             ImportGroup {
-                from: "../../../../infra/rust-bridge/bridge-ts/generated/ooxml-types".to_string(),
+                from: "@mog/bridge-ts/generated/ooxml-types".to_string(),
                 types: vec![
                     TypeImport {
                         local_name: "ColorScheme".into(),

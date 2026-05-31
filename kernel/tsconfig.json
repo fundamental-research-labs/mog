@@ -29,6 +29,7 @@
     { "path": "../contracts" },
     { "path": "../infra/culture" },
     { "path": "../infra/env" },
+    { "path": "../infra/rust-bridge/bridge-ts" },
     { "path": "../infra/rust-bridge/client" },
     { "path": "../infra/transport" },
     { "path": "../spreadsheet-utils" },

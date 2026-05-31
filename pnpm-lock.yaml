@@ -1029,6 +1029,9 @@ importers:
       '@mog-sdk/types-host':
         specifier: workspace:*
         version: link:../types/host
+      '@mog/bridge-ts':
+        specifier: workspace:*
+        version: link:../infra/rust-bridge/bridge-ts
       '@mog/canvas-engine':
         specifier: workspace:*
         version: link:../canvas/engine

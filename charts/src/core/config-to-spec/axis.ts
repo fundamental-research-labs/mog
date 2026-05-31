@@ -61,6 +61,7 @@ export function buildAxisScaleSpec(
     ...(scaleDomain ?? {}),
     ...(scaleType ? { type: scaleType } : {}),
     ...(scaleType === 'log' ? { base: logBase && logBase > 1 ? logBase : 10 } : {}),
+    ...(axisConf.reverse ? { reverse: true } : {}),
     ...(useDateSerialCategoryAxis ? { zero: false } : {}),
     ...(useDateSerialCategoryAxis || hasExplicitDomain ? { nice: false } : {}),
   };

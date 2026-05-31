@@ -1,4 +1,4 @@
-import type { UnitSpec } from '../../grammar/spec';
+import type { LayerSpec, UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
 
@@ -21,6 +21,10 @@ function makeData(): ChartData {
 
 function asUnitSpec(config: ChartConfig, data = makeData()): UnitSpec {
   return configToSpec(config, data) as UnitSpec;
+}
+
+function asLayerSpec(config: ChartConfig, data = makeData()): LayerSpec {
+  return configToSpec(config, data) as LayerSpec;
 }
 
 describe('configToSpec axis render contracts', () => {
@@ -146,6 +150,114 @@ describe('configToSpec axis render contracts', () => {
       minorTicks: true,
       categoryCrossing: 'midCat',
     });
+  });
+
+  it('lowers reversed axes onto primary, date-serial, horizontal, and secondary scales', () => {
+    const primarySpec = asUnitSpec({
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      axis: {
+        categoryAxis: { visible: true, reverse: true },
+        valueAxis: { visible: true, reverse: true },
+      },
+    } as ChartConfig);
+
+    expect(primarySpec.encoding?.x?.scale).toMatchObject({ reverse: true });
+    expect(primarySpec.encoding?.y?.scale).toMatchObject({ reverse: true });
+
+    const dateData: ChartData = {
+      categories: [45_000, 45_001, 45_002],
+      series: [
+        {
+          name: 'Revenue',
+          data: [
+            { x: 45_000, y: 1_000 },
+            { x: 45_001, y: 2_000 },
+            { x: 45_002, y: 4_000 },
+          ],
+        },
+      ],
+    };
+    const dateSpec = asUnitSpec(
+      {
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 8,
+        height: 5,
+        axis: {
+          categoryAxis: { visible: true, categoryType: 'dateAxis', reverse: true },
+          valueAxis: { visible: true },
+        },
+      } as ChartConfig,
+      dateData,
+    );
+
+    expect(dateSpec.encoding?.x?.scale).toMatchObject({
+      type: 'linear',
+      zero: false,
+      nice: false,
+      reverse: true,
+    });
+
+    const horizontalSpec = asUnitSpec({
+      type: 'bar',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      axis: {
+        categoryAxis: { visible: true, reverse: true },
+        valueAxis: { visible: true },
+      },
+    } as ChartConfig);
+
+    expect(horizontalSpec.encoding?.y?.scale).toMatchObject({ reverse: true });
+
+    const comboData: ChartData = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Revenue',
+          data: [
+            { x: 'A', y: 1_000 },
+            { x: 'B', y: 2_000 },
+          ],
+        },
+        {
+          name: 'Margin',
+          yAxisIndex: 1,
+          data: [
+            { x: 'A', y: 0.1 },
+            { x: 'B', y: 0.2 },
+          ],
+        },
+      ],
+    };
+    const comboSpec = asLayerSpec(
+      {
+        type: 'combo',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 8,
+        height: 5,
+        axis: {
+          categoryAxis: { visible: true },
+          valueAxis: { visible: true },
+          secondaryValueAxis: { visible: true, reverse: true },
+        },
+        series: [
+          { name: 'Revenue', type: 'column' },
+          { name: 'Margin', type: 'line', yAxisIndex: 1 },
+        ],
+      } as ChartConfig,
+      comboData,
+    );
+
+    expect(comboSpec.layer[1]?.encoding?.y?.scale).toMatchObject({ reverse: true });
   });
 
   it('maps tick label position none to hidden labels', () => {

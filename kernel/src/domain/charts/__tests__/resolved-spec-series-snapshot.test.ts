@@ -124,13 +124,78 @@ describe('resolved spec series snapshot helpers', () => {
         categories: 'live',
         bubbleSize: 'unavailable',
       },
+      xValues: [1, 2, null],
       categories: [1, 2, null],
       values: [5, null, null],
+      bubbleSizes: [null, null, null],
+      stockValues: {
+        open: [null, null, null],
+        high: [null, null, null],
+        low: [null, null, null],
+        close: [null, null, null],
+        volume: [null, null, null],
+      },
       blankMask: [false, true, true],
       pointCount: 3,
       renderedPointCount: 1,
     });
     expect(series.dataHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('snapshots bubble sizes and stock OHLC volume fields by point', () => {
+    const bubble = snapshotSeries(
+      {
+        name: 'Bubbles',
+        data: [
+          { x: 1, y: 10, size: 5 },
+          { x: 2, y: 20, size: 15 },
+        ],
+      },
+      0,
+      [1, 2],
+      {
+        type: 'bubble',
+        series: [{ name: 'Bubbles', bubbleSizeSourceKind: 'literal' }],
+      } as ChartConfig,
+      true,
+      undefined,
+    );
+
+    expect(bubble).toMatchObject({
+      xValues: [1, 2],
+      values: [10, 20],
+      bubbleSizes: [5, 15],
+    });
+    expect(bubble).not.toHaveProperty('stockValues');
+
+    const stock = snapshotSeries(
+      {
+        name: 'Stock',
+        type: 'stock',
+        data: [
+          { x: 'Jan', y: 8, open: 5, high: 10, low: 4, close: 8, volume: 1000 },
+          { x: 'Feb', y: 9, open: 8, high: 12, low: 7, close: 9, volume: 1200 },
+        ],
+      },
+      0,
+      ['Jan', 'Feb'],
+      { type: 'stock', series: [{ name: 'Stock', stockRole: 'close' }] } as ChartConfig,
+      true,
+      undefined,
+    );
+
+    expect(stock).toMatchObject({
+      xValues: ['Jan', 'Feb'],
+      values: [8, 9],
+      bubbleSizes: [null, null],
+      stockValues: {
+        open: [5, 8],
+        high: [10, 12],
+        low: [4, 7],
+        close: [8, 9],
+        volume: [1000, 1200],
+      },
+    });
   });
 
   it('summarizes rendered and dropped series projection state', () => {

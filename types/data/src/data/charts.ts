@@ -1204,8 +1204,17 @@ export interface ResolvedChartSeriesSnapshot {
     categories: ChartSeriesDimensionRenderAuthority;
     bubbleSize: ChartSeriesDimensionRenderAuthority;
   };
+  xValues: Array<string | number | null>;
   categories: Array<string | number | null>;
   values: Array<number | null>;
+  bubbleSizes: Array<number | null>;
+  stockValues?: {
+    open: Array<number | null>;
+    high: Array<number | null>;
+    low: Array<number | null>;
+    close: Array<number | null>;
+    volume: Array<number | null>;
+  };
   blankMask: boolean[];
   pointCount: number;
   renderedPointCount: number;

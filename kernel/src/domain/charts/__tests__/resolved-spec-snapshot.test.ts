@@ -328,6 +328,9 @@ describe('resolved spec snapshot helpers', () => {
         categories: 'literal',
         bubbleSize: 'literal',
       },
+      xValues: [1, 2],
+      values: [10, 20],
+      bubbleSizes: [5, 15],
     });
     expect(snapshot.diagnostics.compiler).toEqual([
       'Series 1 values rendered from fallback cache because live source "Missing!B2:C2" is unavailable.',

@@ -52,6 +52,15 @@ export function snapshotSeries(
   const sourceSeriesIndex = seriesSourceIndex(series, index);
   const sourceSeriesKey = seriesSourceKey(series, index);
   const values: Array<number | null> = [];
+  const xValues: Array<string | number | null> = [];
+  const bubbleSizes: Array<number | null> = [];
+  const stockValues = {
+    open: [] as Array<number | null>,
+    high: [] as Array<number | null>,
+    low: [] as Array<number | null>,
+    close: [] as Array<number | null>,
+    volume: [] as Array<number | null>,
+  };
   const blankMask: boolean[] = [];
   const seriesCategories = snapshotCategoriesForSeries(
     series,
@@ -61,8 +70,16 @@ export function snapshotSeries(
   );
   const length = Math.max(seriesCategories.length, series.data.length);
   for (let pointIndex = 0; pointIndex < length; pointIndex += 1) {
-    const value = numericPointValue(series.data[pointIndex]);
+    const point = series.data[pointIndex];
+    const value = numericPointValue(point);
+    xValues.push(snapshotScalar(point?.x));
     values.push(value);
+    bubbleSizes.push(numericPointField(point, 'size'));
+    stockValues.open.push(numericPointField(point, 'open'));
+    stockValues.high.push(numericPointField(point, 'high'));
+    stockValues.low.push(numericPointField(point, 'low'));
+    stockValues.close.push(numericPointField(point, 'close'));
+    stockValues.volume.push(numericPointField(point, 'volume'));
     blankMask.push(value === null);
   }
   const source = {
@@ -98,6 +115,7 @@ export function snapshotSeries(
   const renderedPointCount = values.filter((value) => value !== null).length;
   const effectiveType = series.type ?? configured?.type;
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
+  const includeStockValues = shouldSnapshotStockValues(config, effectiveType, configured, stockValues);
 
   return {
     index,
@@ -132,8 +150,11 @@ export function snapshotSeries(
       config.colors?.[index],
     source,
     renderAuthority,
+    xValues,
     categories: seriesCategories,
     values,
+    bubbleSizes,
+    ...(includeStockValues ? { stockValues } : {}),
     blankMask,
     pointCount: length,
     renderedPointCount,
@@ -150,9 +171,12 @@ export function snapshotSeries(
       renderLayerCount: estimatedRenderLayerCount(config, configured, effectiveType, index),
       source,
       renderAuthority,
+      xValues,
       categories: seriesCategories,
       categoryFormatCodes: configured?.categoryLabelFormat,
       values,
+      bubbleSizes,
+      stockValues: includeStockValues ? stockValues : undefined,
       blankMask,
     }),
   };
@@ -268,4 +292,33 @@ function numericPointValue(point: ChartDataPoint | undefined): number | null {
   if (point?.valueState && point.valueState !== 'value') return null;
   if (!point || typeof point.y !== 'number' || !Number.isFinite(point.y)) return null;
   return point.y;
+}
+
+function numericPointField(
+  point: ChartDataPoint | undefined,
+  field: 'size' | 'open' | 'high' | 'low' | 'close' | 'volume',
+): number | null {
+  if (point?.valueState && point.valueState !== 'value') return null;
+  const value = point?.[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function shouldSnapshotStockValues(
+  config: ChartConfig,
+  effectiveType: string | undefined,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  stockValues: {
+    open: Array<number | null>;
+    high: Array<number | null>;
+    low: Array<number | null>;
+    close: Array<number | null>;
+    volume: Array<number | null>;
+  },
+): boolean {
+  return (
+    config.type === 'stock' ||
+    effectiveType === 'stock' ||
+    configured?.stockRole !== undefined ||
+    Object.values(stockValues).some((values) => values.some((value) => value !== null))
+  );
 }

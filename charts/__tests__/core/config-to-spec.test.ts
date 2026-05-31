@@ -1150,6 +1150,7 @@ describe('buildEncoding - legend config', () => {
       orient: 'right',
       title: null,
       values: ['Series 1', 'Series 2'],
+      symbolType: 'area',
       labelFontSize: 18,
       labelColor: '#595959',
     });

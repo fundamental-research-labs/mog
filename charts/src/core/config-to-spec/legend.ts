@@ -22,6 +22,7 @@ export function buildColorEncoding(
   reverseLegend?: boolean,
   legendDomain?: string[],
   symbolType?: LegendSpec['symbolType'],
+  symbolTypeByValue?: LegendSpec['symbolTypeByValue'],
   config?: ChartConfig,
   forceColorEncoding = false,
   legendValues?: string[],
@@ -41,6 +42,7 @@ export function buildColorEncoding(
     channel.legend = buildLegendSpec(legend, config, {
       reverse: reverseLegend,
       symbolType,
+      symbolTypeByValue,
       values: legendValues,
     });
   }

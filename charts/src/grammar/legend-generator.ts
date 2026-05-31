@@ -8,7 +8,13 @@
 
 import type { AnyMark, PathMark, RectMark, SymbolMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
-import type { ChannelSpec, EncodingSpec, Layout } from './spec';
+import type { ChannelSpec, EncodingSpec, Layout, LegendSpec, LegendSymbolType } from './spec';
+
+interface LegendSymbolMetrics {
+  type: LegendSymbolType;
+  width: number;
+  height: number;
+}
 
 /**
  * Generate legend marks.
@@ -42,7 +48,7 @@ export function generateColorLegend(
   if (!layout.legend) return [];
 
   const marks: AnyMark[] = [];
-  const legendSpec = channel.legend ?? {};
+  const legendSpec: LegendSpec = channel.legend ?? {};
   const { x, y } = layout.legend;
 
   // Title
@@ -70,11 +76,20 @@ export function generateColorLegend(
   const legendEntries: unknown[] = legendSpec.values ?? domain;
   const legendValues = legendSpec.reverse ? [...legendEntries].reverse() : legendEntries;
 
-  const symbolType = legendSpec.symbolType ?? 'square';
-  const symbolSize = legendSpec.symbolSize ?? (symbolType === 'line' ? 28 : 10);
+  const defaultSymbolType = legendSpec.symbolType ?? 'square';
   const itemY = y + (title ? 20 : 0);
-  const itemSpacing = 18;
+  const symbolMetrics = legendValues.map((value) =>
+    legendSymbolMetrics(
+      legendSymbolTypeForValue(legendSpec, value, defaultSymbolType),
+      legendSpec.symbolSize,
+    ),
+  );
+  const maxSymbolHeight = symbolMetrics.reduce(
+    (max, metrics) => Math.max(max, metrics.height),
+    0,
+  );
   const labelFontSize = legendSpec.labelFontSize ?? 11;
+  const itemSpacing = Math.max(18, maxSymbolHeight + 8, Math.ceil(labelFontSize + 7));
   const isHorizontalLegend = legendSpec.orient === 'bottom' || legendSpec.orient === 'top';
   const isRightLegend =
     legendSpec.orient === 'right' ||
@@ -83,12 +98,13 @@ export function generateColorLegend(
   const labelWidths = legendValues.map((value) =>
     estimateLegendLabelWidth(String(value), labelFontSize),
   );
-  const maxLabelWidth = labelWidths.reduce<number>((max, width) => Math.max(max, width), 0);
   const entryGap = isHorizontalLegend ? 18 : 0;
-  const entryWidths = labelWidths.map((labelWidth) => symbolSize + 5 + labelWidth + entryGap);
+  const entryWidths = labelWidths.map(
+    (labelWidth, index) => (symbolMetrics[index]?.width ?? 10) + 5 + labelWidth + entryGap,
+  );
   const contentWidth = isHorizontalLegend
     ? entryWidths.reduce((total, width) => total + width, 0)
-    : symbolSize + 5 + maxLabelWidth;
+    : entryWidths.reduce((max, width) => Math.max(max, width), 0);
   const contentX = isRightLegend ? x + layout.legend.width - contentWidth : x;
   let horizontalX = isHorizontalLegend
     ? x + Math.max(0, (layout.legend.width - contentWidth) / 2)
@@ -97,60 +113,20 @@ export function generateColorLegend(
   for (let i = 0; i < legendValues.length; i++) {
     const value = legendValues[i];
     const color = scale(value) as string;
+    const metrics =
+      symbolMetrics[i] ?? legendSymbolMetrics(defaultSymbolType, legendSpec.symbolSize);
     const entryX = isHorizontalLegend ? horizontalX : contentX;
     const entryY = isHorizontalLegend
-      ? y + (layout.legend.height - symbolSize) / 2
+      ? y + (layout.legend.height - metrics.height) / 2
       : itemY + i * itemSpacing;
 
-    if (symbolType === 'line') {
-      const yMid = entryY + symbolSize / 2;
-      marks.push({
-        type: 'path',
-        x: 0,
-        y: 0,
-        path: `M${entryX},${yMid} L${entryX + symbolSize},${yMid}`,
-        datum: { entryIndex: i },
-        style: {
-          stroke: color,
-          strokeWidth: 2.25,
-          fill: undefined,
-        },
-      } as PathMark);
-    } else if (symbolType === 'square') {
-      marks.push({
-        type: 'rect',
-        x: entryX,
-        y: entryY,
-        width: symbolSize,
-        height: symbolSize,
-        datum: { entryIndex: i },
-        style: {
-          fill: color,
-          stroke: '#000',
-          strokeWidth: 0.5,
-        },
-      } as RectMark);
-    } else {
-      marks.push({
-        type: 'symbol',
-        x: entryX + symbolSize / 2,
-        y: entryY + symbolSize / 2,
-        shape: symbolType,
-        size: symbolSize * symbolSize,
-        datum: { entryIndex: i },
-        style: {
-          fill: color,
-          stroke: '#000',
-          strokeWidth: 0.5,
-        },
-      } as SymbolMark);
-    }
+    marks.push(createLegendSymbol(metrics, entryX, entryY, color, i));
 
     // Label
     marks.push({
       type: 'text',
-      x: entryX + symbolSize + 5,
-      y: entryY + symbolSize / 2,
+      x: entryX + metrics.width + 5,
+      y: entryY + metrics.height / 2,
       text: String(value),
       datum: { entryIndex: i },
       fontSize: labelFontSize,
@@ -172,4 +148,85 @@ export function generateColorLegend(
 
 function estimateLegendLabelWidth(text: string, fontSize: number): number {
   return text.length * fontSize * 0.7;
+}
+
+function legendSymbolTypeForValue(
+  legendSpec: LegendSpec,
+  value: unknown,
+  fallback: LegendSymbolType,
+): LegendSymbolType {
+  return legendSpec.symbolTypeByValue?.[String(value)] ?? fallback;
+}
+
+function legendSymbolMetrics(
+  symbolType: LegendSymbolType,
+  explicitSize: number | undefined,
+): LegendSymbolMetrics {
+  const size = explicitSize ?? (symbolType === 'line' || symbolType === 'area' ? 28 : 10);
+  if (symbolType === 'line' || symbolType === 'area') {
+    return {
+      type: symbolType,
+      width: size,
+      height: Math.max(8, Math.min(12, Math.round(size * 0.4))),
+    };
+  }
+  return {
+    type: symbolType,
+    width: size,
+    height: size,
+  };
+}
+
+function createLegendSymbol(
+  metrics: LegendSymbolMetrics,
+  x: number,
+  y: number,
+  color: string,
+  entryIndex: number,
+): PathMark | RectMark | SymbolMark {
+  if (metrics.type === 'line') {
+    const yMid = y + metrics.height / 2;
+    return {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: `M${x},${yMid} L${x + metrics.width},${yMid}`,
+      datum: { entryIndex },
+      style: {
+        stroke: color,
+        strokeWidth: 2.25,
+        fill: undefined,
+      },
+    } as PathMark;
+  }
+
+  if (metrics.type === 'square' || metrics.type === 'area') {
+    return {
+      type: 'rect',
+      x,
+      y,
+      width: metrics.width,
+      height: metrics.height,
+      datum: { entryIndex },
+      style: {
+        fill: color,
+        stroke: '#000',
+        strokeWidth: 0.5,
+      },
+    } as RectMark;
+  }
+
+  return {
+    type: 'symbol',
+    x: x + metrics.width / 2,
+    y: y + metrics.height / 2,
+    shape: metrics.type,
+    size: metrics.width * metrics.height,
+    datum: { entryIndex },
+    style: {
+      fill: color,
+      stroke: '#000',
+      strokeWidth: 0.5,
+    },
+  } as SymbolMark;
 }

@@ -369,6 +369,16 @@ export type LegendOrient =
   | 'bottom-right'
   | 'none';
 
+export type LegendSymbolType =
+  | 'area'
+  | 'circle'
+  | 'square'
+  | 'line'
+  | 'cross'
+  | 'diamond'
+  | 'triangle-up'
+  | 'triangle-down';
+
 /**
  * Legend specification.
  */
@@ -389,7 +399,9 @@ export interface LegendSpec {
   /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
   reverse?: boolean;
   symbolSize?: number;
-  symbolType?: 'circle' | 'square' | 'line' | 'cross' | 'diamond' | 'triangle-up' | 'triangle-down';
+  symbolType?: LegendSymbolType;
+  /** Per-entry symbol override keyed by legend label/value, used by mixed-family combo charts. */
+  symbolTypeByValue?: Record<string, LegendSymbolType>;
   offset?: number;
   padding?: number;
 }

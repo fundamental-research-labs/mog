@@ -43,6 +43,7 @@ export function buildLegendSpec(
   options: {
     reverse?: boolean;
     symbolType?: LegendSpec['symbolType'];
+    symbolTypeByValue?: LegendSpec['symbolTypeByValue'];
     values?: string[];
   } = {},
 ): LegendSpec | null {
@@ -64,6 +65,7 @@ export function buildLegendSpec(
     ...(options.values ? { values: options.values } : {}),
     ...(options.reverse ? { reverse: true } : {}),
     ...(options.symbolType ? { symbolType: options.symbolType } : {}),
+    ...(options.symbolTypeByValue ? { symbolTypeByValue: options.symbolTypeByValue } : {}),
     ...(legendFont?.size !== undefined ? { labelFontSize: pointsToCanvasPx(legendFont.size) } : {}),
     ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
     ...(labelColor ? { labelColor } : {}),

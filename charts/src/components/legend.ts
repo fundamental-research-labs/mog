@@ -11,6 +11,7 @@ import type { ChannelSpec, Layout, LegendOrient, LegendSpec } from '../grammar/s
 import type { ColorScale, OrdinalColorScale } from '../primitives/scales/types';
 import type {
   AnyMark as Mark,
+  PathMark,
   RectMark,
   SymbolMark,
   SymbolShape,
@@ -37,8 +38,8 @@ export interface LegendMarks {
  * A single legend entry (symbol + label).
  */
 export interface LegendEntry {
-  /** The symbol (colored rect or shape) */
-  symbol: SymbolMark | RectMark;
+  /** The symbol (colored rect, line, or shape) */
+  symbol: SymbolMark | RectMark | PathMark;
   /** The label text */
   label: TextMark;
   /** The data value this entry represents */
@@ -338,14 +339,30 @@ function createLegendSymbol(
   color: string,
   symbolType: LegendSpec['symbolType'],
   size: number,
-): SymbolMark | RectMark {
-  if (symbolType === 'square') {
+): SymbolMark | RectMark | PathMark {
+  if (symbolType === 'line') {
     const side = Math.sqrt(size);
+    const length = side * 2.8;
+    return {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: `M${x - length / 2},${y} L${x + length / 2},${y}`,
+      style: {
+        stroke: color,
+        strokeWidth: 2,
+      },
+    };
+  }
+
+  if (symbolType === 'square' || symbolType === 'area') {
+    const side = Math.sqrt(size);
+    const width = symbolType === 'area' ? side * 2.8 : side;
     return {
       type: 'rect',
-      x: x - side / 2,
+      x: x - width / 2,
       y: y - side / 2,
-      width: side,
+      width,
       height: side,
       style: {
         fill: color,

@@ -447,6 +447,71 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(Math.min(...legendLabels.map((mark) => mark.y))).toBeGreaterThan(xAxisLabelBottom);
   });
 
+  it('uses per-series legend glyphs for mixed combo chart families', () => {
+    const data: ChartData = {
+      categories: DATE_SERIALS,
+      series: [
+        {
+          name: 'Requests',
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: 180 + pointIndex * 20,
+          })),
+        },
+        {
+          name: 'p95',
+          data: DATE_SERIALS.map((serial, pointIndex) => ({
+            x: serial,
+            y: 50 + pointIndex * 5,
+          })),
+        },
+      ],
+    };
+    const config = makeDateAxisConfig('combo', 2);
+    config.legend = {
+      show: true,
+      visible: true,
+      position: 'bottom',
+    };
+    config.series = [
+      {
+        name: 'Requests',
+        type: 'column',
+        format: {
+          fill: { type: 'solid', color: '#44546A' },
+          line: { color: '#1F2937', width: 0.75 },
+        },
+      },
+      {
+        name: 'p95',
+        type: 'line',
+        format: { line: { color: '#FF0000', width: 1.5 } },
+      },
+    ];
+
+    const spec = asLayerSpec(configToSpec(config, data));
+
+    expect(spec.encoding?.color?.legend).toMatchObject({
+      values: ['Requests', 'p95'],
+      symbolTypeByValue: {
+        Requests: 'area',
+        p95: 'line',
+      },
+    });
+
+    const result = compile(spec);
+    const legendKeys = result.legends.filter((mark): mark is RectMark | PathMark => {
+      const datum = mark.datum as { entryIndex?: number } | undefined;
+      return (mark.type === 'rect' || mark.type === 'path') && datum?.entryIndex !== undefined;
+    });
+
+    expect(legendKeys.map((mark) => mark.type)).toEqual(['rect', 'path']);
+    expect((legendKeys[0] as RectMark).width).toBeGreaterThan(
+      (legendKeys[0] as RectMark).height,
+    );
+    expect((legendKeys[1] as PathMark).style.stroke).toBe('#FF0000');
+  });
+
   it('clips imported combo marks and keeps per-series colors without a default legend', () => {
     const categories = [DATE_SERIALS[0] - 30, ...DATE_SERIALS, DATE_SERIALS[2] + 30];
     const data: ChartData = {

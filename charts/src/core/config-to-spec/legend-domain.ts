@@ -1,4 +1,4 @@
-import type { LegendSpec } from '../../grammar/spec';
+import type { LegendSpec, LegendSymbolType, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, LegendConfig, SeriesConfig } from '../../types';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { MARK_TYPE_MAP } from './constants';
@@ -10,6 +10,7 @@ type LegendEntryConfig = NonNullable<LegendConfig['entries']>[number];
 export interface LegendDomain {
   values: string[];
   forceColorEncoding: boolean;
+  symbolTypeByValue?: Record<string, LegendSymbolType>;
 }
 
 export function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | undefined {
@@ -37,6 +38,7 @@ export function buildSeriesLegendDomain(
   if (!isLegendShown(legend)) return undefined;
 
   const names: string[] = [];
+  const symbolTypesByValue: Record<string, LegendSymbolType> = {};
   for (let index = 0; index < data.series.length; index += 1) {
     const series = data.series[index];
     if (!series) continue;
@@ -45,12 +47,16 @@ export function buildSeriesLegendDomain(
     const entry = legendEntryForIndex(legend, sourceIndex) ?? legendEntryForIndex(legend, index);
     if (!isLegendEntryVisible(entry, seriesConfig)) continue;
     const name = series?.name;
-    if (name && !names.includes(name)) names.push(name);
+    if (!name) continue;
+    if (!names.includes(name)) names.push(name);
+    symbolTypesByValue[name] ??= legendSymbolTypeForSeries(config, series, seriesConfig, index);
   }
 
+  const distinctSymbolTypes = new Set(Object.values(symbolTypesByValue));
   return {
     values: names,
     forceColorEncoding: data.series.length === 1 && names.length > 0,
+    ...(distinctSymbolTypes.size > 1 ? { symbolTypeByValue: symbolTypesByValue } : {}),
   };
 }
 
@@ -91,24 +97,87 @@ export function legendSymbolType(
   config: ChartConfig,
   data: ChartData,
 ): LegendSpec['symbolType'] | undefined {
-  const markTypes = data.series
+  const symbolTypes = data.series
     .map((series, index) => {
       const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
       if (isNoFillNoLineSeries(seriesConfig)) return undefined;
-      const seriesType = (seriesConfig?.type ?? series.type ?? config.type) as ChartType;
-      return MARK_TYPE_MAP[seriesType];
+      return legendSymbolTypeForSeries(config, series, seriesConfig, index);
     })
     .filter(Boolean);
+  const distinctSymbolTypes = new Set(symbolTypes);
 
-  if (markTypes.length > 0 && markTypes.every((markType) => markType === 'line')) {
-    return 'line';
-  }
-  if (markTypes.length > 0 && markTypes.every((markType) => markType === 'point')) {
-    return 'circle';
-  }
+  if (distinctSymbolTypes.size === 1) return symbolTypes[0];
   return undefined;
 }
 
 function legendEntryForIndex(legend: LegendConfig, index: number): LegendEntryConfig | undefined {
   return legend.entries?.find((entry) => entry.idx === index);
+}
+
+function legendSymbolTypeForSeries(
+  config: ChartConfig,
+  series: ChartData['series'][number],
+  seriesConfig: SeriesConfig | undefined,
+  renderedIndex: number,
+): LegendSymbolType {
+  const seriesType = effectiveSeriesType(config, series, seriesConfig, renderedIndex);
+  const markType = seriesType ? MARK_TYPE_MAP[seriesType] : undefined;
+  return legendSymbolTypeForMark(markType, config, seriesConfig);
+}
+
+function effectiveSeriesType(
+  config: ChartConfig,
+  series: ChartData['series'][number],
+  seriesConfig: SeriesConfig | undefined,
+  renderedIndex: number,
+): ChartType | undefined {
+  const type = seriesConfig?.type ?? series.type;
+  if (isChartType(type)) return type;
+  if (config.type === 'combo') return renderedIndex === 0 ? 'column' : 'line';
+  return isChartType(config.type) ? config.type : undefined;
+}
+
+function isChartType(value: unknown): value is ChartType {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(MARK_TYPE_MAP, value);
+}
+
+function legendSymbolTypeForMark(
+  markType: MarkType | undefined,
+  config: ChartConfig,
+  seriesConfig: SeriesConfig | undefined,
+): LegendSymbolType {
+  switch (markType) {
+    case 'line':
+    case 'line3d':
+    case 'rule':
+    case 'tick':
+    case 'trail':
+      return 'line';
+    case 'point':
+    case 'circle':
+      return seriesShowsConnectingLine(config, seriesConfig) ? 'line' : 'circle';
+    case 'bar':
+    case 'bar3d':
+    case 'area':
+    case 'area3d':
+    case 'rect':
+    case 'histogram':
+    case 'boxplot':
+    case 'violin':
+    case 'contour':
+    case 'surface3d':
+      return 'area';
+    case 'radar':
+      return config.radarFilled || config.subType === 'filled' ? 'area' : 'line';
+    default:
+      return 'square';
+  }
+}
+
+function seriesShowsConnectingLine(
+  config: ChartConfig,
+  seriesConfig: SeriesConfig | undefined,
+): boolean {
+  if (seriesConfig?.showLines !== undefined) return seriesConfig.showLines;
+  return config.showLines === true;
 }

@@ -146,7 +146,11 @@ export function buildResolvedChartSpecSnapshot(input: {
     },
     diagnostics: {
       compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
-      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config, series, input.layout ?? null),
+      unsupportedFeatures: unsupportedFeatureDiagnostics(
+        input.config,
+        series,
+        input.layout ?? null,
+      ),
     },
   };
 }
@@ -318,10 +322,26 @@ function snapshotSeriesName(
   configured: NonNullable<ChartConfig['series']>[number] | undefined,
   index: number,
 ): string {
-  if (!configured?.name && typeof configured?.idx === 'number' && Number.isInteger(configured.idx)) {
+  if (series.name) return series.name;
+  if (configured?.name) return configured.name;
+
+  if (
+    typeof configured?.idx === 'number' &&
+    Number.isInteger(configured.idx) &&
+    configured.idx > 0
+  ) {
     return `Series ${configured.idx}`;
   }
-  return series.name || `Series ${index + 1}`;
+
+  if (
+    typeof configured?.order === 'number' &&
+    Number.isInteger(configured.order) &&
+    configured.order >= 0
+  ) {
+    return `Series ${configured.order + 1}`;
+  }
+
+  return `Series ${index + 1}`;
 }
 
 function snapshotCategoriesForSeries(
@@ -387,11 +407,7 @@ function unsupportedFeatureDiagnostics(
   const unsupported: string[] = [];
   if (String(config.type).endsWith('3d'))
     unsupported.push('3d chart rendering is approximated by the 2d chart backend');
-  if (
-    config.type === 'surface' ||
-    config.type === 'surface3d' ||
-    config.type === 'surfaceTopView'
-  )
+  if (config.type === 'surface' || config.type === 'surface3d' || config.type === 'surfaceTopView')
     unsupported.push('surface chart rendering is not fully semantic');
   if (
     config.wireframe ||
@@ -430,9 +446,13 @@ function unsupportedFeatureDiagnostics(
   if (hasPictureMarkers(config))
     unsupported.push('picture markers are preserved for export but rendered as standard symbols');
   if (hasSourceLinkedDataLabelFormatWithoutModeledFormat(config))
-    unsupported.push('source-linked data label number formats are preserved but rendered with modeled fallback formatting');
+    unsupported.push(
+      'source-linked data label number formats are preserved but rendered with modeled fallback formatting',
+    );
   if (config.type === 'ofPie' && config.seriesLines && config.seriesLines.visible !== false)
-    unsupported.push('of-pie series lines require secondary-plot geometry and are preserved for export only');
+    unsupported.push(
+      'of-pie series lines require secondary-plot geometry and are preserved for export only',
+    );
   if (config.view3d)
     unsupported.push('view3D camera/depth is preserved but rendered as a 2D approximation');
   if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
@@ -474,11 +494,10 @@ function pivotFieldButtonDiagnostic(config: ChartConfig): string {
 function hasManualDataLabelLayout(config: ChartConfig): boolean {
   return Boolean(
     config.dataLabels?.layout ||
-      config.series?.some(
-        (series) =>
-          series.dataLabels?.layout ||
-          series.points?.some((point) => point.dataLabel?.layout),
-      ),
+    config.series?.some(
+      (series) =>
+        series.dataLabels?.layout || series.points?.some((point) => point.dataLabel?.layout),
+    ),
   );
 }
 
@@ -494,10 +513,7 @@ function hasPictureMarkers(config: ChartConfig): boolean {
 
 function hasSourceLinkedDataLabelFormatWithoutModeledFormat(config: ChartConfig): boolean {
   return dataLabelConfigs(config).some(
-    (label) =>
-      label.linkNumberFormat === true &&
-      !label.numberFormat &&
-      !label.format,
+    (label) => label.linkNumberFormat === true && !label.numberFormat && !label.format,
   );
 }
 

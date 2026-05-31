@@ -331,6 +331,59 @@ describe('resolved spec snapshot helpers', () => {
     });
   });
 
+  it('aligns unnamed series snapshot labels with chart data extraction fallback order', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 5,
+        series: [
+          { values: 'A1:B1', idx: 0, order: 2 },
+          { values: 'A2:B2', idx: 3, order: 1 },
+          { values: 'A3:B3', order: 0 },
+          { values: 'A4:B4' },
+        ],
+      },
+      chartData: {
+        categories: ['A', 'B'],
+        series: [
+          { name: '', data: [{ x: 'A', y: 1 }] },
+          { name: '', data: [{ x: 'A', y: 2 }] },
+          { name: '', data: [{ x: 'A', y: 3 }] },
+          { name: '', data: [{ x: 'A', y: 4 }] },
+        ],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.series.map((series) => series.name)).toEqual([
+      'Series 3',
+      'Series 3',
+      'Series 1',
+      'Series 4',
+    ]);
+  });
+
   it('reports deterministic chart type and axis unsupported feature diagnostics', () => {
     const sheetId = toSheetId('sheet-1');
     const snapshot = buildResolvedChartSpecSnapshot({

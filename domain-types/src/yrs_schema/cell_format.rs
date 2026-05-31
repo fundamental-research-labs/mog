@@ -1,4 +1,4 @@
-//! Yrs schema for [`CellFormat`] — flat Y.Map with 28 optional fields.
+//! Yrs schema for [`CellFormat`] — flat Y.Map with optional format fields.
 //!
 //! Used for row-level and column-level format overrides stored in Yrs.
 //! Each field maps to a short key to save storage space.
@@ -46,13 +46,15 @@ pub const KEY_AUTO_INDENT: &str = "ai";
 pub const KEY_FONT_COLOR_TINT: &str = "fct";
 pub const KEY_BG_COLOR_TINT: &str = "bct";
 pub const KEY_PATTERN_FG_COLOR_TINT: &str = "pfct";
+pub const KEY_BORDERS: &str = "bd";
+pub const KEY_GRADIENT_FILL: &str = "gf";
 
 /// Convert a [`CellFormat`] to Yrs prelim entries for initial hydration.
 ///
 /// Only present (Some) fields are emitted — omitted fields produce no key,
 /// keeping the Y.Map sparse and bandwidth-friendly.
 pub fn to_yrs_prelim(fmt: &CellFormat) -> Vec<(&str, Any)> {
-    let mut entries: Vec<(&str, Any)> = Vec::with_capacity(32);
+    let mut entries: Vec<(&str, Any)> = Vec::with_capacity(34);
 
     if let Some(ref v) = fmt.font_family {
         entries.push((KEY_FONT_FAMILY, Any::String(Arc::from(v.as_str()))));
@@ -153,6 +155,16 @@ pub fn to_yrs_prelim(fmt: &CellFormat) -> Vec<(&str, Any)> {
     if let Some(v) = fmt.quote_prefix {
         entries.push((KEY_QUOTE_PREFIX, Any::Bool(v)));
     }
+    if let Some(ref v) = fmt.borders
+        && let Ok(json) = serde_json::to_string(v)
+    {
+        entries.push((KEY_BORDERS, Any::String(Arc::from(json.as_str()))));
+    }
+    if let Some(ref v) = fmt.gradient_fill
+        && let Ok(json) = serde_json::to_string(v)
+    {
+        entries.push((KEY_GRADIENT_FILL, Any::String(Arc::from(json.as_str()))));
+    }
 
     entries
 }
@@ -202,7 +214,9 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellFormat> {
         pattern_foreground_color: read_string(map, txn, KEY_PATTERN_FG_COLOR),
         pattern_foreground_color_tint: read_number(map, txn, KEY_PATTERN_FG_COLOR_TINT),
         quote_prefix: read_bool(map, txn, KEY_QUOTE_PREFIX),
-        // borders not stored in row/col Y.Maps (cell-level only via CellProperties JSON)
+        borders: read_string(map, txn, KEY_BORDERS).and_then(|s| serde_json::from_str(&s).ok()),
+        gradient_fill: read_string(map, txn, KEY_GRADIENT_FILL)
+            .and_then(|s| serde_json::from_str(&s).ok()),
         ..Default::default()
     };
 
@@ -269,6 +283,38 @@ mod tests {
         assert_eq!(rt.horizontal_align, Some(HorizontalAlign::CenterContinuous));
         assert_eq!(rt.vertical_align, Some(CellVerticalAlign::Middle));
         assert_eq!(rt.pattern_type, Some(PatternType::Gray125));
+    }
+
+    #[test]
+    fn border_fields_yrs_roundtrip() {
+        let fmt = CellFormat {
+            borders: Some(crate::CellBorders {
+                top: Some(crate::CellBorderSide {
+                    style: Some(BorderStyle::Thin),
+                    color: Some("#000000".into()),
+                    color_tint: None,
+                }),
+                right: Some(crate::CellBorderSide {
+                    style: Some(BorderStyle::Thin),
+                    color: Some("#000000".into()),
+                    color_tint: None,
+                }),
+                bottom: Some(crate::CellBorderSide {
+                    style: Some(BorderStyle::Thin),
+                    color: Some("#000000".into()),
+                    color_tint: None,
+                }),
+                left: Some(crate::CellBorderSide {
+                    style: Some(BorderStyle::Thin),
+                    color: Some("#000000".into()),
+                    color_tint: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let rt = yrs_roundtrip(&fmt);
+        assert_eq!(rt.borders, fmt.borders);
     }
 
     #[test]

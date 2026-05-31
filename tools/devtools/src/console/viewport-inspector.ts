@@ -550,10 +550,9 @@ export async function readResolvedNumberFormats(
  *
  * Strategy:
  *  - One `getDisplayedRangeProperties` call over the bounding rectangle of
- *    all requested cells. Per-cell `getDisplayedCellProperties` is then
- *    used as a fallback for any cell the range read missed (the range
- *    flavor occasionally returns nulls for cells outside the viewport when
- *    the CF re-evaluation for that row hasn't been triggered yet).
+ *    all requested cells when that rectangle is inside the bridge limit.
+ *    Sparse scale-format checks can span hundreds of thousands of rows, so
+ *    larger rectangles go straight to per-cell `getDisplayedCellProperties`.
  */
 export async function readDisplayedFormatsViaBridge(
   cells: ReadonlyArray<{ row: number; col: number }>,
@@ -567,28 +566,35 @@ export async function readDisplayedFormatsViaBridge(
   const sheetId = getActiveSheetId();
   if (!sheetId) return out;
 
-  // Range pre-fetch (single bridge call)
+  const uniqueCells = Array.from(
+    new Map(cells.map((cell) => [`${cell.row},${cell.col}`, cell])).values(),
+  );
+
+  // Range pre-fetch (single bridge call) for dense batches only.
   if (typeof bridge.getDisplayedRangeProperties === 'function') {
     try {
-      const minRow = Math.min(...cells.map((c) => c.row));
-      const maxRow = Math.max(...cells.map((c) => c.row));
-      const minCol = Math.min(...cells.map((c) => c.col));
-      const maxCol = Math.max(...cells.map((c) => c.col));
-      const rangeFormats = await bridge.getDisplayedRangeProperties(
-        sheetId,
-        minRow,
-        minCol,
-        maxRow,
-        maxCol,
-      );
-      if (Array.isArray(rangeFormats)) {
-        for (let ri = 0; ri < rangeFormats.length; ri++) {
-          const rowFmts = rangeFormats[ri];
-          if (!Array.isArray(rowFmts)) continue;
-          for (let ci = 0; ci < rowFmts.length; ci++) {
-            const fmt = rowFmts[ci];
-            if (fmt) {
-              out[`${minRow + ri},${minCol + ci}`] = fmt;
+      const minRow = Math.min(...uniqueCells.map((c) => c.row));
+      const maxRow = Math.max(...uniqueCells.map((c) => c.row));
+      const minCol = Math.min(...uniqueCells.map((c) => c.col));
+      const maxCol = Math.max(...uniqueCells.map((c) => c.col));
+      const cellCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+      if (cellCount <= 10_000) {
+        const rangeFormats = await bridge.getDisplayedRangeProperties(
+          sheetId,
+          minRow,
+          minCol,
+          maxRow,
+          maxCol,
+        );
+        if (Array.isArray(rangeFormats)) {
+          for (let ri = 0; ri < rangeFormats.length; ri++) {
+            const rowFmts = rangeFormats[ri];
+            if (!Array.isArray(rowFmts)) continue;
+            for (let ci = 0; ci < rowFmts.length; ci++) {
+              const fmt = rowFmts[ci];
+              if (fmt) {
+                out[`${minRow + ri},${minCol + ci}`] = fmt;
+              }
             }
           }
         }
@@ -601,7 +607,7 @@ export async function readDisplayedFormatsViaBridge(
   // Per-cell fallback for any requested cell that the range read missed.
   if (typeof bridge.getDisplayedCellProperties === 'function') {
     await Promise.all(
-      cells.map(async ({ row, col }) => {
+      uniqueCells.map(async ({ row, col }) => {
         const key = `${row},${col}`;
         if (out[key]) return;
         try {

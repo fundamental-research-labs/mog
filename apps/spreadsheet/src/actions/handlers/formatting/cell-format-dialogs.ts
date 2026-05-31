@@ -53,6 +53,17 @@ function isVerticalAlign(value: string): value is NonNullable<CellFormat['vertic
   return (VERTICAL_ALIGNS as readonly string[]).includes(value);
 }
 
+function refreshActiveCellFormat(
+  deps: Parameters<AsyncActionHandler>[0],
+  activeCell: { row: number; col: number },
+): void {
+  const format =
+    (deps.workbook.activeSheet.viewport.getCellData(activeCell.row, activeCell.col)?.format as
+      | CellFormat
+      | undefined) ?? null;
+  callUIStoreAction(deps, (state) => state.setActiveCellFormat(format));
+}
+
 // =============================================================================
 // Format Cells Dialog Handlers
 // =============================================================================
@@ -321,6 +332,7 @@ export const INCREASE_INDENT: AsyncActionHandler = async (deps) => {
     const ws = deps.workbook.getSheetById(sheetId);
     await ws.formats.setRanges(ranges, { indent: newIndent });
   }
+  refreshActiveCellFormat(deps, activeCell);
 
   return handled();
 };
@@ -345,6 +357,7 @@ export const DECREASE_INDENT: AsyncActionHandler = async (deps) => {
     const ws = deps.workbook.getSheetById(sheetId);
     await ws.formats.setRanges(ranges, { indent: newIndent });
   }
+  refreshActiveCellFormat(deps, activeCell);
 
   return handled();
 };

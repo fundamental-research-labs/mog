@@ -203,6 +203,7 @@ function setupRuntime(opts: {
     },
     workbook: {
       activeSheet: {
+        sheetId: 'sheet-1',
         getSheetId: () => 'sheet-1',
         layout: {
           // No documentPixelToCell here — force fallback to coordinator's
@@ -524,5 +525,71 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     } finally {
       delete (globalThis as any).document;
     }
+  });
+
+  test('getDisplayedFormatsForCells uses range prefetch for dense in-limit cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            return [[{ bold: true }, { italic: true }]];
+          },
+          getDisplayedCellProperties: async () => {
+            calls.cell++;
+            return null;
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(1);
+    expect(calls.cell).toBe(0);
+    expect(formats['0,0']).toEqual({ bold: true });
+    expect(formats['0,1']).toEqual({ italic: true });
+  });
+
+  test('getDisplayedFormatsForCells skips range prefetch for sparse oversized cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            throw new Error('range should not be called');
+          },
+          getDisplayedCellProperties: async (_sheetId: string, row: number, col: number) => {
+            calls.cell++;
+            return { row, col };
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 99999, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(0);
+    expect(calls.cell).toBe(2);
+    expect(formats['0,0']).toEqual({ row: 0, col: 0 });
+    expect(formats['99999,1']).toEqual({ row: 99999, col: 1 });
   });
 });

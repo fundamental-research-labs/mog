@@ -228,26 +228,68 @@ describe('selection-mode lifecycle', () => {
 
         actor.send({
           type: 'SET_SELECTION',
-          ranges: [rng(5, 5, 5, 5)],
-          activeCell: cell(5, 5),
+          ranges: [rng(0, 0, 1, 0), rng(4, 2, 4, 2)],
+          activeCell: cell(4, 2),
           source,
         });
 
         const after = actor.getSnapshot().context;
         expect(after.modes).toEqual(initialSelectionModes);
         expect(after.committedRanges).toEqual([]);
-        expect(after.pendingRange).toEqual(rng(5, 5, 5, 5));
-        expect(after.activeCell).toEqual(cell(5, 5));
+        expect(after.pendingRange).toEqual(rng(4, 2, 4, 2));
+        expect(after.activeCell).toEqual(cell(4, 2));
         actor.stop();
       });
     }
   });
 
+  it('8. mouse_shift_click_moves_active_cell_to_clicked_edge_and_keeps_anchor', () => {
+    const actor = startActorAt(0, 0);
+
+    actor.send({ type: 'MOUSE_DOWN', cell: cell(2, 2), shiftKey: true, ctrlKey: false });
+
+    let after = actor.getSnapshot().context;
+    expect(after.anchor).toEqual(cell(0, 0));
+    expect(after.activeCell).toEqual(cell(2, 2));
+    expect(after.pendingRange).toEqual(rng(0, 0, 2, 2));
+
+    actor.send({ type: 'MOUSE_UP' });
+    actor.send({ type: 'MOUSE_DOWN', cell: cell(0, 1), shiftKey: true, ctrlKey: false });
+
+    after = actor.getSnapshot().context;
+    expect(after.anchor).toEqual(cell(0, 0));
+    expect(after.activeCell).toEqual(cell(0, 1));
+    expect(after.pendingRange).toEqual(rng(0, 0, 0, 1));
+    actor.stop();
+  });
+
+  it('9. additive_shift_click_adds_single_cell_and_exits_additive_mode', () => {
+    const actor = startActorAt(0, 0);
+    actor.send({ type: 'SET_MODE', mode: 'additive', value: true });
+
+    actor.send({ type: 'MOUSE_DOWN', cell: cell(2, 2), shiftKey: true, ctrlKey: false });
+
+    let after = actor.getSnapshot().context;
+    expect(after.modes.additive).toBe(false);
+    expect(after.committedRanges).toEqual([rng(0, 0, 0, 0)]);
+    expect(after.pendingRange).toEqual(rng(2, 2, 2, 2));
+    expect(after.activeCell).toEqual(cell(2, 2));
+
+    actor.send({ type: 'MOUSE_UP' });
+    actor.send({ type: 'MOUSE_DOWN', cell: cell(3, 3), shiftKey: false, ctrlKey: false });
+
+    after = actor.getSnapshot().context;
+    expect(after.committedRanges).toEqual([]);
+    expect(after.pendingRange).toEqual(rng(3, 3, 3, 3));
+    expect(after.activeCell).toEqual(cell(3, 3));
+    actor.stop();
+  });
+
   // ===========================================================================
-  // 8 & 9: extend mode behavior + Esc
+  // 10 & 11: extend mode behavior + Esc
   // ===========================================================================
 
-  it('8. extend_mode_arrow_extends_without_shift', () => {
+  it('10. extend_mode_arrow_extends_without_shift', () => {
     const actor = startActorAt(2, 2);
     actor.send({ type: 'SET_MODE', mode: 'extend', value: true });
 
@@ -262,7 +304,7 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
-  it('9. extend_mode_esc_clears', () => {
+  it('11. extend_mode_esc_clears', () => {
     const actor = startActorAt(2, 2);
     actor.send({ type: 'SET_MODE', mode: 'extend', value: true });
     actor.send({ type: 'EXIT_ALL_MODES' });
@@ -272,10 +314,10 @@ describe('selection-mode lifecycle', () => {
   });
 
   // ===========================================================================
-  // 10. extend ⊕ additive mutual exclusion
+  // 12. extend/additive mutual exclusion
   // ===========================================================================
 
-  it('10. extend_mode_setting_additive_clears_extend', () => {
+  it('12. extend_mode_setting_additive_clears_extend', () => {
     const actor = startActorAt(0, 0);
     actor.send({ type: 'SET_MODE', mode: 'extend', value: true });
     expect(actor.getSnapshot().context.modes.extend).toBe(true);

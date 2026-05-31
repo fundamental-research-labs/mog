@@ -106,6 +106,11 @@ export const selectionMachine = setup({
         // the prior anchor.
         MOUSE_DOWN: [
           {
+            guard: 'isAdditiveShiftOnlyClick',
+            target: 'multiSelecting',
+            actions: ['addSingleCellToSelectionAndExitAdditive', 'emitUserSelectionChanged'],
+          },
+          {
             guard: 'isShiftAndCtrlClick',
             target: 'multiSelecting',
             actions: ['startMultiSelectAndExtend', 'emitUserSelectionChanged'],

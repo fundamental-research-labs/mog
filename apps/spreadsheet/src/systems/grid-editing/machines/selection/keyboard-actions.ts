@@ -536,13 +536,15 @@ const tabNavigate = assign(
  * The handler uses Cells.getCurrentRegion() from the kernel and UIStore's CtrlAStateSlice
  * for the multi-press timing logic.
  */
-const selectAll = assign(() => {
+const selectAll = assign(({ context }: { context: SelectionContext }) => {
   const range = getSelectAllRange();
+  const activeCell = context.activeCell;
+  const anchor = context.anchor ?? activeCell;
   return {
     pendingRange: range,
     committedRanges: [],
-    activeCell: { row: range.startRow, col: range.startCol },
-    anchor: { row: range.startRow, col: range.startCol },
+    activeCell,
+    anchor,
     tabOriginCol: null, // Clear tab-enter tracking
   };
 });

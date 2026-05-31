@@ -4,7 +4,7 @@ use crate::infra::scanner::{
 use crate::infra::xml::decode_xml_entities;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
-use super::{parse_chart_ext_lst, parse_str_ref, DataLabelOptions, DataLabelPosition};
+use super::{DataLabelOptions, DataLabelPosition, parse_chart_ext_lst, parse_str_ref};
 use crate::domain::charts::{parse_shape_properties, parse_text_body};
 
 pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {

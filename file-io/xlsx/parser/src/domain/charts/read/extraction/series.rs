@@ -70,13 +70,8 @@ pub(super) fn extract_single_series(
     let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
 
     // Markers
-    let (
-        show_markers,
-        marker_size,
-        marker_style,
-        marker_background_color,
-        marker_foreground_color,
-    ) = extract_marker_config(&s.marker);
+    let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
+        extract_marker_config(&s.marker);
 
     // Per-point formatting
     let mut point_formats: BTreeMap<u32, domain_types::chart::PointFormatData> = BTreeMap::new();

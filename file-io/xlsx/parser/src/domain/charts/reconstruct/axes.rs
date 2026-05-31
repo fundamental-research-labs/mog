@@ -1,6 +1,6 @@
 use domain_types::{
-    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
     ChartDefinition,
+    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,

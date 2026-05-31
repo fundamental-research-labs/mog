@@ -336,10 +336,13 @@ pub(super) fn inject_series_into_config(
 
 fn build_chart_lines(settings: &ChartLineSettingsData) -> charts::ChartLines {
     charts::ChartLines {
-        sp_pr: settings.format.as_ref().map(|line| charts::ShapeProperties {
-            ln: Some(build_outline(line)),
-            ..Default::default()
-        }),
+        sp_pr: settings
+            .format
+            .as_ref()
+            .map(|line| charts::ShapeProperties {
+                ln: Some(build_outline(line)),
+                ..Default::default()
+            }),
     }
 }
 
@@ -355,7 +358,10 @@ fn build_up_down_bars(settings: &UpDownBarsData) -> charts::UpDownBars {
     charts::UpDownBars {
         gap_width: settings.gap_width,
         up_bars: settings.up_format.as_ref().and_then(build_shape_properties),
-        down_bars: settings.down_format.as_ref().and_then(build_shape_properties),
+        down_bars: settings
+            .down_format
+            .as_ref()
+            .and_then(build_shape_properties),
         ..Default::default()
     }
 }

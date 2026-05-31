@@ -19,10 +19,13 @@ pub(super) fn extract_marker_config(
         .map(|s| *s != ooxml_types::charts::MarkerStyle::None);
     let size = m.size;
     let style = m.symbol.as_ref().map(|s| s.to_ooxml().to_string());
-    let background = m.sp_pr.as_ref().and_then(|sp_pr| match sp_pr.fill.as_ref()? {
-        ooxml_types::drawings::DrawingFill::Solid(solid) => extract_chart_color(&solid.color),
-        _ => None,
-    });
+    let background = m
+        .sp_pr
+        .as_ref()
+        .and_then(|sp_pr| match sp_pr.fill.as_ref()? {
+            ooxml_types::drawings::DrawingFill::Solid(solid) => extract_chart_color(&solid.color),
+            _ => None,
+        });
     let foreground = m
         .sp_pr
         .as_ref()

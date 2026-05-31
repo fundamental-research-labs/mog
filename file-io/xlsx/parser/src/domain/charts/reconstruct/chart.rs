@@ -14,11 +14,15 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         Some(ChartDefinition::Chart(chart_space)) => Some(&chart_space.chart),
         _ => None,
     };
-    let imported_title_layout: Option<domain_types::domain::drawings::ManualLayout> = imported_chart
-        .and_then(|chart| chart.title.as_ref())
-        .and_then(|title| title.layout.as_ref())
-        .map(Into::into);
-    let title_layout = spec.title_layout.as_ref().or(imported_title_layout.as_ref());
+    let imported_title_layout: Option<domain_types::domain::drawings::ManualLayout> =
+        imported_chart
+            .and_then(|chart| chart.title.as_ref())
+            .and_then(|title| title.layout.as_ref())
+            .map(Into::into);
+    let title_layout = spec
+        .title_layout
+        .as_ref()
+        .or(imported_title_layout.as_ref());
 
     charts::Chart {
         title: build_title(

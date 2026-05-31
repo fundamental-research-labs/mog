@@ -8,7 +8,9 @@ use ooxml_types::charts::{
 };
 use ooxml_types::drawings::{Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent};
 
-use super::formatting::{build_outline, build_run_properties, build_shape_properties, build_text_body};
+use super::formatting::{
+    build_outline, build_run_properties, build_shape_properties, build_text_body,
+};
 
 pub(super) fn build_title(
     text: Option<&str>,
@@ -158,7 +160,12 @@ pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLab
     let tx = dl
         .text
         .as_ref()
-        .map(|text| build_chart_text_rich(text, dl.visual_format.as_ref().and_then(|f| f.font.as_ref())))
+        .map(|text| {
+            build_chart_text_rich(
+                text,
+                dl.visual_format.as_ref().and_then(|f| f.font.as_ref()),
+            )
+        })
         .or_else(|| {
             dl.formula.as_ref().map(|formula| {
                 ChartText::StrRef(StrRef {

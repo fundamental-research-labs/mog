@@ -176,8 +176,11 @@ fn external_worksheet_pivot_cache_exports_snapshot_and_relationship() {
     )
     .unwrap();
 
-    assert!(definition_xml
-        .contains(r#"worksheetSource ref="A1:B3" sheet="External Data" r:id="rIdExternalSource""#));
+    assert!(
+        definition_xml.contains(
+            r#"worksheetSource ref="A1:B3" sheet="External Data" r:id="rIdExternalSource""#
+        )
+    );
     assert!(definition_xml.contains(r#"<s v="B"/><s v="A"/>"#));
     assert!(records_xml.contains(r#"<x v="1"/>"#));
     assert!(records_xml.contains(r#"<n v="10"/>"#));

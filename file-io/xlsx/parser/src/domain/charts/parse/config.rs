@@ -398,7 +398,8 @@ fn parse_up_down_bars(xml: &[u8]) -> UpDownBars {
             udb.gap_width = attrs::parse_u32_attr(&udb_bytes[start..], b"val=\"");
         }
         if let Some(up_start) = find_tag_simd(udb_bytes, b"upBars", 0) {
-            let up_end = find_closing_tag(udb_bytes, b"upBars", up_start).unwrap_or(udb_bytes.len());
+            let up_end =
+                find_closing_tag(udb_bytes, b"upBars", up_start).unwrap_or(udb_bytes.len());
             udb.up_bars = parse_shape_properties_child(&udb_bytes[up_start..up_end]);
         }
         if let Some(down_start) = find_tag_simd(udb_bytes, b"downBars", 0) {

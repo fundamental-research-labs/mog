@@ -8,6 +8,10 @@ import type { ChartWasmExports } from '../bridge/chart-compiler';
 import { defaultExportOptionsForSize, hashJson } from '../bridge/resolved-spec-snapshot';
 
 type ChartCompilerModule = typeof import('../bridge/chart-compiler');
+type LayeredCompileInput = {
+  data?: { values?: unknown[] };
+  layer?: Array<{ data?: { values?: unknown[] }; transform?: unknown[] }>;
+};
 
 const baseConfig: ChartConfig = {
   type: 'bar',
@@ -130,11 +134,15 @@ describe('chart compiler bridge module', () => {
   it('uses injected WASM transforms before the TypeScript grammar compiler when available', async () => {
     await withFreshCompiler(({ compileChartMarks, initChartWasm }) => {
       const calls: Array<{ data: unknown; transforms: unknown }> = [];
+      const transformedTrendlineRows = [
+        { __mogScatterX: 1, __mogValue: 2, series: 'Points' },
+        { __mogScatterX: 2, __mogValue: 4, series: 'Points' },
+      ];
       initChartWasm(
         createWasmExports({
           chart_apply_transforms: (data, transforms) => {
             calls.push({ data, transforms });
-            return data;
+            return transformedTrendlineRows;
           },
         }),
       );
@@ -160,8 +168,54 @@ describe('chart compiler bridge module', () => {
 
       expect(calls).toHaveLength(1);
       expect(result.compilerPathId).toBe('wasm-transforms+ts-grammar');
-      expect(result.compileInput.transform).toBeUndefined();
+      const compileInput = result.compileInput as LayeredCompileInput;
+      expect(calls[0]?.data).toBe(compileInput.data?.values);
+      expect(compileInput.layer?.[1]?.transform).toBeUndefined();
+      expect(compileInput.layer?.[1]?.data?.values).toBe(transformedTrendlineRows);
       expect(result.marks.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('falls back to the original layered TypeScript spec when a child WASM transform fails', async () => {
+    await withFreshCompiler(({ compileChartMarks, initChartWasm }) => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      initChartWasm(
+        createWasmExports({
+          chart_apply_transforms: () => {
+            throw new Error('regression unavailable');
+          },
+        }),
+      );
+
+      try {
+        const result = compileChartMarks({
+          config: {
+            type: 'scatter',
+            trendline: { show: true, type: 'linear' },
+          },
+          chartData: {
+            categories: [1, 2],
+            series: [
+              {
+                name: 'Points',
+                data: [
+                  { x: 1, y: 2 },
+                  { x: 2, y: 4 },
+                ],
+              },
+            ],
+          },
+        });
+
+        expect(result.compilerPathId).toBe('ts-grammar');
+        expect((result.compileInput as LayeredCompileInput).layer?.[1]?.transform).toBeDefined();
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[ChartBridge] WASM transform failed, falling back to TS:',
+          expect.any(Error),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });

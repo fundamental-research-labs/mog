@@ -1,4 +1,5 @@
 use super::*;
+use snapshot_types::properties::{CellMetadata, RegionBounds, RegionKind, RegionMeta};
 use value_types::{CellError, CellValue};
 use xlsx_parser::write::ZipWriter;
 
@@ -89,6 +90,129 @@ fn sheets_type_conversion_fixture_xlsx() -> Vec<u8> {
         .expect("sheets type conversion fixture should be writable")
 }
 
+fn data_table_minimal_fixture_xlsx() -> Vec<u8> {
+    let mut zip = ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#
+            .to_vec(),
+    )
+    .add_file(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/worksheets/sheet1.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:C3"/>
+  <sheetData>
+    <row r="1"><c r="A1"><v>2</v></c><c r="B1"><v>5</v></c><c r="C1"><v>10</v></c></row>
+    <row r="2"><c r="A2"><v>3</v></c><c r="B2"><f t="dataTable" ref="B2:C3" r1="$A$1" r2="$A$2" dt2D="1"/><v>5</v></c><c r="C2"><v>10</v></c></row>
+    <row r="3"><c r="B3"><v>5.5</v></c><c r="C3"><v>11</v></c></row>
+  </sheetData>
+</worksheet>"#
+            .to_vec(),
+    );
+    zip.finish()
+        .expect("minimal data table fixture should be writable")
+}
+
+fn assert_deferred_data_table_readback(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    is_anchor: bool,
+    phase: &str,
+) {
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(sheet_id, row, col)
+            .unwrap_or_else(|| panic!("{phase}: data table cell should be materialized")),
+    )
+    .unwrap();
+    let active = engine.get_active_cell(sheet_id, &cell_id);
+    assert_eq!(
+        active.formula.as_deref(),
+        Some("=TABLE($A$2,$A$1)"),
+        "{phase}: active cell should expose synthesized TABLE formula"
+    );
+
+    let metadata: CellMetadata = serde_json::from_value(
+        active
+            .metadata
+            .clone()
+            .unwrap_or_else(|| panic!("{phase}: active cell should expose region metadata")),
+    )
+    .expect("active cell metadata should deserialize");
+    assert_eq!(metadata.is_array_formula, true, "{phase}: array flag");
+    assert_eq!(metadata.is_cse_anchor, false, "{phase}: CSE anchor flag");
+    assert_eq!(
+        metadata.is_array_member, !is_anchor,
+        "{phase}: array member flag"
+    );
+    assert_eq!(
+        metadata.region,
+        Some(RegionMeta {
+            kind: RegionKind::DataTable,
+            is_anchor,
+            anchor_row: 1,
+            anchor_col: 1,
+            bounds: RegionBounds { rows: 2, cols: 2 },
+        }),
+        "{phase}: active-cell region metadata"
+    );
+
+    let cell_data = engine
+        .get_cell_data(sheet_id, row, col)
+        .unwrap_or_else(|| panic!("{phase}: get_cell_data should return the data table cell"));
+    assert_eq!(
+        cell_data.get("formula").and_then(|value| value.as_str()),
+        Some("TABLE($A$2,$A$1)"),
+        "{phase}: get_cell_data formula"
+    );
+    let region = cell_data
+        .get("region")
+        .unwrap_or_else(|| panic!("{phase}: get_cell_data should expose region"));
+    assert_eq!(
+        region.get("kind").and_then(|value| value.as_str()),
+        Some("dataTable"),
+        "{phase}: get_cell_data region kind"
+    );
+    assert_eq!(
+        region.get("isAnchor").and_then(|value| value.as_bool()),
+        Some(is_anchor),
+        "{phase}: get_cell_data anchor flag"
+    );
+}
+
 #[test]
 fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
     let bytes = formula_text_fixture_xlsx();
@@ -155,6 +279,37 @@ fn deferred_xlsx_import_exposes_first_sheet_formula_text_before_graph_build() {
         b1.flags,
     );
     assert_eq!(b1.formatted.as_deref(), Some("=A1*2"));
+}
+
+#[test]
+fn deferred_xlsx_import_exposes_data_table_region_metadata_before_full_hydration() {
+    let bytes = data_table_minimal_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let sheet_id_hex = engine
+        .get_all_sheet_ids()
+        .first()
+        .cloned()
+        .expect("imported workbook should have a first sheet");
+    let sheet_id = SheetId::from_uuid_str(&sheet_id_hex).unwrap();
+
+    assert_eq!(
+        engine.mirror().all_data_table_regions().len(),
+        1,
+        "deferred first-sheet snapshot must retain data table regions"
+    );
+    assert_deferred_data_table_readback(&engine, &sheet_id, 1, 1, true, "before full hydration");
+    assert_deferred_data_table_readback(&engine, &sheet_id, 2, 2, false, "before full hydration");
+
+    engine
+        .complete_deferred_hydration()
+        .expect("full deferred hydration should succeed");
+    assert_deferred_data_table_readback(&engine, &sheet_id, 1, 1, true, "after full hydration");
+    assert_deferred_data_table_readback(&engine, &sheet_id, 2, 2, false, "after full hydration");
 }
 
 #[test]

@@ -102,6 +102,12 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             },
             named_ranges: parse_output.named_ranges.clone(),
             calculation: parse_output.calculation.clone(),
+            data_table_regions: parse_output
+                .data_table_regions
+                .iter()
+                .filter(|region| region.sheet_index == 0)
+                .cloned()
+                .collect(),
             ..Default::default()
         };
         let first_id_map = {

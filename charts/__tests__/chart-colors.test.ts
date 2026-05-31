@@ -26,6 +26,55 @@ describe('chart OOXML/theme color utilities', () => {
     expect(chartThemeSlotKey('bg2')).toBe('lt2');
   });
 
+  it.each([
+    ['Dk1', '#000000'],
+    ['dk1', '#000000'],
+    ['Tx1', '#000000'],
+    ['tx1', '#000000'],
+    ['Lt1', '#FFFFFF'],
+    ['lt1', '#FFFFFF'],
+    ['Bg1', '#FFFFFF'],
+    ['bg1', '#FFFFFF'],
+    ['Dk2', '#1F497D'],
+    ['dk2', '#1F497D'],
+    ['Tx2', '#1F497D'],
+    ['tx2', '#1F497D'],
+    ['Lt2', '#EEECE1'],
+    ['lt2', '#EEECE1'],
+    ['Bg2', '#EEECE1'],
+    ['bg2', '#EEECE1'],
+    ['Accent1', '#4472C4'],
+    ['accent1', '#4472C4'],
+    ['Accent2', '#ED7D31'],
+    ['accent2', '#ED7D31'],
+    ['Accent3', '#A5A5A5'],
+    ['accent3', '#A5A5A5'],
+    ['Accent4', '#FFC000'],
+    ['accent4', '#FFC000'],
+    ['Accent5', '#5B9BD5'],
+    ['accent5', '#5B9BD5'],
+    ['Accent6', '#70AD47'],
+    ['accent6', '#70AD47'],
+    ['Hlink', '#0563C1'],
+    ['hlink', '#0563C1'],
+    ['FolHlink', '#954F72'],
+    ['folHLink', '#954F72'],
+    ['folHlink', '#954F72'],
+  ])('resolves OOXML scheme color %s', (slot, expected) => {
+    expect(ooxmlSchemeColorHex(slot)).toBe(expected);
+  });
+
+  it.each([
+    ['tx1', 'dk1'],
+    ['bg1', 'lt1'],
+    ['tx2', 'dk2'],
+    ['bg2', 'lt2'],
+    ['folHLink', 'folhlink'],
+    ['accent1', 'accent1'],
+  ])('normalizes workbook theme slot key %s', (slot, expected) => {
+    expect(chartThemeSlotKey(slot)).toBe(expected);
+  });
+
   it('applies Excel-compatible tint/shade math', () => {
     expect(applyChartTintShade('#4472C4', 0.5)).toBe('#A2B8E2');
     expect(applyChartTintShade('#ED7D31', -0.25)).toBe('#C55A11');

@@ -29,6 +29,9 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  // Public @mog-sdk/* packages cannot publish runtime dependencies on internal
+  // @mog/* packages. Kernel still imports chart internals in source, so tsup
+  // bundles those workspace packages into dist and they stay devDependencies.
   noExternal: INTERNAL_WORKSPACE_DEPS,
   external: ['@mog-sdk/contracts', '@mog-sdk/contracts/*', '@mog-sdk/wasm', 'xstate'],
   esbuildOptions(options) {

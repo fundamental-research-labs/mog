@@ -3,6 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot};
+use crate::storage::engine::mutation::CellInput;
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -577,6 +578,19 @@ fn formula_at(
     Some(engine.to_a1_display(display_sheet, formula))
 }
 
+fn formula_text_at(
+    engine: &YrsComputeEngine,
+    sheet: &SheetId,
+    row: u32,
+    col: u32,
+) -> Option<String> {
+    let cell_id = engine
+        .mirror()
+        .get_sheet(sheet)?
+        .cell_id_at(SheetPos::new(row, col))?;
+    engine.get_formula(&cell_id)
+}
+
 #[test]
 fn test_copy_range_cross_sheet_rebinds_naked_refs() {
     let snap = cross_sheet_copy_snapshot();
@@ -661,5 +675,114 @@ fn test_copy_range_cross_sheet_rebinds_naked_refs() {
         d1_value,
         CellValue::Number(FiniteF64::must(77.0)),
         "Sheet2!D1 should still resolve Sheet3!A1 = 77"
+    );
+}
+
+#[test]
+fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
+    let snap = WorkbookSnapshot {
+        sheets: vec![
+            SheetSnapshot {
+                id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+                name: "Sheet1".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Text("Sheet2Data".into()),
+                    formula: Some("=Sheet2!A1".to_string()),
+                    identity_formula: None,
+                    array_ref: None,
+                }],
+                ranges: vec![],
+            },
+            SheetSnapshot {
+                id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
+                name: "Sheet2".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Text("Sheet2Data".into()),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                }],
+                ranges: vec![],
+            },
+        ],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+    let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sheet1,
+            src_start_row: 0,
+            src_start_col: 0,
+            src_end_row: 0,
+            src_end_col: 0,
+            target_sheet_id: sheet2,
+            target_row: 0,
+            target_col: 1,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        formula_text_at(&engine, &sheet2, 0, 1).as_deref(),
+        Some("=Sheet2!A1"),
+        "cross-sheet copy to Sheet2 must keep the authored Sheet2! prefix"
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet2, SheetPos::new(0, 1))
+            .cloned(),
+        Some(CellValue::Text("Sheet2Data".into())),
+        "Sheet2!B1 should evaluate through the preserved Sheet2!A1 reference"
+    );
+
+    engine
+        .apply_mutation(EngineMutation::SetCellsByPosition {
+            edits: vec![(
+                sheet2,
+                0,
+                0,
+                CellInput::Parse {
+                    text: "ChangedSheet2Data".to_string(),
+                },
+            )],
+            skip_cycle_check: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet2, SheetPos::new(0, 1))
+            .cloned(),
+        Some(CellValue::Text("ChangedSheet2Data".into())),
+        "Sheet2!B1 should remain a live formula after Sheet2!A1 changes"
+    );
+    assert_eq!(
+        formula_text_at(&engine, &sheet2, 0, 1).as_deref(),
+        Some("=Sheet2!A1")
     );
 }

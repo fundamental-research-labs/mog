@@ -64,6 +64,17 @@ function isCellInCutRange(
   );
 }
 
+async function isProjectedMember(
+  ws: ReturnType<WorkbookInternal['getSheetById']>,
+  cell: CellCoord,
+) {
+  const projectionSource = await ws.bindings.getProjectionSource(cell.row, cell.col);
+  return (
+    projectionSource != null &&
+    (projectionSource.row !== cell.row || projectionSource.col !== cell.col)
+  );
+}
+
 export function createEditEntryService(options: EditEntryServiceOptions): EditEntryService {
   let generation = 0;
 
@@ -112,6 +123,11 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
 
       const preEditSelectionRanges = options.getPreEditSelectionRanges?.();
       const ws = wb.getSheetById(request.sheetId);
+      if (await isProjectedMember(ws, request.cell)) {
+        if (!isCurrent(requestGeneration)) return protectionError('Edit session was superseded');
+        return protectionError('You cannot change part of an array formula.');
+      }
+
       const fastEditability = ws.protection.canEditCellFast(request.cell.row, request.cell.col);
       if (fastEditability === 'unknown') {
         const editable = await ws.protection.canEditCell(request.cell.row, request.cell.col);

@@ -232,6 +232,13 @@ export function useEditorActions(): UseEditorActionsReturn {
         }
 
         const ws = wb.getSheetById(sheetId);
+        const projectionSource = await ws.bindings.getProjectionSource(cell.row, cell.col);
+        if (
+          projectionSource != null &&
+          (projectionSource.row !== cell.row || projectionSource.col !== cell.col)
+        ) {
+          return protectionError('You cannot change part of an array formula.');
+        }
 
         // CSE partial-array rejection now lives in Rust (`compute-core`
         // returns `ComputeError::PartialArrayWrite` from `set_cell` for

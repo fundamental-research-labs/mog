@@ -288,6 +288,68 @@ describe('ChartDataResolver', () => {
     expect(getCellData).not.toHaveBeenCalled();
   });
 
+  it('renders unresolved imported refs from fallback caches', async () => {
+    const getCellData = jest.fn(async () => ({ value: { type: 'number', value: null } }));
+    const resolver = new ChartDataResolver(ctx({ getCellData }));
+
+    const result = await resolver.resolveChartDataForRendering(
+      chart({
+        chartType: 'bubble',
+        dataRange: undefined,
+        series: [
+          {
+            name: 'Fallback',
+            values: 'Missing!B1:C1',
+            valueSourceKind: 'ref',
+            valueCache: {
+              pointCount: 2,
+              points: [
+                { idx: 0, value: '10' },
+                { idx: 1, value: '20' },
+              ],
+            },
+            categories: 'Missing!A1:B1',
+            categorySourceKind: 'ref',
+            categoryCache: {
+              pointCount: 2,
+              points: [
+                { idx: 0, value: '1' },
+                { idx: 1, value: '2' },
+              ],
+            },
+            bubbleSize: 'Missing!D1:E1',
+            bubbleSizeSourceKind: 'ref',
+            bubbleSizeCache: {
+              pointCount: 2,
+              points: [
+                { idx: 0, value: '5' },
+                { idx: 1, value: '15' },
+              ],
+            },
+          },
+        ],
+      }),
+      resolvedRanges({
+        dataRange: null,
+        seriesReferences: [{ index: 0, values: null, categories: null, bubbleSizes: null }],
+      }),
+      CHART_ID,
+    );
+
+    expect('code' in result).toBe(false);
+    if ('code' in result) return;
+    expect(getCellData).not.toHaveBeenCalled();
+    expect(result.config.series?.[0]).toMatchObject({
+      valueSourceKind: 'cacheFallback',
+      categorySourceKind: 'cacheFallback',
+      bubbleSizeSourceKind: 'cacheFallback',
+    });
+    expect(result.data.categories).toEqual([1, 2]);
+    expect(result.data.series[0].data.map((point) => point.y)).toEqual([10, 20]);
+    expect(result.data.series[0].data.map((point) => point.size)).toEqual([5, 15]);
+    expect(chartDataToRows(result.data).map((row) => row.size)).toEqual([5, 15]);
+  });
+
   it('keeps hidden bubble-size source cells from falling back to imported caches', async () => {
     const getCellData = jest.fn(async (sheetId: SheetId, row: number, col: number) => {
       if (sheetId === SHEET_SIZES) {

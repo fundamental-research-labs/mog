@@ -10,10 +10,13 @@ type DecodedPng = {
 
 describe('Node SDK chart image export', () => {
   let wb: Workbook | undefined;
+  let importedWb: Workbook | undefined;
 
   afterEach(async () => {
     await wb?.dispose();
+    await importedWb?.dispose();
     wb = undefined;
+    importedWb = undefined;
   });
 
   it('exports a created chart through the production Node raster backend', async () => {
@@ -96,6 +99,44 @@ describe('Node SDK chart image export', () => {
     await expect(sheet.charts.exportImage(chart.id, { format: 'svg' })).rejects.toThrow(
       /Unsupported chart image format "svg"/,
     );
+  });
+
+  it('exports created charts through Workbook.toXlsx production exporter', async () => {
+    wb = await createWorkbook({ userTimezone: 'UTC' });
+    const sheet = wb.activeSheet;
+
+    await sheet.setCell('A1', 'Month');
+    await sheet.setCell('B1', 'Revenue');
+    await sheet.setCell('A2', 'Jan');
+    await sheet.setCell('B2', 12);
+    await sheet.setCell('A3', 'Feb');
+    await sheet.setCell('B3', 28);
+    await sheet.setCell('A4', 'Mar');
+    await sheet.setCell('B4', 19);
+
+    await sheet.charts.add({
+      type: 'bar',
+      anchorRow: 0,
+      anchorCol: 3,
+      width: 8,
+      height: 12,
+      dataRange: 'A1:B4',
+      title: 'Quarter Revenue',
+    });
+
+    const xlsxBytes = await wb.toXlsx();
+    expect(xlsxBytes).toBeInstanceOf(Uint8Array);
+    expect(xlsxBytes.byteLength).toBeGreaterThan(0);
+
+    importedWb = await createWorkbook(xlsxBytes);
+    const importedCharts = await importedWb.activeSheet.charts.list();
+
+    expect(importedCharts).toHaveLength(1);
+    expect(importedCharts[0]).toMatchObject({
+      type: 'bar',
+      title: 'Quarter Revenue',
+    });
+    expect(importedCharts[0]?.dataRange).toBeTruthy();
   });
 });
 

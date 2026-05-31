@@ -179,8 +179,9 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     sourceRange: CellRange,
     targetRow: number,
     targetCol: number,
+    tablesInSourceRange?: CanonicalTable[],
   ): Promise<void> {
-    const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    const tables = tablesInSourceRange ?? (await this.getTableDefinitionsForRange(sourceRange));
     const tableMoves = tables
       .filter(
         (table) =>
@@ -330,11 +331,12 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       sourceRange.endRow - sourceRange.startRow + 1,
       sourceRange.endCol - sourceRange.startCol + 1,
     );
+    const tablesInSourceRange = await this.getTableDefinitionsForRange(sourceRange);
     await CellOps.relocateCells(this.ctx, this.sheetId, sourceRange, {
       row: targetRow,
       col: targetCol,
     });
-    await this.moveTableDefinitionsForRange(sourceRange, targetRow, targetCol);
+    await this.moveTableDefinitionsForRange(sourceRange, targetRow, targetCol, tablesInSourceRange);
   }
 
   async relocateCellsToSheet(

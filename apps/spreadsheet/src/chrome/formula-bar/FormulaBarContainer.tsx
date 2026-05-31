@@ -55,6 +55,10 @@ import { FormulaBarContextMenu } from './FormulaBarContextMenu';
 // Component
 // =============================================================================
 
+function isStructuredReferenceFormula(formula: string): boolean {
+  return /\[[^\]]+\]/.test(formula);
+}
+
 /**
  * Container that connects the FormulaBar to the editor state machine.
  *
@@ -293,7 +297,11 @@ function FormulaBarContainerImpl() {
         wb,
       );
       if (cancelled) return;
-      const formulaText = calculatedColumnContext?.calculatedFormula ?? rawData.formula;
+      const calculatedFormula = calculatedColumnContext?.calculatedFormula;
+      const formulaText =
+        calculatedFormula && isStructuredReferenceFormula(calculatedFormula)
+          ? calculatedFormula
+          : rawData.formula;
       const formula = formulaText ? ensureFormulaA1(formulaText) : undefined;
       if (cell.value === null && !formula) {
         setCellData(undefined);

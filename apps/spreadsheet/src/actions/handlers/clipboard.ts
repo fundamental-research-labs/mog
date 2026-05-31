@@ -50,7 +50,10 @@ import { blobToDataUrl } from '../../utils/blob-to-data-url';
 
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { getUIStore, handled } from './handler-utils';
-import { waitForPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
+import {
+  trackActiveClipboardPaste,
+  waitForPendingClipboardPaste,
+} from '../../systems/grid-editing/coordination/pending-clipboard-paste';
 
 // =============================================================================
 // Type Helpers
@@ -725,7 +728,7 @@ const runPaste: AsyncActionHandler = async (deps) => {
 
   // Await async operation - unifiedPaste reads system clipboard
   // and routes to appropriate paste method (internal or external)
-  await unifiedPaste(activeCell, {
+  const pastePromise = unifiedPaste(activeCell, {
     getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
     commands: deps.commands.clipboard,
     waitForPasteCommit: waitForPendingClipboardPaste,
@@ -739,6 +742,8 @@ const runPaste: AsyncActionHandler = async (deps) => {
       });
     },
   });
+  trackActiveClipboardPaste(pastePromise);
+  await pastePromise;
 
   // Accessibility announcement for paste operation
   uiStore.getState().announce('Pasted', 'polite');

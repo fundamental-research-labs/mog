@@ -148,6 +148,10 @@ export function Tabs({
               disabled={tab.disabled}
               className={triggerClasses}
               title={tab.title}
+              onClick={(event) => {
+                if (event.defaultPrevented || tab.disabled || activeTab === tab.id) return;
+                onTabChange(tab.id);
+              }}
             >
               {tab.label}
             </RadixTabs.Trigger>

@@ -43,7 +43,7 @@ import {
   Tabs,
 } from '@mog/shell';
 import type { PageOrientation, PaperSize, PrintSettings } from '@mog-sdk/contracts/core';
-import type { PrintTitles } from '@mog-sdk/contracts/events';
+import type { PrintRange, PrintTitles } from '@mog-sdk/contracts/events';
 import { useRangeSelectionEnterGuard } from '../../hooks/dialogs/use-range-selection-enter-guard';
 // =============================================================================
 // Print Titles Utilities (15-PRINT-EXPORT: Item 15.6)
@@ -148,6 +148,19 @@ function formatPrintTitles(titles: PrintTitles | undefined): {
   }
 
   return { rows, cols };
+}
+
+function formatPrintArea(area: PrintRange | null | undefined): string {
+  if (!area) return '';
+
+  const startRef = `$${colIndexToLetter(area.startCol)}$${area.startRow + 1}`;
+  const endRef = `$${colIndexToLetter(area.endCol)}$${area.endRow + 1}`;
+  return `${startRef}:${endRef}`;
+}
+
+function normalizePrintAreaInput(input: string): string | null {
+  const trimmed = input.trim();
+  return trimmed === '' ? null : trimmed.replace(/\$/g, '');
 }
 
 // =============================================================================
@@ -331,6 +344,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
   const [footerRight, setFooterRight] = useState('');
 
   // State for sheet options (Sheet tab)
+  const [printAreaInput, setPrintAreaInput] = useState('');
   const [repeatRowsInput, setRepeatRowsInput] = useState('');
   const [repeatColsInput, setRepeatColsInput] = useState('');
   const [showGridlines, setShowGridlines] = useState(() => currentSettings.gridlines);
@@ -400,6 +414,10 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
       const printTitles = activeSheetId
         ? formatPrintTitles(workbook.mirror.getPrintTitles(activeSheetId))
         : { rows: '', cols: '' };
+      const printArea = activeSheetId
+        ? formatPrintArea(workbook.mirror.getPrintArea(activeSheetId))
+        : '';
+      setPrintAreaInput(printArea);
       setRepeatRowsInput(printTitles.rows);
       setRepeatColsInput(printTitles.cols);
     }
@@ -489,7 +507,10 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
     };
     const repeatRows = parseRowRange(repeatRowsInput);
     const repeatCols = parseColRange(repeatColsInput);
-    const settings: Partial<PrintSettings> & { printTitles: PrintTitles } = {
+    const settings: Partial<PrintSettings> & {
+      printArea: string | null;
+      printTitles: PrintTitles;
+    } = {
       // Page tab
       paperSize: paperSizeCodeMap[paperSize] ?? 1,
       orientation,
@@ -528,6 +549,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
       printComments: commentsOption,
       printErrors: cellErrorsAs,
       pageOrder,
+      printArea: normalizePrintAreaInput(printAreaInput),
       printTitles: {
         repeatRows: repeatRowsInput.trim() === '' ? undefined : (repeatRows ?? undefined),
         repeatCols: repeatColsInput.trim() === '' ? undefined : (repeatCols ?? undefined),
@@ -560,6 +582,7 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
     commentsOption,
     cellErrorsAs,
     pageOrder,
+    printAreaInput,
     repeatRowsInput,
     repeatColsInput,
   ]);
@@ -911,6 +934,26 @@ export function PageSetupDialog({ initialTab }: PageSetupDialogProps) {
 
           {/* Sheet Tab */}
           <TabPanel tabId="sheet">
+            {/* Print Area Section */}
+            <div className="mb-5">
+              <SectionLabel size="sm" className="mb-3 font-semibold text-text-ss-primary">
+                Print Area
+              </SectionLabel>
+
+              <div className="flex items-center gap-4 mb-3">
+                <Label className="w-[140px] flex-shrink-0 mb-0">Print area</Label>
+                <CollapsibleRangeInput
+                  value={printAreaInput}
+                  onChange={setPrintAreaInput}
+                  dialogId="page-setup-dialog"
+                  inputId="print-area"
+                  placeholder="e.g., $A$1:$D$10"
+                  label="Print area"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+
             {/* Print Titles Section */}
             <div className="mb-5">
               <SectionLabel size="sm" className="mb-3 font-semibold text-text-ss-primary">

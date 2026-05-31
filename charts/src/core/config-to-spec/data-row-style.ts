@@ -1,0 +1,208 @@
+import type { DataRow } from '../../grammar/spec';
+import type { ChartColor, ChartConfig, ChartFormat, PointFormat, SeriesConfig } from '../../types';
+import {
+  MARKER_FILL_FIELD,
+  MARKER_SHAPE_FIELD,
+  MARKER_SIZE_FIELD,
+  MARKER_STROKE_FIELD,
+  MARKER_VISIBLE_FIELD,
+  POINT_EXPLOSION_FIELD,
+  POINT_FILL_FIELD,
+  POINT_STYLE_VISIBLE_FIELD,
+  POINT_STROKE_FIELD,
+  POINT_STROKE_WIDTH_FIELD,
+  SERIES_FILL_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+} from './fields';
+import { isNoFillNoLineSeries, resolveSeriesColor } from './style';
+import {
+  resolveChartFillColor,
+  resolveChartLineStyle,
+  resolveChartOwnerFormat,
+  resolverContextFromConfig,
+} from '../style-resolver';
+import { resolveChartColor } from '../../utils/chart-colors';
+import { linePointsToCanvasPx } from './units';
+
+export function applyPointStyle(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  _seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
+  pointFormat: PointFormat | undefined,
+): void {
+  const ownerKey =
+    pointFormat?.idx === undefined ? undefined : pointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+  const resolverContext = config && ownerKey ? resolverContextFromConfig(config, ownerKey) : {};
+  const format = config
+    ? resolveChartOwnerFormat(config, ownerKey, pointChartFormat(pointFormat))
+    : pointChartFormat(pointFormat);
+  const fill =
+    colorToCss(pointFormat?.fill, resolverContext) ??
+    resolveChartFillColor(format?.fill, resolverContext);
+  let hasStyle = false;
+  if (fill) row[POINT_FILL_FIELD] = fill;
+  const line = format?.line;
+  const stroke = lineColor(line, resolverContext) ?? colorToCss(pointFormat?.border?.color);
+  if (stroke) row[POINT_STROKE_FIELD] = stroke;
+  const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
+  if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
+  if (pointFormat?.explosion !== undefined) row[POINT_EXPLOSION_FIELD] = pointFormat.explosion;
+  hasStyle =
+    fill !== undefined ||
+    stroke !== undefined ||
+    strokeWidth !== undefined ||
+    pointFormat?.explosion !== undefined;
+  if (hasStyle) row[POINT_STYLE_VISIBLE_FIELD] = true;
+}
+
+export function applyMarker(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
+  pointFormat: PointFormat | undefined,
+): void {
+  const style = pointFormat?.markerStyle ?? seriesConfig?.markerStyle;
+  const hasPointMarkerOverride =
+    pointFormat?.markerStyle !== undefined || pointFormat?.markerSize !== undefined;
+  if (seriesConfig?.showMarkers === false && !hasPointMarkerOverride) return;
+  const showMarkers =
+    style === 'none'
+      ? false
+      : pointFormat?.markerStyle !== undefined ||
+        pointFormat?.markerSize !== undefined ||
+        seriesConfig?.markerStyle !== undefined ||
+        seriesConfig?.markerSize !== undefined ||
+        seriesConfig?.showMarkers === true ||
+        isMarkerDefaultChart(config?.type, seriesConfig?.type);
+  if (!showMarkers) return;
+
+  row[MARKER_VISIBLE_FIELD] = true;
+  row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
+  row[MARKER_SIZE_FIELD] = markerPointSizeToArea(
+    pointFormat?.markerSize ?? seriesConfig?.markerSize,
+  );
+  const pointLine = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
+  const ownerKey =
+    pointFormat?.idx === undefined
+      ? markerOwnerKey(sourceSeriesIndex)
+      : markerPointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+  const resolverContext = config ? resolverContextFromConfig(config, ownerKey) : {};
+  const fill =
+    resolveChartColor(
+      pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor,
+      resolverContext,
+    ) ??
+    colorToCss(pointFormat?.fill, resolverContext) ??
+    resolveChartFillColor(pointFormat?.visualFormat?.fill, resolverContext);
+  const stroke =
+    resolveChartColor(
+      pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor,
+      resolverContext,
+    ) ??
+    lineColor(pointLine, resolverContext) ??
+    colorToCss(pointFormat?.border?.color);
+  if (fill) row[MARKER_FILL_FIELD] = fill;
+  if (stroke) row[MARKER_STROKE_FIELD] = stroke;
+}
+
+export function applySeriesVisualStyle(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+  sourceSeriesIndex: number,
+): void {
+  if (!seriesConfig || isNoFillNoLineSeries(seriesConfig)) return;
+  const fill = config
+    ? resolveSeriesColor(seriesConfig, sourceSeriesIndex, config.type, config)
+    : resolveSeriesColor(seriesConfig, sourceSeriesIndex);
+  if (fill) row[SERIES_FILL_FIELD] = fill;
+
+  const ownerKey = `series(${sourceSeriesIndex})`;
+  const resolverContext = config ? resolverContextFromConfig(config, ownerKey) : {};
+  const format = config
+    ? resolveChartOwnerFormat(config, ownerKey, seriesConfig?.format)
+    : seriesConfig?.format;
+  const stroke = lineColor(format?.line, resolverContext);
+  const strokeWidth = linePointsToCanvasPx(format?.line?.width);
+  if (stroke) row[SERIES_STROKE_FIELD] = stroke;
+  if (strokeWidth !== undefined) row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
+}
+
+export function lineColor(
+  line: PointFormat['lineFormat'] | undefined,
+  context: Parameters<typeof resolveChartLineStyle>[1] = {},
+): string | undefined {
+  if (!line || line.noFill) return undefined;
+  const resolved = resolveChartLineStyle(line, context, { widthToPx: linePointsToCanvasPx });
+  return resolved?.paint?.type === 'solid' ? resolved.paint.color : undefined;
+}
+
+function colorToCss(
+  color: unknown,
+  context: Parameters<typeof resolveChartColor>[1] = {},
+): string | undefined {
+  if (typeof color === 'string') return color.startsWith('#') ? color : `#${color}`;
+  if (color && typeof color === 'object' && 'theme' in color) {
+    return resolveChartColor(color as ChartColor, context);
+  }
+  return undefined;
+}
+
+function pointChartFormat(pointFormat: PointFormat | undefined): ChartFormat | undefined {
+  if (!pointFormat) return undefined;
+  const base = pointFormat.visualFormat;
+  if (!pointFormat.lineFormat) return base;
+  return { ...(base ?? {}), line: pointFormat.lineFormat };
+}
+
+function pointOwnerKey(sourceSeriesIndex: number, pointIndex: number): string {
+  return `point(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
+}
+
+function markerOwnerKey(sourceSeriesIndex: number): string {
+  return `marker(seriesIdx=${sourceSeriesIndex})`;
+}
+
+function markerPointOwnerKey(sourceSeriesIndex: number, pointIndex: number): string {
+  return `markerPoint(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
+}
+
+function isMarkerDefaultChart(type?: ChartConfig['type'], seriesType?: string): boolean {
+  return (
+    type === 'lineMarkers' ||
+    type === 'lineMarkersStacked' ||
+    type === 'lineMarkersStacked100' ||
+    seriesType === 'lineMarkers' ||
+    seriesType === 'lineMarkersStacked' ||
+    seriesType === 'lineMarkersStacked100'
+  );
+}
+
+function excelMarkerShape(style?: string): string {
+  switch (style) {
+    case 'square':
+    case 'diamond':
+    case 'star':
+    case 'dash':
+      return style;
+    case 'triangle':
+      return 'triangle-up';
+    case 'plus':
+      return 'cross';
+    case 'x':
+      return 'x';
+    case 'dot':
+    case 'circle':
+    case 'auto':
+    default:
+      return 'circle';
+  }
+}
+
+function markerPointSizeToArea(size?: number): number {
+  const diameter = size ?? 7;
+  return Math.max(4, diameter * diameter);
+}

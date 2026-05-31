@@ -68,6 +68,7 @@ import {
 import { useCoordinator } from './hooks/shared/use-coordinator';
 import { createSpreadsheetEmbedAppBridge } from './infra/embed/create-spreadsheet-embed-app-bridge';
 import {
+  type ImportDurabilityGate,
   resolveInitialActiveSheetId,
   subscribeActiveSheetPersistence,
 } from './infra/document-active-sheet';
@@ -208,13 +209,17 @@ function SpreadsheetEmbedRuntimeBridge(): null {
   return null;
 }
 
-function ActiveSheetPersistenceBridge(): null {
+function ActiveSheetPersistenceBridge({
+  importDurability,
+}: {
+  importDurability?: ImportDurabilityGate;
+}): null {
   const workbook = useWorkbook();
   const uiStore = useUIStoreApi();
 
   useEffect(() => {
-    return subscribeActiveSheetPersistence({ workbook, uiStore });
-  }, [workbook, uiStore]);
+    return subscribeActiveSheetPersistence({ workbook, uiStore, importDurability });
+  }, [importDurability, workbook, uiStore]);
 
   return null;
 }
@@ -466,7 +471,7 @@ export default function SpreadsheetApp({
           appearanceMode={appearanceMode as SpreadsheetAppAppearanceMode | undefined}
           onAppearanceModeChange={onAppearanceModeChange}
         />
-        <ActiveSheetPersistenceBridge />
+        <ActiveSheetPersistenceBridge importDurability={handle} />
         <SpreadsheetContent key={handle.documentId} />
       </FeatureGatesProvider>
     </DocumentContext.Provider>

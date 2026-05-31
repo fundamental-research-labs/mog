@@ -373,7 +373,11 @@ export function DocumentProvider({
         if (restoredActiveSheetId !== uiStore.getState().activeSheetId) {
           uiStore.getState().setActiveSheet(restoredActiveSheetId);
         }
-        unsubscribeActiveSheetPersistence = subscribeActiveSheetPersistence({ workbook, uiStore });
+        unsubscribeActiveSheetPersistence = subscribeActiveSheetPersistence({
+          workbook,
+          uiStore,
+          importDurability: handle,
+        });
 
         setState({
           status: 'ready',

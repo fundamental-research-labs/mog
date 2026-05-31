@@ -12,6 +12,10 @@ function pathMove(path: string): { x: number; y: number } {
   return { x: Number(match[1]), y: Number(match[2]) };
 }
 
+function estimatedTextWidth(mark: TextMark): number {
+  return mark.text.length * (mark.fontSize ?? 18) * 0.6;
+}
+
 describe('axis generator render contracts', () => {
   it('renders a secondary top x-axis sharing the primary x scale', () => {
     const spec: ChartSpec = {
@@ -168,6 +172,95 @@ describe('axis generator render contracts', () => {
     expect(label?.rotation).toBeCloseTo(Math.PI / 4, 6);
     expect(tick?.path.startsWith(`M${plotRight},`)).toBe(true);
     expect(tick?.path).toContain(` L${plotRight - 6},`);
+  });
+
+  it('places vertical y-axis titles outside wide left tick labels', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 0 },
+          { category: 'B', value: 2_500_000 },
+        ],
+      },
+      mark: 'line',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          scale: { domain: [0, 2_500_000], nice: false },
+          axis: {
+            title: 'Admissions',
+            tickCount: 6,
+            format: '#,##0',
+          },
+        },
+      },
+      width: 600,
+      height: 400,
+    };
+
+    const result = compile(spec);
+    const labels = result.axes.filter(
+      (mark): mark is TextMark =>
+        mark.type === 'text' && datum(mark).role === 'y-axis' && datum(mark).axisPart === 'label',
+    );
+    const title = result.axes.find(
+      (mark): mark is TextMark =>
+        mark.type === 'text' && datum(mark).role === 'y-axis' && datum(mark).axisPart === 'title',
+    );
+
+    expect(title).toBeDefined();
+    const labelLeft = Math.min(...labels.map((label) => label.x - estimatedTextWidth(label)));
+    const titleRight = title!.x + (title!.fontSize ?? 20) / 2;
+    expect(titleRight).toBeLessThanOrEqual(labelLeft - 9);
+  });
+
+  it('places vertical right-axis titles outside wide right tick labels', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { x: 0, value: 0 },
+          { x: 10, value: 1 },
+        ],
+      },
+      mark: 'line',
+      encoding: {
+        x: { field: 'x', type: 'quantitative' },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          scale: { domain: [0, 1], nice: false },
+          axis: {
+            orient: 'right',
+            title: 'Rate',
+            tickCount: 3,
+            format: '0.0%',
+          },
+        },
+      },
+      width: 600,
+      height: 400,
+    };
+
+    const result = compile(spec);
+    const labels = result.axes.filter(
+      (mark): mark is TextMark =>
+        mark.type === 'text' &&
+        datum(mark).role === 'y-axis-right' &&
+        datum(mark).axisPart === 'label',
+    );
+    const title = result.axes.find(
+      (mark): mark is TextMark =>
+        mark.type === 'text' &&
+        datum(mark).role === 'y-axis-right' &&
+        datum(mark).axisPart === 'title',
+    );
+
+    expect(title).toBeDefined();
+    const labelRight = Math.max(...labels.map((label) => label.x + estimatedTextWidth(label)));
+    const titleLeft = title!.x - (title!.fontSize ?? 20) / 2;
+    expect(titleLeft).toBeGreaterThanOrEqual(labelRight + 9);
   });
 
   it('renders mid-category value-axis crossings on categorical scales', () => {

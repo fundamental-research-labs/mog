@@ -27,6 +27,8 @@ type AxisPart =
   | 'displayUnitLabel';
 type CategoryCrossingSide = 'min' | 'max';
 
+const DEFAULT_AXIS_TITLE_PADDING = 10;
+const ESTIMATED_TEXT_WIDTH_RATIO = 0.6;
 const GRAMMAR_AXIS_LABEL_FONT_SIZE = 11;
 const GRAMMAR_AXIS_TITLE_FONT_SIZE = 12;
 
@@ -189,8 +191,7 @@ export function generateXAxis(
   // Estimate label widths and determine how many labels to skip so adjacent
   // labels don't collide.
   const fontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
-  const collisionFontSize =
-    axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
+  const collisionFontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   let labelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
   if (
     axisSpec.tickLabelSkip === undefined &&
@@ -198,7 +199,7 @@ export function generateXAxis(
     axisSpec.labels !== false &&
     ticks.length > 1
   ) {
-    const avgCharWidth = collisionFontSize * 0.6;
+    const avgCharWidth = collisionFontSize * ESTIMATED_TEXT_WIDTH_RATIO;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
       const text = axisLabelText(channel, axisSpec, t, tickFormat);
       return Math.max(max, text.length);
@@ -360,13 +361,26 @@ export function generateXAxis(
     const title = axisSpec.title ?? channel.title;
     if (title) {
       const titleSide = xAxisLabelSide(axisSpec, orient);
+      const titleFontSize = axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE;
+      const titleY = xAxisTitleY(
+        channel,
+        axisSpec,
+        ticks,
+        scale,
+        tickFormat,
+        labelSkip,
+        y,
+        layout,
+        orient,
+        titleFontSize,
+      );
       marks.push({
         type: 'text',
         x: layout.plotArea.x + layout.plotArea.width / 2,
-        y: titleSide === 'top' ? layout.plotArea.y - 35 : layout.plotArea.y + layout.plotArea.height + 35,
+        y: titleY,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE,
+        fontSize: titleFontSize,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: titleSide === 'top' ? 'bottom' : 'top',
@@ -436,6 +450,96 @@ function xLabelLayout(
   return side === 'top'
     ? { y: axisY - tickExtent - labelPadding, baseline: 'bottom' }
     : { y: axisY + tickExtent + labelPadding, baseline: 'top' };
+}
+
+function xAxisTitleY(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  ticks: unknown[],
+  scale: AnyScale,
+  tickFormat: string | undefined,
+  labelSkip: number,
+  axisY: number,
+  layout: Layout,
+  orient: Extract<AxisOrient, 'top' | 'bottom'>,
+  titleFontSize: number,
+): number {
+  const titleSide = xAxisLabelSide(axisSpec, orient);
+  const titlePadding = axisSpec.titlePadding ?? DEFAULT_AXIS_TITLE_PADDING;
+  const labelOuterY = xAxisLabelOuterY(
+    channel,
+    axisSpec,
+    ticks,
+    scale,
+    tickFormat,
+    labelSkip,
+    axisY,
+    layout,
+    orient,
+  );
+  const y = titleSide === 'top' ? labelOuterY - titlePadding : labelOuterY + titlePadding;
+  const clampedY = clampAxisPosition(y, titleFontSize, layout.height - titleFontSize);
+  if (
+    (titleSide === 'top' && clampedY <= labelOuterY - titlePadding) ||
+    (titleSide === 'bottom' && clampedY >= labelOuterY + titlePadding)
+  ) {
+    return clampedY;
+  }
+  return y;
+}
+
+function xAxisLabelOuterY(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  ticks: unknown[],
+  scale: AnyScale,
+  tickFormat: string | undefined,
+  labelSkip: number,
+  axisY: number,
+  layout: Layout,
+  orient: Extract<AxisOrient, 'top' | 'bottom'>,
+): number {
+  const titleSide = xAxisLabelSide(axisSpec, orient);
+  const fontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
+  const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
+  const labelPadding = axisSpec.labelPadding ?? ((axisSpec.labelAngle ?? 0) ? 2 : 3);
+  const labelLayout = xLabelLayout(axisSpec, axisY, tickExtent, labelPadding, layout, orient);
+
+  if (axisSpec.labels === false || axisSpec.labelPosition === 'none') {
+    const outwardTick =
+      axisSpec.ticks === false ? 0 : outwardTickExtent(axisSpec.tickMark, tickExtent);
+    return titleSide === 'top' ? axisY - outwardTick : axisY + outwardTick;
+  }
+
+  let outerY = labelLayout.y;
+  let labelIndex = 0;
+  let sawLabel = false;
+  for (const tick of ticks) {
+    const x = axisPosition(scale, tick);
+    if (isNaN(x)) continue;
+    const showThisLabel = labelIndex % labelSkip === 0;
+    if (showThisLabel) {
+      const labelResult = axisLabelResult(
+        channel,
+        axisSpec,
+        tick,
+        axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
+      );
+      const labelAngle = axisSpec.labelAngle ?? 0;
+      const multiLevelLabels = labelAngle === 0 ? axisMultiLevelLabels(axisSpec, tick) : undefined;
+      const labelHeight = multiLevelLabels
+        ? multiLevelLabels.length * (fontSize + 2)
+        : rotatedTextHeight(estimatedTextWidth(labelResult.text, fontSize), fontSize, labelAngle);
+      outerY =
+        titleSide === 'top'
+          ? Math.min(outerY, labelLayout.y - labelHeight)
+          : Math.max(outerY, labelLayout.y + labelHeight);
+      sawLabel = true;
+    }
+    labelIndex++;
+  }
+
+  return sawLabel ? outerY : labelLayout.y;
 }
 
 function xTickPath(
@@ -613,8 +717,7 @@ export function generateYAxis(
 
   // Compute label skip interval to prevent vertical overlap on y-axis.
   const yFontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
-  const yCollisionFontSize =
-    axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
+  const yCollisionFontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   let yLabelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
   if (
     axisSpec.tickLabelSkip === undefined &&
@@ -785,13 +888,26 @@ export function generateYAxis(
     const title = axisSpec.title ?? channel.title;
     if (title) {
       const titleSide = yAxisLabelSide(axisSpec, orient);
+      const titleFontSize = axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE;
+      const titleX = yAxisTitleX(
+        channel,
+        axisSpec,
+        ticks,
+        scale,
+        tickFormat,
+        yLabelSkip,
+        x,
+        layout,
+        orient,
+        titleFontSize,
+      );
       marks.push({
         type: 'text',
-        x: titleSide === 'right' ? layout.plotArea.x + layout.plotArea.width + 45 : layout.plotArea.x - 45,
+        x: titleX,
         y: layout.plotArea.y + layout.plotArea.height / 2,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE,
+        fontSize: titleFontSize,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: 'middle',
@@ -911,6 +1027,138 @@ function yLabelLayout(
   return side === 'right'
     ? { x: axisX + tickExtent + labelPadding, align: 'left' }
     : { x: axisX - tickExtent - labelPadding, align: 'right' };
+}
+
+function yAxisTitleX(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  ticks: unknown[],
+  scale: AnyScale,
+  tickFormat: string | undefined,
+  labelSkip: number,
+  axisX: number,
+  layout: Layout,
+  orient: Extract<AxisOrient, 'left' | 'right'>,
+  titleFontSize: number,
+): number {
+  const titleSide = yAxisLabelSide(axisSpec, orient);
+  const titleHalfWidth = titleFontSize / 2;
+  const titlePadding = axisSpec.titlePadding ?? DEFAULT_AXIS_TITLE_PADDING;
+  const labelOuterX = yAxisLabelOuterX(
+    channel,
+    axisSpec,
+    ticks,
+    scale,
+    tickFormat,
+    labelSkip,
+    axisX,
+    layout,
+    orient,
+  );
+  const x =
+    titleSide === 'right'
+      ? labelOuterX + titlePadding + titleHalfWidth
+      : labelOuterX - titlePadding - titleHalfWidth;
+  const clampedX = clampAxisPosition(x, titleHalfWidth, layout.width - titleHalfWidth);
+  if (
+    (titleSide === 'right' && clampedX - titleHalfWidth >= labelOuterX + titlePadding) ||
+    (titleSide === 'left' && clampedX + titleHalfWidth <= labelOuterX - titlePadding)
+  ) {
+    return clampedX;
+  }
+  return x;
+}
+
+function yAxisLabelOuterX(
+  channel: ChannelSpec,
+  axisSpec: AxisSpec,
+  ticks: unknown[],
+  scale: AnyScale,
+  tickFormat: string | undefined,
+  labelSkip: number,
+  axisX: number,
+  layout: Layout,
+  orient: Extract<AxisOrient, 'left' | 'right'>,
+): number {
+  const titleSide = yAxisLabelSide(axisSpec, orient);
+  const fontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
+  const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
+  const labelPadding = axisSpec.labelPadding ?? 3;
+  const labelLayout = yLabelLayout(axisSpec, axisX, tickExtent, labelPadding, layout, orient);
+
+  if (axisSpec.labels === false || axisSpec.labelPosition === 'none') {
+    const outwardTick =
+      axisSpec.ticks === false ? 0 : outwardTickExtent(axisSpec.tickMark, tickExtent);
+    return titleSide === 'right' ? axisX + outwardTick : axisX - outwardTick;
+  }
+
+  let outerX = labelLayout.x;
+  let labelIndex = 0;
+  let sawLabel = false;
+  for (const tick of ticks) {
+    const y = axisPosition(scale, tick);
+    if (isNaN(y)) continue;
+    const showThisLabel = labelIndex % labelSkip === 0;
+    if (showThisLabel) {
+      const labelResult = axisLabelResult(
+        channel,
+        axisSpec,
+        tick,
+        axisSpec.labelFormatByValue?.[String(tick)] ?? tickFormat,
+      );
+      const labelAngle = axisSpec.labelAngle ?? 0;
+      const multiLevelLabels = labelAngle === 0 ? axisMultiLevelLabels(axisSpec, tick) : undefined;
+      if (multiLevelLabels) {
+        const outward = titleSide === 'right' ? 1 : -1;
+        const orderedLabels = [...multiLevelLabels].reverse();
+        const columnWidth = multiLevelYAxisColumnWidth(multiLevelLabels, fontSize);
+        for (let levelIndex = 0; levelIndex < orderedLabels.length; levelIndex += 1) {
+          const label = orderedLabels[levelIndex];
+          const labelX = labelLayout.x + outward * columnWidth * levelIndex;
+          const width = estimatedTextWidth(label.text, fontSize);
+          outerX =
+            titleSide === 'right'
+              ? Math.max(outerX, labelX + width)
+              : Math.min(outerX, labelX - width);
+        }
+      } else {
+        const width = rotatedTextWidth(
+          estimatedTextWidth(labelResult.text, fontSize),
+          fontSize,
+          labelAngle,
+        );
+        outerX =
+          titleSide === 'right'
+            ? Math.max(outerX, labelLayout.x + width)
+            : Math.min(outerX, labelLayout.x - width);
+      }
+      sawLabel = true;
+    }
+    labelIndex++;
+  }
+
+  return sawLabel ? outerX : labelLayout.x;
+}
+
+function estimatedTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * ESTIMATED_TEXT_WIDTH_RATIO;
+}
+
+function rotatedTextWidth(width: number, height: number, angleDegrees: number): number {
+  const radians = (Math.abs(angleDegrees) * Math.PI) / 180;
+  return Math.cos(radians) * width + Math.sin(radians) * height;
+}
+
+function rotatedTextHeight(width: number, height: number, angleDegrees: number): number {
+  const radians = (Math.abs(angleDegrees) * Math.PI) / 180;
+  return Math.sin(radians) * width + Math.cos(radians) * height;
+}
+
+function outwardTickExtent(
+  tickMark: AxisSpec['tickMark'] | AxisSpec['minorTickMark'],
+  tickSize: number,
+): number {
+  return tickMark === 'in' || tickMark === 'none' ? 0 : tickSize;
 }
 
 function yTickPath(

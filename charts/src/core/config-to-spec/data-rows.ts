@@ -1,5 +1,5 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartDataPoint } from '../../types';
+import type { ChartConfig, ChartData } from '../../types';
 import {
   formatExcelValueResult,
   type ExcelNumberFormatResult,
@@ -84,6 +84,16 @@ import {
   WATERFALL_START_FIELD,
   WATERFALL_TYPE_FIELD,
 } from './fields';
+import {
+  bubbleSizeValue,
+  isBubbleSeries,
+  isQuantitativeXSeries,
+  maxRenderableBubbleMagnitude,
+  scatterXValue,
+  shouldBreakScatterLineAtPoint,
+  shouldEmitBlankRow,
+  shouldIncludePointInRows,
+} from './data-point-values';
 import { isNoFillNoLineSeries, resolveSeriesColor } from './style';
 import {
   resolveChartFillColor,
@@ -319,9 +329,7 @@ function applyPointStyle(
   pointFormat: PointFormat | undefined,
 ): void {
   const ownerKey =
-    pointFormat?.idx === undefined
-      ? undefined
-      : pointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+    pointFormat?.idx === undefined ? undefined : pointOwnerKey(sourceSeriesIndex, pointFormat.idx);
   const resolverContext = config && ownerKey ? resolverContextFromConfig(config, ownerKey) : {};
   const format = config
     ? resolveChartOwnerFormat(config, ownerKey, pointChartFormat(pointFormat))
@@ -359,17 +367,19 @@ function applyMarker(
   const showMarkers =
     style === 'none'
       ? false
-      : (pointFormat?.markerStyle !== undefined ||
+      : pointFormat?.markerStyle !== undefined ||
         pointFormat?.markerSize !== undefined ||
         seriesConfig?.markerStyle !== undefined ||
         seriesConfig?.markerSize !== undefined ||
         seriesConfig?.showMarkers === true ||
-        isMarkerDefaultChart(config?.type, seriesConfig?.type));
+        isMarkerDefaultChart(config?.type, seriesConfig?.type);
   if (!showMarkers) return;
 
   row[MARKER_VISIBLE_FIELD] = true;
   row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
-  row[MARKER_SIZE_FIELD] = markerPointSizeToArea(pointFormat?.markerSize ?? seriesConfig?.markerSize);
+  row[MARKER_SIZE_FIELD] = markerPointSizeToArea(
+    pointFormat?.markerSize ?? seriesConfig?.markerSize,
+  );
   const pointLine = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
   const ownerKey =
     pointFormat?.idx === undefined
@@ -468,9 +478,7 @@ function applyDataLabel(
     row[DATA_LABEL_Y_FIELD] = coordinates.labelY;
   }
   const ownerKey = dataLabelOwnerKey(context.sourceSeriesIndex, context.pointIndex);
-  const resolverContext = context.config
-    ? resolverContextFromConfig(context.config, ownerKey)
-    : {};
+  const resolverContext = context.config ? resolverContextFromConfig(context.config, ownerKey) : {};
   const labelFormat = context.config
     ? resolveChartOwnerFormat(context.config, ownerKey, label.visualFormat)
     : label.visualFormat;
@@ -503,7 +511,10 @@ function applyErrorBars(
   },
 ): void {
   const bars = [
-    { config: context.seriesConfig?.errorBars, fallbackDirection: defaultErrorBarDirection(context.config) },
+    {
+      config: context.seriesConfig?.errorBars,
+      fallbackDirection: defaultErrorBarDirection(context.config),
+    },
     { config: context.seriesConfig?.xErrorBars, fallbackDirection: 'x' as const },
     { config: context.seriesConfig?.yErrorBars, fallbackDirection: 'y' as const },
   ].filter((entry): entry is { config: ErrorBarConfig; fallbackDirection: 'x' | 'y' } =>
@@ -527,8 +538,10 @@ function applyErrorBars(
         row[ERROR_BAR_X_MAX_FIELD] = extent.plus;
         if (!bar.noEndCap) row[ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD] = true;
       }
-      if (extent.minus !== undefined && extent.plus === undefined) row[ERROR_BAR_X_MAX_FIELD] = baseValue;
-      if (extent.plus !== undefined && extent.minus === undefined) row[ERROR_BAR_X_MIN_FIELD] = baseValue;
+      if (extent.minus !== undefined && extent.plus === undefined)
+        row[ERROR_BAR_X_MAX_FIELD] = baseValue;
+      if (extent.plus !== undefined && extent.minus === undefined)
+        row[ERROR_BAR_X_MIN_FIELD] = baseValue;
     } else {
       if (extent.minus !== undefined) {
         row[ERROR_BAR_Y_MIN_FIELD] = extent.minus;
@@ -538,8 +551,10 @@ function applyErrorBars(
         row[ERROR_BAR_Y_MAX_FIELD] = extent.plus;
         if (!bar.noEndCap) row[ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD] = true;
       }
-      if (extent.minus !== undefined && extent.plus === undefined) row[ERROR_BAR_Y_MAX_FIELD] = baseValue;
-      if (extent.plus !== undefined && extent.minus === undefined) row[ERROR_BAR_Y_MIN_FIELD] = baseValue;
+      if (extent.minus !== undefined && extent.plus === undefined)
+        row[ERROR_BAR_Y_MAX_FIELD] = baseValue;
+      if (extent.plus !== undefined && extent.minus === undefined)
+        row[ERROR_BAR_Y_MIN_FIELD] = baseValue;
     }
     const ownerKey = errorBarsOwnerKey(context.sourceSeriesIndex, direction);
     const resolverContext = context.config
@@ -568,11 +583,15 @@ function mergeLabels(
   seriesLabel?: DataLabelConfig,
   pointLabel?: DataLabelConfig,
 ): DataLabelConfig | undefined {
-  const merged = [chartLabel, seriesLabel, pointLabel].filter(Boolean).reduce(
-    (acc, label) => ({ ...acc, ...definedEntries(label!) }),
-    {} as Partial<DataLabelConfig>,
-  );
-  return Object.keys(merged).length > 0 ? ({ show: false, ...merged } as DataLabelConfig) : undefined;
+  const merged = [chartLabel, seriesLabel, pointLabel]
+    .filter(Boolean)
+    .reduce(
+      (acc, label) => ({ ...acc, ...definedEntries(label!) }),
+      {} as Partial<DataLabelConfig>,
+    );
+  return Object.keys(merged).length > 0
+    ? ({ show: false, ...merged } as DataLabelConfig)
+    : undefined;
 }
 
 function definedEntries<T extends object>(value: T): Partial<T> {
@@ -606,7 +625,9 @@ function composeLabelText(
   if (label.showCategoryName ?? label.showCategory) parts.push(String(context.category));
   if (showValue) pushNumber(formatLabelNumber(context.value, label.numberFormat ?? label.format));
   if (label.showPercentage ?? label.showPercent) {
-    pushNumber(formatLabelNumber(context.percentage ?? 0, label.numberFormat ?? label.format ?? '0%'));
+    pushNumber(
+      formatLabelNumber(context.percentage ?? 0, label.numberFormat ?? label.format ?? '0%'),
+    );
   }
   if (label.showBubbleSize && context.bubbleSize !== undefined) {
     pushNumber(formatLabelNumber(context.bubbleSize, label.numberFormat ?? label.format));
@@ -645,7 +666,13 @@ function labelPlacement(position: DataLabelConfig['position'], chartType?: Chart
       return { dx: 10, dy: 0, align: 'left', baseline: 'middle', valueDelta: () => 0 };
     case 'bottom':
     case 'insideBase':
-      return { dx: 0, dy: 10, align: 'center', baseline: 'top', valueDelta: (v: number) => -Math.abs(v) * 0.08 };
+      return {
+        dx: 0,
+        dy: 10,
+        align: 'center',
+        baseline: 'top',
+        valueDelta: (v: number) => -Math.abs(v) * 0.08,
+      };
     case 'outsideEnd':
     case 'top':
     case 'bestFit':
@@ -677,8 +704,10 @@ function errorBarExtent(
   const minusDelta = custom
     ? customErrorDelta(bar.minusSource, context.pointIndex)
     : baseErrorDelta(type, bar, context);
-  const plus = bar.barType === 'minus' || plusDelta === undefined ? undefined : context.baseValue + plusDelta;
-  const minus = bar.barType === 'plus' || minusDelta === undefined ? undefined : context.baseValue - minusDelta;
+  const plus =
+    bar.barType === 'minus' || plusDelta === undefined ? undefined : context.baseValue + plusDelta;
+  const minus =
+    bar.barType === 'plus' || minusDelta === undefined ? undefined : context.baseValue - minusDelta;
   return plus === undefined && minus === undefined ? undefined : { plus, minus };
 }
 
@@ -688,13 +717,21 @@ function baseErrorDelta(
   context: { baseValue: number; seriesValues: Array<number | undefined> },
 ): number {
   const value = bar.value ?? 1;
-  if (type === 'percentage' || type === 'percentageValue') return Math.abs(context.baseValue) * value / 100;
+  if (type === 'percentage' || type === 'percentageValue')
+    return (Math.abs(context.baseValue) * value) / 100;
   if (type === 'stdDev') return sampleStdDev(context.seriesValues) * value;
-  if (type === 'stdErr') return sampleStdDev(context.seriesValues) / Math.sqrt(validNumbers(context.seriesValues).length) * value;
+  if (type === 'stdErr')
+    return (
+      (sampleStdDev(context.seriesValues) / Math.sqrt(validNumbers(context.seriesValues).length)) *
+      value
+    );
   return value;
 }
 
-function customErrorDelta(source: ErrorBarConfig['plusSource'], pointIndex: number): number | undefined {
+function customErrorDelta(
+  source: ErrorBarConfig['plusSource'],
+  pointIndex: number,
+): number | undefined {
   const raw = source?.cache?.points.find((point) => point.idx === pointIndex)?.value;
   const value = raw === undefined ? undefined : Number(raw);
   return value !== undefined && Number.isFinite(value) ? Math.abs(value) : undefined;
@@ -709,7 +746,9 @@ function sampleStdDev(values: Array<number | undefined>): number {
 }
 
 function validNumbers(values: Array<number | undefined>): number[] {
-  return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  return values.filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  );
 }
 
 function finiteNumber(value: unknown): number | undefined {
@@ -736,7 +775,8 @@ function buildPieLabelGeometries(data: ChartData, config?: ChartConfig): PieLabe
     let startAngle = -Math.PI / 2;
     return series.data.map((point) => {
       const value = total > 0 ? Math.abs(point?.y ?? 0) : 1;
-      const angle = total > 0 ? (value / total) * Math.PI * 2 : (Math.PI * 2) / Math.max(1, series.data.length);
+      const angle =
+        total > 0 ? (value / total) * Math.PI * 2 : (Math.PI * 2) / Math.max(1, series.data.length);
       const midAngle = startAngle + angle / 2;
       startAngle += angle;
       return { cos: Math.cos(midAngle), sin: Math.sin(midAngle) };
@@ -850,122 +890,4 @@ function dataLabelOwnerKey(sourceSeriesIndex: number, pointIndex: number): strin
 
 function errorBarsOwnerKey(sourceSeriesIndex: number, axis: 'x' | 'y'): string {
   return `errorBars(seriesIdx=${sourceSeriesIndex},axis=${axis})`;
-}
-
-function isScatterLikeChart(config?: ChartConfig): boolean {
-  return config?.type === 'scatter' || config?.type === 'bubble';
-}
-
-function isQuantitativeXSeries(
-  config: ChartConfig | undefined,
-  seriesConfig: SeriesConfig | undefined,
-): boolean {
-  if (seriesConfig?.xRole === 'quantitative') return true;
-  if (seriesConfig?.xRole === 'category') return false;
-  return (
-    isScatterLikeChart(config) ||
-    seriesConfig?.type === 'scatter' ||
-    seriesConfig?.type === 'bubble'
-  );
-}
-
-function isBubbleSeries(
-  config: ChartConfig | undefined,
-  seriesConfig: SeriesConfig | undefined,
-): boolean {
-  return config?.type === 'bubble' || seriesConfig?.type === 'bubble';
-}
-
-function scatterXValue(point: ChartDataPoint): number {
-  return toFiniteNumber(point.x)!;
-}
-
-function bubbleSizeValue(
-  point: ChartDataPoint,
-  config: ChartConfig | undefined,
-  maxBubbleMagnitude: number,
-): number {
-  const rawSize = toFiniteNumber(point.size)!;
-  const magnitude = Math.abs(rawSize);
-  if (config?.sizeRepresents === 'w' && maxBubbleMagnitude > 0) {
-    return (magnitude * magnitude) / maxBubbleMagnitude;
-  }
-  return magnitude;
-}
-
-function shouldIncludePointInRows(
-  point: ChartDataPoint,
-  config?: ChartConfig,
-  seriesConfig?: SeriesConfig,
-): boolean {
-  if (point.valueState === 'hidden') return false;
-  if (config?.type === 'stock' && !isRenderableStockPoint(point, config)) return false;
-  const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
-  if (isQuantitativeX && toFiniteNumber(point.x) === undefined) return false;
-  if (isBubbleSeries(config, seriesConfig)) {
-    const size = toFiniteNumber(point.size);
-    if (size === undefined) return false;
-    if (size <= 0 && config?.showNegBubbles !== true) return false;
-  }
-  if (isQuantitativeX && point.valueState) return false;
-  if (!point.valueState || point.valueState === 'value') return true;
-  if (point.valueState === 'blank') {
-    return config?.displayBlanksAs === 'zero';
-  }
-  return false;
-}
-
-function isRenderableStockPoint(point: ChartDataPoint, config: ChartConfig): boolean {
-  const hasHighLowClose =
-    toFiniteNumber(point.high) !== undefined &&
-    toFiniteNumber(point.low) !== undefined &&
-    toFiniteNumber(point.close) !== undefined;
-  if (hasHighLowClose) {
-    return (
-      (config.subType !== 'ohlc' && config.subType !== 'volume-ohlc') ||
-      toFiniteNumber(point.open) !== undefined
-    );
-  }
-
-  return toFiniteNumber(point.open) !== undefined && toFiniteNumber(point.close) !== undefined;
-}
-
-function shouldEmitBlankRow(
-  point: ChartDataPoint | undefined,
-  config?: ChartConfig,
-  seriesConfig?: SeriesConfig,
-): boolean {
-  if (isQuantitativeXSeries(config, seriesConfig)) return false;
-  if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
-  if (!point) return true;
-  return point.valueState === 'blank';
-}
-
-function shouldBreakScatterLineAtPoint(
-  point: ChartDataPoint | undefined,
-  config?: ChartConfig,
-  seriesConfig?: SeriesConfig,
-): boolean {
-  return (
-    isQuantitativeXSeries(config, seriesConfig) &&
-    (seriesConfig?.showLines ?? config?.showLines) === true &&
-    config?.displayBlanksAs === 'gap' &&
-    (!point || point.valueState === 'blank')
-  );
-}
-
-function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConfig): number {
-  if (!config) return 0;
-  let max = 0;
-  for (let seriesIndex = 0; seriesIndex < data.series.length; seriesIndex += 1) {
-    const series = data.series[seriesIndex];
-    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], seriesIndex);
-    if (!isBubbleSeries(config, seriesConfig)) continue;
-    for (const point of series.data) {
-      if (!shouldIncludePointInRows(point, config, seriesConfig)) continue;
-      const size = toFiniteNumber(point.size);
-      if (size !== undefined) max = Math.max(max, Math.abs(size));
-    }
-  }
-  return max;
 }

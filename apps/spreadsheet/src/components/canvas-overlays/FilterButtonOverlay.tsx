@@ -38,6 +38,9 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
 }: FilterButtonOverlayProps) {
   const { metadata } = element;
   const { x, y, width, height } = element.bounds;
+  const triggerSize = Math.max(1, Math.min(20, width, height));
+  const triggerLeft = x + Math.max(0, width - triggerSize);
+  const triggerTop = y + Math.max(0, (height - triggerSize) / 2);
 
   // Controlled popover state - we manage open/close to pass onClose to content
   const [isOpen, setIsOpen] = useState(false);
@@ -150,19 +153,16 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
     [updateDragOffset],
   );
 
-  const handleDragPointerEnd = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (dragStateRef.current?.pointerId !== event.pointerId) return;
-      event.preventDefault();
-      event.stopPropagation();
-      dragStateRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      stopDragTrackingRef.current?.();
-    },
-    [],
-  );
+  const handleDragPointerEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragStateRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    stopDragTrackingRef.current?.();
+  }, []);
 
   // 0-based column index is now directly provided in metadata.col.
   // Derive a column letter label for aria-label (A=0, B=1, ...).
@@ -187,10 +187,10 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
           type="button"
           style={{
             position: 'absolute',
-            left: x,
-            top: y,
-            width: width,
-            height: height,
+            left: triggerLeft,
+            top: triggerTop,
+            width: triggerSize,
+            height: triggerSize,
             // Invisible but clickable
             opacity: 0,
             cursor: 'pointer',

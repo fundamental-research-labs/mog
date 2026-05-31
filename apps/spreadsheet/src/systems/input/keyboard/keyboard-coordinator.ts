@@ -1424,7 +1424,9 @@ export class KeyboardCoordinator {
   private shouldDispatchCompletedChordPrefixImmediately(
     entry: PendingShortcut<KeyboardShortcut>,
   ): boolean {
-    return entry.shortcut.action === 'SWITCH_RIBBON_TAB';
+    return (
+      entry.shortcut.action === 'SWITCH_RIBBON_TAB' || entry.shortcut.dispatchOnChordPrefix === true
+    );
   }
 
   /**

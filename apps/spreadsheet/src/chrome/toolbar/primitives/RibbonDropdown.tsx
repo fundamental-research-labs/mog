@@ -90,6 +90,8 @@ interface RibbonDropdownProps {
    * dedicated `<div data-testid="...">` keep working unchanged.
    */
   menuTestId?: string;
+  /** Additional stable selectors for compatibility with older scenario contracts. */
+  menuTestIdAliases?: readonly string[];
   /**
    * Manual trigger mode - when true, the trigger element controls when to open/close.
    * Use this for SplitButton or other triggers with multiple click zones where
@@ -180,6 +182,7 @@ export function RibbonDropdown({
   containerClassName = '',
   menuLabel,
   menuTestId,
+  menuTestIdAliases = [],
   manualTrigger = false,
 }: RibbonDropdownProps) {
   const { side, align } = mapPositionToSideAlign(position);
@@ -196,6 +199,15 @@ export function RibbonDropdown({
       level: 0,
     }),
     [handleClose],
+  );
+
+  const contentWithAliases = menuTestIdAliases.reduceRight<ReactNode>(
+    (content, alias) => (
+      <div role="menu" aria-label={menuLabel} data-testid={alias}>
+        {content}
+      </div>
+    ),
+    children,
   );
 
   return (
@@ -219,7 +231,7 @@ export function RibbonDropdown({
           aria-label={menuLabel}
           data-testid={menuTestId}
         >
-          {children}
+          {contentWithAliases}
         </PopoverContent>
       </Popover>
     </RibbonDropdownContext.Provider>
@@ -415,9 +427,9 @@ const MenuItemRow = forwardRef<HTMLDivElement, MenuItemRowProps>(function MenuIt
       data-value={dataValue}
       {...rest}
     >
-      <span className="w-4 h-4 flex items-center justify-center shrink-0">{iconSlot}</span>
-      <span className="flex-1">{children}</span>
+      <span className="flex-1 order-2">{children}</span>
       {trailingSlot}
+      <span className="w-4 h-4 flex items-center justify-center shrink-0 order-1">{iconSlot}</span>
     </div>
   );
 });
@@ -536,7 +548,8 @@ export function RibbonDropdownItem({
       iconSlot={isSelected ? SelectedCheckmark : (icon ?? null)}
       trailingSlot={
         shortcut ? (
-          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0">
+          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0 order-3">
+            {' '}
             {shortcut}
           </span>
         ) : null

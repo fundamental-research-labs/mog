@@ -192,6 +192,7 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     contexts: HOME_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
+    dispatchOnChordPrefix: true,
     notes:
       "Excel 365: Home → O opens Orientation dropdown. (Excel's Cells/Format dropdown has a non-trivial alternate chord; we expose it via Alt+H,KeyO,KeyF or Alt+H,KeyE,KeyT — see CellsGroup keytip notes.)",
   },
@@ -435,6 +436,7 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     contexts: HOME_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
+    dispatchOnChordPrefix: true,
   },
 
   // ===========================================================================

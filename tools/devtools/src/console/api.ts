@@ -1162,6 +1162,27 @@ export function createConsoleAPI(
       return fmt;
     },
 
+    hasComment(row: number, col: number, viewportId?: string): boolean {
+      const bridge = getActiveComputeBridge();
+      if (!bridge) return false;
+
+      const tryRead = (vpId: string): boolean | null => {
+        const accessor = bridge.getAccessorForViewport?.(vpId);
+        if (!accessor?.moveTo?.(row, col)) return null;
+        return accessor.hasComment === true;
+      };
+
+      if (viewportId) return tryRead(viewportId) === true;
+
+      const states: ReadonlyMap<string, unknown> | undefined = bridge.getPerViewportStates?.();
+      if (!states) return false;
+      for (const [vpId] of states) {
+        const value = tryRead(vpId);
+        if (value !== null) return value;
+      }
+      return false;
+    },
+
     getMachineStates() {
       const result: Record<string, import('../types').ProgrammaticMachineState> = {};
       for (const [id, m] of actorRecorder.machines) {
@@ -1683,6 +1704,28 @@ export function createConsoleAPI(
         applied = false;
       }
       return { frozenRows: panes.rows, frozenCols: panes.cols, applied };
+    },
+
+    getFrozenPanes(): { rows: number; cols: number } | null {
+      const wb = getActiveWorkbook();
+      const sheetId = wb?.getActiveSheetId?.() ?? wb?.activeSheet?.id ?? wb?.activeSheet?.sheetId;
+      const mirrorPanes = sheetId ? wb?.mirror?.getFrozenPanes?.(sheetId) : null;
+      if (
+        mirrorPanes &&
+        typeof mirrorPanes.rows === 'number' &&
+        typeof mirrorPanes.cols === 'number'
+      ) {
+        return { rows: mirrorPanes.rows, cols: mirrorPanes.cols };
+      }
+      const rendererPanes = (window as any).__COORDINATOR__?.renderer?.getFrozenPanes?.();
+      if (
+        rendererPanes &&
+        typeof rendererPanes.rows === 'number' &&
+        typeof rendererPanes.cols === 'number'
+      ) {
+        return { rows: rendererPanes.rows, cols: rendererPanes.cols };
+      }
+      return null;
     },
 
     async freezeTopRow(): Promise<void> {

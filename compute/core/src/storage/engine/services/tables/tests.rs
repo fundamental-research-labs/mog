@@ -930,6 +930,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn convert_to_range_removes_owned_filter() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+
+        engine
+            .create_table(
+                &sid,
+                "Table1".into(),
+                0,
+                0,
+                3,
+                1,
+                vec!["A".into(), "B".into()],
+                true,
+            )
+            .expect("create_table");
+
+        assert!(
+            engine
+                .get_filters_in_sheet(&sid)
+                .iter()
+                .any(|filter| filter.table_id.as_deref() == Some("Table1")),
+            "table creation must install an owned table filter"
+        );
+
+        engine
+            .convert_table_to_range("Table1")
+            .expect("convert_to_range");
+
+        assert!(
+            engine
+                .get_filters_in_sheet(&sid)
+                .iter()
+                .all(|filter| filter.table_id.as_deref() != Some("Table1")),
+            "convert_to_range must remove the table-owned filter"
+        );
+    }
+
     /// Style info persists through binding.
     #[test]
     fn style_info_persists_in_binding() {

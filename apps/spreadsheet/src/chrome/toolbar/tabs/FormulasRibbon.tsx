@@ -1072,6 +1072,7 @@ export function FormulasRibbon() {
             open={financialOpen}
             onOpenChange={setFinancialOpen}
             menuTestId="ribbon-dropdown-menu-financial"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-financial']}
             trigger={
               <RibbonButton
                 id="formulas-financial"
@@ -1101,6 +1102,7 @@ export function FormulasRibbon() {
             open={logicalOpen}
             onOpenChange={setLogicalOpen}
             menuTestId="ribbon-dropdown-menu-logical"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-logical']}
             trigger={
               <RibbonButton
                 id="formulas-logical"
@@ -1130,6 +1132,7 @@ export function FormulasRibbon() {
             open={textOpen}
             onOpenChange={setTextOpen}
             menuTestId="ribbon-dropdown-menu-text"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-text']}
             trigger={
               <RibbonButton
                 id="formulas-text"
@@ -1159,6 +1162,7 @@ export function FormulasRibbon() {
             open={dateTimeOpen}
             onOpenChange={setDateTimeOpen}
             menuTestId="ribbon-dropdown-menu-date-time"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-date-time']}
             trigger={
               <RibbonButton
                 id="formulas-datetime"
@@ -1188,6 +1192,7 @@ export function FormulasRibbon() {
             open={lookupOpen}
             onOpenChange={setLookupOpen}
             menuTestId="ribbon-dropdown-menu-lookup"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-lookup']}
             trigger={
               <RibbonButton
                 id="formulas-lookup"
@@ -1217,6 +1222,7 @@ export function FormulasRibbon() {
             open={mathTrigOpen}
             onOpenChange={setMathTrigOpen}
             menuTestId="ribbon-dropdown-menu-math-trig"
+            menuTestIdAliases={['ribbon-dropdown-menu-formulas-math-trig']}
             trigger={
               <RibbonButton
                 id="formulas-mathtrig"

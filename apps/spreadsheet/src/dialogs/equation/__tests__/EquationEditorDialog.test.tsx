@@ -594,6 +594,15 @@ describe('EquationEditorDialog', () => {
       expect(screen.getByLabelText('LaTeX Equation')).toBeInTheDocument();
     });
 
+    it('exposes the LaTeX input through an aria-label', () => {
+      renderWithCoordinator(<EquationEditorDialog />);
+
+      expect(screen.getByLabelText('LaTeX Equation')).toHaveAttribute(
+        'aria-label',
+        'LaTeX Equation',
+      );
+    });
+
     it('shows template gallery in Templates tab', async () => {
       const user = userEvent.setup();
       renderWithCoordinator(<EquationEditorDialog />);

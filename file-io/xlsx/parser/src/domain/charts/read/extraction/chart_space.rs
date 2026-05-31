@@ -75,11 +75,9 @@ pub fn extract_chart_spec_from_chart_space(
         .and_then(|title| title.layout.as_ref().map(Into::into));
 
     // -------------------------------------------------------------------------
-    // (i) scalar fields from first chart group's config
+    // (i) scalar fields from chart group configs
     // -------------------------------------------------------------------------
-    let scalar_fields = first_group
-        .map(|g| extract_scalar_fields_from_config(&g.config))
-        .unwrap_or_default();
+    let scalar_fields = extract_scalar_fields_from_plot_area(plot_area);
     let surface_family = surface_family_for_plot_area(plot_area);
     let (drop_lines, high_low_lines, series_lines, up_down_bars) = first_group
         .map(|g| extract_analysis_fields_from_config(&g.config))
@@ -838,14 +836,44 @@ fn extract_scalar_fields_from_config(
     }
 }
 
+fn extract_scalar_fields_from_plot_area(
+    plot_area: &ooxml_types::charts::PlotArea,
+) -> ScalarChartFields {
+    let mut merged = ScalarChartFields::default();
+    for group in &plot_area.chart_groups {
+        merged.fill_missing(extract_scalar_fields_from_config(&group.config));
+    }
+    merged
+}
+
+impl ScalarChartFields {
+    fn fill_missing(&mut self, other: Self) {
+        self.gap_width = self.gap_width.or(other.gap_width);
+        self.gap_depth = self.gap_depth.or(other.gap_depth);
+        self.overlap = self.overlap.or(other.overlap);
+        self.doughnut_hole_size = self.doughnut_hole_size.or(other.doughnut_hole_size);
+        self.first_slice_angle = self.first_slice_angle.or(other.first_slice_angle);
+        self.bubble_scale = self.bubble_scale.or(other.bubble_scale);
+        self.show_neg_bubbles = self.show_neg_bubbles.or(other.show_neg_bubbles);
+        self.size_represents = self.size_represents.take().or(other.size_represents);
+        self.bubble_3d_effect = self.bubble_3d_effect.or(other.bubble_3d_effect);
+        self.split_type = self.split_type.take().or(other.split_type);
+        self.split_value = self.split_value.or(other.split_value);
+        self.bar_shape = self.bar_shape.take().or(other.bar_shape);
+        self.wireframe = self.wireframe.or(other.wireframe);
+        self.surface_top_view = self.surface_top_view.or(other.surface_top_view);
+        self.vary_by_categories = self.vary_by_categories.or(other.vary_by_categories);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, AxisType, BarChartConfig, Chart as OoxmlChart, ChartAxis,
-        ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
+        AreaChartConfig, AxisType, BarChartConfig, BubbleChartConfig, Chart as OoxmlChart,
+        ChartAxis, ChartAxisPosition, ChartGroup, ChartSeries, ChartSpace, ChartText, ChartType,
         ChartTypeConfig, Legend, LineChartConfig, NumData, NumDataSource, NumPoint, PlotArea,
-        StockChartConfig, Title,
+        SizeRepresents, StockChartConfig, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -1028,6 +1056,43 @@ mod tests {
             chart_type_for_plot_area(&plot_area),
             domain_types::ChartType::Combo
         );
+    }
+
+    #[test]
+    fn combo_bubble_group_projects_bubble_scalars_when_not_first_group() {
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                plot_area: PlotArea {
+                    chart_groups: vec![
+                        group(
+                            ChartType::Line,
+                            ChartTypeConfig::Line(LineChartConfig::default()),
+                        ),
+                        group(
+                            ChartType::Bubble,
+                            ChartTypeConfig::Bubble(BubbleChartConfig {
+                                bubble_scale: Some(175),
+                                show_neg_bubbles: Some(true),
+                                size_represents: Some(SizeRepresents::Width),
+                                bubble_3d: Some(true),
+                                ..Default::default()
+                            }),
+                        ),
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+
+        assert_eq!(spec.chart_type, domain_types::ChartType::Combo);
+        assert_eq!(spec.bubble_scale, Some(175));
+        assert_eq!(spec.show_neg_bubbles, Some(true));
+        assert_eq!(spec.size_represents.as_deref(), Some("w"));
+        assert_eq!(spec.bubble_3d_effect, Some(true));
     }
 
     #[test]
@@ -1247,9 +1312,11 @@ mod tests {
             spec.series[0].stock_role,
             Some(domain_types::chart::ChartSeriesStockRoleData::Volume)
         );
-        assert!(spec.series[1..]
-            .iter()
-            .all(|series| series.r#type == Some(domain_types::ChartType::Stock)));
+        assert!(
+            spec.series[1..]
+                .iter()
+                .all(|series| series.r#type == Some(domain_types::ChartType::Stock))
+        );
         assert_eq!(
             spec.series[1..]
                 .iter()

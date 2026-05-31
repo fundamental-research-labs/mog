@@ -1,7 +1,8 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::ChartDefinition;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartFormatData, ChartSeriesDimensionSourceKindData,
+    AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
+    ChartSeriesCategoryLevelsCacheData, ChartSeriesDimensionSourceKindData,
     ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSpec,
     ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, PivotChartOptionsData,
     SingleAxisData,
@@ -236,6 +237,83 @@ fn literal_series_sources_reconstruct_from_imported_caches() {
     assert!(xml.contains("<c:v>North</c:v>"));
     assert!(xml.contains("<c:v>20</c:v>"));
     assert!(!xml.contains("<c:f>"));
+}
+
+#[test]
+fn multi_level_category_sources_reconstruct_from_imported_level_cache() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    let mut series = ranges::chart_series_data(
+        Some("Imported".to_string()),
+        Some("Data!$A$2:$B$4".to_string()),
+        Some("Data!$C$2:$C$4".to_string()),
+        0,
+    );
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+    series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(3),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "Flat cache should not win".to_string(),
+            format_code: None,
+        }],
+    });
+    series.category_levels = Some(ChartSeriesCategoryLevelsCacheData {
+        point_count: Some(3),
+        levels: vec![
+            ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "North".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 2,
+                        value: "South".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+            ChartSeriesCategoryLevelCacheData {
+                level: 1,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "Q1".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 1,
+                        value: "Q2".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+        ],
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:multiLvlStrRef>"), "{xml}");
+    assert!(xml.contains("<c:f>Data!$A$2:$B$4</c:f>"), "{xml}");
+    assert!(xml.contains("<c:multiLvlStrCache>"), "{xml}");
+    assert_eq!(xml.matches("<c:lvl>").count(), 2, "{xml}");
+    assert_eq!(xml.matches("<c:ptCount val=\"3\"/>").count(), 3, "{xml}");
+    assert!(
+        xml.contains("<c:pt idx=\"2\"><c:v>South</c:v></c:pt>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("<c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>"),
+        "{xml}"
+    );
+    assert!(!xml.contains("<c:strRef>"), "{xml}");
+    assert!(!xml.contains("Flat cache should not win"), "{xml}");
 }
 
 #[test]

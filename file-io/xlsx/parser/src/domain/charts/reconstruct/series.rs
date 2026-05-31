@@ -1,7 +1,7 @@
 use domain_types::chart::{
-    ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
-    ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData, PointFormatData, TrendlineData,
-    TrendlineLabelData,
+    ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
+    ChartSeriesPointCacheData, ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData,
+    PointFormatData, TrendlineData, TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
@@ -53,6 +53,7 @@ pub(super) fn build_series(
     let cat_ref = build_cat_data_source(
         sd.categories.as_deref(),
         sd.category_cache.as_ref(),
+        sd.category_levels.as_ref(),
         sd.category_source_kind,
     );
     let (cat, x_val) = if has_x_val {
@@ -176,8 +177,20 @@ fn build_num_data_source(
 fn build_cat_data_source(
     formula: Option<&str>,
     cache: Option<&ChartSeriesPointCacheData>,
+    category_levels: Option<&ChartSeriesCategoryLevelsCacheData>,
     source_kind: Option<ChartSeriesDimensionSourceKindData>,
 ) -> Option<CatDataSource> {
+    if let Some(formula) = formula {
+        if let Some(levels) = category_levels {
+            return Some(CatDataSource::MultiLvlStrRef(charts::MultiLvlStrRef {
+                f: formula.to_string(),
+                multi_lvl_str_cache: category_levels_cache_has_payload(levels)
+                    .then(|| multi_lvl_str_data_from_cache(levels)),
+                ..Default::default()
+            }));
+        }
+    }
+
     if let Some(formula) = formula {
         return Some(CatDataSource::StrRef(StrRef {
             f: formula.to_string(),
@@ -198,6 +211,39 @@ fn build_cat_data_source(
 
 fn point_cache_has_payload(cache: &ChartSeriesPointCacheData) -> bool {
     cache.point_count.is_some() || cache.format_code.is_some() || !cache.points.is_empty()
+}
+
+fn category_levels_cache_has_payload(cache: &ChartSeriesCategoryLevelsCacheData) -> bool {
+    cache.point_count.is_some()
+        || cache
+            .levels
+            .iter()
+            .any(|level| level.point_count.is_some() || !level.points.is_empty())
+}
+
+fn multi_lvl_str_data_from_cache(
+    cache: &ChartSeriesCategoryLevelsCacheData,
+) -> charts::MultiLvlStrData {
+    charts::MultiLvlStrData {
+        pt_count: cache.point_count,
+        levels: cache
+            .levels
+            .iter()
+            .map(|level| StrData {
+                pt_count: level.point_count,
+                pts: level
+                    .points
+                    .iter()
+                    .map(|point| StrPoint {
+                        idx: point.idx,
+                        v: point.value.clone(),
+                    })
+                    .collect(),
+                ..Default::default()
+            })
+            .collect(),
+        ..Default::default()
+    }
 }
 
 fn num_data_from_cache(cache: &ChartSeriesPointCacheData) -> NumData {

@@ -247,6 +247,11 @@ fn emit_multi_lvl_str_ref(w: &mut XmlWriter, r: &ooxml_types::charts::MultiLvlSt
         }
         for level in &cache.levels {
             w.start_element("c:lvl").end_attrs();
+            if let Some(pc) = level.pt_count {
+                w.start_element("c:ptCount")
+                    .attr("val", &pc.to_string())
+                    .self_close();
+            }
             for pt in &level.pts {
                 w.start_element("c:pt")
                     .attr("idx", &pt.idx.to_string())

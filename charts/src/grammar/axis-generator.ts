@@ -11,6 +11,11 @@ import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisOrient, AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 import {
+  DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE,
+  DEFAULT_AXIS_LABEL_FONT_SIZE,
+  DEFAULT_AXIS_TITLE_FONT_SIZE,
+} from '../defaults';
+import {
   formatExcelValueResult,
   type ExcelNumberFormatResult,
 } from '@mog/spreadsheet-utils/number-formats';
@@ -185,10 +190,12 @@ export function generateXAxis(
   // Compute label skip interval to prevent overlap.
   // Estimate label widths and determine how many labels to skip so adjacent
   // labels don't collide.
-  const fontSize = axisSpec.labelFontSize ?? 11;
+  const fontSize = axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const collisionFontSize =
+    axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE;
   let labelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
   if (axisSpec.tickLabelSkip === undefined && axisSpec.labels !== false && ticks.length > 1) {
-    const avgCharWidth = fontSize * 0.6;
+    const avgCharWidth = collisionFontSize * 0.6;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
       const text = axisLabelText(channel, axisSpec, t, tickFormat);
       return Math.max(max, text.length);
@@ -356,7 +363,7 @@ export function generateXAxis(
         y: titleSide === 'top' ? layout.plotArea.y - 35 : layout.plotArea.y + layout.plotArea.height + 35,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? 12,
+        fontSize: axisSpec.titleFontSize ?? DEFAULT_AXIS_TITLE_FONT_SIZE,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: titleSide === 'top' ? 'bottom' : 'top',
@@ -379,7 +386,7 @@ export function generateXAxis(
           : layout.plotArea.y + layout.plotArea.height + 18,
       text: axisSpec.displayUnitLabel,
       datum: axisDatum(role, 'displayUnitLabel'),
-      fontSize: axisSpec.labelFontSize ?? 11,
+      fontSize: axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE,
       fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: 'right',
       textBaseline: labelSide === 'top' ? 'bottom' : 'top',
@@ -602,7 +609,9 @@ export function generateYAxis(
   const minorTicks = getMinorAxisTicks(scale, axisSpec, ticks);
 
   // Compute label skip interval to prevent vertical overlap on y-axis.
-  const yFontSize = axisSpec.labelFontSize ?? 11;
+  const yFontSize = axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const yCollisionFontSize =
+    axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE;
   let yLabelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
   if (axisSpec.tickLabelSkip === undefined && axisSpec.labels !== false && ticks.length > 1) {
     const tickPositions = ticks
@@ -616,8 +625,8 @@ export function generateYAxis(
         if (spacing < minSpacing) minSpacing = spacing;
       }
       // Each label needs at least fontSize height
-      if (minSpacing > 0 && yFontSize > minSpacing) {
-        yLabelSkip = Math.ceil(yFontSize / minSpacing);
+      if (minSpacing > 0 && yCollisionFontSize > minSpacing) {
+        yLabelSkip = Math.ceil(yCollisionFontSize / minSpacing);
       }
     }
   }
@@ -774,7 +783,7 @@ export function generateYAxis(
         y: layout.plotArea.y + layout.plotArea.height / 2,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? 12,
+        fontSize: axisSpec.titleFontSize ?? DEFAULT_AXIS_TITLE_FONT_SIZE,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: 'middle',
@@ -795,7 +804,7 @@ export function generateYAxis(
       y: layout.plotArea.y - 10,
       text: axisSpec.displayUnitLabel,
       datum: axisDatum(role, 'displayUnitLabel'),
-      fontSize: axisSpec.labelFontSize ?? 11,
+      fontSize: axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE,
       fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: labelSide === 'right' ? 'left' : 'right',
       textBaseline: 'bottom',

@@ -102,6 +102,7 @@ import {
 } from './capabilities';
 
 type LayoutRecomputeReason = 'structural' | 'scroll' | 'data';
+const INTERNAL_GRID_RENDERER_KEY = '__mogInternalGridRenderer';
 
 // =============================================================================
 // PUBLIC CONFIG / CALLBACKS
@@ -1772,6 +1773,9 @@ export function createSheetView(
     resize: (width, height) => impl.resize(width, height),
     dispose: () => impl.dispose(),
   } satisfies SheetViewHandle;
+  Object.defineProperty(handle, INTERNAL_GRID_RENDERER_KEY, {
+    value: impl.gridRenderer,
+  });
   return handle;
 }
 

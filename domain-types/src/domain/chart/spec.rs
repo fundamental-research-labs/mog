@@ -48,6 +48,8 @@ pub struct ChartExReplayData {
     pub original_path: String,
     pub original_xml: Vec<u8>,
     pub original_position: AnchorPosition,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub projection_fingerprint: Option<String>,
     pub rels_path: Option<String>,
     pub rels_xml: Option<Vec<u8>>,
     pub relationships: Vec<ChartRelationshipData>,

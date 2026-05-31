@@ -269,6 +269,9 @@ pub(super) fn chart_ex_allows_opaque_replay(
     if !chart_ex_relationships_are_policy_allowed(chart_spec, chart_path) {
         return false;
     }
+    if let Some(imported_fingerprint) = replay.projection_fingerprint.as_deref() {
+        return imported_fingerprint == standard_chart_projection_fingerprint(chart_spec);
+    }
     !has_modeled_chart_space_state_except_imported_title(chart_spec)
 }
 

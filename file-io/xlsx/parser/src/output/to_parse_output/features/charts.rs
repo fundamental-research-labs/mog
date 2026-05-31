@@ -1081,6 +1081,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                     original_path: cx.original_path.clone(),
                     original_xml: cx.original_xml.clone(),
                     original_position: position.clone(),
+                    projection_fingerprint: None,
                     rels_path: cx.chart_rels_bytes.as_ref().map(|(path, _)| path.clone()),
                     rels_xml: cx.chart_rels_bytes.as_ref().map(|(_, xml)| xml.clone()),
                     relationships: cx
@@ -1114,6 +1115,10 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
             };
             if let Some((_, frame)) = matched_frame {
                 apply_chart_frame_to_spec(&mut spec, frame);
+            }
+            let projection_fingerprint = standard_chart_projection_fingerprint(&spec);
+            if let Some(replay) = spec.chart_ex_replay.as_mut() {
+                replay.projection_fingerprint = Some(projection_fingerprint);
             }
             spec
         })

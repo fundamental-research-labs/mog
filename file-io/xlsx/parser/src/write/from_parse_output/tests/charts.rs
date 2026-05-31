@@ -838,11 +838,13 @@ fn chart_ex_with_raw_anchor(original_number: usize) -> ChartSpec {
         original_xml: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:plotArea><cx:plotAreaRegion/></cx:plotArea></cx:chart></cx:chartSpace>"#
             .to_vec(),
         original_position: chart_ex.position.clone(),
+        projection_fingerprint: None,
         rels_path: None,
         rels_xml: None,
         relationships: Vec::new(),
         auxiliary_files: Vec::new(),
     });
+    refresh_chart_ex_replay_projection_fingerprint(&mut chart_ex);
     chart_ex
 }
 
@@ -922,6 +924,7 @@ fn chart_ex_family_with_replay(
         )
         .into_bytes(),
         original_position: chart_ex.position.clone(),
+        projection_fingerprint: None,
         rels_path: Some(format!(
             "xl/charts/_rels/chartEx{original_number}.xml.rels"
         )),
@@ -936,8 +939,16 @@ fn chart_ex_family_with_replay(
         relationships,
         auxiliary_files,
     });
+    refresh_chart_ex_replay_projection_fingerprint(&mut chart_ex);
 
     chart_ex
+}
+
+fn refresh_chart_ex_replay_projection_fingerprint(chart_ex: &mut ChartSpec) {
+    let projection_fingerprint = chart_replay::standard_chart_projection_fingerprint(chart_ex);
+    if let Some(replay) = chart_ex.chart_ex_replay.as_mut() {
+        replay.projection_fingerprint = Some(projection_fingerprint);
+    }
 }
 
 #[test]
@@ -1014,7 +1025,89 @@ fn chart_ex_with_imported_title(original_number: usize, family_marker: &str) -> 
         });
     }
     chart_ex.title = Some(IMPORTED_CHART_EX_TITLE.to_string());
+    refresh_chart_ex_replay_projection_fingerprint(&mut chart_ex);
     chart_ex
+}
+
+fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
+    domain_types::chart::ChartSeriesData {
+        name: Some("Revenue".to_string()),
+        r#type: Some(ChartType::Waterfall),
+        color: None,
+        values: Some("Data!B2:B3".to_string()),
+        value_cache: None,
+        value_source_kind: Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+        categories: Some("Data!A2:A3".to_string()),
+        x_role: Some(domain_types::chart::ChartSeriesXRoleData::Category),
+        category_cache: None,
+        category_source_kind: Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+        category_levels: None,
+        category_label_format: None,
+        bubble_size: None,
+        bubble_size_cache: None,
+        bubble_size_source_kind: None,
+        smooth: None,
+        show_lines: None,
+        explosion: None,
+        invert_if_negative: None,
+        y_axis_index: None,
+        show_markers: None,
+        marker_size: None,
+        marker_style: None,
+        line_width: None,
+        points: None,
+        data_labels: None,
+        trendlines: None,
+        error_bars: None,
+        x_error_bars: None,
+        y_error_bars: None,
+        idx: Some(0),
+        order: Some(0),
+        format: None,
+        bar_shape: None,
+        invert_color: None,
+        marker_background_color: None,
+        marker_foreground_color: None,
+        filtered: None,
+        show_shadow: None,
+        show_connector_lines: None,
+        leader_line_format: None,
+        show_leader_lines: None,
+    }
+}
+
+#[test]
+fn chart_ex_import_projected_series_keeps_opaque_replay_current() {
+    let mut chart_ex = chart_ex_with_imported_title(43, "projected-import");
+    chart_ex.series = vec![chart_ex_projected_series()];
+    chart_ex.data_range = Some("Data!A2:B3".to_string());
+    refresh_chart_ex_replay_projection_fingerprint(&mut chart_ex);
+    assert!(chart_replay::chart_ex_allows_opaque_replay(
+        &chart_ex,
+        "xl/charts/chartEx43.xml"
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+            make_cell(2, 0, DomainValue::Text(Arc::from("Q2"))),
+            make_cell(2, 1, DomainValue::Number(FiniteF64::new(120.0).unwrap())),
+        ],
+        charts: vec![chart_ex],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml =
+        String::from_utf8(archive.read_file("xl/charts/chartEx43.xml").unwrap()).unwrap();
+
+    assert!(chart_xml.contains("CHARTEX-FAMILY-projected-import"));
+    assert!(chart_xml.contains("PRINT-projected-import"));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
 fn chart_ex_test_legend(position: &str, overlay: Option<bool>) -> domain_types::chart::LegendData {

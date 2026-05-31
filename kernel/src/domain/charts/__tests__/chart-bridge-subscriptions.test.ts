@@ -23,6 +23,18 @@ const CHART_2 = 'chart-2';
 
 type TestEvent = { type: string; [key: string]: unknown };
 type Handler = (event: TestEvent) => void;
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+};
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 function createTestEventBus(): IEventBus & {
   handlers: Map<string, Set<Handler>>;
@@ -170,16 +182,11 @@ describe('setupChartBridgeSubscriptions', () => {
   });
 
   it('deactivates in-flight fire-and-forget handlers when cleaned up', async () => {
-    let resolveSheetOrder: (sheetIds: SheetId[]) => void = () => {};
+    const sheetOrder = deferred<SheetId[]>();
     const deps = createDeps({
       ctx: {
         computeBridge: {
-          getSheetOrder: jest.fn(
-            () =>
-              new Promise<SheetId[]>((resolve) => {
-                resolveSheetOrder = resolve;
-              }),
-          ),
+          getSheetOrder: jest.fn(() => sheetOrder.promise),
         } as never,
       },
     });
@@ -196,9 +203,70 @@ describe('setupChartBridgeSubscriptions', () => {
     } as never);
 
     cleanup();
-    resolveSheetOrder([SHEET_A]);
+    sheetOrder.resolve([SHEET_A]);
     await flushAsyncHandlers();
 
+    expect(deps.invalidateChart).not.toHaveBeenCalled();
+  });
+
+  it('deactivates in-flight batch change handlers when cleaned up', async () => {
+    const sheetOrder = deferred<SheetId[]>();
+    const deps = createDeps({
+      ctx: {
+        computeBridge: {
+          getSheetOrder: jest.fn(() => sheetOrder.promise),
+          getAllCharts: jest.fn(async () => [chart()]),
+        } as never,
+      },
+    });
+
+    const cleanup = setupChartBridgeSubscriptions(deps);
+    deps.ctx.eventBus.emit({
+      type: 'cells:batch-changed',
+      sheetId: SHEET_A as unknown as string,
+      changes: [
+        { row: 1, col: 1, oldValue: undefined, newValue: 10 },
+        { row: 2, col: 2, oldValue: undefined, newValue: 20 },
+      ],
+      source: 'local',
+    } as never);
+
+    cleanup();
+    sheetOrder.resolve([SHEET_A]);
+    await flushAsyncHandlers();
+
+    expect(deps.invalidateChart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['rows:inserted', { startRow: 2, count: 1 }],
+    ['rows:deleted', { startRow: 2, count: 1 }],
+    ['columns:inserted', { startCol: 2, count: 1 }],
+    ['columns:deleted', { startCol: 2, count: 1 }],
+  ])('deactivates in-flight %s handlers when cleaned up', async (type, eventFields) => {
+    const charts = deferred<ChartFloatingObject[]>();
+    const deps = createDeps({
+      ctx: {
+        computeBridge: {
+          getAllCharts: jest.fn(() => charts.promise),
+        } as never,
+      },
+    });
+    const computeBridge = computeBridgeMock(deps.ctx);
+
+    const cleanup = setupChartBridgeSubscriptions(deps);
+    deps.ctx.eventBus.emit({
+      type,
+      sheetId: SHEET_A as unknown as string,
+      source: 'local',
+      ...eventFields,
+    } as never);
+
+    cleanup();
+    charts.resolve([chart({ id: CHART_1, dataRange: 'B2:C4' })]);
+    await flushAsyncHandlers();
+
+    expect(computeBridge.updateChart).not.toHaveBeenCalled();
     expect(deps.invalidateChart).not.toHaveBeenCalled();
   });
 

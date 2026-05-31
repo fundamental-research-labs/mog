@@ -153,6 +153,36 @@ describe('chart render data normalizer', () => {
     });
   });
 
+  it("preserves trailing blank category domains for displayBlanksAs 'gap' and 'span'", () => {
+    const source = data({
+      categories: ['A', 'B', 'C'],
+      categoryFormatCodes: ['fmt-a', 'fmt-b', 'fmt-c'],
+      series: [
+        {
+          name: 'Series 1',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 0, valueState: 'blank' },
+            { x: 'C', y: 0, valueState: 'blank' },
+          ],
+        },
+      ],
+    });
+
+    for (const displayBlanksAs of ['gap', 'span'] as const) {
+      expect(
+        normalizeChartDataForRendering(source, {
+          type: 'line',
+          displayBlanksAs,
+          anchorRow: 0,
+          anchorCol: 0,
+          width: 4,
+          height: 4,
+        } as ChartConfig),
+      ).toEqual(source);
+    }
+  });
+
   it('detects no-fill/no-line series for render and diagnostics filtering', () => {
     expect(
       isNoFillNoLineSeriesConfig({

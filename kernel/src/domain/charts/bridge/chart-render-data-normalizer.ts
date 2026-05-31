@@ -201,7 +201,10 @@ export function trimTrailingBlankChartData(data: ChartData): ChartData {
 }
 
 export function normalizeChartDataForRendering(data: ChartData, config: ChartConfig): ChartData {
-  return trimTrailingBlankChartData(
-    normalizeImportedCategoryData(withCategoryFormatCodes(data, config), config),
-  );
+  const normalized = normalizeImportedCategoryData(withCategoryFormatCodes(data, config), config);
+  return preservesBlankCategoryDomain(config) ? normalized : trimTrailingBlankChartData(normalized);
+}
+
+function preservesBlankCategoryDomain(config: ChartConfig): boolean {
+  return config.displayBlanksAs === 'gap' || config.displayBlanksAs === 'span';
 }

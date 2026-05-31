@@ -266,6 +266,10 @@ pub(super) fn parse_chart_space_post_chart_props(xml: &[u8], start: usize, chart
             ps.page_setup = Some(setup);
         }
 
+        if let Some(legacy_start) = find_tag_simd(ps_xml, b"legacyDrawingHF", 0) {
+            ps.legacy_drawing_hf = attrs::parse_string_attr(&ps_xml[legacy_start..], b"r:id=\"");
+        }
+
         chart.print_settings = Some(ps);
     }
 

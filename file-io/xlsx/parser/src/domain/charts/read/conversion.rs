@@ -112,6 +112,7 @@ pub(super) fn convert_chart_to_chart_spec(
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,

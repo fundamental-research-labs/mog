@@ -50,6 +50,7 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,

@@ -16,18 +16,77 @@ pub(super) fn extract_series_from_chart_space(
         .chart_groups
         .iter()
         .flat_map(|g| {
-            let series_type = if is_combo {
-                Some(map_ooxml_chart_type_to_domain(g.chart_type, &g.config))
-            } else {
-                None
-            };
-            let y_axis_index =
-                resolve_group_y_axis_index(&plot_area.axes, &plot_area.chart_groups, g);
+            let semantics = series_group_semantics(plot_area, g, is_combo);
             g.series
                 .iter()
-                .map(move |s| extract_single_series(s, series_type.clone(), y_axis_index))
+                .map(move |s| extract_single_series_with_semantics(s, semantics.clone()))
         })
         .collect()
+}
+
+#[derive(Clone, Default)]
+struct SeriesGroupSemantics {
+    series_type: Option<domain_types::ChartType>,
+    y_axis_index: Option<u8>,
+    x_role: Option<domain_types::chart::ChartSeriesXRoleData>,
+    show_lines: Option<bool>,
+    show_markers: Option<bool>,
+    smooth: Option<bool>,
+}
+
+fn series_group_semantics(
+    plot_area: &ooxml_types::charts::PlotArea,
+    group: &ooxml_types::charts::ChartGroup,
+    is_combo: bool,
+) -> SeriesGroupSemantics {
+    let series_type = if is_combo {
+        Some(map_ooxml_chart_type_to_domain(
+            group.chart_type,
+            &group.config,
+        ))
+    } else {
+        None
+    };
+    let y_axis_index = resolve_group_y_axis_index(&plot_area.axes, &plot_area.chart_groups, group);
+    let x_role = match &group.config {
+        ooxml_types::charts::ChartTypeConfig::Scatter(_)
+        | ooxml_types::charts::ChartTypeConfig::Bubble(_) => {
+            Some(domain_types::chart::ChartSeriesXRoleData::Quantitative)
+        }
+        _ => Some(domain_types::chart::ChartSeriesXRoleData::Category),
+    };
+    let (show_lines, show_markers, smooth) = match &group.config {
+        ooxml_types::charts::ChartTypeConfig::Scatter(cfg) => {
+            scatter_style_semantics(cfg.scatter_style)
+        }
+        ooxml_types::charts::ChartTypeConfig::Line(cfg) => (Some(true), cfg.marker, cfg.smooth),
+        ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None, None),
+        _ => (None, None, None),
+    };
+
+    SeriesGroupSemantics {
+        series_type,
+        y_axis_index,
+        x_role,
+        show_lines,
+        show_markers,
+        smooth,
+    }
+}
+
+fn scatter_style_semantics(
+    style: ooxml_types::charts::ScatterStyle,
+) -> (Option<bool>, Option<bool>, Option<bool>) {
+    use ooxml_types::charts::ScatterStyle;
+
+    match style {
+        ScatterStyle::None => (Some(false), Some(false), Some(false)),
+        ScatterStyle::Line => (Some(true), Some(false), Some(false)),
+        ScatterStyle::LineMarker => (Some(true), Some(true), Some(false)),
+        ScatterStyle::Marker => (Some(false), Some(true), Some(false)),
+        ScatterStyle::Smooth => (Some(true), Some(false), Some(true)),
+        ScatterStyle::SmoothMarker => (Some(true), Some(true), Some(true)),
+    }
 }
 
 /// Extract a single series from an ooxml ChartSeries.
@@ -35,6 +94,20 @@ pub(super) fn extract_single_series(
     s: &ooxml_types::charts::ChartSeries,
     series_type: Option<domain_types::ChartType>,
     y_axis_index: Option<u8>,
+) -> domain_types::chart::ChartSeriesData {
+    extract_single_series_with_semantics(
+        s,
+        SeriesGroupSemantics {
+            series_type,
+            y_axis_index,
+            ..Default::default()
+        },
+    )
+}
+
+fn extract_single_series_with_semantics(
+    s: &ooxml_types::charts::ChartSeries,
+    semantics: SeriesGroupSemantics,
 ) -> domain_types::chart::ChartSeriesData {
     use ooxml_types::charts::SeriesTextSource;
 
@@ -69,6 +142,13 @@ pub(super) fn extract_single_series(
         extract_cat_level_cache(&s.cat).or_else(|| extract_cat_level_cache(&s.x_val));
     let category_label_format =
         extract_category_label_format(&s.cat).or_else(|| extract_category_label_format(&s.x_val));
+    let x_role = if s.x_val.is_some() {
+        Some(domain_types::chart::ChartSeriesXRoleData::Quantitative)
+    } else if s.cat.is_some() {
+        Some(domain_types::chart::ChartSeriesXRoleData::Category)
+    } else {
+        semantics.x_role
+    };
 
     let bubble_size = extract_num_ref_formula(&s.bubble_size);
     let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
@@ -77,6 +157,8 @@ pub(super) fn extract_single_series(
     // Markers
     let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
         extract_marker_config(&s.marker);
+    let show_markers = show_markers.or(semantics.show_markers);
+    let smooth = s.smooth.or(semantics.smooth);
 
     // Per-point formatting
     let mut point_formats: BTreeMap<u32, domain_types::chart::PointFormatData> = BTreeMap::new();
@@ -178,12 +260,13 @@ pub(super) fn extract_single_series(
 
     domain_types::chart::ChartSeriesData {
         name,
-        r#type: series_type,
+        r#type: semantics.series_type,
         color,
         values,
         value_cache,
         value_source_kind,
         categories,
+        x_role,
         category_cache,
         category_source_kind,
         category_levels,
@@ -191,10 +274,11 @@ pub(super) fn extract_single_series(
         bubble_size,
         bubble_size_cache,
         bubble_size_source_kind,
-        smooth: s.smooth,
+        smooth,
+        show_lines: semantics.show_lines,
         explosion: s.explosion,
         invert_if_negative: s.invert_if_negative,
-        y_axis_index,
+        y_axis_index: semantics.y_axis_index,
         show_markers,
         marker_size,
         marker_style,

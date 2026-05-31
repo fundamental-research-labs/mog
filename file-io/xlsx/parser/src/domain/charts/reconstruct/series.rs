@@ -1,7 +1,7 @@
 use domain_types::chart::{
     ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData,
-    PointFormatData, TrendlineData, TrendlineLabelData,
+    ChartSeriesPointCacheData, ChartSeriesXRoleData, ChartType as DomainChartType, ErrorBarData,
+    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
@@ -31,8 +31,9 @@ pub(super) fn build_series(
     );
 
     // Determine if this series uses scatter/bubble conventions based on data fields
-    let has_x_val =
-        sd.bubble_size.is_some() || (sd.categories.is_some() && sd.values.is_some() && uses_xy);
+    let has_x_val = sd.x_role == Some(ChartSeriesXRoleData::Quantitative)
+        || sd.bubble_size.is_some()
+        || (sd.categories.is_some() && sd.values.is_some() && uses_xy);
 
     // Series name → SeriesTextSource
     let tx = sd.name.as_ref().map(|n| SeriesTextSource::Value(n.clone()));

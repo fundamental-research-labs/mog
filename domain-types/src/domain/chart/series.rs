@@ -12,6 +12,14 @@ pub enum ChartSeriesDimensionSourceKindData {
     CacheFallback,
 }
 
+/// Imported x/category dimension role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesXRoleData {
+    Category,
+    Quantitative,
+}
+
 /// Runtime series data — carries both range references and visual config.
 /// bridge-ts generates the TS equivalent, replacing hand-written SeriesConfig.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,6 +52,9 @@ pub struct ChartSeriesData {
     /// Categories range: c:cat (bar/line/pie) or c:xVal (scatter/bubble)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub categories: Option<String>,
+    /// Whether `categories` should be interpreted as category labels or x values.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub x_role: Option<ChartSeriesXRoleData>,
     /// Imported cached category/x values from the source chart data reference.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_cache: Option<ChartSeriesPointCacheData>,
@@ -70,6 +81,9 @@ pub struct ChartSeriesData {
     /// Smooth line (line, scatter)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smooth: Option<bool>,
+    /// Whether this series requests a connecting line/path.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_lines: Option<bool>,
     /// Explosion percentage for pie slices (0-400)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explosion: Option<u32>,

@@ -106,6 +106,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(v) = d.gap_width {
         entries.push(("gapWidth".into(), Any::Number(v as f64)));
     }
+    if let Some(v) = d.gap_depth {
+        entries.push(("gapDepth".into(), Any::Number(v as f64)));
+    }
     if let Some(v) = d.overlap {
         entries.push(("overlap".into(), Any::Number(v as f64)));
     }
@@ -318,6 +321,7 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         display_blanks_as: read_string(map, txn, "displayBlanksAs"),
         plot_visible_only: read_bool(map, txn, "plotVisibleOnly"),
         gap_width: read_number(map, txn, "gapWidth").map(|n| n as u32),
+        gap_depth: read_number(map, txn, "gapDepth").map(|n| n as u32),
         overlap: read_number(map, txn, "overlap").map(|n| n as i32),
         doughnut_hole_size: read_number(map, txn, "doughnutHoleSize").map(|n| n as u32),
         first_slice_angle: read_number(map, txn, "firstSliceAngle").map(|n| n as u32),

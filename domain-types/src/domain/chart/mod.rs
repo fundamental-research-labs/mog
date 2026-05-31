@@ -135,6 +135,7 @@ pub enum ChartType {
     Bar,
     Bar3D,
     Column,
+    Column3D,
     Line,
     Line3D,
     Pie,
@@ -190,6 +191,7 @@ impl ChartType {
             ChartType::Bar => "bar",
             ChartType::Bar3D => "bar3D",
             ChartType::Column => "column",
+            ChartType::Column3D => "column3D",
             ChartType::Line => "line",
             ChartType::Line3D => "line3D",
             ChartType::Pie => "pie",
@@ -228,9 +230,7 @@ impl ChartType {
             "bar" => ChartType::Bar,
             "bar3D" | "bar3d" => ChartType::Bar3D,
             "column" => ChartType::Column,
-            // Legacy 3-D column string from the TS bridge maps to Bar3D
-            // (OOXML has no "column" chart type — it's `Bar` with `bar_dir=col`).
-            "column3d" | "column3D" => ChartType::Bar3D,
+            "column3d" | "column3D" => ChartType::Column3D,
             "line" => ChartType::Line,
             "line3D" | "line3d" => ChartType::Line3D,
             "pie" => ChartType::Pie,
@@ -300,14 +300,14 @@ impl ChartType {
     /// Convert to the OOXML chart-type enum. Variants that don't have a
     /// direct OOXML mapping (ChartEx-only types — waterfall/treemap/
     /// sunburst/funnel/regionMap/histogram/pareto/boxplot, plus `Column`
-    /// which OOXML expresses via `Bar` + `BarDirection`, and `Unknown`
-    /// which carries its own token)
+    /// and `Column3D` which OOXML expresses via `Bar`/`Bar3D` plus
+    /// `BarDirection`, and `Unknown` which carries its own token)
     /// map to `OoxmlChartType::Unknown`.
     pub fn to_ooxml(&self) -> ooxml_types::charts::ChartType {
         use ooxml_types::charts::ChartType as Oct;
         match self {
             ChartType::Bar | ChartType::Column => Oct::Bar,
-            ChartType::Bar3D => Oct::Bar3D,
+            ChartType::Bar3D | ChartType::Column3D => Oct::Bar3D,
             ChartType::Line => Oct::Line,
             ChartType::Line3D => Oct::Line3D,
             ChartType::Pie => Oct::Pie,

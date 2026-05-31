@@ -882,6 +882,7 @@ export interface ChartData {
   displayBlanksAs?: string;
   plotVisibleOnly?: boolean;
   gapWidth?: number;
+  gapDepth?: number;
   overlap?: number;
   doughnutHoleSize?: number;
   firstSliceAngle?: number;
@@ -969,6 +970,7 @@ export interface ChartExReplayData {
   originalPath: string;
   originalXml: Uint8Array;
   originalPosition: AnchorPosition;
+  projectionFingerprint?: string;
   relsPath: string | null;
   relsXml: Uint8Array | null;
   relationships: ChartRelationshipData[];
@@ -1087,6 +1089,7 @@ export interface ChartSeriesData {
   valueCache?: ChartSeriesPointCacheData;
   valueSourceKind?: ChartSeriesDimensionSourceKindData;
   categories?: string;
+  xRole?: ChartSeriesXRoleData;
   categoryCache?: ChartSeriesPointCacheData;
   categorySourceKind?: ChartSeriesDimensionSourceKindData;
   categoryLevels?: ChartSeriesCategoryLevelsCacheData;
@@ -1095,6 +1098,7 @@ export interface ChartSeriesData {
   bubbleSizeCache?: ChartSeriesPointCacheData;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKindData;
   smooth?: boolean;
+  showLines?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
   yAxisIndex?: number;
@@ -1135,6 +1139,8 @@ export interface ChartSeriesPointCachePointData {
   value: string;
   formatCode?: string;
 }
+
+export type ChartSeriesXRoleData = "category" | "quantitative";
 
 export interface ChartShadowData {
   visible?: boolean;
@@ -1189,6 +1195,7 @@ export interface ChartSpec {
   displayBlanksAs?: string;
   plotVisibleOnly?: boolean;
   gapWidth?: number;
+  gapDepth?: number;
   overlap?: number;
   doughnutHoleSize?: number;
   firstSliceAngle?: number;

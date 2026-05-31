@@ -11,7 +11,7 @@ pub(super) fn extract_legend_from_chart_space(
             LegendPosition::Top => "top",
             LegendPosition::Left => "left",
             LegendPosition::Right => "right",
-            LegendPosition::TopRight => "right",
+            LegendPosition::TopRight => "topRight",
         };
 
         let format = extract_chart_format(l.sp_pr.as_ref(), l.tx_pr.as_ref());

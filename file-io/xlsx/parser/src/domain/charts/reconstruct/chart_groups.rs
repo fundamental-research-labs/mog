@@ -113,7 +113,7 @@ pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
 /// Determine bar direction from domain chart type.
 pub(super) fn bar_direction_for(ct: &DomainChartType) -> BarDirection {
     match ct {
-        DomainChartType::Bar => BarDirection::Bar,
+        DomainChartType::Bar | DomainChartType::Bar3D => BarDirection::Bar,
         _ => BarDirection::Column,
     }
 }
@@ -134,7 +134,7 @@ pub(super) fn build_default_config(
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
     match ct {
-        OoxmlChartType::Bar | OoxmlChartType::Bar3D => {
+        OoxmlChartType::Bar => {
             let bar_dir = bar_direction_for(&spec.chart_type);
             ChartTypeConfig::Bar(charts::BarChartConfig {
                 bar_dir,
@@ -149,6 +149,17 @@ pub(super) fn build_default_config(
                 ..Default::default()
             })
         }
+        OoxmlChartType::Bar3D => {
+            let bar_dir = bar_direction_for(&spec.chart_type);
+            ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
+                bar_dir,
+                grouping: Some(grouping),
+                gap_width: spec.gap_width,
+                gap_depth: spec.gap_depth,
+                shape: spec.bar_shape.as_deref().map(charts::BarShape::from_ooxml),
+                ..Default::default()
+            })
+        }
         OoxmlChartType::Line => ChartTypeConfig::Line(charts::LineChartConfig {
             grouping,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
@@ -159,6 +170,7 @@ pub(super) fn build_default_config(
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
             grouping,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
+            gap_depth: spec.gap_depth,
             ..Default::default()
         }),
         OoxmlChartType::Pie => ChartTypeConfig::Pie(charts::PieChartConfig {
@@ -179,6 +191,7 @@ pub(super) fn build_default_config(
         OoxmlChartType::Area3D => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
             grouping: Some(grouping),
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
+            gap_depth: spec.gap_depth,
             ..Default::default()
         }),
         OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig::default()),
@@ -193,10 +206,14 @@ pub(super) fn build_default_config(
             ..Default::default()
         }),
         OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig::default()),
-        OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig::default()),
-        OoxmlChartType::Surface3D => {
-            ChartTypeConfig::Surface3D(charts::SurfaceChartConfig::default())
-        }
+        OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
+            wireframe: spec.wireframe,
+            ..Default::default()
+        }),
+        OoxmlChartType::Surface3D => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
+            wireframe: spec.wireframe,
+            ..Default::default()
+        }),
         OoxmlChartType::Stock => ChartTypeConfig::Stock(charts::StockChartConfig {
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
@@ -241,6 +258,12 @@ pub(super) fn inject_series_into_config(
         }),
         ChartTypeConfig::Bar3D(c) => ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
             gap_width: spec.gap_width.or(c.gap_width),
+            gap_depth: spec.gap_depth.or(c.gap_depth),
+            shape: spec
+                .bar_shape
+                .as_deref()
+                .map(charts::BarShape::from_ooxml)
+                .or(c.shape),
             ..c.clone()
         }),
         ChartTypeConfig::Line(c) => ChartTypeConfig::Line(charts::LineChartConfig {
@@ -267,6 +290,7 @@ pub(super) fn inject_series_into_config(
                 .as_ref()
                 .map(build_chart_lines)
                 .or_else(|| c.drop_lines.clone()),
+            gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
         ChartTypeConfig::Pie(c) => ChartTypeConfig::Pie(charts::PieChartConfig {
@@ -293,6 +317,7 @@ pub(super) fn inject_series_into_config(
                 .as_ref()
                 .map(build_chart_lines)
                 .or_else(|| c.drop_lines.clone()),
+            gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
         ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(c.clone()),
@@ -308,8 +333,14 @@ pub(super) fn inject_series_into_config(
             ..c.clone()
         }),
         ChartTypeConfig::Radar(c) => ChartTypeConfig::Radar(c.clone()),
-        ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(c.clone()),
-        ChartTypeConfig::Surface3D(c) => ChartTypeConfig::Surface3D(c.clone()),
+        ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
+            wireframe: spec.wireframe.or(c.wireframe),
+            ..c.clone()
+        }),
+        ChartTypeConfig::Surface3D(c) => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
+            wireframe: spec.wireframe.or(c.wireframe),
+            ..c.clone()
+        }),
         ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(charts::StockChartConfig {
             drop_lines: spec
                 .drop_lines

@@ -204,6 +204,29 @@ fn test_parse_3d_chart() {
 }
 
 #[test]
+fn test_project_bar3d_gap_depth_and_shape() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+            <c:chart>
+                <c:plotArea>
+                    <c:bar3DChart>
+                        <c:barDir val="col"/>
+                        <c:gapWidth val="180"/>
+                        <c:gapDepth val="220"/>
+                        <c:shape val="coneToMax"/>
+                    </c:bar3DChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+    assert_eq!(spec.chart_type, domain_types::ChartType::Column3D);
+    assert_eq!(spec.gap_width, Some(180));
+    assert_eq!(spec.gap_depth, Some(220));
+    assert_eq!(spec.bar_shape.as_deref(), Some("coneToMax"));
+}
+
+#[test]
 fn test_parse_chart_title() {
     let xml = br#"<?xml version="1.0"?>
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
@@ -504,6 +527,33 @@ fn test_parse_pivot_field_buttons() {
     assert_eq!(pivot_options.show_legend_field_buttons, Some(true));
     assert_eq!(pivot_options.show_value_field_buttons, Some(true));
     assert_eq!(pivot_options.show_report_filter_field_buttons, Some(false));
+}
+
+#[test]
+fn test_parse_chart_print_settings_legacy_drawing_hf() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace
+            xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                    </c:barChart>
+                </c:plotArea>
+            </c:chart>
+            <c:printSettings>
+                <c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/>
+                <c:legacyDrawingHF r:id="rIdHeaderFooterVml"/>
+            </c:printSettings>
+        </c:chartSpace>"#;
+
+    let chart = Chart::parse(xml);
+    let print_settings = chart.print_settings.expect("print settings");
+    assert_eq!(
+        print_settings.legacy_drawing_hf.as_deref(),
+        Some("rIdHeaderFooterVml")
+    );
 }
 
 #[test]

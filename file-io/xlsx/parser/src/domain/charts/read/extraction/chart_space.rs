@@ -1,7 +1,8 @@
 use super::axes::extract_axes_from_chart_space;
 use super::common::{
-    chart_import_status_for_renderability, chart_import_status_for_unsupported_chart_type,
-    map_ooxml_chart_type_to_domain,
+    chart_import_status_for_renderability, chart_import_status_for_surface_family,
+    chart_import_status_for_unsupported_chart_type, map_ooxml_chart_type_to_domain,
+    merge_chart_import_statuses,
 };
 use super::data_refs::reconstruct_data_range_from_chart_space;
 use super::formatting::{
@@ -78,6 +79,7 @@ pub fn extract_chart_spec_from_chart_space(
     let scalar_fields = first_group
         .map(|g| extract_scalar_fields_from_config(&g.config))
         .unwrap_or_default();
+    let surface_family = surface_family_for_plot_area(plot_area);
     let (drop_lines, high_low_lines, series_lines, up_down_bars) = first_group
         .map(|g| extract_analysis_fields_from_config(&g.config))
         .unwrap_or_default();
@@ -146,7 +148,7 @@ pub fn extract_chart_spec_from_chart_space(
         axes: axes.as_ref(),
         series: &series,
     });
-    let import_status = match &chart_type {
+    let renderability_import_status = match &chart_type {
         domain_types::ChartType::Unknown(raw) => chart_import_status_for_unsupported_chart_type(
             raw,
             Some(anchor.target.as_str()),
@@ -167,6 +169,20 @@ pub fn extract_chart_spec_from_chart_space(
             anchor.cnv_pr_name.as_deref(),
         ),
     };
+    let surface_import_status =
+        surface_family
+            .as_ref()
+            .and_then(|(surface_chart_type, wireframe, surface_top_view)| {
+                chart_import_status_for_surface_family(
+                    surface_chart_type,
+                    *wireframe,
+                    *surface_top_view,
+                    Some(anchor.target.as_str()),
+                    anchor.cnv_pr_name.as_deref(),
+                )
+            });
+    let import_status =
+        merge_chart_import_statuses(surface_import_status, renderability_import_status);
 
     // -------------------------------------------------------------------------
     // (l) Anchor metadata
@@ -236,6 +252,7 @@ pub fn extract_chart_spec_from_chart_space(
         display_blanks_as,
         plot_visible_only,
         gap_width: scalar_fields.gap_width,
+        gap_depth: scalar_fields.gap_depth,
         overlap: scalar_fields.overlap,
         doughnut_hole_size: scalar_fields.doughnut_hole_size,
         first_slice_angle: scalar_fields.first_slice_angle,
@@ -248,15 +265,15 @@ pub fn extract_chart_spec_from_chart_space(
         series_name_level: None,
         show_all_field_buttons: chart.show_all_field_buttons,
         second_plot_size: None,
-        vary_by_categories: None,
+        vary_by_categories: scalar_fields.vary_by_categories,
         title_h_align: None,
         title_v_align: None,
         title_show_shadow: None,
         pivot_options,
-        bar_shape: None,
+        bar_shape: scalar_fields.bar_shape,
         bubble_3d_effect: scalar_fields.bubble_3d_effect,
-        wireframe: None,
-        surface_top_view: None,
+        wireframe: scalar_fields.wireframe,
+        surface_top_view: scalar_fields.surface_top_view,
         color_scheme: None,
         chart_style_context,
         view_3d,
@@ -394,6 +411,23 @@ fn chart_type_for_plot_area(plot_area: &ooxml_types::charts::PlotArea) -> domain
     } else {
         first_type
     }
+}
+
+fn surface_family_for_plot_area(
+    plot_area: &ooxml_types::charts::PlotArea,
+) -> Option<(domain_types::ChartType, Option<bool>, Option<bool>)> {
+    plot_area.chart_groups.iter().find_map(|group| {
+        let chart_type = chart_type_for_group(group);
+        if !matches!(
+            chart_type,
+            domain_types::ChartType::Surface | domain_types::ChartType::Surface3D
+        ) {
+            return None;
+        }
+
+        let fields = extract_scalar_fields_from_config(&group.config);
+        Some((chart_type, fields.wireframe, fields.surface_top_view))
+    })
 }
 
 fn chart_type_for_group(group: &ooxml_types::charts::ChartGroup) -> domain_types::ChartType {
@@ -643,6 +677,7 @@ fn extract_sub_type_from_config(
 #[derive(Default)]
 struct ScalarChartFields {
     gap_width: Option<u32>,
+    gap_depth: Option<u32>,
     overlap: Option<i32>,
     doughnut_hole_size: Option<u32>,
     first_slice_angle: Option<u32>,
@@ -652,6 +687,10 @@ struct ScalarChartFields {
     bubble_3d_effect: Option<bool>,
     split_type: Option<String>,
     split_value: Option<f64>,
+    bar_shape: Option<String>,
+    wireframe: Option<bool>,
+    surface_top_view: Option<bool>,
+    vary_by_categories: Option<bool>,
 }
 
 fn extract_scalar_fields_from_config(
@@ -663,20 +702,63 @@ fn extract_scalar_fields_from_config(
         CTC::Bar(c) => ScalarChartFields {
             gap_width: c.gap_width,
             overlap: c.overlap,
+            vary_by_categories: c.vary_colors,
             ..Default::default()
         },
         CTC::Bar3D(c) => ScalarChartFields {
             gap_width: c.gap_width,
+            gap_depth: c.gap_depth,
+            bar_shape: c.shape.map(|shape| shape.to_ooxml().to_string()),
+            wireframe: None,
+            surface_top_view: None,
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Line(c) => ScalarChartFields {
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Line3D(c) => ScalarChartFields {
+            gap_depth: c.gap_depth,
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Surface(c) => ScalarChartFields {
+            wireframe: c.wireframe,
+            surface_top_view: Some(true),
+            ..Default::default()
+        },
+        CTC::Surface3D(c) => ScalarChartFields {
+            wireframe: c.wireframe,
+            surface_top_view: Some(false),
             ..Default::default()
         },
         CTC::Pie(c) => ScalarChartFields {
             first_slice_angle: c.first_slice_ang,
+            vary_by_categories: c.vary_colors,
             ..Default::default()
         },
-        CTC::Pie3D(_) => ScalarChartFields::default(),
+        CTC::Pie3D(c) => ScalarChartFields {
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
         CTC::Doughnut(c) => ScalarChartFields {
             doughnut_hole_size: c.hole_size,
             first_slice_angle: c.first_slice_ang,
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Area(c) => ScalarChartFields {
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Area3D(c) => ScalarChartFields {
+            gap_depth: c.gap_depth,
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Scatter(c) => ScalarChartFields {
+            vary_by_categories: c.vary_colors,
             ..Default::default()
         },
         CTC::Bubble(c) => ScalarChartFields {
@@ -684,6 +766,11 @@ fn extract_scalar_fields_from_config(
             show_neg_bubbles: c.show_neg_bubbles,
             size_represents: c.size_represents.map(|sr| sr.to_ooxml().to_string()),
             bubble_3d_effect: c.bubble_3d,
+            vary_by_categories: c.vary_colors,
+            ..Default::default()
+        },
+        CTC::Radar(c) => ScalarChartFields {
+            vary_by_categories: c.vary_colors,
             ..Default::default()
         },
         CTC::OfPie(c) => {
@@ -693,6 +780,7 @@ fn extract_scalar_fields_from_config(
                 gap_width: c.gap_width,
                 split_type,
                 split_value,
+                vary_by_categories: c.vary_colors,
                 ..Default::default()
             }
         }

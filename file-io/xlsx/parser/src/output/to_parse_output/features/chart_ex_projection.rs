@@ -166,10 +166,16 @@ pub(super) fn project_chart_ex_space(
         .as_ref()
         .map(project_chart_ex_legend);
     let chart_format = extract_chart_format(chart_space.sp_pr.as_ref(), chart_space.tx_pr.as_ref());
-    let plot_format = merge_chart_format(
-        extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None),
-        extract_chart_format(region.sp_pr.as_ref(), None),
-    );
+    let plot_area_format = extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None);
+    let plot_area_region_format = extract_chart_format(region.sp_pr.as_ref(), None);
+    if plot_area_format.is_some() && plot_area_region_format.is_some() {
+        push_projection_diagnostic(
+            &mut projection_diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            "ChartEx plotArea and plotAreaRegion styles were merged for rendering; separate style owners are preserved for export",
+        );
+    }
+    let plot_format = merge_chart_format(plot_area_format, plot_area_region_format);
     let chart_style_context = project_chart_ex_style_context(ChartExStyleContextInputs {
         chart_format: chart_format.as_ref(),
         plot_format: plot_format.as_ref(),
@@ -406,7 +412,7 @@ pub(super) fn chart_ex_import_status(
         return Some(chart_import_status(
             domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
             "Imported ChartEx chart was preserved but has no renderable series data".to_string(),
-            domain_types::ImportRenderability::Placeholder,
+            domain_types::ImportRenderability::NotRenderable,
             original_path,
             title,
         ));
@@ -442,7 +448,7 @@ pub(super) fn chart_ex_import_status(
             domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
             "Imported ChartEx chart was preserved but its source ranges are not rectangular"
                 .to_string(),
-            domain_types::ImportRenderability::Placeholder,
+            domain_types::ImportRenderability::NotRenderable,
             original_path,
             title,
         ));
@@ -558,11 +564,9 @@ fn project_chart_ex_series(
                 region.series.len(),
                 diagnostics,
             )?;
-            let categories = chart_ex_dimension_formula(data, DimensionKind::String, "cat")
-                .or_else(|| first_dimension_formula(data, DimensionKind::String));
-            let values = chart_ex_dimension_formula(data, DimensionKind::Numeric, "val")
-                .or_else(|| chart_ex_dimension_formula(data, DimensionKind::Numeric, "size"))
-                .or_else(|| first_dimension_formula(data, DimensionKind::Numeric));
+            diagnose_unprojected_series_dimensions(data, &series.layout_id, diagnostics);
+            let categories = chart_ex_dimension_formula(data, DimensionKind::String, "cat");
+            let values = chart_ex_dimension_formula(data, DimensionKind::Numeric, "val");
             let categories = categories
                 .and_then(|formula| project_chart_formula(formula, "category", diagnostics))
                 .map(str::to_string);
@@ -588,6 +592,7 @@ fn project_chart_ex_series(
                 value_cache: None,
                 value_source_kind,
                 categories,
+                x_role: None,
                 category_cache: None,
                 category_source_kind,
                 category_levels: None,
@@ -596,6 +601,7 @@ fn project_chart_ex_series(
                 bubble_size_cache: None,
                 bubble_size_source_kind: None,
                 smooth: None,
+                show_lines: None,
                 explosion: None,
                 invert_if_negative: None,
                 y_axis_index: chart_ex_series_y_axis_index(
@@ -789,20 +795,6 @@ fn chart_ex_dimension_formula<'a>(
                 dim_type: actual,
                 formula,
             } if matches!(kind, DimensionKind::Numeric) && actual == dim_type => {
-                Some(formula.content.as_str())
-            }
-            _ => None,
-        })
-}
-
-fn first_dimension_formula(data: &ChartExData, kind: DimensionKind) -> Option<&str> {
-    data.dimensions
-        .iter()
-        .find_map(|dimension| match dimension {
-            ChartExDimension::String { formula, .. } if matches!(kind, DimensionKind::String) => {
-                Some(formula.content.as_str())
-            }
-            ChartExDimension::Numeric { formula, .. } if matches!(kind, DimensionKind::Numeric) => {
                 Some(formula.content.as_str())
             }
             _ => None,
@@ -1352,6 +1344,56 @@ fn project_boxplot(
     Some(config)
 }
 
+fn diagnose_unprojected_series_dimensions(
+    data: &ChartExData,
+    layout_id: &ChartExLayoutId,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) {
+    for dimension in &data.dimensions {
+        match dimension {
+            ChartExDimension::String { dim_type, .. } if dim_type != "cat" => {
+                push_projection_diagnostic(
+                    diagnostics,
+                    domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                    format!(
+                        "ChartEx string dimension `{dim_type}` is preserved but not mapped to render categories"
+                    ),
+                );
+            }
+            ChartExDimension::Numeric { dim_type, .. }
+                if dim_type != "val" && !chart_ex_size_dimension_is_projected(layout_id) =>
+            {
+                push_projection_diagnostic(
+                    diagnostics,
+                    domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                    format!(
+                        "ChartEx numeric dimension `{dim_type}` is preserved but not mapped to render values"
+                    ),
+                );
+            }
+            ChartExDimension::Numeric { dim_type, .. }
+                if dim_type != "val" && dim_type != "size" =>
+            {
+                push_projection_diagnostic(
+                    diagnostics,
+                    domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                    format!(
+                        "ChartEx numeric dimension `{dim_type}` is preserved but not mapped to render values"
+                    ),
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+fn chart_ex_size_dimension_is_projected(layout_id: &ChartExLayoutId) -> bool {
+    matches!(
+        layout_id,
+        ChartExLayoutId::Treemap | ChartExLayoutId::Sunburst
+    )
+}
+
 fn first_layout(region: &ChartExPlotAreaRegion) -> Option<&ChartExLayoutProperties> {
     region
         .series
@@ -1490,11 +1532,9 @@ fn project_region_map(
         diagnostics,
     )?;
     let region_formula = chart_ex_dimension_formula(data, DimensionKind::String, "cat")
-        .or_else(|| first_dimension_formula(data, DimensionKind::String))
         .and_then(|formula| project_chart_formula(formula, "region", diagnostics))
         .map(str::to_string);
     let value_formula = chart_ex_dimension_formula(data, DimensionKind::Numeric, "val")
-        .or_else(|| first_dimension_formula(data, DimensionKind::Numeric))
         .and_then(|formula| project_chart_formula(formula, "region value", diagnostics))
         .map(str::to_string);
 
@@ -1647,6 +1687,7 @@ mod tests {
             value_source_kind: values
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
             categories: categories.map(str::to_string),
+            x_role: None,
             category_cache: None,
             category_source_kind: categories
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
@@ -1656,6 +1697,7 @@ mod tests {
             bubble_size_cache: None,
             bubble_size_source_kind: None,
             smooth: None,
+            show_lines: None,
             explosion: None,
             invert_if_negative: None,
             y_axis_index: None,
@@ -2088,6 +2130,79 @@ mod tests {
     }
 
     #[test]
+    fn unknown_chart_ex_dimensions_do_not_fallback_to_render_data() {
+        let chart_space = chart_space_with_series(
+            ChartExLayoutId::Waterfall,
+            vec![
+                ChartExDimension::String {
+                    dim_type: "colorStr".to_string(),
+                    formula: formula("Sheet1!A1:A3"),
+                },
+                ChartExDimension::Numeric {
+                    dim_type: "colorVal".to_string(),
+                    formula: formula("Sheet1!B1:B3"),
+                },
+            ],
+            None,
+        );
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+        assert_eq!(projected.series.len(), 1);
+        assert_eq!(projected.series[0].categories, None);
+        assert_eq!(projected.series[0].values, None);
+        assert_eq!(projected.data_range, None);
+        let status = projected
+            .import_status
+            .expect("unknown dimensions should block rendering");
+
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+        let messages = diagnostic_messages(&status);
+        for expected in ["colorStr", "colorVal"] {
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "missing diagnostic containing `{expected}` in {messages:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_ex_empty_and_non_rectangular_sources_are_not_renderable() {
+        let empty = chart_ex_import_status(
+            &ChartType::Waterfall,
+            &[],
+            None,
+            "xl/charts/chartEx1.xml",
+            None,
+        )
+        .expect("empty ChartEx series should be diagnosed");
+        assert_eq!(
+            empty.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+
+        let non_rectangular = chart_ex_import_status(
+            &ChartType::Waterfall,
+            &[chart_series(
+                ChartType::Waterfall,
+                Some("Sheet1!A1:A3"),
+                Some("Sheet1!C1:C2"),
+            )],
+            None,
+            "xl/charts/chartEx1.xml",
+            None,
+        )
+        .expect("non-rectangular ChartEx source ranges should be diagnosed");
+        assert_eq!(
+            non_rectangular.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+    }
+
+    #[test]
     fn projects_supported_chart_ex_family_series_data() {
         for (layout_id, expected_chart_type) in [
             (ChartExLayoutId::Funnel, ChartType::Funnel),
@@ -2409,6 +2524,15 @@ mod tests {
                 color: domain_types::chart::ChartColorData::Hex("FF0000".to_string()),
                 transparency: None,
             }
+        );
+        let status = projected
+            .import_status
+            .expect("merged plot styles should be diagnosed");
+        assert!(
+            diagnostic_messages(&status)
+                .iter()
+                .any(|message| message.contains("plotArea and plotAreaRegion styles")),
+            "missing merged-style diagnostic"
         );
     }
 

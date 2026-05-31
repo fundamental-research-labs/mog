@@ -80,6 +80,14 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                     relationship_closure.diagnostics.clone(),
                 );
             }
+            append_chart_import_status_diagnostics(
+                &mut spec.import_status,
+                standard_chart_pivot_format_diagnostics(
+                    chart_space,
+                    chart.original_path.as_deref(),
+                    spec.title.as_deref(),
+                ),
+            );
             let relationship_closure_current = relationship_closure.current;
             spec.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
                 original_path: chart.original_path.clone(),
@@ -292,6 +300,38 @@ fn validate_standard_chart_relationship(
         object_name,
         Some(r_id),
     ))
+}
+
+fn standard_chart_pivot_format_diagnostics(
+    chart_space: &ooxml_types::charts::ChartSpace,
+    chart_path: Option<&str>,
+    object_name: Option<&str>,
+) -> Vec<domain_types::ImportDiagnosticRef> {
+    let count = chart_space
+        .chart
+        .pivot_fmts
+        .iter()
+        .filter(|format| {
+            format.sp_pr.is_some()
+                || format.tx_pr.is_some()
+                || format.marker.is_some()
+                || format.d_lbl.is_some()
+                || !format.extensions.is_empty()
+        })
+        .count();
+    if count == 0 {
+        return Vec::new();
+    }
+
+    vec![chart_relationship_diagnostic(
+        domain_types::ImportDiagnosticCode::UnsupportedFeature,
+        format!(
+            "Pivot chart formatting (c:pivotFmts, {count} entries) is preserved for export but not rendered; semantic style resolution is owned by the chart style plan"
+        ),
+        chart_path,
+        object_name,
+        Some("pivotFmts"),
+    )]
 }
 
 fn chart_relationship_diagnostic(
@@ -911,6 +951,7 @@ pub(crate) fn build_fallback_chart_spec(
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
@@ -1046,6 +1087,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 display_blanks_as: None,
                 plot_visible_only: None,
                 gap_width: None,
+                gap_depth: None,
                 overlap: None,
                 doughnut_hole_size: None,
                 first_slice_angle: None,
@@ -1330,5 +1372,40 @@ mod tests {
         assert!(!closure.current);
         assert!(codes.contains(&domain_types::ImportDiagnosticCode::MissingRelationshipTarget));
         assert!(codes.contains(&domain_types::ImportDiagnosticCode::UnsupportedFeature));
+    }
+
+    #[test]
+    fn standard_chart_pivot_fmts_emit_import_diagnostic_for_style_semantics() {
+        let chart_space = ooxml_types::charts::ChartSpace {
+            chart: ooxml_types::charts::Chart {
+                pivot_fmts: vec![ooxml_types::charts::PivotFmt {
+                    idx: 2,
+                    sp_pr: Some(Default::default()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let diagnostics = standard_chart_pivot_format_diagnostics(
+            &chart_space,
+            Some("xl/charts/chart1.xml"),
+            Some("Revenue"),
+        );
+
+        assert_eq!(diagnostics.len(), 1);
+        let diagnostic = &diagnostics[0];
+        assert_eq!(
+            diagnostic.code,
+            Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
+        );
+        assert!(
+            diagnostic
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("c:pivotFmts"))
+        );
+        assert_eq!(diagnostic.object_id.as_deref(), Some("pivotFmts"));
     }
 }

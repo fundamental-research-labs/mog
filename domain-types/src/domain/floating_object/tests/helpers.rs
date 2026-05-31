@@ -248,6 +248,7 @@ pub(super) fn chart_data_with_optional_keys() -> ChartData {
         display_blanks_as: Some("gap".to_string()),
         plot_visible_only: Some(true),
         gap_width: Some(150),
+        gap_depth: Some(200),
         overlap: Some(0),
         doughnut_hole_size: Some(50),
         first_slice_angle: Some(0),

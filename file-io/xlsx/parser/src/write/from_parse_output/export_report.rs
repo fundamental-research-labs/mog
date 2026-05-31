@@ -226,6 +226,7 @@ fn append_standard_chart_export_diagnostics(
     }
 
     append_standard_chart_relationship_diagnostics(chart, chart_path, diagnostics);
+    append_standard_chart_print_settings_diagnostics(chart, chart_path, diagnostics);
     append_standard_chart_raw_xml_drop_diagnostics(chart, chart_path, diagnostics);
 }
 
@@ -271,6 +272,35 @@ fn append_standard_chart_relationship_diagnostics(
             ExportSemanticImpact::PackagePreservationDropped,
             format!(
                 "Imported chart userShapes relationship `{r_id}` was not exported because the target part is unsupported or missing."
+            ),
+        );
+    }
+}
+
+fn append_standard_chart_print_settings_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    let Some(ChartDefinition::Chart(chart_space)) = chart.definition.as_ref() else {
+        return;
+    };
+    let Some(print_settings) = chart_space.print_settings.as_ref() else {
+        return;
+    };
+    let Some(r_id) = print_settings.legacy_drawing_hf.as_deref() else {
+        return;
+    };
+
+    if super::chart_replay::should_reconstruct_chart_space(chart) {
+        push_chart_diagnostic(
+            diagnostics,
+            ExportDiagnosticCode::ChartPrintSettingsDropped,
+            "chartPrintSettings",
+            Some(chart_path),
+            ExportSemanticImpact::PackagePreservationDropped,
+            format!(
+                "Imported chart printSettings legacyDrawingHF relationship `{r_id}` was not exported because chart print VML relationships are not modeled."
             ),
         );
     }

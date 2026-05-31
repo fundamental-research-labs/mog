@@ -135,6 +135,8 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub gap_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub gap_depth: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub overlap: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub doughnut_hole_size: Option<u32>,
@@ -152,7 +154,8 @@ pub struct ChartSpec {
     pub split_value: Option<f64>,
 
     // -- Bar shape (3D decorative charts) --
-    /// Mark shape for 3D bar/column charts: "box", "cylinder", "cone", "pyramid".
+    /// Mark shape for 3D bar/column charts:
+    /// "box", "cylinder", "cone", "coneToMax", "pyramid", "pyramidToMax".
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bar_shape: Option<String>,
 
@@ -617,6 +620,7 @@ impl ChartSpec {
             display_blanks_as: chart_data.display_blanks_as.clone(),
             plot_visible_only: chart_data.plot_visible_only,
             gap_width: chart_data.gap_width,
+            gap_depth: chart_data.gap_depth,
             overlap: chart_data.overlap,
             doughnut_hole_size: chart_data.doughnut_hole_size,
             first_slice_angle: chart_data.first_slice_angle,
@@ -873,6 +877,7 @@ impl ChartSpec {
             display_blanks_as: self.display_blanks_as.clone(),
             plot_visible_only: self.plot_visible_only,
             gap_width: self.gap_width,
+            gap_depth: self.gap_depth,
             overlap: self.overlap,
             doughnut_hole_size: self.doughnut_hole_size,
             first_slice_angle: self.first_slice_angle,

@@ -46,6 +46,76 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart
     ))
 }
 
+pub(in crate::domain::charts::read) fn chart_import_status_for_surface_family(
+    chart_type: &domain_types::ChartType,
+    wireframe: Option<bool>,
+    surface_top_view: Option<bool>,
+    part_path: Option<&str>,
+    object_name: Option<&str>,
+) -> Option<domain_types::ImportObjectStatus> {
+    if !matches!(
+        chart_type,
+        domain_types::ChartType::Surface | domain_types::ChartType::Surface3D
+    ) {
+        return None;
+    }
+
+    let message = surface_family_placeholder_message(chart_type, wireframe, surface_top_view);
+    Some(crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            message: message.to_string(),
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::Placeholder,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id: None,
+        },
+    ))
+}
+
+pub(in crate::domain::charts::read) fn merge_chart_import_statuses(
+    primary: Option<domain_types::ImportObjectStatus>,
+    secondary: Option<domain_types::ImportObjectStatus>,
+) -> Option<domain_types::ImportObjectStatus> {
+    match (primary, secondary) {
+        (Some(mut primary), Some(secondary)) => {
+            for diagnostic in secondary.diagnostics {
+                if !primary
+                    .diagnostics
+                    .iter()
+                    .any(|existing| existing.id == diagnostic.id)
+                {
+                    primary.diagnostics.push(diagnostic);
+                }
+            }
+            Some(primary)
+        }
+        (Some(status), None) | (None, Some(status)) => Some(status),
+        (None, None) => None,
+    }
+}
+
+fn surface_family_placeholder_message(
+    chart_type: &domain_types::ChartType,
+    wireframe: Option<bool>,
+    surface_top_view: Option<bool>,
+) -> &'static str {
+    let top_view =
+        surface_top_view.unwrap_or(matches!(chart_type, domain_types::ChartType::Surface));
+    if wireframe == Some(true) {
+        return "surface wireframe rendering is not implemented; chart is preserved as a placeholder";
+    }
+    if top_view {
+        return "contour/top-view surface rendering is not implemented; chart is preserved as a placeholder";
+    }
+    if matches!(chart_type, domain_types::ChartType::Surface3D) {
+        return "3-D surface chart rendering is not implemented; chart is preserved as a placeholder";
+    }
+    "surface chart rendering is not implemented; chart is preserved as a placeholder"
+}
+
 /// Map ooxml ChartType + config to domain ChartType.
 pub(super) fn map_ooxml_chart_type_to_domain(
     ct: ooxml_types::charts::ChartType,
@@ -61,7 +131,13 @@ pub(super) fn map_ooxml_chart_type_to_domain(
             },
             _ => domain_types::ChartType::Column,
         },
-        OT::Bar3D => domain_types::ChartType::Bar3D,
+        OT::Bar3D => match config {
+            CTC::Bar3D(c) => match c.bar_dir {
+                BarDirection::Bar => domain_types::ChartType::Bar3D,
+                BarDirection::Column => domain_types::ChartType::Column3D,
+            },
+            _ => domain_types::ChartType::Column3D,
+        },
         OT::Line => domain_types::ChartType::Line,
         OT::Line3D => domain_types::ChartType::Line3D,
         OT::Pie => domain_types::ChartType::Pie,

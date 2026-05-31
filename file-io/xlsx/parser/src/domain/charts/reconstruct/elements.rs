@@ -143,7 +143,7 @@ pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {
         "top" | "t" => LegendPosition::Top,
         "left" | "l" => LegendPosition::Left,
         "right" | "r" => LegendPosition::Right,
-        "topRight" | "tr" => LegendPosition::TopRight,
+        "topRight" | "top-right" | "corner" | "tr" => LegendPosition::TopRight,
         _ => LegendPosition::Right,
     });
 
@@ -169,10 +169,15 @@ pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {
 
 pub(super) fn build_legend_entry(entry: &LegendEntryData) -> charts::LegendEntry {
     let tx_pr = entry.format.as_ref().and_then(build_text_body);
+    let delete = match (entry.delete, entry.visible) {
+        (Some(value), _) => Some(value),
+        (None, Some(false)) => Some(true),
+        _ => None,
+    };
 
     charts::LegendEntry {
         idx: entry.idx,
-        delete: entry.delete,
+        delete,
         tx_pr,
         ..Default::default()
     }

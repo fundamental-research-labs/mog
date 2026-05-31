@@ -146,6 +146,11 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 value_cache,
                 value_source_kind,
                 categories,
+                x_role: if s.x_val.is_some() {
+                    Some(domain_types::chart::ChartSeriesXRoleData::Quantitative)
+                } else {
+                    Some(domain_types::chart::ChartSeriesXRoleData::Category)
+                },
                 category_cache,
                 category_source_kind,
                 category_levels: None,
@@ -154,6 +159,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 bubble_size_cache,
                 bubble_size_source_kind,
                 smooth: s.smooth,
+                show_lines: None,
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,
                 y_axis_index: None, // follow-up: derive from c:axId cross-reference
@@ -228,7 +234,7 @@ pub(in crate::domain::charts::read) fn extract_legend(
             LegendPosition::Top => "top",
             LegendPosition::Left => "left",
             LegendPosition::Right => "right",
-            LegendPosition::TopRight => "right",
+            LegendPosition::TopRight => "topRight",
         };
         domain_types::chart::LegendData {
             show: false,

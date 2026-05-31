@@ -86,6 +86,9 @@ pub struct ChartData {
     /// Gap width between bars/columns (0-500%)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap_width: Option<u32>,
+    /// Gap depth between 3-D chart series (0-500%)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_depth: Option<u32>,
     /// Overlap between bars/columns (-100 to 100)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overlap: Option<i32>,
@@ -203,7 +206,8 @@ pub struct ChartData {
     pub up_down_bars: Option<UpDownBarsData>,
 
     // ── Bar shape (3D decorative charts) ──
-    /// Mark shape for 3D bar/column charts: "box", "cylinder", "cone", "pyramid".
+    /// Mark shape for 3D bar/column charts:
+    /// "box", "cylinder", "cone", "coneToMax", "pyramid", "pyramidToMax".
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bar_shape: Option<String>,
 

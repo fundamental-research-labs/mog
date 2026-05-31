@@ -96,6 +96,52 @@ fn reconstructed_chart_drops_unresolved_chart_owned_relationship_ids() {
 }
 
 #[test]
+fn reconstructed_chart_reports_dropped_print_settings_legacy_drawing_hf() {
+    let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
+    imported_chart.definition = Some(domain_types::ChartDefinition::Chart(
+        ooxml_types::charts::ChartSpace {
+            print_settings: Some(ooxml_types::charts::PrintSettings {
+                page_margins: Some(ooxml_types::charts::PageMargins {
+                    bottom: 0.75,
+                    left: 0.7,
+                    right: 0.7,
+                    top: 0.75,
+                    header: 0.3,
+                    footer: 0.3,
+                }),
+                legacy_drawing_hf: Some("rIdHeaderFooterVml".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    ));
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![imported_chart],
+        ..Default::default()
+    }]);
+
+    let (bytes, report) = write_xlsx_from_parse_output_with_report(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let chart_xml = String::from_utf8(archive.read_file("xl/charts/chart1.xml").unwrap()).unwrap();
+
+    assert!(chart_xml.contains("<c:printSettings>"));
+    assert!(!chart_xml.contains("legacyDrawingHF"));
+    assert_export_report_contains(
+        &report,
+        ExportDiagnosticCode::ChartPrintSettingsDropped,
+        "legacyDrawingHF relationship `rIdHeaderFooterVml`",
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn imported_chart_definition_exports_chart_owned_relationships_without_rt_xml_authority() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B2");
     imported_chart.definition = Some(domain_types::ChartDefinition::Chart(

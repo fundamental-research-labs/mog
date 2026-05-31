@@ -911,6 +911,75 @@ fn test_project_bubble_chart_scalars() {
 }
 
 #[test]
+fn multi_level_category_ref_projects_levels_by_point_index() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+            <c:chart>
+                <c:plotArea>
+                    <c:lineChart>
+                        <c:ser>
+                            <c:idx val="0"/>
+                            <c:order val="0"/>
+                            <c:cat>
+                                <c:multiLvlStrRef>
+                                    <c:f>Sheet1!$A$2:$B$4</c:f>
+                                    <c:multiLvlStrCache>
+                                        <c:ptCount val="3"/>
+                                        <c:lvl>
+                                            <c:ptCount val="3"/>
+                                            <c:pt idx="0"><c:v>North</c:v></c:pt>
+                                            <c:pt idx="2"><c:v>South</c:v></c:pt>
+                                        </c:lvl>
+                                        <c:lvl>
+                                            <c:ptCount val="3"/>
+                                            <c:pt idx="0"><c:v>Q1</c:v></c:pt>
+                                            <c:pt idx="1"><c:v>Q2</c:v></c:pt>
+                                        </c:lvl>
+                                    </c:multiLvlStrCache>
+                                </c:multiLvlStrRef>
+                            </c:cat>
+                            <c:val>
+                                <c:numRef>
+                                    <c:f>Sheet1!$C$2:$C$4</c:f>
+                                    <c:numCache>
+                                        <c:ptCount val="3"/>
+                                        <c:pt idx="0"><c:v>10</c:v></c:pt>
+                                        <c:pt idx="1"><c:v>20</c:v></c:pt>
+                                        <c:pt idx="2"><c:v>30</c:v></c:pt>
+                                    </c:numCache>
+                                </c:numRef>
+                            </c:val>
+                        </c:ser>
+                    </c:lineChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+    let series = spec.series.first().expect("projected series");
+    let levels = series
+        .category_levels
+        .as_ref()
+        .expect("multi-level category cache");
+
+    assert_eq!(series.categories.as_deref(), Some("Sheet1!$A$2:$B$4"));
+    assert_eq!(
+        series.category_source_kind,
+        Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+    );
+    assert!(series.category_cache.is_none());
+    assert_eq!(levels.point_count, Some(3));
+    assert_eq!(levels.levels.len(), 2);
+    assert_eq!(levels.levels[0].level, 0);
+    assert_eq!(levels.levels[0].point_count, Some(3));
+    assert_eq!(levels.levels[0].points[1].idx, 2);
+    assert_eq!(levels.levels[0].points[1].value, "South");
+    assert_eq!(levels.levels[1].level, 1);
+    assert_eq!(levels.levels[1].points[1].idx, 1);
+    assert_eq!(levels.levels[1].points[1].value, "Q2");
+}
+
+#[test]
 fn test_parse_view_3d() {
     let xml = br#"<?xml version="1.0"?>
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">

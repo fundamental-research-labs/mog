@@ -280,6 +280,7 @@ impl ComputeCore {
         col: u32,
         input: CellInput,
     ) -> Result<RecalcResult, ComputeError> {
+        self.ensure_graph_built(mirror)?;
         let (extra, teardown_pcs) =
             self.process_input(mirror, sheet_id, cell_id, row, col, &input, false);
         let mut dirty = vec![cell_id];
@@ -309,6 +310,7 @@ impl ComputeCore {
     ) -> Result<RecalcResult, ComputeError> {
         let input = input.into();
         check_region_partial_write(mirror, sheet_id, cell_id, row, col, &input)?;
+        self.ensure_graph_built(mirror)?;
         let (extra, teardown_pcs) = self
             .process_input_with_target(mirror, sheet_id, cell_id, row, col, &input, false, target);
         let mut dirty = vec![cell_id];
@@ -459,6 +461,7 @@ impl ComputeCore {
         skip_cycle_check: bool,
     ) -> Result<RecalcResult, ComputeError> {
         self.validate_region_partial_writes(mirror, edits)?;
+        self.ensure_graph_built(mirror)?;
 
         // Pass 2: apply edits. `check_region_partial_write` is the
         // per-cell safety net — anchor-Clear tears down the CSE;
@@ -523,6 +526,7 @@ impl ComputeCore {
         );
 
         self.validate_region_partial_writes(mirror, edits)?;
+        self.ensure_graph_built(mirror)?;
 
         let mut changed = Vec::with_capacity(edits.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
@@ -623,6 +627,7 @@ impl ComputeCore {
                 }
             }
         }
+        self.ensure_graph_built(mirror)?;
 
         let mut changed = Vec::with_capacity(edits.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
@@ -658,6 +663,7 @@ impl ComputeCore {
         changes: &[CellEdit],
         skip_cycle_check: bool,
     ) -> Result<RecalcResult, ComputeError> {
+        self.ensure_graph_built(mirror)?;
         let mut changed = Vec::with_capacity(changes.len());
         let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
         for edit in changes {
@@ -724,6 +730,7 @@ impl ComputeCore {
         mirror: &mut CellMirror,
         cell_ids: &[CellId],
     ) -> Result<RecalcResult, ComputeError> {
+        self.ensure_graph_built(mirror)?;
         // First pass: if any cleared cell is a CSE member (not anchor),
         // collect the anchor cell IDs so the caller-issued list is
         // expanded to include them. Excel: Clear on any cell of a CSE

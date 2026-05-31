@@ -19,52 +19,46 @@ import type {
   DataRow,
   EncodingSpec,
   LayerSpec,
-  LegendOrient,
-  LegendSpec,
   MarkSpec,
   MarkType,
   ScaleSpec,
   Transform,
   UnitSpec,
 } from '../grammar/spec';
-import type {
-  AxisConfig,
-  ChartConfig,
-  ChartData,
-  ChartDataPoint,
-  ChartFormat,
-  ChartType,
-  LegendConfig,
-  SeriesConfig,
-  SingleAxisConfig,
-} from '../types';
+import type { ChartConfig, ChartData, ChartDataPoint, ChartType, SeriesConfig } from '../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../primitives/scales/linear';
 import {
-  resolveChartTextColor,
   resolveFormatFillColor,
   resolveFormatFillOpacity,
-  resolveGridlineColor,
   resolveLineColor,
   resolveSolidFillColor,
 } from '../utils/chart-colors';
 import {
-  CATEGORY_KEY_PREFIX,
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
   MARK_TYPE_MAP,
-  MINOR_GRIDLINE_TICK_COUNT,
   PIXELS_PER_COLUMN,
   PIXELS_PER_ROW,
   SERIES_OPACITY_FIELD,
 } from './config-to-spec/constants';
+import {
+  buildAxisScaleSpec,
+  categoryKeyForIndex,
+  explicitDomainBound,
+  isHorizontalBarType,
+  mapAxisConfigToAxisSpec,
+  shouldUseDateSerialCategoryAxis,
+  shouldUseStableCategoryKeys,
+  toFiniteNumber,
+} from './config-to-spec/axis';
+import { buildEncoding, isLegendShown } from './config-to-spec/encoding';
 import { buildDataLabelLayer } from './config-to-spec/layers/data-labels';
 import { buildStockLayers } from './config-to-spec/layers/stock';
 import { buildWaterfallLayers } from './config-to-spec/layers/waterfall';
 import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
 import {
   applySeriesLineFormat,
-  dashStyleToStrokeDash,
   hasVisibleLineStyle,
   isNoFillNoLineSeries,
   resolveSeriesColor,
@@ -73,9 +67,10 @@ import {
 import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
 import { buildTitle } from './config-to-spec/title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
-import { linePointsToCanvasPx, pointsToCanvasPx } from './config-to-spec/units';
+import { linePointsToCanvasPx } from './config-to-spec/units';
 
 export {
+  buildEncoding,
   buildDataLabelLayer,
   buildStockLayers,
   buildTitle,
@@ -86,36 +81,6 @@ export {
   resolveStackMode,
   resolveSubTypeMarkProps,
 };
-
-function normalizeAxisLabelAngle(
-  axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
-): number | undefined {
-  const textVerticalType = (
-    axisConf.format as (ChartFormat & { textVerticalType?: string }) | undefined
-  )?.textVerticalType;
-  switch (textVerticalType) {
-    case 'vert':
-    case 'wordArtVert':
-    case 'eaVert':
-    case 'mongolianVert':
-      return 90;
-    case 'vert270':
-    case 'wordArtVertRtl':
-      return -90;
-    case 'horz':
-      return undefined;
-    default:
-      break;
-  }
-
-  const raw = axisConf.textOrientation ?? axisConf.format?.textRotation;
-  if (raw === undefined) return undefined;
-  if (raw === 0) return 0;
-  const degrees = Math.abs(raw) >= 60000 ? raw / 60000 : raw;
-  if (Math.abs(degrees) > 90) return undefined;
-  if (Math.abs(degrees) <= 90) return degrees;
-  return undefined;
-}
 
 // =============================================================================
 // Data Conversion
@@ -172,673 +137,12 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   return rows;
 }
 
-function categoryKeyForIndex(index: number): string {
-  return `${CATEGORY_KEY_PREFIX}:${index}`;
-}
-
-function categoryDisplayLabel(value: string | number | null | undefined): string {
-  return value == null ? '' : String(value);
-}
-
-function hasDuplicateOrBlankCategoryLabels(data: ChartData): boolean {
-  const seen = new Set<string>();
-  for (const category of data.categories ?? []) {
-    const label = categoryDisplayLabel(category);
-    if (label === '' || seen.has(label)) return true;
-    seen.add(label);
-  }
-  return false;
-}
-
-function shouldUseStableCategoryKeys(
-  config: ChartConfig | undefined,
-  data: ChartData,
-  useExcelDateSerialCategories: boolean,
-): boolean {
-  if (!config?.extra || useExcelDateSerialCategories) return false;
-  return hasDuplicateOrBlankCategoryLabels(data);
-}
-
 function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): boolean {
   if (!point.valueState || point.valueState === 'value') return true;
   if (point.valueState === 'blank') {
     return config?.displayBlanksAs === 'zero';
   }
   return false;
-}
-
-// =============================================================================
-// Encoding Helpers
-// =============================================================================
-
-/**
- * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
- */
-function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec {
-  const spec: AxisSpec = {};
-  spec.title = axisConf.title ?? null;
-  if (axisConf.visible === false || axisConf.show === false) {
-    spec.labels = false;
-    spec.ticks = false;
-    spec.domain = false;
-    spec.grid = false;
-    return spec;
-  }
-  if (axisConf.gridLines !== undefined) spec.grid = axisConf.gridLines;
-  if (axisConf.minorGridLines !== undefined) {
-    // Minor grid lines are represented by halving the tick count
-    // (spec doesn't have a dedicated minor grid, so this is the closest mapping)
-    if (axisConf.minorGridLines) {
-      spec.tickCount = MINOR_GRIDLINE_TICK_COUNT; // More ticks to simulate minor gridlines
-    }
-  }
-  if (axisConf.tickMarks === 'none') spec.ticks = false;
-  if (axisConf.numberFormat) spec.format = axisConf.numberFormat;
-  if (isDateAxisConfig(axisConf)) {
-    spec.formatType = 'time';
-    const tickInterval = dateAxisTickInterval(axisConf);
-    if (tickInterval) spec.tickInterval = tickInterval;
-    else {
-      const majorUnit = toFiniteNumber(axisConf.majorUnit);
-      if (majorUnit !== undefined && majorUnit > 0) spec.tickStep = majorUnit;
-    }
-  }
-  if (axisConf.crossesAt) spec.crossesAt = axisConf.crossesAt;
-  if (axisConf.crossesAtValue !== undefined) spec.crossesAtValue = axisConf.crossesAtValue;
-
-  const labelFont = axisConf.format?.font;
-  if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
-  if (labelFont?.name) spec.labelFontFamily = labelFont.name;
-  const labelColor = resolveChartTextColor(labelFont?.color);
-  if (labelColor) spec.labelColor = labelColor;
-
-  const labelAngle = normalizeAxisLabelAngle(axisConf);
-  const isCategoryAxis = axisConf.axisType === 'catAx' || axisConf.type === 'category';
-  if (isCategoryAxis && axisConf.tickMarks === 'none') {
-    spec.labelPadding = 14;
-  }
-  if (labelAngle !== undefined) {
-    spec.labelAngle = labelAngle;
-  }
-
-  const axisLine = axisConf.format?.line;
-  if (axisLine && !hasVisibleLineStyle(axisLine)) {
-    spec.domain = false;
-    spec.ticks = false;
-  }
-  const axisLineColor = resolveChartTextColor(axisLine?.color);
-  if (axisLineColor) {
-    spec.domainColor = axisLineColor;
-    spec.tickColor = axisLineColor;
-  }
-  if (axisLine?.width !== undefined) {
-    const lineWidth = linePointsToCanvasPx(axisLine.width);
-    spec.domainWidth = lineWidth;
-    spec.tickWidth = lineWidth;
-  }
-
-  const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color);
-  if (gridlineColor) spec.gridColor = gridlineColor;
-  if (axisConf.gridlineFormat?.width !== undefined) {
-    spec.gridWidth = linePointsToCanvasPx(axisConf.gridlineFormat.width);
-  }
-  const gridDash = dashStyleToStrokeDash(
-    axisConf.gridlineFormat?.dashStyle,
-    linePointsToCanvasPx(axisConf.gridlineFormat?.width),
-  );
-  if (gridDash) spec.gridDash = gridDash;
-  if (axisConf.gridlineFormat) {
-    spec.gridOpacity =
-      axisConf.gridlineFormat.transparency === undefined
-        ? 1
-        : Math.max(0, Math.min(1, 1 - axisConf.gridlineFormat.transparency));
-  }
-
-  const titleFont = axisConf.titleFormat?.font;
-  if (titleFont?.size !== undefined) spec.titleFontSize = pointsToCanvasPx(titleFont.size);
-  if (titleFont?.name) spec.titleFontFamily = titleFont.name;
-  const titleColor = resolveChartTextColor(titleFont?.color);
-  if (titleColor) spec.titleColor = titleColor;
-  return spec;
-}
-
-/**
- * Map AxisType to ScaleType for encoding scale configuration.
- * Returns undefined for default types that don't need explicit scale setting.
- */
-function axisTypeToScaleType(
-  axisType: import('../types').AxisType | undefined,
-): import('../grammar/spec').ScaleType | undefined {
-  if (!axisType) return undefined;
-  if (axisType === 'log') return 'log';
-  if (axisType === 'time') return 'time';
-  // 'linear', 'category', 'value' are defaults - no explicit scale needed
-  return undefined;
-}
-
-/**
- * Build axis scale domain from min/max config.
- */
-function buildAxisScaleDomain(
-  axisConf: { min?: number; max?: number } | undefined,
-): { domain?: [number | undefined, number | undefined] } | undefined {
-  if (!axisConf) return undefined;
-  if (axisConf.min !== undefined || axisConf.max !== undefined) {
-    // Only set domain if at least one bound is given
-    const domain: [number | undefined, number | undefined] = [axisConf.min, axisConf.max];
-    return { domain };
-  }
-  return undefined;
-}
-
-function buildAxisScaleSpec(
-  axisConf: SingleAxisConfig | undefined,
-  useDateSerialCategoryAxis: boolean,
-): ScaleSpec | undefined {
-  if (!axisConf) {
-    return useDateSerialCategoryAxis ? { type: 'linear', zero: false, nice: false } : undefined;
-  }
-
-  const scaleDomain = buildAxisScaleDomain(axisConf);
-  const scaleType = useDateSerialCategoryAxis ? 'linear' : axisTypeToScaleType(axisConf.type);
-  const hasExplicitDomain = Boolean(scaleDomain?.domain?.some((bound) => bound !== undefined));
-  const scaleSpec: ScaleSpec = {
-    ...(scaleDomain ?? {}),
-    ...(scaleType ? { type: scaleType } : {}),
-    ...(useDateSerialCategoryAxis ? { zero: false } : {}),
-    ...(useDateSerialCategoryAxis || hasExplicitDomain ? { nice: false } : {}),
-  };
-
-  return Object.keys(scaleSpec).length > 0 ? scaleSpec : undefined;
-}
-
-function resolveAxisConfigForChannel(
-  axis: AxisConfig | undefined,
-  channel: 'x' | 'y',
-  isHorizontal: boolean,
-): SingleAxisConfig | undefined {
-  if (!axis) return undefined;
-  if (channel === 'x') {
-    return isHorizontal ? (axis.valueAxis ?? axis.xAxis) : (axis.xAxis ?? axis.categoryAxis);
-  }
-  return isHorizontal ? (axis.categoryAxis ?? axis.yAxis) : (axis.yAxis ?? axis.valueAxis);
-}
-
-function isDateAxisConfig(axisConf: SingleAxisConfig | undefined): boolean {
-  if (!axisConf) return false;
-  const axisType = axisConf.axisType?.toLowerCase();
-  return (
-    axisType === 'dateax' ||
-    axisType === 'date' ||
-    axisConf.categoryType === 'dateAxis' ||
-    axisConf.type === 'time'
-  );
-}
-
-function dateAxisTickInterval(axisConf: SingleAxisConfig): AxisSpec['tickInterval'] | undefined {
-  const majorUnit = toFiniteNumber(axisConf.majorUnit);
-  if (majorUnit === undefined || majorUnit <= 0) return undefined;
-
-  const unit = normalizeDateAxisTimeUnit(axisConf.majorTimeUnit ?? axisConf.baseTimeUnit);
-  return unit ? { unit, step: majorUnit } : undefined;
-}
-
-function normalizeDateAxisTimeUnit(
-  value: string | undefined,
-): NonNullable<AxisSpec['tickInterval']>['unit'] | undefined {
-  switch (value?.toLowerCase()) {
-    case 'day':
-    case 'days':
-      return 'day';
-    case 'month':
-    case 'months':
-      return 'month';
-    case 'year':
-    case 'years':
-      return 'year';
-    default:
-      return undefined;
-  }
-}
-
-function shouldUseDateSerialCategoryAxis(
-  config: ChartConfig,
-  data: ChartData,
-  isHorizontal: boolean,
-): boolean {
-  if (!supportsContinuousCategoryAxis(config.type) || isHorizontal) return false;
-  const categoryAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
-  return isDateAxisConfig(categoryAxis) && hasFiniteCategorySerials(data);
-}
-
-function supportsContinuousCategoryAxis(chartType: ChartType): boolean {
-  if (chartType === 'combo') return true;
-  if (chartType === 'radar') return false;
-  const markType = MARK_TYPE_MAP[chartType];
-  return markType === 'line' || markType === 'area';
-}
-
-function shouldReverseHorizontalCategoryAxis(config: ChartConfig, isHorizontal: boolean): boolean {
-  return isHorizontal && config.extra !== undefined;
-}
-
-function hasFiniteCategorySerials(data: ChartData): boolean {
-  const categories = data.categories ?? [];
-  if (categories.length === 0) return false;
-
-  let finiteCount = 0;
-  for (const category of categories) {
-    const serial = toFiniteNumber(category);
-    if (serial === undefined) return false;
-    finiteCount += 1;
-  }
-  return finiteCount > 0;
-}
-
-function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return undefined;
-}
-
-function explicitDomainBound(domain: unknown[] | undefined, index: number): number | undefined {
-  const value = domain?.[index];
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-/**
- * Map LegendConfig.position to LegendOrient.
- */
-function legendPositionToOrient(position: string): LegendOrient {
-  switch (position) {
-    case 't':
-    case 'top':
-      return 'top';
-    case 'b':
-    case 'bottom':
-      return 'bottom';
-    case 'l':
-    case 'left':
-      return 'left';
-    case 'r':
-    case 'right':
-      return 'right';
-    case 'tr':
-    case 'topRight':
-    case 'top-right':
-    case 'corner':
-      return 'top-right';
-    case 'none':
-      return 'none';
-    default:
-      return 'bottom';
-  }
-}
-
-function isLegendShown(legend: LegendConfig | undefined): legend is LegendConfig {
-  return Boolean(legend && legend.show && legend.visible !== false && legend.position !== 'none');
-}
-
-/**
- * Build encoding for the color channel, including legend config.
- */
-function buildColorEncoding(
-  hasMultipleSeries: boolean,
-  legend?: LegendConfig,
-  colors?: string[],
-  reverseLegend?: boolean,
-  legendDomain?: string[],
-  symbolType?: LegendSpec['symbolType'],
-): ChannelSpec | undefined {
-  if (!hasMultipleSeries) return undefined;
-  const channel: ChannelSpec = {
-    field: 'series',
-    type: 'nominal',
-  };
-  if ((colors && colors.length > 0) || (legendDomain && legendDomain.length > 0)) {
-    channel.scale = {
-      ...(legendDomain && legendDomain.length > 0 ? { domain: legendDomain } : {}),
-      ...(colors && colors.length > 0 ? { range: colors } : {}),
-    };
-  }
-  if (legend) {
-    if (!isLegendShown(legend)) {
-      channel.legend = null; // hide
-    } else {
-      const legendFont = legend.format?.font ?? legend.font;
-      const labelColor = resolveChartTextColor(legendFont?.color);
-      channel.legend = {
-        orient: legendPositionToOrient(legend.position),
-        title: null,
-        ...(reverseLegend ? { reverse: true } : {}),
-        ...(symbolType ? { symbolType } : {}),
-        ...(legendFont?.size !== undefined
-          ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
-          : {}),
-        ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
-        ...(labelColor ? { labelColor } : {}),
-      };
-    }
-  }
-  return channel;
-}
-
-function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | undefined {
-  const seriesConfigs = config.series ?? [];
-  if (!seriesConfigs.some(isNoFillNoLineSeries)) return undefined;
-
-  const names: string[] = [];
-  for (let index = 0; index < data.series.length; index += 1) {
-    if (isNoFillNoLineSeries(seriesConfigs[index])) continue;
-    const name = data.series[index]?.name;
-    if (name && !names.includes(name)) names.push(name);
-  }
-
-  return names.length > 0 ? names : undefined;
-}
-
-function legendSymbolType(
-  config: ChartConfig,
-  data: ChartData,
-): LegendSpec['symbolType'] | undefined {
-  const markTypes = data.series
-    .map((series, index) => {
-      const seriesConfig = config.series?.[index];
-      if (isNoFillNoLineSeries(seriesConfig)) return undefined;
-      const seriesType = (seriesConfig?.type ?? series.type ?? config.type) as ChartType;
-      return MARK_TYPE_MAP[seriesType];
-    })
-    .filter(Boolean);
-
-  return markTypes.length > 0 && markTypes.every((markType) => markType === 'line')
-    ? 'line'
-    : undefined;
-}
-
-/**
- * Build the main encoding spec for a chart.
- *
- * IMPORTANT: The old chart-engine.ts had a bug where bar chart x/y types were
- * inverted. This implementation FIXES that:
- *
- *   column (vertical bars): x = nominal (category), y = quantitative (value)
- *   bar (horizontal bars):  x = quantitative (value), y = nominal (category)
- */
-export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpec {
-  const encoding: EncodingSpec = {};
-  const chartType = config.type;
-  const hasMultipleSeries = data.series.length > 1;
-
-  // --- Pie / Doughnut / Pie3D / OfPie: theta + color instead of x/y ---
-  if (
-    chartType === 'pie' ||
-    chartType === 'doughnut' ||
-    chartType === 'pie3d' ||
-    chartType === 'ofPie'
-  ) {
-    encoding.theta = {
-      field: 'value',
-      type: 'quantitative',
-    };
-    encoding.color = {
-      field: 'category',
-      type: 'nominal',
-    };
-    const categoryColors = resolvedCategoryColors(config);
-    if (categoryColors) {
-      encoding.color.scale = { range: categoryColors };
-    }
-    // Apply legend config to color channel
-    if (config.legend) {
-      if (!isLegendShown(config.legend)) {
-        encoding.color.legend = null;
-      } else {
-        const legendFont = config.legend.format?.font ?? config.legend.font;
-        const labelColor = resolveChartTextColor(legendFont?.color);
-        encoding.color.legend = {
-          orient: legendPositionToOrient(config.legend.position),
-          title: null,
-          ...(resolveStackMode(config) ? { reverse: true } : {}),
-          ...(legendFont?.size !== undefined
-            ? { labelFontSize: pointsToCanvasPx(legendFont.size) }
-            : {}),
-          ...(legendFont?.name ? { labelFontFamily: legendFont.name } : {}),
-          ...(labelColor ? { labelColor } : {}),
-        };
-      }
-    }
-    return encoding;
-  }
-
-  // --- X/Y encoding for all other chart types ---
-  // Excel column charts are vertical; Excel bar charts are horizontal.
-  const isHorizontal = isHorizontalBarType(chartType);
-  const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
-  const useStableCategoryKeys = shouldUseStableCategoryKeys(
-    config,
-    data,
-    useDateSerialCategoryAxis,
-  );
-  const categoryChannel: ChannelSpec = {
-    field: 'category',
-    type: useDateSerialCategoryAxis ? 'quantitative' : 'nominal',
-    ...(useDateSerialCategoryAxis
-      ? { scale: { type: 'linear', zero: false, nice: false } }
-      : useStableCategoryKeys || shouldReverseHorizontalCategoryAxis(config, isHorizontal)
-        ? {
-            scale: {
-              ...(useStableCategoryKeys
-                ? { domain: data.categories.map((_category, index) => categoryKeyForIndex(index)) }
-                : {}),
-              ...(shouldReverseHorizontalCategoryAxis(config, isHorizontal)
-                ? { reverse: true }
-                : {}),
-            },
-          }
-        : {}),
-  };
-  const valueChannel: ChannelSpec = { field: 'value', type: 'quantitative' };
-  if (isHorizontal) {
-    encoding.x = valueChannel;
-    encoding.y = categoryChannel;
-  } else {
-    encoding.x = categoryChannel;
-    encoding.y = valueChannel;
-  }
-
-  // Apply axis config
-  if (config.axis) {
-    const xAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
-    if (xAxis && encoding.x) {
-      encoding.x.axis = mapAxisConfigToAxisSpec(xAxis);
-      const scaleSpec = buildAxisScaleSpec(xAxis, useDateSerialCategoryAxis);
-      if (scaleSpec) encoding.x.scale = { ...(encoding.x.scale ?? {}), ...scaleSpec };
-    }
-    const yAxis = resolveAxisConfigForChannel(config.axis, 'y', isHorizontal);
-    if (yAxis && encoding.y) {
-      encoding.y.axis = mapAxisConfigToAxisSpec(yAxis);
-      const scaleSpec = buildAxisScaleSpec(yAxis, false);
-      if (scaleSpec) encoding.y.scale = { ...(encoding.y.scale ?? {}), ...scaleSpec };
-    }
-  }
-
-  applyBarCategorySpacingScale(config, encoding, isHorizontal);
-  applyCategoryAxisLabels(data, encoding, isHorizontal, useStableCategoryKeys);
-
-  // Color encoding for multi-series
-  const legendDomain = visibleLegendDomain(config, data);
-  const colorChannel = buildColorEncoding(
-    hasMultipleSeries,
-    config.legend,
-    resolvedCategoryColors(config),
-    Boolean(resolveStackMode(config)) && !legendDomain,
-    legendDomain,
-    legendSymbolType(config, data),
-  );
-  if (colorChannel) {
-    encoding.color = colorChannel;
-  }
-  if (config.series?.some(isNoFillNoLineSeries)) {
-    encoding.opacity = {
-      field: SERIES_OPACITY_FIELD,
-      type: 'quantitative',
-      scale: { domain: [0, 1], range: [0, 1] },
-      legend: null,
-    };
-  }
-
-  applyStackedValueDomain(config, data, encoding);
-  applyAutomaticCategoryAxisCrossing(encoding);
-
-  return encoding;
-}
-
-function hasBarSpacingConfig(config: ChartConfig): boolean {
-  return typeof config.gapWidth === 'number' || typeof config.overlap === 'number';
-}
-
-function applyBarCategorySpacingScale(
-  config: ChartConfig,
-  encoding: EncodingSpec,
-  isHorizontal: boolean,
-): void {
-  if (MARK_TYPE_MAP[config.type] !== 'bar' || !hasBarSpacingConfig(config)) return;
-  const categoryChannel = isHorizontal ? encoding.y : encoding.x;
-  if (!categoryChannel) return;
-
-  categoryChannel.scale = {
-    ...(categoryChannel.scale ?? {}),
-    paddingInner: 0,
-    paddingOuter: 0,
-  };
-}
-
-function applyCategoryAxisLabels(
-  data: ChartData,
-  encoding: EncodingSpec,
-  isHorizontal: boolean,
-  useStableCategoryKeys: boolean,
-): void {
-  const categoryChannel = isHorizontal ? encoding.y : encoding.x;
-  if (!categoryChannel || categoryChannel.axis === null) return;
-
-  const labelTextByValue: Record<string, string> = {};
-  if (useStableCategoryKeys) {
-    data.categories.forEach((category, index) => {
-      labelTextByValue[categoryKeyForIndex(index)] = categoryDisplayLabel(category);
-    });
-  }
-
-  const labelFormatByValue: Record<string, string> = {};
-  if (data.categoryFormatCodes?.some(Boolean)) {
-    data.categories.forEach((category, index) => {
-      const formatCode = data.categoryFormatCodes?.[index];
-      if (formatCode) {
-        const key = useStableCategoryKeys ? categoryKeyForIndex(index) : String(category);
-        labelFormatByValue[key] = formatCode;
-      }
-    });
-  }
-  if (Object.keys(labelTextByValue).length === 0 && Object.keys(labelFormatByValue).length === 0) {
-    return;
-  }
-
-  categoryChannel.axis = {
-    ...(categoryChannel.axis ?? {}),
-    ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
-    ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
-  };
-}
-
-function isHorizontalBarType(chartType: ChartType): boolean {
-  switch (chartType) {
-    case 'bar':
-    case 'bar3d':
-    case 'cylinderBarClustered':
-    case 'cylinderBarStacked':
-    case 'cylinderBarStacked100':
-    case 'coneBarClustered':
-    case 'coneBarStacked':
-    case 'coneBarStacked100':
-    case 'pyramidBarClustered':
-    case 'pyramidBarStacked':
-    case 'pyramidBarStacked100':
-      return true;
-    default:
-      return false;
-  }
-}
-
-function applyStackedValueDomain(
-  config: ChartConfig,
-  data: ChartData,
-  encoding: EncodingSpec,
-): void {
-  const stack = resolveStackMode(config);
-  if (!stack || stack === 'normalize') return;
-
-  const chartType = config.type;
-  const valueChannel = isHorizontalBarType(chartType) ? encoding.x : encoding.y;
-  if (!valueChannel) return;
-
-  const existingDomain = Array.isArray(valueChannel.scale?.domain)
-    ? valueChannel.scale.domain
-    : undefined;
-  const explicitMin = explicitDomainBound(existingDomain, 0);
-  const explicitMax = explicitDomainBound(existingDomain, 1);
-
-  let maxPositive = 0;
-  let minNegative = 0;
-  for (let pointIndex = 0; pointIndex < (data.categories?.length ?? 0); pointIndex += 1) {
-    let positive = 0;
-    let negative = 0;
-    for (const series of data.series) {
-      const value = series.data[pointIndex]?.y;
-      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
-      if (value >= 0) positive += value;
-      else negative += value;
-    }
-    if (positive > maxPositive) maxPositive = positive;
-    if (negative < minNegative) minNegative = negative;
-  }
-
-  if (maxPositive === 0 && minNegative === 0) return;
-
-  const isAutoDivergingStack =
-    explicitMin === undefined && explicitMax === undefined && minNegative < 0 && maxPositive > 0;
-
-  valueChannel.scale = {
-    ...(valueChannel.scale ?? {}),
-    domain: [explicitMin ?? minNegative, explicitMax ?? maxPositive],
-    ...(isAutoDivergingStack ? { nice: valueChannel.scale?.nice ?? 6 } : {}),
-  };
-
-  if (isAutoDivergingStack) {
-    valueChannel.axis = {
-      ...(valueChannel.axis ?? {}),
-      tickCount: valueChannel.axis?.tickCount ?? 6,
-    };
-  }
-}
-
-function applyAutomaticCategoryAxisCrossing(encoding: EncodingSpec): void {
-  const x = encoding.x;
-  const y = encoding.y;
-  if (!x || !y || x.type !== 'nominal' || y.type !== 'quantitative') return;
-  if (x.axis === null || x.axis?.crossesAt !== undefined) return;
-
-  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
-  const min = explicitDomainBound(scaleDomain, 0);
-  const max = explicitDomainBound(scaleDomain, 1);
-  if (min === undefined || max === undefined || min >= 0 || max <= 0) return;
-
-  x.axis = {
-    ...(x.axis ?? {}),
-    crossesAt: 'automatic',
-  };
 }
 
 // =============================================================================
@@ -1140,16 +444,11 @@ function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number |
   if (Math.abs(labelAngle) > 1) {
     const labelWidth = estimateXAxisMaxLabelWidth(x, fontSize);
     const radians = (Math.abs(labelAngle) * Math.PI) / 180;
-    const rotatedHeight =
-      Math.sin(radians) * labelWidth + Math.cos(radians) * fontSize;
+    const rotatedHeight = Math.sin(radians) * labelWidth + Math.cos(radians) * fontSize;
     return Math.max(40, Math.ceil(tickExtent + labelPadding + rotatedHeight + 8));
   }
 
-  if (
-    !y ||
-    y.type !== 'quantitative' ||
-    x.axis?.crossesAt !== 'automatic'
-  ) {
+  if (!y || y.type !== 'quantitative' || x.axis?.crossesAt !== 'automatic') {
     return undefined;
   }
 

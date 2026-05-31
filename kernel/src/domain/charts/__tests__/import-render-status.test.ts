@@ -114,6 +114,28 @@ describe('importStatusToTerminalRenderStatus', () => {
     });
   });
 
+  it('treats ChartEx Pareto preserved-not-renderable status as terminal after data projection', () => {
+    const status = {
+      source: 'xlsx',
+      featureKind: 'chart',
+      recoverability: 'preservedNotRenderable',
+      renderability: 'notRenderable',
+      editability: 'partiallyEditable',
+      diagnostics: [
+        {
+          code: 'UnsupportedFeature',
+          message: 'ChartEx pareto is preserved but not rendered as a plain bar chart',
+        },
+      ],
+    };
+
+    expect(importStatusToTerminalRenderStatus(status)).toEqual({
+      terminal: true,
+      message: 'ChartEx pareto is preserved but not rendered as a plain bar chart',
+      raw: status,
+    });
+  });
+
   it('ignores absent, ready, and renderable statuses', () => {
     expect(importStatusToTerminalRenderStatus(null)).toBeNull();
     expect(importStatusToTerminalRenderStatus(undefined)).toBeNull();

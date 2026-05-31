@@ -394,6 +394,60 @@ describe('resolved spec snapshot helpers', () => {
     });
   });
 
+  it.each([
+    ['pareto', 'pareto rendering requires cumulative percentage line semantics'],
+    ['treemap', 'treemap rendering requires hierarchy layout semantics'],
+    ['sunburst', 'sunburst rendering requires hierarchy layout semantics'],
+    ['regionMap', 'region map rendering uses placeholder geometry'],
+  ] as const)(
+    'reports ChartEx %s render limits without hiding projected data',
+    (type, expectedDiagnostic) => {
+      const sheetId = toSheetId('sheet-1');
+      const snapshot = buildResolvedChartSpecSnapshot({
+        chart: {
+          id: 'chart-1',
+          name: 'Chart 1',
+          anchor: { anchorRow: 1, anchorCol: 2 },
+          widthCells: 4,
+          heightCells: 5,
+        } as any,
+        sheetId,
+        config: {
+          type,
+          anchorRow: 1,
+          anchorCol: 2,
+          width: 4,
+          height: 5,
+          dataRange: 'Sheet1!A1:B2',
+          extra: { isChartEx: true },
+        } as ChartConfig,
+        chartData: {
+          categories: ['A'],
+          series: [{ name: 'Values', data: [{ x: 'A', y: 1 }] }],
+        },
+        resolvedRanges: {
+          dataRange: null,
+          categoryRange: null,
+          seriesRange: null,
+          seriesReferences: [],
+          diagnostics: [],
+        },
+        exportOptions: defaultExportOptionsForSize(320, 180),
+        compilerPathId: 'ts-grammar',
+        compilerInputHash: 'input-hash',
+      });
+
+      expect(snapshot.diagnostics.unsupportedFeatures).toContain(expectedDiagnostic);
+      expect(snapshot.diagnostics.unsupportedFeatures).not.toContain(
+        `ChartEx ${type} data projection is not implemented`,
+      );
+      expect(snapshot.resolved.series[0]).toMatchObject({
+        name: 'Values',
+        values: [1],
+      });
+    },
+  );
+
   it('reports mismatched axis positions and secondary category independent domains', () => {
     const sheetId = toSheetId('sheet-1');
     const snapshot = buildResolvedChartSpecSnapshot({

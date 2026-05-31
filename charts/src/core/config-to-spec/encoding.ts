@@ -71,6 +71,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       const legendDomain = buildCategoryLegendDomain(config, data);
       encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
+        entries: legendDomain?.entries,
         values: legendDomain?.values,
       });
     }
@@ -88,18 +89,18 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       scale: { zero: false, nice: true },
     };
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
-    const colorChannel = buildColorEncoding(
+    const colorChannel = buildColorEncoding({
       hasMultipleSeries,
-      config.legend,
-      resolvedCategoryColors(config, data),
-      false,
-      visibleLegendDomain(config, data),
-      legendSymbolType(config, data),
-      seriesLegendDomain?.symbolTypeByValue,
+      legend: config.legend,
+      colors: resolvedCategoryColors(config, data),
+      reverseLegend: false,
+      legendDomain: visibleLegendDomain(config, data),
+      symbolType: legendSymbolType(config, data),
+      legendEntries: seriesLegendDomain?.entries,
       config,
-      seriesLegendDomain?.forceColorEncoding,
-      seriesLegendDomain?.values,
-    );
+      forceColorEncoding: seriesLegendDomain?.forceColorEncoding,
+      legendValues: seriesLegendDomain?.values,
+    });
     if (colorChannel) encoding.color = colorChannel;
     return encoding;
   }
@@ -126,18 +127,18 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       scale: { zero: true, nice: true, ...(valueScaleSpec ?? {}) },
     };
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
-    const colorChannel = buildColorEncoding(
+    const colorChannel = buildColorEncoding({
       hasMultipleSeries,
-      config.legend,
-      resolvedCategoryColors(config, data),
-      false,
-      visibleLegendDomain(config, data),
-      legendSymbolType(config, data),
-      seriesLegendDomain?.symbolTypeByValue,
+      legend: config.legend,
+      colors: resolvedCategoryColors(config, data),
+      reverseLegend: false,
+      legendDomain: visibleLegendDomain(config, data),
+      symbolType: legendSymbolType(config, data),
+      legendEntries: seriesLegendDomain?.entries,
       config,
-      seriesLegendDomain?.forceColorEncoding,
-      seriesLegendDomain?.values,
-    );
+      forceColorEncoding: seriesLegendDomain?.forceColorEncoding,
+      legendValues: seriesLegendDomain?.values,
+    });
     if (colorChannel) encoding.color = colorChannel;
     return encoding;
   }
@@ -252,6 +253,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
         ? {
             legend: buildLegendSpec(config.legend, config, {
               symbolType: categoryLegendSymbolType(config),
+              entries: categoryLegendDomain?.entries,
               values: categoryLegendDomain?.values,
             }),
           }
@@ -261,18 +263,18 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     // Color encoding for multi-series.
     const legendDomain = visibleLegendDomain(config, data);
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
-    const colorChannel = buildColorEncoding(
+    const colorChannel = buildColorEncoding({
       hasMultipleSeries,
-      config.legend,
-      resolvedCategoryColors(config, data),
-      false,
+      legend: config.legend,
+      colors: resolvedCategoryColors(config, data),
+      reverseLegend: false,
       legendDomain,
-      legendSymbolType(config, data),
-      seriesLegendDomain?.symbolTypeByValue,
+      symbolType: legendSymbolType(config, data),
+      legendEntries: seriesLegendDomain?.entries,
       config,
-      seriesLegendDomain?.forceColorEncoding,
-      seriesLegendDomain?.values,
-    );
+      forceColorEncoding: seriesLegendDomain?.forceColorEncoding,
+      legendValues: seriesLegendDomain?.values,
+    });
     if (colorChannel) {
       encoding.color = colorChannel;
     }

@@ -379,6 +379,21 @@ export type LegendSymbolType =
   | 'triangle-up'
   | 'triangle-down';
 
+export interface LegendEntrySpec {
+  /** Backing color-scale value for this legend entry. */
+  value: string;
+  /** Display label, when it differs from the backing value. */
+  label?: string;
+  /** Entry-specific symbol shape, used by mixed-family combo charts. */
+  symbolType?: LegendSymbolType;
+  /** Rendered series index for provenance/debugging. */
+  seriesIndex?: number;
+  /** Source workbook series index, when known. */
+  sourceSeriesIndex?: number;
+  /** Stable source workbook series key, when known. */
+  sourceSeriesKey?: string;
+}
+
 /**
  * Legend specification.
  */
@@ -396,12 +411,12 @@ export interface LegendSpec {
   labelColor?: string;
   /** Explicit legend entries to render when they differ from the backing scale domain. */
   values?: string[];
+  /** Ordered, styled legend entries to render. */
+  entries?: LegendEntrySpec[];
   /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
   reverse?: boolean;
   symbolSize?: number;
   symbolType?: LegendSymbolType;
-  /** Per-entry symbol override keyed by legend label/value, used by mixed-family combo charts. */
-  symbolTypeByValue?: Record<string, LegendSymbolType>;
   offset?: number;
   padding?: number;
 }

@@ -47,11 +47,12 @@ export function buildLegendSpec(
   options: {
     reverse?: boolean;
     symbolType?: LegendSpec['symbolType'];
-    symbolTypeByValue?: LegendSpec['symbolTypeByValue'];
+    entries?: LegendSpec['entries'];
     values?: string[];
   } = {},
 ): LegendSpec | null {
   if (!isLegendShown(legend)) return null;
+  if (options.entries && options.entries.length === 0) return null;
   if (options.values && options.values.length === 0) return null;
 
   const legendFormat = config
@@ -67,9 +68,9 @@ export function buildLegendSpec(
     title: null,
     ...(legend.overlay !== undefined ? { overlay: legend.overlay } : {}),
     ...(options.values ? { values: options.values } : {}),
+    ...(options.entries ? { entries: options.entries } : {}),
     ...(options.reverse ? { reverse: true } : {}),
     ...(options.symbolType ? { symbolType: options.symbolType } : {}),
-    ...(options.symbolTypeByValue ? { symbolTypeByValue: options.symbolTypeByValue } : {}),
     labelFontSize:
       legendFont?.size !== undefined
         ? pointsToCanvasPx(legendFont.size)

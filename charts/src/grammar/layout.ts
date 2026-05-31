@@ -14,6 +14,7 @@ import type {
   ChartSpec,
   EncodingSpec,
   Layout,
+  LegendEntrySpec,
   LegendSpec,
   LegendSymbolType,
   ManualLayoutSpec,
@@ -36,6 +37,11 @@ type LayoutRect = {
   y: number;
   width: number;
   height: number;
+};
+
+type LegendLayoutEntry = {
+  label: string;
+  symbolType?: LegendSymbolType;
 };
 
 /**
@@ -577,15 +583,17 @@ function estimateLegendWidth(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
 ): number {
-  const labels = legendLabels(encoding, legendSpec);
-  if (labels.length === 0) return DEFAULT_LAYOUT.legendWidth;
+  const entries = legendLayoutEntries(encoding, legendSpec);
+  if (entries.length === 0) return DEFAULT_LAYOUT.legendWidth;
 
   const labelFontSize = legendSpec?.labelFontSize ?? 11;
-  const maxEntryWidth = labels.reduce(
-    (max, label) =>
+  const maxEntryWidth = entries.reduce(
+    (max, entry) =>
       Math.max(
         max,
-        estimateLegendSymbolWidth(legendSpec, label) + 6 + label.length * labelFontSize * 0.6,
+        estimateLegendSymbolWidth(legendSpec, entry) +
+          6 +
+          entry.label.length * labelFontSize * 0.6,
       ),
     0,
   );
@@ -600,12 +608,12 @@ function estimateLegendHeight(
   if (orient === 'top') return TOP_LEGEND_HEIGHT;
   if (orient === 'bottom') return BOTTOM_LEGEND_HEIGHT;
 
-  const labels = legendLabels(encoding, legendSpec);
-  if (labels.length === 0) return DEFAULT_SIDE_LEGEND_HEIGHT;
+  const entries = legendLayoutEntries(encoding, legendSpec);
+  if (entries.length === 0) return DEFAULT_SIDE_LEGEND_HEIGHT;
 
   const labelFontSize = legendSpec?.labelFontSize ?? 11;
-  const maxSymbolHeight = labels.reduce(
-    (max, label) => Math.max(max, estimateLegendSymbolHeight(legendSpec, label)),
+  const maxSymbolHeight = entries.reduce(
+    (max, entry) => Math.max(max, estimateLegendSymbolHeight(legendSpec, entry)),
     0,
   );
   const entryHeight = Math.max(maxSymbolHeight, labelFontSize);
@@ -615,34 +623,41 @@ function estimateLegendHeight(
     Math.ceil(labelFontSize + 7),
   );
   const titleHeight = legendSpec?.title ? 20 : 0;
-  return titleHeight + entryHeight + Math.max(0, labels.length - 1) * itemSpacing;
+  return titleHeight + entryHeight + Math.max(0, entries.length - 1) * itemSpacing;
 }
 
-function legendLabels(
+function legendLayoutEntries(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
-): string[] {
-  return (
+): LegendLayoutEntry[] {
+  if (legendSpec?.entries) {
+    return legendSpec.entries.map((entry) => legendLayoutEntryForSpec(entry));
+  }
+
+  const values =
     legendSpec?.values ??
-    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size)
-  );
+    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size);
+  return values.map((value) => ({
+    label: value,
+    symbolType: legendSpec?.symbolType,
+  }));
 }
 
 function estimateLegendSymbolWidth(
   legendSpec: LegendSpec | undefined,
-  label: string,
+  entry: LegendLayoutEntry,
 ): number {
   return (
-    legendSpec?.symbolSize ?? defaultLegendSymbolWidth(legendSymbolTypeForLabel(legendSpec, label))
+    legendSpec?.symbolSize ?? defaultLegendSymbolWidth(legendSymbolTypeForEntry(legendSpec, entry))
   );
 }
 
 function estimateLegendSymbolHeight(
   legendSpec: LegendSpec | undefined,
-  label: string,
+  entry: LegendLayoutEntry,
 ): number {
   const size = legendSpec?.symbolSize;
-  const symbolType = legendSymbolTypeForLabel(legendSpec, label);
+  const symbolType = legendSymbolTypeForEntry(legendSpec, entry);
   if (symbolType === 'line' || symbolType === 'area') {
     const width = size ?? defaultLegendSymbolWidth(symbolType);
     return Math.max(8, Math.min(12, Math.round(width * 0.4)));
@@ -650,11 +665,18 @@ function estimateLegendSymbolHeight(
   return size ?? DEFAULT_LEGEND_SYMBOL_SIZE;
 }
 
-function legendSymbolTypeForLabel(
+function legendLayoutEntryForSpec(entry: LegendEntrySpec): LegendLayoutEntry {
+  return {
+    label: entry.label ?? entry.value,
+    symbolType: entry.symbolType,
+  };
+}
+
+function legendSymbolTypeForEntry(
   legendSpec: LegendSpec | undefined,
-  label: string,
+  entry: LegendLayoutEntry,
 ): LegendSymbolType {
-  return legendSpec?.symbolTypeByValue?.[label] ?? legendSpec?.symbolType ?? 'square';
+  return entry.symbolType ?? legendSpec?.symbolType ?? 'square';
 }
 
 function defaultLegendSymbolWidth(symbolType: LegendSymbolType): number {

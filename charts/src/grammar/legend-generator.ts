@@ -8,12 +8,25 @@
 
 import type { AnyMark, PathMark, RectMark, SymbolMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
-import type { ChannelSpec, EncodingSpec, Layout, LegendSpec, LegendSymbolType } from './spec';
+import type {
+  ChannelSpec,
+  EncodingSpec,
+  Layout,
+  LegendEntrySpec,
+  LegendSpec,
+  LegendSymbolType,
+} from './spec';
 
 interface LegendSymbolMetrics {
   type: LegendSymbolType;
   width: number;
   height: number;
+}
+
+interface ResolvedLegendEntry {
+  value: unknown;
+  label: string;
+  symbolType: LegendSymbolType;
 }
 
 /**
@@ -73,16 +86,11 @@ export function generateColorLegend(
 
   // Get domain
   const domain: unknown[] = typeof scale.domain === 'function' ? scale.domain() : [];
-  const legendEntries: unknown[] = legendSpec.values ?? domain;
-  const legendValues = legendSpec.reverse ? [...legendEntries].reverse() : legendEntries;
-
   const defaultSymbolType = legendSpec.symbolType ?? 'square';
+  const legendEntries = resolveLegendEntries(legendSpec, domain, defaultSymbolType);
   const itemY = y + (title ? 20 : 0);
-  const symbolMetrics = legendValues.map((value) =>
-    legendSymbolMetrics(
-      legendSymbolTypeForValue(legendSpec, value, defaultSymbolType),
-      legendSpec.symbolSize,
-    ),
+  const symbolMetrics = legendEntries.map((entry) =>
+    legendSymbolMetrics(entry.symbolType, legendSpec.symbolSize),
   );
   const maxSymbolHeight = symbolMetrics.reduce(
     (max, metrics) => Math.max(max, metrics.height),
@@ -95,8 +103,8 @@ export function generateColorLegend(
     legendSpec.orient === 'right' ||
     legendSpec.orient === 'top-right' ||
     legendSpec.orient === 'bottom-right';
-  const labelWidths = legendValues.map((value) =>
-    estimateLegendLabelWidth(String(value), labelFontSize),
+  const labelWidths = legendEntries.map((entry) =>
+    estimateLegendLabelWidth(entry.label, labelFontSize),
   );
   const entryGap = isHorizontalLegend ? 18 : 0;
   const entryWidths = labelWidths.map(
@@ -110,9 +118,9 @@ export function generateColorLegend(
     ? x + Math.max(0, (layout.legend.width - contentWidth) / 2)
     : contentX;
 
-  for (let i = 0; i < legendValues.length; i++) {
-    const value = legendValues[i];
-    const color = scale(value) as string;
+  for (let i = 0; i < legendEntries.length; i++) {
+    const entry = legendEntries[i];
+    const color = scale(entry.value) as string;
     const metrics =
       symbolMetrics[i] ?? legendSymbolMetrics(defaultSymbolType, legendSpec.symbolSize);
     const entryX = isHorizontalLegend ? horizontalX : contentX;
@@ -127,7 +135,7 @@ export function generateColorLegend(
       type: 'text',
       x: entryX + metrics.width + 5,
       y: entryY + metrics.height / 2,
-      text: String(value),
+      text: entry.label,
       datum: { entryIndex: i },
       fontSize: labelFontSize,
       fontFamily: legendSpec.labelFontFamily ?? 'system-ui, sans-serif',
@@ -150,12 +158,35 @@ function estimateLegendLabelWidth(text: string, fontSize: number): number {
   return text.length * fontSize * 0.7;
 }
 
-function legendSymbolTypeForValue(
+function resolveLegendEntries(
   legendSpec: LegendSpec,
-  value: unknown,
-  fallback: LegendSymbolType,
-): LegendSymbolType {
-  return legendSpec.symbolTypeByValue?.[String(value)] ?? fallback;
+  domain: unknown[],
+  defaultSymbolType: LegendSymbolType,
+): ResolvedLegendEntry[] {
+  if (legendSpec.entries) {
+    return orderLegendEntries(legendSpec.entries, legendSpec.reverse).map((entry) => ({
+      value: entry.value,
+      label: entry.label ?? entry.value,
+      symbolType: entry.symbolType ?? defaultSymbolType,
+    }));
+  }
+
+  return orderLegendValues(legendSpec.values ?? domain, legendSpec.reverse).map((value) => ({
+    value,
+    label: String(value),
+    symbolType: defaultSymbolType,
+  }));
+}
+
+function orderLegendEntries(
+  entries: LegendEntrySpec[],
+  reverse: boolean | undefined,
+): LegendEntrySpec[] {
+  return reverse ? [...entries].reverse() : entries;
+}
+
+function orderLegendValues(values: unknown[], reverse: boolean | undefined): unknown[] {
+  return reverse ? [...values].reverse() : values;
 }
 
 function legendSymbolMetrics(

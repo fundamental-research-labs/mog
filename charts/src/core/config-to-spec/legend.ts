@@ -15,18 +15,30 @@ export { buildLegendSpec, isLegendShown, legendPositionToOrient } from './legend
 /**
  * Build encoding for the color channel, including legend config.
  */
-export function buildColorEncoding(
-  hasMultipleSeries: boolean,
-  legend?: LegendConfig,
-  colors?: string[],
-  reverseLegend?: boolean,
-  legendDomain?: string[],
-  symbolType?: LegendSpec['symbolType'],
-  symbolTypeByValue?: LegendSpec['symbolTypeByValue'],
-  config?: ChartConfig,
-  forceColorEncoding = false,
-  legendValues?: string[],
-): ChannelSpec | undefined {
+export function buildColorEncoding(options: {
+  hasMultipleSeries: boolean;
+  legend?: LegendConfig;
+  colors?: string[];
+  reverseLegend?: boolean;
+  legendDomain?: string[];
+  symbolType?: LegendSpec['symbolType'];
+  legendEntries?: LegendSpec['entries'];
+  config?: ChartConfig;
+  forceColorEncoding?: boolean;
+  legendValues?: string[];
+}): ChannelSpec | undefined {
+  const {
+    hasMultipleSeries,
+    legend,
+    colors,
+    reverseLegend,
+    legendDomain,
+    symbolType,
+    legendEntries,
+    config,
+    forceColorEncoding = false,
+    legendValues,
+  } = options;
   if (!hasMultipleSeries && !forceColorEncoding) return undefined;
   const channel: ChannelSpec = {
     field: 'series',
@@ -42,7 +54,7 @@ export function buildColorEncoding(
     channel.legend = buildLegendSpec(legend, config, {
       reverse: reverseLegend,
       symbolType,
-      symbolTypeByValue,
+      entries: legendEntries,
       values: legendValues,
     });
   }

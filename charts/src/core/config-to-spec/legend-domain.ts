@@ -1,6 +1,10 @@
-import type { LegendSpec, LegendSymbolType, MarkType } from '../../grammar/spec';
+import type { LegendEntrySpec, LegendSpec, LegendSymbolType, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, LegendConfig, SeriesConfig } from '../../types';
-import { seriesConfigForDataSeries } from '../series-identity';
+import {
+  seriesConfigForDataSeries,
+  seriesSourceIndex,
+  seriesSourceKey,
+} from '../series-identity';
 import { MARK_TYPE_MAP } from './constants';
 import { isLegendShown } from './legend-spec';
 import { isNoFillNoLineSeries } from './style';
@@ -10,7 +14,7 @@ type LegendEntryConfig = NonNullable<LegendConfig['entries']>[number];
 export interface LegendDomain {
   values: string[];
   forceColorEncoding: boolean;
-  symbolTypeByValue?: Record<string, LegendSymbolType>;
+  entries?: LegendEntrySpec[];
 }
 
 export function visibleLegendDomain(config: ChartConfig, data: ChartData): string[] | undefined {
@@ -38,25 +42,32 @@ export function buildSeriesLegendDomain(
   if (!isLegendShown(legend)) return undefined;
 
   const names: string[] = [];
-  const symbolTypesByValue: Record<string, LegendSymbolType> = {};
+  const entries: LegendEntrySpec[] = [];
   for (let index = 0; index < data.series.length; index += 1) {
     const series = data.series[index];
     if (!series) continue;
     const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
-    const sourceIndex = seriesConfig?.sourceSeriesIndex ?? series.sourceSeriesIndex ?? index;
+    const sourceIndex = seriesConfig?.sourceSeriesIndex ?? seriesSourceIndex(series, index);
     const entry = legendEntryForIndex(legend, sourceIndex) ?? legendEntryForIndex(legend, index);
     if (!isLegendEntryVisible(entry, seriesConfig)) continue;
     const name = series?.name;
     if (!name) continue;
     if (!names.includes(name)) names.push(name);
-    symbolTypesByValue[name] ??= legendSymbolTypeForSeries(config, series, seriesConfig, index);
+    const sourceKey = seriesConfig?.sourceSeriesKey ?? seriesSourceKey(series, index);
+    entries.push({
+      value: name,
+      label: name,
+      symbolType: legendSymbolTypeForSeries(config, series, seriesConfig, index),
+      seriesIndex: index,
+      sourceSeriesIndex: sourceIndex,
+      sourceSeriesKey: sourceKey,
+    });
   }
 
-  const distinctSymbolTypes = new Set(Object.values(symbolTypesByValue));
   return {
     values: names,
     forceColorEncoding: data.series.length === 1 && names.length > 0,
-    ...(distinctSymbolTypes.size > 1 ? { symbolTypeByValue: symbolTypesByValue } : {}),
+    ...(entries.length > 0 ? { entries } : {}),
   };
 }
 
@@ -68,17 +79,22 @@ export function buildCategoryLegendDomain(
   if (!isLegendShown(legend)) return undefined;
 
   const values: string[] = [];
+  const entries: LegendEntrySpec[] = [];
   for (let index = 0; index < data.categories.length; index += 1) {
     const entry = legendEntryForIndex(legend, index);
     if (!isLegendEntryVisible(entry)) continue;
     const value = data.categories[index];
     const label = value !== undefined && value !== null ? String(value) : undefined;
-    if (label && !values.includes(label)) values.push(label);
+    if (!label) continue;
+    if (values.includes(label)) continue;
+    values.push(label);
+    entries.push({ value: label, label });
   }
 
   return {
     values,
     forceColorEncoding: false,
+    ...(entries.length > 0 ? { entries } : {}),
   };
 }
 

@@ -493,11 +493,26 @@ describe('configToSpec imported Excel date category axes', () => {
 
     expect(spec.encoding?.color?.legend).toMatchObject({
       values: ['Requests', 'p95'],
-      symbolTypeByValue: {
-        Requests: 'area',
-        p95: 'line',
-      },
+      entries: [
+        {
+          value: 'Requests',
+          label: 'Requests',
+          symbolType: 'area',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+        {
+          value: 'p95',
+          label: 'p95',
+          symbolType: 'line',
+          seriesIndex: 1,
+          sourceSeriesIndex: 1,
+          sourceSeriesKey: 'series:1',
+        },
+      ],
     });
+    expect(spec.encoding?.color?.legend).not.toHaveProperty('symbolTypeByValue');
 
     const result = compile(spec);
     const legendKeys = result.legends.filter((mark): mark is RectMark | PathMark => {

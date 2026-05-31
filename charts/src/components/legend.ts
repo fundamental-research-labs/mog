@@ -56,6 +56,13 @@ export interface LegendPosition {
   height: number;
 }
 
+interface LegendValueEntry {
+  value: unknown;
+  label: string;
+  color: string;
+  symbolType?: LegendSpec['symbolType'];
+}
+
 // =============================================================================
 // Default Configuration
 // =============================================================================
@@ -116,7 +123,7 @@ export function generateLegend(
   }
 
   // Get legend values from scale
-  const legendValues = getLegendValues(scale);
+  const legendValues = getLegendValues(scale, legendConfig);
   if (legendValues.length === 0) {
     return { entries: [] };
   }
@@ -163,12 +170,25 @@ export function generateLegend(
  */
 function getLegendValues(
   scale: ColorScale | OrdinalColorScale,
-): { value: unknown; color: string }[] {
-  if ('domain' in scale && typeof scale.domain === 'function') {
-    const domain = scale.domain();
+  legendSpec: LegendSpec,
+): LegendValueEntry[] {
+  if (legendSpec.entries) {
+    const entries = legendSpec.reverse ? [...legendSpec.entries].reverse() : legendSpec.entries;
+    return entries.map((entry) => ({
+      value: entry.value,
+      label: entry.label ?? entry.value,
+      color: scale(entry.value as string),
+      symbolType: entry.symbolType,
+    }));
+  }
 
-    return domain.map((value) => ({
+  if ('domain' in scale && typeof scale.domain === 'function') {
+    const domain = legendSpec.values ?? scale.domain();
+    const values = legendSpec.reverse ? [...domain].reverse() : domain;
+
+    return values.map((value) => ({
       value,
+      label: String(value),
       color: scale(value as string),
     }));
   }
@@ -280,7 +300,7 @@ function generateLegendTitle(
  * Generate legend entry marks.
  */
 function generateLegendEntries(
-  values: { value: unknown; color: string }[],
+  values: LegendValueEntry[],
   _scale: ColorScale | OrdinalColorScale,
   position: LegendPosition,
   config: typeof DEFAULT_LEGEND_CONFIG,
@@ -289,7 +309,7 @@ function generateLegendEntries(
   const isVertical = config.direction === 'vertical';
 
   for (let i = 0; i < values.length; i++) {
-    const { value, color } = values[i];
+    const { value, label: labelText, color, symbolType } = values[i];
 
     // Calculate position for this entry
     const entryX = isVertical
@@ -304,7 +324,7 @@ function generateLegendEntries(
       entryX,
       entryY + 8, // Center vertically with text
       color,
-      config.symbolType,
+      symbolType ?? config.symbolType,
       config.symbolSize,
     );
 
@@ -313,7 +333,7 @@ function generateLegendEntries(
       type: 'text',
       x: entryX + Math.sqrt(config.symbolSize / Math.PI) + SYMBOL_LABEL_GAP + 5,
       y: entryY + 8,
-      text: String(value),
+      text: labelText,
       fontSize: config.labelFontSize,
       fontFamily: 'sans-serif',
       textAlign: 'left',

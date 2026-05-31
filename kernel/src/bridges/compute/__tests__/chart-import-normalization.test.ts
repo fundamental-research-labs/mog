@@ -178,6 +178,7 @@ describe('normalizeImportedComboChart', () => {
           type: 'line',
           valueCache: {
             pointCount: 0,
+            formatCode: '0%',
             points: [{ idx: 0, value: '0.5', formatCode: '0%' }],
           },
         },

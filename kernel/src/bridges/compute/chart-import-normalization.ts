@@ -5,7 +5,10 @@ import type {
   ChartSeriesData,
   SingleAxisData,
 } from './compute-types.gen';
-import { chartPointCachePointsInsideCardinality } from '../../domain/charts/chart-point-cache';
+import {
+  chartPointCachePointsInsideCardinality,
+  hasRenderableChartPointCache,
+} from '../../domain/charts/chart-point-cache';
 
 export type ImportNormalizableChart = {
   chartType?: string;
@@ -199,6 +202,7 @@ function formatContainsPercent(format: string | undefined): boolean {
 
 function seriesHasPercentValueFormat(series: ChartSeriesData): boolean {
   const cache = series.valueCache;
+  if (!hasRenderableChartPointCache(cache)) return false;
   if (formatContainsPercent(cache?.formatCode)) return true;
   return chartPointCachePointsInsideCardinality(cache).some((point) =>
     formatContainsPercent(point.formatCode),

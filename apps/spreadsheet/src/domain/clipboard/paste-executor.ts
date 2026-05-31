@@ -872,17 +872,18 @@ export async function executePaste(
             : coreCopyType === 'values'
               ? clipboardHasValue || clipboardHasFormula
               : false;
-    // Cross-sheet pastes cannot use the core copy_range fast path: that path
-    // re-reads the source range from the engine at paste time, but the source
-    // sheet may no longer be mirrored once a different sheet is active, so the
-    // re-read yields blanks and nothing is written. The clipboard payload was
-    // captured while the source sheet was active and already holds the
-    // values/formulas/formats, so route cross-sheet pastes through the TS
-    // cell-by-cell path which writes that captured payload directly.
-    const isCrossSheetPaste = isInternalSource && toSheetId(data.sourceSheetId) !== sheetId;
+    // Cross-sheet pastes DO use the core copy_range fast path. The engine
+    // reads the source range from its own mirror (not the active-sheet
+    // viewport), so a non-active source sheet is read correctly, blank source
+    // positions clear the target atomically, and naked relative refs rebind to
+    // the target sheet via build_cross_sheet_adjusted_formula — none of which
+    // the TS cell-by-cell path (which writes captured formula strings
+    // verbatim, without positional rebasing) can do. The earlier cross-sheet
+    // no-op was NOT the engine read failing; it was a redundant TS blank-clear
+    // pass that read the source through the active-only viewport (see the
+    // copy_range call below).
     const useCoreCopyRange =
       isInternalSource &&
-      !isCrossSheetPaste &&
       clipboardHasCorePayload &&
       !!store.copyRange &&
       coreCopyType !== null &&

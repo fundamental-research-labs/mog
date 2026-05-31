@@ -31,7 +31,6 @@
 import type {
   AxisData,
   BoxplotConfigData,
-  ChartLineData,
   ChartSeriesData,
   DataLabelData,
   ErrorBarData,
@@ -51,7 +50,6 @@ import type {
   AxisConfig,
   BoxplotConfig,
   ChartConfig,
-  ChartLineSettings,
   ChartType,
   DataLabelConfig,
   ErrorBarConfig,
@@ -80,6 +78,7 @@ import {
   wireToChartFormat,
   wireToChartFormatString,
   wireToChartLineFormat,
+  wireToChartLineSettings,
   wireToChartShadow,
   wireToLeaderLinesFormat,
 } from './chart-format-converters';
@@ -101,6 +100,7 @@ export {
   wireToChartFormat,
   wireToChartFormatString,
   wireToChartLineFormat,
+  wireToChartLineSettings,
   wireToChartShadow,
   wireToChartStyleContext,
   wireToDataTableConfig,
@@ -632,16 +632,6 @@ export function wireToErrorBarConfig(w: ErrorBarData): ErrorBarConfig {
     lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
     plusSource: w.plusSource,
     minusSource: w.minusSource,
-  };
-}
-
-export function wireToChartLineSettings(
-  w: { visible?: boolean; format?: ChartLineData } | undefined,
-): ChartLineSettings | undefined {
-  if (!w) return undefined;
-  return {
-    visible: w.visible,
-    format: w.format ? wireToChartLineFormat(w.format) : undefined,
   };
 }
 

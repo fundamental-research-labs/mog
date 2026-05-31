@@ -18,6 +18,7 @@ import type {
   ChartFormatString,
   ChartLeaderLinesFormat,
   ChartLineFormat,
+  ChartLineSettings,
   ChartShadow,
   ChartStyleContext,
   DataTableConfig,
@@ -187,6 +188,16 @@ export function wireToLeaderLinesFormat(w: ChartLineData): ChartLeaderLinesForma
 /** Convert contract ChartLeaderLinesFormat to wire ChartLineData. */
 export function leaderLinesFormatToWire(c: ChartLeaderLinesFormat): ChartLineData {
   return chartLineFormatToWire(c.format);
+}
+
+export function wireToChartLineSettings(
+  w: { visible?: boolean; format?: ChartLineData } | undefined,
+): ChartLineSettings | undefined {
+  if (!w) return undefined;
+  return {
+    visible: w.visible,
+    format: w.format ? wireToChartLineFormat(w.format) : undefined,
+  };
 }
 
 export function wireToChartFormat(format: ChartFormatData | undefined): ChartFormat | undefined {

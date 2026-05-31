@@ -885,6 +885,49 @@ describe('chart data point value provenance', () => {
     ]);
   });
 
+  it('uses stock projection for volume-stock combo configs before kernel normalization', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [1000, 1500, 1200],
+      [10, 11, 12],
+      [15, 14, 16],
+      [8, 9, 10],
+      [12, 9, 15],
+      ['Jan', 'Feb', 'Mar'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'stock-volume-ohlc-combo-chart',
+      type: 'combo',
+      subType: 'volume-ohlc',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        { name: 'Volume', type: 'column', values: 'A1:C1', categories: 'A6:C6' },
+        { name: 'Open', type: 'stock', values: 'A2:C2', categories: 'A6:C6' },
+        { name: 'High', type: 'stock', values: 'A3:C3', categories: 'A6:C6' },
+        { name: 'Low', type: 'stock', values: 'A4:C4', categories: 'A6:C6' },
+        { name: 'Close', type: 'stock', values: 'A5:C5', categories: 'A6:C6' },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+    const spec = configToSpec(config, data);
+    const rows = specRows(spec);
+
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].type).toBe('stock');
+    expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
+    expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([10, 11, 12]);
+    expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
+      { type: 'bar', opacity: 0.3 },
+      { type: 'rule' },
+      expect.objectContaining({ type: 'rule', strokeWidth: expect.any(Number) }),
+    ]);
+  });
+
   it('maps imported volume-HLC stock combo source series by typed roles, not raw order', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [15, 14, 16],

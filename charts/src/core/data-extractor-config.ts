@@ -9,6 +9,7 @@ import {
 import { type CellDataAccessor, type CellRange, tryParseRange } from './data-extractor-primitives';
 import { extractChartDataFromRange } from './data-extractor-range';
 import { withSeriesConfigIdentity } from './series-identity';
+import { shouldProjectStockSeries } from './stock-semantics';
 
 /**
  * Extract chart data from a cell range
@@ -26,7 +27,7 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
       accessor,
       importedSeries,
       config.categoryLabelLevel,
-      config.type,
+      shouldProjectStockSeries(config) ? 'stock' : config.type,
     );
   }
 

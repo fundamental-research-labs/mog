@@ -28,6 +28,7 @@ import {
   buildUnitSpec,
   sharedLayerEncodingForLegend,
 } from './spec-assembly';
+import { asStockConfig, shouldRenderStockChart } from '../stock-semantics';
 import { resolveStackMode, resolveSubTypeMarkProps } from './subtypes';
 import { buildTitle } from './title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './transforms';
@@ -57,49 +58,53 @@ export {
  * LOSSLESS: maps every ChartConfig field to the appropriate ChartSpec construct.
  */
 export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
+  const renderConfig = shouldRenderStockChart(config, data) ? asStockConfig(config) : config;
+
   // 1. Convert data
-  const rows = chartDataToRows(data, config);
+  const rows = chartDataToRows(data, renderConfig);
 
   // 2. Build title
-  const title = buildTitle(config);
+  const title = buildTitle(renderConfig);
 
   // 3. Build encoding
-  const encoding = buildEncoding(config, data);
+  const encoding = buildEncoding(renderConfig, data);
 
   // 4. Build mark
-  const mark = buildMark(config);
+  const mark = buildMark(renderConfig);
 
   // 5. Build config (stacking, colors)
-  const configSpec = buildConfigSpec(config, encoding, data);
+  const configSpec = buildConfigSpec(renderConfig, encoding, data);
 
   // 6. Build transforms
   const transforms: Transform[] = [];
 
   // 7. Build dimensions (cell units -> pixels)
-  const dimensions = buildChartDimensions(config);
+  const dimensions = buildChartDimensions(renderConfig);
 
   // 8. Handle layered chart types (combo, stock, waterfall, dual-axis)
-  if (config.type === 'combo' || hasSecondaryYAxis(config, data)) {
-    const layers = buildComboLayers(config, data, rows);
+  if (renderConfig.type === 'combo' || hasSecondaryYAxis(renderConfig, data)) {
+    const layers = buildComboLayers(renderConfig, data, rows);
 
-    layers.push(...buildAnnotationLayers(config, data, encoding, rows, { includeMarkers: false }));
+    layers.push(
+      ...buildAnnotationLayers(renderConfig, data, encoding, rows, { includeMarkers: false }),
+    );
 
-    const resolve = buildResolve(config, data);
+    const resolve = buildResolve(renderConfig, data);
     return buildLayerSpec({
       dimensions,
       rows,
       layers,
-      encoding: sharedLayerEncodingForLegend(encoding, config.legend),
+      encoding: sharedLayerEncodingForLegend(encoding, renderConfig.legend),
       title,
       config: configSpec,
       resolve,
     });
   }
 
-  if (config.type === 'stock') {
-    const layers = buildStockLayers(config, data, rows);
-    layers.push(...buildAnnotationLayers(config, data, encoding, rows));
-    const resolve = hasStockVolumeLayer(config, rows)
+  if (renderConfig.type === 'stock') {
+    const layers = buildStockLayers(renderConfig, data, rows);
+    layers.push(...buildAnnotationLayers(renderConfig, data, encoding, rows));
+    const resolve = hasStockVolumeLayer(renderConfig, rows)
       ? {
           scale: { y: 'independent' as const },
           axis: { y: 'independent' as const },
@@ -115,8 +120,8 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  if (config.type === 'funnel') {
-    const funnel = buildFunnelLayers(config, rows);
+  if (renderConfig.type === 'funnel') {
+    const funnel = buildFunnelLayers(renderConfig, rows);
     return buildLayerSpec({
       dimensions,
       rows: funnel.rows,
@@ -126,9 +131,9 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  if (config.type === 'waterfall') {
-    const layers = buildWaterfallLayers(config, data, rows);
-    layers.push(...buildDataTableLayers(config, data));
+  if (renderConfig.type === 'waterfall') {
+    const layers = buildWaterfallLayers(renderConfig, data, rows);
+    layers.push(...buildDataTableLayers(renderConfig, data));
     return buildLayerSpec({
       dimensions,
       rows,
@@ -138,9 +143,11 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  if (config.type === 'pareto') {
-    const pareto = buildParetoLayers(config, data);
-    pareto.layers.push(...buildAnnotationLayers(config, data, encoding, pareto.rows));
+  if (renderConfig.type === 'pareto') {
+    const pareto = buildParetoLayers(renderConfig, data);
+    pareto.layers.push(
+      ...buildAnnotationLayers(renderConfig, data, encoding, pareto.rows),
+    );
     return buildLayerSpec({
       dimensions,
       rows: pareto.rows,
@@ -154,7 +161,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  if (isPreservedOnlyChartExFamily(config.type)) {
+  if (isPreservedOnlyChartExFamily(renderConfig.type)) {
     return buildLayerSpec({
       dimensions,
       rows: [],
@@ -164,17 +171,17 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
-  const annotationLayers = buildAnnotationLayers(config, data, encoding, rows);
-  if (shouldBuildPerSeriesLineLayers(config, data)) {
+  const annotationLayers = buildAnnotationLayers(renderConfig, data, encoding, rows);
+  if (shouldBuildPerSeriesLineLayers(renderConfig, data)) {
     const layers: ChartSpec[] = [
-      ...buildPerSeriesLineLayers(config, data, encoding),
+      ...buildPerSeriesLineLayers(renderConfig, data, encoding),
       ...annotationLayers,
     ];
     return buildLayerSpec({
       dimensions,
       rows,
       layers,
-      encoding: sharedLayerEncodingForLegend(encoding, config.legend),
+      encoding: sharedLayerEncodingForLegend(encoding, renderConfig.legend),
       title,
       config: configSpec,
       transforms,

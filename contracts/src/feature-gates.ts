@@ -59,6 +59,7 @@ export interface FeatureGates {
     data?: boolean;
     review?: boolean;
     view?: boolean;
+    help?: boolean;
   };
 
   // ── Ribbon Groups (within tabs) ──────────────────────────

@@ -387,7 +387,7 @@ function KeyboardCaptureSetup({
       if (!isNavigationKey && !isSheetSwitch) {
         const target = keyboardEventTargetElement(e);
         const isPrintableFormulaInput =
-          editorSnapshot.matches('formulaEditing.enterMode') &&
+          editorSnapshot.matches({ formulaEditing: 'enterMode' }) &&
           e.key.length === 1 &&
           !e.ctrlKey &&
           !e.metaKey &&

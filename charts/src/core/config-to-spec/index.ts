@@ -17,12 +17,12 @@ import {
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding, isLegendShown } from './encoding';
-import { buildComboLayers, buildResolve } from './layers/combo';
+import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildStockLayers } from './layers/stock';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
-import { hasSecondaryYAxis } from './secondary-axis';
+import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
 import { resolveStackMode, resolveSubTypeMarkProps } from './subtypes';
 import { buildTitle } from './title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './transforms';

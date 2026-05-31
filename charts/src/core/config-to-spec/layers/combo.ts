@@ -1,4 +1,4 @@
-import type { ChartSpec, DataRow, EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
+import type { DataRow, EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType } from '../../../types';
 import {
   buildAxisScaleSpec,
@@ -7,7 +7,6 @@ import {
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
 import { buildSeriesMark } from '../marks';
-import { hasSecondaryYAxis } from '../secondary-axis';
 import { buildTrendlineTransform } from '../transforms';
 
 /**
@@ -120,19 +119,4 @@ export function buildComboLayers(
   }
 
   return layers;
-}
-
-/**
- * Build the resolve spec for dual-axis charts.
- * When series have different yAxisIndex values, use independent y scales.
- */
-export function buildResolve(
-  config: ChartConfig,
-  data?: ChartData,
-): ChartSpec['resolve'] | undefined {
-  if (!hasSecondaryYAxis(config, data)) return undefined;
-  return {
-    scale: { y: 'independent' },
-    axis: { y: 'independent' },
-  };
 }

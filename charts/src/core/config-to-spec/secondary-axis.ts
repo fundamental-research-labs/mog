@@ -1,3 +1,4 @@
+import type { ChartSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 
 /**
@@ -12,4 +13,19 @@ export function hasSecondaryYAxis(config: ChartConfig, data?: ChartData): boolea
     (config.series ?? []).some((s) => s.yAxisIndex === 1) ||
     (data?.series ?? []).some((s) => s.yAxisIndex === 1)
   );
+}
+
+/**
+ * Build the resolve spec for dual-axis charts.
+ * When series have different yAxisIndex values, use independent y scales.
+ */
+export function buildResolve(
+  config: ChartConfig,
+  data?: ChartData,
+): ChartSpec['resolve'] | undefined {
+  if (!hasSecondaryYAxis(config, data)) return undefined;
+  return {
+    scale: { y: 'independent' },
+    axis: { y: 'independent' },
+  };
 }

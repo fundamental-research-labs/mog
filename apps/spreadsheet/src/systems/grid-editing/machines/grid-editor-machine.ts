@@ -393,7 +393,11 @@ export const editorMachine = setup({
         CYCLE_REFERENCE: { actions: ['cycleReference', 'computeFormulaContext'] },
         COMMIT: {
           target: 'validating',
-          actions: ['storeCommitDirection', 'resetAutocompleteState'],
+          actions: [
+            'completePointModeFormulaForCommit',
+            'storeCommitDirection',
+            'resetAutocompleteState',
+          ],
         },
         // Ctrl+Shift+Enter to commit as array formula (CSE)
         ENTER_ARRAY_FORMULA: {

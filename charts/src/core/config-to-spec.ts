@@ -40,7 +40,6 @@ import type {
   LegendConfig,
   SeriesConfig,
   SingleAxisConfig,
-  TrendlineConfig,
 } from '../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../primitives/scales/linear';
@@ -57,31 +56,21 @@ import {
   resolveLineColor,
   resolveSolidFillColor,
 } from '../utils/chart-colors';
+import {
+  CANDLESTICK_BAR_WIDTH,
+  CATEGORY_KEY_PREFIX,
+  DEFAULT_CHART_HEIGHT,
+  DEFAULT_CHART_WIDTH,
+  MARK_TYPE_MAP,
+  MINOR_GRIDLINE_TICK_COUNT,
+  PIXELS_PER_COLUMN,
+  PIXELS_PER_ROW,
+  SERIES_OPACITY_FIELD,
+} from './config-to-spec/constants';
+import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
+import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
 
-// =============================================================================
-// Layout Constants
-// =============================================================================
-
-/** Default column width in pixels, used to convert cell-unit width to pixels. */
-const PIXELS_PER_COLUMN = 80;
-
-/** Default row height in pixels, used to convert cell-unit height to pixels. */
-const PIXELS_PER_ROW = 20;
-
-/** Default chart width in pixels when no width is specified. */
-const DEFAULT_CHART_WIDTH = 600;
-
-/** Default chart height in pixels when no height is specified. */
-const DEFAULT_CHART_HEIGHT = 400;
-
-/** Pixel width of OHLC candlestick body bars. */
-const CANDLESTICK_BAR_WIDTH = 14;
-
-/** Tick count used to simulate minor gridlines. */
-const MINOR_GRIDLINE_TICK_COUNT = 10;
-
-const SERIES_OPACITY_FIELD = '__mogSeriesOpacity';
-const CATEGORY_KEY_PREFIX = '__mogCategory';
+export { buildTrendlineTransform, buildWaterfallTransforms, hasSecondaryYAxis };
 
 function isStrokeColoredSeries(series: SeriesConfig, fallbackType: ChartType | undefined): boolean {
   const seriesType = (series.type ?? fallbackType) as ChartType | undefined;
@@ -196,84 +185,6 @@ function dashStyleToStrokeDash(
       return undefined;
   }
 }
-
-// =============================================================================
-// Mark Type Mapping
-// =============================================================================
-
-/** Map ChartConfig.type to the base MarkType for simple (non-layered) charts. */
-const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
-  bar: 'bar',
-  column: 'bar',
-  line: 'line',
-  area: 'area',
-  pie: 'arc',
-  doughnut: 'arc',
-  scatter: 'point',
-  bubble: 'point',
-  combo: 'bar', // default layer mark; combo uses layers
-  radar: 'line',
-  stock: 'rule', // stock uses rule marks for OHLC ranges
-  funnel: 'bar',
-  waterfall: 'bar',
-  // 3D variants map to same marks as 2D counterparts (3D is visual-only in grammar)
-  bar3d: 'bar',
-  column3d: 'bar',
-  line3d: 'line',
-  pie3d: 'arc',
-  area3d: 'area',
-  // Surface and ofPie have no grammar equivalents yet; use placeholder marks
-  surface: 'rect',
-  surface3d: 'rect',
-  ofPie: 'arc',
-  // Statistical chart types
-  histogram: 'histogram',
-  boxplot: 'boxplot',
-  heatmap: 'rect',
-  violin: 'violin',
-  pareto: 'bar',
-  // Exploded pie variants (visual config, same base marks)
-  pieExploded: 'arc',
-  pie3dExploded: 'arc',
-  doughnutExploded: 'arc',
-  // Bubble with 3D effect
-  bubble3DEffect: 'point',
-  // Surface variants
-  surfaceWireframe: 'rect',
-  surfaceTopView: 'rect',
-  surfaceTopViewWireframe: 'rect',
-  // Line with markers variants
-  lineMarkers: 'line',
-  lineMarkersStacked: 'line',
-  lineMarkersStacked100: 'line',
-  // Decorative 3D bar shape variants — all map to bar marks
-  cylinderColClustered: 'bar',
-  cylinderColStacked: 'bar',
-  cylinderColStacked100: 'bar',
-  cylinderBarClustered: 'bar',
-  cylinderBarStacked: 'bar',
-  cylinderBarStacked100: 'bar',
-  cylinderCol: 'bar',
-  coneColClustered: 'bar',
-  coneColStacked: 'bar',
-  coneColStacked100: 'bar',
-  coneBarClustered: 'bar',
-  coneBarStacked: 'bar',
-  coneBarStacked100: 'bar',
-  coneCol: 'bar',
-  pyramidColClustered: 'bar',
-  pyramidColStacked: 'bar',
-  pyramidColStacked100: 'bar',
-  pyramidBarClustered: 'bar',
-  pyramidBarStacked: 'bar',
-  pyramidBarStacked100: 'bar',
-  pyramidCol: 'bar',
-  // Hierarchical chart types
-  treemap: 'rect',
-  sunburst: 'arc',
-  // Geographic chart types
-  regionMap: 'rect',
-};
 
 // =============================================================================
 // Data Conversion
@@ -1413,60 +1324,6 @@ function estimateXAxisMaxLabelWidth(x: ChannelSpec, fontSize: number): number {
 }
 
 // =============================================================================
-// Transform Builders
-// =============================================================================
-
-/**
- * Build transforms for waterfall charts.
- * Waterfall charts need cumulative running totals with special "total" bars.
- * The calculate transform produces a running total end position per bar.
- */
-export function buildWaterfallTransforms(): Transform[] {
-  const transforms: Transform[] = [];
-  // Calculate running total for waterfall positioning
-  transforms.push({
-    type: 'calculate',
-    calculate: 'datum._waterfallRunningTotal',
-    as: '_waterfallEnd',
-  });
-  return transforms;
-}
-
-/**
- * Build transforms for trendlines (scatter charts).
- * Maps showEquation, showR2, and period from TrendlineConfig.
- */
-export function buildTrendlineTransform(trendline: TrendlineConfig): Transform[] {
-  if (trendline.show === false) return [];
-  const methodMap: Record<string, string> = {
-    linear: 'linear',
-    exponential: 'exp',
-    logarithmic: 'log',
-    polynomial: 'poly',
-    power: 'pow',
-    'moving-average': 'linear', // moving average handled separately
-  };
-
-  const transform: Transform = {
-    type: 'regression',
-    regression: 'value',
-    on: 'category',
-    method: (methodMap[trendline.type ?? 'linear'] ?? 'linear') as 'linear',
-    ...(trendline.order !== undefined ? { order: trendline.order } : {}),
-  };
-
-  // Attach showEquation/showR2/period as extra metadata on the transform
-  // These are consumed by the OOXML exporter for trendline generation
-  if (trendline.showEquation !== undefined) transform._showEquation = trendline.showEquation;
-  if (trendline.showR2 !== undefined) transform._showR2 = trendline.showR2;
-  if (trendline.type === 'moving-average' && trendline.period !== undefined) {
-    transform._movingAveragePeriod = trendline.period;
-  }
-
-  return [transform];
-}
-
-// =============================================================================
 // Layer Builders (Combo, Stock, Waterfall, Data Labels)
 // =============================================================================
 
@@ -1783,24 +1640,6 @@ export function buildDataLabelLayer(
       text: textChannel,
     },
   };
-}
-
-// =============================================================================
-// Secondary Y-Axis
-// =============================================================================
-
-/**
- * Check whether a secondary Y-axis should be used.
- * Returns true when a modeled secondary value axis is visible and at least
- * one series uses yAxisIndex=1.
- */
-export function hasSecondaryYAxis(config: ChartConfig, data?: ChartData): boolean {
-  const secondaryAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
-  if (!(secondaryAxis?.show ?? secondaryAxis?.visible)) return false;
-  return (
-    (config.series ?? []).some((s) => s.yAxisIndex === 1) ||
-    (data?.series ?? []).some((s) => s.yAxisIndex === 1)
-  );
 }
 
 /**

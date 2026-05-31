@@ -167,11 +167,7 @@ async function resolveA1ChartRange(
 }
 
 function firstSeriesCategoryRangeRef(chart: ChartFloatingObject): string | undefined {
-  for (const series of chart.series ?? []) {
-    const ref = series.categories?.trim();
-    if (ref) return ref;
-  }
-  return undefined;
+  return chart.series?.[0]?.categories?.trim() || undefined;
 }
 
 async function resolveChartRangeReference(

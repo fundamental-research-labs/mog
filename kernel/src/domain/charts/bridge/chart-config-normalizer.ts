@@ -118,82 +118,14 @@ type ChartWithPivotProjection = ChartFloatingObject & {
   pivotProjection?: ChartConfig['pivotProjection'];
 };
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function colorMappingValue(mapping: Record<string, unknown>, field: string): string | undefined {
-  const snakeField = field === 'folHlink' ? 'fol_hlink' : field;
-  const value = mapping[field] ?? mapping[snakeField];
-  return typeof value === 'string' ? value : undefined;
-}
-
-function chartColorMapOverrideFromSerialized(
-  value: unknown,
-): ChartColorMapOverrideConfig | undefined {
-  if (
-    value === 'MasterClrMapping' ||
-    value === 'masterClrMapping' ||
-    value === 'master' ||
-    value === 'Master'
-  ) {
-    return { type: 'master' };
-  }
-
-  const record = asRecord(value);
-  if (!record) return undefined;
-
-  const kind = record.kind ?? record.type;
-  if (kind === 'master' || kind === 'Master') return { type: 'master' };
-  if ('MasterClrMapping' in record || 'masterClrMapping' in record) return { type: 'master' };
-
-  const rawMapping =
-    asRecord(record.OverrideClrMapping) ??
-    asRecord(record.overrideClrMapping) ??
-    asRecord(record.Override) ??
-    asRecord(record.override) ??
-    asRecord(record.mapping) ??
-    record;
-
-  const mappingFields = [
-    'bg1',
-    'tx1',
-    'bg2',
-    'tx2',
-    'accent1',
-    'accent2',
-    'accent3',
-    'accent4',
-    'accent5',
-    'accent6',
-    'hlink',
-    'folHlink',
-  ] as const;
-  const mapping: Record<string, string> = {};
-  for (const field of mappingFields) {
-    const mappedValue = colorMappingValue(rawMapping, field);
-    if (mappedValue) mapping[field] = mappedValue;
-  }
-
-  return Object.keys(mapping).length > 0 ? { type: 'override', mapping } : undefined;
-}
-
-function chartStyleContextFromOoxml(
-  ooxml: ChartFloatingObject['ooxml'],
-): ChartConfig['chartStyleContext'] | undefined {
-  const definition = asRecord(ooxml?.definition);
-  const colorMapOverride = chartColorMapOverrideFromSerialized(
-    definition?.clr_map_ovr ?? definition?.clrMapOvr,
-  );
-  return colorMapOverride ? { colorMapOverride } : undefined;
-}
-
 function wireToChartStyleContext(
   context: ChartFloatingObject['chartStyleContext'],
 ): ChartConfig['chartStyleContext'] | undefined {
   return context as ChartConfig['chartStyleContext'] | undefined;
+}
+
+function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
+  return chart.ooxml || chart.importStatus ? { imported: true } : undefined;
 }
 
 /**
@@ -303,9 +235,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     sideWallFormat: normalizedChart.sideWallFormat as ChartConfig['sideWallFormat'],
     backWallFormat: normalizedChart.backWallFormat as ChartConfig['backWallFormat'],
     subType: normalizedChart.subType as ChartConfig['subType'],
-    chartStyleContext:
-      wireToChartStyleContext(normalizedChart.chartStyleContext) ??
-      chartStyleContextFromOoxml(normalizedChart.ooxml),
-    extra: normalizedChart.ooxml,
+    chartStyleContext: wireToChartStyleContext(normalizedChart.chartStyleContext),
+    extra: renderExtraFromChart(normalizedChart),
   };
 }

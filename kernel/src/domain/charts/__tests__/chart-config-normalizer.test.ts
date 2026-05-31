@@ -164,6 +164,8 @@ describe('chart config normalizer', () => {
       type: 'override',
       mapping: { bg1: 'Dk2', tx1: 'Accent2', folHlink: 'Hlink' },
     });
+    expect(config.extra).toEqual({ imported: true });
+    expect(config.extra).not.toHaveProperty('definition');
   });
 
   it('prefers generated chart style context over the OOXML compatibility fallback', () => {

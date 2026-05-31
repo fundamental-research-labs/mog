@@ -1,6 +1,7 @@
 import type {
   AxisData,
   ChartGroupMeta,
+  ChartStyleContextData,
   ChartSeriesData,
   SingleAxisData,
 } from './compute-types.gen';
@@ -10,11 +11,92 @@ export type ImportNormalizableChart = {
   subType?: string;
   axis?: AxisData;
   axes?: AxisData;
+  chartStyleContext?: ChartStyleContextData;
+  ooxml?: unknown;
   rt?: {
     chartGroupsMeta?: ChartGroupMeta[];
   };
   series?: ChartSeriesData[];
 };
+
+type ChartColorMapOverrideConfig = NonNullable<ChartStyleContextData['colorMapOverride']>;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function colorMappingValue(mapping: Record<string, unknown>, field: string): string | undefined {
+  const snakeField = field === 'folHlink' ? 'fol_hlink' : field;
+  const value = mapping[field] ?? mapping[snakeField];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function chartColorMapOverrideFromSerialized(
+  value: unknown,
+): ChartColorMapOverrideConfig | undefined {
+  if (
+    value === 'MasterClrMapping' ||
+    value === 'masterClrMapping' ||
+    value === 'master' ||
+    value === 'Master'
+  ) {
+    return { type: 'master' };
+  }
+
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const kind = record.kind ?? record.type;
+  if (kind === 'master' || kind === 'Master') return { type: 'master' };
+  if ('MasterClrMapping' in record || 'masterClrMapping' in record) return { type: 'master' };
+
+  const rawMapping =
+    asRecord(record.OverrideClrMapping) ??
+    asRecord(record.overrideClrMapping) ??
+    asRecord(record.Override) ??
+    asRecord(record.override) ??
+    asRecord(record.mapping) ??
+    record;
+
+  const mappingFields = [
+    'bg1',
+    'tx1',
+    'bg2',
+    'tx2',
+    'accent1',
+    'accent2',
+    'accent3',
+    'accent4',
+    'accent5',
+    'accent6',
+    'hlink',
+    'folHlink',
+  ] as const;
+  const mapping: Record<string, string> = {};
+  for (const field of mappingFields) {
+    const mappedValue = colorMappingValue(rawMapping, field);
+    if (mappedValue) mapping[field] = mappedValue;
+  }
+
+  return Object.keys(mapping).length > 0 ? { type: 'override', mapping } : undefined;
+}
+
+function chartStyleContextFromOoxml(ooxml: unknown): ChartStyleContextData | undefined {
+  const ooxmlRecord = asRecord(ooxml);
+  const definition = asRecord(ooxmlRecord?.definition);
+  const colorMapOverride = chartColorMapOverrideFromSerialized(
+    definition?.clr_map_ovr ?? definition?.clrMapOvr,
+  );
+  return colorMapOverride ? { colorMapOverride } : undefined;
+}
+
+function normalizeImportedChartStyleContext<T extends ImportNormalizableChart>(chart: T): T {
+  if (chart.chartStyleContext) return chart;
+  const chartStyleContext = chartStyleContextFromOoxml(chart.ooxml);
+  return chartStyleContext ? { ...chart, chartStyleContext } : chart;
+}
 
 function chartTypeForImportedGroups(groups: readonly ChartGroupMeta[]): string | null {
   if (groups.length === 0) return null;
@@ -217,32 +299,42 @@ function normalizeSeriesAxisBindings<T extends ImportNormalizableChart>(
 }
 
 export function normalizeImportedComboChart<T extends ImportNormalizableChart>(chart: T): T {
+  const chartWithStyleContext = normalizeImportedChartStyleContext(chart);
   const groups = chart.rt?.chartGroupsMeta ?? [];
   const assignments =
-    groups.length > 1 && chart.series ? seriesTypeAssignments(groups, chart.series) : null;
+    groups.length > 1 && chartWithStyleContext.series
+      ? seriesTypeAssignments(groups, chartWithStyleContext.series)
+      : null;
   const typedSeries = assignments
-    ? chart.series?.map((entry, index) => {
+    ? chartWithStyleContext.series?.map((entry, index) => {
         if (entry.type) return entry;
         const chartType = assignments.get(index);
         return chartType ? { ...entry, type: chartType } : entry;
       })
-    : chart.series;
-  const series = normalizeSeriesAxisBindings(chart, typedSeries);
-  const chartWithNormalizedSeries = series === chart.series ? chart : { ...chart, series };
+    : chartWithStyleContext.series;
+  const series = normalizeSeriesAxisBindings(chartWithStyleContext, typedSeries);
+  const chartWithNormalizedSeries =
+    series === chartWithStyleContext.series
+      ? chartWithStyleContext
+      : { ...chartWithStyleContext, series };
   const stockVolumeSubType = importedStockVolumeSubType(chartWithNormalizedSeries, groups, series);
   const chartType =
     (stockVolumeSubType ? 'stock' : null) ??
     (groups.length > 1 ? chartTypeForImportedGroups(groups) : null) ??
     chartTypeForUniformSeries(chartWithNormalizedSeries) ??
-    chart.chartType;
-  const subType = stockVolumeSubType ?? chart.subType;
+    chartWithStyleContext.chartType;
+  const subType = stockVolumeSubType ?? chartWithStyleContext.subType;
 
-  if (chartType === chart.chartType && series === chart.series && subType === chart.subType) {
-    return chart;
+  if (
+    chartType === chartWithStyleContext.chartType &&
+    series === chartWithStyleContext.series &&
+    subType === chartWithStyleContext.subType
+  ) {
+    return chartWithStyleContext;
   }
 
   return {
-    ...chart,
+    ...chartWithStyleContext,
     ...(chartType ? { chartType } : {}),
     ...(subType ? { subType } : {}),
     ...(series ? { series } : {}),

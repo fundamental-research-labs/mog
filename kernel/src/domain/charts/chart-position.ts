@@ -90,7 +90,7 @@ export async function getChartPosition(
   if (chart.anchorCellId) {
     const resolved = await resolveAnchorCellId(ctx, sheetId, toCellId(chart.anchorCellId));
     if (!resolved) {
-      return null;
+      return { anchorRow, anchorCol, width: chartWidth, height: chartHeight };
     }
 
     if (chart.anchor.anchorMode === 'twoCell' && chart.toAnchorCellId) {

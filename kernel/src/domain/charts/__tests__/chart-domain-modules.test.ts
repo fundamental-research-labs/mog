@@ -6,7 +6,7 @@ import type {
   MutationResult,
 } from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
-import { getChartPosition } from '../chart-position';
+import { getChartPosition, updatePosition } from '../chart-position';
 import {
   create,
   get,
@@ -16,11 +16,21 @@ import {
 } from '../chart-store';
 import {
   isChartLinkedToTable,
+  getChartsLinkedToTable,
+  getChartSourceTableId,
   linkChartToTable,
   refreshChartTableLink,
   unlinkChartFromTable,
 } from '../chart-table-links';
-import { bringToFront, getChartsInZOrder } from '../chart-z-order';
+import {
+  bringForward,
+  bringToFront,
+  getChartsInZOrder,
+  getMaxZIndex,
+  getMinZIndex,
+  sendBackward,
+  sendToBack,
+} from '../chart-z-order';
 
 const SHEET_ID: SheetId = toSheetId('sheet-1');
 
@@ -219,6 +229,115 @@ describe('chart-position', () => {
       ),
     ).resolves.toEqual({ anchorRow: 5, anchorCol: 6, width: 11, height: 12 });
   });
+
+  it('falls back to stored coordinates when the primary anchor cell was deleted', async () => {
+    const { ctx, bridge } = createMockContext({
+      getCellPosition: jest.fn(async () => null),
+    });
+
+    await expect(
+      getChartPosition(
+        ctx,
+        chart({
+          anchorCellId: 'deleted-from-cell',
+          toAnchorCellId: 'to-cell',
+          widthCells: 11,
+          heightCells: 12,
+          anchor: { anchorMode: 'twoCell' },
+        }),
+      ),
+    ).resolves.toEqual({ anchorRow: 0, anchorCol: 0, width: 11, height: 12 });
+
+    expect(bridge.getCellPosition).toHaveBeenCalledWith(SHEET_ID, 'deleted-from-cell');
+  });
+
+  it('uses legacy stored coordinates when no anchor cell identity exists', async () => {
+    const { ctx, bridge } = createMockContext();
+
+    await expect(
+      getChartPosition(
+        ctx,
+        chart({
+          anchor: { anchorRow: 9, anchorCol: 10 },
+          widthCells: 13,
+          heightCells: 14,
+        }),
+      ),
+    ).resolves.toEqual({ anchorRow: 9, anchorCol: 10, width: 13, height: 14 });
+
+    expect(bridge.getCellPosition).not.toHaveBeenCalled();
+  });
+
+  it('treats two-cell mode without an end anchor as one-cell anchored fixed size', async () => {
+    const { ctx } = createMockContext({
+      getCellPosition: jest.fn(async () => ({
+        sheetId: SHEET_ID,
+        sheetName: 'Sheet 1',
+        row: 3,
+        col: 4,
+      })),
+    });
+
+    await expect(
+      getChartPosition(
+        ctx,
+        chart({
+          anchorCellId: 'from-cell',
+          toAnchorCellId: undefined,
+          widthCells: 8,
+          heightCells: 9,
+          anchor: { anchorMode: 'twoCell' },
+        }),
+      ),
+    ).resolves.toEqual({ anchorRow: 3, anchorCol: 4, width: 8, height: 9 });
+  });
+
+  it('clamps reversed two-cell anchors to a one-cell footprint', async () => {
+    const positions = new Map([
+      ['from-cell', { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 6, col: 9 }],
+      ['to-cell', { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 2, col: 4 }],
+    ]);
+    const { ctx } = createMockContext({
+      getCellPosition: jest.fn(async (_sheetId: SheetId, cellId: string) =>
+        positions.get(cellId) ?? null,
+      ),
+    });
+
+    await expect(
+      getChartPosition(
+        ctx,
+        chart({
+          anchorCellId: 'from-cell',
+          toAnchorCellId: 'to-cell',
+          anchor: { anchorMode: 'twoCell' },
+        }),
+      ),
+    ).resolves.toEqual({ anchorRow: 6, anchorCol: 9, width: 1, height: 1 });
+  });
+
+  it('updates drag and resize coordinates through chart-store without emitting events', async () => {
+    const { ctx, bridge, eventBus } = createMockContext();
+
+    await updatePosition(ctx, SHEET_ID, 'chart-1', {
+      anchorRow: 5,
+      anchorCol: 6,
+      width: 7,
+      height: 8,
+    });
+
+    expect(bridge.getChart).toHaveBeenCalledWith(SHEET_ID, 'chart-1');
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, 'chart-1', {
+      anchor: {
+        ...chart().anchor,
+        anchorRow: 5,
+        anchorCol: 6,
+      },
+      widthCells: 7,
+      heightCells: 8,
+    });
+    expect(eventBus.emit).not.toHaveBeenCalled();
+    expect(eventBus.emitBatch).not.toHaveBeenCalled();
+  });
 });
 
 describe('chart-z-order', () => {
@@ -252,6 +371,30 @@ describe('chart-z-order', () => {
     expect(bridge.getChart).toHaveBeenCalledWith(SHEET_ID, selected.id);
     expect(bridge.getAllCharts).toHaveBeenCalledWith(SHEET_ID);
     expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, selected.id, { zIndex: 10 });
+  });
+
+  it('computes z-order bounds and delegates relative layer changes', async () => {
+    const back = chart({ id: 'back', zIndex: 1 });
+    const selected = chart({ id: 'selected', zIndex: 2 });
+    const front = chart({ id: 'front', zIndex: 9 });
+    const { ctx, bridge } = createMockContext({
+      getChart: jest.fn(async (_sheetId: SheetId, chartId: string) =>
+        chartId === selected.id ? selected : chartId === front.id ? front : back,
+      ),
+      getAllCharts: jest.fn(async () => [back, selected, front]),
+    });
+
+    await expect(getMinZIndex(ctx, SHEET_ID)).resolves.toBe(1);
+    await expect(getMaxZIndex(ctx, SHEET_ID)).resolves.toBe(9);
+    await sendToBack(ctx, SHEET_ID, selected.id);
+    await bringForward(ctx, SHEET_ID, selected.id);
+    await sendBackward(ctx, SHEET_ID, selected.id);
+
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, selected.id, { zIndex: 0 });
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, selected.id, { zIndex: 9 });
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, front.id, { zIndex: 2 });
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, selected.id, { zIndex: 1 });
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, back.id, { zIndex: 2 });
   });
 });
 
@@ -306,5 +449,23 @@ describe('chart-table-links', () => {
       dataRange: 'AA2:AC10',
       tableColumnNames: ['AA Header', 'AB Header', 'AC Header'],
     });
+  });
+
+  it('reads chart source table IDs and filters charts linked to one table', async () => {
+    const tableOneA = chart({ id: 'table-one-a', sourceTableId: 'table-1' });
+    const tableOneB = chart({ id: 'table-one-b', sourceTableId: 'table-1' });
+    const tableTwo = chart({ id: 'table-two', sourceTableId: 'table-2' });
+    const { ctx } = createMockContext({
+      getChart: jest.fn(async (_sheetId: SheetId, chartId: string) =>
+        chartId === tableOneA.id ? tableOneA : null,
+      ),
+      getAllCharts: jest.fn(async () => [tableTwo, tableOneB, tableOneA]),
+    });
+
+    await expect(getChartSourceTableId(ctx, SHEET_ID, tableOneA.id)).resolves.toBe('table-1');
+    await expect(getChartsLinkedToTable(ctx, SHEET_ID, 'table-1')).resolves.toEqual([
+      tableOneB,
+      tableOneA,
+    ]);
   });
 });

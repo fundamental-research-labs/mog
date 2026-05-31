@@ -6,6 +6,12 @@ function datum(mark: { datum?: unknown }): { role?: string; axisPart?: string } 
   return (mark.datum ?? {}) as { role?: string; axisPart?: string };
 }
 
+function pathMove(path: string): { x: number; y: number } {
+  const match = /^M([^,]+),([^ ]+)/.exec(path);
+  if (!match) throw new Error(`Unexpected path: ${path}`);
+  return { x: Number(match[1]), y: Number(match[2]) };
+}
+
 describe('axis generator render contracts', () => {
   it('renders a secondary top x-axis sharing the primary x scale', () => {
     const spec: ChartSpec = {
@@ -162,5 +168,69 @@ describe('axis generator render contracts', () => {
     expect(label?.rotation).toBeCloseTo(Math.PI / 4, 6);
     expect(tick?.path.startsWith(`M${plotRight},`)).toBe(true);
     expect(tick?.path).toContain(` L${plotRight - 6},`);
+  });
+
+  it('renders mid-category value-axis crossings on categorical scales', () => {
+    const columnSpec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 1 },
+          { category: 'B', value: 2 },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          axis: { categoryCrossing: 'midCat' },
+        },
+      },
+      width: 420,
+      height: 260,
+    };
+    const columnResult = compile(columnSpec);
+    const yDomain = columnResult.axes.find(
+      (mark): mark is PathMark =>
+        mark.type === 'path' &&
+        datum(mark).role === 'y-axis' &&
+        datum(mark).axisPart === 'domain',
+    );
+    const firstCategoryCenter =
+      (columnResult.scales.x?.('A') as number) + (columnResult.scales.x?.bandwidth?.() ?? 0) / 2;
+
+    expect(pathMove(yDomain?.path ?? '').x).toBeCloseTo(firstCategoryCenter, 6);
+
+    const barSpec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 1 },
+          { category: 'B', value: 2 },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: {
+          field: 'value',
+          type: 'quantitative',
+          axis: { categoryCrossing: 'midCat' },
+        },
+        y: { field: 'category', type: 'nominal' },
+      },
+      width: 420,
+      height: 260,
+    };
+    const barResult = compile(barSpec);
+    const xDomain = barResult.axes.find(
+      (mark): mark is PathMark =>
+        mark.type === 'path' &&
+        datum(mark).role === 'x-axis' &&
+        datum(mark).axisPart === 'domain',
+    );
+    const lastCategoryCenter =
+      (barResult.scales.y?.('B') as number) + (barResult.scales.y?.bandwidth?.() ?? 0) / 2;
+
+    expect(pathMove(xDomain?.path ?? '').y).toBeCloseTo(lastCategoryCenter, 6);
   });
 });

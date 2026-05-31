@@ -21,6 +21,7 @@ type AxisPart =
   | 'minorGrid'
   | 'title'
   | 'displayUnitLabel';
+type CategoryCrossingSide = 'min' | 'max';
 
 function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
   return { role, axisPart };
@@ -386,6 +387,20 @@ function xAxisY(axisSpec: AxisSpec, valueScale: AnyScale | undefined, layout: La
   const defaultY = xAxisOrient(axisSpec) === 'top' ? layout.plotArea.y : plotBottom;
   if (!valueScale) return defaultY;
 
+  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(valueScale)) {
+    const side = xAxisCategoryCrossingSide(axisSpec, xAxisOrient(axisSpec));
+    if (side) {
+      return categoricalScaleCrossingPosition(
+        valueScale,
+        side,
+        layout.plotArea.y,
+        plotBottom,
+        'y',
+        defaultY,
+      );
+    }
+  }
+
   switch (axisSpec.crossesAt) {
     case 'min':
       return plotBottom;
@@ -422,6 +437,65 @@ function numericDomainValue(domain: unknown[] | undefined, index: number): numbe
 function clampAxisPosition(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return max;
   return Math.max(min, Math.min(max, value));
+}
+
+function isCategoricalScale(scale: AnyScale | undefined): scale is AnyScale {
+  return Boolean(scale && typeof scale.bandwidth === 'function');
+}
+
+function xAxisCategoryCrossingSide(
+  axisSpec: AxisSpec,
+  orient: Extract<AxisOrient, 'top' | 'bottom'>,
+): CategoryCrossingSide | undefined {
+  switch (axisSpec.crossesAt) {
+    case 'min':
+      return 'min';
+    case 'max':
+      return 'max';
+    case 'custom':
+      return undefined;
+    case 'automatic':
+    default:
+      return orient === 'top' ? 'max' : 'min';
+  }
+}
+
+function yAxisCategoryCrossingSide(
+  axisSpec: AxisSpec,
+  orient: Extract<AxisOrient, 'left' | 'right'>,
+): CategoryCrossingSide | undefined {
+  switch (axisSpec.crossesAt) {
+    case 'min':
+      return 'min';
+    case 'max':
+      return 'max';
+    case 'custom':
+      return undefined;
+    case 'automatic':
+    default:
+      return orient === 'right' ? 'max' : 'min';
+  }
+}
+
+function categoricalScaleCrossingPosition(
+  scale: AnyScale,
+  side: CategoryCrossingSide,
+  minPixel: number,
+  maxPixel: number,
+  dimension: 'x' | 'y',
+  fallback: number,
+): number {
+  const domain = typeof scale.domain === 'function' ? scale.domain() : undefined;
+  if (!Array.isArray(domain) || domain.length === 0) return fallback;
+  const index =
+    dimension === 'x'
+      ? side === 'min'
+        ? 0
+        : domain.length - 1
+      : side === 'min'
+        ? domain.length - 1
+        : 0;
+  return clampAxisPosition(axisPosition(scale, domain[index]), minPixel, maxPixel);
 }
 
 /**
@@ -661,6 +735,20 @@ function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout:
   const plotRight = layout.plotArea.x + layout.plotArea.width;
   const defaultX = yAxisOrient(axisSpec) === 'right' ? plotRight : plotLeft;
   if (!categoryScale) return defaultX;
+
+  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(categoryScale)) {
+    const side = yAxisCategoryCrossingSide(axisSpec, yAxisOrient(axisSpec));
+    if (side) {
+      return categoricalScaleCrossingPosition(
+        categoryScale,
+        side,
+        plotLeft,
+        plotRight,
+        'x',
+        defaultX,
+      );
+    }
+  }
 
   switch (axisSpec.crossesAt) {
     case 'min':

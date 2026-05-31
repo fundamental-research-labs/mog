@@ -8,7 +8,7 @@ import {
   ooxmlSchemeColorHex,
   resolveChartColor,
   resolveChartTextColor,
-} from '../src/utils';
+} from '@mog/charts/utils';
 
 describe('chart OOXML/theme color utilities', () => {
   it('preserves direct color strings while normalizing supported hex forms', () => {

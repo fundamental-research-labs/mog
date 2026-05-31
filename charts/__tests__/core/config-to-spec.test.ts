@@ -12,6 +12,7 @@ import {
   buildStockLayers,
   buildTitle,
   buildTrendlineTransform,
+  buildWaterfallLayers,
   buildWaterfallTransforms,
   chartDataToRows,
   configToSpec,
@@ -128,6 +129,45 @@ describe('chartDataToRows', () => {
     expect(rows).toEqual([
       { category: '26', categoryFormatCode: '"FY3/"0"E"', value: 10, series: 'Forecast' },
       { category: '27', categoryFormatCode: '"FY3/"0"E"', value: 20, series: 'Forecast' },
+    ]);
+  });
+
+  it('should propagate OHLC fields for stock chart rows', () => {
+    const rows = chartDataToRows(
+      {
+        categories: ['Day1', 'Day2'],
+        series: [
+          {
+            name: 'Stock',
+            data: [
+              { x: 'Day1', y: 100, open: 95, high: 110, low: 90, close: 105 },
+              { x: 'Day2', y: 102, open: 105, high: 115, low: 98, close: 108 },
+            ],
+          },
+        ],
+      },
+      makeConfig({ type: 'stock', subType: 'ohlc' }),
+    );
+
+    expect(rows).toEqual([
+      {
+        category: 'Day1',
+        value: 100,
+        series: 'Stock',
+        open: 95,
+        high: 110,
+        low: 90,
+        close: 105,
+      },
+      {
+        category: 'Day2',
+        value: 102,
+        series: 'Stock',
+        open: 105,
+        high: 115,
+        low: 98,
+        close: 108,
+      },
     ]);
   });
 });
@@ -1698,6 +1738,15 @@ describe('configToSpec - waterfall chart', () => {
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     const mainLayer = spec.layer![0];
     expect(mainLayer.encoding!.color).toBeDefined();
+  });
+
+  it('keeps buildWaterfallLayers available from the compatibility import path', () => {
+    const config = makeConfig({ type: 'waterfall' });
+    const rows = chartDataToRows(SINGLE_SERIES_DATA, config);
+    const layers = buildWaterfallLayers(config, SINGLE_SERIES_DATA, rows);
+
+    expect(layers.length).toBeGreaterThan(0);
+    expect(layers[0].mark).toBeDefined();
   });
 });
 

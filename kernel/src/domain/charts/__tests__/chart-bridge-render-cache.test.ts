@@ -43,7 +43,7 @@ import type {
 import type { DocumentContext } from '../../../context/types';
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { ChartBridge } from '../chart-bridge';
-import type { ChartSheetIndex } from '../bridge/chart-sheet-index';
+import type { ChartRenderCache } from '../bridge/chart-render-cache';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
 const SHEET_B: SheetId = toSheetId('sheet-b');
@@ -83,6 +83,10 @@ function createTestCtx() {
   const eventBus = createTestEventBus();
   const ctx = { eventBus } as unknown as DocumentContext;
   return { ctx, eventBus };
+}
+
+function getRenderCache(bridge: ChartBridge): ChartRenderCache {
+  return (bridge as unknown as { renderCache: ChartRenderCache }).renderCache;
 }
 
 /**
@@ -244,15 +248,8 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    // Pretend a previous compile populated the cache and committed cleanly
-    // (mark commit clears dirtyCharts; emitChartCreated's invalidateChart
-    // sets it, so we mirror what a real compile commit would have left).
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.delete(CHART_1);
+    // Pretend a previous compile populated the cache and committed cleanly.
+    getRenderCache(bridge).commitMarks(CHART_1, [], { sheetId: SHEET_A });
 
     const spy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -284,8 +281,7 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const key = `${SHEET_A}::${CHART_1}`;
-    (bridge as unknown as { pendingCompilations: Set<string> }).pendingCompilations.add(key);
+    getRenderCache(bridge).beginCompilation(CHART_1, SHEET_A);
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -302,11 +298,15 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    (bridge as unknown as { errorCache: Map<string, unknown> }).errorCache.set(CHART_1, {
-      code: 'EMPTY_DATA',
-      message: 'no data',
-      chartId: CHART_1,
-    });
+    getRenderCache(bridge).commitError(
+      CHART_1,
+      {
+        code: 'EMPTY_DATA',
+        message: 'no data',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -347,13 +347,11 @@ describe('renderCached — sync paint contract', () => {
     const { ctx } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
-    const internals = bridge as unknown as {
-      chartImportRenderStatus: Map<string, { terminal: true; message: string; raw: unknown }>;
-    };
-    internals.chartImportRenderStatus.set(CHART_1, {
-      terminal: true,
-      message: 'Imported chart cannot be rendered yet',
-      raw: { renderable: false },
+    getRenderCache(bridge).syncImportRenderStatus(CHART_1, {
+      importStatus: {
+        renderable: false,
+        message: 'Imported chart cannot be rendered yet',
+      },
     });
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
@@ -394,12 +392,9 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.invalidateChart(CHART_1, SHEET_A);
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -418,14 +413,9 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(`${SHEET_A}::${CHART_1}`, []);
-    internals.markCache.set(`${SHEET_B}::${CHART_1}`, []);
-    internals.dirtyCharts.delete(`${SHEET_A}::${CHART_1}`);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B });
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
@@ -446,18 +436,17 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-    };
-    internals.errorCache.set(`${SHEET_A}::${CHART_1}`, {
-      code: 'EMPTY_DATA',
-      message: 'sheet A empty',
-      chartId: CHART_1,
-    });
-    internals.markCache.set(`${SHEET_B}::${CHART_1}`, []);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'EMPTY_DATA',
+        message: 'sheet A empty',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B });
 
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
     bridge.renderCached(CHART_1, sheetACtx, bounds(), SHEET_A);
@@ -542,11 +531,11 @@ describe('onCacheUpdate listener lifecycle', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { pendingCompilations: Set<string> };
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
     bridge.stop();
 
-    expect(internals.pendingCompilations.size).toBe(0);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
   });
 
   it('unsubscribe closure created before stop() is safe to call after stop()', () => {
@@ -569,11 +558,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     const bridge = new ChartBridge(ctx);
     bridge.start();
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
+    const renderCache = getRenderCache(bridge);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
 
     emitChartCreated(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
     bridge.stop();
   });
 
@@ -583,28 +572,25 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      chartSheetIndex: Map<string, SheetId>;
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      chartImportRenderStatus: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-      pendingCompilations: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.errorCache.set(CHART_1, { code: 'EMPTY_DATA' });
-    internals.chartImportRenderStatus.set(CHART_1, { terminal: true });
-    internals.dirtyCharts.add(CHART_1);
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitError(CHART_1, { code: 'EMPTY_DATA', message: 'empty', chartId: CHART_1 }, SHEET_A);
+    renderCache.syncImportRenderStatus(
+      CHART_1,
+      { importStatus: { state: 'non-renderable', message: 'Unsupported imported chart' } },
+      SHEET_A,
+    );
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
 
     emitChartDeleted(eventBus, CHART_1, SHEET_A);
 
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
-    expect(internals.markCache.has(CHART_1)).toBe(false);
-    expect(internals.errorCache.has(CHART_1)).toBe(false);
-    expect(internals.chartImportRenderStatus.has(CHART_1)).toBe(false);
-    expect(internals.dirtyCharts.has(CHART_1)).toBe(false);
-    expect(internals.pendingCompilations.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getDirtyChartKeys()).not.toContain(renderCache.cacheKey(CHART_1, SHEET_A));
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
     bridge.stop();
   });
 
@@ -613,12 +599,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     const bridge = new ChartBridge(ctx);
     bridge.start();
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
+    const renderCache = getRenderCache(bridge);
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartDeleted(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
     emitChartCreated(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
     bridge.stop();
   });
 
@@ -630,20 +616,17 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_2, SHEET_B);
 
-    const internals = bridge as unknown as {
-      chartSheetIndex: Map<string, SheetId>;
-      markCache: Map<string, unknown[]>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.markCache.set(CHART_2, []);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_2, [], { sheetId: SHEET_B });
 
     emitSheetDeleted(eventBus, SHEET_A);
 
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
-    expect(internals.markCache.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
     // Chart on the surviving sheet untouched.
-    expect(internals.chartSheetIndex.get(CHART_2)).toBe(SHEET_B);
-    expect(internals.markCache.has(CHART_2)).toBe(true);
+    expect(renderCache.getSheetId(CHART_2)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_2, SHEET_B)).toEqual([]);
     bridge.stop();
   });
 
@@ -656,12 +639,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    const renderCache = getRenderCache(bridge);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
 
     // Hypothetical future cross-sheet move event.
     emitChartUpdated(eventBus, CHART_1, SHEET_B, ['anchorRow', 'anchorCol']);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
     bridge.stop();
   });
 
@@ -671,11 +654,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { chartSheetIndex: ChartSheetIndex };
+    const renderCache = getRenderCache(bridge);
 
     bridge.clearAllCaches();
 
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
     bridge.stop();
   });
 
@@ -685,11 +668,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { chartSheetIndex: ChartSheetIndex };
+    const renderCache = getRenderCache(bridge);
 
     bridge.stop();
 
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
   });
 
   it('position-only :updated does not invalidate the marks cache', () => {
@@ -698,16 +681,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.delete(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
 
     emitChartUpdated(eventBus, CHART_1, SHEET_A, ['anchorRow', 'anchorCol', 'width', 'height']);
 
-    expect(internals.dirtyCharts.has(CHART_1)).toBe(false);
+    expect(renderCache.getDirtyChartKeys()).not.toContain(renderCache.cacheKey(CHART_1, SHEET_A));
     bridge.stop();
   });
 
@@ -747,18 +726,15 @@ describe('getMarks listener-fire on real cache commits', () => {
     const seen: string[] = [];
     bridge.onCacheUpdate((id) => seen.push(id));
 
-    (
-      bridge as unknown as {
-        commitError: (
-          chartId: string,
-          error: { code: string; message: string; chartId: string },
-        ) => void;
-      }
-    ).commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
+    getRenderCache(bridge).commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
     expect(seen).toEqual([CHART_1]);
 
     // Subsequent renderCached must paint the error (precedence over loading).
@@ -774,20 +750,18 @@ describe('getMarks listener-fire on real cache commits', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      pendingCompilations: Set<string>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-      ) => void;
-    };
-    internals.pendingCompilations.add(CHART_1);
-    internals.commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
-    expect(internals.pendingCompilations.size).toBe(0);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
     bridge.stop();
   });
 
@@ -798,15 +772,8 @@ describe('getMarks listener-fire on real cache commits', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      errorCache: Map<string, unknown>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-        sheetId?: SheetId,
-      ) => void;
-    };
-    internals.commitError(
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitError(
       CHART_1,
       {
         code: 'CHART_NOT_FOUND',
@@ -816,8 +783,8 @@ describe('getMarks listener-fire on real cache commits', () => {
       SHEET_A,
     );
 
-    expect(internals.errorCache.has(`${SHEET_A}::${CHART_1}`)).toBe(true);
-    expect(internals.errorCache.has(`${SHEET_B}::${CHART_1}`)).toBe(false);
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeDefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_B)).toBeUndefined();
     bridge.stop();
   });
 });
@@ -1285,14 +1252,9 @@ describe('getLayout sheet-scoped cache contract', () => {
     const layoutB = {
       plotArea: { left: 0.5, top: 0.6, width: 0.7, height: 0.8 },
     };
-    const internals = bridge as unknown as {
-      layoutCache: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-    };
-    internals.layoutCache.set(`${SHEET_A}::${CHART_1}`, layoutA);
-    internals.layoutCache.set(`${SHEET_B}::${CHART_1}`, layoutB);
-    internals.dirtyCharts.delete(`${SHEET_A}::${CHART_1}`);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, layout: layoutA });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, layout: layoutB });
 
     await expect(bridge.getLayout(SHEET_A, CHART_1)).resolves.toEqual(layoutA);
     await expect(bridge.getLayout(SHEET_B, CHART_1)).resolves.toEqual(layoutB);
@@ -1386,7 +1348,7 @@ describe('chart invalidation event fanout', () => {
       endRow: 10,
       endCol: 5,
     });
-    expect((bridge as unknown as { dirtyCharts: Set<string> }).dirtyCharts.has(CHART_1)).toBe(true);
+    expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(CHART_1);
     bridge.stop();
   });
 });
@@ -1402,26 +1364,22 @@ describe('stop() mid-compile', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      pendingCompilations: Set<string>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-      ) => void;
-    };
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
     bridge.stop();
-    internals.commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
 
     // Caches stayed empty after the post-stop resolution.
-    expect(internals.markCache.size).toBe(0);
-    expect(internals.errorCache.size).toBe(0);
-    expect(internals.pendingCompilations.size).toBe(0);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
   });
 });

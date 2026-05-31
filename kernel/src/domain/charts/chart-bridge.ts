@@ -81,12 +81,7 @@ import {
   wireToLegendConfig,
   wireToSeriesConfigArray,
 } from './chart-type-converters';
-import {
-  hasImportStatus,
-  importStatusToTerminalRenderStatus,
-  isChartPayload,
-  type ImportedChartRenderStatus,
-} from './bridge/import-render-status';
+import { hasImportStatus, isChartPayload } from './bridge/import-render-status';
 import { normalizeChartDataForRendering } from './bridge/chart-render-data-normalizer';
 import { isPositionOnlyUpdate } from './bridge/position-only-update';
 import {
@@ -99,7 +94,7 @@ import {
   renderChartMarks,
   renderChartPlaceholder,
 } from './bridge/chart-renderer';
-import { ChartSheetIndex } from './bridge/chart-sheet-index';
+import { ChartRenderCache } from './bridge/chart-render-cache';
 import {
   applyWorkbookThemeColors,
   loadWorkbookThemeColorPalette,
@@ -322,29 +317,7 @@ export type { ChartBounds, ChartDataResult, ChartError, ChartErrorCode, ChartMar
  * 4. Provide render API for ChartLayer
  */
 export class ChartBridge implements IChartBridge {
-  /** Cache of compiled marks per chart ID */
-  private markCache = new Map<string, ChartMark[]>();
-
-  /** Cache of layout snapshots per chart ID (follows same stale pattern as markCache) */
-  private layoutCache = new Map<string, ChartLayoutSnapshot>();
-
-  /** Cache of chart errors per chart ID */
-  private errorCache = new Map<string, ChartError>();
-
-  /** Renderer-side terminal import/render status for imported charts. */
-  private chartImportRenderStatus = new Map<string, ImportedChartRenderStatus>();
-
-  /** Set of dirty charts that need recompilation */
-  private dirtyCharts = new Set<string>();
-
-  /** Set of chart IDs currently being recompiled (in-flight async compilation) */
-  private pendingCompilations = new Set<string>();
-
-  /** Sync paint-path chartId -> owning SheetId index. */
-  private chartSheetIndex = new ChartSheetIndex();
-
-  /** Listeners notified when a real cache outcome (marks or error) is committed. */
-  private cacheUpdateListeners: Array<(chartId: string) => void> = [];
+  private readonly renderCache = new ChartRenderCache();
 
   /** Cleanup functions for event subscriptions */
   private cleanups: Array<() => void> = [];
@@ -357,22 +330,6 @@ export class ChartBridge implements IChartBridge {
     null;
 
   constructor(private ctx: DocumentContext) {}
-
-  private cacheKey(chartId: string, sheetId?: SheetId): string {
-    return this.chartSheetIndex.cacheKey(chartId, sheetId);
-  }
-
-  private deleteCacheEntries(chartId: string, sheetId?: SheetId): void {
-    const keys = new Set([chartId, this.cacheKey(chartId, sheetId)]);
-    for (const key of keys) {
-      this.markCache.delete(key);
-      this.layoutCache.delete(key);
-      this.errorCache.delete(key);
-      this.chartImportRenderStatus.delete(key);
-      this.dirtyCharts.delete(key);
-      this.pendingCompilations.delete(key);
-    }
-  }
 
   // ===========================================================================
   // Lifecycle
@@ -388,6 +345,7 @@ export class ChartBridge implements IChartBridge {
       return () => this.stop();
     }
     this.started = true;
+    this.renderCache.start();
 
     this.setupSubscriptions();
 
@@ -400,20 +358,8 @@ export class ChartBridge implements IChartBridge {
   stop(): void {
     this.cleanups.forEach((fn) => fn());
     this.cleanups = [];
-    this.markCache.clear();
-    this.layoutCache.clear();
-    this.errorCache.clear();
-    this.chartImportRenderStatus.clear();
-    this.dirtyCharts.clear();
-    this.pendingCompilations.clear();
-    this.chartSheetIndex.clear();
+    this.renderCache.stop();
     this.workbookThemeColorPalettePromise = null;
-    // In-place clear, NOT reassignment — onCacheUpdate's unsubscribe closures
-    // capture `this.cacheUpdateListeners` by reference and call indexOf/splice
-    // at unsubscribe time. Reassigning would orphan those closures onto a
-    // stale array, leaking the entry on the new array if the same listener
-    // re-subscribes.
-    this.cacheUpdateListeners.length = 0;
     this.started = false;
   }
 
@@ -450,7 +396,7 @@ export class ChartBridge implements IChartBridge {
 
     // Subscribe to chart updates (emitted by handleFloatingObjectChanges for chart config changes)
     const unsubChart = this.ctx.eventBus.on<ChartUpdatedEvent>('chart:updated', (event) => {
-      this.invalidateChart(event.chartId);
+      this.invalidateChart(event.chartId, toSheetId(event.sheetId));
     });
     this.cleanups.push(unsubChart);
 
@@ -472,9 +418,9 @@ export class ChartBridge implements IChartBridge {
       (event) => {
         if (event.objectType === 'chart' || isChartPayload(event.data)) {
           const eventSheetId = toSheetId(event.sheetId);
-          this.chartSheetIndex.set(event.objectId, eventSheetId);
+          this.renderCache.setSheetId(event.objectId, eventSheetId);
           if (!this.syncImportRenderStatus(event.objectId, event.data, eventSheetId)) {
-            this.invalidateChart(event.objectId);
+            this.invalidateChart(event.objectId, eventSheetId);
           }
         }
       },
@@ -491,8 +437,8 @@ export class ChartBridge implements IChartBridge {
           // chartSheetIndex.get(objectId)`. The conditional re-set costs
           // nothing today and prevents silent index drift if that lands.
           const eventSheetId = toSheetId(event.sheetId);
-          if (this.chartSheetIndex.get(event.objectId) !== eventSheetId) {
-            this.chartSheetIndex.set(event.objectId, eventSheetId);
+          if (this.renderCache.getSheetId(event.objectId) !== eventSheetId) {
+            this.renderCache.setSheetId(event.objectId, eventSheetId);
           }
           const importStatusPayload = hasImportStatus(event.changes) ? event.changes : event.data;
           const hasTerminalImportStatus = this.syncImportRenderStatus(
@@ -508,7 +454,7 @@ export class ChartBridge implements IChartBridge {
           // e.g. moveChart -> ["anchorRow", "anchorCol"], resizeChart -> ["width", "height"].
           const fields = event.changedFields ?? [];
           if (!isPositionOnlyUpdate(fields)) {
-            this.invalidateChart(event.objectId);
+            this.invalidateChart(event.objectId, eventSheetId);
           }
         }
       },
@@ -522,8 +468,8 @@ export class ChartBridge implements IChartBridge {
       (event) => {
         if (event.objectType === 'chart') {
           const eventSheetId = toSheetId(event.sheetId);
-          this.chartSheetIndex.delete(event.objectId);
-          this.deleteCacheEntries(event.objectId, eventSheetId);
+          this.renderCache.deleteSheetId(event.objectId);
+          this.renderCache.deleteChartCaches(event.objectId, eventSheetId);
         }
       },
     );
@@ -536,10 +482,10 @@ export class ChartBridge implements IChartBridge {
     // exists.
     const unsubSheetDeleted = this.ctx.eventBus.on<SheetDeletedEvent>('sheet:deleted', (event) => {
       const deletedSheetId = toSheetId(event.sheetId);
-      const orphanedChartIds = this.chartSheetIndex.chartIdsForSheet(deletedSheetId);
+      const orphanedChartIds = this.renderCache.chartIdsForSheet(deletedSheetId);
       for (const chartId of orphanedChartIds) {
-        this.chartSheetIndex.delete(chartId);
-        this.deleteCacheEntries(chartId, deletedSheetId);
+        this.renderCache.deleteSheetId(chartId);
+        this.renderCache.deleteChartCaches(chartId, deletedSheetId);
       }
     });
     this.cleanups.push(unsubSheetDeleted);
@@ -586,7 +532,7 @@ export class ChartBridge implements IChartBridge {
     const charts = await this.getAllChartsInWorkbook();
     for (const chart of charts) {
       if (await this.chartReferencesCell(chart, sheetId, row, col)) {
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       }
     }
   }
@@ -687,12 +633,12 @@ export class ChartBridge implements IChartBridge {
           endRow: range.endRow + count,
         };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       } else if (startRow > range.startRow && startRow <= range.endRow) {
         // Insertion strictly inside range — expand endRow
         const newRange = { ...range, endRow: range.endRow + count };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       }
       // Insertion at startRow or after endRow: no change
     }
@@ -742,13 +688,13 @@ export class ChartBridge implements IChartBridge {
 
         if (newEndRow < newStartRow) {
           // Entire range was deleted — just invalidate, keep stale range
-          this.invalidateChart(chart.id);
+          this.invalidateChart(chart.id, sheetId);
           continue;
         }
 
         const newRange = { ...range, startRow: newStartRow, endRow: newEndRow };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       }
     }
   }
@@ -777,12 +723,12 @@ export class ChartBridge implements IChartBridge {
           endCol: range.endCol + count,
         };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       } else if (startCol > range.startCol && startCol <= range.endCol) {
         // Insertion strictly inside range — expand endCol
         const newRange = { ...range, endCol: range.endCol + count };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       }
     }
   }
@@ -813,7 +759,7 @@ export class ChartBridge implements IChartBridge {
           endCol: range.endCol - count,
         };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       } else if (startCol > range.endCol) {
         // Deletion entirely after range — no change
       } else {
@@ -826,13 +772,13 @@ export class ChartBridge implements IChartBridge {
         const newEndCol = range.endCol - deletedWithin;
 
         if (newEndCol < newStartCol) {
-          this.invalidateChart(chart.id);
+          this.invalidateChart(chart.id, sheetId);
           continue;
         }
 
         const newRange = { ...range, startCol: newStartCol, endCol: newEndCol };
         await updateChart(this.ctx, sheetId, chart.id, { dataRange: cellRangeToA1(newRange) });
-        this.invalidateChart(chart.id);
+        this.invalidateChart(chart.id, sheetId);
       }
     }
   }
@@ -842,29 +788,22 @@ export class ChartBridge implements IChartBridge {
    * Note: layoutCache also follows the same stale pattern — we keep stale layouts
    * available during async recompilation, and getMarks() replaces both caches.
    */
-  invalidateChart(chartId: string): void {
-    const key = this.cacheKey(chartId);
-    // Don't delete markCache or layoutCache — keep stale data for rendering during
-    // async recompilation. This prevents blank frames when the async bridge call
-    // hasn't resolved yet.
-    // getMarks() checks dirtyCharts first and will recompile + replace both cache entries.
-    this.errorCache.delete(key);
-    this.dirtyCharts.add(key);
+  invalidateChart(chartId: string, sheetId?: SheetId): void {
+    this.renderCache.invalidateChart(chartId, sheetId);
   }
 
   /**
    * Check if a chart is dirty (needs recompilation).
    */
-  isChartDirty(chartId: string): boolean {
-    const key = this.cacheKey(chartId);
-    return this.dirtyCharts.has(key) || !this.markCache.has(key);
+  isChartDirty(chartId: string, sheetId?: SheetId): boolean {
+    return this.renderCache.isChartDirty(chartId, sheetId);
   }
 
   /**
    * Clear the dirty flag for a chart after rendering.
    */
-  clearDirtyFlag(chartId: string): void {
-    this.dirtyCharts.delete(this.cacheKey(chartId));
+  clearDirtyFlag(chartId: string, sheetId?: SheetId): void {
+    this.renderCache.clearDirtyFlag(chartId, sheetId);
   }
 
   // ===========================================================================
@@ -954,15 +893,14 @@ export class ChartBridge implements IChartBridge {
    * @returns Compiled marks or error
    */
   async getMarks(sheetId: SheetId, chartId: string): Promise<ChartMark[] | ChartError> {
-    const key = this.cacheKey(chartId, sheetId);
+    const cacheState = this.renderCache.getCompileState(chartId, sheetId);
     // Started-gate at function entry: a caller landing here after stop()
     // (e.g. an in-flight ensureCompiled racing a bridge teardown) must NOT
     // mutate caches or add to pendingCompilations. Without this, the
     // pending-check short-circuit at the top of subsequent calls would
     // perpetually return stale, since pendingCompilations would never clear.
     if (!this.started) {
-      const cachedMarks = this.markCache.get(key);
-      if (cachedMarks) return cachedMarks;
+      if (cacheState.marks) return cacheState.marks;
       return {
         code: 'CHART_NOT_FOUND',
         message: 'Chart bridge is stopped',
@@ -971,15 +909,13 @@ export class ChartBridge implements IChartBridge {
     }
 
     // Check error cache first
-    const cachedError = this.errorCache.get(key);
-    if (cachedError) {
-      return cachedError;
+    if (cacheState.error) {
+      return cacheState.error;
     }
 
     // Check marks cache
-    const cachedMarks = this.markCache.get(key);
-    if (cachedMarks && !this.dirtyCharts.has(key)) {
-      return cachedMarks;
+    if (cacheState.marks && !cacheState.isDirty) {
+      return cacheState.marks;
     }
 
     // If a recompilation is already in flight, return stale marks to avoid blank frames.
@@ -989,11 +925,11 @@ export class ChartBridge implements IChartBridge {
     // Firing here would loop: renderCached → ensureCompiled → getMarks →
     // pending short-circuit → listener → markDirty('drawing') → next frame
     // → renderCached again → loop until the original compile resolves.
-    if (cachedMarks && this.pendingCompilations.has(key)) {
-      return cachedMarks;
+    if (cacheState.marks && cacheState.isCompilePending) {
+      return cacheState.marks;
     }
 
-    this.pendingCompilations.add(key);
+    this.renderCache.beginCompilation(chartId, sheetId);
 
     // Get chart spec
     const chart = await getChart(this.ctx, sheetId, chartId);
@@ -1049,20 +985,12 @@ export class ChartBridge implements IChartBridge {
     // Flatten all marks into a single array
     const marks = collectMarks(compileResult) as ChartMark[];
 
-    // Extract layout snapshot from compile result and cache it.
-    // Gate on `started`: stop() can run mid-compile (between any two awaits
-    // above), in which case it has cleared caches and an unguarded
-    // layoutCache.set would re-pollute. layoutCache is read by getLayout, not
-    // by the renderer's dirty-flag path, so no listener fire is needed here.
     const layoutSnapshot = extractLayoutSnapshot(compileResult);
-    if (this.started && layoutSnapshot) {
-      this.layoutCache.set(key, layoutSnapshot);
-    }
 
     // Real cache commit — fires listeners so the renderer dirties the
     // drawing layer and the next frame paints from cache instead of the
     // placeholder. commitMarks bails if stop() ran mid-compile.
-    this.commitMarks(chartId, marks, sheetId);
+    this.commitMarks(chartId, marks, sheetId, layoutSnapshot);
 
     return marks;
   }
@@ -1074,18 +1002,13 @@ export class ChartBridge implements IChartBridge {
    * and we must not re-pollute them. The pendingCompilations cleanup is
    * mirrored by stop() so the bridge is fully reset on teardown.
    */
-  private commitMarks(chartId: string, marks: ChartMark[], sheetId?: SheetId): void {
-    const key = this.cacheKey(chartId, sheetId);
-    if (!this.started) {
-      this.pendingCompilations.delete(key);
-      this.pendingCompilations.delete(chartId);
-      return;
-    }
-    this.markCache.set(key, marks);
-    this.dirtyCharts.delete(key);
-    this.pendingCompilations.delete(key);
-    this.pendingCompilations.delete(chartId);
-    this.fireCacheUpdate(chartId);
+  private commitMarks(
+    chartId: string,
+    marks: ChartMark[],
+    sheetId?: SheetId,
+    layout?: ChartLayoutSnapshot | null,
+  ): void {
+    this.renderCache.commitMarks(chartId, marks, { sheetId, layout });
   }
 
   /**
@@ -1097,62 +1020,11 @@ export class ChartBridge implements IChartBridge {
    * placeholder freezes until something else dirties the drawing layer.
    */
   private commitError(chartId: string, error: ChartError, sheetId?: SheetId): void {
-    const key = this.cacheKey(chartId, sheetId);
-    if (!this.started) {
-      this.pendingCompilations.delete(key);
-      this.pendingCompilations.delete(chartId);
-      return;
-    }
-    this.errorCache.set(key, error);
-    this.pendingCompilations.delete(key);
-    this.pendingCompilations.delete(chartId);
-    this.fireCacheUpdate(chartId);
+    this.renderCache.commitError(chartId, error, sheetId);
   }
 
   private syncImportRenderStatus(chartId: string, payload: unknown, sheetId?: SheetId): boolean {
-    const key = this.cacheKey(chartId, sheetId);
-    if (!hasImportStatus(payload)) {
-      if (payload !== undefined) {
-        const hadImportRenderStatus = this.chartImportRenderStatus.delete(key);
-        if (hadImportRenderStatus) this.errorCache.delete(key);
-      }
-      return false;
-    }
-
-    const renderStatus = importStatusToTerminalRenderStatus(payload.importStatus);
-    if (!renderStatus) {
-      const hadImportRenderStatus = this.chartImportRenderStatus.delete(key);
-      if (hadImportRenderStatus) this.errorCache.delete(key);
-      return false;
-    }
-
-    this.chartImportRenderStatus.set(key, renderStatus);
-    this.markCache.delete(key);
-    this.layoutCache.delete(key);
-    this.dirtyCharts.delete(key);
-    this.pendingCompilations.delete(key);
-    this.commitError(
-      chartId,
-      {
-        code: 'RENDER_FAILED',
-        message: renderStatus.message,
-        chartId,
-        details: { importStatus: renderStatus.raw },
-      },
-      sheetId,
-    );
-    return true;
-  }
-
-  /**
-   * Notify cacheUpdateListeners. Snapshots the array first so a listener
-   * that calls its own `off()` mid-iteration doesn't skip the next listener
-   * via splice-during-forEach.
-   */
-  private fireCacheUpdate(chartId: string): void {
-    for (const listener of [...this.cacheUpdateListeners]) {
-      listener(chartId);
-    }
+    return this.renderCache.syncImportRenderStatus(chartId, payload, sheetId);
   }
 
   /**
@@ -1455,19 +1327,18 @@ export class ChartBridge implements IChartBridge {
     bounds: ChartBounds,
     sheetId?: SheetId,
   ): void {
-    const legacyImportRenderStatus = this.chartImportRenderStatus.get(chartId);
-    if (legacyImportRenderStatus) {
+    const paintState = this.renderCache.getPaintState(chartId, sheetId);
+    if (paintState.importRenderStatus) {
       renderChartError(ctx, bounds, {
         code: 'RENDER_FAILED',
-        message: legacyImportRenderStatus.message,
+        message: paintState.importRenderStatus.message,
         chartId,
-        details: { importStatus: legacyImportRenderStatus.raw },
+        details: { importStatus: paintState.importRenderStatus.raw },
       });
       return;
     }
 
-    const resolvedSheetId = this.chartSheetIndex.resolveSheetId(chartId, sheetId);
-    if (!resolvedSheetId) {
+    if (!paintState.resolvedSheetId) {
       // First-paint case: floatingObject:created hasn't been delivered yet,
       // OR the chart was already deleted. Either way paint a placeholder; the
       // recovery path is the existing floating-object-pipeline call into
@@ -1476,74 +1347,49 @@ export class ChartBridge implements IChartBridge {
       renderChartPlaceholder(ctx, bounds, 'Chart loading…');
       return;
     }
-    const key = this.cacheKey(chartId, resolvedSheetId);
 
-    const importRenderStatus =
-      this.chartImportRenderStatus.get(key) ?? this.chartImportRenderStatus.get(chartId);
-    if (importRenderStatus) {
-      renderChartError(ctx, bounds, {
-        code: 'RENDER_FAILED',
-        message: importRenderStatus.message,
-        chartId,
-        details: { importStatus: importRenderStatus.raw },
-      });
-      return;
-    }
-
-    const error = this.errorCache.get(key) ?? this.errorCache.get(chartId);
-    if (error) {
+    if (paintState.error) {
       // Error precedence over loading: a known error state must not retry on
       // every frame. invalidateChart() clears errorCache when the upstream
       // fix lands (data range edited, etc.) and recovery happens normally.
-      renderChartError(ctx, bounds, error);
+      renderChartError(ctx, bounds, paintState.error);
       return;
     }
 
-    const keyMarks = this.markCache.get(key);
-    const legacyMarks = this.markCache.get(chartId);
-    const marks = keyMarks ?? legacyMarks;
-    const isDirty = keyMarks != null ? this.dirtyCharts.has(key) : this.dirtyCharts.has(chartId);
-    const isCompilePending =
-      this.pendingCompilations.has(key) || this.pendingCompilations.has(chartId);
-
-    if (!marks) {
+    if (!paintState.marks) {
       // Cold-cache path: placeholder + background recompile. The compile
       // commit fires onCacheUpdate, the renderer dirties the drawing layer,
       // the next frame paints real marks from cache.
       renderChartPlaceholder(ctx, bounds, 'Chart loading…');
-      if (!isCompilePending) {
-        void this.ensureCompiled(chartId, resolvedSheetId);
+      if (!paintState.isCompilePending) {
+        void this.ensureCompiled(chartId, paintState.resolvedSheetId);
       }
       return;
     }
 
-    if (isDirty && !isCompilePending) {
+    if (paintState.isDirty && !paintState.isCompilePending) {
       // Stale-but-show: paint stale marks this frame, kick a background
       // recompile. Mirrors getMarks's pendingCompilations stale-return at
       // the top of getMarks() and avoids a placeholder flash on every cell
       // edit affecting a chart's data range.
-      void this.ensureCompiled(chartId, resolvedSheetId);
+      void this.ensureCompiled(chartId, paintState.resolvedSheetId);
     }
 
-    renderChartMarks(ctx, marks, bounds);
+    renderChartMarks(ctx, paintState.marks, bounds);
   }
 
   /**
    * Subscribe to cache-update notifications. See {@link IChartBridge.onCacheUpdate}.
    */
   onCacheUpdate(listener: (chartId: string) => void): () => void {
-    this.cacheUpdateListeners.push(listener);
-    return () => {
-      const i = this.cacheUpdateListeners.indexOf(listener);
-      if (i >= 0) this.cacheUpdateListeners.splice(i, 1);
-    };
+    return this.renderCache.onCacheUpdate(listener);
   }
 
   /**
    * Trigger compilation if dirty or absent. See {@link IChartBridge.ensureCompiled}.
    */
   async ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void> {
-    const resolvedSheetId = this.chartSheetIndex.resolveSheetId(chartId, sheetId);
+    const resolvedSheetId = this.renderCache.resolveSheetId(chartId, sheetId);
     if (!resolvedSheetId) return;
     await this.getMarks(resolvedSheetId, chartId);
   }
@@ -1563,10 +1409,9 @@ export class ChartBridge implements IChartBridge {
    * @returns Layout snapshot or null if chart not found / has no layout
    */
   async getLayout(sheetId: SheetId, chartId: string): Promise<ChartLayoutSnapshot | null> {
-    const key = this.cacheKey(chartId, sheetId);
     // If layout is cached and chart is not dirty, return it directly
-    const cached = this.layoutCache.get(key);
-    if (cached && !this.dirtyCharts.has(key)) {
+    const cached = this.renderCache.getFreshLayout(chartId, sheetId);
+    if (cached) {
       return cached;
     }
 
@@ -1576,7 +1421,7 @@ export class ChartBridge implements IChartBridge {
       return null;
     }
 
-    return this.layoutCache.get(key) ?? null;
+    return this.renderCache.getCachedLayout(chartId, sheetId) ?? null;
   }
 
   // ===========================================================================
@@ -1618,7 +1463,7 @@ export class ChartBridge implements IChartBridge {
    * Get all dirty charts that need re-rendering.
    */
   getDirtyCharts(): string[] {
-    return Array.from(this.dirtyCharts);
+    return this.renderCache.getDirtyChartKeys();
   }
 
   /**
@@ -1630,14 +1475,8 @@ export class ChartBridge implements IChartBridge {
    * to re-paint until something else dirtied it).
    */
   clearAllCaches(): void {
-    this.markCache.clear();
-    this.layoutCache.clear();
-    this.errorCache.clear();
-    this.chartImportRenderStatus.clear();
     this.workbookThemeColorPalettePromise = null;
-    this.dirtyCharts.clear();
-    this.pendingCompilations.clear();
-    this.fireCacheUpdate('*');
+    this.renderCache.clearAllCaches();
   }
 
   // ===========================================================================

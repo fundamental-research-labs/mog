@@ -55,6 +55,7 @@ pub(super) fn build_series(
         sd.categories.as_deref(),
         sd.category_cache.as_ref(),
         sd.category_levels.as_ref(),
+        sd.category_label_format.as_ref(),
         sd.category_source_kind,
     );
     let (cat, x_val) = if has_x_val {
@@ -157,10 +158,23 @@ fn build_num_data_source(
     cache: Option<&ChartSeriesPointCacheData>,
     source_kind: Option<ChartSeriesDimensionSourceKindData>,
 ) -> Option<NumDataSource> {
+    if source_kind == Some(ChartSeriesDimensionSourceKindData::Literal) {
+        return cache
+            .filter(|cache| point_cache_has_payload(cache))
+            .map(num_data_from_cache)
+            .map(NumDataSource::Lit);
+    }
+
     if let Some(formula) = formula {
         return Some(NumDataSource::Ref(NumRef {
             f: formula.to_string(),
-            num_cache: cache.map(num_data_from_cache),
+            num_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback) {
+                cache
+                    .filter(|cache| point_cache_has_payload(cache))
+                    .map(num_data_from_cache)
+            } else {
+                None
+            },
             ..Default::default()
         }));
     }
@@ -179,25 +193,67 @@ fn build_cat_data_source(
     formula: Option<&str>,
     cache: Option<&ChartSeriesPointCacheData>,
     category_levels: Option<&ChartSeriesCategoryLevelsCacheData>,
+    category_label_format: Option<&domain_types::chart::CategoryLabelFormatData>,
     source_kind: Option<ChartSeriesDimensionSourceKindData>,
 ) -> Option<CatDataSource> {
+    let numeric_category = category_cache_is_numeric(cache, category_label_format);
+
+    if source_kind == Some(ChartSeriesDimensionSourceKindData::Literal) {
+        return cache
+            .filter(|cache| point_cache_has_payload(cache))
+            .map(|cache| {
+                if numeric_category {
+                    CatDataSource::NumLit(num_data_from_category_cache(
+                        cache,
+                        category_label_format,
+                    ))
+                } else {
+                    CatDataSource::StrLit(str_data_from_cache(cache))
+                }
+            });
+    }
+
     if let Some(formula) = formula {
         if let Some(levels) = category_levels {
             return Some(CatDataSource::MultiLvlStrRef(charts::MultiLvlStrRef {
                 f: formula.to_string(),
-                multi_lvl_str_cache: category_levels_cache_has_payload(levels)
-                    .then(|| multi_lvl_str_data_from_cache(levels)),
+                multi_lvl_str_cache: (source_kind
+                    == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
+                    && category_levels_cache_has_payload(levels))
+                .then(|| multi_lvl_str_data_from_cache(levels)),
                 ..Default::default()
             }));
         }
     }
 
     if let Some(formula) = formula {
-        return Some(CatDataSource::StrRef(StrRef {
-            f: formula.to_string(),
-            str_cache: cache.map(str_data_from_cache),
-            ..Default::default()
-        }));
+        return if numeric_category {
+            Some(CatDataSource::NumRef(NumRef {
+                f: formula.to_string(),
+                num_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
+                {
+                    cache
+                        .filter(|cache| point_cache_has_payload(cache))
+                        .map(|cache| num_data_from_category_cache(cache, category_label_format))
+                } else {
+                    None
+                },
+                ..Default::default()
+            }))
+        } else {
+            Some(CatDataSource::StrRef(StrRef {
+                f: formula.to_string(),
+                str_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
+                {
+                    cache
+                        .filter(|cache| point_cache_has_payload(cache))
+                        .map(str_data_from_cache)
+                } else {
+                    None
+                },
+                ..Default::default()
+            }))
+        };
     }
 
     if source_kind == Some(ChartSeriesDimensionSourceKindData::Ref) {
@@ -206,8 +262,13 @@ fn build_cat_data_source(
 
     cache
         .filter(|cache| point_cache_has_payload(cache))
-        .map(str_data_from_cache)
-        .map(CatDataSource::StrLit)
+        .map(|cache| {
+            if numeric_category {
+                CatDataSource::NumLit(num_data_from_category_cache(cache, category_label_format))
+            } else {
+                CatDataSource::StrLit(str_data_from_cache(cache))
+            }
+        })
 }
 
 fn point_cache_has_payload(cache: &ChartSeriesPointCacheData) -> bool {
@@ -262,6 +323,40 @@ fn num_data_from_cache(cache: &ChartSeriesPointCacheData) -> NumData {
             .collect(),
         ..Default::default()
     }
+}
+
+fn category_cache_is_numeric(
+    cache: Option<&ChartSeriesPointCacheData>,
+    category_label_format: Option<&domain_types::chart::CategoryLabelFormatData>,
+) -> bool {
+    category_label_format.is_some()
+        || cache.is_some_and(|cache| {
+            cache.format_code.is_some()
+                || cache.points.iter().any(|point| point.format_code.is_some())
+        })
+}
+
+fn num_data_from_category_cache(
+    cache: &ChartSeriesPointCacheData,
+    category_label_format: Option<&domain_types::chart::CategoryLabelFormatData>,
+) -> NumData {
+    let mut data = num_data_from_cache(cache);
+    if let Some(format) = category_label_format {
+        data.format_code = format.format_code.clone().or(data.format_code);
+        if let Some(points) = format.points.as_ref() {
+            for point in &mut data.pts {
+                if let Some(format_point) = points.iter().find(|format_point| {
+                    format_point.idx == point.idx && format_point.format_code.is_some()
+                }) {
+                    point.format_code = format_point
+                        .format_code
+                        .clone()
+                        .or(point.format_code.clone());
+                }
+            }
+        }
+    }
+    data
 }
 
 fn str_data_from_cache(cache: &ChartSeriesPointCacheData) -> StrData {

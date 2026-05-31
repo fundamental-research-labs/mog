@@ -21,6 +21,7 @@ pub enum ExportDiagnosticCode {
     ChartExternalDataRelationshipDropped,
     ChartUserShapesRelationshipDropped,
     ChartRelationshipRawXmlDropped,
+    ChartSourceCacheOmitted,
     ChartExOpaqueReplaySuppressed,
     ChartExRawAnchorReplaySuppressed,
     ChartPrintSettingsDropped,
@@ -193,6 +194,7 @@ fn append_standard_chart_export_diagnostics(
         );
     }
 
+    append_standard_chart_source_cache_diagnostics(chart, chart_path, diagnostics);
     if let Some(aux) = super::chart_auxiliary::chart_auxiliary_data(chart) {
         if !super::chart_replay::chart_allows_current_auxiliary_replay(chart, &aux.original_path) {
             push_chart_diagnostic(
@@ -228,6 +230,115 @@ fn append_standard_chart_export_diagnostics(
     append_standard_chart_relationship_diagnostics(chart, chart_path, diagnostics);
     append_standard_chart_print_settings_diagnostics(chart, chart_path, diagnostics);
     append_standard_chart_raw_xml_drop_diagnostics(chart, chart_path, diagnostics);
+}
+
+fn append_standard_chart_source_cache_diagnostics(
+    chart: &ChartSpec,
+    chart_path: &str,
+    diagnostics: &mut Vec<ExportDiagnostic>,
+) {
+    if !super::chart_replay::should_reconstruct_chart_space(chart) {
+        return;
+    }
+
+    let omitted_dimensions: Vec<String> = chart
+        .series
+        .iter()
+        .enumerate()
+        .flat_map(|(series_idx, series)| {
+            let series_number = series_idx + 1;
+            [
+                source_cache_omitted(
+                    series.values.as_deref(),
+                    series.value_cache.as_ref(),
+                    series.value_source_kind,
+                )
+                .then(|| format!("series {series_number} values")),
+                source_cache_omitted(
+                    series.categories.as_deref(),
+                    series.category_cache.as_ref(),
+                    series.category_source_kind,
+                )
+                .then(|| format!("series {series_number} categories")),
+                source_levels_cache_omitted(
+                    series.categories.as_deref(),
+                    series.category_levels.as_ref(),
+                    series.category_source_kind,
+                )
+                .then(|| format!("series {series_number} categoryLevels")),
+                source_cache_omitted(
+                    series.bubble_size.as_deref(),
+                    series.bubble_size_cache.as_ref(),
+                    series.bubble_size_source_kind,
+                )
+                .then(|| format!("series {series_number} bubbleSize")),
+            ]
+            .into_iter()
+            .flatten()
+        })
+        .collect();
+
+    if omitted_dimensions.is_empty() {
+        return;
+    }
+
+    push_chart_diagnostic(
+        diagnostics,
+        ExportDiagnosticCode::ChartSourceCacheOmitted,
+        "chartSourceCache",
+        Some(chart_path),
+        ExportSemanticImpact::None,
+        format!(
+            "Modeled chart export omitted imported source caches without a current live-data snapshot: {}.",
+            omitted_dimensions.join(", ")
+        ),
+    );
+}
+
+fn source_cache_omitted(
+    formula: Option<&str>,
+    cache: Option<&domain_types::chart::ChartSeriesPointCacheData>,
+    source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
+) -> bool {
+    formula.is_some_and(|formula| !formula.trim().is_empty())
+        && point_cache_has_payload(cache)
+        && !matches!(
+            source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::CacheFallback)
+                | Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        )
+}
+
+fn source_levels_cache_omitted(
+    formula: Option<&str>,
+    cache: Option<&domain_types::chart::ChartSeriesCategoryLevelsCacheData>,
+    source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
+) -> bool {
+    formula.is_some_and(|formula| !formula.trim().is_empty())
+        && category_levels_cache_has_payload(cache)
+        && !matches!(
+            source_kind,
+            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::CacheFallback)
+                | Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
+        )
+}
+
+fn point_cache_has_payload(cache: Option<&domain_types::chart::ChartSeriesPointCacheData>) -> bool {
+    cache.is_some_and(|cache| {
+        cache.point_count.is_some() || cache.format_code.is_some() || !cache.points.is_empty()
+    })
+}
+
+fn category_levels_cache_has_payload(
+    cache: Option<&domain_types::chart::ChartSeriesCategoryLevelsCacheData>,
+) -> bool {
+    cache.is_some_and(|cache| {
+        cache.point_count.is_some()
+            || cache
+                .levels
+                .iter()
+                .any(|level| level.point_count.is_some() || !level.points.is_empty())
+    })
 }
 
 fn append_standard_chart_relationship_diagnostics(

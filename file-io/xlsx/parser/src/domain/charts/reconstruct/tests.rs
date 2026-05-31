@@ -7,6 +7,7 @@ use domain_types::chart::{
     ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize, PivotChartOptionsData,
     SingleAxisData,
 };
+use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
@@ -242,7 +243,177 @@ fn literal_series_sources_reconstruct_from_imported_caches() {
 }
 
 #[test]
-fn multi_level_category_sources_reconstruct_from_imported_level_cache() {
+fn numeric_literal_category_sources_reconstruct_num_lit_with_format_codes() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    let mut series = ranges::chart_series_data(None, None, None, 0);
+    series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Literal);
+    series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "10".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "20".to_string(),
+                format_code: None,
+            },
+        ],
+    });
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Literal);
+    series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: Some("m/d/yyyy".to_string()),
+        points: vec![
+            ChartSeriesPointCachePointData {
+                idx: 0,
+                value: "45292".to_string(),
+                format_code: None,
+            },
+            ChartSeriesPointCachePointData {
+                idx: 1,
+                value: "45323".to_string(),
+                format_code: Some("m/d/yy".to_string()),
+            },
+        ],
+    });
+    series.category_label_format = Some(CategoryLabelFormatData {
+        format_code: Some("yyyy-mm".to_string()),
+        points: Some(vec![CategoryPointLabelFormatData {
+            idx: 0,
+            format_code: Some("mmm yy".to_string()),
+        }]),
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:cat><c:numLit>"), "{xml}");
+    assert!(
+        xml.contains("<c:formatCode>yyyy-mm</c:formatCode>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<c:pt idx="0" formatCode="mmm yy">"#),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<c:pt idx="1" formatCode="m/d/yy">"#),
+        "{xml}"
+    );
+    assert!(!xml.contains("<c:cat><c:strLit>"), "{xml}");
+}
+
+#[test]
+fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
+    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
+    let mut series = ranges::chart_series_data(
+        None,
+        Some("Data!$A$2:$A$3".to_string()),
+        Some("Data!$B$2:$B$3".to_string()),
+        0,
+    );
+    series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+    series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "999".to_string(),
+            format_code: None,
+        }],
+    });
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+    series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "Stale category".to_string(),
+            format_code: None,
+        }],
+    });
+    series.bubble_size = Some("Data!$C$2:$C$3".to_string());
+    series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+    series.bubble_size_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "888".to_string(),
+            format_code: None,
+        }],
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:f>Data!$A$2:$A$3</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Data!$B$2:$B$3</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Data!$C$2:$C$3</c:f>"), "{xml}");
+    assert!(!xml.contains("<c:numCache>"), "{xml}");
+    assert!(!xml.contains("<c:strCache>"), "{xml}");
+    assert!(!xml.contains("999"), "{xml}");
+    assert!(!xml.contains("Stale category"), "{xml}");
+    assert!(!xml.contains("888"), "{xml}");
+}
+
+#[test]
+fn cache_fallback_series_sources_reconstruct_ref_caches() {
+    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
+    let mut series = ranges::chart_series_data(
+        None,
+        Some("Data!$A$2:$A$3".to_string()),
+        Some("Data!$B$2:$B$3".to_string()),
+        0,
+    );
+    series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
+    series.value_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: Some("General".to_string()),
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 1,
+            value: "20".to_string(),
+            format_code: None,
+        }],
+    });
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
+    series.category_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 0,
+            value: "Fallback category".to_string(),
+            format_code: None,
+        }],
+    });
+    series.bubble_size = Some("Data!$C$2:$C$3".to_string());
+    series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
+    series.bubble_size_cache = Some(ChartSeriesPointCacheData {
+        point_count: Some(2),
+        format_code: None,
+        points: vec![ChartSeriesPointCachePointData {
+            idx: 1,
+            value: "30".to_string(),
+            format_code: None,
+        }],
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:numCache>"), "{xml}");
+    assert!(xml.contains("<c:strCache>"), "{xml}");
+    assert!(xml.contains("<c:v>Fallback category</c:v>"), "{xml}");
+    assert!(xml.contains("<c:v>30</c:v>"), "{xml}");
+    assert!(xml.contains(r#"<c:pt idx="1">"#), "{xml}");
+}
+
+#[test]
+fn multi_level_ref_sources_omit_imported_level_cache_without_live_snapshot() {
     let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     let mut series = ranges::chart_series_data(
         Some("Imported".to_string()),
@@ -303,6 +474,66 @@ fn multi_level_category_sources_reconstruct_from_imported_level_cache() {
 
     assert!(xml.contains("<c:multiLvlStrRef>"), "{xml}");
     assert!(xml.contains("<c:f>Data!$A$2:$B$4</c:f>"), "{xml}");
+    assert!(!xml.contains("<c:multiLvlStrCache>"), "{xml}");
+    assert!(!xml.contains("<c:lvl>"), "{xml}");
+    assert!(!xml.contains("<c:strRef>"), "{xml}");
+    assert!(!xml.contains("Flat cache should not win"), "{xml}");
+    assert!(!xml.contains("South"), "{xml}");
+    assert!(!xml.contains("Q2"), "{xml}");
+}
+
+#[test]
+fn multi_level_cache_fallback_sources_reconstruct_imported_level_cache() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    let mut series = ranges::chart_series_data(
+        Some("Imported".to_string()),
+        Some("Data!$A$2:$B$4".to_string()),
+        Some("Data!$C$2:$C$4".to_string()),
+        0,
+    );
+    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
+    series.category_levels = Some(ChartSeriesCategoryLevelsCacheData {
+        point_count: Some(3),
+        levels: vec![
+            ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "North".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 2,
+                        value: "South".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+            ChartSeriesCategoryLevelCacheData {
+                level: 1,
+                point_count: Some(3),
+                points: vec![
+                    ChartSeriesPointCachePointData {
+                        idx: 0,
+                        value: "Q1".to_string(),
+                        format_code: None,
+                    },
+                    ChartSeriesPointCachePointData {
+                        idx: 1,
+                        value: "Q2".to_string(),
+                        format_code: None,
+                    },
+                ],
+            },
+        ],
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:multiLvlStrRef>"), "{xml}");
     assert!(xml.contains("<c:multiLvlStrCache>"), "{xml}");
     assert_eq!(xml.matches("<c:lvl>").count(), 2, "{xml}");
     assert_eq!(xml.matches("<c:ptCount val=\"3\"/>").count(), 3, "{xml}");
@@ -314,8 +545,6 @@ fn multi_level_category_sources_reconstruct_from_imported_level_cache() {
         xml.contains("<c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>"),
         "{xml}"
     );
-    assert!(!xml.contains("<c:strRef>"), "{xml}");
-    assert!(!xml.contains("Flat cache should not win"), "{xml}");
 }
 
 #[test]

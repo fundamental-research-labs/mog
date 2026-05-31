@@ -11,11 +11,6 @@ import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisOrient, AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 import {
-  DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE,
-  DEFAULT_AXIS_LABEL_FONT_SIZE,
-  DEFAULT_AXIS_TITLE_FONT_SIZE,
-} from '../defaults';
-import {
   formatExcelValueResult,
   type ExcelNumberFormatResult,
 } from '@mog/spreadsheet-utils/number-formats';
@@ -31,6 +26,9 @@ type AxisPart =
   | 'title'
   | 'displayUnitLabel';
 type CategoryCrossingSide = 'min' | 'max';
+
+const GRAMMAR_AXIS_LABEL_FONT_SIZE = 11;
+const GRAMMAR_AXIS_TITLE_FONT_SIZE = 12;
 
 function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
   return { role, axisPart };
@@ -190,11 +188,16 @@ export function generateXAxis(
   // Compute label skip interval to prevent overlap.
   // Estimate label widths and determine how many labels to skip so adjacent
   // labels don't collide.
-  const fontSize = axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const fontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   const collisionFontSize =
-    axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE;
+    axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   let labelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
-  if (axisSpec.tickLabelSkip === undefined && axisSpec.labels !== false && ticks.length > 1) {
+  if (
+    axisSpec.tickLabelSkip === undefined &&
+    shouldAutoSkipLabels(axisSpec) &&
+    axisSpec.labels !== false &&
+    ticks.length > 1
+  ) {
     const avgCharWidth = collisionFontSize * 0.6;
     const maxLabelLen = ticks.reduce((max: number, t: unknown) => {
       const text = axisLabelText(channel, axisSpec, t, tickFormat);
@@ -363,7 +366,7 @@ export function generateXAxis(
         y: titleSide === 'top' ? layout.plotArea.y - 35 : layout.plotArea.y + layout.plotArea.height + 35,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? DEFAULT_AXIS_TITLE_FONT_SIZE,
+        fontSize: axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: titleSide === 'top' ? 'bottom' : 'top',
@@ -386,7 +389,7 @@ export function generateXAxis(
           : layout.plotArea.y + layout.plotArea.height + 18,
       text: axisSpec.displayUnitLabel,
       datum: axisDatum(role, 'displayUnitLabel'),
-      fontSize: axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE,
+      fontSize: axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE,
       fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: 'right',
       textBaseline: labelSide === 'top' ? 'bottom' : 'top',
@@ -609,11 +612,16 @@ export function generateYAxis(
   const minorTicks = getMinorAxisTicks(scale, axisSpec, ticks);
 
   // Compute label skip interval to prevent vertical overlap on y-axis.
-  const yFontSize = axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const yFontSize = axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   const yCollisionFontSize =
-    axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_COLLISION_FONT_SIZE;
+    axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE;
   let yLabelSkip = normalizedSkip(axisSpec.tickLabelSkip) ?? 1;
-  if (axisSpec.tickLabelSkip === undefined && axisSpec.labels !== false && ticks.length > 1) {
+  if (
+    axisSpec.tickLabelSkip === undefined &&
+    shouldAutoSkipLabels(axisSpec) &&
+    axisSpec.labels !== false &&
+    ticks.length > 1
+  ) {
     const tickPositions = ticks
       .map((t: unknown) => axisPosition(scale, t))
       .filter((v: number) => !isNaN(v))
@@ -783,7 +791,7 @@ export function generateYAxis(
         y: layout.plotArea.y + layout.plotArea.height / 2,
         text: title,
         datum: axisDatum(role, 'title'),
-        fontSize: axisSpec.titleFontSize ?? DEFAULT_AXIS_TITLE_FONT_SIZE,
+        fontSize: axisSpec.titleFontSize ?? GRAMMAR_AXIS_TITLE_FONT_SIZE,
         fontFamily: axisSpec.titleFontFamily ?? 'system-ui, sans-serif',
         textAlign: 'center',
         textBaseline: 'middle',
@@ -804,7 +812,7 @@ export function generateYAxis(
       y: layout.plotArea.y - 10,
       text: axisSpec.displayUnitLabel,
       datum: axisDatum(role, 'displayUnitLabel'),
-      fontSize: axisSpec.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE,
+      fontSize: axisSpec.labelFontSize ?? GRAMMAR_AXIS_LABEL_FONT_SIZE,
       fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
       textAlign: labelSide === 'right' ? 'left' : 'right',
       textBaseline: 'bottom',
@@ -1025,6 +1033,11 @@ function axisTickKey(tick: unknown): string {
 function normalizedSkip(skip: number | undefined): number | undefined {
   if (skip === undefined || !Number.isFinite(skip) || skip < 1) return undefined;
   return Math.max(1, Math.floor(skip));
+}
+
+function shouldAutoSkipLabels(axisSpec: AxisSpec): boolean {
+  if (axisSpec.labelOverlap === false) return false;
+  return axisSpec.tickInterval === undefined && axisSpec.tickStep === undefined;
 }
 
 function numericTickValue(value: unknown): number | undefined {

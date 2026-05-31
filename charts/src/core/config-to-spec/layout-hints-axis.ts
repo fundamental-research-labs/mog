@@ -1,10 +1,11 @@
 import type { AxisSpec, ChannelSpec, EncodingSpec, ScaleSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
-import { DEFAULT_AXIS_LABEL_FONT_SIZE } from '../../defaults';
 import { formatExcelSerialDateTick, formatTickValue } from '../../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../../primitives/scales/linear';
 import { buildAxisScaleSpec, explicitDomainBound, mapAxisConfigToAxisSpec } from './axis';
 import { hasSecondaryYAxis } from './secondary-axis';
+
+const UNRESOLVED_AXIS_LABEL_FONT_SIZE = 11;
 
 export function estimateNominalYAxisLabelWidth(
   encoding: EncodingSpec | undefined,
@@ -18,7 +19,7 @@ export function estimateNominalYAxisLabelWidth(
   const labels = data?.categories ?? [];
   if (labels.length === 0) return undefined;
 
-  const fontSize = y.axis?.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const fontSize = y.axis?.labelFontSize ?? UNRESOLVED_AXIS_LABEL_FONT_SIZE;
   const estimatedWidth =
     estimateMultiLevelYAxisLabelWidth(y.axis, fontSize) ??
     estimateSingleColumnYAxisLabelWidth(labels, fontSize);
@@ -55,7 +56,7 @@ export function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): n
   if (!x || x.axis === null || x.axis?.labels === false) return undefined;
 
   const labelAngle = x.axis?.labelAngle ?? 0;
-  const fontSize = x.axis?.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const fontSize = x.axis?.labelFontSize ?? UNRESOLVED_AXIS_LABEL_FONT_SIZE;
   const labelPadding = x.axis?.labelPadding ?? (labelAngle ? 2 : 3);
   const tickExtent = x.axis?.ticks === false ? 0 : (x.axis?.tickSize ?? 6);
   const multiLevelLabelCount = maxMultiLevelLabelCount(x.axis);
@@ -115,7 +116,7 @@ function estimateQuantitativeAxisLabelWidth(
   );
   if (maxLabelLength === 0) return undefined;
 
-  const fontSize = axis?.labelFontSize ?? DEFAULT_AXIS_LABEL_FONT_SIZE;
+  const fontSize = axis?.labelFontSize ?? UNRESOLVED_AXIS_LABEL_FONT_SIZE;
   const maxMagnitude = Math.max(Math.abs(domain[0]), Math.abs(domain[1]));
   const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
   const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);

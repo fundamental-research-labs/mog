@@ -16,6 +16,7 @@ import {
   applyAxisLineStyle,
   applyAxisTitleStyle,
 } from './axis-format-styles';
+import { applyAxisTextDefaults } from './axis-defaults';
 import { isDateAxisConfig, toFiniteNumber } from './category-axis';
 
 /**
@@ -107,5 +108,6 @@ export function mapAxisConfigToAxisSpec(
   applyAxisLineStyle(spec, axisFormat, context);
   applyAxisGridlineStyle(spec, axisConf, context);
   applyAxisTitleStyle(spec, axisConf, context);
+  applyAxisTextDefaults(spec);
   return spec;
 }

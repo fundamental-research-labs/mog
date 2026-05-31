@@ -161,6 +161,128 @@ describe('WorksheetChartsImpl chart ref read normalization', () => {
   });
 });
 
+describe('WorksheetChartsImpl rich chart format boundary', () => {
+  it('normalizes wire chart format colors on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartFormat: { fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.2 } } },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tint_shade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tint_shade: 0.3 } } },
+        },
+        chartStyleContext: {
+          colorMapOverride: { type: 'master' },
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              format: { line: { color: { theme: 'accent4', tint_shade: -0.3 } } },
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tint_shade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        chartFormat: {
+          fill: { type: 'solid', color: { theme: 'accent1', tintShade: 0.2 } },
+        },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tintShade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tintShade: 0.3 } } },
+        },
+        chartStyleContext: {
+          colorMapOverride: { type: 'master' },
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              format: { line: { color: { theme: 'accent4', tintShade: -0.3 } } },
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tintShade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('writes public chart format colors to the wire shape on update', async () => {
+    const chart = makeChart();
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      chartFormat: { fill: { type: 'solid', color: { theme: 'accent1', tintShade: 0.2 } } },
+      titleRichText: [{ text: 'Revenue', font: { color: { theme: 'accent2', tintShade: -0.2 } } }],
+      dataTable: {
+        visible: true,
+        format: { shadow: { color: { theme: 'accent3', tintShade: 0.3 } } },
+      },
+      trendlines: [
+        {
+          label: {
+            format: { font: { color: { theme: 'accent4', tintShade: -0.3 } } },
+          },
+        },
+      ],
+      chartStyleContext: {
+        owners: [
+          {
+            ownerKey: 'plot-area',
+            richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tintShade: 0.4 } } }],
+          },
+        ],
+      },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        chartFormat: {
+          fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.2 } },
+        },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tint_shade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tint_shade: 0.3 } } },
+        },
+        trendline: [
+          expect.objectContaining({
+            label: {
+              format: { font: { color: { theme: 'accent4', tint_shade: -0.3 } } },
+            },
+          }),
+        ],
+        chartStyleContext: {
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tint_shade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    );
+  });
+});
+
 describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
   it('preserves imported ChartEx family options on read', async () => {
     const charts = createChartsApi([
@@ -243,31 +365,31 @@ describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
     );
 
     await charts.update('chart-1', {
-        waterfall: {
-          subtotalIndices: [2],
-          totalIndices: [9],
-          showConnectorLines: true,
-        },
-        histogram: {
-          binWidth: 2.5,
-          overflowBin: true,
-          overflowBinValue: 10,
-        },
-        boxplot: {
-          showOutliers: false,
-          showMean: true,
-          quartileMethod: 'inclusive',
-        },
-        hierarchy: {
-          categoryFormulas: ['Sheet1!A1:A3'],
-          valueFormula: 'Sheet1!B1:B3',
-          parentLabelLayout: 'overlapping',
-        },
-        regionMap: {
-          regionFormula: 'Sheet1!A1:A3',
-          valueFormula: 'Sheet1!B1:B3',
-        },
-      });
+      waterfall: {
+        subtotalIndices: [2],
+        totalIndices: [9],
+        showConnectorLines: true,
+      },
+      histogram: {
+        binWidth: 2.5,
+        overflowBin: true,
+        overflowBinValue: 10,
+      },
+      boxplot: {
+        showOutliers: false,
+        showMean: true,
+        quartileMethod: 'inclusive',
+      },
+      hierarchy: {
+        categoryFormulas: ['Sheet1!A1:A3'],
+        valueFormula: 'Sheet1!B1:B3',
+        parentLabelLayout: 'overlapping',
+      },
+      regionMap: {
+        regionFormula: 'Sheet1!A1:A3',
+        valueFormula: 'Sheet1!B1:B3',
+      },
+    });
 
     expect(updateChart).toHaveBeenCalledWith(
       SHEET_ID,

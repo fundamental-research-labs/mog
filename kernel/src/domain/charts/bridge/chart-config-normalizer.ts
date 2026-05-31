@@ -1,9 +1,5 @@
 import type { ChartError } from '@mog-sdk/contracts/bridges';
-import type {
-  AxisType,
-  ChartConfig,
-  ChartLayoutAuthority,
-} from '@mog-sdk/contracts/data/charts';
+import type { AxisType, ChartConfig, ChartLayoutAuthority } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { normalizeImportedComboChart } from '../../../bridges/compute/chart-import-normalization';
@@ -23,6 +19,10 @@ import {
   wireToManualLayout,
   wireToTrendlineConfigArray,
   wireToSizeRepresents,
+  wireToChartFormat,
+  wireToChartFormatString,
+  wireToDataTableConfig,
+  wireToChartStyleContext,
 } from '../chart-type-converters';
 
 /**
@@ -108,21 +108,12 @@ export function unsupportedChartTypeError(
   };
 }
 
-type ChartColorMapOverrideConfig = NonNullable<
-  NonNullable<ChartConfig['chartStyleContext']>['colorMapOverride']
->;
 type ChartWithLayoutAuthority = ChartFloatingObject & {
   layoutAuthority?: ChartLayoutAuthority;
 };
 type ChartWithPivotProjection = ChartFloatingObject & {
   pivotProjection?: ChartConfig['pivotProjection'];
 };
-
-function wireToChartStyleContext(
-  context: ChartFloatingObject['chartStyleContext'],
-): ChartConfig['chartStyleContext'] | undefined {
-  return context as ChartConfig['chartStyleContext'] | undefined;
-}
 
 function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
   return chart.ooxml || chart.importStatus ? { imported: true } : undefined;
@@ -144,11 +135,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
-      : normalizedChart.widthCells ?? normalizedChart.width;
+      : (normalizedChart.widthCells ?? normalizedChart.width);
   const heightCells =
     layoutAuthority === 'chartSheet'
       ? undefined
-      : normalizedChart.heightCells ?? normalizedChart.height;
+      : (normalizedChart.heightCells ?? normalizedChart.height);
 
   return {
     type: narrowedType.type ?? 'bar',
@@ -210,14 +201,14 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     roundedCorners: normalizedChart.roundedCorners,
     autoTitleDeleted: normalizedChart.autoTitleDeleted,
     showDataLabelsOverMaximum: normalizedChart.showDataLabelsOverMax,
-    chartFormat: normalizedChart.chartFormat as ChartConfig['chartFormat'],
-    plotFormat: normalizedChart.plotFormat as ChartConfig['plotFormat'],
-    titleFormat: normalizedChart.titleFormat as ChartConfig['titleFormat'],
-    titleRichText: normalizedChart.titleRichText as ChartConfig['titleRichText'],
+    chartFormat: wireToChartFormat(normalizedChart.chartFormat),
+    plotFormat: wireToChartFormat(normalizedChart.plotFormat),
+    titleFormat: wireToChartFormat(normalizedChart.titleFormat),
+    titleRichText: normalizedChart.titleRichText?.map(wireToChartFormatString),
     titleFormula: normalizedChart.titleFormula,
     plotLayout: wireToManualLayout(normalizedChart.plotLayout),
     titleLayout: wireToManualLayout(normalizedChart.titleLayout),
-    dataTable: normalizedChart.dataTable as ChartConfig['dataTable'],
+    dataTable: wireToDataTableConfig(normalizedChart.dataTable),
     dropLines: wireToChartLineSettings(normalizedChart.dropLines),
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
     seriesLines: wireToChartLineSettings(normalizedChart.seriesLines),
@@ -231,9 +222,9 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     surfaceTopView: normalizedChart.surfaceTopView,
     colorScheme: normalizedChart.colorScheme,
     view3d: normalizedChart.view3d,
-    floorFormat: normalizedChart.floorFormat as ChartConfig['floorFormat'],
-    sideWallFormat: normalizedChart.sideWallFormat as ChartConfig['sideWallFormat'],
-    backWallFormat: normalizedChart.backWallFormat as ChartConfig['backWallFormat'],
+    floorFormat: wireToChartFormat(normalizedChart.floorFormat),
+    sideWallFormat: wireToChartFormat(normalizedChart.sideWallFormat),
+    backWallFormat: wireToChartFormat(normalizedChart.backWallFormat),
     subType: normalizedChart.subType as ChartConfig['subType'],
     chartStyleContext: wireToChartStyleContext(normalizedChart.chartStyleContext),
     extra: renderExtraFromChart(normalizedChart),

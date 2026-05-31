@@ -38,12 +38,21 @@ import type { ChartLayoutSnapshot } from '@mog-sdk/contracts/bridges';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
   axisConfigToWire,
+  chartFormatStringToWire,
+  chartFormatToWire,
+  chartStyleContextToWire,
   dataLabelConfigToWire,
+  dataTableConfigToWire,
   legendConfigToWire,
   seriesConfigArrayToWire,
+  trendlineConfigArrayToWire,
   wireToAxisConfig,
   wireToBoxplotConfig,
+  wireToChartFormat,
+  wireToChartFormatString,
+  wireToChartStyleContext,
   wireToDataLabelConfig,
+  wireToDataTableConfig,
   wireToHierarchyChartConfig,
   wireToHistogramConfig,
   wireToLegendConfig,
@@ -91,9 +100,7 @@ function waterfallConfigToWire(
   };
 }
 
-function waterfallConfigFromWire(
-  waterfall: ChartFloatingObject['waterfall'],
-): Chart['waterfall'] {
+function waterfallConfigFromWire(waterfall: ChartFloatingObject['waterfall']): Chart['waterfall'] {
   if (!waterfall) return undefined;
   return {
     ...(waterfall.subtotalIndices !== undefined
@@ -560,7 +567,9 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
         )
       : undefined,
     pieSlice,
-    trendline: config.trendlines ?? (config.trendline ? [config.trendline] : undefined),
+    trendline: trendlineConfigArrayToWire(
+      config.trendlines ?? (config.trendline ? [config.trendline] : undefined),
+    ),
     showLines: config.showLines,
     smoothLines: config.smoothLines,
     radarFilled: config.radarFilled,
@@ -589,12 +598,12 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     roundedCorners: config.roundedCorners,
     autoTitleDeleted: config.autoTitleDeleted,
     showDataLabelsOverMax: config.showDataLabelsOverMaximum,
-    chartFormat: config.chartFormat,
-    plotFormat: config.plotFormat,
-    titleFormat: config.titleFormat,
-    titleRichText: config.titleRichText,
+    chartFormat: chartFormatToWire(config.chartFormat),
+    plotFormat: chartFormatToWire(config.plotFormat),
+    titleFormat: chartFormatToWire(config.titleFormat),
+    titleRichText: config.titleRichText?.map(chartFormatStringToWire),
     titleFormula: config.titleFormula,
-    dataTable: config.dataTable,
+    dataTable: dataTableConfigToWire(config.dataTable),
     categoryLabelLevel: config.categoryLabelLevel,
     seriesNameLevel: config.seriesNameLevel,
     showAllFieldButtons: config.showAllFieldButtons,
@@ -605,6 +614,7 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     titleShowShadow: config.chartTitle?.showShadow,
     pivotOptions: config.pivotOptions,
     pivotProjection: config.pivotProjection,
+    chartStyleContext: chartStyleContextToWire(config.chartStyleContext),
   };
 }
 
@@ -689,9 +699,11 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
 
   if (updates.pieSlice !== undefined) result.pieSlice = updates.pieSlice;
   if (updates.trendlines !== undefined) {
-    result.trendline = updates.trendlines;
+    result.trendline = trendlineConfigArrayToWire(updates.trendlines);
   } else if (updates.trendline !== undefined) {
-    result.trendline = updates.trendline ? [updates.trendline] : undefined;
+    result.trendline = trendlineConfigArrayToWire(
+      updates.trendline ? [updates.trendline] : undefined,
+    );
   }
   if (updates.showLines !== undefined) result.showLines = updates.showLines;
   if (updates.smoothLines !== undefined) result.smoothLines = updates.smoothLines;
@@ -725,12 +737,15 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.autoTitleDeleted !== undefined) result.autoTitleDeleted = updates.autoTitleDeleted;
   if (updates.showDataLabelsOverMaximum !== undefined)
     result.showDataLabelsOverMax = updates.showDataLabelsOverMaximum;
-  if (updates.chartFormat !== undefined) result.chartFormat = updates.chartFormat;
-  if (updates.plotFormat !== undefined) result.plotFormat = updates.plotFormat;
-  if (updates.titleFormat !== undefined) result.titleFormat = updates.titleFormat;
-  if (updates.titleRichText !== undefined) result.titleRichText = updates.titleRichText;
+  if (updates.chartFormat !== undefined)
+    result.chartFormat = chartFormatToWire(updates.chartFormat);
+  if (updates.plotFormat !== undefined) result.plotFormat = chartFormatToWire(updates.plotFormat);
+  if (updates.titleFormat !== undefined)
+    result.titleFormat = chartFormatToWire(updates.titleFormat);
+  if (updates.titleRichText !== undefined)
+    result.titleRichText = updates.titleRichText?.map(chartFormatStringToWire);
   if (updates.titleFormula !== undefined) result.titleFormula = updates.titleFormula;
-  if (updates.dataTable !== undefined) result.dataTable = updates.dataTable;
+  if (updates.dataTable !== undefined) result.dataTable = dataTableConfigToWire(updates.dataTable);
   if (updates.categoryLabelLevel !== undefined)
     result.categoryLabelLevel = updates.categoryLabelLevel;
   if (updates.seriesNameLevel !== undefined) result.seriesNameLevel = updates.seriesNameLevel;
@@ -745,6 +760,8 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   }
   if (updates.pivotOptions !== undefined) result.pivotOptions = updates.pivotOptions;
   if (updates.pivotProjection !== undefined) result.pivotProjection = updates.pivotProjection;
+  if (updates.chartStyleContext !== undefined)
+    result.chartStyleContext = chartStyleContextToWire(updates.chartStyleContext);
 
   return result;
 }
@@ -854,12 +871,12 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     roundedCorners: chart.roundedCorners,
     autoTitleDeleted: chart.autoTitleDeleted,
     showDataLabelsOverMaximum: chart.showDataLabelsOverMax,
-    chartFormat: chart.chartFormat as Chart['chartFormat'],
-    plotFormat: chart.plotFormat as Chart['plotFormat'],
-    titleFormat: chart.titleFormat as Chart['titleFormat'],
-    titleRichText: chart.titleRichText,
+    chartFormat: wireToChartFormat(chart.chartFormat),
+    plotFormat: wireToChartFormat(chart.plotFormat),
+    titleFormat: wireToChartFormat(chart.titleFormat),
+    titleRichText: chart.titleRichText?.map(wireToChartFormatString),
     titleFormula: chart.titleFormula,
-    dataTable: chart.dataTable as Chart['dataTable'],
+    dataTable: wireToDataTableConfig(chart.dataTable),
     categoryLabelLevel: chart.categoryLabelLevel,
     seriesNameLevel: chart.seriesNameLevel,
     showAllFieldButtons: chart.showAllFieldButtons,
@@ -888,6 +905,7 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     } as Chart['chartTitle'],
     pivotOptions: chart.pivotOptions as Chart['pivotOptions'],
     pivotProjection: chart.pivotProjection as Chart['pivotProjection'],
+    chartStyleContext: wireToChartStyleContext(chart.chartStyleContext),
     createdAt: chart.createdAt,
     updatedAt: chart.updatedAt,
   };

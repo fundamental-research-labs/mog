@@ -31,8 +31,16 @@
 import type {
   AxisData,
   BoxplotConfigData,
+  ChartColorData,
+  ChartDataTableData,
+  ChartFillData,
+  ChartFontData,
+  ChartFormatData,
+  ChartFormatStringData,
   ChartLineData,
+  ChartShadowData,
   ChartSeriesData,
+  ChartStyleContextData,
   DataLabelData,
   ErrorBarData,
   HierarchyChartConfigData,
@@ -43,18 +51,27 @@ import type {
   RegionMapConfigData,
   SingleAxisData,
   TrendlineData,
+  UpDownBarsData,
   WaterfallOptions,
 } from '../../bridges/compute/compute-types.gen';
 
 import type {
   AxisConfig,
   BoxplotConfig,
+  ChartColor,
   ChartConfig,
+  ChartFill,
+  ChartFont,
+  ChartFormat,
+  ChartFormatString,
   ChartLeaderLinesFormat,
   ChartLineFormat,
   ChartLineSettings,
+  ChartShadow,
+  ChartStyleContext,
   ChartType,
   DataLabelConfig,
+  DataTableConfig,
   ErrorBarConfig,
   HierarchyChartConfig,
   HistogramConfig,
@@ -256,6 +273,246 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/** Convert wire chart colors to the public contract color shape. */
+export function wireToChartColor(color: ChartColorData | undefined): ChartColor | undefined {
+  if (typeof color === 'string') return color;
+  if (!color || typeof color !== 'object') return undefined;
+  return {
+    theme: color.theme,
+    ...(color.tint_shade !== undefined ? { tintShade: color.tint_shade } : {}),
+  };
+}
+
+/** Convert public chart colors back to the wire shape. */
+export function chartColorToWire(color: ChartColor | undefined): ChartColorData | undefined {
+  if (typeof color === 'string') return color;
+  if (!color || typeof color !== 'object') return undefined;
+  return {
+    theme: color.theme,
+    ...(color.tintShade !== undefined ? { tint_shade: color.tintShade } : {}),
+  };
+}
+
+export function wireToChartFill(fill: ChartFillData | undefined): ChartFill | undefined {
+  if (!fill) return undefined;
+  switch (fill.type) {
+    case 'none':
+      return { type: 'none' };
+    case 'solid':
+      return {
+        type: 'solid',
+        color: wireToChartColor(fill.color)!,
+        transparency: fill.transparency,
+      };
+    case 'gradient':
+      return {
+        type: 'gradient',
+        gradientType: fill.gradientType,
+        angle: fill.angle,
+        stops: fill.stops.map((stop) => ({
+          position: stop.position,
+          color: wireToChartColor(stop.color)!,
+          transparency: stop.transparency,
+        })),
+      };
+    case 'pattern':
+      return {
+        type: 'pattern',
+        pattern: fill.pattern,
+        foreground: wireToChartColor(fill.foreground),
+        background: wireToChartColor(fill.background),
+      };
+  }
+}
+
+export function chartFillToWire(fill: ChartFill | undefined): ChartFillData | undefined {
+  if (!fill) return undefined;
+  switch (fill.type) {
+    case 'none':
+      return { type: 'none' };
+    case 'solid':
+      return {
+        type: 'solid',
+        color: chartColorToWire(fill.color)!,
+        transparency: fill.transparency,
+      };
+    case 'gradient':
+      return {
+        type: 'gradient',
+        gradientType: fill.gradientType,
+        angle: fill.angle,
+        stops: fill.stops.map((stop) => ({
+          position: stop.position,
+          color: chartColorToWire(stop.color)!,
+          transparency: stop.transparency,
+        })),
+      };
+    case 'pattern':
+      return {
+        type: 'pattern',
+        pattern: fill.pattern,
+        foreground: chartColorToWire(fill.foreground),
+        background: chartColorToWire(fill.background),
+      };
+  }
+}
+
+export function wireToChartFont(font: ChartFontData | undefined): ChartFont | undefined {
+  if (!font) return undefined;
+  return {
+    name: font.name,
+    size: font.size,
+    bold: font.bold,
+    italic: font.italic,
+    color: wireToChartColor(font.color),
+    underline: font.underline,
+    strikethrough: font.strikethrough,
+  };
+}
+
+export function chartFontToWire(font: ChartFont | undefined): ChartFontData | undefined {
+  if (!font) return undefined;
+  return {
+    name: font.name,
+    size: font.size,
+    bold: font.bold,
+    italic: font.italic,
+    color: chartColorToWire(font.color),
+    underline: font.underline,
+    strikethrough: font.strikethrough,
+  };
+}
+
+export function wireToChartShadow(shadow: ChartShadowData | undefined): ChartShadow | undefined {
+  if (!shadow) return undefined;
+  return {
+    visible: shadow.visible,
+    color: wireToChartColor(shadow.color),
+    blur: shadow.blur,
+    offsetX: shadow.offsetX,
+    offsetY: shadow.offsetY,
+    transparency: shadow.transparency,
+  };
+}
+
+export function chartShadowToWire(shadow: ChartShadow | undefined): ChartShadowData | undefined {
+  if (!shadow) return undefined;
+  return {
+    visible: shadow.visible,
+    color: chartColorToWire(shadow.color),
+    blur: shadow.blur,
+    offsetX: shadow.offsetX,
+    offsetY: shadow.offsetY,
+    transparency: shadow.transparency,
+  };
+}
+
+export function wireToChartFormat(format: ChartFormatData | undefined): ChartFormat | undefined {
+  if (!format) return undefined;
+  return {
+    fill: wireToChartFill(format.fill),
+    line: format.line ? wireToChartLineFormat(format.line) : undefined,
+    font: wireToChartFont(format.font),
+    textRotation: format.textRotation,
+    textVerticalType: format.textVerticalType,
+    shadow: wireToChartShadow(format.shadow),
+  };
+}
+
+export function chartFormatToWire(format: ChartFormat | undefined): ChartFormatData | undefined {
+  if (!format) return undefined;
+  return {
+    fill: chartFillToWire(format.fill),
+    line: format.line ? chartLineFormatToWire(format.line) : undefined,
+    font: chartFontToWire(format.font),
+    textRotation: format.textRotation,
+    textVerticalType: format.textVerticalType,
+    shadow: chartShadowToWire(format.shadow),
+  };
+}
+
+export function wireToChartFormatString(run: ChartFormatStringData): ChartFormatString {
+  return {
+    text: run.text,
+    font: wireToChartFont(run.font),
+  };
+}
+
+export function chartFormatStringToWire(run: ChartFormatString): ChartFormatStringData {
+  return {
+    text: run.text,
+    font: chartFontToWire(run.font),
+  };
+}
+
+export function wireToDataTableConfig(
+  table: ChartDataTableData | undefined,
+): DataTableConfig | undefined {
+  if (!table) return undefined;
+  return {
+    showHorzBorder: table.showHorzBorder,
+    showVertBorder: table.showVertBorder,
+    showOutline: table.showOutline,
+    showKeys: table.showKeys,
+    format: wireToChartFormat(table.format),
+    showLegendKey: table.showLegendKey,
+    visible: table.visible,
+  };
+}
+
+export function dataTableConfigToWire(
+  table: DataTableConfig | undefined,
+): ChartDataTableData | undefined {
+  if (!table) return undefined;
+  return {
+    showHorzBorder: table.showHorzBorder,
+    showVertBorder: table.showVertBorder,
+    showOutline: table.showOutline,
+    showKeys: table.showKeys,
+    format: chartFormatToWire(table.format),
+    showLegendKey: table.showLegendKey,
+    visible: table.visible,
+  };
+}
+
+export function wireToChartStyleContext(
+  context: ChartStyleContextData | undefined,
+): ChartStyleContext | undefined {
+  if (!context) return undefined;
+  return {
+    colorMapOverride: context.colorMapOverride,
+    diagnostics: context.diagnostics,
+    owners: context.owners?.map((owner) => ({
+      ownerKey: owner.ownerKey,
+      sourcePath: owner.sourcePath,
+      editOwnerId: owner.editOwnerId,
+      format: wireToChartFormat(owner.format),
+      richText: owner.richText?.map(wireToChartFormatString),
+      diagnostics: owner.diagnostics,
+      importedDrawingMl: owner.importedDrawingMl,
+    })),
+  };
+}
+
+export function chartStyleContextToWire(
+  context: ChartStyleContext | undefined,
+): ChartStyleContextData | undefined {
+  if (!context) return undefined;
+  return {
+    colorMapOverride: context.colorMapOverride,
+    diagnostics: context.diagnostics,
+    owners: context.owners?.map((owner) => ({
+      ownerKey: owner.ownerKey,
+      sourcePath: owner.sourcePath,
+      editOwnerId: owner.editOwnerId,
+      format: chartFormatToWire(owner.format),
+      richText: owner.richText?.map(chartFormatStringToWire),
+      diagnostics: owner.diagnostics,
+      importedDrawingMl: owner.importedDrawingMl,
+    })),
+  };
+}
+
 /** Convert a loose wire manual-layout value to the public chart contract. */
 export function wireToManualLayout(layout: unknown): ManualLayout | undefined {
   if (!isRecord(layout)) return undefined;
@@ -376,11 +633,13 @@ export function wireToSingleAxisConfig(w: SingleAxisData): SingleAxisConfig {
     position: w.position,
     logBase: w.logBase,
     displayUnit: w.displayUnit,
-    format: w.format,
-    titleFormat: w.titleFormat,
-    titleRichText: w.titleRichText,
-    gridlineFormat: w.gridlineFormat,
-    minorGridlineFormat: w.minorGridlineFormat,
+    format: wireToChartFormat(w.format),
+    titleFormat: wireToChartFormat(w.titleFormat),
+    titleRichText: w.titleRichText?.map(wireToChartFormatString),
+    gridlineFormat: w.gridlineFormat ? wireToChartLineFormat(w.gridlineFormat) : undefined,
+    minorGridlineFormat: w.minorGridlineFormat
+      ? wireToChartLineFormat(w.minorGridlineFormat)
+      : undefined,
     crossBetween: w.crossBetween,
     tickLabelPosition: w.tickLabelPosition,
     baseTimeUnit: w.baseTimeUnit,
@@ -389,7 +648,7 @@ export function wireToSingleAxisConfig(w: SingleAxisData): SingleAxisConfig {
     customDisplayUnit: w.customDisplayUnit,
     displayUnitLabel: w.displayUnitLabel,
     displayUnitLabelLayout: wireToManualLayout(w.displayUnitLabelLayout),
-    displayUnitLabelFormat: w.displayUnitLabelFormat,
+    displayUnitLabelFormat: wireToChartFormat(w.displayUnitLabelFormat),
     labelAlignment: w.labelAlignment,
     labelOffset: w.labelOffset,
     noMultiLevelLabels: w.noMultiLevelLabels,
@@ -435,29 +694,31 @@ export function wireToLegendConfig(w: LegendData): LegendConfig {
     position: w.position,
     visible,
     overlay: w.overlay,
-    format: w.format,
-    entries: w.entries,
+    format: wireToChartFormat(w.format),
+    entries: w.entries?.map(wireToLegendEntryConfig),
     customX: w.customX,
     customY: w.customY,
     layout: wireToManualLayout(w.layout),
-    shadow: w.shadow,
+    shadow: wireToChartShadow(w.shadow),
     showShadow: w.showShadow,
+  };
+}
+
+function wireToLegendEntryConfig(
+  entry: LegendEntryData,
+): NonNullable<LegendConfig['entries']>[number] {
+  return {
+    idx: entry.idx,
+    delete: entry.delete,
+    format: wireToChartFormat(entry.format),
+    visible: entry.visible,
   };
 }
 
 /** Convert a wire ChartLineData to the contract ChartLineFormat. */
 export function wireToChartLineFormat(w: ChartLineData): ChartLineFormat {
-  // Wire `color` is `string | { theme, tint_shade? }`; contract is
-  // `string | { theme, tintShade? }`. Snake→camel rename on theme variant.
-  let color: ChartLineFormat['color'];
-  if (typeof w.color === 'string') {
-    color = w.color;
-  } else if (w.color && typeof w.color === 'object') {
-    const t = w.color as { theme: string; tint_shade?: number };
-    color = { theme: t.theme, tintShade: t.tint_shade };
-  }
   return {
-    color,
+    color: wireToChartColor(w.color),
     width: w.width,
     dashStyle: w.dashStyle,
     transparency: w.transparency,
@@ -486,10 +747,10 @@ export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
     separator: w.separator,
     showLeaderLines: w.showLeaderLines,
     text: w.text,
-    visualFormat: w.visualFormat,
+    visualFormat: wireToChartFormat(w.visualFormat),
     numberFormat: w.numberFormat,
     textOrientation: w.textOrientation,
-    richText: w.richText,
+    richText: w.richText?.map(wireToChartFormatString),
     autoText: w.autoText,
     horizontalAlignment: narrowEnum<TextHAlignment>(
       w.horizontalAlignment,
@@ -530,7 +791,7 @@ export function wireToTrendlineConfig(w: TrendlineData): TrendlineConfig {
     label: w.label
       ? {
           text: w.label.text,
-          format: w.label.format,
+          format: wireToChartFormat(w.label.format),
           numberFormat: w.label.numberFormat,
           layout: wireToManualLayout(w.label.layout),
         }
@@ -542,6 +803,38 @@ export function wireToTrendlineConfigArray(
   trendlines: TrendlineData[] | undefined,
 ): TrendlineConfig[] | undefined {
   return trendlines?.map(wireToTrendlineConfig);
+}
+
+export function trendlineConfigToWire(c: TrendlineConfig): TrendlineData {
+  return {
+    show: c.show,
+    type: c.type,
+    color: c.color,
+    lineWidth: c.lineWidth,
+    order: c.order,
+    period: c.period,
+    forward: c.forward,
+    backward: c.backward,
+    intercept: c.intercept,
+    displayEquation: c.displayEquation,
+    displayRSquared: c.displayRSquared,
+    name: c.name,
+    lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
+    label: c.label
+      ? {
+          text: c.label.text,
+          format: chartFormatToWire(c.label.format),
+          numberFormat: c.label.numberFormat,
+          layout: c.label.layout ? manualLayoutToWire(c.label.layout) : undefined,
+        }
+      : undefined,
+  };
+}
+
+export function trendlineConfigArrayToWire(
+  trendlines: TrendlineConfig[] | undefined,
+): TrendlineData[] | undefined {
+  return trendlines?.map(trendlineConfigToWire);
 }
 
 /** Convert a wire PointFormatData to the contract PointFormat. */
@@ -556,9 +849,9 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
     border: w.border,
     lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
     dataLabel: w.dataLabel ? wireToDataLabelConfig(w.dataLabel) : undefined,
-    visualFormat: w.visualFormat,
-    markerBackgroundColor: w.markerBackgroundColor,
-    markerForegroundColor: w.markerForegroundColor,
+    visualFormat: wireToChartFormat(w.visualFormat),
+    markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
+    markerForegroundColor: wireToChartColor(w.markerForegroundColor),
     markerSize: w.markerSize,
     markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Point.markerStyle'),
   };
@@ -589,17 +882,30 @@ export function wireToChartLineSettings(
 }
 
 export function wireToUpDownBarsConfig(
-  w: { gapWidth?: number; upFormat?: unknown; downFormat?: unknown } | undefined,
+  w: UpDownBarsData | undefined,
 ): UpDownBarsConfig | undefined {
   if (!w) return undefined;
   return {
     gapWidth: w.gapWidth,
-    upFormat: w.upFormat as UpDownBarsConfig['upFormat'],
-    downFormat: w.downFormat as UpDownBarsConfig['downFormat'],
+    upFormat: wireToChartFormat(w.upFormat),
+    downFormat: wireToChartFormat(w.downFormat),
   };
 }
 
-export function wireToWaterfallConfig(w: WaterfallOptions | undefined): WaterfallConfig | undefined {
+export function upDownBarsConfigToWire(
+  c: UpDownBarsConfig | undefined,
+): UpDownBarsData | undefined {
+  if (!c) return undefined;
+  return {
+    gapWidth: c.gapWidth,
+    upFormat: chartFormatToWire(c.upFormat),
+    downFormat: chartFormatToWire(c.downFormat),
+  };
+}
+
+export function wireToWaterfallConfig(
+  w: WaterfallOptions | undefined,
+): WaterfallConfig | undefined {
   if (!w) return undefined;
   return {
     subtotalIndices: w.subtotalIndices,
@@ -608,7 +914,9 @@ export function wireToWaterfallConfig(w: WaterfallOptions | undefined): Waterfal
   };
 }
 
-export function wireToHistogramConfig(w: HistogramConfigData | undefined): HistogramConfig | undefined {
+export function wireToHistogramConfig(
+  w: HistogramConfigData | undefined,
+): HistogramConfig | undefined {
   if (!w) return undefined;
   return {
     binCount: w.binCount,
@@ -644,7 +952,9 @@ export function wireToHierarchyChartConfig(
   };
 }
 
-export function wireToRegionMapConfig(w: RegionMapConfigData | undefined): RegionMapConfig | undefined {
+export function wireToRegionMapConfig(
+  w: RegionMapConfigData | undefined,
+): RegionMapConfig | undefined {
   if (!w) return undefined;
   return {
     regionFormula: w.regionFormula,
@@ -691,11 +1001,11 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     yErrorBars: w.yErrorBars ? wireToErrorBarConfig(w.yErrorBars) : undefined,
     idx: w.idx,
     order: w.order,
-    format: w.format,
+    format: wireToChartFormat(w.format),
     barShape: w.barShape,
-    invertColor: w.invertColor,
-    markerBackgroundColor: w.markerBackgroundColor,
-    markerForegroundColor: w.markerForegroundColor,
+    invertColor: wireToChartColor(w.invertColor),
+    markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
+    markerForegroundColor: wireToChartColor(w.markerForegroundColor),
     filtered: w.filtered,
     sourceSeriesIndex: w.sourceSeriesIndex,
     sourceSeriesKey: w.sourceSeriesKey,
@@ -706,7 +1016,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     projectionDiagnostics: w.projectionDiagnostics,
     showShadow: w.showShadow,
     showConnectorLines: w.showConnectorLines,
-    leaderLineFormat: w.leaderLineFormat,
+    leaderLineFormat: wireToChartFormat(w.leaderLineFormat),
     showLeaderLines: w.showLeaderLines,
     binOptions: undefined,
     boxwhiskerOptions: undefined,
@@ -742,11 +1052,13 @@ export function singleAxisConfigToWire(c: SingleAxisConfig): SingleAxisData {
     position: c.position,
     logBase: c.logBase,
     displayUnit: c.displayUnit,
-    format: c.format,
-    titleFormat: c.titleFormat,
-    titleRichText: c.titleRichText,
-    gridlineFormat: c.gridlineFormat,
-    minorGridlineFormat: c.minorGridlineFormat,
+    format: chartFormatToWire(c.format),
+    titleFormat: chartFormatToWire(c.titleFormat),
+    titleRichText: c.titleRichText?.map(chartFormatStringToWire),
+    gridlineFormat: c.gridlineFormat ? chartLineFormatToWire(c.gridlineFormat) : undefined,
+    minorGridlineFormat: c.minorGridlineFormat
+      ? chartLineFormatToWire(c.minorGridlineFormat)
+      : undefined,
     crossBetween: c.crossBetween,
     tickLabelPosition: c.tickLabelPosition,
     baseTimeUnit: c.baseTimeUnit,
@@ -757,7 +1069,7 @@ export function singleAxisConfigToWire(c: SingleAxisConfig): SingleAxisData {
     displayUnitLabelLayout: c.displayUnitLabelLayout
       ? manualLayoutToWire(c.displayUnitLabelLayout)
       : undefined,
-    displayUnitLabelFormat: c.displayUnitLabelFormat,
+    displayUnitLabelFormat: chartFormatToWire(c.displayUnitLabelFormat),
     labelAlignment: c.labelAlignment,
     labelOffset: c.labelOffset,
     noMultiLevelLabels: c.noMultiLevelLabels,
@@ -798,12 +1110,12 @@ export function legendConfigToWire(c: LegendConfig): LegendData {
     position: c.position,
     visible: c.visible ?? c.show,
     overlay: c.overlay,
-    format: c.format,
+    format: chartFormatToWire(c.format),
     entries: c.entries?.map(legendEntryConfigToWire),
     customX: c.customX,
     customY: c.customY,
     layout: c.layout ? manualLayoutToWire(c.layout) : undefined,
-    shadow: c.shadow,
+    shadow: chartShadowToWire(c.shadow),
     showShadow: c.showShadow,
   };
 }
@@ -812,23 +1124,17 @@ function legendEntryConfigToWire(
   entry: NonNullable<LegendConfig['entries']>[number],
 ): LegendEntryData {
   return {
-    ...entry,
+    idx: entry.idx,
     delete: entry.delete ?? (entry.visible === false ? true : undefined),
+    format: chartFormatToWire(entry.format),
+    visible: entry.visible,
   };
 }
 
 /** Convert contract ChartLineFormat to wire ChartLineData. */
 export function chartLineFormatToWire(c: ChartLineFormat): ChartLineData {
-  // Contract color is `string | { theme, tintShade? }`; wire is
-  // `string | { theme, tint_shade? }`. Re-emit with snake-case.
-  let color: ChartLineData['color'];
-  if (typeof c.color === 'string') {
-    color = c.color;
-  } else if (c.color && typeof c.color === 'object') {
-    color = { theme: c.color.theme, tint_shade: c.color.tintShade };
-  }
   return {
-    color,
+    color: chartColorToWire(c.color),
     width: c.width,
     dashStyle: c.dashStyle,
     transparency: c.transparency,
@@ -857,10 +1163,10 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
     separator: c.separator,
     showLeaderLines: c.showLeaderLines,
     text: c.text,
-    visualFormat: c.visualFormat,
+    visualFormat: chartFormatToWire(c.visualFormat),
     numberFormat: c.numberFormat,
     textOrientation: c.textOrientation,
-    richText: c.richText,
+    richText: c.richText?.map(chartFormatStringToWire),
     autoText: c.autoText,
     horizontalAlignment: c.horizontalAlignment,
     verticalAlignment: c.verticalAlignment,
@@ -870,7 +1176,7 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
     leaderLinesFormat: c.leaderLinesFormat
       ? leaderLinesFormatToWire(c.leaderLinesFormat)
       : undefined,
-    layout: c.layout as DataLabelData['layout'],
+    layout: c.layout ? manualLayoutToWire(c.layout) : undefined,
   };
 }
 
@@ -885,9 +1191,9 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
     border: c.border,
     lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
     dataLabel: c.dataLabel ? dataLabelConfigToWire(c.dataLabel) : undefined,
-    visualFormat: c.visualFormat,
-    markerBackgroundColor: c.markerBackgroundColor,
-    markerForegroundColor: c.markerForegroundColor,
+    visualFormat: chartFormatToWire(c.visualFormat),
+    markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
+    markerForegroundColor: chartColorToWire(c.markerForegroundColor),
     markerSize: c.markerSize,
     markerStyle: c.markerStyle,
   };
@@ -936,17 +1242,17 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     lineWidth: c.lineWidth,
     points: c.points?.map(pointFormatToWire),
     dataLabels: c.dataLabels ? dataLabelConfigToWire(c.dataLabels) : undefined,
-    trendlines: c.trendlines,
+    trendlines: trendlineConfigArrayToWire(c.trendlines),
     errorBars: c.errorBars ? errorBarConfigToWire(c.errorBars) : undefined,
     xErrorBars: c.xErrorBars ? errorBarConfigToWire(c.xErrorBars) : undefined,
     yErrorBars: c.yErrorBars ? errorBarConfigToWire(c.yErrorBars) : undefined,
     idx: c.idx,
     order: c.order,
-    format: c.format,
+    format: chartFormatToWire(c.format),
     barShape: c.barShape,
-    invertColor: c.invertColor,
-    markerBackgroundColor: c.markerBackgroundColor,
-    markerForegroundColor: c.markerForegroundColor,
+    invertColor: chartColorToWire(c.invertColor),
+    markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
+    markerForegroundColor: chartColorToWire(c.markerForegroundColor),
     filtered: c.filtered,
     sourceSeriesIndex: c.sourceSeriesIndex,
     sourceSeriesKey: c.sourceSeriesKey,
@@ -957,7 +1263,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     projectionDiagnostics: c.projectionDiagnostics,
     showShadow: c.showShadow,
     showConnectorLines: c.showConnectorLines,
-    leaderLineFormat: c.leaderLineFormat,
+    leaderLineFormat: chartFormatToWire(c.leaderLineFormat),
     showLeaderLines: c.showLeaderLines,
   };
 }

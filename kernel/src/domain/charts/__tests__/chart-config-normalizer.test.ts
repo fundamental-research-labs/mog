@@ -101,10 +101,19 @@ describe('chart config normalizer', () => {
         roundedCorners: true,
         autoTitleDeleted: false,
         showDataLabelsOverMax: true,
-        titleRichText: [{ text: 'Revenue', font: { bold: true } }],
+        chartFormat: { fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.1 } } },
+        plotFormat: { line: { color: { theme: 'accent2', tint_shade: -0.1 } } },
+        titleFormat: { font: { color: { theme: 'accent3', tint_shade: 0.2 } } },
+        titleRichText: [
+          { text: 'Revenue', font: { bold: true, color: { theme: 'accent4', tint_shade: 0.3 } } },
+        ],
         plotLayout: { layoutTarget: 'inner', x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
         titleLayout: { xMode: 'factor', x: 0.15, y: 0.05 },
-        dataTable: { visible: true, showHorzBorder: true },
+        dataTable: {
+          visible: true,
+          showHorzBorder: true,
+          format: { shadow: { color: { theme: 'accent5', tint_shade: 0.4 } } },
+        },
         pivotOptions: { showAxisFieldButtons: false },
         pivotProjection: {
           sourceRef: 'Pivot!A3',
@@ -120,7 +129,9 @@ describe('chart config normalizer', () => {
         sizeRepresents: 'w',
         bubble3dEffect: true,
         view3d: { rotX: 30, rotY: 20, depthPercent: 150 },
-        floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.2 } } },
+        sideWallFormat: { line: { color: { theme: 'dk1', tint_shade: 0.25 } } },
+        backWallFormat: { font: { color: { theme: 'tx1', tint_shade: -0.25 } } },
         colorScheme: 12,
         ooxml: {
           definition: {
@@ -139,10 +150,22 @@ describe('chart config normalizer', () => {
 
     expect(config.roundedCorners).toBe(true);
     expect(config.showDataLabelsOverMaximum).toBe(true);
-    expect(config.titleRichText).toEqual([{ text: 'Revenue', font: { bold: true } }]);
+    expect(config.chartFormat?.fill).toEqual({
+      type: 'solid',
+      color: { theme: 'accent1', tintShade: 0.1 },
+    });
+    expect(config.plotFormat?.line?.color).toEqual({ theme: 'accent2', tintShade: -0.1 });
+    expect(config.titleFormat?.font?.color).toEqual({ theme: 'accent3', tintShade: 0.2 });
+    expect(config.titleRichText).toEqual([
+      { text: 'Revenue', font: { bold: true, color: { theme: 'accent4', tintShade: 0.3 } } },
+    ]);
     expect(config.plotLayout).toEqual({ layoutTarget: 'inner', x: 0.1, y: 0.2, w: 0.7, h: 0.6 });
     expect(config.titleLayout).toEqual({ xMode: 'factor', x: 0.15, y: 0.05 });
     expect(config.dataTable).toMatchObject({ visible: true, showHorzBorder: true });
+    expect(config.dataTable?.format?.shadow?.color).toEqual({
+      theme: 'accent5',
+      tintShade: 0.4,
+    });
     expect(config.pivotOptions).toEqual({ showAxisFieldButtons: false });
     expect(config.pivotProjection).toMatchObject({
       sourceRef: 'Pivot!A3',
@@ -158,7 +181,12 @@ describe('chart config normalizer', () => {
     expect(config.sizeRepresents).toBe('w');
     expect(config.bubble3DEffect).toBe(true);
     expect(config.view3d).toEqual({ rotX: 30, rotY: 20, depthPercent: 150 });
-    expect(config.floorFormat).toEqual({ fill: { type: 'solid', color: '#eeeeee' } });
+    expect(config.floorFormat?.fill).toEqual({
+      type: 'solid',
+      color: { theme: 'lt1', tintShade: -0.2 },
+    });
+    expect(config.sideWallFormat?.line?.color).toEqual({ theme: 'dk1', tintShade: 0.25 });
+    expect(config.backWallFormat?.font?.color).toEqual({ theme: 'tx1', tintShade: -0.25 });
     expect(config.colorScheme).toBe(12);
     expect(config.chartStyleContext?.colorMapOverride).toEqual({
       type: 'override',
@@ -173,7 +201,17 @@ describe('chart config normalizer', () => {
       chart({
         chartStyleContext: {
           colorMapOverride: { type: 'master' },
-          owners: [{ ownerKey: 'title', richText: [{ text: 'Generated' }] }],
+          owners: [
+            {
+              ownerKey: 'title',
+              format: {
+                fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.15 } },
+              },
+              richText: [
+                { text: 'Generated', font: { color: { theme: 'accent2', tint_shade: -0.15 } } },
+              ],
+            },
+          ],
         },
         ooxml: {
           definition: {
@@ -188,7 +226,17 @@ describe('chart config normalizer', () => {
 
     expect(config.chartStyleContext).toEqual({
       colorMapOverride: { type: 'master' },
-      owners: [{ ownerKey: 'title', richText: [{ text: 'Generated' }] }],
+      owners: [
+        {
+          ownerKey: 'title',
+          format: {
+            fill: { type: 'solid', color: { theme: 'accent1', tintShade: 0.15 } },
+          },
+          richText: [
+            { text: 'Generated', font: { color: { theme: 'accent2', tintShade: -0.15 } } },
+          ],
+        },
+      ],
     });
   });
 

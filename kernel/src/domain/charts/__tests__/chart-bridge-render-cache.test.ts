@@ -32,6 +32,7 @@ jest.mock('../../cells/cell-reads', () => ({
 }));
 
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
+import type { ChartMark } from '@mog-sdk/contracts/bridges';
 import type {
   FloatingObjectCreatedEvent,
   FloatingObjectDeletedEvent,
@@ -681,6 +682,30 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.stop();
   });
 
+  it('floatingObject:deleted removes only the matching sheet context for duplicated chart ids', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const sheetBMarks = [{ type: 'group', children: [{ type: 'text' }] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B });
+
+    emitChartDeleted(eventBus, CHART_1, SHEET_A);
+
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_B)).toBe(true);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    bridge.stop();
+  });
+
   it('round-trips correctly through delete + recreate (undo/redo)', () => {
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);
@@ -717,10 +742,34 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.stop();
   });
 
-  it('cross-sheet :updated forward-looking handler updates the index', () => {
-    // Charts cannot move between sheets in the current API. The conditional
-    // re-set in the :updated handler costs nothing today and prevents silent
-    // drift if cross-sheet move ever lands.
+  it('sheet:deleted removes only deleted-sheet contexts for duplicated chart ids', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const sheetBMarks = [{ type: 'group', children: [{ type: 'text' }] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B });
+
+    emitSheetDeleted(eventBus, SHEET_A);
+
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_B)).toBe(true);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    bridge.stop();
+  });
+
+  it('cross-sheet :updated forward-looking handler records an additional sheet context', () => {
+    // Charts cannot move between sheets in the current API. If a future or
+    // imported event reports the same chartId on another sheet, keep both
+    // contexts instead of collapsing the id back to one sheet.
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
@@ -729,9 +778,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     const renderCache = getRenderCache(bridge);
     expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
 
-    // Hypothetical future cross-sheet move event.
+    // Hypothetical cross-sheet event carrying the same imported chart id.
     emitChartUpdated(eventBus, CHART_1, SHEET_B, ['anchorRow', 'anchorCol']);
-    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getSheetId(CHART_1)).toBeUndefined();
+    expect(renderCache.chartIdsForSheet(SHEET_A)).toEqual([CHART_1]);
+    expect(renderCache.chartIdsForSheet(SHEET_B)).toEqual([CHART_1]);
     bridge.stop();
   });
 

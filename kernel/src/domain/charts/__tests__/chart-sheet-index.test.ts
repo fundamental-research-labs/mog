@@ -9,23 +9,23 @@ const CHART_2 = 'chart-2';
 const CHART_3 = 'chart-3';
 
 describe('ChartSheetIndex', () => {
-  it('supports get, set, delete, and clear', () => {
+  it('supports get, set, sheet-scoped delete, and clear for unambiguous chart ids', () => {
     const index = new ChartSheetIndex();
 
     expect(index.get(CHART_1)).toBeUndefined();
     expect(index.has(CHART_1)).toBe(false);
+    expect(index.has(CHART_1, SHEET_A)).toBe(false);
 
     index.set(CHART_1, SHEET_A);
     expect(index.get(CHART_1)).toBe(SHEET_A);
     expect(index.has(CHART_1)).toBe(true);
+    expect(index.has(CHART_1, SHEET_A)).toBe(true);
+    expect(index.has(CHART_1, SHEET_B)).toBe(false);
 
-    index.set(CHART_1, SHEET_B);
-    expect(index.get(CHART_1)).toBe(SHEET_B);
-
-    expect(index.delete(CHART_1)).toBe(true);
+    expect(index.delete(CHART_1, SHEET_A)).toBe(true);
     expect(index.get(CHART_1)).toBeUndefined();
     expect(index.has(CHART_1)).toBe(false);
-    expect(index.delete(CHART_1)).toBe(false);
+    expect(index.delete(CHART_1, SHEET_A)).toBe(false);
 
     index.set(CHART_1, SHEET_A);
     index.set(CHART_2, SHEET_B);
@@ -57,14 +57,58 @@ describe('ChartSheetIndex', () => {
     expect(index.cacheKey(CHART_1)).toBe(CHART_1);
   });
 
-  it('returns chart ids for one sheet without changing the one-sheet-per-chart invariant', () => {
+  it('keeps the same chart id isolated across sheet contexts', () => {
+    const index = new ChartSheetIndex();
+    index.set(CHART_1, SHEET_A);
+    index.set(CHART_1, SHEET_B);
+
+    expect(index.has(CHART_1)).toBe(true);
+    expect(index.has(CHART_1, SHEET_A)).toBe(true);
+    expect(index.has(CHART_1, SHEET_B)).toBe(true);
+    expect(index.get(CHART_1)).toBeUndefined();
+    expect(index.resolveSheetId(CHART_1)).toBeUndefined();
+    expect(index.cacheKey(CHART_1)).toBe(CHART_1);
+    expect(index.cacheKey(CHART_1, SHEET_A)).toBe(`${SHEET_A}::${CHART_1}`);
+    expect(index.cacheKey(CHART_1, SHEET_B)).toBe(`${SHEET_B}::${CHART_1}`);
+    expect(index.chartIdsForSheet(SHEET_A)).toEqual([CHART_1]);
+    expect(index.chartIdsForSheet(SHEET_B)).toEqual([CHART_1]);
+  });
+
+  it('does not perform ambiguous unscoped deletes for duplicated chart ids', () => {
+    const index = new ChartSheetIndex();
+    index.set(CHART_1, SHEET_A);
+    index.set(CHART_1, SHEET_B);
+
+    expect(index.delete(CHART_1)).toBe(false);
+    expect(index.has(CHART_1, SHEET_A)).toBe(true);
+    expect(index.has(CHART_1, SHEET_B)).toBe(true);
+
+    expect(index.delete(CHART_1, SHEET_A)).toBe(true);
+    expect(index.has(CHART_1, SHEET_A)).toBe(false);
+    expect(index.has(CHART_1, SHEET_B)).toBe(true);
+    expect(index.resolveSheetId(CHART_1)).toBe(SHEET_B);
+  });
+
+  it('handles duplicate same-sheet registrations idempotently', () => {
+    const index = new ChartSheetIndex();
+    index.set(CHART_1, SHEET_A);
+    index.set(CHART_1, SHEET_A);
+
+    expect(index.get(CHART_1)).toBe(SHEET_A);
+    expect(index.chartIdsForSheet(SHEET_A)).toEqual([CHART_1]);
+    expect(index.delete(CHART_1, SHEET_A)).toBe(true);
+    expect(index.delete(CHART_1, SHEET_A)).toBe(false);
+    expect(index.has(CHART_1)).toBe(false);
+  });
+
+  it('returns chart ids for one sheet without collapsing duplicate ids on other sheets', () => {
     const index = new ChartSheetIndex();
     index.set(CHART_1, SHEET_A);
     index.set(CHART_2, SHEET_B);
     index.set(CHART_3, SHEET_A);
     index.set(CHART_1, SHEET_B);
 
-    expect(index.chartIdsForSheet(SHEET_A)).toEqual([CHART_3]);
-    expect(index.chartIdsForSheet(SHEET_B)).toEqual([CHART_1, CHART_2]);
+    expect(index.chartIdsForSheet(SHEET_A)).toEqual([CHART_1, CHART_3]);
+    expect(index.chartIdsForSheet(SHEET_B)).toEqual([CHART_2, CHART_1]);
   });
 });

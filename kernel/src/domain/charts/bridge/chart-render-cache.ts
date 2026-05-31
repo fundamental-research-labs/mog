@@ -94,16 +94,16 @@ export class ChartRenderCache {
     return this.chartSheetIndex.get(chartId);
   }
 
-  hasSheetId(chartId: string): boolean {
-    return this.chartSheetIndex.has(chartId);
+  hasSheetId(chartId: string, sheetId?: SheetId): boolean {
+    return this.chartSheetIndex.has(chartId, sheetId);
   }
 
   setSheetId(chartId: string, sheetId: SheetId): void {
     this.chartSheetIndex.set(chartId, sheetId);
   }
 
-  deleteSheetId(chartId: string): boolean {
-    return this.chartSheetIndex.delete(chartId);
+  deleteSheetId(chartId: string, sheetId?: SheetId): boolean {
+    return this.chartSheetIndex.delete(chartId, sheetId);
   }
 
   chartIdsForSheet(sheetId: SheetId): string[] {

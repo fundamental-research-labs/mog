@@ -341,7 +341,7 @@ describe('setupChartBridgeSubscriptions', () => {
       source: 'local',
     } as never);
 
-    expect(deps.renderCache.deleteSheetId).toHaveBeenCalledWith(CHART_1);
+    expect(deps.renderCache.deleteSheetId).toHaveBeenCalledWith(CHART_1, SHEET_A);
     expect(deps.renderCache.deleteChartCaches).toHaveBeenCalledWith(CHART_1, SHEET_A);
   });
 

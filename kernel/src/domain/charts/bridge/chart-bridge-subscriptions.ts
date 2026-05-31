@@ -25,7 +25,7 @@ import { isPositionOnlyUpdate } from './position-only-update';
 export interface ChartBridgeSubscriptionRenderCache {
   getSheetId(chartId: string): SheetId | undefined;
   setSheetId(chartId: string, sheetId: SheetId): void;
-  deleteSheetId(chartId: string): boolean;
+  deleteSheetId(chartId: string, sheetId?: SheetId): boolean;
   chartIdsForSheet(sheetId: SheetId): string[];
   deleteChartCaches(chartId: string, sheetId?: SheetId): void;
   syncImportRenderStatus(chartId: string, payload: unknown, sheetId?: SheetId): boolean;
@@ -142,7 +142,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
       if (!liveDeps.isLive()) return;
       if (event.objectType === 'chart') {
         const eventSheetId = toSheetId(event.sheetId);
-        deps.renderCache.deleteSheetId(event.objectId);
+        deps.renderCache.deleteSheetId(event.objectId, eventSheetId);
         deps.renderCache.deleteChartCaches(event.objectId, eventSheetId);
       }
     }),
@@ -154,7 +154,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
       const deletedSheetId = toSheetId(event.sheetId);
       const orphanedChartIds = deps.renderCache.chartIdsForSheet(deletedSheetId);
       for (const chartId of orphanedChartIds) {
-        deps.renderCache.deleteSheetId(chartId);
+        deps.renderCache.deleteSheetId(chartId, deletedSheetId);
         deps.renderCache.deleteChartCaches(chartId, deletedSheetId);
       }
     }),

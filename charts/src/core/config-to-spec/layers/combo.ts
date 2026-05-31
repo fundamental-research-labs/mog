@@ -1,7 +1,6 @@
 import type { DataRow, EncodingSpec, MarkType, Transform, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../../types';
 import { buildAxisScaleSpec, mapAxisConfigToAxisSpec } from '../axis';
-import { isBarLikeChartType } from '../bar-geometry';
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
 import {
@@ -19,6 +18,15 @@ import {
 } from '../fields';
 import { buildSeriesMark } from '../marks';
 import { seriesConfigForDataSeries, seriesSourceIndex } from '../../series-identity';
+import {
+  effectiveShowLines,
+  effectiveShowMarkers,
+  isQuantitativeXSeries,
+  isSupportedChartType,
+  normalizeYAxisIndex,
+  resolveComboSeriesType,
+  shouldGroupAsBarSeries,
+} from './combo-series-options';
 
 /**
  * Build layers for combo and dual-axis charts where each series can own its
@@ -40,9 +48,7 @@ export function buildComboLayers(
     const series = data.series[i];
     const seriesConf = seriesConfigForDataSeries(series, seriesConfigs, i);
     const sourceSeriesIndex = seriesSourceIndex(series, i);
-    const fallbackComboType =
-      config.type === 'combo' ? (i === 0 ? 'column' : 'line') : (config.type ?? 'line');
-    const rawSeriesType = seriesConf?.type ?? series.type ?? fallbackComboType;
+    const rawSeriesType = resolveComboSeriesType(config, series, seriesConf, i);
     if (!isSupportedChartType(rawSeriesType)) continue;
 
     const markType = MARK_TYPE_MAP[rawSeriesType];
@@ -58,7 +64,7 @@ export function buildComboLayers(
     const showLine = effectiveShowLines(seriesConf, rawSeriesType, config);
     const showMarkers = effectiveShowMarkers(seriesConf, rawSeriesType, config, !showLine);
 
-    if (markType === 'bar' && isBarLikeChartType(rawSeriesType)) {
+    if (markType === 'bar' && shouldGroupAsBarSeries(rawSeriesType)) {
       const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
       const groupKey = `bar:${yAxisIndex ?? 0}`;
       if (emittedBarGroups.has(groupKey)) continue;
@@ -80,7 +86,15 @@ export function buildComboLayers(
     if (markType === 'point') {
       if (showLine) {
         layers.push(
-          buildMainLayer('line', config, seriesConf, sourceSeriesIndex, rawSeriesType, encoding, filter),
+          buildMainLayer(
+            'line',
+            config,
+            seriesConf,
+            sourceSeriesIndex,
+            rawSeriesType,
+            encoding,
+            filter,
+          ),
         );
       }
       if (showMarkers) {
@@ -101,7 +115,15 @@ export function buildComboLayers(
     }
 
     layers.push(
-      buildMainLayer(markType, config, seriesConf, sourceSeriesIndex, rawSeriesType, encoding, filter),
+      buildMainLayer(
+        markType,
+        config,
+        seriesConf,
+        sourceSeriesIndex,
+        rawSeriesType,
+        encoding,
+        filter,
+      ),
     );
     if ((markType === 'line' || markType === 'area') && showMarkers) {
       layers.push(
@@ -154,7 +176,9 @@ function buildSeriesEncoding(input: {
   return encoding;
 }
 
-function quantitativeXEncoding(baseX: NonNullable<EncodingSpec['x']>): NonNullable<EncodingSpec['x']> {
+function quantitativeXEncoding(
+  baseX: NonNullable<EncodingSpec['x']>,
+): NonNullable<EncodingSpec['x']> {
   return {
     field: SCATTER_X_FIELD,
     type: 'quantitative',
@@ -218,16 +242,13 @@ function buildBarGroupLayer(input: {
   const memberIndices = input.data.series
     .map((series, index) => {
       const seriesConf = seriesConfigForDataSeries(series, input.seriesConfigs, index);
-      const fallbackComboType =
-        input.config.type === 'combo' ? (index === 0 ? 'column' : 'line') : input.config.type;
-      const rawSeriesType = seriesConf?.type ?? series.type ?? fallbackComboType;
+      const rawSeriesType = resolveComboSeriesType(input.config, series, seriesConf, index);
       const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
       return { index, rawSeriesType, yAxisIndex };
     })
     .filter(
       (item) =>
-        isSupportedChartType(item.rawSeriesType) &&
-        isBarLikeChartType(item.rawSeriesType) &&
+        shouldGroupAsBarSeries(item.rawSeriesType) &&
         (item.yAxisIndex ?? 0) === (input.yAxisIndex ?? 0),
     )
     .map((item) => item.index);
@@ -241,9 +262,7 @@ function buildBarGroupLayer(input: {
     },
     encoding: {
       ...input.encoding,
-      ...(input.baseEncoding.color
-        ? { color: { ...input.baseEncoding.color, legend: null } }
-        : {}),
+      ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
       ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
     },
     transform: [{ type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: memberIndices } }],
@@ -252,66 +271,4 @@ function buildBarGroupLayer(input: {
 
 function seriesFilter(seriesIndex: number): Transform {
   return { type: 'filter', filter: { field: SERIES_INDEX_FIELD, equal: seriesIndex } };
-}
-
-function normalizeYAxisIndex(value: number | undefined): 0 | 1 | undefined {
-  if (value === 0 || value === 1) return value;
-  return undefined;
-}
-
-function isSupportedChartType(value: string | undefined): value is ChartType {
-  return !!value && Object.prototype.hasOwnProperty.call(MARK_TYPE_MAP, value);
-}
-
-function isQuantitativeXSeries(
-  seriesConf: SeriesConfig | undefined,
-  seriesType: ChartType,
-  config: ChartConfig,
-): boolean {
-  if (seriesConf?.xRole === 'quantitative') return true;
-  if (seriesConf?.xRole === 'category') return false;
-  return config.type === 'scatter' || config.type === 'bubble' || seriesType === 'scatter' || seriesType === 'bubble';
-}
-
-function effectiveShowLines(
-  seriesConf: SeriesConfig | undefined,
-  seriesType: ChartType,
-  config: ChartConfig,
-): boolean {
-  if (seriesConf?.showLines !== undefined) return seriesConf.showLines;
-  if (seriesType === 'scatter' || seriesType === 'bubble') return config.showLines === true;
-  const markType = MARK_TYPE_MAP[seriesType];
-  return markType === 'line' || markType === 'area';
-}
-
-function effectiveShowMarkers(
-  seriesConf: SeriesConfig | undefined,
-  seriesType: ChartType,
-  config: ChartConfig,
-  defaultValue: boolean,
-): boolean {
-  if (seriesConf?.markerStyle === 'none') return false;
-  if (seriesConf?.showMarkers !== undefined) return seriesConf.showMarkers;
-  if (seriesConf?.markerStyle !== undefined || seriesConf?.markerSize !== undefined) return true;
-  if (
-    seriesConf?.points?.some(
-      (point) =>
-        point.markerStyle !== undefined ||
-        point.markerSize !== undefined ||
-        point.markerBackgroundColor !== undefined ||
-        point.markerForegroundColor !== undefined,
-    )
-  ) {
-    return true;
-  }
-  return isMarkerDefaultSeries(seriesType, config.type) || defaultValue;
-}
-
-function isMarkerDefaultSeries(seriesType: ChartType, chartType: ChartConfig['type']): boolean {
-  return (
-    chartType === 'lineMarkers' ||
-    seriesType === 'lineMarkers' ||
-    seriesType === 'lineMarkersStacked' ||
-    seriesType === 'lineMarkersStacked100'
-  );
 }

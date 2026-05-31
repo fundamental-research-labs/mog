@@ -1,10 +1,6 @@
 import type { LegendEntrySpec, LegendSpec, LegendSymbolType, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, LegendConfig, SeriesConfig } from '../../types';
-import {
-  seriesConfigForDataSeries,
-  seriesSourceIndex,
-  seriesSourceKey,
-} from '../series-identity';
+import { seriesConfigForDataSeries, seriesSourceIndex, seriesSourceKey } from '../series-identity';
 import { MARK_TYPE_MAP } from './constants';
 import { isLegendShown } from './legend-spec';
 import { isNoFillNoLineSeries } from './style';

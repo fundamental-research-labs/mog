@@ -92,10 +92,7 @@ export function generateColorLegend(
   const symbolMetrics = legendEntries.map((entry) =>
     legendSymbolMetrics(entry.symbolType, legendSpec.symbolSize),
   );
-  const maxSymbolHeight = symbolMetrics.reduce(
-    (max, metrics) => Math.max(max, metrics.height),
-    0,
-  );
+  const maxSymbolHeight = symbolMetrics.reduce((max, metrics) => Math.max(max, metrics.height), 0);
   const labelFontSize = legendSpec.labelFontSize ?? 11;
   const itemSpacing = Math.max(18, maxSymbolHeight + 8, Math.ceil(labelFontSize + 7));
   const isHorizontalLegend = legendSpec.orient === 'bottom' || legendSpec.orient === 'top';

@@ -424,9 +424,24 @@ fn sumif_exact_reproduction_cross_sheet_let_spill_absolute_refs() {
 
     let report_formulas = vec![
         (2, 1, "LET(a,UNIQUE('Data Source'!C1:C6),a)", Some("B3:B5")),
-        (3, 11, "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)", None),
-        (4, 11, "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)", None),
-        (5, 11, "SUMIF('Data Source'!$C:$C,$B6,'Data Source'!P:P)", None),
+        (
+            3,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            4,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            5,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B6,'Data Source'!P:P)",
+            None,
+        ),
     ];
 
     let snapshot = build_multi_sheet_snapshot(vec![
@@ -467,8 +482,18 @@ fn sumif_cross_sheet_let_sortby_spill_criteria() {
             "LET(a,UNIQUE('Data Source'!C1:C6),SORTBY(a,a))",
             Some("B3:B5"),
         ),
-        (3, 11, "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)", None),
-        (4, 11, "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)", None),
+        (
+            3,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            4,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)",
+            None,
+        ),
     ];
 
     let snapshot = build_multi_sheet_snapshot(vec![

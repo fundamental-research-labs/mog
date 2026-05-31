@@ -260,15 +260,40 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
 
     // IF formulas should read from D column spill targets
     // E1 = IF(197>0, 197*2, 0) = 394
-    assert_mirror_number(&mirror, &e1, 394.0, "Projection!E1 IF reads TRANSPOSE anchor");
+    assert_mirror_number(
+        &mirror,
+        &e1,
+        394.0,
+        "Projection!E1 IF reads TRANSPOSE anchor",
+    );
     // E2 = IF(448>0, 448*2, 0) = 896
-    assert_mirror_number(&mirror, &e2, 896.0, "Projection!E2 IF reads spill target D2");
+    assert_mirror_number(
+        &mirror,
+        &e2,
+        896.0,
+        "Projection!E2 IF reads spill target D2",
+    );
     // E3 = IF(475>0, 475*2, 0) = 950
-    assert_mirror_number(&mirror, &e3, 950.0, "Projection!E3 IF reads spill target D3");
+    assert_mirror_number(
+        &mirror,
+        &e3,
+        950.0,
+        "Projection!E3 IF reads spill target D3",
+    );
     // E4 = IF(529>0, 529*2, 0) = 1058
-    assert_mirror_number(&mirror, &e4, 1058.0, "Projection!E4 IF reads spill target D4");
+    assert_mirror_number(
+        &mirror,
+        &e4,
+        1058.0,
+        "Projection!E4 IF reads spill target D4",
+    );
     // E5 = IF(377>0, 377*2, 0) = 754
-    assert_mirror_number(&mirror, &e5, 754.0, "Projection!E5 IF reads spill target D5");
+    assert_mirror_number(
+        &mirror,
+        &e5,
+        754.0,
+        "Projection!E5 IF reads spill target D5",
+    );
 }
 
 /// R4: Full cascade — 4 sheets, TRANSPOSE → SUM → TRANSPOSE → IF.
@@ -323,7 +348,7 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
             10,
             vec![
                 (0, 1, CellValue::Null, Some("TRANSPOSE(SourceA!C1:C5)")), // B1
-                (1, 1, CellValue::Null, Some("TRANSPOSE(SourceB!C1:C5)")),  // B2
+                (1, 1, CellValue::Null, Some("TRANSPOSE(SourceB!C1:C5)")), // B2
                 (2, 1, CellValue::Null, Some("SUM(B1:B2)")),               // B3
                 (2, 2, CellValue::Null, Some("SUM(C1:C2)")),               // C3
                 (2, 3, CellValue::Null, Some("SUM(D1:D2)")),               // D3
@@ -363,18 +388,8 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
     let rb_d3 = CellId::from_uuid_str(&cell_uuid(2, 2, 3)).expect("rb d3");
 
     // TRANSPOSE anchors
-    assert_mirror_number(
-        &mirror,
-        &rb_b1,
-        0.0,
-        "Output!B1 SourceA TRANSPOSE anchor",
-    );
-    assert_mirror_number(
-        &mirror,
-        &rb_b2,
-        197.0,
-        "Output!B2 SourceB TRANSPOSE anchor",
-    );
+    assert_mirror_number(&mirror, &rb_b1, 0.0, "Output!B1 SourceA TRANSPOSE anchor");
+    assert_mirror_number(&mirror, &rb_b2, 197.0, "Output!B2 SourceB TRANSPOSE anchor");
 
     // Output spill — SourceB row (row 1): C2=448, D2=475, E2=529, F2=377
     assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");

@@ -67,9 +67,7 @@ function isStacked(config: ConfigSpec | undefined): boolean {
   return config?.stack === 'normalize' || config?.stack === 'zero' || config?.stack === 'center';
 }
 
-function shouldReverseGroupOrder(
-  barGeometry: BarGeometrySpec | undefined,
-): boolean {
+function shouldReverseGroupOrder(barGeometry: BarGeometrySpec | undefined): boolean {
   return barGeometry?.seriesSlotOrder === 'reverse';
 }
 

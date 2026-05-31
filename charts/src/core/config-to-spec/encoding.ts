@@ -242,7 +242,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     encoding.color = {
       field: 'category',
       type: 'nominal',
-      ...((data.categories.length > 0 || (categoryColors && categoryColors.length > 0))
+      ...(data.categories.length > 0 || (categoryColors && categoryColors.length > 0)
         ? {
             scale: {
               ...(data.categories.length > 0

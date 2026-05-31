@@ -232,7 +232,10 @@ fn regression_sumifs_fullcol_faroutside_primary() {
         new_value: CellValue::Number(FiniteF64::must(85.0)),
     };
     let outcome = run_case(&case);
-    eprintln!("[regression fullcol_faroutside_primary] outcome: {:?}", outcome);
+    eprintln!(
+        "[regression fullcol_faroutside_primary] outcome: {:?}",
+        outcome
+    );
     match outcome {
         TestOutcome::Passed => {
             // If this passes today, the bug fixed itself — the plan
@@ -275,7 +278,10 @@ fn regression_sumifs_fullcol_faroutside_secondary() {
         new_value: CellValue::Number(FiniteF64::must(55.0)),
     };
     let outcome = run_case(&case);
-    eprintln!("[regression fullcol_faroutside_secondary] outcome: {:?}", outcome);
+    eprintln!(
+        "[regression fullcol_faroutside_secondary] outcome: {:?}",
+        outcome
+    );
     match outcome {
         TestOutcome::Passed => {
             eprintln!(
@@ -331,7 +337,10 @@ fn regression_float_cascade_seed() {
             );
         }
         TestOutcome::Failed(msg) => {
-            eprintln!("[regression float_cascade] expected failure pinned: {}", msg);
+            eprintln!(
+                "[regression float_cascade] expected failure pinned: {}",
+                msg
+            );
         }
         TestOutcome::Skipped(r) => {
             panic!(

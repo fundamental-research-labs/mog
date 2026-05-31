@@ -174,7 +174,13 @@ describe('configToSpec bar series colors', () => {
       '#8064A2',
       '#4BACC6',
     ]);
-    expect(legendLabels).toEqual(['Category A', 'Category B', 'Category C', 'Category D', 'Category E']);
+    expect(legendLabels).toEqual([
+      'Category A',
+      'Category B',
+      'Category C',
+      'Category D',
+      'Category E',
+    ]);
     for (const rect of rects) {
       const category = String(rect.datum.category);
       const categoryX = result.scales.x?.(category) as number;
@@ -185,7 +191,10 @@ describe('configToSpec bar series colors', () => {
 
   it('matches Excel horizontal clustered bar series order and data-label slots', () => {
     const categories = Array.from({ length: 11 }, (_value, index) => `Item ${index + 1}`);
-    const negativeValues = Array.from({ length: categories.length }, (_value, index) => -(index + 1));
+    const negativeValues = Array.from(
+      { length: categories.length },
+      (_value, index) => -(index + 1),
+    );
     const positiveValues = Array.from({ length: categories.length }, (_value, index) => index + 1);
     const data: ChartData = {
       categories,

@@ -1,10 +1,4 @@
-import type {
-  AxisOrient,
-  AxisSpec,
-  ChannelSpec,
-  ScaleSpec,
-  ScaleType,
-} from '../../grammar/spec';
+import type { AxisOrient, AxisSpec, ChannelSpec, ScaleSpec, ScaleType } from '../../grammar/spec';
 import type { AxisConfig, AxisType, ChartConfig, ChartType, SingleAxisConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { mapAxisConfigToAxisSpec as mapAxisConfigToAxisFormatSpec } from './axis-format';
@@ -114,8 +108,7 @@ export function applyAutoValueAxisTicks(
 function hasFullyExplicitNumericDomain(scaleSpec: ScaleSpec): boolean {
   const domain = Array.isArray(scaleSpec.domain) ? scaleSpec.domain : undefined;
   return (
-    explicitDomainBound(domain, 0) !== undefined &&
-    explicitDomainBound(domain, 1) !== undefined
+    explicitDomainBound(domain, 0) !== undefined && explicitDomainBound(domain, 1) !== undefined
   );
 }
 

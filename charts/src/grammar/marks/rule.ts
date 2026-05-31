@@ -88,11 +88,9 @@ export function generateRuleMarks(
       const categoryOffsetX = barSlotContext && !barSlotContext.isHorizontal ? slotOffset : 0;
       const categoryOffsetY = barSlotContext?.isHorizontal ? slotOffset : 0;
       const encodedX1 =
-        (xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0) +
-        categoryOffsetX;
+        (xScale ? centeredScalePosition(xScale, encodings.x.accessor(datum)) : 0) + categoryOffsetX;
       const encodedY1 =
-        (yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0) +
-        categoryOffsetY;
+        (yScale ? centeredScalePosition(yScale, encodings.y.accessor(datum)) : 0) + categoryOffsetY;
       const encodedX2 =
         (xScale ? centeredScalePosition(xScale, encodings.x2.accessor(datum)) : encodedX1) +
         categoryOffsetX;

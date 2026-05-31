@@ -608,9 +608,7 @@ function estimateLegendWidth(
     (max, entry) =>
       Math.max(
         max,
-        estimateLegendSymbolWidth(legendSpec, entry) +
-          6 +
-          entry.label.length * labelFontSize * 0.6,
+        estimateLegendSymbolWidth(legendSpec, entry) + 6 + entry.label.length * labelFontSize * 0.6,
       ),
     0,
   );

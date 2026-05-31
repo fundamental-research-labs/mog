@@ -410,7 +410,13 @@ fn external_sumifs_inverse_leaves_stale_result() {
     // Match walk's op pair exactly: forward via set_cell (input parser path),
     // inverse via import_values (Track 1a's lossless raw path).
     engine
-        .set_cell(&edit_sheet, edit_cid, edit_row, edit_col, new_value.to_string())
+        .set_cell(
+            &edit_sheet,
+            edit_cid,
+            edit_row,
+            edit_col,
+            new_value.to_string(),
+        )
         .expect("forward via set_cell");
     engine
         .import_values(

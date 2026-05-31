@@ -73,10 +73,9 @@ export function snapshotLegend(
       .map((entry) => entry.idx) ?? [],
   );
   const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
-  const categoryEntries =
-    usesCategoryLegendEntries(config, data)
-      ? data.categories.map((category) => String(category))
-      : undefined;
+  const categoryEntries = usesCategoryLegendEntries(config, data)
+    ? data.categories.map((category) => String(category))
+    : undefined;
   const allEntries = categoryEntries ?? series.map((item) => item.name);
   const visibleEntries = categoryEntries
     ? categoryEntries.filter((_entry, index) => !deletedEntries.has(index))

@@ -448,8 +448,14 @@ fn is_axis_position_compatible(
     matches!(
         (position, orientation),
         (None, _)
-            | (Some(AxisPosition::Bottom | AxisPosition::Top), AxisOrientation::Horizontal)
-            | (Some(AxisPosition::Left | AxisPosition::Right), AxisOrientation::Vertical)
+            | (
+                Some(AxisPosition::Bottom | AxisPosition::Top),
+                AxisOrientation::Horizontal
+            )
+            | (
+                Some(AxisPosition::Left | AxisPosition::Right),
+                AxisOrientation::Vertical
+            )
     )
 }
 

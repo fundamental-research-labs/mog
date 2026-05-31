@@ -336,9 +336,10 @@ describe('configToSpec axis render contracts', () => {
       series: [
         {
           name: 'Count',
-          data: [191, 164, 164, 144, 115, 152, 144, 112, 128, 100, 101].map(
-            (value, index) => ({ x: `Stage ${index + 1}`, y: value }),
-          ),
+          data: [191, 164, 164, 144, 115, 152, 144, 112, 128, 100, 101].map((value, index) => ({
+            x: `Stage ${index + 1}`,
+            y: value,
+          })),
         },
       ],
     };
@@ -566,8 +567,7 @@ describe('configToSpec axis render contracts', () => {
       'slot-15',
     ];
     const primaryValues = [
-      29.8, 30.1, 30.4, 30.7, 31, 31.2, 31.4, 31.6, 31.7, 31.8, 31.9, 32, 32.1,
-      32.2, 32.3,
+      29.8, 30.1, 30.4, 30.7, 31, 31.2, 31.4, 31.6, 31.7, 31.8, 31.9, 32, 32.1, 32.2, 32.3,
     ];
     const secondaryValues = [
       327, 495, 485, 486, 612, 575, 503, 498, 517, 540, 522, 558, 571, 599, 615,

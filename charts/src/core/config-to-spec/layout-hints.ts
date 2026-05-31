@@ -81,7 +81,8 @@ function estimateSecondaryYAxisLabelWidth(
   const secondaryAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
   if (!secondaryAxis) return undefined;
 
-  const axis = mapAxisConfigToAxisSpec(secondaryAxis);
+  const ownerKey = config.axis?.secondaryValueAxis ? 'secondaryValueAxis' : 'secondaryYAxis';
+  const axis = mapAxisConfigToAxisSpec(secondaryAxis, config, ownerKey);
   const scale = buildAxisScaleSpec(secondaryAxis, false);
   return estimateQuantitativeAxisLabelWidth(axis, scale, axis.format);
 }

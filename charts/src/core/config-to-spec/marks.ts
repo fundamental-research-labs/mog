@@ -13,9 +13,12 @@ import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 
 function applyPrimarySeriesFormat(mark: MarkSpec, config: ChartConfig): void {
-  const series = config.series?.find((item) => !isNoFillNoLineSeries(item));
+  const seriesIndex = config.series?.findIndex((item) => !isNoFillNoLineSeries(item)) ?? -1;
+  if (seriesIndex < 0) return;
+
+  const series = config.series?.[seriesIndex];
   if (!series?.format) return;
-  const context = resolverContextFromConfig(config, 'series(0)');
+  const context = resolverContextFromConfig(config, `series(${seriesIndex})`);
   const fillPaint = resolveChartFillPaint(series.format.fill, context);
   if (fillPaint) mark.fillPaint = fillPaint;
   const line = resolveChartLineStyle(series.format.line, context, {
@@ -150,6 +153,26 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   // Funnel: bar with decreasing width (represented as horizontal bars)
   if (config.type === 'funnel') {
     return { type: 'bar', cornerRadius: 2 };
+  }
+
+  if (config.type === 'histogram') {
+    return {
+      type: 'histogram',
+      binCount: config.histogram?.binCount,
+      binWidth: config.histogram?.binWidth,
+      underflowBinValue: config.histogram?.underflowBinValue,
+      overflowBinValue: config.histogram?.overflowBinValue,
+    };
+  }
+
+  if (config.type === 'boxplot') {
+    return {
+      type: 'boxplot',
+      showOutlierPoints: config.boxplot?.showOutlierPoints ?? config.boxplot?.showOutliers,
+      showMeanMarkers: config.boxplot?.showMeanMarkers ?? config.boxplot?.showMean,
+      showMeanLine: config.boxplot?.showMeanLine,
+      quartileMethod: config.boxplot?.quartileMethod,
+    };
   }
 
   // If subType props change the mark type or add interpolation

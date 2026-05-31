@@ -64,6 +64,8 @@ pub struct Chart {
     pub style_alternate_content: Option<String>,
     /// Whether the `style_alternate_content` appeared after `</c:chart>` (non-standard).
     pub style_after_chart: bool,
+    /// Chart-local theme color mapping override (`c:clrMapOvr`).
+    pub clr_map_ovr: Option<ooxml_types::themes::ColorMappingOverride>,
     /// Non-standard `chartType` attribute on the chart type element (Google Sheets).
     pub raw_chart_type_attr: Option<String>,
     /// Chart protection settings

@@ -12,7 +12,13 @@
 
 import { groupByAccessor } from '../../algebra/group-by';
 import { boxPlotWhiskerPaths, type BoxPlotGeometry } from '../../math/geometry';
-import { max as maxValue, min as minValue, outlierBounds, quartiles } from '../../math/statistics';
+import {
+  max as maxValue,
+  mean,
+  min as minValue,
+  outlierBounds,
+  quartiles,
+} from '../../math/statistics';
 import type { AnyMark, PathMark, RectMark, SymbolMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
@@ -60,6 +66,7 @@ interface BoxStats {
   q3: number;
   lowerWhisker: number;
   upperWhisker: number;
+  mean: number;
   outliers: number[];
   category?: string;
 }
@@ -67,6 +74,7 @@ interface BoxStats {
 function calculateBoxStats(
   values: number[],
   whiskerMultiplier: number,
+  quartileMethod: string | undefined,
   category?: string,
 ): BoxStats {
   const validValues = values.filter((v) => isFinite(v));
@@ -78,13 +86,14 @@ function calculateBoxStats(
       q3: NaN,
       lowerWhisker: NaN,
       upperWhisker: NaN,
+      mean: NaN,
       outliers: [],
       category,
     };
   }
 
   const sorted = [...validValues].sort((a, b) => a - b);
-  const q = quartiles(sorted);
+  const q = quartilesForMethod(sorted, quartileMethod);
   const bounds = outlierBounds(sorted, whiskerMultiplier);
 
   const nonOutliers = sorted.filter((v) => v >= bounds.lower && v <= bounds.upper);
@@ -98,9 +107,29 @@ function calculateBoxStats(
     q3: q.q3,
     lowerWhisker,
     upperWhisker,
+    mean: mean(sorted),
     outliers: outlierValues,
     category,
   };
+}
+
+function quartilesForMethod(values: number[], method: string | undefined) {
+  if (method !== 'exclusive') return quartiles(values);
+  return {
+    q1: quantileExclusive(values, 0.25),
+    median: quantileExclusive(values, 0.5),
+    q3: quantileExclusive(values, 0.75),
+  };
+}
+
+function quantileExclusive(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return NaN;
+  const position = p * (sortedValues.length + 1);
+  if (position <= 1) return sortedValues[0];
+  if (position >= sortedValues.length) return sortedValues[sortedValues.length - 1];
+  const lowerIndex = Math.floor(position) - 1;
+  const fraction = position - Math.floor(position);
+  return sortedValues[lowerIndex] + fraction * (sortedValues[lowerIndex + 1] - sortedValues[lowerIndex]);
 }
 
 // =============================================================================
@@ -130,6 +159,9 @@ export function generateBoxPlotMarks(
 
   const valueField = encoding?.y?.field;
   const categoryField = encoding?.x?.field;
+  const showOutlierPoints = markSpec.showOutlierPoints !== false;
+  const showMeanMarkers = markSpec.showMeanMarkers === true;
+  const showMeanLine = markSpec.showMeanLine === true;
 
   if (!valueField) return [];
 
@@ -141,7 +173,7 @@ export function generateBoxPlotMarks(
     const values = data
       .map((row) => row[valueField])
       .filter((v): v is number => typeof v === 'number');
-    allStats.push(calculateBoxStats(values, DEFAULT_WHISKER_MULTIPLIER));
+    allStats.push(calculateBoxStats(values, DEFAULT_WHISKER_MULTIPLIER, markSpec.quartileMethod));
   } else {
     // Grouped box plots
     const rowGroups = groupByAccessor(data, (row) => String(row[categoryField] ?? 'Unknown'));
@@ -154,7 +186,9 @@ export function generateBoxPlotMarks(
         }
       }
       if (values.length > 0) {
-        allStats.push(calculateBoxStats(values, DEFAULT_WHISKER_MULTIPLIER, category));
+        allStats.push(
+          calculateBoxStats(values, DEFAULT_WHISKER_MULTIPLIER, markSpec.quartileMethod, category),
+        );
       }
     }
   }
@@ -189,7 +223,8 @@ export function generateBoxPlotMarks(
     const q3Y = yScale(stats.q3) as number;
     const lowerWhiskerY = yScale(stats.lowerWhisker) as number;
     const upperWhiskerY = yScale(stats.upperWhisker) as number;
-    const outlierYs = stats.outliers.map((v) => yScale(v) as number);
+    const outlierYs = showOutlierPoints ? stats.outliers.map((v) => yScale(v) as number) : [];
+    const meanY = yScale(stats.mean) as number;
 
     // Build geometry for whisker path helpers
     const geom: BoxPlotGeometry = {
@@ -252,8 +287,31 @@ export function generateBoxPlotMarks(
       datum: { stats, type: 'whisker-upper' },
     } as PathMark);
 
+    if (showMeanLine && isFinite(stats.mean)) {
+      marks.push({
+        type: 'path',
+        x: 0,
+        y: 0,
+        path: `M${centerX - boxWidth / 2},${meanY} L${centerX + boxWidth / 2},${meanY}`,
+        style: { stroke: '#222222', strokeWidth: 1, strokeDash: [3, 3] },
+        datum: { stats, type: 'mean-line' },
+      } as PathMark);
+    }
+
+    if (showMeanMarkers && isFinite(stats.mean)) {
+      marks.push({
+        type: 'symbol',
+        x: centerX,
+        y: meanY,
+        size: DEFAULT_OUTLIER_SIZE,
+        shape: 'cross',
+        style: { fill: '#222222', stroke: '#222222', strokeWidth: 1 },
+        datum: { value: stats.mean, type: 'mean' },
+      } as SymbolMark);
+    }
+
     // Outliers
-    for (let i = 0; i < stats.outliers.length; i++) {
+    for (let i = 0; i < outlierYs.length; i++) {
       const outlierMark: SymbolMark = {
         type: 'symbol',
         x: centerX,

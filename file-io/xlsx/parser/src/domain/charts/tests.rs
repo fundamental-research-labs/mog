@@ -32,6 +32,70 @@ fn test_parse_bar_chart() {
 }
 
 #[test]
+fn test_parse_chart_color_map_override() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:clrMapOvr>
+                <a:overrideClrMapping bg1="dk2" tx1="accent2" bg2="lt2" tx2="accent3"
+                    accent1="accent4" accent2="accent5" accent3="accent6" accent4="hlink"
+                    accent5="folHlink" accent6="dk1" hlink="lt1" folHlink="accent1"/>
+            </c:clrMapOvr>
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                    </c:barChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let chart = Chart::parse(xml);
+    let chart_space = chart.chart_space.expect("expected chart space");
+    let override_mapping = chart_space
+        .clr_map_ovr
+        .expect("expected clrMapOvr override");
+
+    match override_mapping {
+        ooxml_types::themes::ColorMappingOverride::OverrideClrMapping(mapping) => {
+            assert_eq!(mapping.bg1, ooxml_types::themes::ColorSchemeIndex::Dk2);
+            assert_eq!(mapping.tx1, ooxml_types::themes::ColorSchemeIndex::Accent2);
+            assert_eq!(
+                mapping.fol_hlink,
+                ooxml_types::themes::ColorSchemeIndex::Accent1
+            );
+        }
+        other => panic!("expected override color mapping, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_chart_color_map_master_mapping() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:clrMapOvr>
+                <a:masterClrMapping/>
+            </c:clrMapOvr>
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                    </c:barChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let chart = Chart::parse(xml);
+    let chart_space = chart.chart_space.expect("expected chart space");
+
+    assert!(matches!(
+        chart_space.clr_map_ovr,
+        Some(ooxml_types::themes::ColorMappingOverride::MasterClrMapping)
+    ));
+}
+
+#[test]
 fn test_parse_pie_chart() {
     let xml = br#"<?xml version="1.0"?>
         <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">

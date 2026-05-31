@@ -20,6 +20,9 @@ import {
   STOCK_OPEN_FIELD,
   STOCK_VOLUME_FIELD,
   VALUE_FIELD,
+  WATERFALL_END_FIELD,
+  WATERFALL_RUNNING_TOTAL_FIELD,
+  WATERFALL_TYPE_FIELD,
 } from './fields';
 import { isNoFillNoLineSeries } from './series-style';
 
@@ -43,6 +46,11 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   );
   const seriesConfigs = config?.series ?? [];
   const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
+  let waterfallRunningTotal = 0;
+  const waterfallTotalIndices = new Set([
+    ...(config?.waterfall?.totalIndices ?? []),
+    ...(config?.waterfall?.subtotalIndices ?? []),
+  ]);
   for (let i = 0; i < categories.length; i++) {
     const rawCategory = categories[i];
     const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
@@ -66,6 +74,17 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         }
         if (config?.series?.some(isNoFillNoLineSeries)) {
           row[SERIES_OPACITY_FIELD] = isNoFillNoLineSeries(seriesConfigs[seriesIndex]) ? 0 : 1;
+        }
+        if (config?.type === 'waterfall') {
+          const value = toFiniteNumber(point.y) ?? 0;
+          const isTotal = waterfallTotalIndices.has(i);
+          const end = isTotal ? value : waterfallRunningTotal + value;
+          row[WATERFALL_RUNNING_TOTAL_FIELD] = end;
+          row[WATERFALL_END_FIELD] = end;
+          row[WATERFALL_TYPE_FIELD] = isTotal ? 'total' : value >= 0 ? 'increase' : 'decrease';
+          if (seriesIndex === data.series.length - 1) {
+            waterfallRunningTotal = end;
+          }
         }
         const categoryFormatCode = data.categoryFormatCodes?.[i];
         if (categoryFormatCode) row[CATEGORY_FORMAT_CODE_FIELD] = categoryFormatCode;

@@ -1,6 +1,6 @@
 import type { DataRow, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
-import { CATEGORY_FIELD, VALUE_FIELD, WATERFALL_TYPE_FIELD } from '../fields';
+import { CATEGORY_FIELD, WATERFALL_END_FIELD, WATERFALL_TYPE_FIELD } from '../fields';
 import { buildWaterfallTransforms } from '../transforms';
 
 /**
@@ -25,7 +25,7 @@ export function buildWaterfallLayers(
     mark: { type: 'bar' },
     encoding: {
       x: { field: CATEGORY_FIELD, type: 'nominal' },
-      y: { field: VALUE_FIELD, type: 'quantitative' },
+      y: { field: WATERFALL_END_FIELD, type: 'quantitative' },
       color: {
         field: WATERFALL_TYPE_FIELD,
         type: 'nominal',
@@ -38,5 +38,17 @@ export function buildWaterfallLayers(
     transform: [...buildWaterfallTransforms()],
   };
 
-  return [mainLayer];
+  if (waterfall?.showConnectorLines === false) {
+    return [mainLayer];
+  }
+
+  const connectorLayer: UnitSpec = {
+    mark: { type: 'line', stroke: '#6b7280', strokeWidth: 1 },
+    encoding: {
+      x: { field: CATEGORY_FIELD, type: 'nominal' },
+      y: { field: WATERFALL_END_FIELD, type: 'quantitative' },
+    },
+  };
+
+  return [mainLayer, connectorLayer];
 }

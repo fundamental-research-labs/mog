@@ -74,7 +74,12 @@ function waterfallConfigToWire(
   waterfall: NonNullable<ChartConfig['waterfall']>,
 ): NonNullable<ChartFloatingObject['waterfall']> {
   return {
-    ...(waterfall.totalIndices !== undefined ? { subtotalIndices: waterfall.totalIndices } : {}),
+    ...(waterfall.subtotalIndices !== undefined || waterfall.totalIndices !== undefined
+      ? { subtotalIndices: waterfall.subtotalIndices ?? waterfall.totalIndices }
+      : {}),
+    ...(waterfall.showConnectorLines !== undefined
+      ? { showConnectorLines: waterfall.showConnectorLines }
+      : {}),
   };
 }
 
@@ -83,7 +88,15 @@ function waterfallConfigFromWire(
 ): Chart['waterfall'] {
   if (!waterfall) return undefined;
   return {
-    ...(waterfall.subtotalIndices !== undefined ? { totalIndices: waterfall.subtotalIndices } : {}),
+    ...(waterfall.subtotalIndices !== undefined
+      ? {
+          subtotalIndices: waterfall.subtotalIndices,
+          totalIndices: waterfall.subtotalIndices,
+        }
+      : {}),
+    ...(waterfall.showConnectorLines !== undefined
+      ? { showConnectorLines: waterfall.showConnectorLines }
+      : {}),
   };
 }
 

@@ -25,9 +25,9 @@ describe('chart-type-converters', () => {
       type: 'boxplot',
       diagnostics: [{ code: 'acceptedChartTypeAlias', canonicalType: 'boxplot' }],
     });
-    expect(wireChartTypeToConfig('chartEx:funnel')).toMatchObject({
-      type: 'funnel',
-      diagnostics: [{ code: 'acceptedChartTypeAlias', canonicalType: 'funnel' }],
+    expect(wireChartTypeToConfig('paretoLine')).toMatchObject({
+      type: 'pareto',
+      diagnostics: [{ code: 'acceptedChartTypeAlias', canonicalType: 'pareto' }],
     });
   });
 
@@ -39,6 +39,16 @@ describe('chart-type-converters', () => {
           code: 'unsupportedChartType',
           message: 'Imported chart type "chartEx:unknown" is not supported',
           rawType: 'chartEx:unknown',
+        },
+      ],
+    });
+    expect(wireChartTypeToConfig('chartEx:funnel')).toEqual({
+      type: undefined,
+      diagnostics: [
+        {
+          code: 'unsupportedChartType',
+          message: 'Imported chart type "chartEx:funnel" is not supported',
+          rawType: 'chartEx:funnel',
         },
       ],
     });

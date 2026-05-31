@@ -54,6 +54,52 @@ describe('configToSpec axis render contracts', () => {
     });
   });
 
+  it('resolves secondary category axis styles with workbook theme context', () => {
+    const spec = asUnitSpec({
+      type: 'column',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      workbookTheme: {
+        colors: [{ name: 'accent1', color: '#123456' }],
+        colorScheme: {
+          accent1: { type: 'SrgbClr', val: '123456', transforms: [] },
+        },
+      },
+      axis: {
+        categoryAxis: { visible: true },
+        secondaryCategoryAxis: {
+          visible: true,
+          title: 'Themed Top Axis',
+          position: 't',
+          format: {
+            font: {
+              color: { theme: 'accent1' },
+            },
+          },
+          titleFormat: {
+            font: {
+              color: { theme: 'accent1' },
+            },
+          },
+          gridlineFormat: {
+            color: { theme: 'accent1' },
+          },
+        },
+        valueAxis: { visible: true },
+      },
+    } as ChartConfig);
+
+    expect(spec.encoding?.x?.secondaryAxis).toMatchObject({
+      orient: 'top',
+      title: 'Themed Top Axis',
+      labelColor: '#123456',
+      titleColor: '#123456',
+      gridColor: '#123456',
+    });
+  });
+
   it('lowers log scales, value units, display units, and minor streams', () => {
     const spec = asUnitSpec({
       type: 'line',

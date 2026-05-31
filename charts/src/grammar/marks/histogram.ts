@@ -64,14 +64,16 @@ function processHistogramData(
   data: DataRow[],
   valueField: string,
   categoryField?: string,
+  markSpec?: MarkSpec,
 ): HistogramData[] {
+  const binOptions = histogramBinOptions(markSpec);
   if (!categoryField) {
     const values = data
       .map((row) => row[valueField])
       .filter((v): v is number => typeof v === 'number' && isFinite(v));
     if (values.length === 0) return [{ bins: [] }];
-    const binCount = freedmanDiaconisBins(values);
-    const bins = binData(values, { binCount, nice: true });
+    const binCount = binOptions.binCount ?? freedmanDiaconisBins(values);
+    const bins = binData(values, { ...binOptions, binCount, nice: true });
     return [{ bins }];
   }
 
@@ -90,14 +92,23 @@ function processHistogramData(
     }
     if (values.length > 0) {
       const color = DEFAULT_COLORS[colorIndex % DEFAULT_COLORS.length];
-      const binCount = freedmanDiaconisBins(values);
-      const bins = binData(values, { binCount, nice: true });
+      const binCount = binOptions.binCount ?? freedmanDiaconisBins(values);
+      const bins = binData(values, { ...binOptions, binCount, nice: true });
       results.push({ bins, category, color });
       colorIndex++;
     }
   }
 
   return results;
+}
+
+function histogramBinOptions(markSpec: MarkSpec | undefined) {
+  return {
+    binCount: markSpec?.binCount,
+    binWidth: markSpec?.binWidth,
+    minValue: markSpec?.underflowBinValue,
+    maxValue: markSpec?.overflowBinValue,
+  };
 }
 
 // =============================================================================
@@ -131,7 +142,7 @@ export function generateHistogramMarks(
   if (!valueField) return [];
 
   // Process data into bins
-  const histogramData = processHistogramData(data, valueField, categoryField);
+  const histogramData = processHistogramData(data, valueField, categoryField, markSpec);
 
   // If no y scale was provided (histogram computes counts internally),
   // create one from the max bin count and the layout.

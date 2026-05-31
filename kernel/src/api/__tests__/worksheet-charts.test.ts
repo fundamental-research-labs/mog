@@ -161,6 +161,63 @@ describe('WorksheetChartsImpl chart ref read normalization', () => {
   });
 });
 
+describe('WorksheetChartsImpl waterfall config mapping', () => {
+  it('preserves imported waterfall subtotal and connector-line options on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartType: 'waterfall',
+        waterfall: {
+          subtotalIndices: [1, 3],
+          showConnectorLines: false,
+        },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        waterfall: {
+          subtotalIndices: [1, 3],
+          totalIndices: [1, 3],
+          showConnectorLines: false,
+        },
+      }),
+    );
+  });
+
+  it('writes waterfall subtotal options through the generated compute bridge shape', async () => {
+    const chart = makeChart({ chartType: 'waterfall' });
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      waterfall: {
+        subtotalIndices: [2],
+        totalIndices: [9],
+        showConnectorLines: true,
+      },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        waterfall: {
+          subtotalIndices: [2],
+          showConnectorLines: true,
+        },
+      }),
+    );
+  });
+});
+
 describe('Worksheet chart image export', () => {
   it('delegates worksheet.charts.exportImage through the context chart image exporter', async () => {
     const chart = makeChart();

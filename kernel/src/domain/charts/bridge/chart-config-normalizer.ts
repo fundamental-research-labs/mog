@@ -9,6 +9,11 @@ import {
   wireToLegendConfig,
   wireChartTypeToConfig,
   wireToSeriesConfigArray,
+  wireToBoxplotConfig,
+  wireToHierarchyChartConfig,
+  wireToHistogramConfig,
+  wireToRegionMapConfig,
+  wireToWaterfallConfig,
 } from '../chart-type-converters';
 
 /**
@@ -69,6 +74,82 @@ export function unsupportedChartTypeError(
   };
 }
 
+type ChartColorMapOverrideConfig = NonNullable<
+  NonNullable<ChartConfig['chartStyleContext']>['colorMapOverride']
+>;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function colorMappingValue(mapping: Record<string, unknown>, field: string): string | undefined {
+  const snakeField = field === 'folHlink' ? 'fol_hlink' : field;
+  const value = mapping[field] ?? mapping[snakeField];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function chartColorMapOverrideFromSerialized(
+  value: unknown,
+): ChartColorMapOverrideConfig | undefined {
+  if (
+    value === 'MasterClrMapping' ||
+    value === 'masterClrMapping' ||
+    value === 'master' ||
+    value === 'Master'
+  ) {
+    return { type: 'master' };
+  }
+
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const kind = record.kind ?? record.type;
+  if (kind === 'master' || kind === 'Master') return { type: 'master' };
+  if ('MasterClrMapping' in record || 'masterClrMapping' in record) return { type: 'master' };
+
+  const rawMapping =
+    asRecord(record.OverrideClrMapping) ??
+    asRecord(record.overrideClrMapping) ??
+    asRecord(record.Override) ??
+    asRecord(record.override) ??
+    asRecord(record.mapping) ??
+    record;
+
+  const mappingFields = [
+    'bg1',
+    'tx1',
+    'bg2',
+    'tx2',
+    'accent1',
+    'accent2',
+    'accent3',
+    'accent4',
+    'accent5',
+    'accent6',
+    'hlink',
+    'folHlink',
+  ] as const;
+  const mapping: Record<string, string> = {};
+  for (const field of mappingFields) {
+    const mappedValue = colorMappingValue(rawMapping, field);
+    if (mappedValue) mapping[field] = mappedValue;
+  }
+
+  return Object.keys(mapping).length > 0 ? { type: 'override', mapping } : undefined;
+}
+
+function chartStyleContextFromOoxml(
+  ooxml: ChartFloatingObject['ooxml'],
+): ChartConfig['chartStyleContext'] | undefined {
+  const definition = asRecord(ooxml?.definition);
+  const colorMapOverride = chartColorMapOverrideFromSerialized(
+    definition?.clr_map_ovr ?? definition?.clrMapOvr,
+  );
+  return colorMapOverride ? { colorMapOverride } : undefined;
+}
+
 /**
  * Convert a ChartFloatingObject to a ChartConfig for passing to the charts library.
  * Provides defaults for required fields that are optional in the gen type.
@@ -112,7 +193,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     smoothLines: normalizedChart.smoothLines,
     radarFilled: normalizedChart.radarFilled,
     radarMarkers: normalizedChart.radarMarkers,
-    waterfall: normalizedChart.waterfall as ChartConfig['waterfall'],
+    waterfall: wireToWaterfallConfig(normalizedChart.waterfall),
+    histogram: wireToHistogramConfig(normalizedChart.histogram),
+    boxplot: wireToBoxplotConfig(normalizedChart.boxplot),
+    hierarchy: wireToHierarchyChartConfig(normalizedChart.hierarchy),
+    regionMap: wireToRegionMapConfig(normalizedChart.regionMap),
     displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
     plotVisibleOnly: normalizedChart.plotVisibleOnly,
     gapWidth: normalizedChart.gapWidth,
@@ -125,11 +210,32 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     splitValue: normalizedChart.splitValue,
     categoryLabelLevel: normalizedChart.categoryLabelLevel,
     seriesNameLevel: normalizedChart.seriesNameLevel,
+    showAllFieldButtons: normalizedChart.showAllFieldButtons,
+    secondPlotSize: normalizedChart.secondPlotSize,
+    varyByCategories: normalizedChart.varyByCategories,
+    pivotOptions: normalizedChart.pivotOptions as ChartConfig['pivotOptions'],
     style: normalizedChart.style,
+    roundedCorners: normalizedChart.roundedCorners,
+    autoTitleDeleted: normalizedChart.autoTitleDeleted,
+    showDataLabelsOverMaximum: normalizedChart.showDataLabelsOverMax,
     chartFormat: normalizedChart.chartFormat as ChartConfig['chartFormat'],
     plotFormat: normalizedChart.plotFormat as ChartConfig['plotFormat'],
     titleFormat: normalizedChart.titleFormat as ChartConfig['titleFormat'],
+    titleRichText: normalizedChart.titleRichText as ChartConfig['titleRichText'],
+    titleFormula: normalizedChart.titleFormula,
+    dataTable: normalizedChart.dataTable as ChartConfig['dataTable'],
+    barShape: normalizedChart.barShape as ChartConfig['barShape'],
+    heightPt: normalizedChart.heightPt,
+    widthPt: normalizedChart.widthPt,
+    leftPt: normalizedChart.leftPt,
+    topPt: normalizedChart.topPt,
+    wireframe: normalizedChart.wireframe,
+    surfaceTopView: normalizedChart.surfaceTopView,
+    colorScheme: normalizedChart.colorScheme,
     subType: normalizedChart.subType as ChartConfig['subType'],
+    chartStyleContext:
+      (normalizedChart as { chartStyleContext?: ChartConfig['chartStyleContext'] })
+        .chartStyleContext ?? chartStyleContextFromOoxml(normalizedChart.ooxml),
     extra: normalizedChart.ooxml,
   };
 }

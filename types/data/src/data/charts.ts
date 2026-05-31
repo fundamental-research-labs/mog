@@ -415,14 +415,41 @@ export interface ChartAreaConfig {
 export interface HistogramConfig {
   binCount?: number;
   binWidth?: number;
+  overflowBin?: boolean;
+  overflowBinValue?: number;
+  underflowBin?: boolean;
+  underflowBinValue?: number;
   cumulative?: boolean;
 }
 
 /** Box plot configuration */
 export interface BoxplotConfig {
   showOutliers?: boolean;
+  showOutlierPoints?: boolean;
   showMean?: boolean;
+  showMeanMarkers?: boolean;
+  showMeanLine?: boolean;
+  quartileMethod?: string;
   whiskerType?: 'tukey' | 'minMax' | 'percentile';
+}
+
+/** Imported hierarchy row for treemap/sunburst ChartEx projections. */
+export interface HierarchyChartRow {
+  id: string;
+  parentId?: string;
+  label: string;
+  level: number;
+  value?: number;
+  categoryFormula?: string;
+  valueFormula?: string;
+}
+
+/** Typed hierarchy projection for ChartEx treemap/sunburst imports. */
+export interface HierarchyChartConfig {
+  rows?: HierarchyChartRow[];
+  categoryFormulas?: string[];
+  valueFormula?: string;
+  parentLabelLayout?: string;
 }
 
 /** Heatmap configuration */
@@ -466,6 +493,10 @@ export interface SunburstConfig {
 
 /** Region map chart configuration */
 export interface RegionMapConfig {
+  /** Imported region category formula from ChartEx projection. */
+  regionFormula?: string;
+  /** Imported value formula from ChartEx projection. */
+  valueFormula?: string;
   /** Geographic region scope */
   region?: 'world' | 'us' | 'europe' | 'asia' | 'africa' | 'oceania' | 'southAmerica';
   /** Color scale for region fills */
@@ -484,8 +515,12 @@ export interface RegionMapConfig {
  * Waterfall chart configuration for special bars
  */
 export interface WaterfallConfig {
+  /** Indices that are subtotal bars in imported ChartEx waterfalls. */
+  subtotalIndices?: number[];
   /** Indices that are "total" bars (drawn from zero) */
   totalIndices?: number[];
+  /** Whether connector lines between bars are drawn. */
+  showConnectorLines?: boolean;
   /** Color for positive values */
   increaseColor?: string;
   /** Color for negative values */
@@ -1205,6 +1240,7 @@ export interface ChartConfig {
   // Hierarchical chart specific
   treemap?: TreemapConfig;
   sunburst?: SunburstConfig;
+  hierarchy?: HierarchyChartConfig;
 
   // Geographic chart specific
   regionMap?: RegionMapConfig;

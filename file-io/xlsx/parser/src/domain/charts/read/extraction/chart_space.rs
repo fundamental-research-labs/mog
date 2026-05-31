@@ -4,7 +4,9 @@ use super::common::{
     map_ooxml_chart_type_to_domain,
 };
 use super::data_refs::reconstruct_data_range_from_chart_space;
-use super::formatting::{extract_chart_format, extract_title_chart_format};
+use super::formatting::{
+    extract_chart_format, extract_chart_rich_text, extract_title_chart_format,
+};
 use super::labels::extract_data_label_data;
 use super::legend::extract_legend_from_chart_space;
 use super::series::extract_series_from_chart_space;
@@ -63,6 +65,7 @@ pub fn extract_chart_spec_from_chart_space(
     let chart_format = extract_chart_format(cs.sp_pr.as_ref(), cs.tx_pr.as_ref());
     let plot_format = extract_chart_format(plot_area.sp_pr.as_ref(), None);
     let title_format = chart.title.as_ref().and_then(extract_title_chart_format);
+    let title_rich_text = chart.title.as_ref().and_then(extract_title_rich_text);
 
     // -------------------------------------------------------------------------
     // (i) scalar fields from first chart group's config
@@ -205,7 +208,7 @@ pub fn extract_chart_spec_from_chart_space(
         chart_format,
         plot_format,
         title_format,
-        title_rich_text: None,
+        title_rich_text,
         title_formula: None,
         data_table,
         waterfall: None,
@@ -314,6 +317,15 @@ fn extract_chart_title_text(chart: &ooxml_types::charts::Chart) -> Option<String
     None
 }
 
+fn extract_title_rich_text(
+    title: &ooxml_types::charts::Title,
+) -> Option<Vec<domain_types::chart::ChartFormatStringData>> {
+    match title.tx.as_ref()? {
+        ooxml_types::charts::ChartText::Rich(body) => extract_chart_rich_text(body),
+        ooxml_types::charts::ChartText::StrRef(_) => None,
+    }
+}
+
 /// Extract sub-type from a chart type config.
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
@@ -373,8 +385,8 @@ fn extract_scalar_fields_from_config(
 mod tests {
     use super::*;
     use ooxml_types::charts::{
-        AreaChartConfig, Chart as OoxmlChart, ChartGroup, ChartSpace, ChartType, ChartTypeConfig,
-        LineChartConfig, PlotArea, Title,
+        AreaChartConfig, Chart as OoxmlChart, ChartGroup, ChartSpace, ChartText, ChartType,
+        ChartTypeConfig, LineChartConfig, PlotArea, Title,
     };
 
     fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
@@ -564,5 +576,49 @@ mod tests {
         let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
 
         assert_eq!(spec.title, None);
+    }
+
+    #[test]
+    fn inline_title_rich_text_runs_are_projected() {
+        let body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:p>
+                    <a:defRPr sz="1200"/>
+                    <a:r>
+                        <a:rPr b="1"/>
+                        <a:t>Bold</a:t>
+                    </a:r>
+                    <a:r>
+                        <a:rPr i="1"/>
+                        <a:t> Italic</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let cs = ChartSpace {
+            chart: OoxmlChart {
+                title: Some(Title {
+                    tx: Some(ChartText::Rich(body)),
+                    ..Default::default()
+                }),
+                plot_area: PlotArea::default(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor());
+        let runs = spec.title_rich_text.expect("expected rich title runs");
+
+        assert_eq!(
+            runs.iter().map(|run| run.text.as_str()).collect::<Vec<_>>(),
+            vec!["Bold", " Italic"]
+        );
+        assert_eq!(runs[0].font.as_ref().and_then(|font| font.bold), Some(true));
+        assert_eq!(
+            runs[1].font.as_ref().and_then(|font| font.italic),
+            Some(true)
+        );
     }
 }

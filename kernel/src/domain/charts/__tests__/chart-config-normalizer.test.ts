@@ -50,8 +50,84 @@ describe('chart config normalizer', () => {
 
   it('canonicalizes imported chart type aliases before rendering', () => {
     expect(toChartConfig(chart({ chartType: 'surface3D' })).type).toBe('surface3d');
-    expect(toChartConfig(chart({ chartType: 'chartEx:funnel' })).type).toBe('funnel');
     expect(toChartConfig(chart({ chartType: 'boxWhisker' })).type).toBe('boxplot');
+    expect(toChartConfig(chart({ chartType: 'paretoLine' })).type).toBe('pareto');
+    expect(() => toChartConfig(chart({ chartType: 'chartEx:funnel' }))).toThrow(
+      'Imported chart type "chartEx:funnel" is not supported',
+    );
+  });
+
+  it('passes projected ChartEx family config through to render config', () => {
+    const config = toChartConfig(
+      chart({
+        chartType: 'waterfall',
+        waterfall: { subtotalIndices: [2], showConnectorLines: true },
+        histogram: { binCount: 8, underflowBin: true, underflowBinValue: 1 },
+        boxplot: {
+          showOutlierPoints: true,
+          showMeanMarkers: false,
+          showMeanLine: true,
+          quartileMethod: 'inclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'banner',
+        },
+        regionMap: { regionFormula: 'Sheet1!A1:A3', valueFormula: 'Sheet1!B1:B3' },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.waterfall).toMatchObject({
+      subtotalIndices: [2],
+      totalIndices: [2],
+      showConnectorLines: true,
+    });
+    expect(config.histogram).toMatchObject({ binCount: 8, underflowBinValue: 1 });
+    expect(config.boxplot).toMatchObject({
+      showOutlierPoints: true,
+      showOutliers: true,
+      showMeanMarkers: false,
+      showMeanLine: true,
+      quartileMethod: 'inclusive',
+    });
+    expect(config.hierarchy).toMatchObject({ parentLabelLayout: 'banner' });
+    expect(config.regionMap).toMatchObject({ regionFormula: 'Sheet1!A1:A3' });
+  });
+
+  it('forwards imported chart style fields into the render config', () => {
+    const config = toChartConfig(
+      chart({
+        roundedCorners: true,
+        autoTitleDeleted: false,
+        showDataLabelsOverMax: true,
+        titleRichText: [{ text: 'Revenue', font: { bold: true } }],
+        dataTable: { visible: true, showHorzBorder: true },
+        colorScheme: 12,
+        ooxml: {
+          definition: {
+            _kind: 'chart',
+            clr_map_ovr: {
+              OverrideClrMapping: {
+                bg1: 'Dk2',
+                tx1: 'Accent2',
+                fol_hlink: 'Hlink',
+              },
+            },
+          },
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.roundedCorners).toBe(true);
+    expect(config.showDataLabelsOverMaximum).toBe(true);
+    expect(config.titleRichText).toEqual([{ text: 'Revenue', font: { bold: true } }]);
+    expect(config.dataTable).toMatchObject({ visible: true, showHorzBorder: true });
+    expect(config.colorScheme).toBe(12);
+    expect(config.chartStyleContext?.colorMapOverride).toEqual({
+      type: 'override',
+      mapping: { bg1: 'Dk2', tx1: 'Accent2', folHlink: 'Hlink' },
+    });
   });
 
   it('normalizes imported combo chart metadata before narrowing the chart type', () => {

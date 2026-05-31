@@ -603,6 +603,22 @@ export interface MarkSpec {
   tooltip?: boolean | { content?: 'data' | 'encoding' };
   /** Show KDE density curve overlay (histogram mark only) */
   density?: boolean;
+  /** Imported histogram bin count. */
+  binCount?: number;
+  /** Imported histogram bin width. */
+  binWidth?: number;
+  /** Imported histogram lower bound. */
+  underflowBinValue?: number;
+  /** Imported histogram upper bound. */
+  overflowBinValue?: number;
+  /** Show boxplot outlier points. */
+  showOutlierPoints?: boolean;
+  /** Show boxplot mean markers. */
+  showMeanMarkers?: boolean;
+  /** Show boxplot mean line. */
+  showMeanLine?: boolean;
+  /** Boxplot quartile calculation method. */
+  quartileMethod?: string;
   /** Exploded slice index for pie charts (consumed by OOXML exporter) */
   _explodedIndex?: number;
   /** Exploded slice indices for pie charts (consumed by OOXML exporter) */

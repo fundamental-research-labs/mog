@@ -43,7 +43,7 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
         style: chart.style.map(|s| s as u8),
         style_alternate_content: chart.style_alternate_content.clone(),
         style_after_chart: chart.style_after_chart,
-        clr_map_ovr: None,
+        clr_map_ovr: chart.clr_map_ovr.clone(),
         protection: chart.protection.clone(),
         chart: oc::Chart {
             title: chart.title.clone(),

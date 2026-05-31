@@ -72,6 +72,29 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     return encoding;
   }
 
+  if (chartType === 'histogram') {
+    encoding.x = {
+      field: VALUE_FIELD,
+      type: 'quantitative',
+      bin:
+        config.histogram?.binCount || config.histogram?.binWidth
+          ? { maxbins: config.histogram.binCount, step: config.histogram.binWidth }
+          : true,
+      scale: { zero: false, nice: true },
+    };
+    const colorChannel = buildColorEncoding(
+      hasMultipleSeries,
+      config.legend,
+      resolvedCategoryColors(config),
+      false,
+      visibleLegendDomain(config, data),
+      legendSymbolType(config, data),
+      config,
+    );
+    if (colorChannel) encoding.color = colorChannel;
+    return encoding;
+  }
+
   // --- X/Y encoding for all other chart types ---
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);
@@ -192,7 +215,11 @@ function applySecondaryCategoryAxis(
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
   if (!categoryChannel) return;
 
-  const axisSpec = mapAxisConfigToAxisSpec(secondaryCategoryAxis);
+  const axisSpec = mapAxisConfigToAxisSpec(
+    secondaryCategoryAxis,
+    config,
+    'secondaryCategoryAxis',
+  );
   const explicitOrient = normalizeAxisOrient(secondaryCategoryAxis.position);
   categoryChannel.secondaryAxis = {
     ...axisSpec,

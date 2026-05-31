@@ -30,24 +30,34 @@
 
 import type {
   AxisData,
+  BoxplotConfigData,
   ChartLineData,
   ChartSeriesData,
   DataLabelData,
+  HierarchyChartConfigData,
+  HistogramConfigData,
   LegendData,
   PointFormatData,
+  RegionMapConfigData,
   SingleAxisData,
+  WaterfallOptions,
 } from '../../bridges/compute/compute-types.gen';
 
 import type {
   AxisConfig,
+  BoxplotConfig,
   ChartLeaderLinesFormat,
   ChartType,
   DataLabelConfig,
+  HierarchyChartConfig,
+  HistogramConfig,
   LegendConfig,
   MarkerStyle,
   PointFormat,
+  RegionMapConfig,
   SeriesConfig,
   SingleAxisConfig,
+  WaterfallConfig,
 } from '@mog-sdk/contracts/data/charts';
 
 // =============================================================================
@@ -187,16 +197,6 @@ const CHART_TYPE_ALIASES: Record<string, ChartType> = {
   surface3D: 'surface3d',
   boxWhisker: 'boxplot',
   paretoLine: 'pareto',
-  'chartEx:waterfall': 'waterfall',
-  'chartEx:treemap': 'treemap',
-  'chartEx:sunburst': 'sunburst',
-  'chartEx:funnel': 'funnel',
-  'chartEx:regionMap': 'regionMap',
-  'chartEx:histogram': 'histogram',
-  'chartEx:pareto': 'pareto',
-  'chartEx:paretoLine': 'pareto',
-  'chartEx:boxWhisker': 'boxplot',
-  'chartEx:boxplot': 'boxplot',
 };
 
 /**
@@ -429,6 +429,59 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
   };
 }
 
+export function wireToWaterfallConfig(w: WaterfallOptions | undefined): WaterfallConfig | undefined {
+  if (!w) return undefined;
+  return {
+    subtotalIndices: w.subtotalIndices,
+    totalIndices: w.subtotalIndices,
+    showConnectorLines: w.showConnectorLines,
+  };
+}
+
+export function wireToHistogramConfig(w: HistogramConfigData | undefined): HistogramConfig | undefined {
+  if (!w) return undefined;
+  return {
+    binCount: w.binCount,
+    binWidth: w.binWidth,
+    overflowBin: w.overflowBin,
+    overflowBinValue: w.overflowBinValue,
+    underflowBin: w.underflowBin,
+    underflowBinValue: w.underflowBinValue,
+  };
+}
+
+export function wireToBoxplotConfig(w: BoxplotConfigData | undefined): BoxplotConfig | undefined {
+  if (!w) return undefined;
+  return {
+    showOutlierPoints: w.showOutlierPoints,
+    showOutliers: w.showOutlierPoints,
+    showMeanMarkers: w.showMeanMarkers,
+    showMean: w.showMeanMarkers,
+    showMeanLine: w.showMeanLine,
+    quartileMethod: w.quartileMethod,
+  };
+}
+
+export function wireToHierarchyChartConfig(
+  w: HierarchyChartConfigData | undefined,
+): HierarchyChartConfig | undefined {
+  if (!w) return undefined;
+  return {
+    rows: w.rows,
+    categoryFormulas: w.categoryFormulas,
+    valueFormula: w.valueFormula,
+    parentLabelLayout: w.parentLabelLayout,
+  };
+}
+
+export function wireToRegionMapConfig(w: RegionMapConfigData | undefined): RegionMapConfig | undefined {
+  if (!w) return undefined;
+  return {
+    regionFormula: w.regionFormula,
+    valueFormula: w.valueFormula,
+  };
+}
+
 /** Convert a wire ChartSeriesData to the contract SeriesConfig. */
 export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
   const config: SeriesConfig = {
@@ -472,6 +525,8 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     showConnectorLines: w.showConnectorLines,
     leaderLineFormat: w.leaderLineFormat,
     showLeaderLines: w.showLeaderLines,
+    binOptions: undefined,
+    boxwhiskerOptions: undefined,
   };
   return config;
 }

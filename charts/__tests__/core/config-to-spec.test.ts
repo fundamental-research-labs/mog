@@ -88,6 +88,17 @@ describe('chartDataToRows', () => {
     expect(rows[3]).toEqual({ category: 'B', value: 40, series: 'Series 2' });
   });
 
+  it('adds imported waterfall running-total metadata', () => {
+    const rows = chartDataToRows(SINGLE_SERIES_DATA, {
+      ...makeConfig({ type: 'waterfall' }),
+      waterfall: { subtotalIndices: [2], showConnectorLines: true },
+    });
+
+    expect(rows.map((row) => row._waterfallType)).toEqual(['increase', 'increase', 'total']);
+    expect(rows.map((row) => row._waterfallRunningTotal)).toEqual([10, 30, 30]);
+    expect(rows.map((row) => row._waterfallEnd)).toEqual([10, 30, 30]);
+  });
+
   it('should handle empty data', () => {
     const rows = chartDataToRows({ categories: [], series: [] });
     expect(rows).toEqual([]);
@@ -246,6 +257,50 @@ describe('buildMark - mark type mapping', () => {
     const mark = buildMark(config) as MarkSpec;
     expect(mark.type).toBe('bar');
     expect(mark.cornerRadius).toBe(2);
+  });
+
+  it('maps imported histogram bin options to the histogram mark', () => {
+    const mark = buildMark(
+      makeConfig({
+        type: 'histogram',
+        histogram: {
+          binCount: 8,
+          binWidth: 2,
+          underflowBinValue: 1,
+          overflowBinValue: 20,
+        },
+      }),
+    ) as MarkSpec;
+
+    expect(mark).toMatchObject({
+      type: 'histogram',
+      binCount: 8,
+      binWidth: 2,
+      underflowBinValue: 1,
+      overflowBinValue: 20,
+    });
+  });
+
+  it('maps imported boxplot options to the boxplot mark', () => {
+    const mark = buildMark(
+      makeConfig({
+        type: 'boxplot',
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          showMeanLine: true,
+          quartileMethod: 'exclusive',
+        },
+      }),
+    ) as MarkSpec;
+
+    expect(mark).toMatchObject({
+      type: 'boxplot',
+      showOutlierPoints: false,
+      showMeanMarkers: true,
+      showMeanLine: true,
+      quartileMethod: 'exclusive',
+    });
   });
 
   it('should map pie to arc mark', () => {

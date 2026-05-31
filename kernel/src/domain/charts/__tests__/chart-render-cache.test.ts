@@ -105,18 +105,47 @@ describe('ChartRenderCache', () => {
 
   it('sheet-scoped keys isolate same chart IDs on different sheets', () => {
     const cache = startedCache();
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const sheetBMarks = [{ type: 'group', children: [{ type: 'text' }] }] as unknown as ChartMark[];
     const sheetBLayout: ChartLayoutSnapshot = {
       plotArea: { left: 0.5, top: 0.6, width: 0.7, height: 0.8 },
     };
 
-    cache.commitMarks(CHART_1, marks, { sheetId: SHEET_A, layout });
-    cache.commitMarks(CHART_1, marks, { sheetId: SHEET_B, layout: sheetBLayout });
+    cache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A, layout });
+    cache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B, layout: sheetBLayout });
     cache.commitError(CHART_1, error, SHEET_A);
+    cache.invalidateChart(CHART_1, SHEET_A);
+    cache.beginCompilation(CHART_1, SHEET_B);
 
+    expect(cache.getCachedMarks(CHART_1, SHEET_A)).toBe(sheetAMarks);
+    expect(cache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
     expect(cache.getCachedLayout(CHART_1, SHEET_A)).toEqual(layout);
     expect(cache.getCachedLayout(CHART_1, SHEET_B)).toEqual(sheetBLayout);
-    expect(cache.getCachedError(CHART_1, SHEET_A)).toBe(error);
+    expect(cache.getDirtyChartKeys()).toContain(cache.cacheKey(CHART_1, SHEET_A));
+    expect(cache.getDirtyChartKeys()).not.toContain(cache.cacheKey(CHART_1, SHEET_B));
+    expect(cache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(cache.isCompilationPending(CHART_1, SHEET_B)).toBe(true);
     expect(cache.getCachedError(CHART_1, SHEET_B)).toBeUndefined();
+
+    cache.syncImportRenderStatus(
+      CHART_1,
+      {
+        importStatus: {
+          renderable: false,
+          message: 'Sheet A imported chart cannot render',
+        },
+      },
+      SHEET_A,
+    );
+
+    expect(cache.getImportRenderStatus(CHART_1, SHEET_A)?.message).toBe(
+      'Sheet A imported chart cannot render',
+    );
+    expect(cache.getImportRenderStatus(CHART_1, SHEET_B)).toBeUndefined();
+    expect(cache.getCachedError(CHART_1, SHEET_A)?.code).toBe('RENDER_FAILED');
+    expect(cache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    expect(cache.getCachedLayout(CHART_1, SHEET_B)).toEqual(sheetBLayout);
+    expect(cache.isCompilationPending(CHART_1, SHEET_B)).toBe(true);
   });
 
   it('terminal import status clears render caches and commits a render error', () => {

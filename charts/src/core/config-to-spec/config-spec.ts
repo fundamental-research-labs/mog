@@ -1,10 +1,8 @@
 import type { ConfigSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import {
-  resolveChartFillPaint,
-  resolveChartLineStyle,
-  resolveChartShadow,
-  resolverContextFromConfig,
+  mergeChartFormats,
+  resolveChartOwnerElementStyle,
 } from '../style-resolver';
 import { buildLayoutHints } from './layout-hints';
 import { resolvedCategoryColors } from './series-style';
@@ -45,21 +43,19 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const chartContext = resolverContextFromConfig(config, 'chartArea');
-  const chartFill =
-    resolveChartFillPaint(config.chartFormat?.fill, chartContext) ??
-    resolveChartFillPaint(config.chartArea?.fill, chartContext) ??
-    resolveChartFillPaint(config.chartArea?.format?.fill, chartContext);
-  const chartLine =
-    resolveChartLineStyle(config.chartFormat?.line, chartContext, {
-      widthToPx: linePointsToCanvasPx,
-    }) ??
-    resolveChartLineStyle(config.chartArea?.format?.line, chartContext, {
-      widthToPx: linePointsToCanvasPx,
-    });
-  const chartShadow =
-    resolveChartShadow(config.chartFormat?.shadow, chartContext) ??
-    resolveChartShadow(config.chartArea?.format?.shadow, chartContext);
+  const chartFormat = mergeChartFormats(
+    mergeChartFormats(
+      config.chartArea?.format,
+      config.chartArea?.fill ? { fill: config.chartArea.fill } : undefined,
+    ),
+    config.chartFormat,
+  );
+  const chartStyle = resolveChartOwnerElementStyle(config, 'chartArea', chartFormat, {
+    widthToPx: linePointsToCanvasPx,
+  });
+  const chartFill = chartStyle.paint;
+  const chartLine = chartStyle.line;
+  const chartShadow = chartStyle.shadow;
   if (chartFill?.type === 'solid') {
     configSpec.background = chartFill.color;
   }
@@ -73,21 +69,19 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const plotContext = resolverContextFromConfig(config, 'plotArea');
-  const plotFill =
-    resolveChartFillPaint(config.plotFormat?.fill, plotContext) ??
-    resolveChartFillPaint(config.plotArea?.fill, plotContext) ??
-    resolveChartFillPaint(config.plotArea?.format?.fill, plotContext);
-  const plotLine =
-    resolveChartLineStyle(config.plotFormat?.line, plotContext, {
-      widthToPx: linePointsToCanvasPx,
-    }) ??
-    resolveChartLineStyle(config.plotArea?.format?.line, plotContext, {
-      widthToPx: linePointsToCanvasPx,
-    });
-  const plotShadow =
-    resolveChartShadow(config.plotFormat?.shadow, plotContext) ??
-    resolveChartShadow(config.plotArea?.format?.shadow, plotContext);
+  const plotFormat = mergeChartFormats(
+    mergeChartFormats(
+      config.plotArea?.format,
+      config.plotArea?.fill ? { fill: config.plotArea.fill } : undefined,
+    ),
+    config.plotFormat,
+  );
+  const plotStyle = resolveChartOwnerElementStyle(config, 'plotArea', plotFormat, {
+    widthToPx: linePointsToCanvasPx,
+  });
+  const plotFill = plotStyle.paint;
+  const plotLine = plotStyle.line;
+  const plotShadow = plotStyle.shadow;
   if (plotFill || plotLine || plotShadow) {
     configSpec.plotFrame = {
       ...(plotFill ? { fill: plotFill } : {}),

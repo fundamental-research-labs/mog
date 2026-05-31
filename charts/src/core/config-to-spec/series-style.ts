@@ -9,7 +9,7 @@ import {
   resolveFormatLineColor,
   resolveLineColor,
 } from '../../utils/chart-colors';
-import { resolverContextFromConfig } from '../style-resolver';
+import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import { linePointsToCanvasPx } from './units';
 
@@ -29,16 +29,19 @@ export function resolveSeriesColor(
   config?: ChartConfig,
 ): string | undefined {
   const context = config ? resolverContextFromConfig(config, `series(${index})`) : {};
-  const fill = series.format?.fill;
+  const format = config
+    ? resolveChartOwnerFormat(config, `series(${index})`, series.format)
+    : series.format;
+  const fill = format?.fill;
   const fillTheme = fill?.type === 'solid' ? chartThemeColorKey(fill.color) : undefined;
   const fillHasExplicitTransform =
     fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
   const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
   const fillColor =
-    (fillHasExplicitTransform ? resolveFormatFillColor(series.format, context) : undefined) ??
+    (fillHasExplicitTransform ? resolveFormatFillColor(format, context) : undefined) ??
     chartStyleRepeatThemeColor(fillTheme, sourceIndex) ??
-    resolveFormatFillColor(series.format, context);
-  const lineColor = resolveFormatLineColor(series.format, context);
+    resolveFormatFillColor(format, context);
+  const lineColor = resolveFormatLineColor(format, context);
 
   if (isStrokeColoredSeries(series, fallbackType)) {
     return (series.color ? resolveChartColor(series.color, context) : undefined) ?? lineColor ?? fillColor;
@@ -108,7 +111,10 @@ export function applySeriesLineFormat(
   seriesIndex = 0,
 ): void {
   const context = config ? resolverContextFromConfig(config, `series(${seriesIndex})`) : {};
-  const line = seriesConf?.format?.line;
+  const format = config
+    ? resolveChartOwnerFormat(config, `series(${seriesIndex})`, seriesConf?.format)
+    : seriesConf?.format;
+  const line = format?.line;
   if (line && hasVisibleLineStyle(line)) {
     const stroke = resolveLineColor(line, context);
     if (stroke) mark.stroke = stroke;

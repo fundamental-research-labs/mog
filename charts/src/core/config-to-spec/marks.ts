@@ -1,7 +1,12 @@
 import type { MarkSpec, MarkType } from '../../grammar/spec';
 import type { ChartConfig, ChartType, SeriesConfig } from '../../types';
 import { resolveFormatFillOpacity, resolveLineColor } from '../../utils/chart-colors';
-import { resolveChartFillPaint, resolveChartLineStyle, resolverContextFromConfig } from '../style-resolver';
+import {
+  resolveChartFillPaint,
+  resolveChartLineStyle,
+  resolveChartOwnerFormat,
+  resolverContextFromConfig,
+} from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import {
   POINT_FILL_FIELD,
@@ -23,11 +28,12 @@ function applyPrimarySeriesFormat(mark: MarkSpec, config: ChartConfig): void {
   if (seriesIndex < 0) return;
 
   const series = config.series?.[seriesIndex];
-  if (!series?.format) return;
+  const format = resolveChartOwnerFormat(config, `series(${seriesIndex})`, series?.format);
+  if (!format) return;
   const context = resolverContextFromConfig(config, `series(${seriesIndex})`);
-  const fillPaint = resolveChartFillPaint(series.format.fill, context);
+  const fillPaint = resolveChartFillPaint(format.fill, context);
   if (fillPaint) mark.fillPaint = fillPaint;
-  const line = resolveChartLineStyle(series.format.line, context, {
+  const line = resolveChartLineStyle(format.line, context, {
     widthToPx: linePointsToCanvasPx,
   });
   if (line) {
@@ -263,11 +269,14 @@ export function buildSeriesMark(
     ? resolveSeriesColor(seriesConf, seriesIndex, fallbackType, config)
     : undefined;
   if (color) mark.color = color;
-  if (seriesConf?.format && config) {
+  const format = config
+    ? resolveChartOwnerFormat(config, `series(${seriesIndex})`, seriesConf?.format)
+    : seriesConf?.format;
+  if (format && config) {
     const context = resolverContextFromConfig(config, `series(${seriesIndex})`);
-    const fillPaint = resolveChartFillPaint(seriesConf.format.fill, context);
+    const fillPaint = resolveChartFillPaint(format.fill, context);
     if (fillPaint) mark.fillPaint = fillPaint;
-    const line = resolveChartLineStyle(seriesConf.format.line, context, {
+    const line = resolveChartLineStyle(format.line, context, {
       widthToPx: linePointsToCanvasPx,
     });
     if (line) mark.line = line;

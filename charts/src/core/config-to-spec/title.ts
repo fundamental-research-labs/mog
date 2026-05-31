@@ -2,8 +2,11 @@ import type { TitleSpec } from '../../grammar/spec';
 import type { ChartConfig } from '../../types';
 import { resolveChartTextColor } from '../../utils/chart-colors';
 import {
+  mergeChartFormats,
   resolveChartColor,
   resolveChartFillPaint,
+  resolveChartOwnerFormat,
+  resolveChartOwnerRichText,
   resolveChartShadow,
   resolverContextFromConfig,
 } from '../style-resolver';
@@ -17,7 +20,11 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
   if (!text) return undefined;
   const context = resolverContextFromConfig(config, 'title');
   const titleConfig = config.chartTitle;
-  const titleFormat = config.titleFormat ?? titleConfig?.format;
+  const titleDirectFormat = mergeChartFormats(
+    mergeChartFormats(titleConfig?.font ? { font: titleConfig.font } : undefined, titleConfig?.format),
+    config.titleFormat,
+  );
+  const titleFormat = resolveChartOwnerFormat(config, 'title', titleDirectFormat);
   const font = titleFormat?.font ?? titleConfig?.font;
   const titleSpec: TitleSpec = {
     text,
@@ -38,7 +45,7 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
   if (titleFill) titleSpec.fill = titleFill;
   const shadow = resolveChartShadow(titleFormat?.shadow, context);
   if (shadow) titleSpec.shadow = shadow;
-  const richText = config.titleRichText ?? titleConfig?.richText;
+  const richText = config.titleRichText ?? titleConfig?.richText ?? resolveChartOwnerRichText(config, 'title');
   if (richText?.length) {
     titleSpec.richText = richText.map((run) => ({
       text: run.text,

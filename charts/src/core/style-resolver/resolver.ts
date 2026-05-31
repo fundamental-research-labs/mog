@@ -1,4 +1,11 @@
-import type { ChartConfig, ChartFill, ChartFormat, ChartLineFormat, ChartShadow } from '../../types';
+import type {
+  ChartConfig,
+  ChartFill,
+  ChartFormat,
+  ChartLineFormat,
+  ChartShadow,
+  ChartStyleOwner,
+} from '../../types';
 import type { LineStyleSpec, PaintSpec, ShadowSpec } from '../../primitives/types';
 import {
   chartStyleRepeatThemeColor,
@@ -12,6 +19,8 @@ import {
 export type ChartStyleResolverContext = ResolveChartColorOptions & {
   config?: ChartConfig;
 };
+
+type ChartFont = NonNullable<ChartFormat['font']>;
 
 export type ResolvedChartElementStyle = {
   paint?: PaintSpec;
@@ -40,6 +49,57 @@ export function resolverContextFromConfig(
     ownerKey,
     diagnostics: config.chartStyleContext?.diagnostics,
   };
+}
+
+export function chartStyleOwner(
+  config: ChartConfig | undefined,
+  ownerKey: string | undefined,
+): ChartStyleOwner | undefined {
+  if (!config || !ownerKey) return undefined;
+  return config.chartStyleContext?.owners?.find((owner) => owner.ownerKey === ownerKey);
+}
+
+export function mergeChartFormats(
+  base: ChartFormat | undefined,
+  override: ChartFormat | undefined,
+): ChartFormat | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  return {
+    fill: override.fill ?? base.fill,
+    line: mergeDefined(base.line, override.line),
+    font: mergeDefined(base.font, override.font),
+    textRotation: override.textRotation ?? base.textRotation,
+    textVerticalType: override.textVerticalType ?? base.textVerticalType,
+    shadow: mergeDefined(base.shadow, override.shadow),
+  };
+}
+
+export function resolveChartOwnerFormat(
+  config: ChartConfig | undefined,
+  ownerKey: string | undefined,
+  directFormat: ChartFormat | undefined,
+): ChartFormat | undefined {
+  return mergeChartFormats(chartStyleOwner(config, ownerKey)?.format, directFormat);
+}
+
+export function resolveChartOwnerRichText(
+  config: ChartConfig | undefined,
+  ownerKey: string | undefined,
+): ChartStyleOwner['richText'] | undefined {
+  return chartStyleOwner(config, ownerKey)?.richText;
+}
+
+export function resolveChartOwnerElementStyle(
+  config: ChartConfig,
+  ownerKey: string,
+  directFormat: ChartFormat | undefined,
+  options: { widthToPx?: (width: number | undefined) => number | undefined } = {},
+): ResolvedChartElementStyle {
+  return resolveChartElementStyle(resolveChartOwnerFormat(config, ownerKey, directFormat), {
+    ...resolverContextFromConfig(config, ownerKey),
+    ownerKey,
+  }, options);
 }
 
 export function resolveChartFillPaint(
@@ -218,4 +278,21 @@ function multiplyOpacity(
   if (existingOpacity === undefined) return fromTransparency;
   if (fromTransparency === undefined) return existingOpacity;
   return existingOpacity * fromTransparency;
+}
+
+function mergeDefined<T extends ChartLineFormat | ChartFont | ChartShadow>(
+  base: T | undefined,
+  override: T | undefined,
+): T | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  return Object.fromEntries(
+    Object.entries({ ...base, ...definedEntries(override) }),
+  ) as unknown as T;
+}
+
+function definedEntries<T extends object>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }

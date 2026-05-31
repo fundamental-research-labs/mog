@@ -83,4 +83,103 @@ describe('configToSpec style resolver integration', () => {
       ],
     });
   });
+
+  it('uses owner style context when ergonomic chart fields are absent', () => {
+    const spec = configToSpec(
+      config({
+        title: 'Owner styled',
+        series: [{}],
+        chartStyleContext: {
+          owners: [
+            {
+              ownerKey: 'chartArea',
+              format: {
+                fill: { type: 'solid', color: { theme: 'accent1' } },
+                line: { color: '#111111', width: 1 },
+              },
+            },
+            {
+              ownerKey: 'plotArea',
+              format: {
+                fill: {
+                  type: 'gradient',
+                  gradientType: 'linear',
+                  angle: 45,
+                  stops: [
+                    { position: 0, color: '#000000' },
+                    { position: 1, color: '#FFFFFF' },
+                  ],
+                },
+              },
+            },
+            {
+              ownerKey: 'title',
+              format: {
+                font: { color: { theme: 'accent1' }, size: 16, bold: true },
+              },
+              richText: [{ text: 'Owner styled', font: { italic: true } }],
+            },
+            {
+              ownerKey: 'series(0)',
+              format: {
+                fill: { type: 'solid', color: '#00AA00' },
+              },
+            },
+          ],
+        },
+      }),
+      data,
+    ) as UnitSpec;
+
+    expect(spec.config?.chartFrame).toMatchObject({
+      fill: { type: 'solid', color: '#123456' },
+      line: { paint: { type: 'solid', color: '#111111' } },
+    });
+    expect(spec.config?.plotFrame?.fill).toEqual({
+      type: 'linearGradient',
+      angle: 45,
+      stops: [
+        { offset: 0, color: '#000000', opacity: undefined },
+        { offset: 1, color: '#FFFFFF', opacity: undefined },
+      ],
+    });
+    expect(spec.title).toMatchObject({
+      text: 'Owner styled',
+      color: '#123456',
+      fontSize: 32,
+      fontWeight: 'bold',
+      richText: [expect.objectContaining({ text: 'Owner styled', fontStyle: 'italic' })],
+    });
+    expect(spec.config?.range?.category).toEqual(['#00AA00']);
+  });
+
+  it('lets direct ergonomic fields override owner style properties without dropping owner siblings', () => {
+    const spec = configToSpec(
+      config({
+        chartFormat: {
+          line: { width: 4 },
+        },
+        chartStyleContext: {
+          owners: [
+            {
+              ownerKey: 'chartArea',
+              format: {
+                fill: { type: 'solid', color: '#EEEEEE' },
+                line: { color: '#111111', width: 1 },
+              },
+            },
+          ],
+        },
+      }),
+      data,
+    ) as UnitSpec;
+
+    expect(spec.config?.chartFrame).toMatchObject({
+      fill: { type: 'solid', color: '#EEEEEE' },
+      line: {
+        paint: { type: 'solid', color: '#111111' },
+        width: 8,
+      },
+    });
+  });
 });

@@ -1,7 +1,7 @@
 import type { ChannelSpec, LegendOrient, LegendSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, LegendConfig } from '../../types';
 import { resolveChartTextColor } from '../../utils/chart-colors';
-import { resolverContextFromConfig } from '../style-resolver';
+import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
 import { isNoFillNoLineSeries } from './series-style';
 import { pointsToCanvasPx } from './units';
@@ -49,7 +49,10 @@ export function buildLegendSpec(
 ): LegendSpec | null {
   if (!isLegendShown(legend)) return null;
 
-  const legendFont = legend.format?.font ?? legend.font;
+  const legendFormat = config
+    ? resolveChartOwnerFormat(config, 'legend', legend.format)
+    : legend.format;
+  const legendFont = legendFormat?.font ?? legend.font;
   const labelColor = resolveChartTextColor(
     legendFont?.color,
     config ? resolverContextFromConfig(config, 'legend') : {},

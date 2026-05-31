@@ -1,7 +1,7 @@
 import type { AxisOrient, AxisSpec, AxisTickMark } from '../../grammar/spec';
 import type { ChartConfig, ChartFormat, SingleAxisConfig } from '../../types';
 import { resolveChartTextColor, resolveGridlineColor } from '../../utils/chart-colors';
-import { resolverContextFromConfig } from '../style-resolver';
+import { resolveChartOwnerFormat, resolverContextFromConfig } from '../style-resolver';
 import { isDateAxisConfig, toFiniteNumber } from './category-axis';
 import { dashStyleToStrokeDash, hasVisibleLineStyle } from './series-style';
 import { linePointsToCanvasPx, pointsToCanvasPx } from './units';
@@ -37,6 +37,9 @@ export function mapAxisConfigToAxisSpec(
 ): AxisSpec {
   const spec: AxisSpec = {};
   const context = config ? resolverContextFromConfig(config, ownerKey) : {};
+  const axisFormat = config
+    ? resolveChartOwnerFormat(config, ownerKey, axisConf.format)
+    : axisConf.format;
   spec.title = axisConf.title ?? null;
   if (orient) spec.orient = orient;
   if (axisConf.visible === false || axisConf.show === false) {
@@ -98,7 +101,7 @@ export function mapAxisConfigToAxisSpec(
   if (displayUnitFactor !== undefined) spec.displayUnitFactor = displayUnitFactor;
   if (axisConf.displayUnitLabel) spec.displayUnitLabel = axisConf.displayUnitLabel;
 
-  const labelFont = axisConf.format?.font;
+  const labelFont = axisFormat?.font;
   if (labelFont?.size !== undefined) spec.labelFontSize = pointsToCanvasPx(labelFont.size);
   if (labelFont?.name) spec.labelFontFamily = labelFont.name;
   const labelColor = resolveChartTextColor(labelFont?.color, context);
@@ -113,7 +116,7 @@ export function mapAxisConfigToAxisSpec(
     spec.labelAngle = labelAngle;
   }
 
-  const axisLine = axisConf.format?.line;
+  const axisLine = axisFormat?.line;
   if (axisLine && !hasVisibleLineStyle(axisLine)) {
     spec.domain = false;
     spec.ticks = false;

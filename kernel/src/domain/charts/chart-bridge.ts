@@ -24,19 +24,11 @@
  * @see docs/ARCHITECTURE-CHECKLIST.md (sections 7, 8)
  */
 
-import {
-  collectMarks,
-  compile,
-  configToSpec,
-  type CompileResult,
-  type DataRow,
-} from '@mog/charts';
 import type {
   ChartBounds,
   ChartDataResult,
   ChartError,
   ChartErrorCode,
-  ChartLayoutRect,
   ChartLayoutSnapshot,
   ChartMark,
   ChartRenderSnapshot,
@@ -63,11 +55,7 @@ import { resolveChartRangeReferences } from './chart-range-references';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import { hasImportStatus, isChartPayload } from './bridge/import-render-status';
 import { isPositionOnlyUpdate } from './bridge/position-only-update';
-import {
-  buildResolvedChartSpecSnapshot,
-  defaultExportOptionsForSize,
-  hashJson,
-} from './bridge/resolved-spec-snapshot';
+import { defaultExportOptionsForSize } from './bridge/resolved-spec-snapshot';
 import {
   renderChartError,
   renderChartMarks,
@@ -75,112 +63,22 @@ import {
 } from './bridge/chart-renderer';
 import { ChartRenderCache } from './bridge/chart-render-cache';
 import { ChartDataResolver } from './bridge/chart-data-resolver';
+import {
+  compileChartMarks,
+  compileChartRenderSnapshotAtSize as compileResolvedChartRenderSnapshotAtSize,
+} from './bridge/chart-compiler';
 
 import type { DocumentContext } from '../../context/types';
 
 export { isPositionOnlyUpdate } from './bridge/position-only-update';
+export { initChartWasm } from './bridge/chart-compiler';
+export type { ChartWasmExports } from './bridge/chart-compiler';
 
 // =============================================================================
 // Chart Layout Types — the narrow ChartLayoutSnapshot used by this
 // bridge now lives in contracts so IChartBridge can declare the same return
 // type. See contracts/src/bridges/chart-bridge.ts.
 // =============================================================================
-
-// =============================================================================
-// Chart WASM acceleration (optional — injected by compute-bridge)
-// =============================================================================
-
-/** Typed interface for chart WASM exports injected from compute-bridge. */
-export interface ChartWasmExports {
-  /** Index signature for compatibility with generic WASM module loaders. */
-  [fn_name: string]: (...args: unknown[]) => unknown;
-  chart_apply_transforms: (data: unknown, transforms: unknown) => unknown;
-  chart_compute_regression: (
-    points: unknown,
-    method: unknown,
-    degree: unknown,
-    options: unknown,
-  ) => unknown;
-  chart_compute_stacking: (inputs: unknown, mode: unknown) => unknown;
-  chart_compute_bins: (values: unknown, maxbins: unknown, step: unknown, nice: unknown) => unknown;
-  chart_compute_statistics: (values: unknown) => unknown;
-  chart_compute_density: (values: unknown, bandwidth: unknown, steps: unknown) => unknown;
-}
-
-let chartWasmExports: ChartWasmExports | null = null;
-
-/**
- * Initialize the chart WASM backend.
- * Called by compute-bridge after loading @mog-sdk/wasm.
- */
-export function initChartWasm(exports: ChartWasmExports): void {
-  chartWasmExports = exports;
-}
-
-/**
- * Check if chart WASM module is available.
- */
-function isChartWasmAvailable(): boolean {
-  return chartWasmExports !== null;
-}
-
-/**
- * Try to apply transforms via WASM. Returns transformed DataRow[] or null if WASM unavailable.
- */
-function tryWasmTransforms(data: DataRow[], transforms: unknown[]): DataRow[] | null {
-  if (!isChartWasmAvailable()) return null;
-
-  try {
-    const result = chartWasmExports!.chart_apply_transforms(data, transforms);
-    return result as DataRow[];
-  } catch (err) {
-    console.warn('[ChartBridge] WASM transform failed, falling back to TS:', err);
-    return null;
-  }
-}
-
-// =============================================================================
-// Layout Extraction
-// =============================================================================
-
-/**
- * Extract a ChartLayoutSnapshot from a CompileResult.
- *
- * Converts the compiler's absolute pixel layout into normalized (0-1) coordinates
- * relative to the total chart dimensions, which is what the OfficeJS-style
- * getPlotAreaLayout / getLegendLayout / getTitleLayout APIs return.
- */
-function extractLayoutSnapshot(result: CompileResult): ChartLayoutSnapshot | null {
-  const layout = result.layout;
-  if (!layout) return null;
-
-  const totalW = layout.width || 1;
-  const totalH = layout.height || 1;
-
-  const normalize = (
-    rect: { x: number; y: number; width: number; height: number } | undefined,
-  ): ChartLayoutRect | undefined => {
-    if (!rect) return undefined;
-    return {
-      left: rect.x / totalW,
-      top: rect.y / totalH,
-      width: rect.width / totalW,
-      height: rect.height / totalH,
-    };
-  };
-
-  const plotArea = normalize(layout.plotArea);
-  if (!plotArea) return null;
-
-  return {
-    plotArea,
-    legend: normalize(layout.legend),
-    title: normalize(layout.title),
-    // dataLabels: The compile result doesn't provide a separate data labels region;
-    // this would need mark-level bounding box computation in a future iteration.
-    dataLabels: undefined,
-  };
-}
 
 // =============================================================================
 // Re-export types from contracts for backward compatibility
@@ -455,9 +353,7 @@ export class ChartBridge implements IChartBridge {
 
   private async getAllChartsInWorkbook(): Promise<ChartFloatingObject[]> {
     const sheetIds = await this.ctx.computeBridge.getSheetOrder();
-    const perSheet = await Promise.all(
-      sheetIds.map((id) => getAllCharts(this.ctx, toSheetId(id))),
-    );
+    const perSheet = await Promise.all(sheetIds.map((id) => getAllCharts(this.ctx, toSheetId(id))));
     return perSheet.flat();
   }
 
@@ -779,32 +675,12 @@ export class ChartBridge implements IChartBridge {
       return error;
     }
 
-    // Convert to ChartSpec and compile
-    const spec = configToSpec(config, chartData);
-
-    // Try WASM-accelerated transforms if available
-    const specDataValues =
-      spec.data && 'values' in spec.data ? (spec.data.values as DataRow[]) : [];
-    const wasmData = spec.transform ? tryWasmTransforms(specDataValues, spec.transform) : null;
-
-    let compileResult;
-    if (wasmData) {
-      // WASM already applied transforms — compile without them
-      compileResult = compile({ ...spec, transform: undefined, data: { values: wasmData } });
-    } else {
-      // Fallback: let compile() handle transforms in TS
-      compileResult = compile(spec);
-    }
-
-    // Flatten all marks into a single array
-    const marks = collectMarks(compileResult) as ChartMark[];
-
-    const layoutSnapshot = extractLayoutSnapshot(compileResult);
+    const { marks, layout } = compileChartMarks({ config, chartData });
 
     // Real cache commit — fires listeners so the renderer dirties the
     // drawing layer and the next frame paints from cache instead of the
     // placeholder. commitMarks bails if stop() ran mid-compile.
-    this.commitMarks(chartId, marks, sheetId, layoutSnapshot);
+    this.commitMarks(chartId, marks, sheetId, layout);
 
     return marks;
   }
@@ -902,43 +778,17 @@ export class ChartBridge implements IChartBridge {
       };
     }
 
-    const spec = configToSpec(config, chartData);
-
-    // Try WASM-accelerated transforms if available
-    const specDataValues =
-      spec.data && 'values' in spec.data ? (spec.data.values as DataRow[]) : [];
-    const wasmData = spec.transform ? tryWasmTransforms(specDataValues, spec.transform) : null;
-    const compilerPathId = wasmData ? 'wasm-transforms+ts-grammar' : 'ts-grammar';
-    const compileInput = wasmData
-      ? { ...spec, transform: undefined, data: { values: wasmData } }
-      : spec;
-
-    // Compile at the target dimensions (override via CompileOptions)
-    const compileResult = compile(compileInput, undefined, { width, height });
-
-    // Flatten all marks into a single array (same as getMarks)
-    const marks = collectMarks(compileResult) as ChartMark[];
-
-    return {
-      marks,
-      resolvedChartSpec: buildResolvedChartSpecSnapshot({
-        chart,
-        sheetId,
-        config,
-        chartData,
-        resolvedRanges,
-        exportOptions,
-        compilerPathId,
-        compilerInputHash: hashJson({
-          chartId,
-          sheetId,
-          config,
-          chartData,
-          resolvedRanges,
-          compileInput,
-        }),
-      }),
-    };
+    return compileResolvedChartRenderSnapshotAtSize({
+      chart,
+      sheetId,
+      chartId,
+      config,
+      chartData,
+      resolvedRanges,
+      exportOptions,
+      width,
+      height,
+    });
   }
 
   // ===========================================================================

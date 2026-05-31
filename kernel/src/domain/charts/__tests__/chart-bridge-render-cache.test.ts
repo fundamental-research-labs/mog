@@ -226,6 +226,7 @@ beforeEach(() => {
 async function flushAsyncHandlers(): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
 }
 
@@ -1350,7 +1351,9 @@ describe('chart invalidation event fanout', () => {
       diagnostics: [],
     });
     const bridge = new ChartBridge(ctx);
+    const invalidateSpy = jest.spyOn(bridge, 'invalidateChart');
     bridge.start();
+    expect(eventBus.handlers.get('cells:batch-changed')?.size).toBe(1);
 
     eventBus.emit({
       type: 'cells:batch-changed',
@@ -1365,8 +1368,10 @@ describe('chart invalidation event fanout', () => {
     });
     await flushAsyncHandlers();
 
+    expect(computeBridge.getSheetOrder).toHaveBeenCalledTimes(1);
     expect(computeBridge.getAllCharts).toHaveBeenCalledTimes(1);
     expect(computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_A);
+    expect(invalidateSpy).toHaveBeenCalledWith(CHART_1, undefined);
     expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(CHART_1);
     bridge.stop();
   });

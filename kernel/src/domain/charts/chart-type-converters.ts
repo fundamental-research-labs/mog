@@ -353,6 +353,7 @@ export function wireToLegendConfig(w: LegendData): LegendConfig {
     entries: w.entries,
     customX: w.customX,
     customY: w.customY,
+    layout: w.layout,
     shadow: w.shadow,
     showShadow: w.showShadow,
   };

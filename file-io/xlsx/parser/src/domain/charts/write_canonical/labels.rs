@@ -54,6 +54,11 @@ pub(super) fn emit_data_labels(w: &mut XmlWriter, dl: &DataLabelOptions) {
         emit_text_body(w, tb, "c:txPr");
     }
 
+    // layout
+    if let Some(ref lay) = dl.layout {
+        emit_layout(w, lay);
+    }
+
     // dLblPos
     let pos_str = dl.position.to_ooxml();
     if pos_str != "bestFit" {

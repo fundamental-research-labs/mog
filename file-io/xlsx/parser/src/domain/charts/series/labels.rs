@@ -103,6 +103,14 @@ pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
         }
     }
 
+    // Parse group-level manual layout.
+    if let Some(layout_start) = find_tag_simd(tail_children, b"layout", 0) {
+        let layout_end = find_closing_tag(tail, b"layout", layout_start).unwrap_or(tail_child_end);
+        labels.layout = Some(crate::domain::charts::Chart::parse_layout(
+            &tail[layout_start..layout_end],
+        ));
+    }
+
     // Parse separator
     if let Some(sep_start) = find_tag_simd(tail_children, b"separator", 0) {
         let sep_content_start = find_gt_simd(tail, sep_start).map(|p| p + 1);

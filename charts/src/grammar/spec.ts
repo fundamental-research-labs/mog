@@ -565,6 +565,12 @@ export interface MarkSpec {
   line?: LineStyleSpec;
   /** Stroke dash pattern */
   strokeDash?: number[];
+  /** Datum field for direct fill color */
+  fillField?: string;
+  /** Datum field for direct stroke color */
+  strokeField?: string;
+  /** Datum field for stroke width */
+  strokeWidthField?: string;
   /** Opacity (0-1) */
   opacity?: number;
   /** Fill opacity (0-1) */
@@ -627,6 +633,8 @@ export interface MarkSpec {
   effects?: EffectSpec;
   /** Show points on lines */
   point?: boolean | { color?: string; size?: number; filled?: boolean };
+  /** Tick orientation when a tick mark has both x and y encodings. */
+  orient?: 'horizontal' | 'vertical';
   /** Inner radius for arc marks (0-1 ratio or pixels) */
   innerRadius?: number;
   /** Outer radius for arc marks */

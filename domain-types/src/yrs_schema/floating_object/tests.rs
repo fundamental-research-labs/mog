@@ -564,6 +564,8 @@ fn test_chart_roundtrip() {
                 font: None,
             }]),
             title_formula: None,
+            plot_layout: None,
+            title_layout: None,
             data_table: None,
             drop_lines: None,
             high_low_lines: None,

@@ -9,6 +9,7 @@ use crate::domain::chart::{
     RegionMapConfigData, SeriesOrientation, TrendlineData, UpDownBarsData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
+use crate::domain::drawings::ManualLayout;
 
 /// Chart-specific data for the `FloatingObjectData::Chart` variant.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -177,6 +178,10 @@ pub struct ChartData {
     pub title_rich_text: Option<Vec<ChartFormatStringData>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plot_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_layout: Option<ManualLayout>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

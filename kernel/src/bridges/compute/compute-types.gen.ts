@@ -891,6 +891,8 @@ export interface ChartData {
   titleFormat?: ChartFormatData;
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
+  plotLayout?: unknown;
+  titleLayout?: unknown;
   dataTable?: ChartDataTableData;
   dropLines?: ChartLineSettingsData;
   highLowLines?: ChartLineSettingsData;
@@ -919,11 +921,6 @@ export interface ChartDataTableData {
   format?: ChartFormatData;
   showLegendKey?: boolean;
   visible?: boolean;
-}
-
-export interface ChartLineSettingsData {
-  visible?: boolean;
-  format?: ChartLineData;
 }
 
 export type ChartDefinition =
@@ -1020,6 +1017,11 @@ export interface ChartLineData {
   dashStyle?: ChartDashStyle;
   transparency?: number;
   noFill?: boolean;
+}
+
+export interface ChartLineSettingsData {
+  visible?: boolean;
+  format?: ChartLineData;
 }
 
 export interface ChartOoxmlProps {
@@ -1141,6 +1143,8 @@ export interface ChartSpec {
   titleFormat?: ChartFormatData;
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
+  plotLayout?: unknown;
+  titleLayout?: unknown;
   dataTable?: ChartDataTableData;
   dropLines?: ChartLineSettingsData;
   highLowLines?: ChartLineSettingsData;
@@ -2582,6 +2586,7 @@ export interface LegendData {
   entries?: LegendEntryData[];
   customX?: number;
   customY?: number;
+  layout?: unknown;
   shadow?: ChartShadowData;
   showShadow?: boolean;
 }
@@ -3357,12 +3362,6 @@ export interface PointFormatData {
   markerForegroundColor?: ChartColorData;
   markerSize?: number;
   markerStyle?: string;
-}
-
-export interface UpDownBarsData {
-  gapWidth?: number;
-  upFormat?: ChartFormatData;
-  downFormat?: ChartFormatData;
 }
 
 export interface PolicyPreservedParseOutcome {
@@ -5406,6 +5405,12 @@ export interface UndoState {
   canRedo: boolean;
   undoDepth: number;
   redoDepth: number;
+}
+
+export interface UpDownBarsData {
+  gapWidth?: number;
+  upFormat?: ChartFormatData;
+  downFormat?: ChartFormatData;
 }
 
 export interface UpdateBindingFields {

@@ -576,6 +576,7 @@ fn project_chart_ex_legend(legend: &ooxml_types::chart_ex::ChartExLegend) -> Leg
         entries: None,
         custom_x: None,
         custom_y: None,
+        layout: None,
         shadow: None,
         show_shadow: None,
     }

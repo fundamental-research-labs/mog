@@ -13,6 +13,18 @@ import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
 import { definedStyle } from './helpers';
 
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 /**
  * Generate arc/pie marks.
  */
@@ -140,9 +152,9 @@ export function generateArcMarks(
       endAngle: paddedEnd,
       datum: arcDatum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke ?? '#fff',
-        strokeWidth: markSpec.strokeWidth ?? 1,
+        fill: datumString(datum, markSpec.fillField) ?? color,
+        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke ?? '#fff',
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
         ...definedStyle({
           fillPaint: markSpec.fillPaint,

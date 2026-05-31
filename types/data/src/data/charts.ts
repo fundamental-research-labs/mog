@@ -325,6 +325,26 @@ export interface ChartStyleOwner {
   importedDrawingMl?: unknown;
 }
 
+/** OOXML chart manual layout target. */
+export type ManualLayoutTarget = 'inner' | 'outer';
+
+/** OOXML chart manual layout mode. */
+export type ManualLayoutMode = 'edge' | 'factor';
+
+/** Manual chart element layout imported from OOXML `c:manualLayout`. */
+export interface ManualLayout {
+  layoutTarget?: ManualLayoutTarget;
+  xMode?: ManualLayoutMode;
+  yMode?: ManualLayoutMode;
+  wMode?: ManualLayoutMode;
+  hMode?: ManualLayoutMode;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  extLst?: string;
+}
+
 /** OOXML DrawingML text vertical mode (`a:bodyPr@vert`). */
 export type ChartTextVerticalType =
   | 'horz'
@@ -390,6 +410,8 @@ export interface TitleConfig {
   textOrientation?: number;
   richText?: ChartFormatString[];
   formula?: string;
+  /** Manual title layout imported from OOXML when representable. */
+  layout?: ManualLayout;
   // Additional title properties
   /** Horizontal text alignment. */
   horizontalAlignment?: 'left' | 'center' | 'right';
@@ -412,6 +434,8 @@ export interface PlotAreaConfig {
   fill?: ChartFill;
   border?: ChartBorder;
   format?: ChartFormat;
+  /** Manual plot-area layout imported from OOXML when representable. */
+  layout?: ManualLayout;
 }
 
 /** Chart area configuration */
@@ -554,6 +578,8 @@ export interface LegendConfig {
   customX?: number;
   /** Custom legend Y position (0-1, fraction of chart area) when position is 'custom' */
   customY?: number;
+  /** Manual legend layout imported from OOXML when representable. */
+  layout?: ManualLayout;
   shadow?: ChartShadow;
   // Additional legend properties
   /** Show drop shadow on legend box. */
@@ -727,7 +753,7 @@ export interface DataLabelConfig {
   /** Leader line formatting configuration. */
   leaderLinesFormat?: ChartLeaderLinesFormat;
   /** Manual layout imported from OOXML when representable. */
-  layout?: unknown;
+  layout?: ManualLayout;
 }
 
 /**
@@ -763,6 +789,7 @@ export interface TrendlineLabelConfig {
   text?: string;
   format?: ChartFormat;
   numberFormat?: string;
+  layout?: ManualLayout;
 }
 
 /**
@@ -1186,6 +1213,16 @@ export interface DataTableConfig {
   visible?: boolean;
 }
 
+/** 3D view metadata preserved from OOXML. Rendered by the 2D backend as an approximation. */
+export interface ChartView3DConfig {
+  rotX?: number;
+  rotY?: number;
+  depthPercent?: number;
+  rAngAx?: boolean;
+  perspective?: number;
+  heightPercent?: number;
+}
+
 // =============================================================================
 // Public API Types
 // =============================================================================
@@ -1317,6 +1354,10 @@ export interface ChartConfig {
   titleFormat?: ChartFormat;
   titleRichText?: ChartFormatString[];
   titleFormula?: string;
+  /** Manual plot-area layout imported from OOXML. */
+  plotLayout?: ManualLayout;
+  /** Manual title layout imported from OOXML. */
+  titleLayout?: ManualLayout;
   dataTable?: DataTableConfig;
 
   // Simple config properties
@@ -1336,6 +1377,12 @@ export interface ChartConfig {
   // Pivot chart options
   /** Pivot chart display options. */
   pivotOptions?: PivotChartOptions;
+
+  // 3D preserve-only metadata
+  view3d?: ChartView3DConfig;
+  floorFormat?: ChartFormat;
+  sideWallFormat?: ChartFormat;
+  backWallFormat?: ChartFormat;
 
   // Z-Order commands (used by chart z-order actions)
   /**

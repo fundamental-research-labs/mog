@@ -64,6 +64,8 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.title_format.is_some()
         || chart_spec.title_rich_text.is_some()
         || chart_spec.title_formula.is_some()
+        || chart_spec.plot_layout.is_some()
+        || chart_spec.title_layout.is_some()
         || chart_spec.display_blanks_as.is_some()
         || chart_spec.plot_visible_only.is_some()
         || chart_spec.sub_type.is_some()
@@ -115,6 +117,8 @@ fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -
     fingerprint.write_json(&chart_spec.title_format);
     fingerprint.write_json(&chart_spec.title_rich_text);
     fingerprint.write_json(&chart_spec.title_formula);
+    fingerprint.write_json(&chart_spec.plot_layout);
+    fingerprint.write_json(&chart_spec.title_layout);
     fingerprint.write_json(&chart_spec.data_table);
     fingerprint.write_json(&chart_spec.display_blanks_as);
     fingerprint.write_json(&chart_spec.plot_visible_only);

@@ -205,6 +205,12 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(ref v) = d.title_formula {
         entries.push(("titleFormula".into(), Any::String(Arc::from(v.as_str()))));
     }
+    if let Some(a) = option_sub_object(&d.plot_layout) {
+        entries.push(("plotLayout".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.title_layout) {
+        entries.push(("titleLayout".into(), a));
+    }
     if let Some(a) = option_sub_object(&d.data_table) {
         entries.push(("dataTable".into(), a));
     }
@@ -336,6 +342,8 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         title_format: read_sub_object(map, txn, "titleFormat"),
         title_rich_text: read_sub_object(map, txn, "titleRichText"),
         title_formula: read_string(map, txn, "titleFormula"),
+        plot_layout: read_sub_object(map, txn, "plotLayout"),
+        title_layout: read_sub_object(map, txn, "titleLayout"),
         data_table: read_sub_object(map, txn, "dataTable"),
         drop_lines: read_sub_object(map, txn, "dropLines"),
         high_low_lines: read_sub_object(map, txn, "highLowLines"),

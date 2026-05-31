@@ -66,6 +66,11 @@ pub fn extract_chart_spec_from_chart_space(
     let plot_format = extract_chart_format(plot_area.sp_pr.as_ref(), None);
     let title_format = chart.title.as_ref().and_then(extract_title_chart_format);
     let title_rich_text = chart.title.as_ref().and_then(extract_title_rich_text);
+    let plot_layout = plot_area.layout.as_ref().map(Into::into);
+    let title_layout = chart
+        .title
+        .as_ref()
+        .and_then(|title| title.layout.as_ref().map(Into::into));
 
     // -------------------------------------------------------------------------
     // (i) scalar fields from first chart group's config
@@ -213,6 +218,8 @@ pub fn extract_chart_spec_from_chart_space(
         title_format,
         title_rich_text,
         title_formula: None,
+        plot_layout,
+        title_layout,
         data_table,
         drop_lines,
         high_low_lines,

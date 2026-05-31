@@ -60,7 +60,7 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
             .and_then(|lines| lines.sp_pr.as_ref())
             .and_then(|sp_pr| sp_pr.ln.as_ref())
             .map(extract_chart_line),
-        layout: None,
+        layout: dl.layout.as_ref().map(Into::into),
     }
 }
 

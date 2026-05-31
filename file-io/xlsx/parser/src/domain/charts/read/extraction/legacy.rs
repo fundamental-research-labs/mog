@@ -224,6 +224,7 @@ pub(in crate::domain::charts::read) fn extract_legend(
             entries: None,
             custom_x: None,
             custom_y: None,
+            layout: l.layout.as_ref().map(Into::into),
             shadow: None,
             show_shadow: None,
         }

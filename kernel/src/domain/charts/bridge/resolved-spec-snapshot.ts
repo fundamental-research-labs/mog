@@ -345,10 +345,63 @@ function unsupportedFeatureDiagnostics(
     unsupported.push(`ChartEx ${config.type} data projection is not implemented`);
   }
   if (config.pivotOptions || config.showAllFieldButtons)
-    unsupported.push('pivot chart field buttons are not rendered');
+    unsupported.push(pivotFieldButtonDiagnostic(config));
+  if (config.plotLayout) unsupported.push('manual plot layout is preserved but not rendered');
+  if (config.titleLayout || config.chartTitle?.layout)
+    unsupported.push('manual title layout is preserved but not rendered');
+  if (config.legend?.layout)
+    unsupported.push('manual legend layout is preserved but not rendered');
+  if (hasManualDataLabelLayout(config))
+    unsupported.push('manual data-label layout is preserved but not rendered');
+  if (hasTrendlineLabelLayout(config))
+    unsupported.push('trendline label layout is preserved but not rendered');
+  if (config.dataTable)
+    unsupported.push('chart data table is preserved but not rendered');
+  if (config.view3d)
+    unsupported.push('view3D camera/depth is preserved but rendered as a 2D approximation');
+  if (config.floorFormat || config.sideWallFormat || config.backWallFormat)
+    unsupported.push('floor/sideWall/backWall surfaces are preserved but not rendered');
   unsupported.push(...sourceLinkedAxisNumberFormatDiagnostics(config));
   unsupported.push(...axisUnsupportedFeatureDiagnostics(config.axis, series));
   return unsupported;
+}
+
+function pivotFieldButtonDiagnostic(config: ChartConfig): string {
+  const flags = [
+    config.showAllFieldButtons !== undefined ? 'showAllFieldButtons' : undefined,
+    config.pivotOptions?.showAxisFieldButtons !== undefined ? 'showAxisFieldButtons' : undefined,
+    config.pivotOptions?.showLegendFieldButtons !== undefined
+      ? 'showLegendFieldButtons'
+      : undefined,
+    config.pivotOptions?.showReportFilterFieldButtons !== undefined
+      ? 'showReportFilterFieldButtons'
+      : undefined,
+    config.pivotOptions?.showValueFieldButtons !== undefined ? 'showValueFieldButtons' : undefined,
+  ].filter(Boolean);
+  return flags.length > 0
+    ? `pivot chart field buttons are preserved but not rendered (${flags.join(', ')})`
+    : 'pivot chart field buttons are preserved but not rendered';
+}
+
+function hasManualDataLabelLayout(config: ChartConfig): boolean {
+  return Boolean(
+    config.dataLabels?.layout ||
+      config.series?.some(
+        (series) =>
+          series.dataLabels?.layout ||
+          series.points?.some((point) => point.dataLabel?.layout),
+      ),
+  );
+}
+
+function hasTrendlineLabelLayout(config: ChartConfig): boolean {
+  return Boolean(
+    config.trendline?.label?.layout ||
+      config.trendlines?.some((trendline) => trendline.label?.layout) ||
+      config.series?.some((series) =>
+        series.trendlines?.some((trendline) => trendline.label?.layout),
+      ),
+  );
 }
 
 function axisUnsupportedFeatureDiagnostics(

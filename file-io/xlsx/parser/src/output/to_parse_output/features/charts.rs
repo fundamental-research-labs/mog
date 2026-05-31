@@ -135,6 +135,8 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.title_format);
     fingerprint.write_json(&spec.title_rich_text);
     fingerprint.write_json(&spec.title_formula);
+    fingerprint.write_json(&spec.plot_layout);
+    fingerprint.write_json(&spec.title_layout);
     fingerprint.write_json(&spec.data_table);
     fingerprint.write_json(&spec.waterfall);
     fingerprint.write_json(&spec.histogram);
@@ -646,6 +648,8 @@ pub(crate) fn build_fallback_chart_spec(
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
         drop_lines: None,
         high_low_lines: None,
@@ -776,6 +780,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 title_format: projection.title_format,
                 title_rich_text: projection.title_rich_text,
                 title_formula: projection.title_formula,
+                plot_layout: None,
+                title_layout: None,
                 data_table: None,
                 drop_lines: None,
                 high_low_lines: None,

@@ -18,15 +18,23 @@ import {
   DATA_LABEL_DX_FIELD,
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_FONT_SIZE_FIELD,
+  DATA_LABEL_LEADER_STROKE_FIELD,
+  DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
   DATA_LABEL_LEADER_VISIBLE_FIELD,
   DATA_LABEL_ROTATION_FIELD,
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VALUE_ANCHOR_FIELD,
   DATA_LABEL_VISIBLE_FIELD,
+  ERROR_BAR_STROKE_FIELD,
+  ERROR_BAR_STROKE_WIDTH_FIELD,
   ERROR_BAR_VISIBLE_FIELD,
+  ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD,
   ERROR_BAR_X_MAX_FIELD,
+  ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD,
   ERROR_BAR_X_MIN_FIELD,
+  ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD,
   ERROR_BAR_Y_MAX_FIELD,
+  ERROR_BAR_Y_MIN_CAP_VISIBLE_FIELD,
   ERROR_BAR_Y_MIN_FIELD,
   MARKER_FILL_FIELD,
   MARKER_SHAPE_FIELD,
@@ -55,6 +63,7 @@ import {
   WATERFALL_TYPE_FIELD,
 } from './fields';
 import { isNoFillNoLineSeries } from './series-style';
+import { linePointsToCanvasPx } from './units';
 import type { ChartFill, DataLabelConfig, ErrorBarConfig, PointFormat, SeriesConfig } from '../../types';
 
 /**
@@ -77,6 +86,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   );
   const seriesConfigs = config?.series ?? [];
   const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
+  const totalsBySeries = data.series.map((series) => seriesTotal(series.data));
   let waterfallRunningTotal = 0;
   const waterfallTotalIndices = new Set([
     ...(config?.waterfall?.totalIndices ?? []),
@@ -119,6 +129,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           category: rawCategory,
           value: point.y,
           bubbleSize: point.size,
+          percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
           seriesValues: series.data.map((item) => item?.y),
         });
         if (config?.type === 'waterfall') {
@@ -161,6 +172,7 @@ function applyPointAnnotations(
     category: string | number;
     value: number;
     bubbleSize?: number;
+    percentage?: number;
     seriesValues: Array<number | undefined>;
   },
 ): void {
@@ -182,7 +194,7 @@ function applyPointStyle(
   const line = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
   const stroke = lineColor(line) ?? pointFormat?.border?.color;
   if (stroke) row[POINT_STROKE_FIELD] = stroke;
-  const strokeWidth = line?.width ?? pointFormat?.border?.width;
+  const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
 }
 
@@ -221,6 +233,7 @@ function applyDataLabel(
     category: string | number;
     value: number;
     bubbleSize?: number;
+    percentage?: number;
   },
   pointFormat: PointFormat | undefined,
 ): void {
@@ -249,6 +262,11 @@ function applyDataLabel(
   if (rotation !== undefined) row[DATA_LABEL_ROTATION_FIELD] = rotation;
   if (label.showLeaderLines === true || label.leaderLinesFormat) {
     row[DATA_LABEL_LEADER_VISIBLE_FIELD] = true;
+    const line = label.leaderLinesFormat?.format;
+    const stroke = lineColor(line);
+    const strokeWidth = linePointsToCanvasPx(line?.width);
+    if (stroke) row[DATA_LABEL_LEADER_STROKE_FIELD] = stroke;
+    if (strokeWidth !== undefined) row[DATA_LABEL_LEADER_STROKE_WIDTH_FIELD] = strokeWidth;
   }
 }
 
@@ -276,12 +294,28 @@ function applyErrorBars(
     if (!extent) continue;
     row[ERROR_BAR_VISIBLE_FIELD] = true;
     if (direction === 'x') {
-      if (extent.minus !== undefined) row[ERROR_BAR_X_MIN_FIELD] = extent.minus;
-      if (extent.plus !== undefined) row[ERROR_BAR_X_MAX_FIELD] = extent.plus;
+      if (extent.minus !== undefined) {
+        row[ERROR_BAR_X_MIN_FIELD] = extent.minus;
+        if (!bar.noEndCap) row[ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD] = true;
+      }
+      if (extent.plus !== undefined) {
+        row[ERROR_BAR_X_MAX_FIELD] = extent.plus;
+        if (!bar.noEndCap) row[ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD] = true;
+      }
     } else {
-      if (extent.minus !== undefined) row[ERROR_BAR_Y_MIN_FIELD] = extent.minus;
-      if (extent.plus !== undefined) row[ERROR_BAR_Y_MAX_FIELD] = extent.plus;
+      if (extent.minus !== undefined) {
+        row[ERROR_BAR_Y_MIN_FIELD] = extent.minus;
+        if (!bar.noEndCap) row[ERROR_BAR_Y_MIN_CAP_VISIBLE_FIELD] = true;
+      }
+      if (extent.plus !== undefined) {
+        row[ERROR_BAR_Y_MAX_FIELD] = extent.plus;
+        if (!bar.noEndCap) row[ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD] = true;
+      }
     }
+    const stroke = lineColor(bar.lineFormat);
+    const strokeWidth = linePointsToCanvasPx(bar.lineFormat?.width);
+    if (stroke) row[ERROR_BAR_STROKE_FIELD] = stroke;
+    if (strokeWidth !== undefined) row[ERROR_BAR_STROKE_WIDTH_FIELD] = strokeWidth;
   }
 }
 
@@ -305,7 +339,13 @@ function definedEntries<T extends object>(value: T): Partial<T> {
 
 function composeLabelText(
   label: DataLabelConfig,
-  context: { seriesName: string; category: string | number; value: number; bubbleSize?: number },
+  context: {
+    seriesName: string;
+    category: string | number;
+    value: number;
+    bubbleSize?: number;
+    percentage?: number;
+  },
 ): string {
   if (label.text) return label.text;
   if (label.formula) return label.formula;
@@ -316,7 +356,9 @@ function composeLabelText(
   if (label.showSeriesName) parts.push(context.seriesName);
   if (label.showCategoryName ?? label.showCategory) parts.push(String(context.category));
   if (showValue) parts.push(formatLabelNumber(context.value, label.numberFormat ?? label.format));
-  if (label.showPercentage ?? label.showPercent) parts.push(formatLabelNumber(context.value, '0%'));
+  if (label.showPercentage ?? label.showPercent) {
+    parts.push(formatLabelNumber(context.percentage ?? 0, label.numberFormat ?? label.format ?? '0%'));
+  }
   if (label.showBubbleSize && context.bubbleSize !== undefined) {
     parts.push(formatLabelNumber(context.bubbleSize, label.numberFormat ?? label.format));
   }
@@ -373,10 +415,15 @@ function errorBarExtent(
   context: { pointIndex: number; value: number; seriesValues: Array<number | undefined> },
 ): { plus?: number; minus?: number } | undefined {
   const type = bar.valueType ?? 'fixedVal';
-  const plusDelta = customErrorDelta(bar.plusSource, context.pointIndex) ?? baseErrorDelta(type, bar, context);
-  const minusDelta = customErrorDelta(bar.minusSource, context.pointIndex) ?? baseErrorDelta(type, bar, context);
-  const plus = bar.barType === 'minus' ? undefined : context.value + plusDelta;
-  const minus = bar.barType === 'plus' ? undefined : context.value - minusDelta;
+  const custom = type === 'cust' || type === 'custom' || bar.plusSource || bar.minusSource;
+  const plusDelta = custom
+    ? customErrorDelta(bar.plusSource, context.pointIndex)
+    : baseErrorDelta(type, bar, context);
+  const minusDelta = custom
+    ? customErrorDelta(bar.minusSource, context.pointIndex)
+    : baseErrorDelta(type, bar, context);
+  const plus = bar.barType === 'minus' || plusDelta === undefined ? undefined : context.value + plusDelta;
+  const minus = bar.barType === 'plus' || minusDelta === undefined ? undefined : context.value - minusDelta;
   return plus === undefined && minus === undefined ? undefined : { plus, minus };
 }
 
@@ -408,6 +455,18 @@ function sampleStdDev(values: Array<number | undefined>): number {
 
 function validNumbers(values: Array<number | undefined>): number[] {
   return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+}
+
+function seriesTotal(values: Array<{ y: number } | undefined>): number {
+  return values.reduce((sum, point) => {
+    const value = point?.y;
+    return typeof value === 'number' && Number.isFinite(value) ? sum + Math.abs(value) : sum;
+  }, 0);
+}
+
+function percentageForValue(value: number, total: number): number | undefined {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total === 0) return undefined;
+  return Math.abs(value) / total;
 }
 
 function isMarkerDefaultChart(type?: ChartConfig['type']): boolean {

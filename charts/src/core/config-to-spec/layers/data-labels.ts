@@ -8,6 +8,8 @@ import {
   DATA_LABEL_DX_FIELD,
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_FONT_SIZE_FIELD,
+  DATA_LABEL_LEADER_STROKE_FIELD,
+  DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
   DATA_LABEL_LEADER_VISIBLE_FIELD,
   DATA_LABEL_ROTATION_FIELD,
   DATA_LABEL_TEXT_FIELD,
@@ -63,7 +65,13 @@ export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
 
   return [
     {
-      mark: { type: 'rule', stroke: '#808080', strokeWidth: 1 },
+      mark: {
+        type: 'rule',
+        stroke: '#808080',
+        strokeWidth: 1,
+        strokeField: DATA_LABEL_LEADER_STROKE_FIELD,
+        strokeWidthField: DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
+      },
       encoding: {
         x: position.anchorX,
         y: position.anchorY,

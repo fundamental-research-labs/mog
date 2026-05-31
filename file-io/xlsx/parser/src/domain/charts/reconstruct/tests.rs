@@ -30,6 +30,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
         drop_lines: None,
         high_low_lines: None,

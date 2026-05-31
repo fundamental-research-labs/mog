@@ -281,6 +281,8 @@ pub(super) fn chart_data_with_optional_keys() -> ChartData {
         title_format: None,
         title_rich_text: Some(vec![]),
         title_formula: Some("Sheet1!A1".to_string()),
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
         drop_lines: None,
         high_low_lines: None,

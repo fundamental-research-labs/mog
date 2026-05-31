@@ -14,9 +14,18 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         Some(ChartDefinition::Chart(chart_space)) => Some(&chart_space.chart),
         _ => None,
     };
+    let imported_title_layout: Option<domain_types::domain::drawings::ManualLayout> = imported_chart
+        .and_then(|chart| chart.title.as_ref())
+        .and_then(|title| title.layout.as_ref())
+        .map(Into::into);
+    let title_layout = spec.title_layout.as_ref().or(imported_title_layout.as_ref());
 
     charts::Chart {
-        title: build_title(spec.title.as_deref(), spec.title_format.as_ref()),
+        title: build_title(
+            spec.title.as_deref(),
+            spec.title_format.as_ref(),
+            title_layout,
+        ),
         auto_title_deleted: spec.auto_title_deleted,
         view_3d: spec.view_3d.as_ref().map(build_view_3d),
         floor: build_surface(spec.floor_format.as_ref()),
@@ -47,7 +56,11 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
     };
 
     charts::PlotArea {
-        layout: imported_plot_area.and_then(|plot_area| plot_area.layout.clone()),
+        layout: spec
+            .plot_layout
+            .clone()
+            .map(Into::into)
+            .or_else(|| imported_plot_area.and_then(|plot_area| plot_area.layout.clone())),
         chart_groups: build_chart_groups(spec),
         axes: build_axes(spec),
         d_table: spec.data_table.as_ref().map(build_data_table),

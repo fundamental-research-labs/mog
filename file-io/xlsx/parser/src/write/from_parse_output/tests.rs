@@ -720,6 +720,8 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
         drop_lines: None,
         high_low_lines: None,

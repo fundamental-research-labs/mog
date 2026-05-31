@@ -13,6 +13,18 @@ import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
 import { definedStyle, invokeScale } from './helpers';
 
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 /**
  * Generate point/scatter marks.
  */
@@ -64,9 +76,9 @@ export function generatePointMarks(
       index: 0,
     });
     const fillValue = encodings.fill?.accessor(datum);
-    const fill = typeof fillValue === 'string' ? fillValue : color;
+    const fill = datumString(datum, markSpec.fillField) ?? (typeof fillValue === 'string' ? fillValue : color);
     const strokeValue = encodings.stroke?.accessor(datum);
-    const stroke = typeof strokeValue === 'string' ? strokeValue : markSpec.stroke;
+    const stroke = datumString(datum, markSpec.strokeField) ?? (typeof strokeValue === 'string' ? strokeValue : markSpec.stroke);
 
     const sizeValue = encodings.size?.accessor(datum);
     const size =
@@ -94,7 +106,7 @@ export function generatePointMarks(
       style: {
         fill,
         stroke,
-        strokeWidth: markSpec.strokeWidth ?? 1,
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
         ...definedStyle({
           fillPaint: markSpec.fillPaint,

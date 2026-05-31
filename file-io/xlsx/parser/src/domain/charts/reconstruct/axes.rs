@@ -294,7 +294,7 @@ pub(super) fn build_single_axis_with_ids(
     let title = sad
         .title
         .as_ref()
-        .map(|t| build_title_element(t, sad.title_format.as_ref()));
+        .map(|t| build_title_element(t, sad.title_format.as_ref(), None));
 
     let num_fmt = sad.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),

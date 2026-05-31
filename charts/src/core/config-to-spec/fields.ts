@@ -21,6 +21,8 @@ export const DATA_LABEL_COLOR_FIELD = '__mogDataLabelColor';
 export const DATA_LABEL_FONT_SIZE_FIELD = '__mogDataLabelFontSize';
 export const DATA_LABEL_ROTATION_FIELD = '__mogDataLabelRotation';
 export const DATA_LABEL_LEADER_VISIBLE_FIELD = '__mogDataLabelLeaderVisible';
+export const DATA_LABEL_LEADER_STROKE_FIELD = '__mogDataLabelLeaderStroke';
+export const DATA_LABEL_LEADER_STROKE_WIDTH_FIELD = '__mogDataLabelLeaderStrokeWidth';
 
 export const POINT_FILL_FIELD = '__mogPointFill';
 export const POINT_STROKE_FIELD = '__mogPointStroke';
@@ -37,6 +39,28 @@ export const ERROR_BAR_X_MAX_FIELD = '__mogErrorBarXMax';
 export const ERROR_BAR_Y_MIN_FIELD = '__mogErrorBarYMin';
 export const ERROR_BAR_Y_MAX_FIELD = '__mogErrorBarYMax';
 export const ERROR_BAR_VISIBLE_FIELD = '__mogErrorBarVisible';
+export const ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD = '__mogErrorBarXMinCapVisible';
+export const ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD = '__mogErrorBarXMaxCapVisible';
+export const ERROR_BAR_Y_MIN_CAP_VISIBLE_FIELD = '__mogErrorBarYMinCapVisible';
+export const ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD = '__mogErrorBarYMaxCapVisible';
+export const ERROR_BAR_STROKE_FIELD = '__mogErrorBarStroke';
+export const ERROR_BAR_STROKE_WIDTH_FIELD = '__mogErrorBarStrokeWidth';
+
+export const ANALYSIS_X_FIELD = '__mogAnalysisX';
+export const ANALYSIS_Y_FIELD = '__mogAnalysisY';
+export const ANALYSIS_X2_FIELD = '__mogAnalysisX2';
+export const ANALYSIS_Y2_FIELD = '__mogAnalysisY2';
+export const ANALYSIS_KIND_FIELD = '__mogAnalysisKind';
+export const ANALYSIS_DIRECTION_FIELD = '__mogAnalysisDirection';
+export const ANALYSIS_STROKE_FIELD = '__mogAnalysisStroke';
+export const ANALYSIS_STROKE_WIDTH_FIELD = '__mogAnalysisStrokeWidth';
+export const ANALYSIS_FILL_FIELD = '__mogAnalysisFill';
+
+export const TRENDLINE_LABEL_TEXT_FIELD = '__mogTrendlineLabelText';
+export const TRENDLINE_LABEL_X_FIELD = '__mogTrendlineLabelX';
+export const TRENDLINE_LABEL_Y_FIELD = '__mogTrendlineLabelY';
+export const TRENDLINE_LABEL_COLOR_FIELD = '__mogTrendlineLabelColor';
+export const TRENDLINE_LABEL_FONT_SIZE_FIELD = '__mogTrendlineLabelFontSize';
 
 export const STOCK_OPEN_FIELD = 'open';
 export const STOCK_HIGH_FIELD = 'high';

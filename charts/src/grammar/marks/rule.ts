@@ -13,6 +13,18 @@ import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
 import { definedStyle } from './helpers';
 
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 /**
  * Generate rule marks (lines across the chart).
  */
@@ -65,8 +77,8 @@ export function generateRuleMarks(
       path: `M${x1},${y1} L${x2},${y2}`,
       datum,
       style: {
-        stroke: markSpec.color ?? markSpec.stroke ?? '#888',
-        strokeWidth: markSpec.strokeWidth ?? 1,
+        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.color ?? markSpec.stroke ?? '#888',
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
         ...definedStyle({
           strokePaint: markSpec.strokePaint,

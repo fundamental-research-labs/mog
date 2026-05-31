@@ -15,6 +15,8 @@ pub(super) fn extract_legend_from_chart_space(
         };
 
         let format = extract_chart_format(l.sp_pr.as_ref(), l.tx_pr.as_ref());
+        let layout: Option<domain_types::domain::drawings::ManualLayout> =
+            l.layout.as_ref().map(Into::into);
 
         let entries = if l.legend_entry.is_empty() {
             None
@@ -45,8 +47,9 @@ pub(super) fn extract_legend_from_chart_space(
             overlay: l.overlay,
             format,
             entries,
-            custom_x: None,
-            custom_y: None,
+            custom_x: layout.as_ref().and_then(|layout| layout.x),
+            custom_y: layout.as_ref().and_then(|layout| layout.y),
+            layout,
             shadow: None,
             show_shadow: None,
         }

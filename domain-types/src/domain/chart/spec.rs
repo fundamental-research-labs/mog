@@ -1,6 +1,7 @@
 use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::domain::drawings::ManualLayout;
 use crate::ImportObjectStatus;
 
 use super::floating_object::{
@@ -97,6 +98,10 @@ pub struct ChartSpec {
     pub title_rich_text: Option<Vec<ChartFormatStringData>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plot_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_layout: Option<ManualLayout>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -338,9 +343,11 @@ impl ChartSpec {
             || nv.no_drilldown;
         let visible = !cnv.hidden;
         let printable = frame.client_data_prints_with_sheet.unwrap_or(true);
-        let name = (!cnv.name.is_empty())
-            .then(|| cnv.name.clone())
-            .unwrap_or_default();
+        let name = if cnv.name.is_empty() {
+            String::new()
+        } else {
+            cnv.name.clone()
+        };
 
         (rotation, flip_h, flip_v, locked, visible, printable, name)
     }
@@ -491,6 +498,8 @@ impl ChartSpec {
             title_format: chart_data.title_format.clone(),
             title_rich_text: chart_data.title_rich_text.clone(),
             title_formula: chart_data.title_formula.clone(),
+            plot_layout: chart_data.plot_layout.clone(),
+            title_layout: chart_data.title_layout.clone(),
             data_table: chart_data.data_table.clone(),
             drop_lines: chart_data.drop_lines.clone(),
             high_low_lines: chart_data.high_low_lines.clone(),
@@ -797,6 +806,8 @@ impl ChartSpec {
             title_format: self.title_format.clone(),
             title_rich_text: self.title_rich_text.clone(),
             title_formula: self.title_formula.clone(),
+            plot_layout: self.plot_layout.clone(),
+            title_layout: self.title_layout.clone(),
             data_table: self.data_table.clone(),
             drop_lines: self.drop_lines.clone(),
             high_low_lines: self.high_low_lines.clone(),

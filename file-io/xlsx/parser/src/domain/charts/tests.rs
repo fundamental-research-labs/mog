@@ -1,5 +1,74 @@
 use super::*;
 
+fn test_chart_ref_info() -> read::ChartRefInfo {
+    read::ChartRefInfo {
+        target: "xl/charts/chart1.xml".to_string(),
+        from_row: 0,
+        from_col: 0,
+        from_col_off: 0,
+        from_row_off: 0,
+        absolute_x: None,
+        absolute_y: None,
+        to_row: None,
+        to_col: None,
+        to_col_off: None,
+        to_row_off: None,
+        cx: 600 * 9525,
+        cy: 400 * 9525,
+        xfrm_off_x: 0,
+        xfrm_off_y: 0,
+        xfrm_ext_cx: 600 * 9525,
+        xfrm_ext_cy: 400 * 9525,
+        cnv_pr_name: Some("Chart 1".to_string()),
+        cnv_pr_id: Some(1),
+        cnv_pr_descr: None,
+        cnv_pr_title: None,
+        cnv_pr_hidden: false,
+        no_change_aspect: None,
+        has_graphic_frame_locks: false,
+        cnv_pr_ext_lst: None,
+        anchor_edit_as: None,
+        macro_name: None,
+        client_data_locks_with_sheet: None,
+        client_data_prints_with_sheet: None,
+        anchor_index: Some(0),
+    }
+}
+
+fn project_chart_xml(xml: &[u8]) -> domain_types::ChartSpec {
+    let chart = Chart::parse(xml);
+    let chart_space = chart.chart_space.as_ref().expect("canonical chart space");
+    read::extract_chart_spec_from_chart_space(chart_space, &test_chart_ref_info())
+}
+
+fn solid_fill_hex(fill: Option<&ooxml_types::drawings::DrawingFill>) -> Option<&str> {
+    match fill {
+        Some(ooxml_types::drawings::DrawingFill::Solid(solid)) => drawing_color_hex(&solid.color),
+        _ => None,
+    }
+}
+
+fn line_solid_hex(line: Option<&ooxml_types::drawings::Outline>) -> Option<&str> {
+    match line.and_then(|line| line.fill.as_ref()) {
+        Some(ooxml_types::drawings::LineFill::Solid(solid)) => drawing_color_hex(&solid.color),
+        _ => None,
+    }
+}
+
+fn line_is_no_fill(line: Option<&ooxml_types::drawings::Outline>) -> bool {
+    matches!(
+        line.and_then(|line| line.fill.as_ref()),
+        Some(ooxml_types::drawings::LineFill::NoFill)
+    )
+}
+
+fn drawing_color_hex(color: &ooxml_types::drawings::DrawingColor) -> Option<&str> {
+    match color {
+        ooxml_types::drawings::DrawingColor::SrgbClr { val, .. } => Some(val.as_str()),
+        _ => None,
+    }
+}
+
 #[test]
 fn test_parse_empty_chart() {
     let xml = b"<?xml version=\"1.0\"?><chartSpace></chartSpace>";
@@ -964,4 +1033,457 @@ fn test_parse_secondary_axes() {
     let val_ax_sec = chart.plot_area.val_ax_secondary.unwrap();
     assert_eq!(val_ax_sec.ax_id, 12); // Note: 012 parses as 12
     assert_eq!(val_ax_sec.ax_pos, ChartAxisPosition::Right);
+}
+
+#[test]
+fn labels_markers_error_bars_and_no_fill_project_and_reconstruct() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:chart>
+                <c:plotArea>
+                    <c:lineChart>
+                        <c:grouping val="standard"/>
+                        <c:ser>
+                            <c:idx val="0"/>
+                            <c:order val="0"/>
+                            <c:spPr>
+                                <a:ln w="12700"><a:noFill/></a:ln>
+                            </c:spPr>
+                            <c:marker>
+                                <c:symbol val="diamond"/>
+                                <c:size val="9"/>
+                                <c:spPr>
+                                    <a:solidFill><a:srgbClr val="00AA00"/></a:solidFill>
+                                    <a:ln><a:solidFill><a:srgbClr val="AA0000"/></a:solidFill></a:ln>
+                                </c:spPr>
+                            </c:marker>
+                            <c:dPt>
+                                <c:idx val="2"/>
+                                <c:spPr>
+                                    <a:ln><a:noFill/></a:ln>
+                                </c:spPr>
+                                <c:marker>
+                                    <c:symbol val="triangle"/>
+                                    <c:size val="7"/>
+                                    <c:spPr>
+                                        <a:solidFill><a:srgbClr val="0000AA"/></a:solidFill>
+                                        <a:ln><a:solidFill><a:srgbClr val="AA00AA"/></a:solidFill></a:ln>
+                                    </c:spPr>
+                                </c:marker>
+                            </c:dPt>
+                            <c:dLbls>
+                                <c:dLbl>
+                                    <c:idx val="2"/>
+                                    <c:tx>
+                                        <c:rich>
+                                            <a:bodyPr/>
+                                            <a:p><a:r><a:t>Point Label</a:t></a:r></a:p>
+                                        </c:rich>
+                                    </c:tx>
+                                    <c:numFmt formatCode="0.0" sourceLinked="0"/>
+                                    <c:dLblPos val="t"/>
+                                    <c:delete val="0"/>
+                                    <c:showVal val="1"/>
+                                </c:dLbl>
+                                <c:showVal val="0"/>
+                            </c:dLbls>
+                            <c:errBars>
+                                <c:errDir val="y"/>
+                                <c:errBarType val="both"/>
+                                <c:errValType val="cust"/>
+                                <c:noEndCap val="1"/>
+                                <c:plus>
+                                    <c:numRef>
+                                        <c:f>Sheet1!$C$2:$C$4</c:f>
+                                        <c:numCache>
+                                            <c:formatCode>General</c:formatCode>
+                                            <c:ptCount val="2"/>
+                                            <c:pt idx="0"><c:v>1.5</c:v></c:pt>
+                                            <c:pt idx="1"><c:v>2.5</c:v></c:pt>
+                                        </c:numCache>
+                                    </c:numRef>
+                                </c:plus>
+                                <c:minus>
+                                    <c:numLit>
+                                        <c:ptCount val="2"/>
+                                        <c:pt idx="0"><c:v>0.5</c:v></c:pt>
+                                        <c:pt idx="1"><c:v>1.0</c:v></c:pt>
+                                    </c:numLit>
+                                </c:minus>
+                            </c:errBars>
+                            <c:cat><c:strRef><c:f>Sheet1!$A$2:$A$4</c:f></c:strRef></c:cat>
+                            <c:val><c:numRef><c:f>Sheet1!$B$2:$B$4</c:f></c:numRef></c:val>
+                        </c:ser>
+                        <c:axId val="10"/>
+                        <c:axId val="20"/>
+                    </c:lineChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+    let series = spec.series.first().expect("projected series");
+
+    assert_eq!(
+        series.marker_background_color,
+        Some(domain_types::chart::ChartColorData::Hex(
+            "00AA00".to_string()
+        ))
+    );
+    assert_eq!(
+        series.marker_foreground_color,
+        Some(domain_types::chart::ChartColorData::Hex(
+            "AA0000".to_string()
+        ))
+    );
+    assert_eq!(
+        series
+            .format
+            .as_ref()
+            .and_then(|format| format.line.as_ref())
+            .and_then(|line| line.no_fill),
+        Some(true)
+    );
+
+    let point = series
+        .points
+        .as_ref()
+        .and_then(|points| points.iter().find(|point| point.idx == 2))
+        .expect("projected point override");
+    assert_eq!(
+        point.line_format.as_ref().and_then(|line| line.no_fill),
+        Some(true)
+    );
+    assert_eq!(
+        point.marker_background_color,
+        Some(domain_types::chart::ChartColorData::Hex(
+            "0000AA".to_string()
+        ))
+    );
+    assert_eq!(
+        point.marker_foreground_color,
+        Some(domain_types::chart::ChartColorData::Hex(
+            "AA00AA".to_string()
+        ))
+    );
+
+    let label = point.data_label.as_ref().expect("projected point label");
+    assert!(label.show);
+    assert_eq!(label.delete, Some(false));
+    assert_eq!(label.text.as_deref(), Some("Point Label"));
+    assert_eq!(label.position.as_deref(), Some("top"));
+    assert_eq!(label.show_value, Some(true));
+    assert_eq!(label.number_format.as_deref(), Some("0.0"));
+    assert_eq!(label.link_number_format, Some(false));
+
+    let error_bars = series
+        .y_error_bars
+        .as_ref()
+        .expect("projected y error bars");
+    assert_eq!(error_bars.direction.as_deref(), Some("y"));
+    assert_eq!(error_bars.bar_type.as_deref(), Some("both"));
+    assert_eq!(error_bars.value_type.as_deref(), Some("cust"));
+    assert_eq!(error_bars.no_end_cap, Some(true));
+    let plus = error_bars
+        .plus_source
+        .as_ref()
+        .expect("projected plus source");
+    assert_eq!(plus.formula.as_deref(), Some("Sheet1!$C$2:$C$4"));
+    assert_eq!(
+        plus.cache.as_ref().and_then(|cache| cache.point_count),
+        Some(2)
+    );
+    assert_eq!(plus.cache.as_ref().map(|cache| cache.points.len()), Some(2));
+    let minus = error_bars
+        .minus_source
+        .as_ref()
+        .expect("projected minus source");
+    assert_eq!(minus.formula, None);
+    assert_eq!(
+        minus
+            .cache
+            .as_ref()
+            .and_then(|cache| cache.points.first())
+            .map(|point| point.value.as_str()),
+        Some("0.5")
+    );
+
+    let reconstructed = reconstruct::reconstruct_chart_space(&spec);
+    let out_series = reconstructed.chart.plot_area.chart_groups[0]
+        .series
+        .first()
+        .expect("reconstructed series");
+    let out_labels = out_series.d_lbls.as_ref().expect("reconstructed dLbls");
+    assert!(out_series.d_lbl.is_empty());
+    assert_eq!(out_labels.d_lbl.len(), 1);
+    assert_eq!(out_labels.d_lbl[0].idx, 2);
+    assert!(matches!(
+        out_labels.d_lbl[0].text,
+        Some(ooxml_types::charts::ChartText::Rich(_))
+    ));
+    assert_eq!(out_labels.d_lbl[0].delete, Some(false));
+    assert_eq!(out_labels.d_lbl[0].show_value, Some(true));
+
+    let out_marker = out_series.marker.as_ref().expect("reconstructed marker");
+    let out_marker_sp = out_marker
+        .sp_pr
+        .as_ref()
+        .expect("reconstructed marker spPr");
+    assert_eq!(solid_fill_hex(out_marker_sp.fill.as_ref()), Some("00AA00"));
+    assert_eq!(line_solid_hex(out_marker_sp.ln.as_ref()), Some("AA0000"));
+    assert!(line_is_no_fill(
+        out_series
+            .sp_pr
+            .as_ref()
+            .and_then(|sp_pr| sp_pr.ln.as_ref())
+    ));
+
+    let out_point = out_series
+        .d_pt
+        .iter()
+        .find(|point| point.idx == 2)
+        .expect("reconstructed point override");
+    assert!(line_is_no_fill(
+        out_point.sp_pr.as_ref().and_then(|sp_pr| sp_pr.ln.as_ref())
+    ));
+    let out_point_marker_sp = out_point
+        .marker
+        .as_ref()
+        .and_then(|marker| marker.sp_pr.as_ref())
+        .expect("reconstructed point marker spPr");
+    assert_eq!(
+        solid_fill_hex(out_point_marker_sp.fill.as_ref()),
+        Some("0000AA")
+    );
+    assert_eq!(
+        line_solid_hex(out_point_marker_sp.ln.as_ref()),
+        Some("AA00AA")
+    );
+
+    let out_error_bars = out_series
+        .err_bars
+        .iter()
+        .find(|bars| bars.err_dir == Some(ooxml_types::charts::ErrorBarDirection::Y))
+        .expect("reconstructed y error bars");
+    match out_error_bars.plus.as_ref().expect("reconstructed plus") {
+        ooxml_types::charts::NumDataSource::Ref(num_ref) => {
+            assert_eq!(num_ref.f, "Sheet1!$C$2:$C$4");
+            assert_eq!(
+                num_ref.num_cache.as_ref().map(|cache| cache.pts.len()),
+                Some(2)
+            );
+        }
+        other => panic!("expected plus numRef, got {other:?}"),
+    }
+    match out_error_bars.minus.as_ref().expect("reconstructed minus") {
+        ooxml_types::charts::NumDataSource::Lit(num_data) => {
+            assert_eq!(num_data.pts.len(), 2);
+            assert_eq!(num_data.pts[0].v, "0.5");
+        }
+        other => panic!("expected minus numLit, got {other:?}"),
+    }
+}
+
+#[test]
+fn line_analysis_fields_project_to_chart_data_and_reconstruct() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:chart>
+                <c:plotArea>
+                    <c:lineChart>
+                        <c:grouping val="standard"/>
+                        <c:ser><c:idx val="0"/><c:order val="0"/></c:ser>
+                        <c:dropLines>
+                            <c:spPr>
+                                <a:ln w="25400">
+                                    <a:solidFill><a:srgbClr val="112233"/></a:solidFill>
+                                </a:ln>
+                            </c:spPr>
+                        </c:dropLines>
+                        <c:hiLowLines>
+                            <c:spPr>
+                                <a:ln><a:noFill/></a:ln>
+                            </c:spPr>
+                        </c:hiLowLines>
+                        <c:upDownBars>
+                            <c:gapWidth val="219"/>
+                            <c:upBars>
+                                <c:spPr>
+                                    <a:solidFill><a:srgbClr val="ABCDEF"/></a:solidFill>
+                                </c:spPr>
+                            </c:upBars>
+                            <c:downBars>
+                                <c:spPr>
+                                    <a:solidFill><a:srgbClr val="123456"/></a:solidFill>
+                                    <a:ln><a:solidFill><a:srgbClr val="654321"/></a:solidFill></a:ln>
+                                </c:spPr>
+                            </c:downBars>
+                        </c:upDownBars>
+                        <c:axId val="10"/>
+                        <c:axId val="20"/>
+                    </c:lineChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+
+    let drop_lines = spec.drop_lines.as_ref().expect("drop lines");
+    assert_eq!(drop_lines.visible, Some(true));
+    assert_eq!(
+        drop_lines
+            .format
+            .as_ref()
+            .and_then(|line| line.color.clone()),
+        Some(domain_types::chart::ChartColorData::Hex(
+            "112233".to_string()
+        ))
+    );
+    assert_eq!(
+        drop_lines.format.as_ref().and_then(|line| line.width),
+        Some(2.0)
+    );
+    assert_eq!(
+        spec.high_low_lines
+            .as_ref()
+            .and_then(|lines| lines.format.as_ref())
+            .and_then(|line| line.no_fill),
+        Some(true)
+    );
+
+    let up_down_bars = spec.up_down_bars.as_ref().expect("up/down bars");
+    assert_eq!(up_down_bars.gap_width, Some(219));
+    assert_eq!(
+        up_down_bars
+            .up_format
+            .as_ref()
+            .and_then(|format| format.fill.clone()),
+        Some(domain_types::chart::ChartFillData::Solid {
+            color: domain_types::chart::ChartColorData::Hex("ABCDEF".to_string()),
+            transparency: None,
+        })
+    );
+    assert_eq!(
+        up_down_bars
+            .down_format
+            .as_ref()
+            .and_then(|format| format.line.as_ref())
+            .and_then(|line| line.color.clone()),
+        Some(domain_types::chart::ChartColorData::Hex(
+            "654321".to_string()
+        ))
+    );
+
+    match spec.to_floating_object("sheet-1", 0).data {
+        domain_types::FloatingObjectData::Chart(chart_data) => {
+            assert_eq!(chart_data.drop_lines, spec.drop_lines);
+            assert_eq!(chart_data.high_low_lines, spec.high_low_lines);
+            assert_eq!(chart_data.up_down_bars, spec.up_down_bars);
+        }
+        other => panic!("expected chart floating object, got {other:?}"),
+    }
+
+    let reconstructed = reconstruct::reconstruct_chart_space(&spec);
+    let config = &reconstructed.chart.plot_area.chart_groups[0].config;
+    let line_config = match config {
+        ooxml_types::charts::ChartTypeConfig::Line(config) => config,
+        other => panic!("expected line config, got {other:?}"),
+    };
+    let out_drop = line_config
+        .drop_lines
+        .as_ref()
+        .and_then(|lines| lines.sp_pr.as_ref())
+        .expect("reconstructed dropLines spPr");
+    assert_eq!(line_solid_hex(out_drop.ln.as_ref()), Some("112233"));
+    let out_high_low = line_config
+        .hi_low_lines
+        .as_ref()
+        .and_then(|lines| lines.sp_pr.as_ref())
+        .expect("reconstructed hiLowLines spPr");
+    assert!(line_is_no_fill(out_high_low.ln.as_ref()));
+    let out_up_down = line_config
+        .up_down_bars
+        .as_ref()
+        .expect("reconstructed upDownBars");
+    assert_eq!(out_up_down.gap_width, Some(219));
+    assert_eq!(
+        out_up_down
+            .up_bars
+            .as_ref()
+            .and_then(|sp_pr| solid_fill_hex(sp_pr.fill.as_ref())),
+        Some("ABCDEF")
+    );
+    assert_eq!(
+        out_up_down
+            .down_bars
+            .as_ref()
+            .and_then(|sp_pr| line_solid_hex(sp_pr.ln.as_ref())),
+        Some("654321")
+    );
+}
+
+#[test]
+fn bar_series_lines_project_to_chart_data_and_reconstruct() {
+    let xml = br#"<?xml version="1.0"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                        <c:grouping val="stacked"/>
+                        <c:ser><c:idx val="0"/><c:order val="0"/></c:ser>
+                        <c:serLines>
+                            <c:spPr>
+                                <a:ln w="19050">
+                                    <a:solidFill><a:srgbClr val="FEDCBA"/></a:solidFill>
+                                </a:ln>
+                            </c:spPr>
+                        </c:serLines>
+                        <c:axId val="10"/>
+                        <c:axId val="20"/>
+                    </c:barChart>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
+
+    let spec = project_chart_xml(xml);
+
+    let series_lines = spec.series_lines.as_ref().expect("series lines");
+    assert_eq!(series_lines.visible, Some(true));
+    assert_eq!(
+        series_lines
+            .format
+            .as_ref()
+            .and_then(|line| line.color.clone()),
+        Some(domain_types::chart::ChartColorData::Hex(
+            "FEDCBA".to_string()
+        ))
+    );
+    assert_eq!(
+        series_lines.format.as_ref().and_then(|line| line.width),
+        Some(1.5)
+    );
+
+    match spec.to_floating_object("sheet-1", 0).data {
+        domain_types::FloatingObjectData::Chart(chart_data) => {
+            assert_eq!(chart_data.series_lines, spec.series_lines);
+        }
+        other => panic!("expected chart floating object, got {other:?}"),
+    }
+
+    let reconstructed = reconstruct::reconstruct_chart_space(&spec);
+    let config = &reconstructed.chart.plot_area.chart_groups[0].config;
+    let bar_config = match config {
+        ooxml_types::charts::ChartTypeConfig::Bar(config) => config,
+        other => panic!("expected bar config, got {other:?}"),
+    };
+    assert_eq!(bar_config.ser_lines.len(), 1);
+    let out_series_lines = bar_config.ser_lines[0]
+        .sp_pr
+        .as_ref()
+        .expect("reconstructed serLines spPr");
+    assert_eq!(line_solid_hex(out_series_lines.ln.as_ref()), Some("FEDCBA"));
 }

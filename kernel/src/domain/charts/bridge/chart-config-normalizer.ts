@@ -225,6 +225,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     titleFormat: normalizedChart.titleFormat as ChartConfig['titleFormat'],
     titleRichText: normalizedChart.titleRichText as ChartConfig['titleRichText'],
     titleFormula: normalizedChart.titleFormula,
+    plotLayout: normalizedChart.plotLayout,
+    titleLayout: normalizedChart.titleLayout,
     dataTable: normalizedChart.dataTable as ChartConfig['dataTable'],
     dropLines: wireToChartLineSettings(normalizedChart.dropLines),
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
@@ -238,6 +240,10 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     wireframe: normalizedChart.wireframe,
     surfaceTopView: normalizedChart.surfaceTopView,
     colorScheme: normalizedChart.colorScheme,
+    view3d: normalizedChart.view3d,
+    floorFormat: normalizedChart.floorFormat as ChartConfig['floorFormat'],
+    sideWallFormat: normalizedChart.sideWallFormat as ChartConfig['sideWallFormat'],
+    backWallFormat: normalizedChart.backWallFormat as ChartConfig['backWallFormat'],
     subType: normalizedChart.subType as ChartConfig['subType'],
     chartStyleContext:
       (normalizedChart as { chartStyleContext?: ChartConfig['chartStyleContext'] })

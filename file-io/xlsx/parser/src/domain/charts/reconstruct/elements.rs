@@ -13,16 +13,21 @@ use super::formatting::{build_outline, build_run_properties, build_shape_propert
 pub(super) fn build_title(
     text: Option<&str>,
     format: Option<&ChartFormatData>,
+    layout: Option<&domain_types::domain::drawings::ManualLayout>,
 ) -> Option<charts::Title> {
     let text = text?;
     // Guard against the literal string "undefined" leaking from JS bridge serialization.
     if text == "undefined" || text.is_empty() {
         return None;
     }
-    Some(build_title_element(text, format))
+    Some(build_title_element(text, format, layout))
 }
 
-pub(super) fn build_title_element(text: &str, format: Option<&ChartFormatData>) -> charts::Title {
+pub(super) fn build_title_element(
+    text: &str,
+    format: Option<&ChartFormatData>,
+    layout: Option<&domain_types::domain::drawings::ManualLayout>,
+) -> charts::Title {
     let tx = Some(build_chart_text_rich(
         text,
         format.and_then(|f| f.font.as_ref()),
@@ -31,6 +36,7 @@ pub(super) fn build_title_element(text: &str, format: Option<&ChartFormatData>) 
 
     charts::Title {
         tx,
+        layout: layout.cloned().map(Into::into),
         sp_pr,
         ..Default::default()
     }
@@ -87,6 +93,7 @@ pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {
     Some(charts::Legend {
         legend_pos,
         legend_entry,
+        layout: ld.layout.clone().map(Into::into),
         overlay: ld.overlay,
         sp_pr,
         tx_pr,
@@ -133,6 +140,7 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
         separator: dl.separator.clone(),
         num_fmt,
         num_fmt_obj,
+        layout: dl.layout.clone().map(Into::into),
         sp_pr,
         tx_pr,
         show_leader_lines: dl.show_leader_lines,

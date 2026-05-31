@@ -33,6 +33,18 @@ function resolveOpacity(value: unknown, fallback: number): number {
   return Number.isFinite(numeric) ? clamp(numeric, 0, 1) : fallback;
 }
 
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function hasExplicitBarSpacing(config: ConfigSpec | undefined): boolean {
   return finiteNumber(config?.gapWidth) !== undefined || finiteNumber(config?.overlap) !== undefined;
 }
@@ -386,9 +398,9 @@ export function generateBarMarks(
       height: Math.max(0, height),
       datum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke,
-        strokeWidth: markSpec.strokeWidth,
+        fill: datumString(datum, markSpec.fillField) ?? color,
+        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke,
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
         opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
         ...definedStyle({

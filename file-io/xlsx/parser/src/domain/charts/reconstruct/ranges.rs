@@ -82,6 +82,7 @@ pub(super) fn chart_series_data(
         value_cache: None,
         categories,
         category_cache: None,
+        category_levels: None,
         category_label_format: None,
         bubble_size: None,
         bubble_size_cache: None,

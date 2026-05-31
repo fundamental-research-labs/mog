@@ -176,6 +176,8 @@ export interface ChartLineFormat {
   width?: number;
   dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
   transparency?: number;
+  /** Explicit OOXML a:ln/a:noFill. Absent line formatting is not an explicit no-line. */
+  noFill?: boolean;
 }
 
 /** Shared chart border configuration (matches ChartBorderData wire type) */
@@ -366,6 +368,14 @@ export interface ErrorBarConfig {
   value?: number;
   noEndCap?: boolean;
   lineFormat?: ChartLineFormat;
+  plusSource?: ErrorBarSource;
+  minusSource?: ErrorBarSource;
+}
+
+/** Custom error-bar source formula plus sparse cached values. */
+export interface ErrorBarSource {
+  formula?: string;
+  cache?: ChartSeriesPointCache;
 }
 
 /** Rich title configuration */
@@ -659,6 +669,8 @@ export interface AxisConfig {
  */
 export interface DataLabelConfig {
   show: boolean;
+  /** Explicit OOXML delete/suppression, distinct from an absent label config. */
+  delete?: boolean;
   position?:
     | 'center'
     | 'insideEnd'
@@ -714,6 +726,8 @@ export interface DataLabelConfig {
   readonly width?: number;
   /** Leader line formatting configuration. */
   leaderLinesFormat?: ChartLeaderLinesFormat;
+  /** Manual layout imported from OOXML when representable. */
+  layout?: unknown;
 }
 
 /**
@@ -787,6 +801,23 @@ export interface ChartSeriesPointCachePoint {
   formatCode?: string;
 }
 
+/** Imported multi-level category cache for hierarchical category labels. */
+export interface ChartSeriesCategoryLevelsCache {
+  /** Logical OOXML point count for the category domain, when supplied by the source. */
+  pointCount?: number;
+  /** Category label levels in source order. */
+  levels: ChartSeriesCategoryLevelCache[];
+}
+
+export interface ChartSeriesCategoryLevelCache {
+  /** Zero-based level index in source order. */
+  level: number;
+  /** Logical point count for this level, when supplied by the source. */
+  pointCount?: number;
+  /** Sparse cached labels keyed by OOXML `c:pt/@idx`. */
+  points: ChartSeriesPointCachePoint[];
+}
+
 /** Imported chart dimension source authority. */
 export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback';
 
@@ -802,6 +833,7 @@ export interface SeriesConfig {
   valueSourceKind?: ChartSeriesDimensionSourceKind;
   categories?: string;
   categoryCache?: ChartSeriesPointCache;
+  categoryLevels?: ChartSeriesCategoryLevelsCache;
   categorySourceKind?: ChartSeriesDimensionSourceKind;
   categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
@@ -898,8 +930,13 @@ export type MarkerStyle =
  */
 export interface PointFormat {
   idx: number;
+  invertIfNegative?: boolean;
+  explosion?: number;
+  bubble3d?: boolean;
+  bubble3D?: boolean;
   fill?: string;
   border?: ChartBorder;
+  lineFormat?: ChartLineFormat;
   dataLabel?: DataLabelConfig;
   visualFormat?: ChartFormat;
   // Additional point properties
@@ -1111,6 +1148,19 @@ export interface ChartLeaderLinesFormat {
   format: ChartLineFormat;
 }
 
+/** Chart-level line feature such as drop lines, high-low lines, or series lines. */
+export interface ChartLineSettings {
+  visible?: boolean;
+  format?: ChartLineFormat;
+}
+
+/** Up/down bar settings for line and stock charts. */
+export interface UpDownBarsConfig {
+  gapWidth?: number;
+  upFormat?: ChartFormat;
+  downFormat?: ChartFormat;
+}
+
 /** Pivot chart display options (field button visibility). */
 export interface PivotChartOptions {
   /** Show axis field buttons on the chart. */
@@ -1184,6 +1234,10 @@ export interface ChartConfig {
 
   // Data labels
   dataLabels?: DataLabelConfig;
+  dropLines?: ChartLineSettings;
+  highLowLines?: ChartLineSettings;
+  seriesLines?: ChartLineSettings;
+  upDownBars?: UpDownBarsConfig;
 
   // Pie/Doughnut specific
   pieSlice?: PieSliceConfig;

@@ -825,6 +825,7 @@ fn chart_data_serde_roundtrip() {
             error_bars: None,
             x_error_bars: None,
             y_error_bars: None,
+            category_levels: None,
             idx: None,
             order: None,
             format: None,

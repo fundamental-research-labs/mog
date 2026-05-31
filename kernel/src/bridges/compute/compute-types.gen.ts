@@ -892,6 +892,10 @@ export interface ChartData {
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
   dataTable?: ChartDataTableData;
+  dropLines?: ChartLineSettingsData;
+  highLowLines?: ChartLineSettingsData;
+  seriesLines?: ChartLineSettingsData;
+  upDownBars?: UpDownBarsData;
   barShape?: string;
   view3d?: ChartView3DData;
   floorFormat?: ChartFormatData;
@@ -915,6 +919,11 @@ export interface ChartDataTableData {
   format?: ChartFormatData;
   showLegendKey?: boolean;
   visible?: boolean;
+}
+
+export interface ChartLineSettingsData {
+  visible?: boolean;
+  format?: ChartLineData;
 }
 
 export type ChartDefinition =
@@ -1010,6 +1019,7 @@ export interface ChartLineData {
   width?: number;
   dashStyle?: ChartDashStyle;
   transparency?: number;
+  noFill?: boolean;
 }
 
 export interface ChartOoxmlProps {
@@ -1030,6 +1040,17 @@ export interface ChartRelationshipData {
   targetMode?: string;
 }
 
+export interface ChartSeriesCategoryLevelCacheData {
+  level: number;
+  pointCount?: number;
+  points: ChartSeriesPointCachePointData[];
+}
+
+export interface ChartSeriesCategoryLevelsCacheData {
+  pointCount?: number;
+  levels: ChartSeriesCategoryLevelCacheData[];
+}
+
 export interface ChartSeriesData {
   name?: string;
   type?: string;
@@ -1038,6 +1059,7 @@ export interface ChartSeriesData {
   valueCache?: ChartSeriesPointCacheData;
   categories?: string;
   categoryCache?: ChartSeriesPointCacheData;
+  categoryLevels?: ChartSeriesCategoryLevelsCacheData;
   categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCacheData;
@@ -1120,6 +1142,10 @@ export interface ChartSpec {
   titleRichText?: ChartFormatStringData[];
   titleFormula?: string;
   dataTable?: ChartDataTableData;
+  dropLines?: ChartLineSettingsData;
+  highLowLines?: ChartLineSettingsData;
+  seriesLines?: ChartLineSettingsData;
+  upDownBars?: UpDownBarsData;
   waterfall?: WaterfallOptions;
   histogram?: HistogramConfigData;
   boxplot?: BoxplotConfigData;
@@ -1489,6 +1515,7 @@ export interface DataBounds {
 
 export interface DataLabelData {
   show: boolean;
+  delete?: boolean;
   position?: string;
   format?: string;
   showValue?: boolean;
@@ -1511,6 +1538,7 @@ export interface DataLabelData {
   geometricShapeType?: string;
   formula?: string;
   leaderLinesFormat?: ChartLineData;
+  layout?: unknown;
 }
 
 export interface DataTableOoxmlFlags {
@@ -1776,6 +1804,13 @@ export interface ErrorBarData {
   value?: number;
   noEndCap?: boolean;
   lineFormat?: ChartLineData;
+  plusSource?: ErrorBarSourceData;
+  minusSource?: ErrorBarSourceData;
+}
+
+export interface ErrorBarSourceData {
+  formula?: string;
+  cache?: ChartSeriesPointCacheData;
 }
 
 export interface ErrorMessage {
@@ -3310,14 +3345,24 @@ export interface Point {
 
 export interface PointFormatData {
   idx: number;
+  invertIfNegative?: boolean;
+  explosion?: number;
+  bubble3d?: boolean;
   fill?: string;
   border?: ChartBorderData;
+  lineFormat?: ChartLineData;
   dataLabel?: DataLabelData;
   visualFormat?: ChartFormatData;
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
   markerSize?: number;
   markerStyle?: string;
+}
+
+export interface UpDownBarsData {
+  gapWidth?: number;
+  upFormat?: ChartFormatData;
+  downFormat?: ChartFormatData;
 }
 
 export interface PolicyPreservedParseOutcome {

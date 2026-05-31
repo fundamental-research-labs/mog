@@ -134,6 +134,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 show_markers,
                 marker_size,
                 marker_style,
+                category_levels: None,
                 line_width: None,
                 points,
                 data_labels,

@@ -105,6 +105,21 @@ describe('chart-type-converters', () => {
         formatCode: 'm/d/yyyy',
         points: [{ idx: 0, value: '45292' }],
       },
+      categoryLevels: {
+        pointCount: 4,
+        levels: [
+          {
+            level: 0,
+            pointCount: 4,
+            points: [{ idx: 0, value: 'North' }],
+          },
+          {
+            level: 1,
+            pointCount: 4,
+            points: [{ idx: 1, value: 'Q2' }],
+          },
+        ],
+      },
       bubbleSizeCache: {
         pointCount: 2,
         points: [{ idx: 1, value: '10' }],
@@ -120,11 +135,13 @@ describe('chart-type-converters', () => {
       ],
     });
     expect(seriesConfig.categoryCache?.points).toEqual([{ idx: 0, value: '45292' }]);
+    expect(seriesConfig.categoryLevels?.levels[1].points).toEqual([{ idx: 1, value: 'Q2' }]);
     expect(seriesConfig.bubbleSizeCache?.points).toEqual([{ idx: 1, value: '10' }]);
     expect(seriesConfigToWire(seriesConfig)).toEqual(
       expect.objectContaining({
         valueCache: seriesConfig.valueCache,
         categoryCache: seriesConfig.categoryCache,
+        categoryLevels: seriesConfig.categoryLevels,
         bubbleSizeCache: seriesConfig.bubbleSizeCache,
       }),
     );

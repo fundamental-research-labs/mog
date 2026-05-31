@@ -313,6 +313,112 @@ describe('chart data point value provenance', () => {
     expect(data.series[0].data.map((point) => point.x)).toEqual([45292, 'Cached B']);
   });
 
+  it('uses imported multi-level category caches as composed chart-domain labels', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      [10, 20, 30],
+      ['Live A', 'Live B', 'Live C'],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'imported-category-levels-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:C1',
+          categories: 'A2:C2',
+          categoryLevels: {
+            pointCount: 3,
+            levels: [
+              {
+                level: 0,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'North' },
+                  { idx: 1, value: 'North' },
+                  { idx: 2, value: 'South' },
+                ],
+              },
+              {
+                level: 1,
+                pointCount: 3,
+                points: [
+                  { idx: 0, value: 'Q1' },
+                  { idx: 1, value: 'Q2' },
+                  { idx: 2, value: 'Q1' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.categories).toEqual(['North / Q1', 'North / Q2', 'South / Q1']);
+    expect(data.categoryLevels).toEqual([
+      { level: 0, labels: ['North', 'North', 'South'] },
+      { level: 1, labels: ['Q1', 'Q2', 'Q1'] },
+    ]);
+    expect(data.series[0].data.map((point) => point.x)).toEqual([
+      'North / Q1',
+      'North / Q2',
+      'South / Q1',
+    ]);
+  });
+
+  it('uses the configured multi-level category label level for imported labels', () => {
+    const accessor = ObjectCellAccessor.fromArray([[10, 20, 30]]);
+    const config: StoredChartConfig = {
+      id: 'selected-category-level-chart',
+      type: 'line',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: '',
+      categoryLabelLevel: 1,
+      series: [
+        {
+          name: 'Imported',
+          values: 'A1:C1',
+          categoryLevels: {
+            pointCount: 3,
+            levels: [
+              {
+                level: 0,
+                points: [
+                  { idx: 0, value: 'North' },
+                  { idx: 1, value: 'North' },
+                  { idx: 2, value: 'South' },
+                ],
+              },
+              {
+                level: 1,
+                points: [
+                  { idx: 0, value: 'Q1' },
+                  { idx: 1, value: 'Q2' },
+                  { idx: 2, value: 'Q1' },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.categories).toEqual(['Q1', 'Q2', 'Q1']);
+    expect(data.series[0].data.map((point) => point.name)).toEqual(['Q1', 'Q2', 'Q1']);
+    expect(data.categoryLevels?.[0].labels).toEqual(['North', 'North', 'South']);
+  });
+
   it('uses live bubble size ranges before stale caches', () => {
     const accessor = ObjectCellAccessor.fromArray([
       [10, 20, 30],

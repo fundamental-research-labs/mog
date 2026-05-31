@@ -3,10 +3,12 @@
  */
 import type {
   ChartConfig,
+  ChartCategoryLevelData,
   ChartData,
   ChartDataPoint,
   ChartDataPointValueState,
   ChartDataSeries,
+  ChartSeriesCategoryLevelsCache,
   ChartSeriesPointCache,
   SeriesConfig,
   SeriesOrientation,
@@ -198,6 +200,84 @@ function cachePointCardinality(cache: ChartSeriesPointCache | undefined): number
   return cache.points.reduce((max, point) => Math.max(max, point.idx + 1), 0);
 }
 
+function categoryLevelPointCardinality(cache: ChartSeriesCategoryLevelsCache | undefined): number {
+  if (!cache) return 0;
+  if (
+    typeof cache.pointCount === 'number' &&
+    Number.isInteger(cache.pointCount) &&
+    cache.pointCount >= 0
+  ) {
+    return cache.pointCount;
+  }
+  return cache.levels.reduce((max, level) => {
+    const levelPointCount =
+      typeof level.pointCount === 'number' &&
+      Number.isInteger(level.pointCount) &&
+      level.pointCount >= 0
+        ? level.pointCount
+        : 0;
+    const maxPointIndex = level.points.reduce((pointMax, point) => {
+      return Math.max(pointMax, point.idx + 1);
+    }, 0);
+    return Math.max(max, levelPointCount, maxPointIndex);
+  }, 0);
+}
+
+function orderedCategoryLevels(cache: ChartSeriesCategoryLevelsCache | undefined) {
+  return [...(cache?.levels ?? [])].sort((left, right) => left.level - right.level);
+}
+
+function categoryLevelValueAt(
+  cache: ChartSeriesCategoryLevelsCache | undefined,
+  levelIndex: number,
+  pointIndex: number,
+): string | undefined {
+  const levels = orderedCategoryLevels(cache);
+  const level = levels.find((candidate) => candidate.level === levelIndex) ?? levels[levelIndex];
+  const value = level?.points.find((point) => point.idx === pointIndex)?.value;
+  return value === undefined || value === '' ? undefined : value;
+}
+
+function selectedCategoryLabelLevel(level: number | undefined): number | undefined {
+  return typeof level === 'number' && Number.isInteger(level) && level >= 0 ? level : undefined;
+}
+
+function multiLevelCategoryLabelAt(
+  cache: ChartSeriesCategoryLevelsCache | undefined,
+  pointIndex: number,
+  selectedLevel: number | undefined,
+  fallback: string | number,
+): string | number {
+  if (selectedLevel !== undefined) {
+    return categoryLevelValueAt(cache, selectedLevel, pointIndex) ?? fallback;
+  }
+
+  const labels = orderedCategoryLevels(cache)
+    .map((level) => level.points.find((point) => point.idx === pointIndex)?.value)
+    .filter((value): value is string => value !== undefined && value.trim() !== '');
+  return labels.length > 0 ? labels.join(' / ') : fallback;
+}
+
+function categoryLevelsFromCache(
+  cache: ChartSeriesCategoryLevelsCache | undefined,
+): ChartCategoryLevelData[] | undefined {
+  const pointCount = categoryLevelPointCardinality(cache);
+  const levels = orderedCategoryLevels(cache);
+  if (pointCount === 0 || levels.length === 0) return undefined;
+
+  return levels.map((level) => ({
+    level: level.level,
+    labels: Array.from({ length: pointCount }, (_, pointIndex) => {
+      const value = level.points.find((point) => point.idx === pointIndex)?.value;
+      return value === undefined || value === '' ? null : value;
+    }),
+  }));
+}
+
+function hasRenderableCategoryLevels(cache: ChartSeriesCategoryLevelsCache | undefined): boolean {
+  return categoryLevelPointCardinality(cache) > 0 && orderedCategoryLevels(cache).length > 0;
+}
+
 function cacheValueAt(cache: ChartSeriesPointCache | undefined, pointIndex: number): ChartCellValue {
   const cached = importedCachePointState(cache, pointIndex);
   return cached.kind === 'explicit' ? cached.value : undefined;
@@ -350,7 +430,7 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
 export function extractChartData(accessor: CellDataAccessor, config: ChartConfig): ChartData {
   const importedSeries = config.series?.filter(hasRenderableImportedSeriesData);
   if (importedSeries?.length) {
-    return extractChartDataFromSeriesRefs(accessor, importedSeries);
+    return extractChartDataFromSeriesRefs(accessor, importedSeries, config.categoryLabelLevel);
   }
 
   if (!config.dataRange) {
@@ -581,10 +661,13 @@ function extractImportedDimension(
 function extractChartDataFromSeriesRefs(
   accessor: CellDataAccessor,
   seriesConfigs: SeriesConfig[],
+  categoryLabelLevel: number | undefined,
 ): ChartData {
   const series: ChartDataSeries[] = [];
   let categories: (string | number)[] = [];
+  let categoryLevels: ChartCategoryLevelData[] | undefined;
   const categoryFormatCodes: Array<string | null | undefined> = [];
+  const selectedLevel = selectedCategoryLabelLevel(categoryLabelLevel);
 
   for (let seriesIndex = 0; seriesIndex < seriesConfigs.length; seriesIndex++) {
     const seriesConfig = seriesConfigs[seriesIndex];
@@ -596,12 +679,22 @@ function extractChartDataFromSeriesRefs(
     );
     if (valueDimension.values.length === 0) continue;
 
-    const categoryDimension = extractImportedDimension(
-      accessor,
-      seriesConfig.categories,
-      seriesConfig.categoryCache,
-      seriesConfig.categorySourceKind,
-    );
+    const categoryLevelsCache = seriesConfig.categoryLevels;
+    const hasCategoryLevels = hasRenderableCategoryLevels(categoryLevelsCache);
+    const categoryDimension = hasCategoryLevels
+      ? {
+          values: Array.from({ length: categoryLevelPointCardinality(categoryLevelsCache) }, (_, i) =>
+            multiLevelCategoryLabelAt(categoryLevelsCache, i, selectedLevel, categories[i] ?? i + 1),
+          ),
+          hasLiveRange: false,
+        }
+      : extractImportedDimension(
+          accessor,
+          seriesConfig.categories,
+          seriesConfig.categoryCache,
+          seriesConfig.categorySourceKind,
+        );
+    categoryLevels ??= categoryLevelsFromCache(categoryLevelsCache);
     const bubbleSizeDimension = extractImportedDimension(
       accessor,
       seriesConfig.bubbleSize,
@@ -613,20 +706,15 @@ function extractChartDataFromSeriesRefs(
     for (let pointIndex = 0; pointIndex < valueDimension.values.length; pointIndex += 1) {
       const rawValue = valueDimension.values[pointIndex];
       const rawCategory = categoryDimension.values[pointIndex];
+      const categoryFallback = categories[pointIndex] ?? pointIndex + 1;
       const category =
-        categoryDimension.values.length > pointIndex
-          ? categoryDimension.hasLiveRange
-            ? labelValue(rawCategory, categories[pointIndex] ?? pointIndex + 1)
-            : cacheLabelAt(
-                seriesConfig.categoryCache,
-                pointIndex,
-                categories[pointIndex] ?? pointIndex + 1,
-              )
-          : cacheLabelAt(
-              seriesConfig.categoryCache,
-              pointIndex,
-              categories[pointIndex] ?? pointIndex + 1,
-            );
+        hasCategoryLevels && categoryDimension.values.length > pointIndex
+          ? labelValue(rawCategory, categoryFallback)
+          : categoryDimension.values.length > pointIndex
+            ? categoryDimension.hasLiveRange
+              ? labelValue(rawCategory, categoryFallback)
+              : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback)
+            : cacheLabelAt(seriesConfig.categoryCache, pointIndex, categoryFallback);
       const rawSize =
         bubbleSizeDimension.values.length > pointIndex
           ? bubbleSizeDimension.values[pointIndex]
@@ -662,6 +750,7 @@ function extractChartDataFromSeriesRefs(
 
   return {
     categories,
+    ...(categoryLevels ? { categoryLevels } : {}),
     ...(categoryFormatCodes.some(Boolean) ? { categoryFormatCodes } : {}),
     series,
   };

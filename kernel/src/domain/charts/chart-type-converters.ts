@@ -34,6 +34,7 @@ import type {
   ChartLineData,
   ChartSeriesData,
   DataLabelData,
+  ErrorBarData,
   HierarchyChartConfigData,
   HistogramConfigData,
   LegendData,
@@ -47,8 +48,11 @@ import type {
   AxisConfig,
   BoxplotConfig,
   ChartLeaderLinesFormat,
+  ChartLineFormat,
+  ChartLineSettings,
   ChartType,
   DataLabelConfig,
+  ErrorBarConfig,
   HierarchyChartConfig,
   HistogramConfig,
   LegendConfig,
@@ -57,6 +61,7 @@ import type {
   RegionMapConfig,
   SeriesConfig,
   SingleAxisConfig,
+  UpDownBarsConfig,
   WaterfallConfig,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -353,12 +358,11 @@ export function wireToLegendConfig(w: LegendData): LegendConfig {
   };
 }
 
-/** Convert a wire ChartLineData to the contract ChartLeaderLinesFormat. */
-export function wireToLeaderLinesFormat(w: ChartLineData): ChartLeaderLinesFormat {
-  // ChartLeaderLinesFormat wraps a ChartLineFormat under `format`.
+/** Convert a wire ChartLineData to the contract ChartLineFormat. */
+export function wireToChartLineFormat(w: ChartLineData): ChartLineFormat {
   // Wire `color` is `string | { theme, tint_shade? }`; contract is
   // `string | { theme, tintShade? }`. Snake→camel rename on theme variant.
-  let color: ChartLeaderLinesFormat['format']['color'];
+  let color: ChartLineFormat['color'];
   if (typeof w.color === 'string') {
     color = w.color;
   } else if (w.color && typeof w.color === 'object') {
@@ -366,19 +370,24 @@ export function wireToLeaderLinesFormat(w: ChartLineData): ChartLeaderLinesForma
     color = { theme: t.theme, tintShade: t.tint_shade };
   }
   return {
-    format: {
-      color,
-      width: w.width,
-      dashStyle: w.dashStyle,
-      transparency: w.transparency,
-    },
+    color,
+    width: w.width,
+    dashStyle: w.dashStyle,
+    transparency: w.transparency,
+    noFill: w.noFill,
   };
+}
+
+/** Convert a wire ChartLineData to the contract ChartLeaderLinesFormat. */
+export function wireToLeaderLinesFormat(w: ChartLineData): ChartLeaderLinesFormat {
+  return { format: wireToChartLineFormat(w) };
 }
 
 /** Convert a wire DataLabelData to the contract DataLabelConfig. */
 export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
   return {
     show: w.show,
+    delete: w.delete,
     position: narrowEnum<DataLabelPosition>(w.position, DATA_LABEL_POSITIONS, 'DataLabel.position'),
     format: w.format,
     showValue: w.showValue,
@@ -411,6 +420,7 @@ export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
     leaderLinesFormat: w.leaderLinesFormat
       ? wireToLeaderLinesFormat(w.leaderLinesFormat)
       : undefined,
+    layout: w.layout,
   };
 }
 
@@ -418,14 +428,54 @@ export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
 export function wireToPointFormat(w: PointFormatData): PointFormat {
   return {
     idx: w.idx,
+    invertIfNegative: w.invertIfNegative,
+    explosion: w.explosion,
+    bubble3d: w.bubble3d,
+    bubble3D: w.bubble3d,
     fill: w.fill,
     border: w.border,
+    lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
     dataLabel: w.dataLabel ? wireToDataLabelConfig(w.dataLabel) : undefined,
     visualFormat: w.visualFormat,
     markerBackgroundColor: w.markerBackgroundColor,
     markerForegroundColor: w.markerForegroundColor,
     markerSize: w.markerSize,
     markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Point.markerStyle'),
+  };
+}
+
+export function wireToErrorBarConfig(w: ErrorBarData): ErrorBarConfig {
+  return {
+    visible: w.visible,
+    direction: w.direction,
+    barType: w.barType,
+    valueType: w.valueType,
+    value: w.value,
+    noEndCap: w.noEndCap,
+    lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
+    plusSource: w.plusSource,
+    minusSource: w.minusSource,
+  };
+}
+
+export function wireToChartLineSettings(
+  w: { visible?: boolean; format?: ChartLineData } | undefined,
+): ChartLineSettings | undefined {
+  if (!w) return undefined;
+  return {
+    visible: w.visible,
+    format: w.format ? wireToChartLineFormat(w.format) : undefined,
+  };
+}
+
+export function wireToUpDownBarsConfig(
+  w: { gapWidth?: number; upFormat?: unknown; downFormat?: unknown } | undefined,
+): UpDownBarsConfig | undefined {
+  if (!w) return undefined;
+  return {
+    gapWidth: w.gapWidth,
+    upFormat: w.upFormat as UpDownBarsConfig['upFormat'],
+    downFormat: w.downFormat as UpDownBarsConfig['downFormat'],
   };
 }
 
@@ -494,6 +544,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     valueCache: w.valueCache,
     categories: w.categories,
     categoryCache: w.categoryCache,
+    categoryLevels: w.categoryLevels,
     categoryLabelFormat: w.categoryLabelFormat,
     bubbleSize: w.bubbleSize,
     bubbleSizeCache: w.bubbleSizeCache,
@@ -510,9 +561,9 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     points: w.points?.map(wireToPointFormat),
     dataLabels: w.dataLabels ? wireToDataLabelConfig(w.dataLabels) : undefined,
     trendlines: w.trendlines,
-    errorBars: w.errorBars,
-    xErrorBars: w.xErrorBars,
-    yErrorBars: w.yErrorBars,
+    errorBars: w.errorBars ? wireToErrorBarConfig(w.errorBars) : undefined,
+    xErrorBars: w.xErrorBars ? wireToErrorBarConfig(w.xErrorBars) : undefined,
+    yErrorBars: w.yErrorBars ? wireToErrorBarConfig(w.yErrorBars) : undefined,
     idx: w.idx,
     order: w.order,
     format: w.format,
@@ -619,28 +670,35 @@ export function legendConfigToWire(c: LegendConfig): LegendData {
   };
 }
 
-/** Convert contract ChartLeaderLinesFormat to wire ChartLineData. */
-export function leaderLinesFormatToWire(c: ChartLeaderLinesFormat): ChartLineData {
+/** Convert contract ChartLineFormat to wire ChartLineData. */
+export function chartLineFormatToWire(c: ChartLineFormat): ChartLineData {
   // Contract color is `string | { theme, tintShade? }`; wire is
   // `string | { theme, tint_shade? }`. Re-emit with snake-case.
   let color: ChartLineData['color'];
-  if (typeof c.format.color === 'string') {
-    color = c.format.color;
-  } else if (c.format.color && typeof c.format.color === 'object') {
-    color = { theme: c.format.color.theme, tint_shade: c.format.color.tintShade };
+  if (typeof c.color === 'string') {
+    color = c.color;
+  } else if (c.color && typeof c.color === 'object') {
+    color = { theme: c.color.theme, tint_shade: c.color.tintShade };
   }
   return {
     color,
-    width: c.format.width,
-    dashStyle: c.format.dashStyle,
-    transparency: c.format.transparency,
+    width: c.width,
+    dashStyle: c.dashStyle,
+    transparency: c.transparency,
+    noFill: c.noFill,
   };
+}
+
+/** Convert contract ChartLeaderLinesFormat to wire ChartLineData. */
+export function leaderLinesFormatToWire(c: ChartLeaderLinesFormat): ChartLineData {
+  return chartLineFormatToWire(c.format);
 }
 
 /** Convert contract DataLabelConfig to wire DataLabelData. */
 export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
   return {
     show: c.show ?? false,
+    delete: c.delete,
     position: c.position,
     format: c.format,
     showValue: c.showValue,
@@ -665,6 +723,7 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
     leaderLinesFormat: c.leaderLinesFormat
       ? leaderLinesFormatToWire(c.leaderLinesFormat)
       : undefined,
+    layout: c.layout as DataLabelData['layout'],
   };
 }
 
@@ -672,14 +731,32 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
 export function pointFormatToWire(c: PointFormat): PointFormatData {
   return {
     idx: c.idx,
+    invertIfNegative: c.invertIfNegative,
+    explosion: c.explosion,
+    bubble3d: c.bubble3d ?? c.bubble3D,
     fill: c.fill,
     border: c.border,
+    lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
     dataLabel: c.dataLabel ? dataLabelConfigToWire(c.dataLabel) : undefined,
     visualFormat: c.visualFormat,
     markerBackgroundColor: c.markerBackgroundColor,
     markerForegroundColor: c.markerForegroundColor,
     markerSize: c.markerSize,
     markerStyle: c.markerStyle,
+  };
+}
+
+export function errorBarConfigToWire(c: ErrorBarConfig): ErrorBarConfig {
+  return {
+    visible: c.visible,
+    direction: c.direction,
+    barType: c.barType,
+    valueType: c.valueType,
+    value: c.value,
+    noEndCap: c.noEndCap,
+    lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
+    plusSource: c.plusSource,
+    minusSource: c.minusSource,
   };
 }
 
@@ -693,6 +770,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     valueCache: c.valueCache,
     categories: c.categories,
     categoryCache: c.categoryCache,
+    categoryLevels: c.categoryLevels,
     categoryLabelFormat: c.categoryLabelFormat,
     bubbleSize: c.bubbleSize,
     bubbleSizeCache: c.bubbleSizeCache,
@@ -707,9 +785,9 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     points: c.points?.map(pointFormatToWire),
     dataLabels: c.dataLabels ? dataLabelConfigToWire(c.dataLabels) : undefined,
     trendlines: c.trendlines,
-    errorBars: c.errorBars,
-    xErrorBars: c.xErrorBars,
-    yErrorBars: c.yErrorBars,
+    errorBars: c.errorBars ? errorBarConfigToWire(c.errorBars) : undefined,
+    xErrorBars: c.xErrorBars ? errorBarConfigToWire(c.xErrorBars) : undefined,
+    yErrorBars: c.yErrorBars ? errorBarConfigToWire(c.yErrorBars) : undefined,
     idx: c.idx,
     order: c.order,
     format: c.format,

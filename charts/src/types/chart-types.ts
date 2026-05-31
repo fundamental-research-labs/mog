@@ -28,7 +28,11 @@ export type {
   ChartConfig,
   ChartFill,
   ChartFormat,
+  ChartLeaderLinesFormat,
   ChartLineFormat,
+  ChartLineSettings,
+  ChartSeriesCategoryLevelCache,
+  ChartSeriesCategoryLevelsCache,
   ChartSeriesDimensionSourceKind,
   ChartSeriesPointCache,
   ChartSeriesPointCachePoint,
@@ -40,6 +44,8 @@ export type {
   ChartWorkbookThemeData,
   ChartType,
   DataLabelConfig,
+  ErrorBarConfig,
+  ErrorBarSource,
   BoxplotConfig,
   HeatmapConfig,
   HierarchyChartConfig,
@@ -50,7 +56,9 @@ export type {
   LegendConfig,
   LegendPosition,
   LineSubType,
+  MarkerStyle,
   PieSliceConfig,
+  PointFormat,
   RadarSubType,
   SeriesConfig,
   SeriesOrientation,
@@ -59,7 +67,9 @@ export type {
   StockSubType,
   TreemapConfig,
   TrendlineConfig,
+  TrendlineLabelConfig,
   TrendlineType,
+  UpDownBarsConfig,
   RegionMapConfig,
   ViolinConfig,
   WaterfallConfig,
@@ -383,10 +393,20 @@ export interface ChartDataSeries {
 }
 
 /**
+ * One rendered category label level, aligned to ChartData.categories by index.
+ */
+export interface ChartCategoryLevelData {
+  level: number;
+  labels: Array<string | null>;
+}
+
+/**
  * Extracted chart data ready for rendering
  */
 export interface ChartData {
   categories: (string | number)[];
+  /** Optional multi-level category labels preserved from imported chart caches. */
+  categoryLevels?: ChartCategoryLevelData[];
   /** Optional per-category number format codes for axis label rendering. */
   categoryFormatCodes?: Array<string | null | undefined>;
   series: ChartDataSeries[];

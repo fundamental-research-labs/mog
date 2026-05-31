@@ -35,6 +35,9 @@ pub struct ChartSeriesData {
     /// Imported cached category/x values from the source chart data reference.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_cache: Option<ChartSeriesPointCacheData>,
+    /// Imported cached multi-level category labels, keyed by point index.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_levels: Option<ChartSeriesCategoryLevelsCacheData>,
     /// Cached category number format metadata, including per-point overrides.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_label_format: Option<CategoryLabelFormatData>,
@@ -146,6 +149,28 @@ pub struct ChartSeriesPointCachePointData {
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format_code: Option<String>,
+}
+
+/// Imported multi-level category cache for one chart series.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesCategoryLevelsCacheData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point_count: Option<u32>,
+    #[serde(default)]
+    pub levels: Vec<ChartSeriesCategoryLevelCacheData>,
+}
+
+/// One imported category label level from an OOXML multi-level string cache.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeriesCategoryLevelCacheData {
+    #[serde(default)]
+    pub level: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point_count: Option<u32>,
+    #[serde(default)]
+    pub points: Vec<ChartSeriesPointCachePointData>,
 }
 
 /// Category-axis label formatting captured from the series category cache.

@@ -156,6 +156,16 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     });
   }
 
+  if (isPreservedOnlyChartExFamily(config.type)) {
+    return buildLayerSpec({
+      dimensions,
+      rows: [],
+      layers: [],
+      title,
+      config: configSpec,
+    });
+  }
+
   const annotationLayers = buildAnnotationLayers(config, data, encoding, rows);
   if (annotationLayers.length > 0) {
     const mainLayer: ChartSpec = { mark, encoding };
@@ -208,4 +218,8 @@ function hasRowFlag(rows: DataRow[], field: string): boolean {
 
 function isAreaChart(type: ChartConfig['type']): boolean {
   return type === 'area' || type === 'area3d';
+}
+
+function isPreservedOnlyChartExFamily(type: ChartConfig['type']): boolean {
+  return type === 'treemap' || type === 'sunburst' || type === 'regionMap';
 }

@@ -18,6 +18,45 @@ function asLayerSpec(spec: ChartSpec): LayerSpec {
 }
 
 describe('configToSpec ChartEx-family semantics', () => {
+  it.each(['treemap', 'sunburst', 'regionMap'] as const)(
+    'does not render %s as generic placeholder geometry',
+    (type) => {
+      const data: ChartData = {
+        categories: ['A', 'B'],
+        series: [
+          {
+            name: 'Values',
+            data: [
+              { x: 'A', y: 1 },
+              { x: 'B', y: 2 },
+            ],
+          },
+        ],
+      };
+      const config: ChartConfig = {
+        type,
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 6,
+        height: 4,
+      };
+
+      const spec = asLayerSpec(configToSpec(config, data));
+      expect(spec.layer).toEqual([]);
+      expect('values' in spec.data!).toBe(true);
+      expect('values' in spec.data! ? spec.data.values : []).toEqual([]);
+
+      const compiled = compile(spec, undefined, {
+        width: 400,
+        height: 240,
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      });
+      expect(compiled.marks).toEqual([]);
+    },
+  );
+
   it('renders funnel as centered proportional bars in source order', () => {
     const data: ChartData = {
       categories: ['Qualified', 'Proposal', 'Closed'],

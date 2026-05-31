@@ -43,6 +43,7 @@ import {
   wireToDataLabelConfig,
   wireToLegendConfig,
   wireToSeriesConfigArray,
+  wireToTrendlineConfigArray,
 } from '../../domain/charts/chart-type-converters';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 import { KernelError } from '../../errors';
@@ -754,8 +755,8 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
       ? (deriveDataLabelsForRead(dataLabelsConfig) as Chart['dataLabels'])
       : undefined,
     pieSlice: chart.pieSlice,
-    trendline: Array.isArray(chart.trendline) ? chart.trendline[0] : chart.trendline,
-    trendlines: chart.trendline,
+    trendline: wireToTrendlineConfigArray(chart.trendline)?.[0],
+    trendlines: wireToTrendlineConfigArray(chart.trendline),
     showLines: chart.showLines,
     smoothLines: chart.smoothLines,
     radarFilled: chart.radarFilled,

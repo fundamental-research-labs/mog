@@ -155,7 +155,7 @@ function buildAnnotationLayers(
   return [
     ...buildAnalysisLineLayers(config, encoding, rows),
     ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
-    ...buildTrendlineLayers(config, data, encoding),
+    ...buildTrendlineLayers(config, data, encoding, rows),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
     ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
     ...(hasRowFlag(rows, MARKER_VISIBLE_FIELD) ? buildMarkerLayers(encoding) : []),

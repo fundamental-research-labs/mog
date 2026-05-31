@@ -19,7 +19,15 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
   const titleSpec = typeof title === 'string' ? { text: title } : title;
 
   const x = layout.title.x + layout.title.width / 2;
-  const y = layout.title.y;
+  const titleFontSize = titleSpec.fontSize ?? 16;
+  const subtitleFontSize = titleSpec.subtitleFontSize ?? 12;
+  const contentHeight = titleFontSize + (titleSpec.subtitle ? subtitleFontSize + 5 : 0);
+  const y =
+    titleSpec.verticalAlign === 'bottom'
+      ? layout.title.y + Math.max(0, layout.title.height - contentHeight)
+      : titleSpec.verticalAlign === 'middle'
+        ? layout.title.y + Math.max(0, (layout.title.height - contentHeight) / 2)
+        : layout.title.y;
 
   // Main title
   marks.push({
@@ -27,7 +35,7 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
     x,
     y,
     text: titleSpec.text,
-    fontSize: titleSpec.fontSize ?? 16,
+    fontSize: titleFontSize,
     fontFamily: titleSpec.fontFamily ?? 'system-ui, sans-serif',
     textAlign:
       titleSpec.anchor === 'start' ? 'left' : titleSpec.anchor === 'end' ? 'right' : 'center',
@@ -49,9 +57,9 @@ export function generateTitle(title: ChartSpec['title'], layout: Layout): AnyMar
     marks.push({
       type: 'text',
       x,
-      y: y + (titleSpec.fontSize ?? 16) + 5,
+      y: y + titleFontSize + 5,
       text: titleSpec.subtitle,
-      fontSize: titleSpec.subtitleFontSize ?? 12,
+      fontSize: subtitleFontSize,
       fontFamily: titleSpec.fontFamily ?? 'system-ui, sans-serif',
       textAlign:
         titleSpec.anchor === 'start' ? 'left' : titleSpec.anchor === 'end' ? 'right' : 'center',

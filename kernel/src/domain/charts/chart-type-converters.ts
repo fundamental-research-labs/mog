@@ -41,6 +41,7 @@ import type {
   PointFormatData,
   RegionMapConfigData,
   SingleAxisData,
+  TrendlineData,
   WaterfallOptions,
 } from '../../bridges/compute/compute-types.gen';
 
@@ -56,11 +57,13 @@ import type {
   HierarchyChartConfig,
   HistogramConfig,
   LegendConfig,
+  ManualLayout,
   MarkerStyle,
   PointFormat,
   RegionMapConfig,
   SeriesConfig,
   SingleAxisConfig,
+  TrendlineConfig,
   UpDownBarsConfig,
   WaterfallConfig,
 } from '@mog-sdk/contracts/data/charts';
@@ -103,6 +106,12 @@ type CategoryType = (typeof CATEGORY_TYPES)[number];
 
 const CROSSES_AT = ['automatic', 'max', 'min', 'custom'] as const;
 type CrossesAt = (typeof CROSSES_AT)[number];
+
+const MANUAL_LAYOUT_TARGETS = ['inner', 'outer'] as const;
+type ManualLayoutTarget = (typeof MANUAL_LAYOUT_TARGETS)[number];
+
+const MANUAL_LAYOUT_MODES = ['edge', 'factor'] as const;
+type ManualLayoutMode = (typeof MANUAL_LAYOUT_MODES)[number];
 
 const MARKER_STYLES = [
   'circle',
@@ -232,6 +241,52 @@ function narrowEnum<T extends string>(
   return undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+/** Convert a loose wire manual-layout value to the public chart contract. */
+export function wireToManualLayout(layout: unknown): ManualLayout | undefined {
+  if (!isRecord(layout)) return undefined;
+
+  return {
+    layoutTarget: narrowEnum<ManualLayoutTarget>(
+      typeof layout.layoutTarget === 'string' ? layout.layoutTarget : undefined,
+      MANUAL_LAYOUT_TARGETS,
+      'ManualLayout.layoutTarget',
+    ),
+    xMode: narrowEnum<ManualLayoutMode>(
+      typeof layout.xMode === 'string' ? layout.xMode : undefined,
+      MANUAL_LAYOUT_MODES,
+      'ManualLayout.xMode',
+    ),
+    yMode: narrowEnum<ManualLayoutMode>(
+      typeof layout.yMode === 'string' ? layout.yMode : undefined,
+      MANUAL_LAYOUT_MODES,
+      'ManualLayout.yMode',
+    ),
+    wMode: narrowEnum<ManualLayoutMode>(
+      typeof layout.wMode === 'string' ? layout.wMode : undefined,
+      MANUAL_LAYOUT_MODES,
+      'ManualLayout.wMode',
+    ),
+    hMode: narrowEnum<ManualLayoutMode>(
+      typeof layout.hMode === 'string' ? layout.hMode : undefined,
+      MANUAL_LAYOUT_MODES,
+      'ManualLayout.hMode',
+    ),
+    x: optionalNumber(layout.x),
+    y: optionalNumber(layout.y),
+    w: optionalNumber(layout.w),
+    h: optionalNumber(layout.h),
+    extLst: typeof layout.extLst === 'string' ? layout.extLst : undefined,
+  };
+}
+
 export function wireChartTypeToConfig(
   value: string | null | undefined,
 ): WireChartTypeToConfigResult {
@@ -353,7 +408,7 @@ export function wireToLegendConfig(w: LegendData): LegendConfig {
     entries: w.entries,
     customX: w.customX,
     customY: w.customY,
-    layout: w.layout,
+    layout: wireToManualLayout(w.layout),
     shadow: w.shadow,
     showShadow: w.showShadow,
   };
@@ -421,8 +476,41 @@ export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
     leaderLinesFormat: w.leaderLinesFormat
       ? wireToLeaderLinesFormat(w.leaderLinesFormat)
       : undefined,
-    layout: w.layout,
+    layout: wireToManualLayout(w.layout),
   };
+}
+
+/** Convert a wire TrendlineData to the contract TrendlineConfig. */
+export function wireToTrendlineConfig(w: TrendlineData): TrendlineConfig {
+  return {
+    show: w.show,
+    type: w.type,
+    color: w.color,
+    lineWidth: w.lineWidth,
+    order: w.order,
+    period: w.period,
+    forward: w.forward,
+    backward: w.backward,
+    intercept: w.intercept,
+    displayEquation: w.displayEquation,
+    displayRSquared: w.displayRSquared,
+    name: w.name,
+    lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
+    label: w.label
+      ? {
+          text: w.label.text,
+          format: w.label.format,
+          numberFormat: w.label.numberFormat,
+          layout: wireToManualLayout(w.label.layout),
+        }
+      : undefined,
+  };
+}
+
+export function wireToTrendlineConfigArray(
+  trendlines: TrendlineData[] | undefined,
+): TrendlineConfig[] | undefined {
+  return trendlines?.map(wireToTrendlineConfig);
 }
 
 /** Convert a wire PointFormatData to the contract PointFormat. */
@@ -561,7 +649,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     lineWidth: w.lineWidth,
     points: w.points?.map(wireToPointFormat),
     dataLabels: w.dataLabels ? wireToDataLabelConfig(w.dataLabels) : undefined,
-    trendlines: w.trendlines,
+    trendlines: wireToTrendlineConfigArray(w.trendlines),
     errorBars: w.errorBars ? wireToErrorBarConfig(w.errorBars) : undefined,
     xErrorBars: w.xErrorBars ? wireToErrorBarConfig(w.xErrorBars) : undefined,
     yErrorBars: w.yErrorBars ? wireToErrorBarConfig(w.yErrorBars) : undefined,

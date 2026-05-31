@@ -16,6 +16,8 @@ import {
   wireToChartLineSettings,
   wireToUpDownBarsConfig,
   wireToWaterfallConfig,
+  wireToManualLayout,
+  wireToTrendlineConfigArray,
 } from '../chart-type-converters';
 
 /**
@@ -187,10 +189,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
       ? wireToDataLabelConfig(normalizedChart.dataLabels)
       : undefined,
     pieSlice: normalizedChart.pieSlice,
-    trendline: Array.isArray(normalizedChart.trendline)
-      ? normalizedChart.trendline[0]
-      : normalizedChart.trendline,
-    trendlines: normalizedChart.trendline,
+    trendline: wireToTrendlineConfigArray(normalizedChart.trendline)?.[0],
+    trendlines: wireToTrendlineConfigArray(normalizedChart.trendline),
     showLines: normalizedChart.showLines,
     smoothLines: normalizedChart.smoothLines,
     radarFilled: normalizedChart.radarFilled,
@@ -225,8 +225,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     titleFormat: normalizedChart.titleFormat as ChartConfig['titleFormat'],
     titleRichText: normalizedChart.titleRichText as ChartConfig['titleRichText'],
     titleFormula: normalizedChart.titleFormula,
-    plotLayout: normalizedChart.plotLayout,
-    titleLayout: normalizedChart.titleLayout,
+    plotLayout: wireToManualLayout(normalizedChart.plotLayout),
+    titleLayout: wireToManualLayout(normalizedChart.titleLayout),
     dataTable: normalizedChart.dataTable as ChartConfig['dataTable'],
     dropLines: wireToChartLineSettings(normalizedChart.dropLines),
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),

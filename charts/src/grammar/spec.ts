@@ -678,6 +678,7 @@ export interface TitleSpec {
   text: string;
   richText?: TextRunSpec[];
   anchor?: 'start' | 'middle' | 'end';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: 'normal' | 'bold' | number;

@@ -88,7 +88,14 @@ pub(super) fn project_chart_ex_space(
         .and_then(project_chart_ex_title_format);
 
     let mut formulas = Vec::new();
-    let series = project_chart_ex_series(region, &data_by_id, &chart_space.fmt_ovrs, &mut formulas);
+    let has_secondary_value_axis = chart_ex_value_axis_count(&chart_space.chart.plot_area.axes) > 1;
+    let series = project_chart_ex_series(
+        region,
+        &data_by_id,
+        &chart_space.fmt_ovrs,
+        has_secondary_value_axis,
+        &mut formulas,
+    );
     let data_range = synthesize_data_range(&formulas);
     let data_labels = region.series.iter().find_map(|s| {
         s.data_labels
@@ -130,7 +137,10 @@ pub(super) fn project_chart_ex_space(
         data_labels,
         data_range,
         chart_format: extract_chart_format(chart_space.sp_pr.as_ref(), chart_space.tx_pr.as_ref()),
-        plot_format: extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None),
+        plot_format: merge_chart_format(
+            extract_chart_format(chart_space.chart.plot_area.sp_pr.as_ref(), None),
+            extract_chart_format(region.sp_pr.as_ref(), None),
+        ),
         title_format,
         title_rich_text,
         title_formula,
@@ -277,6 +287,7 @@ fn project_chart_ex_series(
     region: &ChartExPlotAreaRegion,
     data_by_id: &HashMap<u32, &ChartExData>,
     format_overrides: &[ChartExFormatOverride],
+    has_secondary_value_axis: bool,
     formulas: &mut Vec<String>,
 ) -> Vec<ChartSeriesData> {
     region
@@ -312,7 +323,12 @@ fn project_chart_ex_series(
                 smooth: None,
                 explosion: None,
                 invert_if_negative: None,
-                y_axis_index: None,
+                y_axis_index: chart_ex_series_y_axis_index(
+                    has_secondary_value_axis,
+                    idx,
+                    region.series.len(),
+                    &series.layout_id,
+                ),
                 show_markers: None,
                 marker_size: None,
                 marker_style: None,
@@ -345,6 +361,33 @@ fn project_chart_ex_series(
             })
         })
         .collect()
+}
+
+fn chart_ex_value_axis_count(axes: &[ChartExAxis]) -> usize {
+    axes.iter()
+        .filter(|axis| {
+            matches!(
+                axis.scaling.as_ref(),
+                Some(ooxml_types::chart_ex::ChartExScaling::Value { .. })
+            )
+        })
+        .count()
+}
+
+fn chart_ex_series_y_axis_index(
+    has_secondary_value_axis: bool,
+    series_idx: usize,
+    series_count: usize,
+    layout_id: &ChartExLayoutId,
+) -> Option<u8> {
+    if !has_secondary_value_axis {
+        return None;
+    }
+    if matches!(layout_id, ChartExLayoutId::Pareto) || series_idx > 0 || series_count == 1 {
+        Some(1)
+    } else {
+        None
+    }
 }
 
 fn project_chart_ex_series_format(
@@ -1297,6 +1340,36 @@ mod tests {
     #[test]
     fn projects_secondary_chart_ex_axes_and_title_alignment() {
         let chart_space = ChartExSpace {
+            chart_data: ChartExChartData {
+                data: vec![
+                    ChartExData {
+                        id: 0,
+                        dimensions: vec![
+                            ChartExDimension::String {
+                                dim_type: "cat".to_string(),
+                                formula: formula("Sheet1!A1:A3"),
+                            },
+                            ChartExDimension::Numeric {
+                                dim_type: "val".to_string(),
+                                formula: formula("Sheet1!B1:B3"),
+                            },
+                        ],
+                    },
+                    ChartExData {
+                        id: 1,
+                        dimensions: vec![
+                            ChartExDimension::String {
+                                dim_type: "cat".to_string(),
+                                formula: formula("Sheet1!A1:A3"),
+                            },
+                            ChartExDimension::Numeric {
+                                dim_type: "val".to_string(),
+                                formula: formula("Sheet1!C1:C3"),
+                            },
+                        ],
+                    },
+                ],
+            },
             chart: ChartExChart {
                 title: Some(ChartExTitle {
                     pos: Some("t".to_string()),
@@ -1304,6 +1377,21 @@ mod tests {
                     ..Default::default()
                 }),
                 plot_area: ChartExPlotArea {
+                    plot_area_region: ChartExPlotAreaRegion {
+                        series: vec![
+                            ChartExSeries {
+                                layout_id: ChartExLayoutId::Funnel,
+                                data_id: Some(0),
+                                ..Default::default()
+                            },
+                            ChartExSeries {
+                                layout_id: ChartExLayoutId::Funnel,
+                                data_id: Some(1),
+                                ..Default::default()
+                            },
+                        ],
+                        ..Default::default()
+                    },
                     axes: vec![
                         ChartExAxis {
                             scaling: Some(ooxml_types::chart_ex::ChartExScaling::Category {
@@ -1344,6 +1432,41 @@ mod tests {
         );
         assert_eq!(projected.title_h_align.as_deref(), Some("center"));
         assert_eq!(projected.title_v_align.as_deref(), Some("top"));
+        assert_eq!(projected.series[0].y_axis_index, None);
+        assert_eq!(projected.series[1].y_axis_index, Some(1));
+    }
+
+    #[test]
+    fn plot_area_region_format_overrides_chart_ex_plot_area_format() {
+        let chart_space = ChartExSpace {
+            chart: ChartExChart {
+                plot_area: ChartExPlotArea {
+                    sp_pr: Some(solid_shape("00FF00")),
+                    plot_area_region: ChartExPlotAreaRegion {
+                        sp_pr: Some(solid_shape("FF0000")),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+        let fill = projected
+            .plot_format
+            .as_ref()
+            .and_then(|format| format.fill.as_ref())
+            .expect("region plot format should be projected");
+        assert_eq!(
+            fill,
+            &domain_types::chart::ChartFillData::Solid {
+                color: domain_types::chart::ChartColorData::Hex("FF0000".to_string()),
+                transparency: None,
+            }
+        );
     }
 
     #[test]

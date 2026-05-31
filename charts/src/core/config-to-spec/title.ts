@@ -1,20 +1,31 @@
 import type { TitleSpec } from '../../grammar/spec';
 import type { ChartConfig } from '../../types';
 import { resolveChartTextColor } from '../../utils/chart-colors';
-import { resolveChartColor, resolveChartFillPaint, resolverContextFromConfig } from '../style-resolver';
+import {
+  resolveChartColor,
+  resolveChartFillPaint,
+  resolveChartShadow,
+  resolverContextFromConfig,
+} from '../style-resolver';
 import { pointsToCanvasPx } from './units';
 
 /**
  * Build a TitleSpec from config.title / config.subtitle.
  */
 export function buildTitle(config: ChartConfig): TitleSpec | string | undefined {
-  if (!config.title) return undefined;
+  const text = config.chartTitle?.text ?? config.title;
+  if (!text) return undefined;
   const context = resolverContextFromConfig(config, 'title');
-  const font = config.titleFormat?.font;
+  const titleConfig = config.chartTitle;
+  const titleFormat = config.titleFormat ?? titleConfig?.format;
+  const font = titleFormat?.font ?? titleConfig?.font;
   const titleSpec: TitleSpec = {
-    text: config.title,
+    text,
     ...(config.subtitle ? { subtitle: config.subtitle } : {}),
   };
+  const anchor = titleAnchor(titleConfig?.horizontalAlignment);
+  if (anchor) titleSpec.anchor = anchor;
+  if (titleConfig?.verticalAlignment) titleSpec.verticalAlign = titleConfig.verticalAlignment;
   if (font?.size !== undefined) titleSpec.fontSize = pointsToCanvasPx(font.size);
   if (font?.name) titleSpec.fontFamily = font.name;
   if (font?.bold) titleSpec.fontWeight = 'bold';
@@ -23,10 +34,13 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
   if (font?.strikethrough !== undefined) titleSpec.strikethrough = true;
   const titleColor = resolveChartTextColor(font?.color, context);
   if (titleColor) titleSpec.color = titleColor;
-  const titleFill = resolveChartFillPaint(config.titleFormat?.fill, context);
+  const titleFill = resolveChartFillPaint(titleFormat?.fill, context);
   if (titleFill) titleSpec.fill = titleFill;
-  if (config.titleRichText?.length) {
-    titleSpec.richText = config.titleRichText.map((run) => ({
+  const shadow = resolveChartShadow(titleFormat?.shadow, context);
+  if (shadow) titleSpec.shadow = shadow;
+  const richText = config.titleRichText ?? titleConfig?.richText;
+  if (richText?.length) {
+    titleSpec.richText = richText.map((run) => ({
       text: run.text,
       fontFamily: run.font?.name,
       fontSize: run.font?.size !== undefined ? pointsToCanvasPx(run.font.size) : undefined,
@@ -47,12 +61,30 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
     titleSpec.fontStyle === undefined &&
     titleSpec.color === undefined &&
     titleSpec.fill === undefined &&
-    titleSpec.richText === undefined
+    titleSpec.shadow === undefined &&
+    titleSpec.richText === undefined &&
+    titleSpec.anchor === undefined &&
+    titleSpec.verticalAlign === undefined
   ) {
-    return config.title;
+    return text;
   }
   if (!config.subtitle) return titleSpec;
   return {
     ...titleSpec,
   };
+}
+
+function titleAnchor(
+  alignment: NonNullable<ChartConfig['chartTitle']>['horizontalAlignment'] | undefined,
+): TitleSpec['anchor'] | undefined {
+  switch (alignment) {
+    case 'left':
+      return 'start';
+    case 'center':
+      return 'middle';
+    case 'right':
+      return 'end';
+    default:
+      return undefined;
+  }
 }

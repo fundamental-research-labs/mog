@@ -1098,6 +1098,24 @@ describe('buildTitle', () => {
       color: '#595959',
     });
   });
+
+  it('should lower imported title alignment into title layout hints', () => {
+    const result = buildTitle(
+      makeConfig({
+        title: 'Aligned',
+        chartTitle: {
+          horizontalAlignment: 'right',
+          verticalAlignment: 'bottom',
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      text: 'Aligned',
+      anchor: 'end',
+      verticalAlign: 'bottom',
+    });
+  });
 });
 
 describe('formatTickValue - imported Excel number formats', () => {

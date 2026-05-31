@@ -204,6 +204,10 @@ describe('toOOXML', () => {
       });
       expect(result.chartXml).toContain('<c:plotVisOnly val="0"/>');
       expect(result.chartXml).toContain('<c:dispBlanksAs val="span"/>');
+      expect(result.chartXml).toContain('<c:ptCount val="3"/>');
+      expect(result.chartXml).toContain('<c:pt idx="0"><c:v>10</c:v></c:pt>');
+      expect(result.chartXml).not.toContain('<c:pt idx="1"><c:v>0</c:v></c:pt>');
+      expect(result.chartXml).toContain('<c:pt idx="2"><c:v>30</c:v></c:pt>');
     });
   });
 

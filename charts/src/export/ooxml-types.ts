@@ -104,7 +104,7 @@ export interface SeriesData {
   /** Category values (x-axis labels) */
   categories: (string | number | Date)[];
   /** Data values (y-axis values) */
-  values: number[];
+  values: Array<number | null>;
   /** Series color (hex without #) */
   color: string;
   /** Optional sizes for bubble charts */

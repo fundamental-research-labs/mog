@@ -1,4 +1,4 @@
-import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   CellChangedEvent,
@@ -16,8 +16,13 @@ import type {
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
-import { resolveChartRangeReferences } from '../chart-range-references';
 import { getAll as getAllCharts, update as updateChart } from '../chart-store';
+import {
+  chartOwnerSheetId,
+  chartReferencesCell,
+  getAllChartsInWorkbook,
+  getChartInvalidationsAffectedByRange,
+} from './chart-reference-invalidation';
 import {
   buildStructuralRangeUpdate,
   type StructuralRangeUpdate,
@@ -42,14 +47,11 @@ export interface ChartBridgeSubscriptionContext {
   clearAllCaches(): void;
 }
 
-type MaybeLive = {
-  isLive?: () => boolean;
-};
-
-type AffectedChartInvalidation = {
-  chartId: string;
-  sheetId?: SheetId;
-};
+export {
+  chartReferencesCell,
+  getAllChartsInWorkbook,
+  getChartsAffectedByRange,
+} from './chart-reference-invalidation';
 
 /**
  * Set up EventBus subscriptions for reactive chart updates.
@@ -252,37 +254,6 @@ export async function handleCellsBatchChange(
   }
 }
 
-export async function getAllChartsInWorkbook(ctx: DocumentContext): Promise<ChartFloatingObject[]> {
-  const sheetIds = await ctx.computeBridge.getSheetOrder();
-  const perSheet = await Promise.all(sheetIds.map((id) => getAllCharts(ctx, toSheetId(id))));
-  return perSheet.flat();
-}
-
-/**
- * Check if a chart's data range includes a specific cell.
- */
-export async function chartReferencesCell(
-  ctx: DocumentContext,
-  chart: ChartFloatingObject,
-  sheetId: SheetId,
-  row: number,
-  col: number,
-): Promise<boolean> {
-  const resolved = await resolveChartRangeReferences(ctx, chart);
-  const ranges = resolvedChartReferenceRanges(resolved);
-
-  return ranges.some((entry) => {
-    const range = entry?.range;
-    return (
-      range?.sheetId === sheetId &&
-      row >= range.startRow &&
-      row <= range.endRow &&
-      col >= range.startCol &&
-      col <= range.endCol
-    );
-  });
-}
-
 /**
  * Handle rows inserted - update legacy A1-string chart ranges for affected charts.
  */
@@ -378,74 +349,4 @@ async function commitStructuralRangeUpdate(
   }
 
   deps.invalidateChart(chart.id, sheetId);
-}
-
-/**
- * Get charts that are affected by changes in a specific cell range.
- */
-export async function getChartsAffectedByRange(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  range: CellRange,
-  options: MaybeLive = {},
-): Promise<string[]> {
-  return (await getChartInvalidationsAffectedByRange(ctx, sheetId, range, options)).map(
-    (chart) => chart.chartId,
-  );
-}
-
-async function getChartInvalidationsAffectedByRange(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  range: CellRange,
-  options: MaybeLive = {},
-): Promise<AffectedChartInvalidation[]> {
-  if (options.isLive && !options.isLive()) return [];
-
-  const charts = await getAllChartsInWorkbook(ctx);
-  if (options.isLive && !options.isLive()) return [];
-
-  const affected: AffectedChartInvalidation[] = [];
-
-  for (const chart of charts) {
-    if (options.isLive && !options.isLive()) return affected;
-    const resolved = await resolveChartRangeReferences(ctx, chart);
-    if (options.isLive && !options.isLive()) return affected;
-    const ranges = resolvedChartReferenceRanges(resolved);
-    const overlaps = ranges.some((entry) => {
-      const chartRange = entry?.range;
-      return (
-        chartRange?.sheetId === sheetId &&
-        range.startRow <= chartRange.endRow &&
-        range.endRow >= chartRange.startRow &&
-        range.startCol <= chartRange.endCol &&
-        range.endCol >= chartRange.startCol
-      );
-    });
-
-    if (overlaps) {
-      affected.push({ chartId: chart.id, sheetId: chartOwnerSheetId(chart) });
-    }
-  }
-
-  return affected;
-}
-
-function resolvedChartReferenceRanges(
-  resolved: Awaited<ReturnType<typeof resolveChartRangeReferences>>,
-) {
-  return [
-    resolved.dataRange,
-    resolved.categoryRange,
-    resolved.seriesRange,
-    ...resolved.seriesReferences.flatMap((series) => [
-      series.values,
-      series.categories,
-      series.bubbleSizes,
-    ]),
-  ];
-}
-
-function chartOwnerSheetId(chart: ChartFloatingObject): SheetId | undefined {
-  return chart.sheetId ? toSheetId(chart.sheetId) : undefined;
 }

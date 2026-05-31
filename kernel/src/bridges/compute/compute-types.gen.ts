@@ -4470,6 +4470,7 @@ export interface SingleAxisData {
   displayUnit?: string;
   format?: ChartFormatData;
   titleFormat?: ChartFormatData;
+  titleRichText?: ChartFormatStringData[];
   gridlineFormat?: ChartLineData;
   minorGridlineFormat?: ChartLineData;
   crossBetween?: string;

@@ -1,4 +1,6 @@
-use super::formatting::{extract_chart_format, extract_chart_line, extract_title_chart_format};
+use super::formatting::{
+    extract_chart_format, extract_chart_line, extract_chart_rich_text, extract_title_chart_format,
+};
 use super::text::{extract_chart_text_string, extract_title_text_from_title};
 
 pub(super) fn extract_axes_from_chart_space(
@@ -611,6 +613,13 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     // Formatting
     let format = extract_chart_format(ax.sp_pr.as_ref(), ax.tx_pr.as_ref());
     let title_format = ax.title.as_ref().and_then(extract_title_chart_format);
+    let title_rich_text = ax
+        .title
+        .as_ref()
+        .and_then(|title| match title.tx.as_ref()? {
+            ooxml_types::charts::ChartText::Rich(body) => extract_chart_rich_text(body),
+            ooxml_types::charts::ChartText::StrRef(_) => None,
+        });
     let gridline_format = ax
         .major_gridlines
         .as_ref()
@@ -684,6 +693,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
         display_unit,
         format,
         title_format,
+        title_rich_text,
         gridline_format,
         minor_gridline_format,
         cross_between,

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::drawings::ManualLayout;
 
-use super::formatting::{ChartFormatData, ChartLineData};
+use super::formatting::{ChartFormatData, ChartFormatStringData, ChartLineData};
 
 /// Chart axes configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,6 +59,8 @@ pub struct SingleAxisData {
     pub format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_format: Option<ChartFormatData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_rich_text: Option<Vec<ChartFormatStringData>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub gridline_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

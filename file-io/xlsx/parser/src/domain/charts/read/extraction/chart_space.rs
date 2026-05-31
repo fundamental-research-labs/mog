@@ -522,10 +522,12 @@ fn extract_chart_style_context(
     }
 
     for (index, series) in inputs.series.iter().enumerate() {
+        let owner_key = series_owner_key(index, series);
+        let source_path = series_source_path(series);
         push_style_owner(
             &mut context.owners,
-            &format!("series({index})"),
-            "c:chartSpace/c:chart/c:plotArea/*/c:ser",
+            &owner_key,
+            &source_path,
             series.format.as_ref(),
             None,
         );
@@ -552,6 +554,29 @@ fn push_axis_style_owner(
     };
 
     push_style_owner(owners, owner_key, source_path, axis.format.as_ref(), None);
+    push_style_owner(
+        owners,
+        &format!("{owner_key}.title"),
+        &format!("{source_path}/c:title"),
+        axis.title_format.as_ref(),
+        axis.title_rich_text.as_deref(),
+    );
+}
+
+fn series_owner_key(index: usize, series: &domain_types::chart::ChartSeriesData) -> String {
+    match (series.idx, series.order) {
+        (Some(idx), Some(order)) => format!("series(idx={idx},order={order})"),
+        (Some(idx), None) => format!("series(idx={idx})"),
+        (None, Some(order)) => format!("series(order={order})"),
+        (None, None) => format!("series({index})"),
+    }
+}
+
+fn series_source_path(series: &domain_types::chart::ChartSeriesData) -> String {
+    match series.idx {
+        Some(idx) => format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[c:idx={idx}]"),
+        None => "c:chartSpace/c:chart/c:plotArea/*/c:ser".to_string(),
+    }
 }
 
 fn push_style_owner(
@@ -925,6 +950,18 @@ mod tests {
                 </a:p>
             </c:rich>"#,
         );
+        let axis_title_rich_text = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:r>
+                        <a:rPr i="1"/>
+                        <a:t>Axis Title</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
         let cs = ChartSpace {
             sp_pr: Some(solid_fill_sp_pr("111111")),
             chart: OoxmlChart {
@@ -945,6 +982,11 @@ mod tests {
                             ax_id: 10,
                             cross_ax: 20,
                             ax_pos: ChartAxisPosition::Bottom,
+                            title: Some(Title {
+                                tx: Some(ChartText::Rich(axis_title_rich_text)),
+                                sp_pr: Some(solid_fill_sp_pr("666666")),
+                                ..Default::default()
+                            }),
                             sp_pr: Some(solid_fill_sp_pr("444444")),
                             ..Default::default()
                         },
@@ -983,7 +1025,7 @@ mod tests {
         let context = spec.chart_style_context.expect("style context");
 
         assert_eq!(context.color_map_override, None);
-        assert_eq!(context.owners.len(), 7);
+        assert_eq!(context.owners.len(), 8);
         assert_eq!(
             format_solid_hex(owner(&context, "chartArea").format.as_ref().unwrap()),
             Some("111111")
@@ -1017,6 +1059,23 @@ mod tests {
             Some("444444")
         );
         assert_eq!(
+            format_solid_hex(
+                owner(&context, "categoryAxis.title")
+                    .format
+                    .as_ref()
+                    .unwrap()
+            ),
+            Some("666666")
+        );
+        assert_eq!(
+            owner(&context, "categoryAxis.title")
+                .rich_text
+                .as_ref()
+                .and_then(|runs| runs.first())
+                .map(|run| run.text.as_str()),
+            Some("Axis Title")
+        );
+        assert_eq!(
             owner(&context, "valueAxis")
                 .format
                 .as_ref()
@@ -1025,7 +1084,12 @@ mod tests {
             Some(11.0)
         );
         assert_eq!(
-            format_solid_hex(owner(&context, "series(0)").format.as_ref().unwrap()),
+            format_solid_hex(
+                owner(&context, "series(idx=0,order=0)")
+                    .format
+                    .as_ref()
+                    .unwrap()
+            ),
             Some("555555")
         );
     }

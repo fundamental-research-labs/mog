@@ -328,6 +328,13 @@ fn push_chart_ex_axis_style_owner(
         axis.format.as_ref(),
         None,
     );
+    push_chart_ex_style_owner(
+        owners,
+        &format!("{owner_key}.title"),
+        "cx:chartSpace/cx:chart/cx:plotArea/cx:axis/cx:title",
+        axis.title_format.as_ref(),
+        axis.title_rich_text.as_deref(),
+    );
 }
 
 fn push_chart_ex_style_owner(
@@ -1850,6 +1857,25 @@ mod tests {
         chart_space.chart.plot_area.axes = vec![
             ChartExAxis {
                 scaling: Some(ChartExScaling::Category { gap_width: None }),
+                title: Some(ChartExTitle {
+                    tx: Some(ChartExText {
+                        rich: Some(crate::domain::charts::parse_text_body(
+                            br#"<cx:rich xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"
+                                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                <a:bodyPr/>
+                                <a:p>
+                                    <a:r>
+                                        <a:rPr i="1"/>
+                                        <a:t>ChartEx Axis</a:t>
+                                    </a:r>
+                                </a:p>
+                            </cx:rich>"#,
+                        )),
+                        ..Default::default()
+                    }),
+                    sp_pr: Some(solid_shape("888888")),
+                    ..Default::default()
+                }),
                 sp_pr: Some(solid_shape("555555")),
                 ..Default::default()
             },
@@ -1868,7 +1894,7 @@ mod tests {
             project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
         let context = projected.chart_style_context.expect("style context");
 
-        assert_eq!(context.owners.len(), 7);
+        assert_eq!(context.owners.len(), 8);
         assert_eq!(
             format_solid_hex(owner(&context, "chartArea").format.as_ref().unwrap()),
             Some("111111")
@@ -1896,6 +1922,23 @@ mod tests {
         assert_eq!(
             format_solid_hex(owner(&context, "categoryAxis").format.as_ref().unwrap()),
             Some("555555")
+        );
+        assert_eq!(
+            format_solid_hex(
+                owner(&context, "categoryAxis.title")
+                    .format
+                    .as_ref()
+                    .unwrap()
+            ),
+            Some("888888")
+        );
+        assert_eq!(
+            owner(&context, "categoryAxis.title")
+                .rich_text
+                .as_ref()
+                .and_then(|runs| runs.first())
+                .map(|run| run.text.as_str()),
+            Some("ChartEx Axis")
         );
         assert_eq!(
             format_solid_hex(owner(&context, "valueAxis").format.as_ref().unwrap()),
@@ -2219,14 +2262,18 @@ mod tests {
             assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
             assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
             assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/US" && row.value == Some(10.0))
+            );
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/CA" && row.value == Some(20.0))
+            );
             assert_eq!(
                 projected.import_status.unwrap().renderability,
                 domain_types::ImportRenderability::NotRenderable

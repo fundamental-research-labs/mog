@@ -625,6 +625,7 @@ export interface SingleAxisConfig {
   displayUnit?: string;
   format?: ChartFormat;
   titleFormat?: ChartFormat;
+  titleRichText?: ChartFormatString[];
   gridlineFormat?: ChartLineFormat;
   minorGridlineFormat?: ChartLineFormat;
   crossBetween?: string;

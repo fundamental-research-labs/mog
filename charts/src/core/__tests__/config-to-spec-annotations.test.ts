@@ -24,6 +24,7 @@ import {
   ERROR_BAR_Y_MIN_FIELD,
   MARKER_FILL_FIELD,
   MARKER_SHAPE_FIELD,
+  MARKER_SIZE_FIELD,
   MARKER_VISIBLE_FIELD,
   POINT_EXPLOSION_FIELD,
   POINT_FILL_FIELD,
@@ -104,9 +105,25 @@ describe('configToSpec annotation layers', () => {
         [ERROR_BAR_Y_MAX_FIELD]: 12,
         [MARKER_VISIBLE_FIELD]: true,
         [MARKER_SHAPE_FIELD]: 'x',
+        [MARKER_SIZE_FIELD]: 36,
         [MARKER_FILL_FIELD]: '#FF0000',
       }),
     );
+
+    const markerLayer = spec.layer.find(
+      (layer) => layer.encoding?.size?.field === MARKER_SIZE_FIELD,
+    );
+    expect(markerLayer?.encoding?.size?.scale).toBeNull();
+
+    const compiled = compile(spec, undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const markerSymbol = compiled.marks.find(
+      (mark) => mark.type === 'symbol' && mark.shape === 'x',
+    );
+    expect(markerSymbol?.size).toBe(36);
 
     expect(spec.layer).toEqual(
       expect.arrayContaining([
@@ -130,6 +147,89 @@ describe('configToSpec annotation layers', () => {
         }),
       ]),
     );
+  });
+
+  it('keeps combo marker sizes absolute instead of rescaling them as bubble areas', () => {
+    const data: ChartData = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Revenue',
+          data: [
+            { x: 'A', y: 10 },
+            { x: 'B', y: 12 },
+          ],
+        },
+        {
+          name: 'Margin',
+          data: [
+            { x: 'A', y: 4 },
+            { x: 'B', y: 5 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'combo',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      series: [
+        { type: 'column' },
+        { type: 'line', showMarkers: true, markerSize: 4, markerStyle: 'diamond' },
+      ],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const markerLayer = spec.layer.find(
+      (layer) => layer.encoding?.size?.field === MARKER_SIZE_FIELD,
+    );
+    expect(markerLayer?.encoding?.size?.scale).toBeNull();
+
+    const compiled = compile(spec, undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const markerSymbols = compiled.marks.filter(
+      (mark) => mark.type === 'symbol' && mark.shape === 'diamond',
+    );
+    expect(markerSymbols).toHaveLength(2);
+    expect(markerSymbols.map((mark) => mark.size)).toEqual([16, 16]);
+  });
+
+  it('does not double-render marker-only scatter points behind imported markers', () => {
+    const data: ChartData = {
+      categories: [1, 2],
+      series: [
+        {
+          name: 'Pressure',
+          data: [
+            { x: 1, y: 10 },
+            { x: 2, y: 12 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'scatter',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      series: [{ showMarkers: true, markerSize: 5, markerStyle: 'circle' }],
+    };
+
+    const spec = asLayerSpec(config, data);
+    const compiled = compile(spec, undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const symbols = compiled.marks.filter((mark) => mark.type === 'symbol');
+    expect(symbols).toHaveLength(2);
+    expect(symbols.map((mark) => mark.size)).toEqual([25, 25]);
   });
 
   it('renders moving-average trendlines from computed rows instead of regression transforms', () => {

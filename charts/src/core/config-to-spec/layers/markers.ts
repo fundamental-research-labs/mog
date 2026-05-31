@@ -20,7 +20,7 @@ export function buildMarkerLayers(encoding: EncodingSpec): UnitSpec[] {
       encoding: {
         x: encoding.x,
         y: encoding.y,
-        size: { field: MARKER_SIZE_FIELD, type: 'quantitative', legend: null },
+        size: { field: MARKER_SIZE_FIELD, type: 'quantitative', scale: null, legend: null },
         shape: { field: MARKER_SHAPE_FIELD, type: 'nominal', legend: null },
         fill: { field: MARKER_FILL_FIELD, type: 'nominal', legend: null },
         stroke: { field: MARKER_STROKE_FIELD, type: 'nominal', legend: null },

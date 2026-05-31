@@ -8,7 +8,7 @@
  */
 import type { ChartFrameSpec, ChartSpec, ConfigSpec, Transform } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
-import { buildAnnotationLayers } from './annotation-layers';
+import { buildAnnotationLayers, composePrimaryAndAnnotationLayers } from './annotation-layers';
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
@@ -225,8 +225,13 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   if (annotationLayers.length > 0) {
-    const mainLayer: ChartSpec = { mark, encoding };
-    const layers: ChartSpec[] = [mainLayer, ...annotationLayers];
+    const layers = composePrimaryAndAnnotationLayers({
+      config: renderConfig,
+      mark,
+      encoding,
+      rows,
+      annotationLayers,
+    });
     return buildLayerSpec({
       dimensions,
       rows,

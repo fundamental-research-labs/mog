@@ -727,6 +727,15 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
     return Object.assign((_v: unknown): number | string => constVal, {});
   }
 
+  // Absolute size channels use Vega-Lite's scale:null convention. Marker
+  // sizes imported from Excel are already lowered to symbol area units.
+  if (channel.scale === null) {
+    return Object.assign((value: unknown): number => {
+      const v = typeof value === 'number' ? value : parseFloat(String(value));
+      return Number.isFinite(v) && v > 0 ? v : 64;
+    }, {});
+  }
+
   const field = channel.field;
   if (!field) {
     return Object.assign((_v: unknown): number | string => 64, {});

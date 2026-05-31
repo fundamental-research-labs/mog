@@ -91,16 +91,17 @@ export const acceptSuggestion = assign(
     if (event.type !== 'ACCEPT_SUGGESTION') return {};
 
     const functionName = event.name;
+    const insertedText = `${functionName}${event.appendOpeningParen === false ? '' : '('}`;
     const prefix = context.formulaContext?.functionPrefix ?? '';
 
     if (!prefix) {
       // No prefix to replace - just insert at cursor
       const before = context.value.slice(0, context.cursorPosition);
       const after = context.value.slice(context.cursorPosition);
-      const newValue = before + functionName + '(' + after;
+      const newValue = before + insertedText + after;
       return {
         value: newValue,
-        cursorPosition: before.length + functionName.length + 1,
+        cursorPosition: before.length + insertedText.length,
         isSuggestionsOpen: false,
         selectedSuggestionIndex: 0,
       };
@@ -112,15 +113,16 @@ export const acceptSuggestion = assign(
     const prefixStart = beforeCursor.length - prefix.length;
     const before = context.value.slice(0, prefixStart);
     const after = context.value.slice(context.cursorPosition);
-    const newValue = before + functionName + '(' + after;
+    const newValue = before + insertedText + after;
+    const cursorPosition = before.length + insertedText.length;
 
     return {
       value: newValue,
-      cursorPosition: before.length + functionName.length + 1,
+      cursorPosition,
       isSuggestionsOpen: false,
       selectedSuggestionIndex: 0,
       // Recompute formula context after accepting
-      formulaContext: analyzeFormulaContext(newValue, before.length + functionName.length + 1),
+      formulaContext: analyzeFormulaContext(newValue, cursorPosition),
     };
   },
 );

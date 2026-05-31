@@ -21,6 +21,26 @@ import type { ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/action
 import { handled, notHandled } from './handler-utils';
 import { beginEditSessionFromAction } from './edit-entry';
 
+function refocusInlineEditor(deps: Parameters<AsyncActionHandler>[0]): void {
+  const focus = () => {
+    const coordinator = deps.coordinator as { input?: { focusEditor?: () => void } } | undefined;
+    coordinator?.input?.focusEditor?.();
+
+    const doc =
+      (typeof document !== 'undefined' ? document : null) ??
+      (globalThis as { window?: { document?: Document } }).window?.document ??
+      null;
+    const editor = doc?.querySelector<HTMLElement>('[data-testid="inline-cell-editor"]');
+    editor?.focus();
+  };
+
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(focus);
+  } else {
+    focus();
+  }
+}
+
 async function insertFormulaToken(
   deps: Parameters<AsyncActionHandler>[0],
   token: string,
@@ -40,6 +60,7 @@ async function insertFormulaToken(
 
     deps.commands.editor.input(newValue, newCursor);
     deps.commands.editor.setCursor(newCursor);
+    refocusInlineEditor(deps);
   } else {
     const activeCell = deps.accessors.selection.getActiveCell();
     const sheetId = deps.getActiveSheetId();

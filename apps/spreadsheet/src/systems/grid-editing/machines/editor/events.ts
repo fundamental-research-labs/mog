@@ -253,9 +253,10 @@ export const EditorEvents = {
     index,
   }),
 
-  acceptSuggestion: (name: string): EditorEvent => ({
+  acceptSuggestion: (name: string, appendOpeningParen = true): EditorEvent => ({
     type: 'ACCEPT_SUGGESTION',
     name,
+    appendOpeningParen,
   }),
 
   navigateSuggestion: (direction: 'up' | 'down'): EditorEvent => ({

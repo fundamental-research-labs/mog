@@ -147,7 +147,8 @@ export function createEditorCommands(actor: MinimalActor): EditorCommands {
 
     selectSuggestion: (index: number) => actor.send({ type: 'SELECT_SUGGESTION', index }),
 
-    acceptSuggestion: (name: string) => actor.send({ type: 'ACCEPT_SUGGESTION', name }),
+    acceptSuggestion: (name: string, appendOpeningParen = true) =>
+      actor.send({ type: 'ACCEPT_SUGGESTION', name, appendOpeningParen }),
 
     navigateSuggestion: (direction: 'up' | 'down') =>
       actor.send({ type: 'NAVIGATE_SUGGESTION', direction }),

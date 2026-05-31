@@ -19,6 +19,7 @@ import { rawToCellValue } from '@mog/spreadsheet-utils/rich-text';
 
 import type { TypedActiveCellData } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import { getTrackedExternalFormula } from '../../services/external-formulas';
 
 // =============================================================================
 // Internal Helpers
@@ -120,12 +121,14 @@ export async function getData(
     if (data) {
       const activeData = activeCellToStoreCellData(data, row, col);
       if (activeData.formula !== undefined || activeData.raw != null) {
-        return activeData;
+        return withTrackedExternalFormula(ctx, sheetId, row, col, activeData);
       }
 
       const cellData = await ctx.computeBridge.getCellData(sheetId, row, col);
       const rangeBackedData = cellDataToStoreCellData(cellData, row, col, cellId);
-      if (rangeBackedData) return rangeBackedData;
+      if (rangeBackedData) {
+        return withTrackedExternalFormula(ctx, sheetId, row, col, rangeBackedData);
+      }
 
       return activeData;
     }
@@ -168,9 +171,29 @@ export async function getData(
   // are not part of a dynamic-array projection.
   const cellData = await ctx.computeBridge.getCellData(sheetId, row, col);
   const rangeBackedData = cellDataToStoreCellData(cellData, row, col);
-  if (rangeBackedData) return rangeBackedData;
+  if (rangeBackedData) {
+    return withTrackedExternalFormula(ctx, sheetId, row, col, rangeBackedData);
+  }
 
   return undefined;
+}
+
+function withTrackedExternalFormula(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  data: StoreCellData,
+): StoreCellData {
+  const formula = getTrackedExternalFormula(ctx, sheetId, row, col);
+  if (!formula) return data;
+
+  return {
+    ...data,
+    formula,
+    raw: formula as CellRawValue,
+    computed: data.computed ?? rawToCellValue(data.raw) ?? null,
+  };
 }
 
 function cellDataToStoreCellData(

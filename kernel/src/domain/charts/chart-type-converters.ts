@@ -28,41 +28,16 @@
  * NOT import both a `*Data` and a `*Config` type in the same file.
  */
 
-import type {
-  BoxplotConfigData,
-  ChartSeriesData,
-  HierarchyChartConfigData,
-  HistogramConfigData,
-  LegendData,
-  LegendEntryData,
-  RegionMapConfigData,
-  UpDownBarsData,
-  WaterfallOptions,
-} from '../../bridges/compute/compute-types.gen';
+import type { ChartSeriesData } from '../../bridges/compute/compute-types.gen';
 
-import type {
-  BoxplotConfig,
-  ChartConfig,
-  ChartType,
-  HierarchyChartConfig,
-  HistogramConfig,
-  LegendConfig,
-  RegionMapConfig,
-  SeriesConfig,
-  UpDownBarsConfig,
-  WaterfallConfig,
-} from '@mog-sdk/contracts/data/charts';
+import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
 
 import {
   chartColorToWire,
   chartFormatToWire,
-  chartShadowToWire,
   wireToChartColor,
   wireToChartFormat,
-  wireToChartShadow,
 } from './chart-format-converters';
-
-import { manualLayoutToWire, wireToManualLayout } from './chart-axis-converters';
 
 import {
   dataLabelConfigToWire,
@@ -74,6 +49,25 @@ import {
   wireToPointFormat,
   wireToTrendlineConfigArray,
 } from './chart-annotation-converters';
+
+export {
+  wireChartTypeToConfig,
+  wireToSizeRepresents,
+  type ChartTypeNarrowingDiagnostic,
+  type WireChartTypeToConfigResult,
+} from './chart-kind-converters';
+
+export { legendConfigToWire, wireToLegendConfig } from './chart-legend-converters';
+
+export {
+  upDownBarsConfigToWire,
+  wireToBoxplotConfig,
+  wireToHierarchyChartConfig,
+  wireToHistogramConfig,
+  wireToRegionMapConfig,
+  wireToUpDownBarsConfig,
+  wireToWaterfallConfig,
+} from './chart-option-converters';
 
 export {
   axisConfigToWire,
@@ -121,287 +115,8 @@ export {
 } from './chart-annotation-converters';
 
 // =============================================================================
-// Literal-union tables — authoritative allow-lists for narrowing.
-//
-// Each table mirrors the literal union on the corresponding *Config field in
-// contracts/src/data/charts.ts. If the contract adds or removes a value, the
-// matching array must be updated — a mismatch here is a silent bug.
-// =============================================================================
-
-const SIZE_REPRESENTS_VALUES = ['area', 'w'] as const satisfies readonly NonNullable<
-  ChartConfig['sizeRepresents']
->[];
-type SizeRepresents = (typeof SIZE_REPRESENTS_VALUES)[number];
-
-const CHART_TYPES = [
-  'bar',
-  'column',
-  'line',
-  'area',
-  'pie',
-  'doughnut',
-  'scatter',
-  'bubble',
-  'combo',
-  'radar',
-  'stock',
-  'funnel',
-  'waterfall',
-  'surface',
-  'surface3d',
-  'ofPie',
-  'bar3d',
-  'column3d',
-  'line3d',
-  'pie3d',
-  'area3d',
-  'histogram',
-  'boxplot',
-  'heatmap',
-  'violin',
-  'pareto',
-  'treemap',
-  'sunburst',
-  'regionMap',
-  'pieExploded',
-  'pie3dExploded',
-  'doughnutExploded',
-  'bubble3DEffect',
-  'surfaceWireframe',
-  'surfaceTopView',
-  'surfaceTopViewWireframe',
-  'lineMarkers',
-  'lineMarkersStacked',
-  'lineMarkersStacked100',
-  'cylinderColClustered',
-  'cylinderColStacked',
-  'cylinderColStacked100',
-  'cylinderBarClustered',
-  'cylinderBarStacked',
-  'cylinderBarStacked100',
-  'cylinderCol',
-  'coneColClustered',
-  'coneColStacked',
-  'coneColStacked100',
-  'coneBarClustered',
-  'coneBarStacked',
-  'coneBarStacked100',
-  'coneCol',
-  'pyramidColClustered',
-  'pyramidColStacked',
-  'pyramidColStacked100',
-  'pyramidBarClustered',
-  'pyramidBarStacked',
-  'pyramidBarStacked100',
-  'pyramidCol',
-] as const satisfies readonly ChartType[];
-
-export type ChartTypeNarrowingDiagnostic = {
-  code: 'acceptedChartTypeAlias' | 'unsupportedChartType';
-  message: string;
-  rawType: string;
-  canonicalType?: ChartType;
-};
-
-export type WireChartTypeToConfigResult =
-  | { type: ChartType; diagnostics: ChartTypeNarrowingDiagnostic[] }
-  | { type: undefined; diagnostics: ChartTypeNarrowingDiagnostic[] };
-
-const CHART_TYPE_ALIASES: Record<string, ChartType> = {
-  bar3D: 'bar3d',
-  column3D: 'column3d',
-  line3D: 'line3d',
-  pie3D: 'pie3d',
-  area3D: 'area3d',
-  surface3D: 'surface3d',
-  boxWhisker: 'boxplot',
-  paretoLine: 'pareto',
-};
-
-/**
- * Narrow a loose wire string into one of the allowed literals, or
- * `undefined` if the wire value is absent or violates the contract.
- *
- * Chart-level enum narrowing helper. Focused converter submodules own their
- * local enum allow-lists. Returning `undefined` on an unknown value drops the
- * bad data rather than crashing — all `*Config` enum fields are optional so
- * this is the safe choice — but a debug-mode assertion is emitted so the drift
- * is visible in development.
- */
-function narrowEnum<T extends string>(
-  value: string | null | undefined,
-  allowed: readonly T[],
-  fieldName: string,
-): T | undefined {
-  if (value == null) return undefined;
-  if ((allowed as readonly string[]).includes(value)) return value as T;
-  // Unknown wire string — drop rather than smuggle into the public contract.
-  // A louder signal (warning or throw) can be wired in later; dropping matches
-  // the field's `?: T` shape which already allows undefined.
-  if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-    console.warn(
-      `[chart-type-converters] dropping unknown ${fieldName}="${value}" — not in allowed set`,
-    );
-  }
-  return undefined;
-}
-
-export function wireChartTypeToConfig(
-  value: string | null | undefined,
-): WireChartTypeToConfigResult {
-  const rawType = value?.trim();
-  if (!rawType) return { type: undefined, diagnostics: [] };
-
-  if ((CHART_TYPES as readonly string[]).includes(rawType)) {
-    return { type: rawType as ChartType, diagnostics: [] };
-  }
-
-  const alias = CHART_TYPE_ALIASES[rawType];
-  if (alias) {
-    return {
-      type: alias,
-      diagnostics: [
-        {
-          code: 'acceptedChartTypeAlias',
-          message: `Imported chart type "${rawType}" was canonicalized to "${alias}"`,
-          rawType,
-          canonicalType: alias,
-        },
-      ],
-    };
-  }
-
-  return {
-    type: undefined,
-    diagnostics: [
-      {
-        code: 'unsupportedChartType',
-        message: `Imported chart type "${rawType}" is not supported`,
-        rawType,
-      },
-    ],
-  };
-}
-
-export function wireToSizeRepresents(
-  value: string | null | undefined,
-): ChartConfig['sizeRepresents'] {
-  return narrowEnum<SizeRepresents>(value, SIZE_REPRESENTS_VALUES, 'Chart.sizeRepresents');
-}
-
-// =============================================================================
 // Wire → Config (narrowing — validates enum strings against contract unions)
 // =============================================================================
-
-/** Convert a wire LegendData to the contract LegendConfig. */
-export function wireToLegendConfig(w: LegendData): LegendConfig {
-  const visible = w.visible === true || w.show === true;
-  return {
-    show: visible,
-    position: w.position,
-    visible,
-    overlay: w.overlay,
-    format: wireToChartFormat(w.format),
-    entries: w.entries?.map(wireToLegendEntryConfig),
-    customX: w.customX,
-    customY: w.customY,
-    layout: wireToManualLayout(w.layout),
-    shadow: wireToChartShadow(w.shadow),
-    showShadow: w.showShadow,
-  };
-}
-
-function wireToLegendEntryConfig(
-  entry: LegendEntryData,
-): NonNullable<LegendConfig['entries']>[number] {
-  return {
-    idx: entry.idx,
-    delete: entry.delete,
-    format: wireToChartFormat(entry.format),
-    visible: entry.visible,
-  };
-}
-
-export function wireToUpDownBarsConfig(
-  w: UpDownBarsData | undefined,
-): UpDownBarsConfig | undefined {
-  if (!w) return undefined;
-  return {
-    gapWidth: w.gapWidth,
-    upFormat: wireToChartFormat(w.upFormat),
-    downFormat: wireToChartFormat(w.downFormat),
-  };
-}
-
-export function upDownBarsConfigToWire(
-  c: UpDownBarsConfig | undefined,
-): UpDownBarsData | undefined {
-  if (!c) return undefined;
-  return {
-    gapWidth: c.gapWidth,
-    upFormat: chartFormatToWire(c.upFormat),
-    downFormat: chartFormatToWire(c.downFormat),
-  };
-}
-
-export function wireToWaterfallConfig(
-  w: WaterfallOptions | undefined,
-): WaterfallConfig | undefined {
-  if (!w) return undefined;
-  return {
-    subtotalIndices: w.subtotalIndices,
-    totalIndices: w.subtotalIndices,
-    showConnectorLines: w.showConnectorLines,
-  };
-}
-
-export function wireToHistogramConfig(
-  w: HistogramConfigData | undefined,
-): HistogramConfig | undefined {
-  if (!w) return undefined;
-  return {
-    binCount: w.binCount,
-    binWidth: w.binWidth,
-    overflowBin: w.overflowBin,
-    overflowBinValue: w.overflowBinValue,
-    underflowBin: w.underflowBin,
-    underflowBinValue: w.underflowBinValue,
-  };
-}
-
-export function wireToBoxplotConfig(w: BoxplotConfigData | undefined): BoxplotConfig | undefined {
-  if (!w) return undefined;
-  return {
-    showOutlierPoints: w.showOutlierPoints,
-    showOutliers: w.showOutlierPoints,
-    showMeanMarkers: w.showMeanMarkers,
-    showMean: w.showMeanMarkers,
-    showMeanLine: w.showMeanLine,
-    quartileMethod: w.quartileMethod,
-  };
-}
-
-export function wireToHierarchyChartConfig(
-  w: HierarchyChartConfigData | undefined,
-): HierarchyChartConfig | undefined {
-  if (!w) return undefined;
-  return {
-    rows: w.rows,
-    categoryFormulas: w.categoryFormulas,
-    valueFormula: w.valueFormula,
-    parentLabelLayout: w.parentLabelLayout,
-  };
-}
-
-export function wireToRegionMapConfig(
-  w: RegionMapConfigData | undefined,
-): RegionMapConfig | undefined {
-  if (!w) return undefined;
-  return {
-    regionFormula: w.regionFormula,
-    valueFormula: w.valueFormula,
-  };
-}
 
 /** Convert a wire ChartSeriesData to the contract SeriesConfig. */
 export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
@@ -473,34 +188,6 @@ export function wireToSeriesConfigArray(w: ChartSeriesData[]): SeriesConfig[] {
 // =============================================================================
 // Config → Wire (widening — string-literal unions → plain strings is trivial)
 // =============================================================================
-
-/** Convert contract LegendConfig to wire LegendData. */
-export function legendConfigToWire(c: LegendConfig): LegendData {
-  return {
-    show: c.show,
-    position: c.position,
-    visible: c.visible ?? c.show,
-    overlay: c.overlay,
-    format: chartFormatToWire(c.format),
-    entries: c.entries?.map(legendEntryConfigToWire),
-    customX: c.customX,
-    customY: c.customY,
-    layout: c.layout ? manualLayoutToWire(c.layout) : undefined,
-    shadow: chartShadowToWire(c.shadow),
-    showShadow: c.showShadow,
-  };
-}
-
-function legendEntryConfigToWire(
-  entry: NonNullable<LegendConfig['entries']>[number],
-): LegendEntryData {
-  return {
-    idx: entry.idx,
-    delete: entry.delete ?? (entry.visible === false ? true : undefined),
-    format: chartFormatToWire(entry.format),
-    visible: entry.visible,
-  };
-}
 
 /** Convert contract SeriesConfig to wire ChartSeriesData. */
 export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {

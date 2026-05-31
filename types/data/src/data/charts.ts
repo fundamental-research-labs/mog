@@ -1154,6 +1154,11 @@ export interface ResolvedChartLegendSnapshot {
   visibleEntries: string[];
 }
 
+export interface ResolvedChartCategoryLevelSnapshot {
+  level: number;
+  labels: Array<string | null>;
+}
+
 export type ChartSeriesDimensionRenderAuthority =
   | 'live'
   | 'literal'
@@ -1347,6 +1352,7 @@ export interface ResolvedChartSpecSnapshot {
     series: ResolvedChartSeriesSnapshot[];
     seriesProjection: ResolvedChartSeriesProjectionSnapshot;
     categories: Array<string | number | null>;
+    categoryLevels?: ResolvedChartCategoryLevelSnapshot[];
     layout?: ResolvedChartLayoutSnapshot;
     plot: {
       displayBlanksAs?: 'gap' | 'zero' | 'span';

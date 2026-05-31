@@ -45,6 +45,9 @@ type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']
 type BarGeometrySnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['plot']['barGeometry']
 >[number];
+type CategoryLevelSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['categoryLevels']
+>[number];
 type SeriesRangeReference = ResolvedChartRangeReferences['seriesReferences'][number];
 
 export function defaultExportOptionsForSize(
@@ -79,6 +82,7 @@ export function buildResolvedChartSpecSnapshot(input: {
   packageAuthority?: ResolvedChartSpecSnapshot['packageAuthority'];
 }): ResolvedChartSpecSnapshot {
   const categories = input.chartData.categories.map(snapshotScalar);
+  const categoryLevels = snapshotCategoryLevels(input.chartData);
   const hasExplicitSeriesReferences =
     input.config.series?.some((item) =>
       Boolean(item.values || item.categories || item.bubbleSize),
@@ -149,6 +153,7 @@ export function buildResolvedChartSpecSnapshot(input: {
       series,
       seriesProjection,
       categories,
+      categoryLevels,
       layout: input.layout ?? undefined,
       plot: {
         displayBlanksAs: input.config.displayBlanksAs,
@@ -177,7 +182,7 @@ export function buildResolvedChartSpecSnapshot(input: {
         })),
       },
       dataHashes: {
-        categoriesHash: hashJson(categories),
+        categoriesHash: hashJson(categoryLevels ? { categories, categoryLevels } : categories),
         seriesHash: hashJson(series),
       },
     },
@@ -195,6 +200,14 @@ export function buildResolvedChartSpecSnapshot(input: {
       }),
     },
   };
+}
+
+function snapshotCategoryLevels(data: ChartData): CategoryLevelSnapshot[] | undefined {
+  if (!data.categoryLevels?.length) return undefined;
+  return data.categoryLevels.map((level) => ({
+    level: level.level,
+    labels: level.labels.map((label) => (label == null ? null : String(label))),
+  }));
 }
 
 function hasRenderableChartExData(config: ChartConfig): boolean {

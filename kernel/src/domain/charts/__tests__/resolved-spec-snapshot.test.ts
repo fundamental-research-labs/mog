@@ -479,6 +479,10 @@ describe('resolved spec snapshot helpers', () => {
         categories: 'fallbackCache',
       },
     });
+    expect(snapshot.resolved.categoryLevels).toEqual([
+      { level: 0, labels: ['North', 'South'] },
+      { level: 1, labels: ['Q1', 'Q2'] },
+    ]);
   });
 
   it('uses sourceSeriesIndex as the dropped-series key fallback', () => {

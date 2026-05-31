@@ -73,16 +73,15 @@ fn parse_input_value_fraction_hint_bare_fraction() {
     }
 }
 
-/// Format-blind path uses the culture-aware date parser. Two-part slash
-/// dates use the parser's explicit default year (2000), so `"1/2"` is
-/// January 2, 2000 rather than a fraction.
+/// Format-blind path requires a year for numeric slash dates. Bare fractions
+/// stay literal text unless the target format is Fraction.
 
 #[test]
-fn parse_input_value_no_hint_slash_date_uses_default_year() {
-    match parse_input_value("1/2", None) {
-        ParsedValue::Number(n) => assert!((n - 36527.0).abs() < 1e-9, "got {n}"),
-        other => panic!("expected Number(36527), got {other:?}"),
-    }
+fn parse_input_value_no_hint_bare_fraction_stays_text() {
+    assert_eq!(
+        parse_input_value("1/2", None),
+        ParsedValue::Text("1/2".into())
+    );
 }
 
 // ── Date-branch hint awareness ─────────────────────────────────────

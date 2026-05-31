@@ -133,6 +133,8 @@ export class FindReplaceCoordinator {
   private pendingReplaceAllEvent: boolean = false;
   /** Cached search data from last search execution */
   private searchCache: SearchCache | null = null;
+  /** Last non-empty query that completed a search in the current coordinator lifetime. */
+  private lastExecutedQuery: string = '';
 
   constructor(config: FindReplaceCoordinatorConfig = {}) {
     this.searchDebounceMs = config.searchDebounceMs ?? 150;
@@ -185,6 +187,7 @@ export class FindReplaceCoordinator {
     this.previousState = null;
     this.deps = null;
     this.searchCache = null;
+    this.lastExecutedQuery = '';
   }
 
   // ===========================================================================
@@ -374,11 +377,22 @@ export class FindReplaceCoordinator {
       // Execute search (sync -- backed by cached data)
       const results = searchInScope(provider, query, options, activeSheetId);
 
-      // Send results to machine
-      this.deps.findReplaceActor.send({ type: 'SEARCH_COMPLETE', results });
+      const isReplacementQuery =
+        this.lastExecutedQuery.trim() !== '' && this.lastExecutedQuery !== query;
+      const initialCurrentIndex = isReplacementQuery && results.length > 0 ? -1 : undefined;
+
+      // Send results to machine. Replacement searches keep results highlighted
+      // but leave navigation unselected so the first explicit Enter lands on
+      // the first result instead of skipping to the second.
+      this.deps.findReplaceActor.send({
+        type: 'SEARCH_COMPLETE',
+        results,
+        initialCurrentIndex,
+      });
+      this.lastExecutedQuery = query;
 
       // If there are results, navigate to the first one
-      if (results.length > 0) {
+      if (results.length > 0 && initialCurrentIndex !== -1) {
         await this.navigateToResult(results[0]);
       }
 

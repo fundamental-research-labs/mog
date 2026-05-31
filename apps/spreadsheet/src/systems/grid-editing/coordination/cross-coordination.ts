@@ -170,6 +170,9 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const suppressEnterNavigation =
+        previousState.context.entryMode === 'doubleClick' &&
+        (commitKey === 'enter' || commitKey === 'shift-enter');
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();
 
@@ -178,7 +181,7 @@ export function setupEditorToSelectionCoordination(
         return;
       }
 
-      if (direction !== 'none') {
+      if (direction !== 'none' && !suppressEnterNavigation) {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
           // Route through KEY_TAB so selection machine tracks tabOriginCol
           selectionActor.send({ type: 'KEY_TAB', shiftKey: commitKey === 'shift-tab' });
@@ -530,11 +533,7 @@ export interface EditingInputInterceptionResult {
 export function setupEditingInputInterception(
   config: EditingInputInterceptionConfig,
 ): EditingInputInterceptionResult {
-  const {
-    editorActor,
-    selectionActor,
-    onCommitAndMove,
-  } = config;
+  const { editorActor, selectionActor, onCommitAndMove } = config;
 
   // Pending selection target after commit completes
   let pendingSelection: { cell: CellCoord; shiftKey: boolean; ctrlKey: boolean } | null = null;

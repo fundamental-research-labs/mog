@@ -1241,3 +1241,36 @@ fn test_set_cell_plain_number_does_not_get_date_format() {
         format.number_format
     );
 }
+
+#[test]
+fn test_set_cell_percent_input_applies_percent_format() {
+    use crate::bridge_types::CellInput;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let edits = vec![(
+        sid,
+        0u32,
+        8u32,
+        CellInput::Parse {
+            text: "50%".to_string(),
+        },
+    )];
+    engine.batch_set_cells_by_position(edits, true).unwrap();
+
+    match engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(0, 8))
+    {
+        Some(value_types::CellValue::Number(n)) => {
+            assert!((n.get() - 0.5).abs() < 1e-12, "got {}", n.get());
+        }
+        other => panic!("expected Number(0.5), got {:?}", other),
+    }
+
+    let format = stored_number_format_at(&engine, &sid, 0, 8);
+    assert_eq!(format.as_deref(), Some("0%"));
+    assert_eq!(engine.format_cell_display(&sid, 0, 8), "50%");
+}

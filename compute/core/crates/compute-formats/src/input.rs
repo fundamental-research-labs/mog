@@ -215,17 +215,15 @@ fn try_parse_iso(text: &str) -> Option<ParsedDateInput> {
 fn try_parse_slash(
     text: &str,
     locale: &crate::CultureInfo,
-    default_year: i32,
+    _default_year: i32,
 ) -> Option<ParsedDateInput> {
-    let parts: Vec<&str> = text.splitn(3, '/').collect();
-    if parts.len() < 2 {
+    let parts: Vec<&str> = text.split('/').collect();
+    if parts.len() != 3 {
         return None;
     }
     let a: u32 = parts[0].parse().ok()?;
     let b: u32 = parts[1].parse().ok()?;
-    let c: Option<i32> = parts.get(2).and_then(|s| s.parse().ok());
-
-    let year = c.map_or(default_year, resolve_year);
+    let year = resolve_year(parts[2].parse().ok()?);
 
     let (month, day) = match locale.date_order() {
         crate::locale::DateOrder::DMY => (b, a),

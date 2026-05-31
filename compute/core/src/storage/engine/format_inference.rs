@@ -7,7 +7,7 @@ use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
 use value_types::{CellValue, ComputeError};
 
-use super::{YrsComputeEngine, mutation, services};
+use super::{mutation, services, YrsComputeEngine};
 
 impl YrsComputeEngine {
     /// cell does not already have a date format applied, write the
@@ -259,6 +259,80 @@ impl YrsComputeEngine {
         for (sheet_id, row, col, fmt) in to_apply {
             let format = CellFormat {
                 number_format: Some(fmt),
+                ..Default::default()
+            };
+            services::formatting::set_format_for_ranges(
+                &mut self.stores,
+                &self.mirror,
+                &sheet_id,
+                &[(row, col, row, col)],
+                &format,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(in crate::storage::engine) fn apply_inferred_percent_formats(
+        &mut self,
+        candidates: &[(SheetId, u32, u32, String)],
+    ) -> Result<(), ComputeError> {
+        let mut to_apply: Vec<(SheetId, u32, u32)> = Vec::new();
+
+        for (sheet_id, row, col, text) in candidates {
+            let trimmed = text.trim();
+            if trimmed.is_empty()
+                || trimmed.starts_with('=')
+                || trimmed.starts_with('\'')
+                || !trimmed.ends_with('%')
+            {
+                continue;
+            }
+
+            if !matches!(
+                self.mirror
+                    .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
+                Some(value_types::CellValue::Number(_))
+            ) {
+                continue;
+            }
+
+            let cell_id =
+                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
+                    Some(id) => id,
+                    None => continue,
+                };
+            let cell_hex = id_to_hex(cell_id.as_u128());
+            let table_fmt =
+                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format(
+                &self.stores.storage,
+                sheet_id,
+                &cell_hex,
+                *row,
+                *col,
+                table_fmt.as_ref(),
+                self.stores.grid_indexes.get(sheet_id),
+                self.mirror.get_sheet(sheet_id),
+            );
+            if effective
+                .number_format
+                .as_deref()
+                .is_some_and(is_non_general_number_format)
+            {
+                continue;
+            }
+
+            to_apply.push((*sheet_id, *row, *col));
+        }
+
+        if to_apply.is_empty() {
+            return Ok(());
+        }
+
+        let _guard = self.mutation.suppress_guard();
+        for (sheet_id, row, col) in to_apply {
+            let format = CellFormat {
+                number_format: Some("0%".to_string()),
                 ..Default::default()
             };
             services::formatting::set_format_for_ranges(

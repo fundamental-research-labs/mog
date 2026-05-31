@@ -53,6 +53,46 @@ fn bulk_set_cells_by_position_undoes_atomically() {
 }
 
 #[test]
+fn set_time_value_undoes_value_and_inferred_format_atomically() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine.set_time_value(&sid, 5, 5, 12, 0, 0).unwrap();
+
+    assert_eq!(engine.get_undo_state().undo_depth, 1);
+    assert_eq!(cell_value_at(&engine, &sid, 5, 5), num(0.5));
+    let cell_id =
+        crate::storage::engine::services::cell_editing::find_cell_id_at(&engine.stores, &sid, 5, 5)
+            .expect("cell allocated");
+    assert_eq!(
+        engine
+            .get_cell_format(&sid, &cell_id, 5, 5)
+            .number_format
+            .as_deref(),
+        Some("h:mm:ss AM/PM")
+    );
+
+    engine.undo().unwrap();
+
+    assert_eq!(cell_value_at(&engine, &sid, 5, 5), CellValue::Null);
+    assert!(
+        crate::storage::engine::services::cell_editing::find_cell_id_at(
+            &engine.stores,
+            &sid,
+            5,
+            5,
+        )
+        .is_none(),
+        "undo should remove the newly allocated cell and its format in one step"
+    );
+    assert!(
+        !engine.can_undo(),
+        "time insertion value and inferred format must be one undo stack item"
+    );
+}
+
+#[test]
 fn text_to_columns_undoes_atomically_and_reports_stats() {
     let sid = sheet_id();
     let snap = WorkbookSnapshot {

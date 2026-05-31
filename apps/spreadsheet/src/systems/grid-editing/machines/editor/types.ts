@@ -39,6 +39,9 @@ export interface EditorContext {
    */
   isEditMode: boolean;
 
+  /** How the current edit session was started, used by commit navigation rules. */
+  entryMode: EditorEntryMode | null;
+
   /** The cell being edited — set once on START_EDITING, never changes during the edit session.
    * This is separate from selection.activeCell which moves during formula point mode.
    * Used by commit coordination to write the value to the correct cell.
@@ -447,6 +450,7 @@ export type EditorEvent =
 
 export const initialEditorContext: EditorContext = {
   isEditMode: false,
+  entryMode: null,
   editingCell: null,
   sheetId: null,
   mergeBounds: null,

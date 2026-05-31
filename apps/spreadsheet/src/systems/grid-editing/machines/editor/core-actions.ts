@@ -72,6 +72,7 @@ export const initializeEditing = assign(({ event }) => {
 
   return {
     isEditMode,
+    entryMode,
     editingCell: event.cell,
     sheetId: event.sheetId,
     mergeBounds: event.mergedRegion ?? null,

@@ -44,6 +44,7 @@ and public facades say so.
 
 ## Features and Domain Notes
 
+- [Charts](charts.md)
 - [Tables](tables.md)
 - [Pivot tables](pivot-tables.md)
 - [Known formula discrepancies](known-formula-discrepancies.md)

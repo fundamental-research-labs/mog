@@ -1,6 +1,7 @@
 import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, SingleAxisConfig } from '../../types';
 import {
+  applyAutoValueAxisTicks,
   buildAxisScaleSpec,
   isHorizontalBarType,
   mapAxisConfigToAxisSpec,
@@ -197,13 +198,21 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   if (config.axis) {
     const xAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
     if (xAxis && encoding.x) {
-      encoding.x.axis = mapAxisConfigToAxisSpec(xAxis, config, 'categoryAxis');
+      encoding.x.axis = mapAxisConfigToAxisSpec(
+        xAxis,
+        config,
+        isHorizontal ? 'valueAxis' : 'categoryAxis',
+      );
       const scaleSpec = buildAxisScaleSpec(xAxis, useDateSerialCategoryAxis);
       if (scaleSpec) encoding.x.scale = { ...(encoding.x.scale ?? {}), ...scaleSpec };
     }
     const yAxis = resolveAxisConfigForChannel(config.axis, 'y', isHorizontal);
     if (yAxis && encoding.y) {
-      encoding.y.axis = mapAxisConfigToAxisSpec(yAxis, config, 'valueAxis');
+      encoding.y.axis = mapAxisConfigToAxisSpec(
+        yAxis,
+        config,
+        isHorizontal ? 'categoryAxis' : 'valueAxis',
+      );
       const scaleSpec = buildAxisScaleSpec(yAxis, false);
       if (scaleSpec) encoding.y.scale = { ...(encoding.y.scale ?? {}), ...scaleSpec };
     }
@@ -248,9 +257,19 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
+  applyCartesianValueAxisDefaults(encoding);
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
+}
+
+function applyCartesianValueAxisDefaults(encoding: EncodingSpec): void {
+  if (encoding.x?.field === VALUE_FIELD || encoding.x?.field === SCATTER_X_FIELD) {
+    applyAutoValueAxisTicks(encoding.x);
+  }
+  if (encoding.y?.field === VALUE_FIELD) {
+    applyAutoValueAxisTicks(encoding.y);
+  }
 }
 
 function bubbleMaxArea(config: ChartConfig): number {

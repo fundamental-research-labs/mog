@@ -1,6 +1,7 @@
 import type { LayerSpec, UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
+import { compile } from '../../grammar/compiler';
 
 function makeData(): ChartData {
   return {
@@ -25,6 +26,15 @@ function asUnitSpec(config: ChartConfig, data = makeData()): UnitSpec {
 
 function asLayerSpec(config: ChartConfig, data = makeData()): LayerSpec {
   return configToSpec(config, data) as LayerSpec;
+}
+
+function axisLabelTexts(result: ReturnType<typeof compile>, role: string): string[] {
+  return result.axes
+    .filter((mark) => {
+      const datum = mark.datum as Record<string, unknown> | undefined;
+      return mark.type === 'text' && datum?.role === role && datum.axisPart === 'label';
+    })
+    .map((mark) => (mark.type === 'text' ? mark.text : ''));
 }
 
 describe('configToSpec axis render contracts', () => {
@@ -277,5 +287,97 @@ describe('configToSpec axis render contracts', () => {
       labelPosition: 'none',
       labels: false,
     });
+  });
+
+  it('uses Mog auto value-axis tick density for imported horizontal bar charts', () => {
+    const data: ChartData = {
+      categories: [
+        'Stage 1',
+        'Stage 2',
+        'Stage 3',
+        'Stage 4',
+        'Stage 5',
+        'Stage 6',
+        'Stage 7',
+        'Stage 8',
+        'Stage 9',
+        'Stage 10',
+        'Stage 11',
+      ],
+      series: [
+        {
+          name: 'Count',
+          data: [191, 164, 164, 144, 115, 152, 144, 112, 128, 100, 101].map(
+            (value, index) => ({ x: `Stage ${index + 1}`, y: value }),
+          ),
+        },
+      ],
+    };
+    const spec = configToSpec(
+      {
+        type: 'bar',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 20,
+        height: 10,
+        axis: {
+          categoryAxis: { visible: true },
+          valueAxis: { visible: true },
+        },
+        dataLabels: {
+          show: true,
+          showValue: true,
+          position: 'bestFit',
+        },
+      } as ChartConfig,
+      data,
+    );
+
+    const result = compile(spec, undefined, { width: 1526, height: 706 });
+
+    expect(result.scales.x?.domain?.()).toEqual([0, 250]);
+    expect(axisLabelTexts(result, 'x-axis')).toEqual(['0', '50', '100', '150', '200', '250']);
+  });
+
+  it('uses the same Mog auto value-axis tick density for vertical columns', () => {
+    const data: ChartData = {
+      categories: ['A', 'B', 'C'],
+      series: [
+        {
+          name: 'Count',
+          data: [
+            { x: 'A', y: 191 },
+            { x: 'B', y: 164 },
+            { x: 'C', y: 100 },
+          ],
+        },
+      ],
+    };
+    const spec = configToSpec(
+      {
+        type: 'column',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 12,
+        height: 8,
+        axis: {
+          categoryAxis: { visible: true },
+          valueAxis: { visible: true },
+        },
+        dataLabels: {
+          show: true,
+          showValue: true,
+          position: 'outsideEnd',
+        },
+      } as ChartConfig,
+      data,
+    );
+
+    const result = compile(spec, undefined, { width: 800, height: 480 });
+
+    expect(result.scales.y?.domain?.()).toEqual([0, 250]);
+    expect(axisLabelTexts(result, 'y-axis')).toEqual(['0', '50', '100', '150', '200', '250']);
   });
 });

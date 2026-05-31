@@ -1,6 +1,10 @@
 import type { DataRow, EncodingSpec, MarkType, Transform, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../../types';
-import { buildAxisScaleSpec, mapAxisConfigToAxisSpec } from '../axis';
+import {
+  applyAutoValueAxisTicks,
+  buildAxisScaleSpec,
+  mapAxisConfigToAxisSpec,
+} from '../axis';
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
 import {
@@ -171,6 +175,13 @@ function buildSeriesEncoding(input: {
       const scaleSpec = buildAxisScaleSpec(secondaryAxis, false);
       if (scaleSpec) encoding.y.scale = scaleSpec;
     }
+  }
+
+  if (encoding.x?.field === SCATTER_X_FIELD) {
+    applyAutoValueAxisTicks(encoding.x);
+  }
+  if (encoding.y?.field === VALUE_FIELD) {
+    applyAutoValueAxisTicks(encoding.y);
   }
 
   return encoding;

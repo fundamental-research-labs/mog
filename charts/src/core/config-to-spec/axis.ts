@@ -1,7 +1,15 @@
-import type { AxisOrient, AxisSpec, ScaleSpec, ScaleType } from '../../grammar/spec';
+import type {
+  AxisOrient,
+  AxisSpec,
+  ChannelSpec,
+  ScaleSpec,
+  ScaleType,
+} from '../../grammar/spec';
 import type { AxisConfig, AxisType, ChartConfig, ChartType, SingleAxisConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { mapAxisConfigToAxisSpec as mapAxisConfigToAxisFormatSpec } from './axis-format';
+
+export const AUTO_VALUE_AXIS_TICK_COUNT = 5;
 
 /**
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
@@ -67,6 +75,30 @@ export function buildAxisScaleSpec(
   };
 
   return Object.keys(scaleSpec).length > 0 ? scaleSpec : undefined;
+}
+
+export function applyAutoValueAxisTicks(channel: ChannelSpec | undefined): void {
+  if (!channel || channel.type !== 'quantitative') return;
+
+  if (channel.axis !== null && channel.axis !== undefined) {
+    const axisSpec: AxisSpec = channel.axis;
+    if (
+      axisSpec.tickCount === undefined &&
+      axisSpec.tickStep === undefined &&
+      axisSpec.tickInterval === undefined
+    ) {
+      axisSpec.tickCount = AUTO_VALUE_AXIS_TICK_COUNT;
+    }
+    channel.axis = axisSpec;
+  }
+
+  if (channel.scale !== null) {
+    const scaleSpec: ScaleSpec = channel.scale ?? {};
+    if (scaleSpec.nice === undefined || scaleSpec.nice === true) {
+      scaleSpec.nice = AUTO_VALUE_AXIS_TICK_COUNT;
+    }
+    channel.scale = scaleSpec;
+  }
 }
 
 function axisConfigToScaleType(axisConf: SingleAxisConfig): ScaleType | undefined {

@@ -1,12 +1,12 @@
 import type { DataRow } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartDataPoint } from '../../types';
+import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
-  isHorizontalBarType,
   shouldUseDateSerialCategoryAxis,
   shouldUseStableCategoryKeys,
   toFiniteNumber,
-} from './axis';
+} from './category-axis';
 import {
   CATEGORY_FIELD,
   CATEGORY_FORMAT_CODE_FIELD,

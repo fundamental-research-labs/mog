@@ -3,13 +3,13 @@ import type {
   AxisConfig,
   AxisType,
   ChartConfig,
-  ChartData,
   ChartFormat,
   ChartType,
   SingleAxisConfig,
 } from '../../types';
 import { resolveChartTextColor, resolveGridlineColor } from '../../utils/chart-colors';
-import { CATEGORY_KEY_PREFIX, MARK_TYPE_MAP, MINOR_GRIDLINE_TICK_COUNT } from './constants';
+import { MINOR_GRIDLINE_TICK_COUNT } from './constants';
+import { isDateAxisConfig, toFiniteNumber } from './category-axis';
 import { dashStyleToStrokeDash, hasVisibleLineStyle } from './series-style';
 import { linePointsToCanvasPx, pointsToCanvasPx } from './units';
 
@@ -41,33 +41,6 @@ function normalizeAxisLabelAngle(
   if (Math.abs(degrees) > 90) return undefined;
   if (Math.abs(degrees) <= 90) return degrees;
   return undefined;
-}
-
-export function categoryKeyForIndex(index: number): string {
-  return `${CATEGORY_KEY_PREFIX}:${index}`;
-}
-
-export function categoryDisplayLabel(value: string | number | null | undefined): string {
-  return value == null ? '' : String(value);
-}
-
-function hasDuplicateOrBlankCategoryLabels(data: ChartData): boolean {
-  const seen = new Set<string>();
-  for (const category of data.categories ?? []) {
-    const label = categoryDisplayLabel(category);
-    if (label === '' || seen.has(label)) return true;
-    seen.add(label);
-  }
-  return false;
-}
-
-export function shouldUseStableCategoryKeys(
-  config: ChartConfig | undefined,
-  data: ChartData,
-  useExcelDateSerialCategories: boolean,
-): boolean {
-  if (!config?.extra || useExcelDateSerialCategories) return false;
-  return hasDuplicateOrBlankCategoryLabels(data);
 }
 
 /**
@@ -219,17 +192,6 @@ export function resolveAxisConfigForChannel(
   return isHorizontal ? (axis.categoryAxis ?? axis.yAxis) : (axis.yAxis ?? axis.valueAxis);
 }
 
-function isDateAxisConfig(axisConf: SingleAxisConfig | undefined): boolean {
-  if (!axisConf) return false;
-  const axisType = axisConf.axisType?.toLowerCase();
-  return (
-    axisType === 'dateax' ||
-    axisType === 'date' ||
-    axisConf.categoryType === 'dateAxis' ||
-    axisConf.type === 'time'
-  );
-}
-
 function dateAxisTickInterval(axisConf: SingleAxisConfig): AxisSpec['tickInterval'] | undefined {
   const majorUnit = toFiniteNumber(axisConf.majorUnit);
   if (majorUnit === undefined || majorUnit <= 0) return undefined;
@@ -254,52 +216,6 @@ function normalizeDateAxisTimeUnit(
     default:
       return undefined;
   }
-}
-
-export function shouldUseDateSerialCategoryAxis(
-  config: ChartConfig,
-  data: ChartData,
-  isHorizontal: boolean,
-): boolean {
-  if (!supportsContinuousCategoryAxis(config.type) || isHorizontal) return false;
-  const categoryAxis = resolveAxisConfigForChannel(config.axis, 'x', isHorizontal);
-  return isDateAxisConfig(categoryAxis) && hasFiniteCategorySerials(data);
-}
-
-function supportsContinuousCategoryAxis(chartType: ChartType): boolean {
-  if (chartType === 'combo') return true;
-  if (chartType === 'radar') return false;
-  const markType = MARK_TYPE_MAP[chartType];
-  return markType === 'line' || markType === 'area';
-}
-
-export function shouldReverseHorizontalCategoryAxis(
-  config: ChartConfig,
-  isHorizontal: boolean,
-): boolean {
-  return isHorizontal && config.extra !== undefined;
-}
-
-function hasFiniteCategorySerials(data: ChartData): boolean {
-  const categories = data.categories ?? [];
-  if (categories.length === 0) return false;
-
-  let finiteCount = 0;
-  for (const category of categories) {
-    const serial = toFiniteNumber(category);
-    if (serial === undefined) return false;
-    finiteCount += 1;
-  }
-  return finiteCount > 0;
-}
-
-export function toFiniteNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return undefined;
 }
 
 export function explicitDomainBound(

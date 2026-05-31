@@ -2,16 +2,18 @@ import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import {
   buildAxisScaleSpec,
-  categoryDisplayLabel,
-  categoryKeyForIndex,
   explicitDomainBound,
   isHorizontalBarType,
   mapAxisConfigToAxisSpec,
   resolveAxisConfigForChannel,
+} from './axis';
+import {
+  categoryDisplayLabel,
+  categoryKeyForIndex,
   shouldReverseHorizontalCategoryAxis,
   shouldUseDateSerialCategoryAxis,
   shouldUseStableCategoryKeys,
-} from './axis';
+} from './category-axis';
 import { MARK_TYPE_MAP, SERIES_OPACITY_FIELD } from './constants';
 import {
   buildColorEncoding,

@@ -15,7 +15,7 @@ import { buildAnalysisLineLayers } from './layers/analysis-lines';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from './layers/data-labels';
 import { buildErrorBarLayers } from './layers/error-bars';
-import { buildMarkerLayers } from './layers/markers';
+import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
 import { buildStockLayers } from './layers/stock';
 import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
@@ -26,6 +26,7 @@ import {
   DATA_LABEL_VISIBLE_FIELD,
   ERROR_BAR_VISIBLE_FIELD,
   MARKER_VISIBLE_FIELD,
+  POINT_STYLE_VISIBLE_FIELD,
 } from './fields';
 import {
   buildChartDimensions,
@@ -100,6 +101,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 
   if (config.type === 'stock') {
     const layers = buildStockLayers(config, data, rows);
+    layers.push(...buildAnnotationLayers(config, data, encoding, rows));
     return buildLayerSpec({
       dimensions,
       rows,
@@ -158,10 +160,17 @@ function buildAnnotationLayers(
     ...buildTrendlineLayers(config, data, encoding, rows),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
     ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
+    ...(isAreaChart(config.type) && hasRowFlag(rows, POINT_STYLE_VISIBLE_FIELD)
+      ? buildPointStyleLayers(encoding)
+      : []),
     ...(hasRowFlag(rows, MARKER_VISIBLE_FIELD) ? buildMarkerLayers(encoding) : []),
   ];
 }
 
 function hasRowFlag(rows: DataRow[], field: string): boolean {
   return rows.some((row) => row[field] === true);
+}
+
+function isAreaChart(type: ChartConfig['type']): boolean {
+  return type === 'area' || type === 'area3d';
 }

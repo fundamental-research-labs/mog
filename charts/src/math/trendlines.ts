@@ -486,29 +486,43 @@ export function generateTrendlinePoints(
 ): TrendlineResult | null {
   if (points.length < 2) return null;
 
-  switch (config.type) {
+  const type = config.type;
+  let result: TrendlineResult | null;
+
+  switch (type) {
     case 'linear':
-      return generateLinearTrendline(points);
+      result =
+        config.intercept !== undefined
+          ? generateLinearTrendlineWithIntercept(points, config.intercept)
+          : generateLinearTrendline(points);
+      break;
 
     case 'exponential':
-      return generateExponentialTrendline(points);
+      result = generateExponentialTrendline(points);
+      break;
 
     case 'logarithmic':
-      return generateLogarithmicTrendline(points);
+      result = generateLogarithmicTrendline(points);
+      break;
 
     case 'polynomial':
-      return generatePolynomialTrendline(points, config.order ?? 2);
+      result = generatePolynomialTrendline(points, config.order ?? 2);
+      break;
 
     case 'power':
-      return generatePowerTrendline(points);
+      result = generatePowerTrendline(points);
+      break;
 
     case 'moving-average':
-      return generateMovingAverageTrendline(points, config.period ?? 2);
+      result = generateMovingAverageTrendline(points, config.period ?? 2);
+      break;
 
     default:
       // Fallback to linear for unknown types
-      return generateLinearTrendline(points);
+      result = generateLinearTrendline(points);
   }
+
+  return result ? applyTrendlineProjection(result, points, config) : null;
 }
 
 // =============================================================================
@@ -538,6 +552,85 @@ function calculateR2(points: [number, number][], predictFn: (x: number) => numbe
   if (ssTotal === 0) return 1; // Perfect prediction when all y values are the same
 
   return Math.max(0, 1 - ssResidual / ssTotal);
+}
+
+function generateLinearTrendlineWithIntercept(
+  points: [number, number][],
+  intercept: number,
+): TrendlineResult {
+  const denominator = points.reduce((sum, [x]) => sum + x * x, 0);
+  const slope =
+    denominator === 0
+      ? 0
+      : points.reduce((sum, [x, y]) => sum + x * (y - intercept), 0) / denominator;
+  const r2 = calculateR2(points, (x) => slope * x + intercept);
+  const xValues = points.map((p) => p[0]);
+  const minX = safeMin(xValues);
+  const maxX = safeMax(xValues);
+
+  return {
+    points: [
+      [minX, slope * minX + intercept],
+      [maxX, slope * maxX + intercept],
+    ],
+    r2,
+    equation: formatLinearEquation(slope, intercept),
+    coefficients: { type: 'linear', slope, intercept },
+  };
+}
+
+function applyTrendlineProjection(
+  result: TrendlineResult,
+  sourcePoints: [number, number][],
+  config: TrendlineConfig,
+): TrendlineResult {
+  if (result.coefficients.type === 'moving-average') return result;
+
+  const forward = finiteProjection(config.forward ?? config.forwardPeriod);
+  const backward = finiteProjection(config.backward ?? config.backwardPeriod);
+  if (forward === 0 && backward === 0) return result;
+
+  const xValues = sourcePoints.map((p) => p[0]).filter(Number.isFinite);
+  if (xValues.length === 0) return result;
+
+  let minX = safeMin(xValues) - backward;
+  let maxX = safeMax(xValues) + forward;
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || minX >= maxX) return result;
+
+  if (result.coefficients.type === 'logarithmic' || result.coefficients.type === 'power') {
+    minX = Math.max(minX, 0.001);
+    if (minX >= maxX) return result;
+  }
+
+  const pointCount = result.coefficients.type === 'linear' ? 2 : Math.max(2, result.points.length);
+  const projected = generateCurvePoints(minX, maxX, pointCount, (x) =>
+    predictTrendline(result.coefficients, x),
+  );
+  return projected.length > 0 ? { ...result, points: projected } : result;
+}
+
+function finiteProjection(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function predictTrendline(coefficients: TrendlineCoefficients, x: number): number {
+  switch (coefficients.type) {
+    case 'linear':
+      return coefficients.slope * x + coefficients.intercept;
+    case 'exponential':
+      return coefficients.a * Math.exp(coefficients.b * x);
+    case 'logarithmic':
+      return x > 0 ? coefficients.a + coefficients.b * Math.log(x) : Number.NaN;
+    case 'polynomial':
+      return coefficients.coefficients.reduce(
+        (sum, coefficient, power) => sum + coefficient * Math.pow(x, power),
+        0,
+      );
+    case 'power':
+      return x > 0 ? coefficients.a * Math.pow(x, coefficients.b) : Number.NaN;
+    case 'moving-average':
+      return Number.NaN;
+  }
 }
 
 /**

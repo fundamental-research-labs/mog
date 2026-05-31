@@ -49,6 +49,7 @@ import {
   POINT_EXPLOSION_FIELD,
   POINT_FILL_FIELD,
   POINT_INDEX_FIELD,
+  POINT_STYLE_VISIBLE_FIELD,
   POINT_STROKE_FIELD,
   POINT_STROKE_WIDTH_FIELD,
   RAW_CATEGORY_FIELD,
@@ -166,6 +167,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           pointIndex: i,
           category: rawCategory,
           value: point.y,
+          xValue: isScatterLikeChart(config) ? scatterXValue(point) : undefined,
           bubbleSize: point.size,
           percentage: percentageForValue(point.y, totalsBySeries[seriesIndex]),
           pieLabelGeometry: pieLabelGeometries[seriesIndex]?.[i],
@@ -242,6 +244,7 @@ function applyPointAnnotations(
     pointIndex: number;
     category: string | number;
     value: number;
+    xValue?: number;
     bubbleSize?: number;
     percentage?: number;
     pieLabelGeometry?: PieLabelGeometry;
@@ -262,6 +265,7 @@ function applyPointStyle(
   pointFormat: PointFormat | undefined,
 ): void {
   const fill = pointFormat?.fill ?? solidFillColor(pointFormat?.visualFormat?.fill);
+  let hasStyle = false;
   if (fill) row[POINT_FILL_FIELD] = fill;
   const line = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
   const stroke = lineColor(line) ?? pointFormat?.border?.color;
@@ -269,6 +273,12 @@ function applyPointStyle(
   const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
   if (pointFormat?.explosion !== undefined) row[POINT_EXPLOSION_FIELD] = pointFormat.explosion;
+  hasStyle =
+    fill !== undefined ||
+    stroke !== undefined ||
+    strokeWidth !== undefined ||
+    pointFormat?.explosion !== undefined;
+  if (hasStyle) row[POINT_STYLE_VISIBLE_FIELD] = true;
 }
 
 function applyMarker(
@@ -365,20 +375,24 @@ function applyErrorBars(
     seriesConfig?: SeriesConfig;
     pointIndex: number;
     value: number;
+    xValue?: number;
     seriesValues: Array<number | undefined>;
   },
 ): void {
   const bars = [
-    context.seriesConfig?.errorBars,
-    context.seriesConfig?.xErrorBars,
-    context.seriesConfig?.yErrorBars,
-  ].filter(Boolean) as ErrorBarConfig[];
+    { config: context.seriesConfig?.errorBars, fallbackDirection: defaultErrorBarDirection(context.config) },
+    { config: context.seriesConfig?.xErrorBars, fallbackDirection: 'x' as const },
+    { config: context.seriesConfig?.yErrorBars, fallbackDirection: 'y' as const },
+  ].filter((entry): entry is { config: ErrorBarConfig; fallbackDirection: 'x' | 'y' } =>
+    Boolean(entry.config),
+  );
   if (bars.length === 0) return;
 
-  for (const bar of bars) {
+  for (const { config: bar, fallbackDirection } of bars) {
     if (bar.visible === false) continue;
-    const direction = bar.direction ?? (context.config?.type === 'scatter' ? 'y' : 'y');
-    const extent = errorBarExtent(bar, context);
+    const direction = normalizedErrorBarDirection(bar.direction, fallbackDirection);
+    const baseValue = direction === 'x' ? (context.xValue ?? context.value) : context.value;
+    const extent = errorBarExtent(bar, { ...context, baseValue });
     if (!extent) continue;
     row[ERROR_BAR_VISIBLE_FIELD] = true;
     if (direction === 'x') {
@@ -390,6 +404,8 @@ function applyErrorBars(
         row[ERROR_BAR_X_MAX_FIELD] = extent.plus;
         if (!bar.noEndCap) row[ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD] = true;
       }
+      if (extent.minus !== undefined && extent.plus === undefined) row[ERROR_BAR_X_MAX_FIELD] = baseValue;
+      if (extent.plus !== undefined && extent.minus === undefined) row[ERROR_BAR_X_MIN_FIELD] = baseValue;
     } else {
       if (extent.minus !== undefined) {
         row[ERROR_BAR_Y_MIN_FIELD] = extent.minus;
@@ -399,12 +415,25 @@ function applyErrorBars(
         row[ERROR_BAR_Y_MAX_FIELD] = extent.plus;
         if (!bar.noEndCap) row[ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD] = true;
       }
+      if (extent.minus !== undefined && extent.plus === undefined) row[ERROR_BAR_Y_MAX_FIELD] = baseValue;
+      if (extent.plus !== undefined && extent.minus === undefined) row[ERROR_BAR_Y_MIN_FIELD] = baseValue;
     }
     const stroke = lineColor(bar.lineFormat);
     const strokeWidth = linePointsToCanvasPx(bar.lineFormat?.width);
     if (stroke) row[ERROR_BAR_STROKE_FIELD] = stroke;
     if (strokeWidth !== undefined) row[ERROR_BAR_STROKE_WIDTH_FIELD] = strokeWidth;
   }
+}
+
+function defaultErrorBarDirection(config?: ChartConfig): 'x' | 'y' {
+  return config && isHorizontalBarType(config.type) ? 'x' : 'y';
+}
+
+function normalizedErrorBarDirection(
+  direction: string | undefined,
+  fallback: 'x' | 'y',
+): 'x' | 'y' {
+  return direction === 'x' ? 'x' : direction === 'y' ? 'y' : fallback;
 }
 
 function mergeLabels(
@@ -500,7 +529,7 @@ function labelPlacement(position: DataLabelConfig['position'], chartType?: Chart
 
 function errorBarExtent(
   bar: ErrorBarConfig,
-  context: { pointIndex: number; value: number; seriesValues: Array<number | undefined> },
+  context: { pointIndex: number; baseValue: number; seriesValues: Array<number | undefined> },
 ): { plus?: number; minus?: number } | undefined {
   const type = bar.valueType ?? 'fixedVal';
   const custom = type === 'cust' || type === 'custom' || bar.plusSource || bar.minusSource;
@@ -510,18 +539,18 @@ function errorBarExtent(
   const minusDelta = custom
     ? customErrorDelta(bar.minusSource, context.pointIndex)
     : baseErrorDelta(type, bar, context);
-  const plus = bar.barType === 'minus' || plusDelta === undefined ? undefined : context.value + plusDelta;
-  const minus = bar.barType === 'plus' || minusDelta === undefined ? undefined : context.value - minusDelta;
+  const plus = bar.barType === 'minus' || plusDelta === undefined ? undefined : context.baseValue + plusDelta;
+  const minus = bar.barType === 'plus' || minusDelta === undefined ? undefined : context.baseValue - minusDelta;
   return plus === undefined && minus === undefined ? undefined : { plus, minus };
 }
 
 function baseErrorDelta(
   type: string,
   bar: ErrorBarConfig,
-  context: { value: number; seriesValues: Array<number | undefined> },
+  context: { baseValue: number; seriesValues: Array<number | undefined> },
 ): number {
   const value = bar.value ?? 1;
-  if (type === 'percentage' || type === 'percentageValue') return Math.abs(context.value) * value / 100;
+  if (type === 'percentage' || type === 'percentageValue') return Math.abs(context.baseValue) * value / 100;
   if (type === 'stdDev') return sampleStdDev(context.seriesValues) * value;
   if (type === 'stdErr') return sampleStdDev(context.seriesValues) / Math.sqrt(validNumbers(context.seriesValues).length) * value;
   return value;

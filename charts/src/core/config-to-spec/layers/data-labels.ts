@@ -80,6 +80,8 @@ export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
         strokeWidth: 1,
         strokeField: DATA_LABEL_LEADER_STROKE_FIELD,
         strokeWidthField: DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
+        dxField: DATA_LABEL_DX_FIELD,
+        dyField: DATA_LABEL_DY_FIELD,
         ...(!position
           ? {
               xField: DATA_LABEL_ANCHOR_X_FIELD,

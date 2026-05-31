@@ -34,6 +34,7 @@ export const POINT_FILL_FIELD = '__mogPointFill';
 export const POINT_STROKE_FIELD = '__mogPointStroke';
 export const POINT_STROKE_WIDTH_FIELD = '__mogPointStrokeWidth';
 export const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
+export const POINT_STYLE_VISIBLE_FIELD = '__mogPointStyleVisible';
 
 export const MARKER_VISIBLE_FIELD = '__mogMarkerVisible';
 export const MARKER_SHAPE_FIELD = '__mogMarkerShape';

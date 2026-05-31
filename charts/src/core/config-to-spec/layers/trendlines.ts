@@ -65,7 +65,7 @@ function buildTrendlineLayer(
     strokeWidth: trendline.lineWidth ?? trendline.lineFormat?.width ?? 2,
     strokeDash: trendline.lineFormat?.dashStyle && trendline.lineFormat.dashStyle !== 'solid' ? [4, 4] : undefined,
   };
-  if (isMovingAverageTrendline(trendline)) {
+  if (usesComputedTrendlineRows(trendline)) {
     const result = trendlineResult(sourceRows(rows, seriesName), xField, trendline);
     return {
       mark,
@@ -198,6 +198,17 @@ function normalizedTrendlineType(type: string | undefined): TrendlineConfig['typ
 
 function isMovingAverageTrendline(trendline: TrendlineConfig): boolean {
   return trendline.type === 'moving-average' || trendline.type === 'movingAvg';
+}
+
+function usesComputedTrendlineRows(trendline: TrendlineConfig): boolean {
+  return (
+    isMovingAverageTrendline(trendline) ||
+    trendline.forward !== undefined ||
+    trendline.backward !== undefined ||
+    trendline.forwardPeriod !== undefined ||
+    trendline.backwardPeriod !== undefined ||
+    trendline.intercept !== undefined
+  );
 }
 
 function numeric(value: unknown): number | undefined {

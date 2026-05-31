@@ -86,6 +86,11 @@ export function generateRuleMarks(
       continue;
     }
 
+    const endpointDx = datumNumber(datum, markSpec.dxField) ?? markSpec.dx ?? 0;
+    const endpointDy = datumNumber(datum, markSpec.dyField) ?? markSpec.dy ?? 0;
+    x2 += endpointDx;
+    y2 += endpointDy;
+
     const colorValue = encodings.color?.accessor(datum);
     const stroke =
       datumString(datum, markSpec.strokeField) ??

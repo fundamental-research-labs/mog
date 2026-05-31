@@ -28,12 +28,17 @@ import {
   DATA_LABEL_TEXT_FIELD,
   LINE_SEGMENT_FIELD,
   SERIES_INDEX_FIELD,
+  STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
+  STOCK_HIGH_FIELD,
+  STOCK_LOW_FIELD,
+  STOCK_OPEN_FIELD,
+  STOCK_VOLUME_FIELD,
 } from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
 import type { PathMark, SymbolMark } from '../../src/primitives/types';
-import type { EncodingSpec, MarkSpec } from '../../src/grammar/spec';
+import type { EncodingSpec, LayerSpec, MarkSpec } from '../../src/grammar/spec';
 import type { ChartConfig, ChartData, ChartType, StoredChartConfig } from '../../src/types';
 
 // =============================================================================
@@ -2906,6 +2911,93 @@ describe('configToSpec dropped fields', () => {
       expect((layers[0].mark as MarkSpec).opacity).toBe(0.3);
       expect((layers[1].mark as MarkSpec).type).toBe('rule');
       expect((layers[2].mark as MarkSpec).type).toBe('rule');
+    });
+
+    it('uses an independent hidden volume y-scale for volume stock charts', () => {
+      const config = makeConfig({ type: 'stock', subType: 'volume-ohlc' as any });
+      const data: ChartData = {
+        categories: ['Day1'],
+        series: [
+          {
+            name: 'Stock',
+            data: [
+              {
+                x: 'Day1',
+                y: 105,
+                [STOCK_OPEN_FIELD]: 95,
+                [STOCK_HIGH_FIELD]: 110,
+                [STOCK_LOW_FIELD]: 90,
+                [STOCK_CLOSE_FIELD]: 105,
+                [STOCK_VOLUME_FIELD]: 1_000_000,
+              },
+            ],
+          },
+        ],
+      };
+
+      const spec = configToSpec(config, data) as LayerSpec;
+
+      expect(spec.resolve).toEqual({
+        scale: { y: 'independent' },
+        axis: { y: 'independent' },
+      });
+      expect(spec.layer[0]?.encoding?.y).toEqual(
+        expect.objectContaining({
+          field: STOCK_VOLUME_FIELD,
+          type: 'quantitative',
+          axis: null,
+        }),
+      );
+    });
+
+    it('keeps volume stock OHLC wicks and bodies on the price scale', () => {
+      const data: ChartData = {
+        categories: ['Day1', 'Day2'],
+        series: [
+          {
+            name: 'Stock',
+            data: [
+              {
+                x: 'Day1',
+                y: 105,
+                [STOCK_OPEN_FIELD]: 95,
+                [STOCK_HIGH_FIELD]: 110,
+                [STOCK_LOW_FIELD]: 90,
+                [STOCK_CLOSE_FIELD]: 105,
+                [STOCK_VOLUME_FIELD]: 1_000_000,
+              },
+              {
+                x: 'Day2',
+                y: 108,
+                [STOCK_OPEN_FIELD]: 105,
+                [STOCK_HIGH_FIELD]: 115,
+                [STOCK_LOW_FIELD]: 98,
+                [STOCK_CLOSE_FIELD]: 108,
+                [STOCK_VOLUME_FIELD]: 750_000,
+              },
+            ],
+          },
+        ],
+      };
+      const withVolume = compile(
+        configToSpec(makeConfig({ type: 'stock', subType: 'volume-ohlc' as any }), data),
+        undefined,
+        {
+          skipAxes: true,
+          skipLegend: true,
+          skipTitle: true,
+        },
+      );
+      const volumePaths = withVolume.marks.filter((mark): mark is PathMark => mark.type === 'path');
+      const [, lowY, , highY] = pathCoordinates(volumePaths[0]);
+      const [, openY, , closeY] = pathCoordinates(volumePaths[2]);
+
+      expect(lowY).toBeGreaterThan(highY);
+      expect(openY).toBeGreaterThan(closeY);
+      expect(openY).toBeLessThan(lowY);
+      expect(closeY).toBeGreaterThan(highY);
+      expect(Math.abs(lowY - highY)).toBeGreaterThan(5);
+      expect(Math.abs(openY - closeY)).toBeGreaterThan(2);
     });
 
     it('adds volume layer for volume-hlc sub-type', () => {

@@ -29,7 +29,8 @@ export function buildStockLayers(
   const layers: UnitSpec[] = [];
   const subType = stockSubType(config, rows);
   const isHLC = subType === 'hlc' || subType === 'volume-hlc';
-  const hasVolume = subType === 'volume-hlc' || subType === 'volume-ohlc';
+  const hasVolume = isVolumeStockSubType(subType);
+  const priceScale = stockPriceScale(rows);
 
   // Volume layer (if applicable) - bar chart of volume at the bottom
   if (hasVolume) {
@@ -37,7 +38,7 @@ export function buildStockLayers(
       mark: { type: 'bar', opacity: 0.3 },
       encoding: {
         x: { field: CATEGORY_FIELD, type: 'nominal' },
-        y: { field: STOCK_VOLUME_FIELD, type: 'quantitative' },
+        y: { field: STOCK_VOLUME_FIELD, type: 'quantitative', axis: null },
         color: { value: '#888888' },
       },
     };
@@ -50,7 +51,7 @@ export function buildStockLayers(
     encoding: {
       x: { field: CATEGORY_FIELD, type: 'nominal' },
       x2: { field: CATEGORY_FIELD, type: 'nominal' },
-      y: { field: STOCK_LOW_FIELD, type: 'quantitative' },
+      y: { field: STOCK_LOW_FIELD, type: 'quantitative', scale: priceScale },
       y2: { field: STOCK_HIGH_FIELD, type: 'quantitative' },
     },
   };
@@ -62,7 +63,7 @@ export function buildStockLayers(
       mark: { type: 'tick' },
       encoding: {
         x: { field: CATEGORY_FIELD, type: 'nominal' },
-        y: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
+        y: { field: STOCK_CLOSE_FIELD, type: 'quantitative', scale: priceScale },
       },
     };
     layers.push(closeLayer);
@@ -76,7 +77,7 @@ export function buildStockLayers(
       encoding: {
         x: { field: CATEGORY_FIELD, type: 'nominal' },
         x2: { field: CATEGORY_FIELD, type: 'nominal' },
-        y: { field: STOCK_OPEN_FIELD, type: 'quantitative' },
+        y: { field: STOCK_OPEN_FIELD, type: 'quantitative', scale: priceScale },
         y2: { field: STOCK_CLOSE_FIELD, type: 'quantitative' },
         color: {
           field: STOCK_DIRECTION_FIELD,
@@ -88,6 +89,10 @@ export function buildStockLayers(
   }
 
   return layers;
+}
+
+export function hasStockVolumeLayer(config: ChartConfig, rows: DataRow[]): boolean {
+  return isVolumeStockSubType(stockSubType(config, rows));
 }
 
 function stockSubType(config: ChartConfig, rows: DataRow[]): string {
@@ -104,6 +109,20 @@ function stockSubType(config: ChartConfig, rows: DataRow[]): string {
   const hasVolume = rows.some((row) => finite(row[STOCK_VOLUME_FIELD]) !== undefined);
   if (hasVolume) return hasOpen ? 'volume-ohlc' : 'volume-hlc';
   return hasOpen ? 'ohlc' : 'hlc';
+}
+
+function isVolumeStockSubType(subType: string): boolean {
+  return subType === 'volume-hlc' || subType === 'volume-ohlc';
+}
+
+function stockPriceScale(rows: DataRow[]): { domain: number[]; zero: false } | undefined {
+  const values = rows.flatMap((row) =>
+    [STOCK_OPEN_FIELD, STOCK_HIGH_FIELD, STOCK_LOW_FIELD, STOCK_CLOSE_FIELD]
+      .map((field) => finite(row[field]))
+      .filter((value): value is number => value !== undefined),
+  );
+  if (values.length === 0) return undefined;
+  return { domain: [Math.min(...values), Math.max(...values)], zero: false };
 }
 
 function finite(value: unknown): number | undefined {

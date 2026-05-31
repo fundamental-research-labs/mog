@@ -123,7 +123,12 @@ export function compileLayered(
     let layerScales: ScaleMap = scales;
 
     if (hasIndependentY && layerUnit.encoding?.y) {
-      const sanitizedLayerData = sanitizeDataForScales(transformedLayerData, layerUnit.encoding);
+      const layerScaleData = extendDataForLayerFields(
+        transformedLayerData,
+        layerUnit.encoding,
+        [layerUnit],
+      );
+      const sanitizedLayerData = sanitizeDataForScales(layerScaleData, layerUnit.encoding);
       const independentScales = createScales(
         layerUnit.encoding,
         sanitizedLayerData,

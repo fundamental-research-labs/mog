@@ -23,7 +23,7 @@ import {
   buildPerSeriesLineLayers,
   shouldBuildPerSeriesLineLayers,
 } from './layers/series-lines';
-import { buildStockLayers } from './layers/stock';
+import { buildStockLayers, hasStockVolumeLayer } from './layers/stock';
 import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
@@ -112,12 +112,19 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   if (config.type === 'stock') {
     const layers = buildStockLayers(config, data, rows);
     layers.push(...buildAnnotationLayers(config, data, encoding, rows));
+    const resolve = hasStockVolumeLayer(config, rows)
+      ? {
+          scale: { y: 'independent' as const },
+          axis: { y: 'independent' as const },
+        }
+      : undefined;
     return buildLayerSpec({
       dimensions,
       rows,
       layers,
       title,
       config: configSpec,
+      resolve,
     });
   }
 

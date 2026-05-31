@@ -30,14 +30,16 @@ import {
   configToSpec,
   extractChartData,
   extractChartDataFromRange,
-  renderMark,
   type CellDataAccessor,
   type ChartData,
-  type ChartDataPoint,
-  type ChartDataSeries,
   type CompileResult,
   type DataRow,
 } from '@mog/charts';
+import {
+  applyWorkbookThemePalette,
+  createChartWorkbookThemeColorPalette,
+  type ChartWorkbookThemeColorPalette,
+} from '@mog/charts/utils';
 import type {
   ChartBounds,
   ChartDataResult,
@@ -55,7 +57,6 @@ import type {
   ChartConfig,
   ChartExportOptionsSnapshot,
   ChartType,
-  ResolvedChartSpecSnapshot,
 } from '@mog-sdk/contracts/data/charts';
 import type {
   CellChangedEvent,
@@ -82,8 +83,28 @@ import {
   wireToLegendConfig,
   wireToSeriesConfigArray,
 } from './chart-type-converters';
+import {
+  hasImportStatus,
+  importStatusToTerminalRenderStatus,
+  isChartPayload,
+  type ImportedChartRenderStatus,
+} from './bridge/import-render-status';
+import { normalizeChartDataForRendering } from './bridge/chart-render-data-normalizer';
+import { isPositionOnlyUpdate } from './bridge/position-only-update';
+import {
+  buildResolvedChartSpecSnapshot,
+  defaultExportOptionsForSize,
+  hashJson,
+} from './bridge/resolved-spec-snapshot';
+import {
+  renderChartError,
+  renderChartMarks,
+  renderChartPlaceholder,
+} from './bridge/chart-renderer';
 
 import type { DocumentContext } from '../../context/types';
+
+export { isPositionOnlyUpdate } from './bridge/position-only-update';
 
 // =============================================================================
 // Chart Layout Types — the narrow ChartLayoutSnapshot used by this
@@ -108,47 +129,6 @@ function normalizeAxisForRendering(axis: NonNullable<ChartConfig['axis']>): Char
   };
 }
 
-/**
- * Fields that represent position/layout-only changes on a floating object.
- * Updates containing only these fields do not affect compiled chart marks
- * (data, axes, series, legends, etc.) and should not trigger cache invalidation.
- */
-const POSITION_ONLY_FIELDS = new Set([
-  'anchorRow',
-  'anchorCol',
-  'anchorRowOffset',
-  'anchorColOffset',
-  'anchorRowOffsetEmu',
-  'anchorColOffsetEmu',
-  'endRow',
-  'endCol',
-  'endRowOffset',
-  'endColOffset',
-  'endRowOffsetEmu',
-  'endColOffsetEmu',
-  'extentCx',
-  'extentCy',
-  'extentCxEmu',
-  'extentCyEmu',
-  'width',
-  'height',
-  'offsetX',
-  'offsetY',
-  'rotation',
-  'zIndex',
-]);
-
-type FloatingObjectWithImportStatus = {
-  type?: unknown;
-  importStatus?: unknown;
-};
-
-type ImportedChartRenderStatus = {
-  terminal: true;
-  message: string;
-  raw: unknown;
-};
-
 type HiddenCellVisibility = {
   hiddenRowsBySheet: Map<string, Set<number>>;
   hiddenColsBySheet: Map<string, Set<number>>;
@@ -158,91 +138,6 @@ type HiddenDimensionBridge = {
   getHiddenRows?: (sheetId: SheetId) => Promise<number[]>;
   getHiddenColumns?: (sheetId: SheetId) => Promise<number[]>;
 };
-
-/**
- * Returns true if changedFields contains only position/layout fields.
- * Returns false for empty or undefined fields (safe default: invalidate on unknown changes).
- */
-export function isPositionOnlyUpdate(fields: string[]): boolean {
-  return fields.length > 0 && fields.every((f) => POSITION_ONLY_FIELDS.has(f));
-}
-
-function hasImportStatus(value: unknown): value is { importStatus: unknown } {
-  return typeof value === 'object' && value !== null && 'importStatus' in value;
-}
-
-function isChartPayload(value: unknown): value is FloatingObjectWithImportStatus {
-  return (
-    typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'chart'
-  );
-}
-
-function stringField(value: unknown, keys: string[]): string | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  for (const key of keys) {
-    const field = record[key];
-    if (typeof field === 'string' && field.trim()) return field.trim();
-  }
-  return undefined;
-}
-
-function booleanField(value: unknown, keys: string[]): boolean | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  for (const key of keys) {
-    const field = record[key];
-    if (typeof field === 'boolean') return field;
-  }
-  return undefined;
-}
-
-function importStatusToTerminalRenderStatus(status: unknown): ImportedChartRenderStatus | null {
-  if (status === null || status === undefined) return null;
-
-  const tokenSource =
-    typeof status === 'string'
-      ? status
-      : stringField(status, [
-          'state',
-          'status',
-          'kind',
-          'code',
-          'result',
-          'recoverability',
-          'renderability',
-        ]);
-  const token = tokenSource
-    ?.trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, '');
-  const renderable = booleanField(status, ['renderable', 'canRender']);
-  const terminal = booleanField(status, ['terminal', 'isTerminal']);
-  const normalTokens = ['renderable', 'ready', 'ok', 'success', 'loaded', 'native'];
-  const terminalTokens = [
-    'nonrenderable',
-    'notrenderable',
-    'preservednotrenderable',
-    'unsupported',
-    'unsupportedchart',
-    'unsupportedcharttype',
-    'placeholder',
-    'terminal',
-    'failed',
-    'error',
-  ];
-
-  const isTerminal =
-    renderable === false ||
-    (terminal === true && token !== undefined && !normalTokens.includes(token)) ||
-    (token !== undefined && terminalTokens.includes(token));
-  if (!isTerminal) return null;
-
-  const message =
-    stringField(status, ['message', 'label', 'reason', 'description']) ??
-    'Imported chart cannot be rendered';
-  return { terminal: true, message, raw: status };
-}
 
 function isCellHidden(
   sheetId: string | undefined,
@@ -324,653 +219,10 @@ function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   };
 }
 
-type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
-type AxisSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['axes']['category']>;
-type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']['dataRange']>;
-
 type ChartRenderData = {
   config: ChartConfig;
   data: ChartData;
 };
-
-type ThemeColorReference = {
-  theme: string;
-  tintShade?: number;
-  tint_shade?: number;
-};
-
-type WorkbookThemeColorPalette = Record<string, string>;
-
-function normalizeHexColor(value: string): string | undefined {
-  const trimmed = value.trim();
-  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
-  if (/^[0-9a-fA-F]{6}$/.test(hex)) return `#${hex.toUpperCase()}`;
-  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
-    return `#${hex
-      .split('')
-      .map((ch) => ch + ch)
-      .join('')
-      .toUpperCase()}`;
-  }
-  return undefined;
-}
-
-function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return [0, 0, l];
-
-  const delta = max - min;
-  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-  let h = 0;
-  if (max === r) {
-    h = (g - b) / delta + (g < b ? 6 : 0);
-  } else if (max === g) {
-    h = (b - r) / delta + 2;
-  } else {
-    h = (r - g) / delta + 4;
-  }
-  return [h / 6, s, l];
-}
-
-function hueToRgb(p: number, q: number, t: number): number {
-  let hue = t;
-  if (hue < 0) hue += 1;
-  if (hue > 1) hue -= 1;
-  if (hue < 1 / 6) return p + (q - p) * 6 * hue;
-  if (hue < 1 / 2) return q;
-  if (hue < 2 / 3) return p + (q - p) * (2 / 3 - hue) * 6;
-  return p;
-}
-
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  if (s === 0) return [l, l, l];
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
-  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3)];
-}
-
-function applyTintShade(hexColor: string, tintShade: number | undefined): string {
-  if (tintShade === undefined || tintShade === 0) return hexColor;
-  const tintAmount =
-    tintShade > 0 && tintShade <= 1 ? (tintShade > 0.5 ? 1 - tintShade : tintShade) : tintShade;
-  const normalized = normalizeHexColor(hexColor);
-  if (!normalized) return hexColor;
-  const hex = normalized.slice(1);
-  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
-  const [h, s, l] = rgbToHsl(r, g, b);
-  const adjustedL =
-    tintAmount > 0 ? l * (1 - tintAmount) + tintAmount : l * Math.max(0, 1 + tintAmount);
-  const [outR, outG, outB] = hslToRgb(h, s, Math.max(0, Math.min(1, adjustedL)));
-  const channels = [outR, outG, outB].map((channel) =>
-    Math.max(0, Math.min(255, Math.round(channel * 255))),
-  );
-  return `#${channels
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase()}`;
-}
-
-function themeSlotKey(theme: string): string {
-  switch (theme.toLowerCase()) {
-    case 'tx1':
-      return 'dk1';
-    case 'bg1':
-      return 'lt1';
-    case 'tx2':
-      return 'dk2';
-    case 'bg2':
-      return 'lt2';
-    case 'folhlink':
-      return 'folhlink';
-    default:
-      return theme.toLowerCase();
-  }
-}
-
-function isThemeColorReference(value: unknown): value is ThemeColorReference {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { theme?: unknown }).theme === 'string'
-  );
-}
-
-function resolveThemeColorReference(
-  color: ThemeColorReference,
-  palette: WorkbookThemeColorPalette,
-): string | ThemeColorReference {
-  const base = palette[themeSlotKey(color.theme)];
-  if (!base) return color;
-  return applyTintShade(base, color.tintShade ?? color.tint_shade);
-}
-
-function resolveThemeColorsInValue(value: unknown, palette: WorkbookThemeColorPalette): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => resolveThemeColorsInValue(item, palette));
-  }
-  if (isThemeColorReference(value)) {
-    return resolveThemeColorReference(value, palette);
-  }
-  if (typeof value === 'object' && value !== null) {
-    const output: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      output[key] = resolveThemeColorsInValue(item, palette);
-    }
-    return output;
-  }
-  return value;
-}
-
-function workbookThemeColorPalette(
-  theme: ThemeData | null | undefined,
-): WorkbookThemeColorPalette | null {
-  const colors = theme?.colors;
-  if (!Array.isArray(colors) || colors.length === 0) return null;
-
-  const palette: WorkbookThemeColorPalette = {};
-  for (const color of colors) {
-    const normalized = normalizeHexColor(color.color);
-    if (normalized) palette[themeSlotKey(color.name)] = normalized;
-  }
-  return Object.keys(palette).length > 0 ? palette : null;
-}
-
-function withCategoryFormatCodes(data: ChartData, config: ChartConfig): ChartData {
-  const categoryLabelFormat = config.series?.find(
-    (series) => series.categoryLabelFormat,
-  )?.categoryLabelFormat;
-  if (!categoryLabelFormat) return data;
-
-  const categoryFormatCodes = data.categories.map(() => categoryLabelFormat.formatCode ?? null);
-  for (const point of categoryLabelFormat.points ?? []) {
-    if (point.idx >= 0 && point.idx < categoryFormatCodes.length && point.formatCode) {
-      categoryFormatCodes[point.idx] = point.formatCode;
-    }
-  }
-
-  return categoryFormatCodes.some(Boolean) ? { ...data, categoryFormatCodes } : data;
-}
-
-function hasVisibleChartLineStyle(line: unknown): boolean {
-  if (!line || typeof line !== 'object') return false;
-  const candidate = line as { color?: unknown; width?: unknown };
-  return candidate.color !== undefined || candidate.width !== undefined;
-}
-
-function isNoFillNoLineSeriesConfig(
-  series: NonNullable<ChartConfig['series']>[number] | undefined,
-): boolean {
-  if (!series?.format) return false;
-  return series.format.fill?.type === 'none' && !hasVisibleChartLineStyle(series.format.line);
-}
-
-function isBlankChartScalar(value: string | number | null | undefined): boolean {
-  return value === null || value === undefined || value === '';
-}
-
-function isBlankChartPoint(point: ChartDataPoint | undefined): boolean {
-  if (!point) return true;
-  return point.valueState === 'blank';
-}
-
-type ImportedPointCache = {
-  pointCount?: unknown;
-  points?: unknown;
-};
-
-type ImportedPointCachePoint = {
-  idx?: unknown;
-  value?: unknown;
-};
-
-function importedCategoryCache(
-  series: NonNullable<ChartConfig['series']>[number] | undefined,
-): ImportedPointCache | undefined {
-  if (!series || typeof series !== 'object') return undefined;
-  const cache = (series as { categoryCache?: unknown }).categoryCache;
-  return cache && typeof cache === 'object' ? (cache as ImportedPointCache) : undefined;
-}
-
-function importedCachePointCount(cache: ImportedPointCache | undefined): number | undefined {
-  const pointCount = cache?.pointCount;
-  return typeof pointCount === 'number' && Number.isInteger(pointCount) && pointCount >= 0
-    ? pointCount
-    : undefined;
-}
-
-function importedCachePoint(
-  cache: ImportedPointCache | undefined,
-  pointIndex: number,
-): ImportedPointCachePoint | undefined {
-  const points = Array.isArray(cache?.points) ? cache.points : [];
-  return points.find((point): point is ImportedPointCachePoint => {
-    if (!point || typeof point !== 'object') return false;
-    return (point as ImportedPointCachePoint).idx === pointIndex;
-  });
-}
-
-function importedCategoryCacheValue(
-  cache: ImportedPointCache | undefined,
-  pointIndex: number,
-): string | number | undefined {
-  const point = importedCachePoint(cache, pointIndex);
-  if (!point) return undefined;
-  const value = point.value;
-  if (value === null || value === undefined || value === '') return '';
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : String(value);
-}
-
-function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): ChartData {
-  const categorySeriesIndex =
-    config.series?.findIndex((series) => Boolean(series.categories) || importedCategoryCache(series)) ??
-    -1;
-  const seriesConfig = categorySeriesIndex >= 0 ? config.series?.[categorySeriesIndex] : undefined;
-  if (!seriesConfig) return data;
-
-  const categoryCache = importedCategoryCache(seriesConfig);
-  const categoryPointCount = importedCachePointCount(categoryCache);
-  if (!categoryCache && !seriesConfig.categories) return data;
-
-  const maxLength = Math.max(
-    data.categories.length,
-    ...data.series.map((series) => series.data.length),
-  );
-  if (maxLength <= 0) return data;
-
-  let changed = false;
-  const categories: Array<string | number> = [];
-  for (let pointIndex = 0; pointIndex < maxLength; pointIndex += 1) {
-    const cached = importedCategoryCacheValue(categoryCache, pointIndex);
-    const isOmittedCachedPoint =
-      cached === undefined &&
-      categoryPointCount !== undefined &&
-      pointIndex >= 0 &&
-      pointIndex < categoryPointCount;
-    const isBeyondCachedDomain =
-      categoryPointCount !== undefined &&
-      pointIndex >= categoryPointCount &&
-      data.series.every((series) => isBlankChartPoint(series.data[pointIndex]));
-    const configuredSeriesCategory = data.series[categorySeriesIndex]?.data[pointIndex]?.x;
-    const fallbackCategory =
-      data.categories[pointIndex] ??
-      data.series.find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
-      '';
-    const current = seriesConfig.categories
-      ? (configuredSeriesCategory ?? fallbackCategory)
-      : fallbackCategory;
-    const next = cached ?? (isOmittedCachedPoint || isBeyondCachedDomain ? '' : current);
-    categories.push(next);
-    if (next !== data.categories[pointIndex]) changed = true;
-  }
-
-  const series = data.series.map((item) => ({
-    ...item,
-    data: item.data.map((point, pointIndex) => {
-      const category = categories[pointIndex];
-      if (!point || point.x === category) return point;
-      changed = true;
-      return { ...point, x: category, name: String(category) };
-    }),
-  }));
-
-  return changed ? { ...data, categories, series } : data;
-}
-
-function trimTrailingBlankChartData(data: ChartData): ChartData {
-  let lastIndex = Math.max(
-    data.categories.length,
-    ...data.series.map((series) => series.data.length),
-  ) - 1;
-
-  while (
-    lastIndex >= 0 &&
-    isBlankChartScalar(data.categories[lastIndex]) &&
-    data.series.every((series) => isBlankChartPoint(series.data[lastIndex]))
-  ) {
-    lastIndex -= 1;
-  }
-
-  if (lastIndex < 0) return { ...data, categories: [], series: [] };
-  if (
-    lastIndex === data.categories.length - 1 &&
-    data.series.every((series) => lastIndex === series.data.length - 1)
-  ) {
-    return data;
-  }
-
-  return {
-    ...data,
-    categories: data.categories.slice(0, lastIndex + 1),
-    ...(data.categoryFormatCodes
-      ? { categoryFormatCodes: data.categoryFormatCodes.slice(0, lastIndex + 1) }
-      : {}),
-    series: data.series.map((series) => ({
-      ...series,
-      data: series.data.slice(0, lastIndex + 1),
-    })),
-  };
-}
-
-function normalizeChartDataForRendering(data: ChartData, config: ChartConfig): ChartData {
-  return trimTrailingBlankChartData(
-    normalizeImportedCategoryData(withCategoryFormatCodes(data, config), config),
-  );
-}
-
-function defaultExportOptionsForSize(width: number, height: number): ChartExportOptionsSnapshot {
-  return {
-    format: 'png',
-    width,
-    height,
-    pixelRatio: 1,
-    physicalWidth: Math.max(1, Math.round(width)),
-    physicalHeight: Math.max(1, Math.round(height)),
-    backgroundColor: '#ffffff',
-  };
-}
-
-function buildResolvedChartSpecSnapshot(input: {
-  chart: ChartFloatingObject;
-  sheetId: SheetId;
-  config: ChartConfig;
-  chartData: ChartData;
-  resolvedRanges: Charts.ResolvedChartRangeReferences;
-  exportOptions: ChartExportOptionsSnapshot;
-  compilerPathId: CompilerPathId;
-  compilerInputHash: string;
-}): ResolvedChartSpecSnapshot {
-  const categories = input.chartData.categories.map(snapshotScalar);
-  const hasExplicitSeriesReferences =
-    input.config.series?.some((item) =>
-      Boolean(item.values || item.categories || item.bubbleSize),
-    ) ?? false;
-  const series = input.chartData.series.map((dataSeries, index) =>
-    snapshotSeries(dataSeries, index, categories, input.config, hasExplicitSeriesReferences),
-  );
-  const legend = snapshotLegend(input.config, series);
-
-  return {
-    schemaVersion: 1,
-    chartId: input.chart.id,
-    sheetId: String(input.sheetId),
-    chartObject: {
-      id: input.chart.id,
-      name: input.chart.name,
-      anchorRow: input.chart.anchor?.anchorRow,
-      anchorCol: input.chart.anchor?.anchorCol,
-      width: input.chart.widthCells ?? input.chart.width,
-      height: input.chart.heightCells ?? input.chart.height,
-      widthPt: input.chart.widthPt,
-      heightPt: input.chart.heightPt,
-    },
-    export: input.exportOptions,
-    implementation: {
-      renderAuthority: 'chartBridge',
-      renderStatus: 'renderable',
-      compilerPathId: input.compilerPathId,
-      compilerInputHash: input.compilerInputHash,
-      compilerVersion: 1,
-    },
-    resolved: {
-      chartType: input.config.type,
-      subType: input.config.subType,
-      grouping: groupingFor(input.config),
-      title: {
-        present: titleText(input.config) !== undefined,
-        text: titleText(input.config),
-      },
-      legend,
-      axes: {
-        category: snapshotAxis(input.config.axis?.categoryAxis ?? input.config.axis?.xAxis),
-        value: snapshotAxis(input.config.axis?.valueAxis ?? input.config.axis?.yAxis),
-        secondaryCategory: snapshotAxis(input.config.axis?.secondaryCategoryAxis),
-        secondaryValue: snapshotAxis(
-          input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis,
-        ),
-      },
-      series,
-      categories,
-      plot: {
-        displayBlanksAs: input.config.displayBlanksAs,
-        plotVisibleOnly: input.config.plotVisibleOnly,
-        gapWidth: input.config.gapWidth,
-        overlap: input.config.overlap,
-      },
-      ranges: {
-        dataRange: snapshotRange(input.resolvedRanges.dataRange),
-        categoryRange: snapshotRange(input.resolvedRanges.categoryRange),
-        seriesRange: snapshotRange(input.resolvedRanges.seriesRange),
-        seriesReferences: input.resolvedRanges.seriesReferences.map((seriesReference) => ({
-          index: seriesReference.index,
-          values: snapshotRange(seriesReference.values),
-          categories: snapshotRange(seriesReference.categories),
-        })),
-        diagnostics: input.resolvedRanges.diagnostics.map((diagnostic) => ({
-          kind: diagnostic.kind,
-          code: diagnostic.code,
-          ref: diagnostic.ref,
-          sheetName: diagnostic.sheetName,
-          message: diagnostic.message,
-        })),
-      },
-      dataHashes: {
-        categoriesHash: hashJson(categories),
-        seriesHash: hashJson(series),
-      },
-    },
-    diagnostics: {
-      compiler: input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
-      unsupportedFeatures: unsupportedFeatureDiagnostics(input.config),
-    },
-  };
-}
-
-function snapshotAxis(
-  axis: NonNullable<ChartConfig['axis']>['categoryAxis'],
-): AxisSnapshot | undefined {
-  if (!axis) return undefined;
-  return {
-    present: true,
-    visible: axis.visible ?? axis.show,
-    title: axis.title,
-    axisType: axis.axisType ?? axis.type,
-    scaleType: axis.scaleType,
-    categoryType: axis.categoryType,
-    min: axis.min,
-    max: axis.max,
-    majorUnit: axis.majorUnit,
-    minorUnit: axis.minorUnit,
-    logBase: axis.logBase,
-    numberFormat: axis.numberFormat,
-    position: axis.position,
-    reverse: axis.reverse,
-  };
-}
-
-function snapshotLegend(
-  config: ChartConfig,
-  series: ResolvedChartSpecSnapshot['resolved']['series'],
-): ResolvedChartSpecSnapshot['resolved']['legend'] {
-  const legend = config.legend;
-  const present = !!legend && legend.position !== 'none';
-  const deletedEntries = new Set(
-    legend?.entries
-      ?.filter((entry) => entry.delete || entry.visible === false)
-      .map((entry) => entry.idx) ?? [],
-  );
-  const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
-  return {
-    present,
-    visible,
-    position: legend?.position,
-    entries: present ? series.map((item) => item.name) : [],
-    visibleEntries: visible
-      ? series
-          .filter(
-            (_item, index) =>
-              !deletedEntries.has(index) && !isNoFillNoLineSeriesConfig(config.series?.[index]),
-          )
-          .map((item) => item.name)
-      : [],
-  };
-}
-
-function snapshotSeries(
-  series: ChartDataSeries,
-  index: number,
-  categories: Array<string | number | null>,
-  config: ChartConfig,
-  hasExplicitSeriesReferences: boolean,
-): ResolvedChartSpecSnapshot['resolved']['series'][number] {
-  const configured = config.series?.[index];
-  const values: Array<number | null> = [];
-  const blankMask: boolean[] = [];
-  const seriesCategories = snapshotCategoriesForSeries(
-    series,
-    configured,
-    categories,
-    hasExplicitSeriesReferences,
-  );
-  const length = Math.max(seriesCategories.length, series.data.length);
-  for (let pointIndex = 0; pointIndex < length; pointIndex += 1) {
-    const value = numericPointValue(series.data[pointIndex]);
-    values.push(value);
-    blankMask.push(value === null);
-  }
-  const source = {
-    values: configured?.values,
-    categories: configured?.categories,
-    bubbleSize: configured?.bubbleSize,
-  };
-  const name = snapshotSeriesName(series, configured, index);
-
-  return {
-    index,
-    order: configured?.order ?? configured?.idx ?? index,
-    name,
-    type: series.type ?? configured?.type,
-    axisGroup: series.yAxisIndex === 1 || configured?.yAxisIndex === 1 ? 'secondary' : 'primary',
-    color: series.color ?? configured?.color ?? config.colors?.[index],
-    source,
-    categories: seriesCategories,
-    values,
-    blankMask,
-    dataHash: hashJson({
-      name,
-      source,
-      categories: seriesCategories,
-      categoryFormatCodes: config.series?.[index]?.categoryLabelFormat,
-      values,
-      blankMask,
-    }),
-  };
-}
-
-function snapshotSeriesName(
-  series: ChartDataSeries,
-  configured: NonNullable<ChartConfig['series']>[number] | undefined,
-  index: number,
-): string {
-  if (!configured?.name && typeof configured?.idx === 'number' && Number.isInteger(configured.idx)) {
-    return `Series ${configured.idx}`;
-  }
-  return series.name || `Series ${index + 1}`;
-}
-
-function snapshotCategoriesForSeries(
-  series: ChartDataSeries,
-  configured: NonNullable<ChartConfig['series']>[number] | undefined,
-  categories: Array<string | number | null>,
-  hasExplicitSeriesReferences: boolean,
-): Array<string | number | null> {
-  if (configured?.categories) {
-    return series.data.map((point) => snapshotScalar(point?.x));
-  }
-  return !hasExplicitSeriesReferences ? categories : [];
-}
-
-function snapshotRange(reference: Charts.ResolvedChartRangeReference | null): RangeSnapshot | null {
-  if (!reference) return null;
-  return {
-    kind: reference.kind,
-    source: reference.source,
-    ref: reference.ref,
-    range: {
-      sheetId: reference.range.sheetId ? String(reference.range.sheetId) : undefined,
-      startRow: reference.range.startRow,
-      startCol: reference.range.startCol,
-      endRow: reference.range.endRow,
-      endCol: reference.range.endCol,
-    },
-  };
-}
-
-function titleText(config: ChartConfig): string | undefined {
-  const text =
-    config.title ??
-    config.chartTitle?.text ??
-    config.titleRichText?.map((part) => part.text).join('');
-  return text || undefined;
-}
-
-function groupingFor(config: ChartConfig): ResolvedChartSpecSnapshot['resolved']['grouping'] {
-  if (config.subType === 'stacked') return 'stacked';
-  if (config.subType === 'percentStacked') return 'percentStacked';
-  if (config.subType === 'clustered') return 'clustered';
-  return 'standard';
-}
-
-function numericPointValue(point: ChartDataPoint | undefined): number | null {
-  if (point?.valueState && point.valueState !== 'value') return null;
-  if (!point || typeof point.y !== 'number' || !Number.isFinite(point.y)) return null;
-  return point.y;
-}
-
-function snapshotScalar(value: string | number | null | undefined): string | number | null {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (typeof value === 'string') return value;
-  return null;
-}
-
-function unsupportedFeatureDiagnostics(config: ChartConfig): string[] {
-  const unsupported: string[] = [];
-  if (String(config.type).endsWith('3d'))
-    unsupported.push('3d chart rendering is approximated by the 2d chart backend');
-  if (config.type === 'surface' || config.type === 'surface3d')
-    unsupported.push('surface chart rendering is not fully semantic');
-  if (config.wireframe) unsupported.push('surface wireframe rendering is not fully semantic');
-  if (config.pivotOptions || config.showAllFieldButtons)
-    unsupported.push('pivot chart field buttons are not rendered');
-  return unsupported;
-}
-
-function hashJson(value: unknown): string {
-  const text = stableStringify(value);
-  let hashA = 0x811c9dc5;
-  let hashB = 0x811c9dc5 ^ text.length;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    hashA = Math.imul(hashA ^ code, 0x01000193);
-    hashB = Math.imul(hashB ^ code, 0x01000193);
-  }
-  return `${(hashA >>> 0).toString(16).padStart(8, '0')}${(hashB >>> 0)
-    .toString(16)
-    .padStart(8, '0')}`;
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .filter((key) => record[key] !== undefined)
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    .join(',')}}`;
-}
 
 // =============================================================================
 // Chart WASM acceleration (optional — injected by compute-bridge)
@@ -1130,7 +382,8 @@ export class ChartBridge implements IChartBridge {
   private started = false;
 
   /** Workbook theme color palette used to resolve imported chart scheme colors. */
-  private workbookThemeColorPalettePromise: Promise<WorkbookThemeColorPalette | null> | null = null;
+  private workbookThemeColorPalettePromise: Promise<ChartWorkbookThemeColorPalette | null> | null =
+    null;
 
   constructor(private ctx: DocumentContext) {}
 
@@ -2180,22 +1433,22 @@ export class ChartBridge implements IChartBridge {
   private async withWorkbookThemeColors(config: ChartConfig): Promise<ChartConfig> {
     const palette = await this.getWorkbookThemeColorPalette();
     if (!palette) return config;
-    return resolveThemeColorsInValue(config, palette) as ChartConfig;
+    return applyWorkbookThemePalette(config, palette);
   }
 
-  private async getWorkbookThemeColorPalette(): Promise<WorkbookThemeColorPalette | null> {
+  private async getWorkbookThemeColorPalette(): Promise<ChartWorkbookThemeColorPalette | null> {
     this.workbookThemeColorPalettePromise ??= this.loadWorkbookThemeColorPalette();
     return this.workbookThemeColorPalettePromise;
   }
 
-  private async loadWorkbookThemeColorPalette(): Promise<WorkbookThemeColorPalette | null> {
+  private async loadWorkbookThemeColorPalette(): Promise<ChartWorkbookThemeColorPalette | null> {
     const bridge = this.ctx.computeBridge as {
       getWorkbookTheme?: () => Promise<ThemeData | null | undefined>;
     };
     if (!bridge.getWorkbookTheme) return null;
 
     try {
-      return workbookThemeColorPalette(await bridge.getWorkbookTheme());
+      return createChartWorkbookThemeColorPalette((await bridge.getWorkbookTheme())?.colors);
     } catch {
       return null;
     }
@@ -2286,7 +1539,7 @@ export class ChartBridge implements IChartBridge {
   ): void {
     const legacyImportRenderStatus = this.chartImportRenderStatus.get(chartId);
     if (legacyImportRenderStatus) {
-      this.renderError(ctx, bounds, {
+      renderChartError(ctx, bounds, {
         code: 'RENDER_FAILED',
         message: legacyImportRenderStatus.message,
         chartId,
@@ -2302,7 +1555,7 @@ export class ChartBridge implements IChartBridge {
       // recovery path is the existing floating-object-pipeline call into
       // sheet-coordinator.ts which dirties the drawing layer once the event
       // lands. ensureCompiled would no-op anyway without a sheetId.
-      this.renderPlaceholder(ctx, bounds, 'Chart loading…');
+      renderChartPlaceholder(ctx, bounds, 'Chart loading…');
       return;
     }
     const key = this.cacheKey(chartId, resolvedSheetId);
@@ -2310,7 +1563,7 @@ export class ChartBridge implements IChartBridge {
     const importRenderStatus =
       this.chartImportRenderStatus.get(key) ?? this.chartImportRenderStatus.get(chartId);
     if (importRenderStatus) {
-      this.renderError(ctx, bounds, {
+      renderChartError(ctx, bounds, {
         code: 'RENDER_FAILED',
         message: importRenderStatus.message,
         chartId,
@@ -2324,7 +1577,7 @@ export class ChartBridge implements IChartBridge {
       // Error precedence over loading: a known error state must not retry on
       // every frame. invalidateChart() clears errorCache when the upstream
       // fix lands (data range edited, etc.) and recovery happens normally.
-      this.renderError(ctx, bounds, error);
+      renderChartError(ctx, bounds, error);
       return;
     }
 
@@ -2339,7 +1592,7 @@ export class ChartBridge implements IChartBridge {
       // Cold-cache path: placeholder + background recompile. The compile
       // commit fires onCacheUpdate, the renderer dirties the drawing layer,
       // the next frame paints real marks from cache.
-      this.renderPlaceholder(ctx, bounds, 'Chart loading…');
+      renderChartPlaceholder(ctx, bounds, 'Chart loading…');
       if (!isCompilePending) {
         void this.ensureCompiled(chartId, resolvedSheetId);
       }
@@ -2354,7 +1607,7 @@ export class ChartBridge implements IChartBridge {
       void this.ensureCompiled(chartId, resolvedSheetId);
     }
 
-    this.renderMarks(ctx, marks, bounds);
+    renderChartMarks(ctx, marks, bounds);
   }
 
   /**
@@ -2375,98 +1628,6 @@ export class ChartBridge implements IChartBridge {
     const resolvedSheetId = sheetId ?? this.chartSheetIndex.get(chartId);
     if (!resolvedSheetId) return;
     await this.getMarks(resolvedSheetId, chartId);
-  }
-
-  /**
-   * Render a placeholder rectangle (cold-cache / loading state).
-   *
-   * Intentionally a minimal duplicate of
-   * `canvas/drawing-canvas/src/renderers/render-utils.ts:renderPlaceholder` —
-   * the kernel cannot import from canvas (kernel → canvas is forbidden by
-   * the layering rules). Style mirrors `renderError` below: square-corner
-   * grey rect, centred 12px label.
-   *
-   * Coordinate semantics: paints at `(bounds.x, bounds.y, bounds.w, bounds.h)`
-   * in the engine-translated frame (engine + withRenderContext have already
-   * applied the viewport offset). Do NOT translate to (0, 0) first — that
-   * re-introduces the very frame-drift this round removes.
-   */
-  private renderPlaceholder(
-    ctx: CanvasRenderingContext2D,
-    bounds: ChartBounds,
-    label: string,
-  ): void {
-    const { x, y, width, height } = bounds;
-
-    ctx.save();
-    ctx.fillStyle = '#f0f0f0';
-    ctx.strokeStyle = '#cccccc';
-    ctx.lineWidth = 1;
-    ctx.fillRect(x, y, width, height);
-    ctx.strokeRect(x, y, width, height);
-
-    ctx.fillStyle = '#999999';
-    ctx.font = '12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, x + width / 2, y + height / 2, width - 8);
-    ctx.restore();
-  }
-
-  /**
-   * Render an error state for a chart.
-   */
-  private renderError(ctx: CanvasRenderingContext2D, bounds: ChartBounds, error: ChartError): void {
-    const { x, y, width, height } = bounds;
-
-    // Draw error background
-    ctx.fillStyle = '#f8d7da';
-    ctx.fillRect(x, y, width, height);
-
-    // Draw error border
-    ctx.strokeStyle = '#f5c6cb';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, width, height);
-
-    // Draw error text
-    ctx.fillStyle = '#721c24';
-    ctx.font = '14px system-ui, -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Truncate message if too long
-    const maxChars = Math.floor(width / 8);
-    const message =
-      error.message.length > maxChars
-        ? error.message.substring(0, maxChars - 3) + '...'
-        : error.message;
-
-    ctx.fillText(message, x + width / 2, y + height / 2);
-  }
-
-  /**
-   * Render compiled marks to canvas using the charts library renderer.
-   */
-  private renderMarks(
-    ctx: CanvasRenderingContext2D,
-    marks: ChartMark[],
-    bounds: ChartBounds,
-  ): void {
-    ctx.save();
-    ctx.translate(bounds.x, bounds.y);
-
-    // Create clipping region
-    ctx.beginPath();
-    ctx.rect(0, 0, bounds.width, bounds.height);
-    ctx.clip();
-
-    // Use the charts library's renderMark for full mark type support
-    // (rect, path, arc, text, symbol)
-    for (const mark of marks) {
-      renderMark(ctx, mark as Parameters<typeof renderMark>[1]);
-    }
-
-    ctx.restore();
   }
 
   // ===========================================================================
@@ -2571,7 +1732,7 @@ export class ChartBridge implements IChartBridge {
   // (OffscreenCanvas or DOM canvas) which is not available in headless/kernel
   // mode. To support server-side chart image export:
   //   1. Use OffscreenCanvas (available in Web Workers and Node 18+)
-  //   2. Call getMarks() to compile the chart, then renderMarks() to an
+  //   2. Call getMarks() to compile the chart, then renderChartMarks() to an
   //      OffscreenCanvas, then canvas.toDataURL() / canvas.toBlob()
   //   3. Wire this through chart-operations.ts exportChartImage()
 }

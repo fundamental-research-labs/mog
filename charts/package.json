@@ -39,6 +39,11 @@
       "types": "./dist/interaction/index.d.ts",
       "import": "./dist/interaction/index.js"
     },
+    "./utils": {
+      "development": "./src/utils/index.ts",
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
+    },
     "./math": {
       "development": "./src/math/index.ts",
       "types": "./dist/math/index.d.ts",

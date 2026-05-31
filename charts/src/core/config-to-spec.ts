@@ -31,11 +31,9 @@ import type {
 } from '../grammar/spec';
 import type {
   AxisConfig,
-  ChartColor,
   ChartConfig,
   ChartData,
   ChartDataPoint,
-  ChartFill,
   ChartFormat,
   ChartType,
   DataLabelConfig,
@@ -46,6 +44,19 @@ import type {
 } from '../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../primitives/scales/linear';
+import {
+  chartColorTintShade,
+  chartStyleRepeatThemeColor,
+  chartThemeColorKey,
+  resolveChartColor,
+  resolveChartTextColor,
+  resolveFormatFillColor,
+  resolveFormatFillOpacity,
+  resolveFormatLineColor,
+  resolveGridlineColor,
+  resolveLineColor,
+  resolveSolidFillColor,
+} from '../utils/chart-colors';
 
 // =============================================================================
 // Layout Constants
@@ -72,196 +83,6 @@ const MINOR_GRIDLINE_TICK_COUNT = 10;
 const SERIES_OPACITY_FIELD = '__mogSeriesOpacity';
 const CATEGORY_KEY_PREFIX = '__mogCategory';
 
-// =============================================================================
-// Imported Style Helpers
-// =============================================================================
-
-function normalizeHexColor(value: string): string | undefined {
-  const trimmed = value.trim();
-  const hex = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
-  if (/^[0-9a-fA-F]{6}$/.test(hex)) return `#${hex}`;
-  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
-    return `#${hex
-      .split('')
-      .map((ch) => ch + ch)
-      .join('')}`;
-  }
-  return trimmed.startsWith('#') ? trimmed : undefined;
-}
-
-function schemeColorHex(value: string): string | undefined {
-  switch (value) {
-    case 'Dk1':
-    case 'dk1':
-    case 'Tx1':
-    case 'tx1':
-      return '#000000';
-    case 'Lt1':
-    case 'lt1':
-    case 'Bg1':
-    case 'bg1':
-      return '#FFFFFF';
-    case 'Dk2':
-    case 'dk2':
-    case 'Tx2':
-    case 'tx2':
-      return '#1F497D';
-    case 'Lt2':
-    case 'lt2':
-    case 'Bg2':
-    case 'bg2':
-      return '#EEECE1';
-    case 'Accent1':
-    case 'accent1':
-      return '#4472C4';
-    case 'Accent2':
-    case 'accent2':
-      return '#ED7D31';
-    case 'Accent3':
-    case 'accent3':
-      return '#A5A5A5';
-    case 'Accent4':
-    case 'accent4':
-      return '#FFC000';
-    case 'Accent5':
-    case 'accent5':
-      return '#5B9BD5';
-    case 'Accent6':
-    case 'accent6':
-      return '#70AD47';
-    case 'Hlink':
-    case 'hlink':
-      return '#0563C1';
-    case 'FolHlink':
-    case 'folHLink':
-    case 'folHlink':
-      return '#954F72';
-    default:
-      return undefined;
-  }
-}
-
-function applyTintShade(hexColor: string, tintShade: number | undefined): string {
-  if (tintShade === undefined || tintShade === 0) return hexColor;
-  const tintAmount =
-    tintShade > 0 && tintShade <= 1 ? (tintShade > 0.5 ? 1 - tintShade : tintShade) : tintShade;
-  const normalized = normalizeHexColor(hexColor);
-  if (!normalized) return hexColor;
-  const hex = normalized.slice(1);
-  const [r, g, b] = [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
-  const [h, s, l] = rgbToHsl(r, g, b);
-  const adjustedL =
-    tintAmount > 0 ? l * (1 - tintAmount) + tintAmount : l * Math.max(0, 1 + tintAmount);
-  const [outR, outG, outB] = hslToRgb(h, s, Math.max(0, Math.min(1, adjustedL)));
-  const channels = [outR, outG, outB].map((channel) =>
-    Math.max(0, Math.min(255, Math.round(channel * 255))),
-  );
-  return `#${channels
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase()}`;
-}
-
-function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return [0, 0, l];
-
-  const delta = max - min;
-  const s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-  let h = 0;
-  if (max === r) {
-    h = (g - b) / delta + (g < b ? 6 : 0);
-  } else if (max === g) {
-    h = (b - r) / delta + 2;
-  } else {
-    h = (r - g) / delta + 4;
-  }
-  return [h / 6, s, l];
-}
-
-function hueToRgb(p: number, q: number, t: number): number {
-  let hue = t;
-  if (hue < 0) hue += 1;
-  if (hue > 1) hue -= 1;
-  if (hue < 1 / 6) return p + (q - p) * 6 * hue;
-  if (hue < 1 / 2) return q;
-  if (hue < 2 / 3) return p + (q - p) * (2 / 3 - hue) * 6;
-  return p;
-}
-
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  if (s === 0) return [l, l, l];
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
-  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3)];
-}
-
-function resolveChartColor(color: ChartColor | undefined): string | undefined {
-  if (typeof color === 'string') return normalizeHexColor(color) ?? color;
-  if (!color || typeof color !== 'object') return undefined;
-  const base = schemeColorHex(color.theme);
-  return base ? applyTintShade(base, chartColorTintShade(color)) : undefined;
-}
-
-function themeColorKey(color: ChartColor | undefined): string | undefined {
-  return typeof color === 'object' && color !== null ? color.theme.toLowerCase() : undefined;
-}
-
-function chartColorTintShade(color: ChartColor | undefined): number | undefined {
-  if (!color || typeof color !== 'object') return undefined;
-  const wireColor = color as { tintShade?: number; tint_shade?: number };
-  return wireColor.tintShade ?? wireColor.tint_shade;
-}
-
-function resolveChartTextColor(color: ChartColor | undefined): string | undefined {
-  if (chartColorTintShade(color) !== undefined) return resolveChartColor(color);
-  if (themeColorKey(color) === 'tx1') return '#595959';
-  return resolveChartColor(color);
-}
-
-function resolveGridlineColor(color: ChartColor | undefined): string | undefined {
-  return resolveChartColor(color);
-}
-
-function resolveSolidFillColor(fill: ChartFill | undefined): string | undefined {
-  if (!fill || fill.type !== 'solid') return undefined;
-  return resolveChartColor(fill.color);
-}
-
-function resolveFormatFillColor(format: ChartFormat | undefined): string | undefined {
-  return resolveSolidFillColor(format?.fill);
-}
-
-function resolveFormatFillOpacity(format: ChartFormat | undefined): number | undefined {
-  const transparency = format?.fill?.type === 'solid' ? format.fill.transparency : undefined;
-  if (typeof transparency !== 'number' || !Number.isFinite(transparency)) return undefined;
-  return Math.max(0, Math.min(1, 1 - transparency));
-}
-
-function resolveLineColor(line: ChartFormat['line'] | undefined): string | undefined {
-  return resolveChartColor(line?.color);
-}
-
-function resolveFormatLineColor(format: ChartFormat | undefined): string | undefined {
-  return resolveChartColor(format?.line?.color);
-}
-
-function excelStyleRepeatColor(theme: string | undefined, index: number): string | undefined {
-  if (index < 6 || !theme) return undefined;
-  switch (theme.toLowerCase()) {
-    case 'accent1':
-      return '#264478';
-    case 'accent2':
-      return '#9E480E';
-    case 'accent3':
-      return '#636363';
-    default:
-      return undefined;
-  }
-}
-
 function isStrokeColoredSeries(series: SeriesConfig, fallbackType: ChartType | undefined): boolean {
   const seriesType = (series.type ?? fallbackType) as ChartType | undefined;
   const markType = seriesType ? MARK_TYPE_MAP[seriesType] : undefined;
@@ -274,13 +95,13 @@ function resolveSeriesColor(
   fallbackType?: ChartType,
 ): string | undefined {
   const fill = series.format?.fill;
-  const fillTheme = fill?.type === 'solid' ? themeColorKey(fill.color) : undefined;
+  const fillTheme = fill?.type === 'solid' ? chartThemeColorKey(fill.color) : undefined;
   const fillHasExplicitTransform =
     fill?.type === 'solid' && chartColorTintShade(fill.color) !== undefined;
   const sourceIndex = typeof series.idx === 'number' ? series.idx : index;
   const fillColor =
     (fillHasExplicitTransform ? resolveFormatFillColor(series.format) : undefined) ??
-    excelStyleRepeatColor(fillTheme, sourceIndex) ??
+    chartStyleRepeatThemeColor(fillTheme, sourceIndex) ??
     resolveFormatFillColor(series.format);
   const lineColor = resolveFormatLineColor(series.format);
 

@@ -143,16 +143,16 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     let display_blanks_as = chart.disp_blanks_as.map(|d| d.to_ooxml().to_string());
     let plot_visible_only = chart.plot_vis_only;
-    let chart_style_context = extract_chart_style_context(
+    let chart_style_context = extract_chart_style_context(ChartStyleContextInputs {
         cs,
-        chart_format.as_ref(),
-        plot_format.as_ref(),
-        title_format.as_ref(),
-        title_rich_text.as_deref(),
-        legend.as_ref(),
-        axes.as_ref(),
-        &series,
-    );
+        chart_format: chart_format.as_ref(),
+        plot_format: plot_format.as_ref(),
+        title_format: title_format.as_ref(),
+        title_rich_text: title_rich_text.as_deref(),
+        legend: legend.as_ref(),
+        axes: axes.as_ref(),
+        series: &series,
+    });
     let import_status = match &chart_type {
         domain_types::ChartType::Unknown(raw) => chart_import_status_for_unsupported_chart_type(
             raw,
@@ -437,18 +437,22 @@ fn extract_title_rich_text(
     }
 }
 
+struct ChartStyleContextInputs<'a> {
+    cs: &'a ooxml_types::charts::ChartSpace,
+    chart_format: Option<&'a domain_types::chart::ChartFormatData>,
+    plot_format: Option<&'a domain_types::chart::ChartFormatData>,
+    title_format: Option<&'a domain_types::chart::ChartFormatData>,
+    title_rich_text: Option<&'a [domain_types::chart::ChartFormatStringData]>,
+    legend: Option<&'a domain_types::chart::LegendData>,
+    axes: Option<&'a domain_types::chart::AxisData>,
+    series: &'a [domain_types::chart::ChartSeriesData],
+}
+
 fn extract_chart_style_context(
-    cs: &ooxml_types::charts::ChartSpace,
-    chart_format: Option<&domain_types::chart::ChartFormatData>,
-    plot_format: Option<&domain_types::chart::ChartFormatData>,
-    title_format: Option<&domain_types::chart::ChartFormatData>,
-    title_rich_text: Option<&[domain_types::chart::ChartFormatStringData]>,
-    legend: Option<&domain_types::chart::LegendData>,
-    axes: Option<&domain_types::chart::AxisData>,
-    series: &[domain_types::chart::ChartSeriesData],
+    inputs: ChartStyleContextInputs<'_>,
 ) -> Option<domain_types::ChartStyleContextData> {
     let mut context = domain_types::ChartStyleContextData {
-        color_map_override: cs.clr_map_ovr.as_ref().map(Into::into),
+        color_map_override: inputs.cs.clr_map_ovr.as_ref().map(Into::into),
         ..Default::default()
     };
 
@@ -456,25 +460,25 @@ fn extract_chart_style_context(
         &mut context.owners,
         "chartArea",
         "c:chartSpace/c:spPr|c:chartSpace/c:txPr",
-        chart_format,
+        inputs.chart_format,
         None,
     );
     push_style_owner(
         &mut context.owners,
         "plotArea",
         "c:chartSpace/c:chart/c:plotArea/c:spPr",
-        plot_format,
+        inputs.plot_format,
         None,
     );
     push_style_owner(
         &mut context.owners,
         "title",
         "c:chartSpace/c:chart/c:title",
-        title_format,
-        title_rich_text,
+        inputs.title_format,
+        inputs.title_rich_text,
     );
 
-    if let Some(legend) = legend {
+    if let Some(legend) = inputs.legend {
         push_style_owner(
             &mut context.owners,
             "legend",
@@ -484,7 +488,7 @@ fn extract_chart_style_context(
         );
     }
 
-    if let Some(axes) = axes {
+    if let Some(axes) = inputs.axes {
         push_axis_style_owner(
             &mut context.owners,
             "categoryAxis",
@@ -517,7 +521,7 @@ fn extract_chart_style_context(
         );
     }
 
-    for (index, series) in series.iter().enumerate() {
+    for (index, series) in inputs.series.iter().enumerate() {
         push_style_owner(
             &mut context.owners,
             &format!("series({index})"),

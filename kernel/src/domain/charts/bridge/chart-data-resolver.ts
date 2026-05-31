@@ -219,6 +219,7 @@ export class ChartDataResolver {
     const cellAccessor = await createCellAccessor(this.ctx, dataRanges, { hiddenVisibility });
     const data = extractChartDataFromRange(cellAccessor, dataRange, {
       categoryRange: resolvedRanges.categoryRange?.range,
+      chartType: config.type,
       seriesRange: resolvedRanges.seriesRange?.range,
       seriesOrientation: chart.seriesOrientation as ChartConfig['seriesOrientation'],
     });

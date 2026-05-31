@@ -43,9 +43,11 @@ export function extractChartData(accessor: CellDataAccessor, config: ChartConfig
   const seriesRange = tryParseRange(config.seriesRange);
   const options: {
     categoryRange?: CellRange;
+    chartType?: ChartConfig['type'];
     seriesRange?: CellRange;
     seriesOrientation?: ChartConfig['seriesOrientation'];
   } = {};
+  options.chartType = config.type;
   if (categoryRange) options.categoryRange = categoryRange;
   if (seriesRange) options.seriesRange = seriesRange;
   if (config.seriesOrientation) options.seriesOrientation = config.seriesOrientation;

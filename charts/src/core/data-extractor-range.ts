@@ -1,14 +1,25 @@
 /**
  * Extraction from resolved cell ranges.
  */
-import type { ChartData, ChartDataPoint, ChartDataSeries, SeriesOrientation } from '../types';
+import type {
+  ChartConfig,
+  ChartData,
+  ChartDataPoint,
+  ChartDataSeries,
+  SeriesOrientation,
+} from '../types';
 import type { CellRange } from './data-extractor-primitives';
 import {
   type CellDataAccessor,
+  type ChartCellValue,
   createDataPoint,
   extractLabels,
   getRangeValue,
   hasCellValue,
+  isHiddenChartCellValue,
+  isNumericLike,
+  labelValue,
+  xyValue,
 } from './data-extractor-primitives';
 import { extractExcelTableData, hasExcelTableShape } from './data-extractor-table';
 
@@ -58,6 +69,7 @@ export function extractChartDataFromRange(
   dataRange: CellRange,
   options?: {
     categoryRange?: CellRange;
+    chartType?: ChartConfig['type'];
     seriesRange?: CellRange;
     seriesOrientation?: SeriesOrientation;
   },
@@ -103,6 +115,14 @@ export function extractChartDataFromRange(
     series.push({ name, data });
 
     return { categories, series };
+  }
+
+  if (options?.chartType === 'bubble') {
+    const bubbleData = extractBubbleChartDataFromRange(accessor, dataRange, {
+      ...options,
+      seriesOrientation: orientation,
+    });
+    if (bubbleData) return bubbleData;
   }
 
   if (!hasExplicitLayout && hasExcelTableShape(accessor, dataRange)) {
@@ -176,4 +196,210 @@ export function extractChartDataFromRange(
   }
 
   return { categories, series };
+}
+
+type BubbleRangeLayout =
+  | {
+      orientation: 'vertical';
+      pointStart: number;
+      pointEnd: number;
+      xIndex: number;
+      seriesPairs: Array<{ valueIndex: number; sizeIndex: number; name: string }>;
+    }
+  | {
+      orientation: 'horizontal';
+      pointStart: number;
+      pointEnd: number;
+      xIndex: number;
+      seriesPairs: Array<{ valueIndex: number; sizeIndex: number; name: string }>;
+    };
+
+function extractBubbleChartDataFromRange(
+  accessor: CellDataAccessor,
+  dataRange: CellRange,
+  options: {
+    categoryRange?: CellRange;
+    seriesRange?: CellRange;
+    seriesOrientation?: SeriesOrientation;
+  },
+): ChartData | null {
+  if (options.categoryRange || options.seriesRange) return null;
+
+  const layout = chooseBubbleRangeLayout(accessor, dataRange, options.seriesOrientation);
+  if (!layout) return null;
+
+  const categories: Array<string | number> = [];
+  const series = layout.seriesPairs.map((pair): ChartDataSeries => {
+    const data: ChartDataPoint[] = [];
+    for (let pointIndex = layout.pointStart; pointIndex <= layout.pointEnd; pointIndex += 1) {
+      const rawX =
+        layout.orientation === 'vertical'
+          ? getRangeValue(accessor, dataRange, pointIndex, layout.xIndex)
+          : getRangeValue(accessor, dataRange, layout.xIndex, pointIndex);
+      const rawY =
+        layout.orientation === 'vertical'
+          ? getRangeValue(accessor, dataRange, pointIndex, pair.valueIndex)
+          : getRangeValue(accessor, dataRange, pair.valueIndex, pointIndex);
+      const rawSize =
+        layout.orientation === 'vertical'
+          ? getRangeValue(accessor, dataRange, pointIndex, pair.sizeIndex)
+          : getRangeValue(accessor, dataRange, pair.sizeIndex, pointIndex);
+      const x = xyValue(rawX);
+      const categoryIndex = pointIndex - layout.pointStart;
+      if (categories[categoryIndex] === undefined) categories[categoryIndex] = x;
+      data.push(
+        createDataPoint(x, rawY, String(x), {
+          rawSize,
+          hidden:
+            isHiddenChartCellValue(rawX) ||
+            isHiddenChartCellValue(rawY) ||
+            isHiddenChartCellValue(rawSize),
+        }),
+      );
+    }
+    return { name: pair.name, data };
+  });
+
+  return { categories, series };
+}
+
+function chooseBubbleRangeLayout(
+  accessor: CellDataAccessor,
+  range: CellRange,
+  seriesOrientation: SeriesOrientation | undefined,
+): BubbleRangeLayout | null {
+  const rowCount = range.endRow - range.startRow + 1;
+  const colCount = range.endCol - range.startCol + 1;
+  const vertical = colCount >= 3 ? verticalBubbleLayout(accessor, range) : null;
+  const horizontal = rowCount >= 3 ? horizontalBubbleLayout(accessor, range) : null;
+
+  if (seriesOrientation === 'columns') return vertical ?? horizontal;
+  if (seriesOrientation === 'rows') return horizontal ?? vertical;
+  return vertical ?? horizontal;
+}
+
+function verticalBubbleLayout(
+  accessor: CellDataAccessor,
+  range: CellRange,
+): BubbleRangeLayout | null {
+  const firstRow = valuesAcrossColumns(accessor, range, range.startRow);
+  const header = isBubbleHeader(firstRow);
+  const pointStart = header ? range.startRow + 1 : range.startRow;
+  if (pointStart > range.endRow) return null;
+
+  const dimensionColStart = range.startCol;
+  const dimensionCount = range.endCol - dimensionColStart + 1;
+  const seriesPairs = bubbleSeriesPairs({
+    dimensionStart: dimensionColStart,
+    dimensionEnd: range.endCol,
+    nameForPair: (pairIndex, valueCol) =>
+      header
+        ? String(
+            labelValue(
+              getRangeValue(accessor, range, range.startRow, valueCol),
+              pairName(pairIndex),
+            ),
+          )
+        : pairName(pairIndex),
+  });
+  if (dimensionCount < 3 || seriesPairs.length === 0) return null;
+
+  return {
+    orientation: 'vertical',
+    pointStart,
+    pointEnd: range.endRow,
+    xIndex: dimensionColStart,
+    seriesPairs,
+  };
+}
+
+function horizontalBubbleLayout(
+  accessor: CellDataAccessor,
+  range: CellRange,
+): BubbleRangeLayout | null {
+  const firstCol = valuesDownRows(accessor, range, range.startCol);
+  const header = isBubbleHeader(firstCol);
+  const pointStart = header ? range.startCol + 1 : range.startCol;
+  if (pointStart > range.endCol) return null;
+
+  const dimensionRowStart = range.startRow;
+  const dimensionCount = range.endRow - dimensionRowStart + 1;
+  const seriesPairs = bubbleSeriesPairs({
+    dimensionStart: dimensionRowStart,
+    dimensionEnd: range.endRow,
+    nameForPair: (pairIndex, valueRow) =>
+      header
+        ? String(
+            labelValue(
+              getRangeValue(accessor, range, valueRow, range.startCol),
+              pairName(pairIndex),
+            ),
+          )
+        : pairName(pairIndex),
+  });
+  if (dimensionCount < 3 || seriesPairs.length === 0) return null;
+
+  return {
+    orientation: 'horizontal',
+    pointStart,
+    pointEnd: range.endCol,
+    xIndex: dimensionRowStart,
+    seriesPairs,
+  };
+}
+
+function bubbleSeriesPairs(input: {
+  dimensionStart: number;
+  dimensionEnd: number;
+  nameForPair: (pairIndex: number, valueIndex: number) => string;
+}): Array<{ valueIndex: number; sizeIndex: number; name: string }> {
+  const pairs: Array<{ valueIndex: number; sizeIndex: number; name: string }> = [];
+  let pairIndex = 0;
+  for (
+    let valueIndex = input.dimensionStart + 1;
+    valueIndex + 1 <= input.dimensionEnd;
+    valueIndex += 2
+  ) {
+    pairs.push({
+      valueIndex,
+      sizeIndex: valueIndex + 1,
+      name: input.nameForPair(pairIndex, valueIndex),
+    });
+    pairIndex += 1;
+  }
+  return pairs;
+}
+
+function isBubbleHeader(values: ChartCellValue[]): boolean {
+  return (
+    values.slice(0, 3).filter((value) => hasCellValue(value) && !isNumericLike(value)).length >= 2
+  );
+}
+
+function valuesAcrossColumns(
+  accessor: CellDataAccessor,
+  range: CellRange,
+  row: number,
+): ChartCellValue[] {
+  const values: ChartCellValue[] = [];
+  for (let col = range.startCol; col <= range.endCol; col += 1) {
+    values.push(getRangeValue(accessor, range, row, col));
+  }
+  return values;
+}
+
+function valuesDownRows(
+  accessor: CellDataAccessor,
+  range: CellRange,
+  col: number,
+): ChartCellValue[] {
+  const values: ChartCellValue[] = [];
+  for (let row = range.startRow; row <= range.endRow; row += 1) {
+    values.push(getRangeValue(accessor, range, row, col));
+  }
+  return values;
+}
+
+function pairName(pairIndex: number): string {
+  return `Series ${pairIndex + 1}`;
 }

@@ -7,6 +7,7 @@ import {
 } from '../data-extractor';
 import { configToSpec } from '../config-to-spec';
 import {
+  BUBBLE_SIZE_FIELD,
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
@@ -649,6 +650,60 @@ describe('chart data point value provenance', () => {
     const data = extractChartData(accessor, config);
 
     expect(data.series[0].data.map((point) => point.size)).toEqual([100, undefined, 300]);
+  });
+
+  it('extracts bubble x, y, and size dimensions from a dataRange table', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      ['X', 'Revenue', 'Revenue Size'],
+      [1, 10, 4],
+      [2, 20, 9],
+      [10, 30, 16],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'bubble-data-range-chart',
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: 'A1:C4',
+    };
+
+    const data = extractChartData(accessor, config);
+    const rows = specRows(configToSpec(config, data));
+
+    expect(data.categories).toEqual([1, 2, 10]);
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].name).toBe('Revenue');
+    expect(data.series[0].data.map((point) => point.x)).toEqual([1, 2, 10]);
+    expect(data.series[0].data.map((point) => point.y)).toEqual([10, 20, 30]);
+    expect(data.series[0].data.map((point) => point.size)).toEqual([4, 9, 16]);
+    expect(rows.map((row) => row[SCATTER_X_FIELD])).toEqual([1, 2, 10]);
+    expect(rows.map((row) => row[BUBBLE_SIZE_FIELD])).toEqual([4, 9, 16]);
+  });
+
+  it('extracts transposed bubble dimensions from a dataRange table', () => {
+    const accessor = ObjectCellAccessor.fromArray([
+      ['X', 1, 2, 10],
+      ['Revenue', 10, 20, 30],
+      ['Revenue Size', 4, 9, 16],
+    ]);
+    const config: StoredChartConfig = {
+      id: 'bubble-data-range-rows-chart',
+      type: 'bubble',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 15,
+      dataRange: 'A1:D3',
+    };
+
+    const data = extractChartData(accessor, config);
+
+    expect(data.categories).toEqual([1, 2, 10]);
+    expect(data.series[0].name).toBe('Revenue');
+    expect(data.series[0].data.map((point) => point.y)).toEqual([10, 20, 30]);
+    expect(data.series[0].data.map((point) => point.size)).toEqual([4, 9, 16]);
   });
 
   it('uses imported bubble size caches when no live size range exists', () => {

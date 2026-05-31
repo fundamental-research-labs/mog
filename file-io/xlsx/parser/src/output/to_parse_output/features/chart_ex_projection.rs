@@ -47,6 +47,23 @@ pub(super) fn chart_type_from_chart_ex_layout_id(layout_id: &ChartExLayoutId) ->
         .unwrap_or_else(|| ChartType::Unknown(layout_id.to_ooxml().to_string()))
 }
 
+#[derive(Debug, Clone)]
+struct ProjectionDiagnostic {
+    code: domain_types::ImportDiagnosticCode,
+    message: String,
+}
+
+fn push_projection_diagnostic(
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+    code: domain_types::ImportDiagnosticCode,
+    message: impl Into<String>,
+) {
+    diagnostics.push(ProjectionDiagnostic {
+        code,
+        message: message.into(),
+    });
+}
+
 pub(super) fn project_chart_ex_space(
     chart_space: &ChartExSpace,
     sheet: &FullParsedSheet,
@@ -54,6 +71,7 @@ pub(super) fn project_chart_ex_space(
 ) -> ChartExProjection {
     let region = &chart_space.chart.plot_area.plot_area_region;
     let data_by_id = chart_ex_data_by_id(&chart_space.chart_data);
+    let mut projection_diagnostics = Vec::new();
     let chart_type = region
         .series
         .first()
@@ -72,7 +90,9 @@ pub(super) fn project_chart_ex_space(
         .and_then(|title| title.tx.as_ref())
         .and_then(|tx| tx.tx_data.as_ref())
         .and_then(|tx_data| tx_data.formula.as_deref())
-        .and_then(valid_chart_formula)
+        .and_then(|formula| {
+            project_chart_formula(formula, "title formula", &mut projection_diagnostics)
+        })
         .map(str::to_string);
     let title_rich_text = chart_space
         .chart
@@ -86,15 +106,23 @@ pub(super) fn project_chart_ex_space(
         .title
         .as_ref()
         .and_then(project_chart_ex_title_format);
+    if let Some(title) = chart_space.chart.title.as_ref() {
+        diagnose_title_projection_gaps(title, &mut projection_diagnostics);
+    }
+    if let Some(legend) = chart_space.chart.legend.as_ref() {
+        diagnose_legend_projection_gaps(legend, &mut projection_diagnostics);
+    }
 
     let mut formulas = Vec::new();
     let has_secondary_value_axis = chart_ex_value_axis_count(&chart_space.chart.plot_area.axes) > 1;
     let series = project_chart_ex_series(
         region,
+        &chart_space.chart_data,
         &data_by_id,
         &chart_space.fmt_ovrs,
         has_secondary_value_axis,
         &mut formulas,
+        &mut projection_diagnostics,
     );
     let data_range = synthesize_data_range(&formulas);
     let data_labels = region.series.iter().find_map(|s| {
@@ -103,23 +131,43 @@ pub(super) fn project_chart_ex_space(
             .and_then(project_chart_ex_data_labels)
     });
     let waterfall = project_waterfall(region);
-    let histogram = project_histogram(region);
-    let boxplot = project_boxplot(region);
+    let histogram = project_histogram(region, &mut projection_diagnostics);
+    let boxplot = project_boxplot(region, &mut projection_diagnostics);
     let hierarchy = match chart_type {
-        ChartType::Treemap | ChartType::Sunburst => {
-            project_hierarchy(region, &data_by_id, sheet, &mut formulas)
-        }
+        ChartType::Treemap | ChartType::Sunburst => project_hierarchy(
+            region,
+            &chart_space.chart_data,
+            &data_by_id,
+            sheet,
+            &mut formulas,
+            &mut projection_diagnostics,
+        ),
         _ => None,
     };
     let region_map = match chart_type {
-        ChartType::RegionMap => project_region_map(region, &data_by_id, &mut formulas),
+        ChartType::RegionMap => project_region_map(
+            region,
+            &chart_space.chart_data,
+            &data_by_id,
+            &mut formulas,
+            &mut projection_diagnostics,
+        ),
         _ => None,
     };
     let data_range = data_range.or_else(|| synthesize_data_range(&formulas));
-    let import_status = chart_ex_import_status(
-        &chart_type,
-        &series,
-        data_range.as_deref(),
+    let axes = project_chart_ex_axes(
+        &chart_space.chart.plot_area.axes,
+        &mut projection_diagnostics,
+    );
+    let import_status = attach_projection_diagnostics(
+        chart_ex_import_status(
+            &chart_type,
+            &series,
+            data_range.as_deref(),
+            original_path,
+            title.as_deref(),
+        ),
+        projection_diagnostics,
         original_path,
         title.as_deref(),
     );
@@ -133,7 +181,7 @@ pub(super) fn project_chart_ex_space(
             .legend
             .as_ref()
             .map(project_chart_ex_legend),
-        axes: project_chart_ex_axes(&chart_space.chart.plot_area.axes),
+        axes,
         data_labels,
         data_range,
         chart_format: extract_chart_format(chart_space.sp_pr.as_ref(), chart_space.tx_pr.as_ref()),
@@ -279,30 +327,96 @@ fn chart_import_status(
     )
 }
 
+fn attach_projection_diagnostics(
+    status: Option<ImportObjectStatus>,
+    diagnostics: Vec<ProjectionDiagnostic>,
+    part_path: &str,
+    object_name: Option<&str>,
+) -> Option<ImportObjectStatus> {
+    if diagnostics.is_empty() {
+        return status;
+    }
+
+    let diagnostic_refs = diagnostics
+        .into_iter()
+        .map(|diagnostic| projection_diagnostic_ref(diagnostic, part_path, object_name))
+        .collect::<Vec<_>>();
+
+    let mut status = status.unwrap_or_else(|| ImportObjectStatus {
+        source: domain_types::ImportSource::Xlsx,
+        feature_kind: domain_types::ImportFeatureKind::Chart,
+        recoverability: domain_types::ImportRecoverability::PartiallySupported,
+        renderability: domain_types::ImportRenderability::Renderable,
+        editability: domain_types::ImportEditability::PartiallyEditable,
+        diagnostics: Vec::new(),
+        reference: None,
+    });
+
+    if status.reference.is_none() {
+        status.reference = diagnostic_refs.first().cloned();
+    }
+    status.diagnostics.extend(diagnostic_refs);
+    Some(status)
+}
+
+fn projection_diagnostic_ref(
+    diagnostic: ProjectionDiagnostic,
+    part_path: &str,
+    object_name: Option<&str>,
+) -> domain_types::ImportDiagnosticRef {
+    crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: diagnostic.code,
+            message: diagnostic.message,
+            recoverability: domain_types::ImportRecoverability::PartiallySupported,
+            renderability: domain_types::ImportRenderability::Renderable,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path: Some(part_path),
+            object_name,
+            object_id: None,
+        },
+    )
+    .reference
+    .expect("chart import diagnostic helper always sets reference")
+}
+
 fn chart_ex_data_by_id(chart_data: &ChartExChartData) -> HashMap<u32, &ChartExData> {
     chart_data.data.iter().map(|data| (data.id, data)).collect()
 }
 
 fn project_chart_ex_series(
     region: &ChartExPlotAreaRegion,
+    chart_data: &ChartExChartData,
     data_by_id: &HashMap<u32, &ChartExData>,
     format_overrides: &[ChartExFormatOverride],
     has_secondary_value_axis: bool,
     formulas: &mut Vec<String>,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
 ) -> Vec<ChartSeriesData> {
     region
         .series
         .iter()
         .enumerate()
         .filter_map(|(idx, series)| {
-            let data = chart_ex_data_for_series(series, idx, data_by_id, region.series.len())?;
+            let data = chart_ex_data_for_series(
+                series,
+                idx,
+                chart_data,
+                data_by_id,
+                region.series.len(),
+                diagnostics,
+            )?;
             let categories = chart_ex_dimension_formula(data, DimensionKind::String, "cat")
                 .or_else(|| first_dimension_formula(data, DimensionKind::String));
             let values = chart_ex_dimension_formula(data, DimensionKind::Numeric, "val")
                 .or_else(|| chart_ex_dimension_formula(data, DimensionKind::Numeric, "size"))
                 .or_else(|| first_dimension_formula(data, DimensionKind::Numeric));
-            let categories = categories.and_then(valid_chart_formula).map(str::to_string);
-            let values = values.and_then(valid_chart_formula).map(str::to_string);
+            let categories = categories
+                .and_then(|formula| project_chart_formula(formula, "category", diagnostics))
+                .map(str::to_string);
+            let values = values
+                .and_then(|formula| project_chart_formula(formula, "value", diagnostics))
+                .map(str::to_string);
 
             push_formula(formulas, categories.as_deref());
             push_formula(formulas, values.as_deref());
@@ -439,18 +553,53 @@ fn merge_chart_format(
 fn chart_ex_data_for_series<'a>(
     series: &ChartExSeries,
     series_idx: usize,
+    chart_data: &'a ChartExChartData,
     data_by_id: &HashMap<u32, &'a ChartExData>,
     series_count: usize,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
 ) -> Option<&'a ChartExData> {
     if let Some(data_id) = series.data_id {
-        return data_by_id.get(&data_id).copied();
+        let data = data_by_id.get(&data_id).copied();
+        if data.is_none() {
+            push_projection_diagnostic(
+                diagnostics,
+                domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
+                format!(
+                    "ChartEx series {} references missing cx:data id {}",
+                    series_idx + 1,
+                    data_id
+                ),
+            );
+        }
+        return data;
     }
 
-    if data_by_id.len() == series_count {
-        data_by_id.get(&(series_idx as u32)).copied()
-    } else if data_by_id.len() == 1 && series_count == 1 {
-        data_by_id.values().next().copied()
+    if chart_data.data.len() == series_count {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            format!(
+                "ChartEx series {} has no dataId; projected cx:data by series ordinal",
+                series_idx + 1
+            ),
+        );
+        chart_data.data.get(series_idx)
+    } else if chart_data.data.len() == 1 && series_count == 1 {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            "ChartEx series has no dataId; projected the only cx:data entry".to_string(),
+        );
+        chart_data.data.first()
     } else {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
+            format!(
+                "ChartEx series {} has no dataId and no unambiguous cx:data fallback",
+                series_idx + 1
+            ),
+        );
         None
     }
 }
@@ -499,12 +648,39 @@ fn first_dimension_formula(data: &ChartExData, kind: DimensionKind) -> Option<&s
         })
 }
 
-fn valid_chart_formula(formula: &str) -> Option<&str> {
+fn project_chart_formula<'a>(
+    formula: &'a str,
+    dimension_label: &str,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) -> Option<&'a str> {
     let trimmed = formula.trim();
-    if trimmed.is_empty() || trimmed.starts_with("_xlchart.") {
+    if trimmed.is_empty() {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
+            format!("ChartEx {dimension_label} formula is empty"),
+        );
         return None;
     }
-    synthesize_rectangular_data_range(&[trimmed]).map(|_| trimmed)
+    if trimmed.starts_with("_xlchart.") {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            format!(
+                "ChartEx {dimension_label} formula `{trimmed}` uses an internal source that is preserved but not renderable"
+            ),
+        );
+        return None;
+    }
+    if synthesize_rectangular_data_range(&[trimmed]).is_none() {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::InvalidRangeReference,
+            format!("ChartEx {dimension_label} formula `{trimmed}` is not a rectangular range"),
+        );
+        return None;
+    }
+    Some(trimmed)
 }
 
 fn push_formula(formulas: &mut Vec<String>, formula: Option<&str>) {
@@ -585,6 +761,37 @@ fn project_chart_ex_title_v_align(title: &ChartExTitle) -> Option<String> {
     title.pos.as_deref().and_then(chart_ex_vertical_alignment)
 }
 
+fn diagnose_title_projection_gaps(
+    title: &ChartExTitle,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) {
+    if title.overlay.is_some() {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            "ChartEx title overlay is preserved for export but has no render contract",
+        );
+    }
+    if let Some(pos) = title.pos.as_deref() {
+        if chart_ex_vertical_alignment(pos).is_none() {
+            push_projection_diagnostic(
+                diagnostics,
+                domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                format!("ChartEx title position `{pos}` is preserved but not rendered"),
+            );
+        }
+    }
+    if let Some(align) = title.align.as_deref() {
+        if chart_ex_horizontal_alignment(align).is_none() {
+            push_projection_diagnostic(
+                diagnostics,
+                domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                format!("ChartEx title alignment `{align}` is preserved but not rendered"),
+            );
+        }
+    }
+}
+
 fn chart_ex_horizontal_alignment(align: &str) -> Option<String> {
     let mapped = match align {
         "l" => "left",
@@ -602,6 +809,19 @@ fn chart_ex_vertical_alignment(pos: &str) -> Option<String> {
         _ => return None,
     };
     Some(mapped.to_string())
+}
+
+fn diagnose_legend_projection_gaps(
+    legend: &ooxml_types::chart_ex::ChartExLegend,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) {
+    if let Some(align) = legend.align.as_deref() {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            format!("ChartEx legend alignment `{align}` is preserved but not rendered"),
+        );
+    }
 }
 
 fn project_chart_ex_legend(legend: &ooxml_types::chart_ex::ChartExLegend) -> LegendData {
@@ -636,19 +856,37 @@ fn chart_ex_position(pos: &str) -> &'static str {
     }
 }
 
-fn project_chart_ex_axes(axes: &[ChartExAxis]) -> Option<AxisData> {
+fn project_chart_ex_axes(
+    axes: &[ChartExAxis],
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) -> Option<AxisData> {
     let mut category_axis = None;
     let mut value_axis = None;
     let mut secondary_category_axis = None;
     let mut secondary_value_axis = None;
 
     for axis in axes {
-        match axis.scaling {
-            Some(ooxml_types::chart_ex::ChartExScaling::Category { .. }) => {
+        match &axis.scaling {
+            Some(ooxml_types::chart_ex::ChartExScaling::Category { gap_width }) => {
+                if let Some(gap_width) = gap_width.as_deref() {
+                    push_projection_diagnostic(
+                        diagnostics,
+                        domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                        format!(
+                            "ChartEx category axis gapWidth `{gap_width}` is preserved but not rendered"
+                        ),
+                    );
+                }
                 if category_axis.is_none() {
                     category_axis = Some(project_chart_ex_axis(axis, "category"));
                 } else if secondary_category_axis.is_none() {
                     secondary_category_axis = Some(project_chart_ex_axis(axis, "category"));
+                } else {
+                    push_projection_diagnostic(
+                        diagnostics,
+                        domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                        "Additional ChartEx category axes beyond primary and secondary are preserved but not rendered",
+                    );
                 }
             }
             Some(ooxml_types::chart_ex::ChartExScaling::Value { .. }) => {
@@ -656,6 +894,12 @@ fn project_chart_ex_axes(axes: &[ChartExAxis]) -> Option<AxisData> {
                     value_axis = Some(project_chart_ex_axis(axis, "value"));
                 } else if secondary_value_axis.is_none() {
                     secondary_value_axis = Some(project_chart_ex_axis(axis, "value"));
+                } else {
+                    push_projection_diagnostic(
+                        diagnostics,
+                        domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                        "Additional ChartEx value axes beyond primary and secondary are preserved but not rendered",
+                    );
                 }
             }
             None => {}
@@ -860,10 +1104,24 @@ fn project_waterfall(region: &ChartExPlotAreaRegion) -> Option<WaterfallOptions>
     })
 }
 
-fn project_histogram(region: &ChartExPlotAreaRegion) -> Option<HistogramConfigData> {
+fn project_histogram(
+    region: &ChartExPlotAreaRegion,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) -> Option<HistogramConfigData> {
     first_layout(region)
         .and_then(|layout| layout.binning.as_ref())
-        .map(project_histogram_binning)
+        .map(|binning| {
+            if let Some(interval_closed) = binning.interval_closed.as_deref() {
+                push_projection_diagnostic(
+                    diagnostics,
+                    domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                    format!(
+                        "ChartEx histogram intervalClosed `{interval_closed}` is preserved but not rendered"
+                    ),
+                );
+            }
+            project_histogram_binning(binning)
+        })
 }
 
 fn project_histogram_binning(binning: &ChartExBinning) -> HistogramConfigData {
@@ -887,10 +1145,23 @@ fn bound_value(value: &Option<ChartExBoundValue>) -> (Option<bool>, Option<f64>)
     }
 }
 
-fn project_boxplot(region: &ChartExPlotAreaRegion) -> Option<BoxplotConfigData> {
+fn project_boxplot(
+    region: &ChartExPlotAreaRegion,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
+) -> Option<BoxplotConfigData> {
     let layout = first_layout(region)?;
     let visibility = layout.visibility.as_ref();
     let statistics = layout.statistics.as_ref();
+    if visibility
+        .and_then(|visibility| visibility.non_outlier_points)
+        .is_some()
+    {
+        push_projection_diagnostic(
+            diagnostics,
+            domain_types::ImportDiagnosticCode::UnsupportedFeature,
+            "ChartEx boxplot non-outlier point visibility is preserved but not rendered",
+        );
+    }
     let config = BoxplotConfigData {
         show_outlier_points: visibility.and_then(|visibility| visibility.outlier_points),
         show_mean_markers: visibility.and_then(|visibility| visibility.mean_marker),
@@ -918,24 +1189,35 @@ fn first_layout(region: &ChartExPlotAreaRegion) -> Option<&ChartExLayoutProperti
 
 fn project_hierarchy(
     region: &ChartExPlotAreaRegion,
+    chart_data: &ChartExChartData,
     data_by_id: &HashMap<u32, &ChartExData>,
     sheet: &FullParsedSheet,
     formulas: &mut Vec<String>,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
 ) -> Option<HierarchyChartConfigData> {
     let series = region.series.first()?;
-    let data = chart_ex_data_for_series(series, 0, data_by_id, region.series.len())?;
+    let data = chart_ex_data_for_series(
+        series,
+        0,
+        chart_data,
+        data_by_id,
+        region.series.len(),
+        diagnostics,
+    )?;
     let category_formulas = data
         .dimensions
         .iter()
         .filter_map(|dimension| match dimension {
-            ChartExDimension::String { formula, .. } => valid_chart_formula(&formula.content),
+            ChartExDimension::String { formula, .. } => {
+                project_chart_formula(&formula.content, "hierarchy category", diagnostics)
+            }
             _ => None,
         })
         .map(str::to_string)
         .collect::<Vec<_>>();
     let value_formula = chart_ex_dimension_formula(data, DimensionKind::Numeric, "size")
         .or_else(|| chart_ex_dimension_formula(data, DimensionKind::Numeric, "val"))
-        .and_then(valid_chart_formula)
+        .and_then(|formula| project_chart_formula(formula, "hierarchy value", diagnostics))
         .map(str::to_string);
 
     for formula in &category_formulas {
@@ -1021,18 +1303,27 @@ fn hierarchy_rows(
 
 fn project_region_map(
     region: &ChartExPlotAreaRegion,
+    chart_data: &ChartExChartData,
     data_by_id: &HashMap<u32, &ChartExData>,
     formulas: &mut Vec<String>,
+    diagnostics: &mut Vec<ProjectionDiagnostic>,
 ) -> Option<RegionMapConfigData> {
     let series = region.series.first()?;
-    let data = chart_ex_data_for_series(series, 0, data_by_id, region.series.len())?;
+    let data = chart_ex_data_for_series(
+        series,
+        0,
+        chart_data,
+        data_by_id,
+        region.series.len(),
+        diagnostics,
+    )?;
     let region_formula = chart_ex_dimension_formula(data, DimensionKind::String, "cat")
         .or_else(|| first_dimension_formula(data, DimensionKind::String))
-        .and_then(valid_chart_formula)
+        .and_then(|formula| project_chart_formula(formula, "region", diagnostics))
         .map(str::to_string);
     let value_formula = chart_ex_dimension_formula(data, DimensionKind::Numeric, "val")
         .or_else(|| first_dimension_formula(data, DimensionKind::Numeric))
-        .and_then(valid_chart_formula)
+        .and_then(|formula| project_chart_formula(formula, "region value", diagnostics))
         .map(str::to_string);
 
     push_formula(formulas, region_formula.as_deref());
@@ -1228,6 +1519,14 @@ mod tests {
         }
     }
 
+    fn diagnostic_messages(status: &ImportObjectStatus) -> Vec<&str> {
+        status
+            .diagnostics
+            .iter()
+            .filter_map(|diagnostic| diagnostic.message.as_deref())
+            .collect()
+    }
+
     #[test]
     fn chart_ex_layout_ids_map_to_public_chart_types_without_prefixes() {
         for (layout_id, expected) in [
@@ -1329,6 +1628,143 @@ mod tests {
             })
         );
         assert!(projected.import_status.is_none());
+    }
+
+    #[test]
+    fn renderable_projection_keeps_diagnostics_for_lossy_chart_ex_fields() {
+        let mut chart_space = ChartExSpace::default();
+        chart_space.chart_data = ChartExChartData {
+            data: vec![ChartExData {
+                id: 42,
+                dimensions: vec![ChartExDimension::Numeric {
+                    dim_type: "val".to_string(),
+                    formula: formula("Sheet1!B1:B3"),
+                }],
+            }],
+        };
+        chart_space.chart = ChartExChart {
+            title: Some(ChartExTitle {
+                pos: Some("l".to_string()),
+                align: Some("dist".to_string()),
+                overlay: Some(true),
+                ..Default::default()
+            }),
+            legend: Some(ooxml_types::chart_ex::ChartExLegend {
+                align: Some("ctr".to_string()),
+                ..Default::default()
+            }),
+            plot_area: ChartExPlotArea {
+                axes: vec![
+                    ChartExAxis {
+                        scaling: Some(ooxml_types::chart_ex::ChartExScaling::Category {
+                            gap_width: Some("0.5".to_string()),
+                        }),
+                        ..Default::default()
+                    },
+                    ChartExAxis {
+                        scaling: Some(ooxml_types::chart_ex::ChartExScaling::Category {
+                            gap_width: None,
+                        }),
+                        ..Default::default()
+                    },
+                    ChartExAxis {
+                        scaling: Some(ooxml_types::chart_ex::ChartExScaling::Category {
+                            gap_width: None,
+                        }),
+                        ..Default::default()
+                    },
+                ],
+                plot_area_region: ChartExPlotAreaRegion {
+                    series: vec![ChartExSeries {
+                        layout_id: ChartExLayoutId::Histogram,
+                        data_id: None,
+                        layout_pr: Some(ChartExLayoutProperties {
+                            binning: Some(ChartExBinning {
+                                interval_closed: Some("l".to_string()),
+                                bin_count: Some(4),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        };
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        assert_eq!(projected.chart_type, ChartType::Histogram);
+        assert_eq!(projected.series[0].values.as_deref(), Some("Sheet1!B1:B3"));
+        let status = projected
+            .import_status
+            .expect("lossy-but-renderable projection should keep diagnostics");
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::Renderable
+        );
+        assert_eq!(
+            status.recoverability,
+            domain_types::ImportRecoverability::PartiallySupported
+        );
+        let messages = diagnostic_messages(&status);
+        for expected in [
+            "no dataId",
+            "title overlay",
+            "title position",
+            "title alignment",
+            "legend alignment",
+            "gapWidth",
+            "Additional ChartEx category axes",
+            "intervalClosed",
+        ] {
+            assert!(
+                messages.iter().any(|message| message.contains(expected)),
+                "missing diagnostic containing `{expected}` in {messages:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn internal_chart_ex_formulas_are_preserved_not_renderable_diagnostics() {
+        let chart_space = chart_space_with_series(
+            ChartExLayoutId::Waterfall,
+            vec![
+                ChartExDimension::String {
+                    dim_type: "cat".to_string(),
+                    formula: formula("_xlchart.CategoryCache"),
+                },
+                ChartExDimension::Numeric {
+                    dim_type: "val".to_string(),
+                    formula: formula("Sheet1!B1:B3"),
+                },
+            ],
+            None,
+        );
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+        let status = projected
+            .import_status
+            .expect("internal category formulas should block waterfall rendering");
+
+        assert_eq!(
+            status.renderability,
+            domain_types::ImportRenderability::NotRenderable
+        );
+        assert!(status.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == Some(domain_types::ImportDiagnosticCode::ChartPartMissingDataRange)
+        }));
+        assert!(status.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("_xlchart.CategoryCache"))
+        }));
     }
 
     #[test]

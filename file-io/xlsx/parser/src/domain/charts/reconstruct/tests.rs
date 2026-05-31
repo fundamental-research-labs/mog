@@ -2,6 +2,8 @@ use crate::domain::charts::write_canonical::serialize_chart_space;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartSpec, ChartType as DomainChartType, ObjectSize, SingleAxisData,
 };
+use domain_types::ChartDefinition;
+use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};
 
@@ -97,6 +99,20 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
 fn chart_xml(spec: &ChartSpec) -> String {
     String::from_utf8(serialize_chart_space(&reconstruct_chart_space(spec)))
         .expect("chart XML should be UTF-8")
+}
+
+fn with_original_axes(mut spec: ChartSpec, axes: Vec<ChartAxis>) -> ChartSpec {
+    spec.definition = Some(ChartDefinition::Chart(ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                axes,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    spec
 }
 
 #[test]
@@ -243,4 +259,100 @@ fn modeled_axes_reconstruct_render_contract_fields() {
     assert!(xml.contains("<c:crosses val=\"min\"/>"));
     assert!(xml.contains("<c:logBase val=\"10\"/>"));
     assert!(xml.contains("<c:crossesAt val=\"7.5\"/>"));
+}
+
+#[test]
+fn original_axis_types_ids_and_cross_axis_ids_are_preserved() {
+    let mut spec = minimal_chart_spec(DomainChartType::Scatter, None);
+    spec.axes = Some(AxisData {
+        category_axis: None,
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            title: Some("X Values".to_string()),
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: Some(SingleAxisData {
+            visible: true,
+            title: Some("Y Values".to_string()),
+            ..Default::default()
+        }),
+        series_axis: None,
+    });
+    let spec = with_original_axes(
+        spec,
+        vec![
+            ChartAxis {
+                axis_type: AxisType::Value,
+                ax_id: 10,
+                cross_ax: 20,
+                ax_pos: ChartAxisPosition::Bottom,
+                ..Default::default()
+            },
+            ChartAxis {
+                axis_type: AxisType::Value,
+                ax_id: 20,
+                cross_ax: 10,
+                ax_pos: ChartAxisPosition::Left,
+                ..Default::default()
+            },
+        ],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:valAx>").count(), 2);
+    assert!(!xml.contains("<c:catAx>"));
+    assert!(xml.contains("<c:axId val=\"10\"/>"));
+    assert!(xml.contains("<c:axId val=\"20\"/>"));
+    assert!(xml.contains("<c:crossAx val=\"20\"/>"));
+    assert!(xml.contains("<c:crossAx val=\"10\"/>"));
+}
+
+#[test]
+fn reversed_original_axis_order_keeps_role_data_by_axis_type_and_position() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            number_format: Some("0".to_string()),
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            scale_type: Some("logarithmic".to_string()),
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+    let spec = with_original_axes(
+        spec,
+        vec![
+            ChartAxis {
+                axis_type: AxisType::Value,
+                ax_id: 200,
+                cross_ax: 100,
+                ax_pos: ChartAxisPosition::Left,
+                ..Default::default()
+            },
+            ChartAxis {
+                axis_type: AxisType::Category,
+                ax_id: 100,
+                cross_ax: 200,
+                ax_pos: ChartAxisPosition::Bottom,
+                ..Default::default()
+            },
+        ],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:valAx><c:axId val=\"200\"/>"));
+    assert!(xml.contains("<c:catAx><c:axId val=\"100\"/>"));
+    assert!(xml.contains("<c:logBase val=\"10\"/>"));
+    assert!(xml.contains("<c:numFmt formatCode=\"0\""));
+    assert!(xml.contains("<c:crossAx val=\"100\"/>"));
+    assert!(xml.contains("<c:crossAx val=\"200\"/>"));
 }

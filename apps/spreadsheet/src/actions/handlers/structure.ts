@@ -34,6 +34,7 @@ import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import {
+  getUIStore,
   handled,
   isProtectionRejection,
   notHandled,
@@ -478,6 +479,10 @@ export const APPLY_COLUMN_WIDTH: AsyncActionHandler = async (deps, payload) => {
  * Uses unified Workbook API.
  */
 export const UNDO: AsyncActionHandler = async (deps) => {
+  if (getUIStore(deps).getState().consumeSuppressNextUndo()) {
+    return handled();
+  }
+
   const receipt = await deps.workbook.history.undo();
   if (receipt.success) {
     const sheetId = deps.getActiveSheetId();

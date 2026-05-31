@@ -331,6 +331,16 @@ const exitAllModes = assign(({ context }: { context: SelectionContext }) => {
   const newActiveCell = context.modes.extend
     ? getMovingEdge(context.pendingRange, context.anchor ?? context.activeCell)
     : context.activeCell;
+  if (context.modes.extend) {
+    return {
+      modes: initialSelectionModes,
+      committedRanges: [],
+      pendingRange: context.pendingRange,
+      activeCell: newActiveCell,
+      anchor: context.anchor ?? context.activeCell,
+    };
+  }
+
   return {
     modes: initialSelectionModes,
     committedRanges: [],

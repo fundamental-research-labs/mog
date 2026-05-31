@@ -301,15 +301,25 @@ describe('selection-mode lifecycle', () => {
     expect(after.pendingRange.startCol).toBe(2);
     expect(after.pendingRange.endRow).toBe(2);
     expect(after.pendingRange.endCol).toBe(3); // extended to D3
+    expect(after.activeCell).toEqual(cell(2, 3));
     actor.stop();
   });
 
-  it('11. extend_mode_esc_clears', () => {
+  it('11. extend_mode_esc_clears_and_preserves_range', () => {
     const actor = startActorAt(2, 2);
     actor.send({ type: 'SET_MODE', mode: 'extend', value: true });
+    actor.send({ type: 'KEY_ARROW', direction: 'right', shiftKey: false });
     actor.send({ type: 'EXIT_ALL_MODES' });
 
-    expect(actor.getSnapshot().context.modes).toEqual(initialSelectionModes);
+    const afterEscape = actor.getSnapshot().context;
+    expect(afterEscape.modes).toEqual(initialSelectionModes);
+    expect(afterEscape.pendingRange).toEqual(rng(2, 2, 2, 3));
+    expect(afterEscape.activeCell).toEqual(cell(2, 3));
+
+    actor.send({ type: 'KEY_ARROW', direction: 'right', shiftKey: false });
+    const afterArrow = actor.getSnapshot().context;
+    expect(afterArrow.pendingRange).toEqual(rng(2, 4, 2, 4));
+    expect(afterArrow.activeCell).toEqual(cell(2, 4));
     actor.stop();
   });
 

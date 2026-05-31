@@ -732,6 +732,7 @@ const runPaste: AsyncActionHandler = async (deps) => {
     getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
     commands: deps.commands.clipboard,
     waitForPasteCommit: waitForPendingClipboardPaste,
+    suppressNextUndo: () => uiStore.getState().suppressNextUndo(),
     pasteImage: async (blob, anchorCell) => {
       const sheetId = deps.getActiveSheetId();
       const ws = deps.workbook.getSheetById(sheetId);

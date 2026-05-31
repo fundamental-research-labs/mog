@@ -295,4 +295,28 @@ describe('unifiedPaste — image routing', () => {
     expect((commands as any).externalPaste).not.toHaveBeenCalled();
     expect((commands as any).paste).not.toHaveBeenCalled();
   });
+
+  it('suppresses canceled internal clipboard text instead of pasting it as external text', async () => {
+    installClipboard([makeClipItem({ 'text/plain': blobLike('One\tTwo', 'text/plain') })]);
+    const commands = makeCommands();
+    const suppressNextUndo = jest.fn();
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            data: null,
+            suppressedTextSignature: 'One\tTwo',
+          },
+          matches: () => false,
+        }) as any,
+      commands,
+      suppressNextUndo,
+    });
+
+    expect((commands as any).externalPaste).not.toHaveBeenCalled();
+    expect((commands as any).paste).not.toHaveBeenCalled();
+    expect(suppressNextUndo).toHaveBeenCalledTimes(1);
+  });
 });

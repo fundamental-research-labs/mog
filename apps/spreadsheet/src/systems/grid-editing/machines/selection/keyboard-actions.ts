@@ -80,6 +80,22 @@ const moveActiveCell = assign(
     // Excel's additive arrow always moves the active cell to a single cell,
     // regardless of pending range size.
     if (isMultiCellSelection && !context.modes.additive) {
+      const hasDistinctAnchor =
+        context.anchor !== null &&
+        (context.activeCell.row !== context.anchor.row ||
+          context.activeCell.col !== context.anchor.col);
+      if (hasDistinctAnchor) {
+        const stepped = moveCellSkipHidden(
+          context.activeCell,
+          event.direction,
+          1,
+          context.isRowHidden,
+          context.isColHidden,
+        );
+        const newCell = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
+        return moveTo(newCell);
+      }
+
       let newCell: { row: number; col: number };
       const normalizedRange = normalizeRange(lastRange);
 
@@ -154,7 +170,8 @@ const extendSelection = assign(
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.extend && !event.shiftKey ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );
 

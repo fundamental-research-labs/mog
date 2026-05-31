@@ -69,6 +69,8 @@ export interface UnifiedPasteDeps {
   waitForPasteCommit?: () => Promise<void>;
   /** Read the persisted user default for normal paste. */
   readPasteDefaultsPreference?: () => unknown;
+  /** Consume the next undo gesture when paste intentionally no-ops. */
+  suppressNextUndo?: () => void;
 }
 
 /**
@@ -245,6 +247,15 @@ export async function unifiedPaste(
     clipboardState.context.isStale !== true;
   const isOurClipboard =
     (internalSignature === systemSignature && systemSignature !== '') || hasFreshInternalClipboard;
+  const suppressedSignature = clipboardState.context.suppressedTextSignature
+    ? normalizeClipboardSignature(clipboardState.context.suppressedTextSignature)
+    : '';
+
+  if (suppressedSignature && suppressedSignature === systemSignature) {
+    hidePendingPreview();
+    deps.suppressNextUndo?.();
+    return;
+  }
 
   // 3. Route to appropriate paste method
   if (clipboardData && isOurClipboard) {

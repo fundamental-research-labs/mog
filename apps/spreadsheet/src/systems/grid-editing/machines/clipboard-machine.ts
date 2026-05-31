@@ -102,6 +102,12 @@ export interface ClipboardContext {
    * @internal Set via machine input
    */
   kernelClipboardService?: IClipboardService;
+  /**
+   * App-owned text signature from a canceled or consumed internal copy/cut.
+   * If the browser clipboard still contains this TSV, paste should no-op
+   * instead of importing it as external text after the internal state is clear.
+   */
+  suppressedTextSignature: string | null;
 }
 
 /**
@@ -130,6 +136,7 @@ const initialContext: ClipboardContext = {
   skipOverwriteCheck: false,
   isStale: false,
   kernelClipboardService: undefined,
+  suppressedTextSignature: null,
 };
 
 // =============================================================================
@@ -511,6 +518,14 @@ function truncateExternalCellText(value: string): string {
   return value.slice(0, end);
 }
 
+function getInternalTextSignature(context: ClipboardContext): string | null {
+  const signature = context.data?.textSignature;
+  if (!signature || context.data?.sourceSheetId === EXTERNAL_SOURCE_SHEET_ID) {
+    return null;
+  }
+  return signature;
+}
+
 // =============================================================================
 // MACHINE DEFINITION
 // =============================================================================
@@ -543,6 +558,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedTextSignature: null,
       };
     }),
 
@@ -567,6 +583,7 @@ export const clipboardMachine = setup({
         isCut: true,
         errorMessage: null,
         isStale: false,
+        suppressedTextSignature: null,
       };
     }),
 
@@ -591,6 +608,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedTextSignature: null,
       };
     }),
 
@@ -615,6 +633,7 @@ export const clipboardMachine = setup({
         isCut: true,
         errorMessage: null,
         isStale: false,
+        suppressedTextSignature: null,
       };
     }),
 
@@ -665,6 +684,7 @@ export const clipboardMachine = setup({
     clearClipboardAfterCut: assign(({ context }) => {
       // Delegate to kernel clipboard service
       context.kernelClipboardService?.clear();
+      const suppressedTextSignature = getInternalTextSignature(context);
 
       return {
         sourceRanges: null,
@@ -673,6 +693,7 @@ export const clipboardMachine = setup({
         isCut: false,
         pastePreviewTarget: null,
         marchingAntsPhase: 0,
+        suppressedTextSignature,
       };
     }),
 
@@ -689,6 +710,8 @@ export const clipboardMachine = setup({
     clearAll: assign(({ context }) => {
       // Delegate to kernel clipboard service
       context.kernelClipboardService?.clear();
+      const suppressedTextSignature =
+        getInternalTextSignature(context) ?? context.suppressedTextSignature;
 
       return {
         sourceRanges: null,
@@ -700,6 +723,7 @@ export const clipboardMachine = setup({
         errorMessage: null,
         pasteOptions: null,
         isStale: false,
+        suppressedTextSignature,
       };
     }),
 
@@ -740,6 +764,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedTextSignature: null,
       };
     }),
 
@@ -754,6 +779,7 @@ export const clipboardMachine = setup({
         isCut: false,
         pastePreviewTarget: event.targetCell,
         pasteOptions: event.options ?? null,
+        suppressedTextSignature: null,
       };
     }),
 

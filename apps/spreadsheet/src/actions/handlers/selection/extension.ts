@@ -2,7 +2,9 @@
  * Extension Action Handlers - Shift+Arrow selection extension.
  *
  * Handlers for extending the current selection using Shift+Arrow keys.
- * These handlers delegate to the selection commands' keyArrow method with shiftKey=true.
+ * In sticky F8 Extend mode, the action is still routed here for bare arrows,
+ * but the machine must see shiftKey=false so it can keep the active cell on
+ * the moving edge instead of pinning it to the anchor like physical Shift+Arrow.
  *
  */
 
@@ -13,21 +15,21 @@ import { handled, type ActionHandler } from './helpers';
 // =============================================================================
 
 export const EXTEND_SELECTION_UP: ActionHandler = (deps) => {
-  deps.commands.selection.keyArrow('up', true);
+  deps.commands.selection.keyArrow('up', !deps.accessors.selection.getModes().extend);
   return handled();
 };
 
 export const EXTEND_SELECTION_DOWN: ActionHandler = (deps) => {
-  deps.commands.selection.keyArrow('down', true);
+  deps.commands.selection.keyArrow('down', !deps.accessors.selection.getModes().extend);
   return handled();
 };
 
 export const EXTEND_SELECTION_LEFT: ActionHandler = (deps) => {
-  deps.commands.selection.keyArrow('left', true);
+  deps.commands.selection.keyArrow('left', !deps.accessors.selection.getModes().extend);
   return handled();
 };
 
 export const EXTEND_SELECTION_RIGHT: ActionHandler = (deps) => {
-  deps.commands.selection.keyArrow('right', true);
+  deps.commands.selection.keyArrow('right', !deps.accessors.selection.getModes().extend);
   return handled();
 };

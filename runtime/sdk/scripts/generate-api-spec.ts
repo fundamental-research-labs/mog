@@ -1575,7 +1575,9 @@ function assertNormalizedType(type: NormalizedType, pathLabel: string): void {
     case 'tuple':
     case 'union':
     case 'intersection':
-      type.items.forEach((item, index) => assertNormalizedType(item, `${pathLabel}.items[${index}]`));
+      type.items.forEach((item, index) =>
+        assertNormalizedType(item, `${pathLabel}.items[${index}]`),
+      );
       return;
     case 'objectRef':
       if (!type.name) throw new Error(`${pathLabel}: objectRef type missing name`);

@@ -660,9 +660,7 @@ impl YrsComputeEngine {
         } else {
             // Normal path: incremental cell changes only.
             if !occupied_positions.is_empty() {
-                self.stores
-                    .compute
-                    .regenerate_formula_strings(&self.mirror);
+                self.stores.compute.regenerate_formula_strings(&self.mirror);
             }
             if !doc_changes.cells.is_empty() {
                 services::mutation::apply_cell_changes(

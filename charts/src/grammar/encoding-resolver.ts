@@ -779,8 +779,10 @@ function createOpacityScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = extractNumericValues(data, field);
-  const min = numericDomainBound(channel.scale?.domain, 0) ?? (values.length > 0 ? safeMin(values) : 0);
-  const max = numericDomainBound(channel.scale?.domain, 1) ?? (values.length > 0 ? safeMax(values) : 1);
+  const min =
+    numericDomainBound(channel.scale?.domain, 0) ?? (values.length > 0 ? safeMin(values) : 0);
+  const max =
+    numericDomainBound(channel.scale?.domain, 1) ?? (values.length > 0 ? safeMax(values) : 1);
   const rangeStart = numericDomainBound(channel.scale?.range, 0) ?? 0.3;
   const rangeEnd = numericDomainBound(channel.scale?.range, 1) ?? 1;
 

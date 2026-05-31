@@ -239,7 +239,8 @@ function horizontalCylinderFaces(rect: RectMark, depth: Depth): PathFaceSpec[] {
 function frontFace(rect: RectMark, markSpec: MarkSpec, pyramidExtent?: PyramidExtent): Point[] {
   const shape = markSpec.chart3d?.barShape ?? 'box';
   const orientation = markSpec.chart3d?.orientation ?? 'vertical';
-  const tapered = shape === 'cone' || shape === 'coneToMax' || shape === 'pyramid' || shape === 'pyramidToMax';
+  const tapered =
+    shape === 'cone' || shape === 'coneToMax' || shape === 'pyramid' || shape === 'pyramidToMax';
   if (!tapered) {
     return [
       { x: rect.x, y: rect.y },
@@ -282,7 +283,12 @@ function stackedPyramidExtents(
 ): Map<RectMark, PyramidExtent> {
   const result = new Map<RectMark, PyramidExtent>();
   const shape = markSpec.chart3d?.barShape;
-  if (shape !== 'cone' && shape !== 'coneToMax' && shape !== 'pyramid' && shape !== 'pyramidToMax') {
+  if (
+    shape !== 'cone' &&
+    shape !== 'coneToMax' &&
+    shape !== 'pyramid' &&
+    shape !== 'pyramidToMax'
+  ) {
     return result;
   }
   if (!isStacked(config)) return result;
@@ -399,7 +405,8 @@ function faceStyle(rect: RectMark, shade: number, face: FaceSpec['face']): RectM
     };
   }
   const fill = shadeColor(rect.style.fill, shade) ?? rect.style.fill;
-  const stroke = shadeColor(rect.style.stroke ?? rect.style.fill, shade - 0.08) ?? rect.style.stroke;
+  const stroke =
+    shadeColor(rect.style.stroke ?? rect.style.fill, shade - 0.08) ?? rect.style.stroke;
   return {
     ...rect.style,
     fill,

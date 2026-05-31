@@ -10,9 +10,7 @@ function explicitPointCount(cache: ChartPointCacheLike | null | undefined): numb
     : undefined;
 }
 
-export function chartPointCacheCardinality(
-  cache: ChartPointCacheLike | null | undefined,
-): number {
+export function chartPointCacheCardinality(cache: ChartPointCacheLike | null | undefined): number {
   if (!cache) return 0;
   const pointCount = explicitPointCount(cache);
   if (pointCount !== undefined) return pointCount;

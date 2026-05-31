@@ -301,9 +301,7 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
     bounds.endCol,
   );
   if (columnGroup) {
-    wb.setPendingUndoDescription(
-      `Ungroup columns ${columnGroup.start + 1}-${columnGroup.end + 1}`,
-    );
+    wb.setPendingUndoDescription(`Ungroup columns ${columnGroup.start + 1}-${columnGroup.end + 1}`);
     await ws.outline.ungroupColumns(columnGroup.start, columnGroup.end);
     return handled();
   }

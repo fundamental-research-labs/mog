@@ -47,7 +47,10 @@ describe('axis generator render contracts', () => {
 
     const result = compile(spec);
     const topDomain = result.axes.find(
-      (mark) => mark.type === 'path' && datum(mark).role === 'x-axis-top' && datum(mark).axisPart === 'domain',
+      (mark) =>
+        mark.type === 'path' &&
+        datum(mark).role === 'x-axis-top' &&
+        datum(mark).axisPart === 'domain',
     ) as PathMark | undefined;
     const topLabels = result.axes.filter(
       (mark): mark is TextMark =>
@@ -286,9 +289,7 @@ describe('axis generator render contracts', () => {
     const columnResult = compile(columnSpec);
     const yDomain = columnResult.axes.find(
       (mark): mark is PathMark =>
-        mark.type === 'path' &&
-        datum(mark).role === 'y-axis' &&
-        datum(mark).axisPart === 'domain',
+        mark.type === 'path' && datum(mark).role === 'y-axis' && datum(mark).axisPart === 'domain',
     );
     const firstCategoryCenter =
       (columnResult.scales.x?.('A') as number) + (columnResult.scales.x?.bandwidth?.() ?? 0) / 2;
@@ -317,9 +318,7 @@ describe('axis generator render contracts', () => {
     const barResult = compile(barSpec);
     const xDomain = barResult.axes.find(
       (mark): mark is PathMark =>
-        mark.type === 'path' &&
-        datum(mark).role === 'x-axis' &&
-        datum(mark).axisPart === 'domain',
+        mark.type === 'path' && datum(mark).role === 'x-axis' && datum(mark).axisPart === 'domain',
     );
     const lastCategoryCenter =
       (barResult.scales.y?.('B') as number) + (barResult.scales.y?.bandwidth?.() ?? 0) / 2;

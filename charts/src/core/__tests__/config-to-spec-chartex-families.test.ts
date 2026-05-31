@@ -156,13 +156,11 @@ describe('configToSpec ChartEx-family semantics', () => {
     const spec = asLayerSpec(configToSpec(config, data));
     const rows = 'values' in spec.data! ? spec.data.values : [];
 
-    expect(rows.map((row) => [row.category, row.value, row.__mogParetoCumulativePercent])).toEqual(
-      [
-        ['A', 5, 50],
-        ['C', 3, 80],
-        ['B', 2, 100],
-      ],
-    );
+    expect(rows.map((row) => [row.category, row.value, row.__mogParetoCumulativePercent])).toEqual([
+      ['A', 5, 50],
+      ['C', 3, 80],
+      ['B', 2, 100],
+    ]);
     expect(spec.resolve).toEqual({
       scale: { y: 'independent' },
       axis: { y: 'independent' },
@@ -231,11 +229,7 @@ describe('configToSpec ChartEx-family semantics', () => {
     };
 
     const rows = chartDataToRows(data, config);
-    expect(rows.map((row) => row[WATERFALL_TYPE_FIELD])).toEqual([
-      'increase',
-      'decrease',
-      'total',
-    ]);
+    expect(rows.map((row) => row[WATERFALL_TYPE_FIELD])).toEqual(['increase', 'decrease', 'total']);
     expect(rows.map((row) => row[WATERFALL_START_FIELD])).toEqual([0, 10, 0]);
     expect(rows.map((row) => row[WATERFALL_END_FIELD])).toEqual([10, 7, 7]);
     expect(rows.map((row) => row[WATERFALL_RUNNING_TOTAL_FIELD])).toEqual([10, 7, 7]);

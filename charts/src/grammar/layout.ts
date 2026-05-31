@@ -600,9 +600,9 @@ function collectEncodings(spec: ChartSpec): EncodingSpec[] {
 function hasLegendChannel(encoding: EncodingSpec | undefined): boolean {
   return Boolean(
     channelContributesLegend(encoding?.color) ||
-      channelContributesLegend(encoding?.fill) ||
-      channelContributesLegend(encoding?.shape) ||
-      channelContributesLegend(encoding?.size),
+    channelContributesLegend(encoding?.fill) ||
+    channelContributesLegend(encoding?.shape) ||
+    channelContributesLegend(encoding?.size),
   );
 }
 

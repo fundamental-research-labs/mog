@@ -114,11 +114,7 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
 
     const result = await filters.getFilterDropdownData(0, 'filter-1');
 
-    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(
-      [1, 2, 3],
-      null,
-      null,
-    );
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith([1, 2, 3], null, null);
     expect(result).toEqual({ ...dropdownData, columnType: 'number' });
   });
 

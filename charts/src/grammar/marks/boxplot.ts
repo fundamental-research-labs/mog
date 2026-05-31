@@ -129,7 +129,9 @@ function quantileExclusive(sortedValues: number[], p: number): number {
   if (position >= sortedValues.length) return sortedValues[sortedValues.length - 1];
   const lowerIndex = Math.floor(position) - 1;
   const fraction = position - Math.floor(position);
-  return sortedValues[lowerIndex] + fraction * (sortedValues[lowerIndex + 1] - sortedValues[lowerIndex]);
+  return (
+    sortedValues[lowerIndex] + fraction * (sortedValues[lowerIndex + 1] - sortedValues[lowerIndex])
+  );
 }
 
 // =============================================================================

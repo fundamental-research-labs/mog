@@ -11,7 +11,10 @@ interface ParetoRow extends DataRow {
   __mogParetoSourceIndex: number;
 }
 
-export function buildParetoLayers(config: ChartConfig, data: ChartData): {
+export function buildParetoLayers(
+  config: ChartConfig,
+  data: ChartData,
+): {
   rows: DataRow[];
   layers: UnitSpec[];
 } {
@@ -67,11 +70,10 @@ export function buildParetoLayers(config: ChartConfig, data: ChartData): {
 }
 
 export function buildParetoRows(data: ChartData): ParetoRow[] {
-  const rows = firstSeriesValues(data)
-    .sort((a, b) => {
-      const valueOrder = b.value - a.value;
-      return valueOrder === 0 ? a.index - b.index : valueOrder;
-    });
+  const rows = firstSeriesValues(data).sort((a, b) => {
+    const valueOrder = b.value - a.value;
+    return valueOrder === 0 ? a.index - b.index : valueOrder;
+  });
   const total = rows.reduce((sum, row) => sum + row.value, 0);
   let runningTotal = 0;
 

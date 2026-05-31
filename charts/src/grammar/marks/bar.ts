@@ -352,12 +352,7 @@ export function generateBarMarks(
       const barX = xScale(xValue) as number; // Category axis always uses original scale
       const fullBandWidth = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : 20;
       const slot = barGeometry
-        ? excelBarSlotGeometry(
-            scaleStep(xScale, fullBandWidth),
-            numGroups,
-            groupIndex,
-            barGeometry,
-          )
+        ? excelBarSlotGeometry(scaleStep(xScale, fullBandWidth), numGroups, groupIndex, barGeometry)
         : { offset: groupIndex * (fullBandWidth / numGroups), size: fullBandWidth / numGroups };
       const barWidth = slot.size;
       const groupOffset = slot.offset;

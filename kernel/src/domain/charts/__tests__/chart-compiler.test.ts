@@ -317,7 +317,13 @@ describe('chart compiler bridge module', () => {
       const chartData: ChartData = {
         categories: ['Q1', 'Q2'],
         series: [
-          { name: 'Revenue', data: [{ x: 'Q1', y: 10 }, { x: 'Q2', y: 20 }] },
+          {
+            name: 'Revenue',
+            data: [
+              { x: 'Q1', y: 10 },
+              { x: 'Q2', y: 20 },
+            ],
+          },
         ],
       };
 

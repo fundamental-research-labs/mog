@@ -1,7 +1,4 @@
-import type {
-  ChartBounds,
-  ChartRenderFrame,
-} from '@mog-sdk/contracts/bridges';
+import type { ChartBounds, ChartRenderFrame } from '@mog-sdk/contracts/bridges';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { ChartRenderFrameSnapshot } from '@mog-sdk/contracts/data/charts';
 

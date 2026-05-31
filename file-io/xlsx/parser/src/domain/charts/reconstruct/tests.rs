@@ -1,4 +1,5 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
+use domain_types::ChartDefinition;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
     ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
@@ -8,7 +9,6 @@ use domain_types::chart::{
 };
 use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
-use domain_types::ChartDefinition;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};

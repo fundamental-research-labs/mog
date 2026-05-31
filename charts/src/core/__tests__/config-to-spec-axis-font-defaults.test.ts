@@ -55,11 +55,7 @@ function asUnitSpec(spec: ChartSpec): UnitSpec {
   return spec as UnitSpec;
 }
 
-function axisTextMarks(
-  marks: readonly unknown[],
-  role: string,
-  axisPart: string,
-): TextMark[] {
+function axisTextMarks(marks: readonly unknown[], role: string, axisPart: string): TextMark[] {
   return marks.filter((mark): mark is TextMark => {
     if (!mark || typeof mark !== 'object' || (mark as { type?: unknown }).type !== 'text') {
       return false;

@@ -2433,14 +2433,18 @@ mod tests {
             assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
             assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
             assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
-            assert!(hierarchy
-                .rows
-                .iter()
-                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/US" && row.value == Some(10.0))
+            );
+            assert!(
+                hierarchy
+                    .rows
+                    .iter()
+                    .any(|row| row.id == "Americas/CA" && row.value == Some(20.0))
+            );
             assert_eq!(
                 projected.import_status.unwrap().renderability,
                 domain_types::ImportRenderability::NotRenderable

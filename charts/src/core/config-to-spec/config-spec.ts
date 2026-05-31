@@ -1,9 +1,6 @@
 import type { ConfigSpec, EncodingSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
-import {
-  mergeChartFormats,
-  resolveChartOwnerElementStyle,
-} from '../style-resolver';
+import { mergeChartFormats, resolveChartOwnerElementStyle } from '../style-resolver';
 import { buildLayoutHints } from './layout-hints';
 import { resolvedCategoryColors } from './style';
 import { resolveStackMode } from './subtypes';

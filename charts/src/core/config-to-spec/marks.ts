@@ -20,11 +20,7 @@ import {
   applyPrimarySeriesFormat,
   hasPointStyleOverrides,
 } from './mark-format';
-import {
-  SERIES_FILL_FIELD,
-  SERIES_STROKE_FIELD,
-  SERIES_STROKE_WIDTH_FIELD,
-} from './fields';
+import { SERIES_FILL_FIELD, SERIES_STROKE_FIELD, SERIES_STROKE_WIDTH_FIELD } from './fields';
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 import { barOrientationForChartType } from './bar-geometry';
@@ -185,8 +181,8 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Radar: radial polygon series with optional fill + markers.
   if (config.type === 'radar') {
-    const radarFilled = config.radarFilled ?? (config.subType === 'filled');
-    const radarMarkers = config.radarMarkers ?? (config.subType === 'markers');
+    const radarFilled = config.radarFilled ?? config.subType === 'filled';
+    const radarMarkers = config.radarMarkers ?? config.subType === 'markers';
     const mark: MarkSpec = {
       type: 'radar',
       fillField: SERIES_FILL_FIELD,
@@ -279,7 +275,9 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
   return baseType;
 }
 
-function resolveBar3DShape(config: ChartConfig): NonNullable<NonNullable<MarkSpec['chart3d']>['barShape']> {
+function resolveBar3DShape(
+  config: ChartConfig,
+): NonNullable<NonNullable<MarkSpec['chart3d']>['barShape']> {
   if (config.barShape) return config.barShape;
   if (String(config.type).startsWith('cylinder')) return 'cylinder';
   if (String(config.type).startsWith('cone')) return 'cone';

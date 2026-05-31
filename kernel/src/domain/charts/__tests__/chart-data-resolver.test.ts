@@ -705,9 +705,7 @@ describe('ChartDataResolver', () => {
       const raw = row === 0 ? [10, 20, 30][col] : ['Live A', 'Live B', 'Live C'][col];
       return {
         value:
-          typeof raw === 'number'
-            ? { type: 'number', value: raw }
-            : { type: 'text', value: raw },
+          typeof raw === 'number' ? { type: 'number', value: raw } : { type: 'text', value: raw },
       };
     });
     const resolver = new ChartDataResolver(

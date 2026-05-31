@@ -16,7 +16,10 @@
 
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
-import { DEFAULT_COL_WIDTH_MACOS, DEFAULT_ROW_HEIGHT } from '@mog-sdk/contracts/rendering/constants';
+import {
+  DEFAULT_COL_WIDTH_MACOS,
+  DEFAULT_ROW_HEIGHT,
+} from '@mog-sdk/contracts/rendering/constants';
 import type {
   ButtonControl,
   CheckboxControl,
@@ -771,8 +774,7 @@ export class FormControlManager implements IFormControlManager {
     if ((height == null || height <= 0) && anchor.endRow != null) {
       const fromY =
         anchor.anchorRow * DEFAULT_ROW_HEIGHT + controlOffsetToPx(anchor.anchorRowOffsetEmu);
-      const toY =
-        anchor.endRow * DEFAULT_ROW_HEIGHT + controlOffsetToPx(anchor.endRowOffsetEmu);
+      const toY = anchor.endRow * DEFAULT_ROW_HEIGHT + controlOffsetToPx(anchor.endRowOffsetEmu);
       height = Math.abs(toY - fromY);
     }
 

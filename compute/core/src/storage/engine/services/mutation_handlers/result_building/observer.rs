@@ -10,9 +10,9 @@ use crate::snapshot::{
     SheetChangeField, SheetSettingsChange, SortingChange, SparklineChange, TableChange,
     VisibilityChange, WorkbookSettingsChange,
 };
+use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::sheet::{
     dimensions, pivots, properties, settings, sparklines, view, visibility,
 };

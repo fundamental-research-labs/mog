@@ -107,7 +107,8 @@ export function applyStyle(
   if (fill) {
     ctx.fillStyle = fill;
   }
-  const stroke = paintToCanvasStyle(ctx, style.line?.paint ?? style.strokePaint, bounds) ?? style.stroke;
+  const stroke =
+    paintToCanvasStyle(ctx, style.line?.paint ?? style.strokePaint, bounds) ?? style.stroke;
   if (stroke) {
     ctx.strokeStyle = stroke;
   }

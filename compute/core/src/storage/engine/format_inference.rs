@@ -7,7 +7,7 @@ use formula_types::IdentityFormulaRef;
 use snapshot_types::MutationResult;
 use value_types::{CellValue, ComputeError};
 
-use super::{mutation, services, YrsComputeEngine};
+use super::{YrsComputeEngine, mutation, services};
 
 impl YrsComputeEngine {
     /// cell does not already have a date format applied, write the

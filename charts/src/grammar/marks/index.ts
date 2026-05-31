@@ -17,7 +17,11 @@ import { generateBar3DMarks } from './bar-3d';
 import { generateBarMarks } from './bar';
 import { generateBoxPlotMarks } from './boxplot';
 import { generateContourMarks } from './contour';
-import { depthEnhanceArcMarks, depthEnhanceAreaPathMarks, depthEnhanceLinePathMarks } from './depth-3d';
+import {
+  depthEnhanceArcMarks,
+  depthEnhanceAreaPathMarks,
+  depthEnhanceLinePathMarks,
+} from './depth-3d';
 import { generateHistogramMarks } from './histogram';
 import { generateLineMarks } from './line';
 import { generatePointMarks } from './point';
@@ -86,7 +90,13 @@ export function generateMarks(
     case 'arc':
       return generateArcMarks(markSpec, data, scales, encodings, layout);
     case 'arc3d': {
-      const arcMarks = generateArcMarks({ ...markSpec, type: 'arc' }, data, scales, encodings, layout);
+      const arcMarks = generateArcMarks(
+        { ...markSpec, type: 'arc' },
+        data,
+        scales,
+        encodings,
+        layout,
+      );
       return depthEnhanceArcMarks(arcMarks, depthOptionsFor3DPlot(markSpec, layout)).map((mark) =>
         with3DMetadata(mark, markSpec.chart3d, 'outer'),
       );

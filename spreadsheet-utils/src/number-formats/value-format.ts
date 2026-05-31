@@ -133,7 +133,10 @@ export function formatExcelValue(value: unknown, formatCode?: string): string {
   return formatExcelValueResult(value, formatCode).text;
 }
 
-export function formatExcelValueResult(value: unknown, formatCode?: string): ExcelNumberFormatResult {
+export function formatExcelValueResult(
+  value: unknown,
+  formatCode?: string,
+): ExcelNumberFormatResult {
   if (value === null || value === undefined) return { text: '', section: 'general' };
   if (value instanceof Date) return { text: value.toLocaleDateString(), section: 'general' };
 
@@ -176,7 +179,9 @@ function formatGeneralNumber(value: number): string {
 }
 
 function selectSection(value: number, sections: FormatSection[]): FormatSection | undefined {
-  const conditional = sections.find((section) => section.condition && matchesCondition(value, section.condition));
+  const conditional = sections.find(
+    (section) => section.condition && matchesCondition(value, section.condition),
+  );
   if (conditional) return conditional;
 
   if (sections.length === 1) return sections[0];
@@ -411,7 +416,11 @@ function fractionPatternRange(pattern: string): { start: number; end: number } |
     : { start: match.index, end: match.index + match[0].length };
 }
 
-function applyFractionToPattern(pattern: string, formattedNumber: string, isNegative: boolean): string {
+function applyFractionToPattern(
+  pattern: string,
+  formattedNumber: string,
+  isNegative: boolean,
+): string {
   const range = fractionPatternRange(pattern);
   if (!range) return applyNumberToPattern(pattern, formattedNumber, isNegative);
   let prefix = renderLiterals(pattern.slice(0, range.start));
@@ -424,9 +433,10 @@ function applyFractionToPattern(pattern: string, formattedNumber: string, isNega
 function formatFraction(value: number, pattern: string): string {
   const denominatorPattern = stripLiterals(pattern).match(/\/([?#0]+)/)?.[1] ?? '?';
   const fixedDenominator = Number(denominatorPattern.replace(/[?#]/g, ''));
-  const maxDenominator = Number.isFinite(fixedDenominator) && fixedDenominator > 0
-    ? fixedDenominator
-    : Math.pow(10, denominatorPattern.length) - 1;
+  const maxDenominator =
+    Number.isFinite(fixedDenominator) && fixedDenominator > 0
+      ? fixedDenominator
+      : Math.pow(10, denominatorPattern.length) - 1;
   const whole = Math.floor(value);
   const fraction = value - whole;
   let bestNumerator = 0;
@@ -467,7 +477,11 @@ function decimalPlacesForPattern(pattern: string): { required: number; maximum: 
   };
 }
 
-function applyNumberToPattern(pattern: string, formattedNumber: string, isNegative: boolean): string {
+function applyNumberToPattern(
+  pattern: string,
+  formattedNumber: string,
+  isNegative: boolean,
+): string {
   const runs = placeholderRuns(pattern);
   const numberRun = runs[0];
   if (!numberRun) return renderLiterals(pattern);

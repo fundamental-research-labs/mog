@@ -91,7 +91,9 @@ function renderTextAtOrigin(ctx: CanvasRenderingContext2D, mark: TextMark): void
       if (hasRenderableFill({ ...mark.style, ...(run.fill ? { fillPaint: run.fill } : {}) })) {
         ctx.fillText(run.text, cursor, 0);
       }
-      if (hasRenderableStroke({ ...mark.style, ...(run.stroke ? { strokePaint: run.stroke } : {}) })) {
+      if (
+        hasRenderableStroke({ ...mark.style, ...(run.stroke ? { strokePaint: run.stroke } : {}) })
+      ) {
         ctx.strokeText(run.text, cursor, 0);
       }
       if (run.underline ?? mark.underline) drawDecoration(ctx, mark, cursor, width, 'underline');
@@ -181,7 +183,9 @@ export function getTextBounds(
 ): { x: number; y: number; width: number; height: number } {
   ctx.save();
   ctx.font = buildFontString(mark);
-  const width = mark.richText?.length ? measureRichText(ctx, mark) : ctx.measureText(mark.text).width;
+  const width = mark.richText?.length
+    ? measureRichText(ctx, mark)
+    : ctx.measureText(mark.text).width;
   ctx.restore();
 
   // Approximate height from font size (actual depends on font metrics)

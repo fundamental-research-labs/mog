@@ -239,9 +239,7 @@ describe('ViewportFetchManager', () => {
         sheetId: 'sheet-1',
         ...latestBounds,
       });
-      expect(manager.getPerViewportStates().get('main')!.lastVisibleBounds).toEqual(
-        latestBounds,
-      );
+      expect(manager.getPerViewportStates().get('main')!.lastVisibleBounds).toEqual(latestBounds);
     });
   });
 

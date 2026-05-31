@@ -113,9 +113,7 @@ describe('configToSpec invisible stacked bar series', () => {
     expect(spec.encoding?.color?.scale).toMatchObject({
       domain: ['25th to Median', 'Median to 75th'],
     });
-    expect(spec.encoding?.color?.legend).toEqual(
-      expect.not.objectContaining({ reverse: true }),
-    );
+    expect(spec.encoding?.color?.legend).toEqual(expect.not.objectContaining({ reverse: true }));
 
     const result = compile(spec);
     expect(result.layout.legend?.x).toBeGreaterThanOrEqual(
@@ -123,7 +121,8 @@ describe('configToSpec invisible stacked bar series', () => {
     );
     const hiddenBars = result.marks.filter(
       (mark): mark is RectMark =>
-        mark.type === 'rect' && (mark.datum as { series?: string } | undefined)?.series === 'Series 0',
+        mark.type === 'rect' &&
+        (mark.datum as { series?: string } | undefined)?.series === 'Series 0',
     );
     expect(hiddenBars).toHaveLength(2);
     expect(hiddenBars.every((mark) => mark.style.opacity === 0)).toBe(true);
@@ -162,12 +161,7 @@ describe('configToSpec invisible stacked bar series', () => {
     const spec = asUnitSpec(configToSpec(importedConfig, duplicateData));
 
     expect(spec.encoding?.y?.scale).toMatchObject({
-      domain: [
-        '__mogCategory:0',
-        '__mogCategory:1',
-        '__mogCategory:2',
-        '__mogCategory:3',
-      ],
+      domain: ['__mogCategory:0', '__mogCategory:1', '__mogCategory:2', '__mogCategory:3'],
       reverse: true,
     });
     expect(spec.encoding?.y?.axis).toMatchObject({
@@ -298,7 +292,9 @@ describe('configToSpec invisible stacked bar series', () => {
     const result = compile(spec);
     const axisLevelLabels = result.axes.filter((mark): mark is TextMark => {
       const datum = mark.datum as { axisPart?: string; role?: string } | undefined;
-      return mark.type === 'text' && datum?.role === 'y-axis' && datum.axisPart === 'multiLevelLabel';
+      return (
+        mark.type === 'text' && datum?.role === 'y-axis' && datum.axisPart === 'multiLevelLabel'
+      );
     });
     expect(axisLevelLabels.map((mark) => mark.text)).toEqual([
       'Q1',

@@ -8,7 +8,8 @@ export function seriesConfigSourceKey(seriesConfig: SeriesConfig, fallbackIndex:
   if (seriesConfig.sourceSeriesKey) return seriesConfig.sourceSeriesKey;
   if (seriesConfig.pivotSeriesKey) return `pivot:${seriesConfig.pivotSeriesKey}`;
   if (finiteNonNegativeInteger(seriesConfig.idx) !== undefined) return `idx:${seriesConfig.idx}`;
-  if (finiteNonNegativeInteger(seriesConfig.order) !== undefined) return `order:${seriesConfig.order}`;
+  if (finiteNonNegativeInteger(seriesConfig.order) !== undefined)
+    return `order:${seriesConfig.order}`;
   return `series:${fallbackIndex}`;
 }
 

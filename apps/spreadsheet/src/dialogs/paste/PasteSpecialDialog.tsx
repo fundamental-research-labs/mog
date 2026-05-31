@@ -111,8 +111,7 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
     const options: PasteSpecialOptions = {
       // Basic paste type flags
       values: !pasteAll && (pasteType === 'values' || pasteType === 'valuesAndNumberFormats'),
-      formulas:
-        !pasteAll && (pasteType === 'formulas' || pasteType === 'formulasAndNumberFormats'),
+      formulas: !pasteAll && (pasteType === 'formulas' || pasteType === 'formulasAndNumberFormats'),
       formats:
         !pasteAll &&
         (pasteType === 'formats' ||

@@ -172,7 +172,9 @@ function decodePng(bytes: Uint8Array): DecodedPng {
   }
 
   if (width <= 0 || height <= 0 || bitDepth !== 8 || colorType !== 6) {
-    throw new Error(`Unsupported PNG payload: ${width}x${height}, depth ${bitDepth}, color ${colorType}`);
+    throw new Error(
+      `Unsupported PNG payload: ${width}x${height}, depth ${bitDepth}, color ${colorType}`,
+    );
   }
 
   const compressed = Buffer.concat(idatChunks.map((chunk) => Buffer.from(chunk)));
@@ -195,7 +197,8 @@ function unfilterRgbaScanlines(scanlines: Uint8Array, width: number, height: num
       const raw = scanlines[inputOffset++];
       const left = x >= bytesPerPixel ? output[rowOffset + x - bytesPerPixel] : 0;
       const up = y > 0 ? output[previousRowOffset + x] : 0;
-      const upLeft = y > 0 && x >= bytesPerPixel ? output[previousRowOffset + x - bytesPerPixel] : 0;
+      const upLeft =
+        y > 0 && x >= bytesPerPixel ? output[previousRowOffset + x - bytesPerPixel] : 0;
 
       output[rowOffset + x] = (raw + filterPredictor(filter, left, up, upLeft)) & 0xff;
     }
@@ -233,7 +236,10 @@ function paeth(left: number, up: number, upLeft: number): number {
 
 function readU32(bytes: Uint8Array, offset: number): number {
   return (
-    ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>>
+    ((bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3]) >>>
     0
   );
 }

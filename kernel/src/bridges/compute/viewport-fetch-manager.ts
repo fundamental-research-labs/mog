@@ -197,11 +197,7 @@ export class ViewportFetchManager {
     };
   }
 
-  private setVisibleWindow(
-    viewportId: string,
-    sheetId: string,
-    bounds: PrefetchBounds,
-  ): number {
+  private setVisibleWindow(viewportId: string, sheetId: string, bounds: PrefetchBounds): number {
     const visibleSeq = (this.perViewportVisibleSeq.get(viewportId) ?? 0) + 1;
     this.perViewportVisibleSeq.set(viewportId, visibleSeq);
 

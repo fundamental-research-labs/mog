@@ -196,12 +196,7 @@ function addBorderRows(
     }
   }
   if (showOutline) {
-    rows.push(
-      ruleRow(0, 0, 1, 0),
-      ruleRow(1, 0, 1, 1),
-      ruleRow(1, 1, 0, 1),
-      ruleRow(0, 1, 0, 0),
-    );
+    rows.push(ruleRow(0, 0, 1, 0), ruleRow(1, 0, 1, 1), ruleRow(1, 1, 0, 1), ruleRow(0, 1, 0, 0));
   }
 }
 

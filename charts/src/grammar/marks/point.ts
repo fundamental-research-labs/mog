@@ -80,9 +80,12 @@ export function generatePointMarks(
       index: 0,
     });
     const fillValue = encodings.fill?.accessor(datum);
-    const fill = datumString(datum, markSpec.fillField) ?? (typeof fillValue === 'string' ? fillValue : color);
+    const fill =
+      datumString(datum, markSpec.fillField) ?? (typeof fillValue === 'string' ? fillValue : color);
     const strokeValue = encodings.stroke?.accessor(datum);
-    const stroke = datumString(datum, markSpec.strokeField) ?? (typeof strokeValue === 'string' ? strokeValue : markSpec.stroke);
+    const stroke =
+      datumString(datum, markSpec.strokeField) ??
+      (typeof strokeValue === 'string' ? strokeValue : markSpec.stroke);
 
     const sizeValue = encodings.size?.accessor(datum);
     const size =
@@ -96,8 +99,8 @@ export function generatePointMarks(
       typeof shapeValue === 'string' && isSymbolShape(shapeValue)
         ? shapeValue
         : shapeValue
-        ? (invokeScale<string>(scales.shape, shapeValue) ?? 'circle')
-        : (markSpec.shape ?? 'circle')
+          ? (invokeScale<string>(scales.shape, shapeValue) ?? 'circle')
+          : (markSpec.shape ?? 'circle')
     ) as SymbolShape;
 
     marks.push({

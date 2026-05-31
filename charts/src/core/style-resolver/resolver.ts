@@ -101,10 +101,14 @@ export function resolveChartOwnerElementStyle(
   directFormat: ChartFormat | undefined,
   options: { widthToPx?: (width: number | undefined) => number | undefined } = {},
 ): ResolvedChartElementStyle {
-  return resolveChartElementStyle(resolveChartOwnerFormat(config, ownerKey, directFormat), {
-    ...resolverContextFromConfig(config, ownerKey),
-    ownerKey,
-  }, options);
+  return resolveChartElementStyle(
+    resolveChartOwnerFormat(config, ownerKey, directFormat),
+    {
+      ...resolverContextFromConfig(config, ownerKey),
+      ownerKey,
+    },
+    options,
+  );
 }
 
 export function resolveChartFillPaint(
@@ -221,7 +225,8 @@ export function resolveChartElementStyle(
           fontFamily: format.font.name,
           fontSize: format.font.size,
           fontWeight: format.font.bold ? 'bold' : undefined,
-          fontStyle: format.font.italic === undefined ? undefined : format.font.italic ? 'italic' : 'normal',
+          fontStyle:
+            format.font.italic === undefined ? undefined : format.font.italic ? 'italic' : 'normal',
           underline: format.font.underline !== undefined && format.font.underline !== 'none',
           strikethrough: format.font.strikethrough !== undefined,
         }

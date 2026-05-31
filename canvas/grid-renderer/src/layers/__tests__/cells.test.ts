@@ -671,8 +671,7 @@ describe('CellsLayer', () => {
     });
 
     it('renders accounting formats as split currency and numeric tokens', () => {
-      const accountingFormat =
-        '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)';
+      const accountingFormat = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)';
       const reader = createMockReader(
         new Map([
           [

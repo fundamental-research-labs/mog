@@ -1,8 +1,5 @@
 import type { DocumentContext } from '../context/types';
-import type {
-  BatchRangeResponse,
-  RangeQueryResult,
-} from '../bridges/compute/compute-types.gen';
+import type { BatchRangeResponse, RangeQueryResult } from '../bridges/compute/compute-types.gen';
 import { getExternalWorkbookSession } from './workbook-links/session-registry';
 import type { PersistedWorkbookLinkRecord } from './workbook-links/types';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';

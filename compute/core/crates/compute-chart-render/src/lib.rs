@@ -1,8 +1,8 @@
 use std::f32::consts::PI;
 
 use compute_text_measurement::FontDb;
-use image::codecs::jpeg::JpegEncoder;
 use image::ExtendedColorType;
+use image::codecs::jpeg::JpegEncoder;
 use rustybuzz::UnicodeBuffer;
 use serde::Deserialize;
 use tiny_skia::{Color, FillRule, Mask, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
@@ -813,11 +813,7 @@ fn parse_svg_path(data: &str, offset_x: f32, offset_y: f32, dpr: f32) -> Result<
 
         let point = |x: f32, y: f32| ((x + offset_x) * dpr, (y + offset_y) * dpr);
         let resolve = |cx: f32, cy: f32, x: f32, y: f32| {
-            if relative {
-                (cx + x, cy + y)
-            } else {
-                (x, y)
-            }
+            if relative { (cx + x, cy + y) } else { (x, y) }
         };
 
         match upper {

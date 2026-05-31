@@ -181,9 +181,7 @@ function manualLeaderLineLayer(
   };
 }
 
-function dataLabelPositionEncoding(
-  encoding: EncodingSpec,
-):
+function dataLabelPositionEncoding(encoding: EncodingSpec):
   | (EncodingSpec & {
       anchorX: NonNullable<EncodingSpec['x']>;
       anchorY: NonNullable<EncodingSpec['y']>;

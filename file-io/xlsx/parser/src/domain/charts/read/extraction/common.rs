@@ -155,49 +155,59 @@ mod tests {
 
     #[test]
     fn top_view_surface_family_is_renderable() {
-        assert!(chart_import_status_for_surface_family(
-            &domain_types::ChartType::Surface,
-            None,
-            Some(true),
-            None,
-            None,
-        )
-        .is_none());
-        assert!(chart_import_status_for_surface_family(
-            &domain_types::ChartType::Surface,
-            Some(true),
-            Some(true),
-            None,
-            None,
-        )
-        .is_none());
-        assert!(chart_import_status_for_surface_family(
-            &domain_types::ChartType::Surface3D,
-            Some(true),
-            Some(true),
-            None,
-            None,
-        )
-        .is_none());
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface,
+                None,
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface,
+                Some(true),
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                Some(true),
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn perspective_surface_family_is_renderable_as_projected_paths() {
-        assert!(chart_import_status_for_surface_family(
-            &domain_types::ChartType::Surface3D,
-            None,
-            Some(false),
-            None,
-            None,
-        )
-        .is_none());
-        assert!(chart_import_status_for_surface_family(
-            &domain_types::ChartType::Surface3D,
-            Some(true),
-            Some(false),
-            None,
-            None,
-        )
-        .is_none());
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                None,
+                Some(false),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                Some(true),
+                Some(false),
+                None,
+                None,
+            )
+            .is_none()
+        );
     }
 }

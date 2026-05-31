@@ -83,7 +83,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       bin:
         config.histogram?.binCount || config.histogram?.binWidth
           ? { maxbins: config.histogram.binCount, step: config.histogram.binWidth }
-        : true,
+          : true,
       scale: { zero: false, nice: true },
     };
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
@@ -103,7 +103,9 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   if (chartType === 'radar') {
-    const valueAxis = config.axis ? resolveAxisConfigForChannel(config.axis, 'y', false) : undefined;
+    const valueAxis = config.axis
+      ? resolveAxisConfigForChannel(config.axis, 'y', false)
+      : undefined;
     const valueAxisSpec = valueAxis
       ? mapAxisConfigToAxisSpec(valueAxis, config, 'valueAxis')
       : undefined;
@@ -267,11 +269,7 @@ function applySecondaryCategoryAxis(
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
   if (!categoryChannel) return;
 
-  const axisSpec = mapAxisConfigToAxisSpec(
-    secondaryCategoryAxis,
-    config,
-    'secondaryCategoryAxis',
-  );
+  const axisSpec = mapAxisConfigToAxisSpec(secondaryCategoryAxis, config, 'secondaryCategoryAxis');
   const explicitOrient = normalizeAxisOrient(secondaryCategoryAxis.position);
   categoryChannel.secondaryAxis = {
     ...axisSpec,

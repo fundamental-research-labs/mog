@@ -94,10 +94,7 @@ export function depthEnhanceArcMark(mark: ArcMark, options: Depth3DOptions = {})
   return marks;
 }
 
-export function depthEnhanceArcMarks(
-  marks: ArcMark[],
-  options: Depth3DOptions = {},
-): PathMark[] {
+export function depthEnhanceArcMarks(marks: ArcMark[], options: Depth3DOptions = {}): PathMark[] {
   return marks.flatMap((mark) => depthEnhanceArcMark(mark, options));
 }
 
@@ -229,7 +226,8 @@ function arcEndDepthFace(
   options: Depth3DOptions,
 ): PathMark {
   const outer = polarPoint(mark, mark.outerRadius, angle);
-  const inner = mark.innerRadius > 0 ? polarPoint(mark, mark.innerRadius, angle) : { x: mark.x, y: mark.y };
+  const inner =
+    mark.innerRadius > 0 ? polarPoint(mark, mark.innerRadius, angle) : { x: mark.x, y: mark.y };
   return {
     type: 'path',
     x: 0,

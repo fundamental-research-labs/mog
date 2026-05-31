@@ -225,13 +225,7 @@ async function resolveSeriesRangeReferences(
   return Promise.all(
     (chart.series ?? []).map(async (series, index) => {
       const [values, categories, bubbleSizes] = await Promise.all([
-        resolveA1ChartRange(
-          ctx,
-          chartSheetId,
-          'seriesValues',
-          series.values?.trim(),
-          diagnostics,
-        ),
+        resolveA1ChartRange(ctx, chartSheetId, 'seriesValues', series.values?.trim(), diagnostics),
         resolveA1ChartRange(
           ctx,
           chartSheetId,
@@ -266,10 +260,11 @@ export async function resolveChartRangeReferences(
 ): Promise<ResolvedChartRangeReferences> {
   const chartSheetId = chart.sheetId ? toSheetId(chart.sheetId) : null;
   const diagnostics: ChartRangeDiagnostic[] = [];
-  const hasRenderableSeriesData = chart.series?.some((series) => {
-    if (series.values?.trim()) return true;
-    return hasRenderableChartPointCache(series.valueCache);
-  }) ?? false;
+  const hasRenderableSeriesData =
+    chart.series?.some((series) => {
+      if (series.values?.trim()) return true;
+      return hasRenderableChartPointCache(series.valueCache);
+    }) ?? false;
   const [dataRange, categoryRange, seriesRange, seriesReferences] = await Promise.all([
     hasRenderableSeriesData && !chart.dataRange?.trim()
       ? Promise.resolve(null)

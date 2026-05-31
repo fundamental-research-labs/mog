@@ -271,9 +271,9 @@ describe('configToSpec annotation layers', () => {
     );
 
     expect(movingAverageLayer).toBeDefined();
-    expect(movingAverageLayer?.transform?.some((transform) => transform.type === 'regression')).not.toBe(
-      true,
-    );
+    expect(
+      movingAverageLayer?.transform?.some((transform) => transform.type === 'regression'),
+    ).not.toBe(true);
     expect(movingAverageLayer!.data).toEqual({
       values: [
         { __mogPointIndex: 1, value: 15 },
@@ -320,9 +320,9 @@ describe('configToSpec annotation layers', () => {
     );
 
     expect(projectedLayer).toBeDefined();
-    expect(projectedLayer?.transform?.some((transform) => transform.type === 'regression')).not.toBe(
-      true,
-    );
+    expect(
+      projectedLayer?.transform?.some((transform) => transform.type === 'regression'),
+    ).not.toBe(true);
     expect(projectedLayer!.data).toEqual({
       values: [
         { [SCATTER_X_FIELD]: 0, [VALUE_FIELD]: 1 },
@@ -362,8 +362,18 @@ describe('configToSpec annotation layers', () => {
       width: 8,
       height: 5,
       series: [
-        { trendlines: [{ show: true, type: 'exp' }, { show: true, type: 'log' }] },
-        { trendlines: [{ show: true, type: 'poly', order: 3 }, { show: true, type: 'pow' }] },
+        {
+          trendlines: [
+            { show: true, type: 'exp' },
+            { show: true, type: 'log' },
+          ],
+        },
+        {
+          trendlines: [
+            { show: true, type: 'poly', order: 3 },
+            { show: true, type: 'pow' },
+          ],
+        },
       ],
     };
 
@@ -511,8 +521,7 @@ describe('configToSpec annotation layers', () => {
     const labelMark = compiled.marks.find(
       (mark) =>
         mark.type === 'text' &&
-        (mark.datum as Record<string, unknown> | undefined)?.[TRENDLINE_LABEL_TEXT_FIELD] ===
-          'Fit',
+        (mark.datum as Record<string, unknown> | undefined)?.[TRENDLINE_LABEL_TEXT_FIELD] === 'Fit',
     );
     expect(labelMark?.x).toBeCloseTo(100, 5);
     expect(labelMark?.y).toBeCloseTo(60, 5);
@@ -579,7 +588,11 @@ describe('configToSpec annotation layers', () => {
       ]),
     );
 
-    const compiled = compile(spec, undefined, { skipAxes: true, skipLegend: true, skipTitle: true });
+    const compiled = compile(spec, undefined, {
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
     const arcMarks = compiled.marks.filter((mark) => mark.type === 'arc');
     const explodedArc = arcMarks.find((mark) => mark.datum?.[POINT_EXPLOSION_FIELD] === 12)!;
     const centerX = compiled.layout.plotArea.x + compiled.layout.plotArea.width / 2;
@@ -782,11 +795,9 @@ describe('configToSpec annotation layers', () => {
       const datum = mark.datum as Record<string, unknown> | undefined;
       return mark.type === 'rect' && typeof datum?.value === 'number' && datum.value > 0;
     });
-    expect(positiveBars.map((mark) => (mark.type === 'rect' ? mark.style.fill : undefined))).toEqual([
-      '#70AD47',
-      '#FFC000',
-      '#C00000',
-    ]);
+    expect(
+      positiveBars.map((mark) => (mark.type === 'rect' ? mark.style.fill : undefined)),
+    ).toEqual(['#70AD47', '#FFC000', '#C00000']);
     expect(
       positiveBars.every((mark) => mark.type === 'rect' && mark.style.fillPaint === undefined),
     ).toBe(true);
@@ -831,8 +842,20 @@ describe('configToSpec annotation layers', () => {
     const data: ChartData = {
       categories: ['Q1', 'Q2'],
       series: [
-        { name: 'Revenue', data: [{ x: 'Q1', y: 10 }, { x: 'Q2', y: 20 }] },
-        { name: 'Cost', data: [{ x: 'Q1', y: 4 }, { x: 'Q2', y: 7 }] },
+        {
+          name: 'Revenue',
+          data: [
+            { x: 'Q1', y: 10 },
+            { x: 'Q2', y: 20 },
+          ],
+        },
+        {
+          name: 'Cost',
+          data: [
+            { x: 'Q1', y: 4 },
+            { x: 'Q2', y: 7 },
+          ],
+        },
       ],
     };
     const config: ChartConfig = {
@@ -851,9 +874,7 @@ describe('configToSpec annotation layers', () => {
     };
 
     const spec = asLayerSpec(config, data);
-    expect(spec.config?.layoutHints?.dataTable).toEqual(
-      expect.objectContaining({ rowCount: 3 }),
-    );
+    expect(spec.config?.layoutHints?.dataTable).toEqual(expect.objectContaining({ rowCount: 3 }));
     expect(spec.layer).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -888,10 +909,11 @@ describe('configToSpec annotation layers', () => {
     const tableLabel = compiled.marks.find(
       (mark) =>
         mark.type === 'text' &&
-        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_TEXT_FIELD] ===
-          'Revenue',
+        (mark.datum as Record<string, unknown> | undefined)?.[DATA_TABLE_TEXT_FIELD] === 'Revenue',
     );
-    expect(tableLabel?.y).toBeGreaterThan(compiled.layout.plotArea.y + compiled.layout.plotArea.height);
+    expect(tableLabel?.y).toBeGreaterThan(
+      compiled.layout.plotArea.y + compiled.layout.plotArea.height,
+    );
     const key = compiled.marks.find(
       (mark) =>
         mark.type === 'rect' &&
@@ -947,9 +969,7 @@ describe('configToSpec annotation layers', () => {
     };
     const spec = asLayerSpec(config, data);
     const keyLayer = spec.layer.find(
-      (layer) =>
-        layer.mark.type === 'rect' &&
-        layer.mark.coordinateSystem === 'dataTableFraction',
+      (layer) => layer.mark.type === 'rect' && layer.mark.coordinateSystem === 'dataTableFraction',
     );
     expect(keyLayer).toBeDefined();
     const keyRows = 'values' in keyLayer!.data! ? keyLayer!.data.values : [];
@@ -1169,7 +1189,9 @@ describe('configToSpec annotation layers', () => {
     );
     expect(mainLayer.mark).toEqual(expect.objectContaining({ type: 'line', opacity: 0 }));
     expect(spec.layer).toEqual(
-      expect.arrayContaining([expect.objectContaining({ mark: expect.objectContaining({ type: 'point' }) })]),
+      expect.arrayContaining([
+        expect.objectContaining({ mark: expect.objectContaining({ type: 'point' }) }),
+      ]),
     );
   });
 });

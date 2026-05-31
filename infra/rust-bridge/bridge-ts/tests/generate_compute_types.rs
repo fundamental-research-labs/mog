@@ -3,7 +3,7 @@
 //! Reads real Rust source files from compute/core/crates/types/snapshot-types/
 //! and generates TypeScript interfaces, string unions, and tagged unions.
 
-use bridge_ts::{generate_types_from_source, ImportConfig, ImportGroup, TypeGenConfig, TypeImport};
+use bridge_ts::{ImportConfig, ImportGroup, TypeGenConfig, TypeImport, generate_types_from_source};
 use std::collections::HashMap;
 
 fn compute_config() -> TypeGenConfig {

@@ -36,8 +36,20 @@ export function buildErrorBarLayers(encoding: EncodingSpec, rows: DataRow[]): Un
       transform: [{ type: 'filter', filter: { field: ERROR_BAR_VISIBLE_FIELD, equal: true } }],
     });
     layers.push(
-      buildCapLayer(encoding, ERROR_BAR_X_MIN_FIELD, undefined, ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD, 'vertical'),
-      buildCapLayer(encoding, ERROR_BAR_X_MAX_FIELD, undefined, ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD, 'vertical'),
+      buildCapLayer(
+        encoding,
+        ERROR_BAR_X_MIN_FIELD,
+        undefined,
+        ERROR_BAR_X_MIN_CAP_VISIBLE_FIELD,
+        'vertical',
+      ),
+      buildCapLayer(
+        encoding,
+        ERROR_BAR_X_MAX_FIELD,
+        undefined,
+        ERROR_BAR_X_MAX_CAP_VISIBLE_FIELD,
+        'vertical',
+      ),
     );
   }
 
@@ -53,8 +65,20 @@ export function buildErrorBarLayers(encoding: EncodingSpec, rows: DataRow[]): Un
       transform: [{ type: 'filter', filter: { field: ERROR_BAR_VISIBLE_FIELD, equal: true } }],
     });
     layers.push(
-      buildCapLayer(encoding, undefined, ERROR_BAR_Y_MIN_FIELD, ERROR_BAR_Y_MIN_CAP_VISIBLE_FIELD, 'horizontal'),
-      buildCapLayer(encoding, undefined, ERROR_BAR_Y_MAX_FIELD, ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD, 'horizontal'),
+      buildCapLayer(
+        encoding,
+        undefined,
+        ERROR_BAR_Y_MIN_FIELD,
+        ERROR_BAR_Y_MIN_CAP_VISIBLE_FIELD,
+        'horizontal',
+      ),
+      buildCapLayer(
+        encoding,
+        undefined,
+        ERROR_BAR_Y_MAX_FIELD,
+        ERROR_BAR_Y_MAX_CAP_VISIBLE_FIELD,
+        'horizontal',
+      ),
     );
   }
 

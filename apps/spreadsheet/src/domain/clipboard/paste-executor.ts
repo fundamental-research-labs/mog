@@ -774,14 +774,11 @@ function checkPastedValuesAgainstValidation(
   return violations;
 }
 
-function isBlankSourceCell(
-  cell: ReturnType<PasteStoreOperations['getCellData']>,
-): boolean {
+function isBlankSourceCell(cell: ReturnType<PasteStoreOperations['getCellData']>): boolean {
   if (!cell) return true;
   const hasFormula = cell.formula !== undefined && cell.formula !== null && cell.formula !== '';
   const hasRaw = cell.raw !== undefined && cell.raw !== null && cell.raw !== '';
-  const hasComputed =
-    cell.computed !== undefined && cell.computed !== null && cell.computed !== '';
+  const hasComputed = cell.computed !== undefined && cell.computed !== null && cell.computed !== '';
   return !hasFormula && !hasRaw && !hasComputed;
 }
 

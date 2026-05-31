@@ -76,10 +76,6 @@ describe('ViewportRegionImpl async cleanup ordering', () => {
 
     region.updateBounds(nextBounds);
 
-    expect(bridge.updateViewportVisibleWindow).toHaveBeenCalledWith(
-      'vp-1',
-      'sheet-1',
-      nextBounds,
-    );
+    expect(bridge.updateViewportVisibleWindow).toHaveBeenCalledWith('vp-1', 'sheet-1', nextBounds);
   });
 });

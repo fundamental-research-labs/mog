@@ -159,10 +159,8 @@ export function applyStackedValueDomain(
 
   if (maxPositive === 0 && minNegative === 0) return;
 
-  const isAutoPositiveStack =
-    explicitMax === undefined && minNegative === 0 && maxPositive > 0;
-  const isAutoNegativeStack =
-    explicitMin === undefined && maxPositive === 0 && minNegative < 0;
+  const isAutoPositiveStack = explicitMax === undefined && minNegative === 0 && maxPositive > 0;
+  const isAutoNegativeStack = explicitMin === undefined && maxPositive === 0 && minNegative < 0;
   const isAutoDivergingStack =
     explicitMin === undefined && explicitMax === undefined && minNegative < 0 && maxPositive > 0;
 

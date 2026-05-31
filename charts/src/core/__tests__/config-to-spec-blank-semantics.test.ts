@@ -61,9 +61,7 @@ function scatterPaths(displayBlanksAs: 'gap' | 'span'): PathMark[] {
 function plottedPointIndices(mark: PathMark): number[] {
   const datum = mark.datum as Array<Record<string, unknown>> | undefined;
   return Array.isArray(datum)
-    ? datum.map((row) =>
-        typeof row[POINT_INDEX_FIELD] === 'number' ? row[POINT_INDEX_FIELD] : -1,
-      )
+    ? datum.map((row) => (typeof row[POINT_INDEX_FIELD] === 'number' ? row[POINT_INDEX_FIELD] : -1))
     : [];
 }
 

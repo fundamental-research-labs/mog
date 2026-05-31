@@ -176,9 +176,7 @@ describe('Line Chart Compilation', () => {
     const firstLinePointX = firstPathPoint(result.marks.find((m) => m.type === 'path') as any).x;
     const firstLabel = result.axes.find(
       (mark) =>
-        mark.type === 'text' &&
-        (mark as any).datum?.role === 'x-axis' &&
-        mark.text === '2024-01',
+        mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === '2024-01',
     ) as any;
 
     expect(firstLabel).toBeDefined();
@@ -249,9 +247,7 @@ describe('Area Chart Compilation', () => {
     const firstAreaPointX = secondPathPoint(result.marks.find((m) => m.type === 'path') as any).x;
     const firstLabel = result.axes.find(
       (mark) =>
-        mark.type === 'text' &&
-        (mark as any).datum?.role === 'x-axis' &&
-        mark.text === '2024-01',
+        mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === '2024-01',
     ) as any;
 
     expect(firstLabel).toBeDefined();
@@ -478,7 +474,9 @@ describe('Axis Generation', () => {
         mark.type === 'path' &&
         (mark as any).datum?.role === 'x-axis' &&
         (mark as any).path.startsWith(`M${result.layout.plotArea.x},`) &&
-        (mark as any).path.includes(` L${result.layout.plotArea.x + result.layout.plotArea.width},`),
+        (mark as any).path.includes(
+          ` L${result.layout.plotArea.x + result.layout.plotArea.width},`,
+        ),
     ) as any;
 
     expect(xAxisLine).toBeDefined();

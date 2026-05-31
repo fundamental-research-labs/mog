@@ -190,9 +190,9 @@ type OmitFieldsFor<T extends ChartType> =
                     ? Exclude<AllChartSpecificFields, RegionMapFields>
                     : // Stock: no type-specific fields (uses subType and series config)
                       T extends 'stock'
-              ? AllChartSpecificFields
-              : // All other chart types (bar, column, combo, funnel, 3D bar/column, surface): no specific fields
-                AllChartSpecificFields;
+                      ? AllChartSpecificFields
+                      : // All other chart types (bar, column, combo, funnel, 3D bar/column, surface): no specific fields
+                        AllChartSpecificFields;
 
 /**
  * Type-safe chart config where subType and chart-specific fields are

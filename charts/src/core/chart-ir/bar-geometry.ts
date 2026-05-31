@@ -136,9 +136,7 @@ export function effectiveOverlap(
   return clamp(finiteNumber(sourceOverlap) ?? fallback, -100, 100);
 }
 
-export function hasExcelBarGeometryConfig(
-  config: Pick<ChartConfig, 'type' | 'series'>,
-): boolean {
+export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'series'>): boolean {
   if (isBarLikeChartType(config.type)) return true;
   if (config.type !== 'combo') return false;
 

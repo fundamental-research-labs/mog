@@ -115,7 +115,12 @@ export function snapshotSeries(
   const renderedPointCount = values.filter((value) => value !== null).length;
   const effectiveType = series.type ?? configured?.type;
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
-  const includeStockValues = shouldSnapshotStockValues(config, effectiveType, configured, stockValues);
+  const includeStockValues = shouldSnapshotStockValues(
+    config,
+    effectiveType,
+    configured,
+    stockValues,
+  );
 
   return {
     index,

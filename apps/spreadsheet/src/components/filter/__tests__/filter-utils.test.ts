@@ -1,8 +1,4 @@
-import {
-  detectColumnType,
-  groupDatesByHierarchy,
-  isDateColumn,
-} from '../filter-utils';
+import { detectColumnType, groupDatesByHierarchy, isDateColumn } from '../filter-utils';
 
 describe('filter-utils column type detection', () => {
   it('treats plain Excel-serial-like numbers as numeric values', () => {
@@ -21,8 +17,8 @@ describe('filter-utils column type detection', () => {
 
     expect(Array.from(hierarchy.years.keys())).toEqual([1900]);
     expect(Array.from(hierarchy.years.get(1900)?.months.keys() ?? [])).toEqual([1]);
-    expect(
-      Array.from(hierarchy.years.get(1900)?.months.get(1)?.days.keys() ?? []),
-    ).toEqual([1, 2, 3, 4, 5]);
+    expect(Array.from(hierarchy.years.get(1900)?.months.get(1)?.days.keys() ?? [])).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
   });
 });

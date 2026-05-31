@@ -45,7 +45,9 @@ export function generateRadarMarks(
   if (!valueDomain) return [];
 
   const marks: Array<PathMark | SymbolMark | TextMark> = [];
-  marks.push(...generateGridMarks(categories, geometry, valueDomain, scales.y, encoding?.y?.format));
+  marks.push(
+    ...generateGridMarks(categories, geometry, valueDomain, scales.y, encoding?.y?.format),
+  );
   marks.push(...generateCategoryLabelMarks(categories, geometry));
 
   const categoryIndex = new Map(categories.map((category, index) => [String(category), index]));
@@ -128,9 +130,7 @@ function numericDomain(
 
   if (min === undefined || max === undefined || min === max) {
     const values = field
-      ? data
-          .map((datum) => datum[field])
-          .filter((value): value is number => isFiniteNumber(value))
+      ? data.map((datum) => datum[field]).filter((value): value is number => isFiniteNumber(value))
       : [];
     if (values.length === 0) return undefined;
     min = Math.min(0, ...values);
@@ -253,14 +253,13 @@ function radarPointsForGroup(input: {
     });
   }
 
-  return [...pointsByIndex.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, point]) => point);
+  return [...pointsByIndex.entries()].sort(([a], [b]) => a - b).map(([, point]) => point);
 }
 
 function seriesPathMark(markSpec: MarkSpec, points: RadarPoint[], color: string): PathMark {
   const seriesStroke = datumString(points[0].datum, markSpec.strokeField) ?? color;
-  const seriesFill = datumString(points[0].datum, markSpec.fillField) ?? markSpec.fill ?? seriesStroke;
+  const seriesFill =
+    datumString(points[0].datum, markSpec.fillField) ?? markSpec.fill ?? seriesStroke;
   const seriesStrokeWidth =
     datumNumber(points[0].datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 2;
   const fillOpacity = markSpec.fillOpacity ?? 0;

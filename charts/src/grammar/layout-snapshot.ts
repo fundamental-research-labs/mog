@@ -263,9 +263,11 @@ function buildDataLabelLayouts(marks: AnyMark[]): DataLabelLayout[] {
   return labels;
 }
 
-function isDataLabelDatum(
-  datum: unknown,
-): datum is { [DATA_LABEL_VISIBLE_FIELD]: true; [POINT_INDEX_FIELD]: number; [SERIES_INDEX_FIELD]: number } {
+function isDataLabelDatum(datum: unknown): datum is {
+  [DATA_LABEL_VISIBLE_FIELD]: true;
+  [POINT_INDEX_FIELD]: number;
+  [SERIES_INDEX_FIELD]: number;
+} {
   return (
     datum != null &&
     typeof datum === 'object' &&

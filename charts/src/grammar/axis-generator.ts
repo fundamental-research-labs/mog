@@ -249,7 +249,13 @@ export function generateXAxis(
         x: 0,
         y: 0,
         datum: axisDatum(role, 'minorTick'),
-        path: xTickPath(x, y, axisSpec.minorTickSize ?? Math.max(2, (axisSpec.tickSize ?? 6) / 2), orient, axisSpec.minorTickMark),
+        path: xTickPath(
+          x,
+          y,
+          axisSpec.minorTickSize ?? Math.max(2, (axisSpec.tickSize ?? 6) / 2),
+          orient,
+          axisSpec.minorTickMark,
+        ),
         style: {
           stroke: axisSpec.minorTickColor ?? axisSpec.tickColor ?? '#000',
           strokeWidth: axisSpec.minorTickWidth ?? axisSpec.tickWidth ?? 1,
@@ -924,7 +930,10 @@ export function generateYAxis(
     const labelSide = yAxisLabelSide(axisSpec, orient);
     marks.push({
       type: 'text',
-      x: labelSide === 'right' ? layout.plotArea.x + layout.plotArea.width + 8 : layout.plotArea.x - 8,
+      x:
+        labelSide === 'right'
+          ? layout.plotArea.x + layout.plotArea.width + 8
+          : layout.plotArea.x - 8,
       y: layout.plotArea.y - 10,
       text: axisSpec.displayUnitLabel,
       datum: axisDatum(role, 'displayUnitLabel'),
@@ -980,10 +989,7 @@ function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout:
     case 'max':
       return plotRight;
     case 'custom':
-      if (
-        axisSpec.crossesAtValue !== undefined &&
-        typeof categoryScale.bandwidth !== 'function'
-      ) {
+      if (axisSpec.crossesAtValue !== undefined && typeof categoryScale.bandwidth !== 'function') {
         return clampAxisPosition(
           categoryScale(axisSpec.crossesAtValue) as number,
           plotLeft,
@@ -993,7 +999,8 @@ function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout:
       return defaultX;
     case 'automatic': {
       if (typeof categoryScale.bandwidth === 'function') return defaultX;
-      const domain = typeof categoryScale.domain === 'function' ? categoryScale.domain() : undefined;
+      const domain =
+        typeof categoryScale.domain === 'function' ? categoryScale.domain() : undefined;
       const min = numericDomainValue(domain, 0);
       const max = numericDomainValue(domain, 1);
       if (min !== undefined && max !== undefined && min < 0 && max > 0) {
@@ -1222,7 +1229,11 @@ function getAxisTicks(scale: AnyScale, axisSpec: AxisSpec): unknown[] {
     }
   }
 
-  if (axisSpec.tickStep !== undefined && axisSpec.tickStep > 0 && typeof scale.domain === 'function') {
+  if (
+    axisSpec.tickStep !== undefined &&
+    axisSpec.tickStep > 0 &&
+    typeof scale.domain === 'function'
+  ) {
     const domain = scale.domain();
     const start = numericTickValue(domain?.[0]);
     const stop = numericTickValue(domain?.[1]);
@@ -1236,11 +1247,7 @@ function getAxisTicks(scale: AnyScale, axisSpec: AxisSpec): unknown[] {
   return [];
 }
 
-function getMinorAxisTicks(
-  scale: AnyScale,
-  axisSpec: AxisSpec,
-  majorTicks: unknown[],
-): unknown[] {
+function getMinorAxisTicks(scale: AnyScale, axisSpec: AxisSpec, majorTicks: unknown[]): unknown[] {
   if (!axisSpec.minorTicks && !axisSpec.minorGrid) return [];
 
   let ticks: unknown[] = [];
@@ -1487,9 +1494,6 @@ export function formatTickValue(value: unknown, format?: string): string {
   return formatTickValueResult(value, format).text;
 }
 
-export function formatTickValueResult(
-  value: unknown,
-  format?: string,
-): ExcelNumberFormatResult {
+export function formatTickValueResult(value: unknown, format?: string): ExcelNumberFormatResult {
   return formatExcelValueResult(value, format);
 }

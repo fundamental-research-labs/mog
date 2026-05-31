@@ -101,9 +101,7 @@ function allNumbers(values: Array<number | undefined>): values is number[] {
 }
 
 function pathBounds(mark: PathMark): { width: number; height: number } {
-  const coordinates = (mark.path.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []).map(
-    Number,
-  );
+  const coordinates = (mark.path.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []).map(Number);
   const xs = coordinates.filter((_value, index) => index % 2 === 0);
   const ys = coordinates.filter((_value, index) => index % 2 === 1);
   return {

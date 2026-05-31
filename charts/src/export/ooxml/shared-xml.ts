@@ -84,9 +84,7 @@ export function generateCategoryValueSeriesXML(
           <c:ptCount val="${valCount}"/>
           ${series.values
             .map((val, i) =>
-              val === null
-                ? ''
-                : `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(val)}</c:v></c:pt>`,
+              val === null ? '' : `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(val)}</c:v></c:pt>`,
             )
             .filter(Boolean)
             .join('\n          ')}

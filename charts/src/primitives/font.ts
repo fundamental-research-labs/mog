@@ -53,11 +53,7 @@ function normalizeFontFamilyToken(value: string): string {
 }
 
 export function canvasFontFamily(fontFamily: string): string {
-  const normalized = fontFamily
-    .split(',')
-    .map(normalizeFontFamilyToken)
-    .filter(Boolean)
-    .join(', ');
+  const normalized = fontFamily.split(',').map(normalizeFontFamilyToken).filter(Boolean).join(', ');
   return normalized || 'sans-serif';
 }
 

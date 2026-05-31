@@ -37,10 +37,7 @@ type InsertCommentPayload = {
  *
  * Excel shortcut: Shift+F2 (when cell has no comment)
  */
-export const INSERT_COMMENT: AsyncActionHandler = async (
-  deps,
-  payload?: InsertCommentPayload,
-) => {
+export const INSERT_COMMENT: AsyncActionHandler = async (deps, payload?: InsertCommentPayload) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const commentCommands = deps.commands.comment;

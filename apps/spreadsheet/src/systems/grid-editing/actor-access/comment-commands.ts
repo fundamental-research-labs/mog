@@ -8,11 +8,7 @@
  * @module systems/grid-editing/actor-access/comment-commands
  */
 
-import type {
-  CommentCommands,
-  CommentTarget,
-  ComposeCommentType,
-} from '@mog-sdk/contracts/actors';
+import type { CommentCommands, CommentTarget, ComposeCommentType } from '@mog-sdk/contracts/actors';
 import type { RichText } from '@mog-sdk/contracts/rich-text';
 
 // =============================================================================

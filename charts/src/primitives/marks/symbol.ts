@@ -236,7 +236,17 @@ export function hitTestSymbol(mark: SymbolMark, px: number, py: number): boolean
  * Get all available symbol shapes.
  */
 export function getSymbolShapes(): SymbolShape[] {
-  return ['circle', 'square', 'diamond', 'cross', 'x', 'star', 'dash', 'triangle-up', 'triangle-down'];
+  return [
+    'circle',
+    'square',
+    'diamond',
+    'cross',
+    'x',
+    'star',
+    'dash',
+    'triangle-up',
+    'triangle-down',
+  ];
 }
 
 /**

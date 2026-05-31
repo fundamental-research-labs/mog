@@ -69,18 +69,18 @@ function hasPerSeriesLineStyle(series: SeriesConfig | undefined): boolean {
   const line = series.format?.line;
   return Boolean(
     series.type !== undefined ||
-      series.color !== undefined ||
-      series.lineWidth !== undefined ||
-      series.smooth !== undefined ||
-      series.showMarkers !== undefined ||
-      series.markerSize !== undefined ||
-      series.markerStyle !== undefined ||
-      series.format?.fill !== undefined ||
-      line?.color !== undefined ||
-      line?.width !== undefined ||
-      line?.dashStyle !== undefined ||
-      line?.transparency !== undefined ||
-      line?.noFill !== undefined,
+    series.color !== undefined ||
+    series.lineWidth !== undefined ||
+    series.smooth !== undefined ||
+    series.showMarkers !== undefined ||
+    series.markerSize !== undefined ||
+    series.markerStyle !== undefined ||
+    series.format?.fill !== undefined ||
+    line?.color !== undefined ||
+    line?.width !== undefined ||
+    line?.dashStyle !== undefined ||
+    line?.transparency !== undefined ||
+    line?.noFill !== undefined,
   );
 }
 
@@ -100,5 +100,7 @@ function sourceSeriesIndex(series: ChartData['series'][number], renderedIndex: n
 }
 
 function isFiniteNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && Number.isFinite(value);
+  return (
+    typeof value === 'number' && Number.isInteger(value) && value >= 0 && Number.isFinite(value)
+  );
 }

@@ -76,9 +76,7 @@ describe('ribbon visibility config', () => {
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'sparklines'])).toBe(
       false,
     );
-    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(
-      true,
-    );
+    expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'filters'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'text'])).toBe(false);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'charts'])).toBe(true);
     expect(isRibbonPathVisible(PUBLIC_RIBBON_VISIBILITY_CONFIG, ['insert', 'links'])).toBe(true);

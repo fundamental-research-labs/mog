@@ -21,7 +21,10 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
   const context = resolverContextFromConfig(config, 'title');
   const titleConfig = config.chartTitle;
   const titleDirectFormat = mergeChartFormats(
-    mergeChartFormats(titleConfig?.font ? { font: titleConfig.font } : undefined, titleConfig?.format),
+    mergeChartFormats(
+      titleConfig?.font ? { font: titleConfig.font } : undefined,
+      titleConfig?.format,
+    ),
     config.titleFormat,
   );
   const titleFormat = resolveChartOwnerFormat(config, 'title', titleDirectFormat);
@@ -45,7 +48,8 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
   if (titleFill) titleSpec.fill = titleFill;
   const shadow = resolveChartShadow(titleFormat?.shadow, context);
   if (shadow) titleSpec.shadow = shadow;
-  const richText = config.titleRichText ?? titleConfig?.richText ?? resolveChartOwnerRichText(config, 'title');
+  const richText =
+    config.titleRichText ?? titleConfig?.richText ?? resolveChartOwnerRichText(config, 'title');
   if (richText?.length) {
     titleSpec.richText = richText.map((run) => ({
       text: run.text,

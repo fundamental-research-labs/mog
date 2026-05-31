@@ -258,15 +258,17 @@ fn test_get_hyperlink_on_empty_cell_returns_none() {
     let (storage, sheet_id, mut grid) = storage_with_sheet();
 
     // No cell at (10, 10)
-    assert!(get_hyperlink(
-        storage.doc(),
-        &storage.sheets_ref(),
-        &sheet_id,
-        &grid,
-        10,
-        10
-    )
-    .is_none());
+    assert!(
+        get_hyperlink(
+            storage.doc(),
+            &storage.sheets_ref(),
+            &sheet_id,
+            &grid,
+            10,
+            10
+        )
+        .is_none()
+    );
 
     // Cell with value but no hyperlink
     seed_cell(&storage, &mut grid, sheet_id, 0, 0, Any::Number(99.0));

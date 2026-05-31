@@ -48,7 +48,10 @@ function normalizeBackgroundColor(backgroundColor: unknown): string {
   return normalized;
 }
 
-function normalizeQuality(format: SupportedImageExportFormat, quality: unknown): number | undefined {
+function normalizeQuality(
+  format: SupportedImageExportFormat,
+  quality: unknown,
+): number | undefined {
   if (quality === undefined) return format === 'jpeg' ? 0.92 : undefined;
   if (format !== 'jpeg') {
     throw new ChartImageExportOptionsError('quality is only supported for JPEG chart exports');

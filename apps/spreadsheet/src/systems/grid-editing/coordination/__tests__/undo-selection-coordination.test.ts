@@ -33,8 +33,9 @@ function snapshot(row: number, col: number): SelectionSnapshot {
 }
 
 function createHistory() {
-  let listener: ((event: Parameters<Parameters<WorkbookHistory['subscribe']>[0]>[0]) => void) | null =
-    null;
+  let listener:
+    | ((event: Parameters<Parameters<WorkbookHistory['subscribe']>[0]>[0]) => void)
+    | null = null;
 
   const history = {
     subscribe: jest.fn((next) => {

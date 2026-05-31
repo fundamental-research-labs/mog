@@ -898,9 +898,8 @@ pub(super) fn hydrate_floating_objects(
         );
         obj.common.anchor_cell_id.get_or_insert(anchor_hex);
         if let (Some(end_row), Some(end_col)) = (anchor.end_row, anchor.end_col) {
-            let to_anchor_hex = get_or_create_cell_id_for_pos(
-                cells_map, pos_map, txn, end_row, end_col, allocator,
-            );
+            let to_anchor_hex =
+                get_or_create_cell_id_for_pos(cells_map, pos_map, txn, end_row, end_col, allocator);
             obj.common.to_anchor_cell_id.get_or_insert(to_anchor_hex);
         }
         // Use the object's own ID as the Y.Map key so that get-by-ID lookups

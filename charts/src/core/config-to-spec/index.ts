@@ -181,9 +181,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 
   if (renderConfig.type === 'pareto') {
     const pareto = buildParetoLayers(renderConfig, data);
-    pareto.layers.push(
-      ...buildAnnotationLayers(renderConfig, data, encoding, pareto.rows),
-    );
+    pareto.layers.push(...buildAnnotationLayers(renderConfig, data, encoding, pareto.rows));
     return buildLayerSpec({
       dimensions,
       rows: pareto.rows,

@@ -76,9 +76,10 @@ function styleKey(mark: AnyMark): string {
       ? `|${(mark as TextMark).fontStyle ?? ''}|${(mark as TextMark).underline ?? ''}|${(mark as TextMark).strikethrough ?? ''}|${JSON.stringify((mark as TextMark).richText ?? null)}`
       : '';
   const paintKey = `${JSON.stringify(s.fillPaint ?? null)}|${JSON.stringify(s.strokePaint ?? null)}|${JSON.stringify(s.line ?? null)}|${JSON.stringify(s.shadow ?? s.effects ?? null)}`;
-  const paintBoundsKey = needsMarkBoundsForPaint(s.fillPaint) || needsMarkBoundsForPaint(s.strokePaint)
-    ? `|bounds:${boundsKey(mark)}`
-    : '';
+  const paintBoundsKey =
+    needsMarkBoundsForPaint(s.fillPaint) || needsMarkBoundsForPaint(s.strokePaint)
+      ? `|bounds:${boundsKey(mark)}`
+      : '';
   // Text marks need per-mark font/alignment, so we include those properties
   // in the key to ensure correct rendering within a batch.
   if (mark.type === 'text') {
@@ -92,9 +93,9 @@ function styleKey(mark: AnyMark): string {
 function needsMarkBoundsForPaint(paint: PaintSpec | undefined): boolean {
   return Boolean(
     paint &&
-      (paint.type === 'linearGradient' ||
-        paint.type === 'radialGradient' ||
-        paint.type === 'rectangularGradient'),
+    (paint.type === 'linearGradient' ||
+      paint.type === 'radialGradient' ||
+      paint.type === 'rectangularGradient'),
   );
 }
 
@@ -111,7 +112,12 @@ function boundsForMark(mark: AnyMark): { x: number; y: number; width: number; he
   if (mark.type === 'rect') return mark;
   if (mark.type === 'arc') {
     const size = mark.outerRadius * 2;
-    return { x: mark.x - mark.outerRadius, y: mark.y - mark.outerRadius, width: size, height: size };
+    return {
+      x: mark.x - mark.outerRadius,
+      y: mark.y - mark.outerRadius,
+      width: size,
+      height: size,
+    };
   }
   return { x: mark.x, y: mark.y, width: 1, height: 1 };
 }

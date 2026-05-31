@@ -54,11 +54,7 @@ describe('chartDataToRows', () => {
       '__mogCategory:2',
       '__mogCategory:3',
     ]);
-    expect(rows.map((row) => row[RAW_CATEGORY_FIELD])).toEqual([
-      'Group A',
-      'Repeated',
-      'Repeated',
-    ]);
+    expect(rows.map((row) => row[RAW_CATEGORY_FIELD])).toEqual(['Group A', 'Repeated', 'Repeated']);
     expect(rows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 2, 3]);
   });
 

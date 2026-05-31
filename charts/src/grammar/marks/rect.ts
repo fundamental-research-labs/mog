@@ -40,8 +40,20 @@ export function generateRectMarks(
   for (const datum of data) {
     const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
     const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
-    const directX2 = directPosition(datum, markSpec.x2Field, layout, 'x', markSpec.coordinateSystem);
-    const directY2 = directPosition(datum, markSpec.y2Field, layout, 'y', markSpec.coordinateSystem);
+    const directX2 = directPosition(
+      datum,
+      markSpec.x2Field,
+      layout,
+      'x',
+      markSpec.coordinateSystem,
+    );
+    const directY2 = directPosition(
+      datum,
+      markSpec.y2Field,
+      layout,
+      'y',
+      markSpec.coordinateSystem,
+    );
     if (
       directX !== undefined &&
       directY !== undefined &&

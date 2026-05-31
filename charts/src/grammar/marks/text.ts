@@ -38,9 +38,15 @@ export function generateTextMarks(
       continue;
     }
     const x =
-      (directX ?? (xScale ? centeredScalePosition(xScale, encodings.x?.accessor(datum)) : layout.plotArea.x)) + dx;
+      (directX ??
+        (xScale
+          ? centeredScalePosition(xScale, encodings.x?.accessor(datum))
+          : layout.plotArea.x)) + dx;
     const y =
-      (directY ?? (yScale ? centeredScalePosition(yScale, encodings.y?.accessor(datum)) : layout.plotArea.y)) + dy;
+      (directY ??
+        (yScale
+          ? centeredScalePosition(yScale, encodings.y?.accessor(datum))
+          : layout.plotArea.y)) + dy;
 
     const textValue = encodings.text?.accessor(datum);
     const text = textValue != null ? String(textValue) : '';
@@ -50,7 +56,8 @@ export function generateTextMarks(
       ? ((scales.color?.(colorValue) as string | undefined) ?? markSpec.color ?? '#000')
       : (markSpec.color ?? '#000');
     const color = stringField(datum, markSpec.colorField) ?? encodedColor;
-    const fontSize = numberField(datum, markSpec.fontSizeField) ?? markSpec.fontSize ?? markSpec.size ?? 12;
+    const fontSize =
+      numberField(datum, markSpec.fontSizeField) ?? markSpec.fontSize ?? markSpec.size ?? 12;
     const textAlign = stringField(datum, markSpec.alignField) ?? markSpec.align ?? 'center';
     const textBaseline =
       stringField(datum, markSpec.baselineField) ?? markSpec.textBaseline ?? 'middle';

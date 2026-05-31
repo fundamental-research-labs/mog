@@ -53,13 +53,14 @@ export function resolveSeriesColor(
   }
 
   return (
-    (series.color ? resolveChartColor(series.color, context) : undefined) ??
-    fillColor ??
-    lineColor
+    (series.color ? resolveChartColor(series.color, context) : undefined) ?? fillColor ?? lineColor
   );
 }
 
-export function resolvedCategoryColors(config: ChartConfig, data?: ChartData): string[] | undefined {
+export function resolvedCategoryColors(
+  config: ChartConfig,
+  data?: ChartData,
+): string[] | undefined {
   const configColors = resolvedConfigColors(config);
   const seriesColors = resolvedSeriesColors(config, data);
 

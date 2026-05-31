@@ -13,7 +13,10 @@ export function depthOptionsFor3DPlot(
   const gapDepth = finiteNumber(markSpec.chart3d?.gapDepth);
   const sourceDepth = depthPercent ?? gapDepth ?? 100;
   const factor = clamp(sourceDepth / 100, 0.2, 2.5);
-  const base = Math.max(5, Math.min(28, Math.min(layout.plotArea.width, layout.plotArea.height) * 0.055));
+  const base = Math.max(
+    5,
+    Math.min(28, Math.min(layout.plotArea.width, layout.plotArea.height) * 0.055),
+  );
   const magnitude = base * factor * scale;
   const rotY = finiteNumber(markSpec.chart3d?.view3d?.rotY);
   const rotX = finiteNumber(markSpec.chart3d?.view3d?.rotX);

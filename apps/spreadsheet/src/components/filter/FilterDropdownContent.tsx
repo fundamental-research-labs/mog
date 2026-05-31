@@ -490,10 +490,7 @@ export function FilterDropdownContent({
       </div>
 
       {/* Filter content */}
-      <div
-        className="min-h-0 flex-1 overflow-hidden p-3"
-        data-testid="filter-values-panel"
-      >
+      <div className="min-h-0 flex-1 overflow-hidden p-3" data-testid="filter-values-panel">
         {activeTab === 'values' ? (
           columnType === 'date' ? (
             dropdownData && (

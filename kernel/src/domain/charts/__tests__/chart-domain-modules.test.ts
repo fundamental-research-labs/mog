@@ -1,19 +1,10 @@
 import { jest } from '@jest/globals';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
-import type {
-  ChartFloatingObject,
-  MutationResult,
-} from '../../../bridges/compute/compute-bridge';
+import type { ChartFloatingObject, MutationResult } from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
 import { getChartPosition, updatePosition } from '../chart-position';
-import {
-  create,
-  get,
-  getAll,
-  remove,
-  update,
-} from '../chart-store';
+import { create, get, getAll, remove, update } from '../chart-store';
 import {
   isChartLinkedToTable,
   getChartsLinkedToTable,
@@ -190,8 +181,8 @@ describe('chart-position', () => {
       ['to-cell', { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 6, col: 9 }],
     ]);
     const { ctx } = createMockContext({
-      getCellPosition: jest.fn(async (_sheetId: SheetId, cellId: string) =>
-        positions.get(cellId) ?? null,
+      getCellPosition: jest.fn(
+        async (_sheetId: SheetId, cellId: string) => positions.get(cellId) ?? null,
       ),
     });
 
@@ -210,9 +201,7 @@ describe('chart-position', () => {
   it('falls back to stored size when the two-cell end anchor was deleted', async () => {
     const { ctx } = createMockContext({
       getCellPosition: jest.fn(async (_sheetId: SheetId, cellId: string) =>
-        cellId === 'from-cell'
-          ? { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 5, col: 6 }
-          : null,
+        cellId === 'from-cell' ? { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 5, col: 6 } : null,
       ),
     });
 
@@ -298,8 +287,8 @@ describe('chart-position', () => {
       ['to-cell', { sheetId: SHEET_ID, sheetName: 'Sheet 1', row: 2, col: 4 }],
     ]);
     const { ctx } = createMockContext({
-      getCellPosition: jest.fn(async (_sheetId: SheetId, cellId: string) =>
-        positions.get(cellId) ?? null,
+      getCellPosition: jest.fn(
+        async (_sheetId: SheetId, cellId: string) => positions.get(cellId) ?? null,
       ),
     });
 
@@ -349,11 +338,7 @@ describe('chart-z-order', () => {
       getAllCharts: jest.fn(async () => [laterTie, back, earlyTie]),
     });
 
-    await expect(getChartsInZOrder(ctx, SHEET_ID)).resolves.toEqual([
-      back,
-      earlyTie,
-      laterTie,
-    ]);
+    await expect(getChartsInZOrder(ctx, SHEET_ID)).resolves.toEqual([back, earlyTie, laterTie]);
   });
 
   it('delegates bring-to-front updates through chart-store and computeBridge', async () => {

@@ -44,5 +44,4 @@ describe('configToSpec context owner threading', () => {
       'secondaryValueAxis',
     );
   });
-
 });

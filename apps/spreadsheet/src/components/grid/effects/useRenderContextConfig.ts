@@ -424,7 +424,7 @@ export function useRenderContextConfig(options: UseRenderContextConfigOptions): 
   // may not coincide with actor transitions that trigger the main context path.
   useEffect(() => {
     let cancelled = false;
-    const read = <T,>(reader: () => T | Promise<T>, fallback: T): Promise<T> => {
+    const read = <T>(reader: () => T | Promise<T>, fallback: T): Promise<T> => {
       try {
         return Promise.resolve(reader()).then((value) => value ?? fallback);
       } catch (err) {

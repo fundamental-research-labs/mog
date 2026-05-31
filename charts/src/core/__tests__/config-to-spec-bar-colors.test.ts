@@ -78,9 +78,7 @@ describe('configToSpec bar series colors', () => {
     const rects = compile(spec).marks.filter(isSeriesRect);
 
     expect(rects).toHaveLength(4);
-    expect(new Set(rects.map((rect) => rect.style.fill))).toEqual(
-      new Set(['#2F75B5', '#70AD47']),
-    );
+    expect(new Set(rects.map((rect) => rect.style.fill))).toEqual(new Set(['#2F75B5', '#70AD47']));
     expect(rects.every((rect) => rect.style.fillPaint === undefined)).toBe(true);
     expect(rects.every((rect) => rect.datum[SERIES_FILL_FIELD] === rect.style.fill)).toBe(true);
   });

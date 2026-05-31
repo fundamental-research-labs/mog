@@ -75,7 +75,8 @@ export function generateTickMarks(
       path,
       datum,
       style: {
-        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.color ?? markSpec.stroke ?? '#000',
+        stroke:
+          datumString(datum, markSpec.strokeField) ?? markSpec.color ?? markSpec.stroke ?? '#000',
         strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
       },

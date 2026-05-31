@@ -45,8 +45,20 @@ export function generateRuleMarks(
 
     const directX1 = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
     const directY1 = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
-    const directX2 = directPosition(datum, markSpec.x2Field, layout, 'x', markSpec.coordinateSystem);
-    const directY2 = directPosition(datum, markSpec.y2Field, layout, 'y', markSpec.coordinateSystem);
+    const directX2 = directPosition(
+      datum,
+      markSpec.x2Field,
+      layout,
+      'x',
+      markSpec.coordinateSystem,
+    );
+    const directY2 = directPosition(
+      datum,
+      markSpec.y2Field,
+      layout,
+      'y',
+      markSpec.coordinateSystem,
+    );
 
     if (
       directX1 !== undefined &&
@@ -99,7 +111,13 @@ export function generateRuleMarks(
     const stroke =
       datumString(datum, markSpec.strokeField) ??
       (encodings.color
-        ? resolveStrokeColor(scales.color, colorValue, markSpec.color, markSpec.stroke, marks.length)
+        ? resolveStrokeColor(
+            scales.color,
+            colorValue,
+            markSpec.color,
+            markSpec.stroke,
+            marks.length,
+          )
         : (markSpec.color ?? markSpec.stroke ?? '#888'));
 
     marks.push({

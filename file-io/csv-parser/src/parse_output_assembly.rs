@@ -74,14 +74,14 @@ pub fn parse_csv_to_parse_output(
         None => detect_delimiter(&text),
     };
 
-    // ---- Line-ending normalisation ----
+    // ---- CSV recovery / line-ending normalisation ----
     // The `csv` crate's `Terminator::Any(b)` only accepts ONE byte —
     // it can't natively handle a file that mixes `\n`, `\r\n`, and `\r`
     // (the `mixed-line-endings.csv` fixture). Pre-normalise CRLF/CR → LF
     // outside any quoted region so the reader sees a single line
     // terminator. Quoted regions are preserved verbatim (RFC 4180 keeps
     // embedded CR/LF inside `"..."` literally).
-    let normalised = normalise_line_endings(&text);
+    let normalised = normalise_line_endings(&text, delimiter_byte);
 
     // ---- CSV reader ----
     let mut builder = csv::ReaderBuilder::new();
@@ -236,30 +236,63 @@ fn empty_output(sheet_name: &str) -> ParseOutput {
     }
 }
 
-/// Normalise line terminators outside quoted regions to `\n`.
+/// Normalise line terminators outside quoted regions to `\n` and recover
+/// literal quotes inside malformed quoted fields.
 ///
 /// Inside a `"..."` quoted region (RFC 4180), CR/LF bytes are payload
 /// and must be preserved verbatim. Outside, fold:
 /// - `\r\n` → `\n`
 /// - bare `\r` → `\n`
 ///
-/// Quote toggling follows the same rule the `csv` crate uses: a `"` flips
-/// the quoted-state. The CSV crate's RFC 4180 mode treats `""` inside a
-/// quoted field as an escaped quote — that's still two toggles, so the
-/// state ends up correct.
+/// Quote handling mirrors Excel's recovery for malformed quoted fields: while
+/// a quoted field is open, a `"` closes the field only when followed by the
+/// delimiter, a line terminator, or EOF. If another byte follows, the quote is
+/// payload and is doubled before handing the text to the `csv` crate so it
+/// survives unquoting.
 ///
 /// Operates at the byte level. UTF-8 continuation bytes (0x80..=0xBF) are
 /// never `"` (0x22) or `\r` (0x0D), so multi-byte sequences pass through
 /// verbatim.
-fn normalise_line_endings(text: &str) -> String {
+fn normalise_line_endings(text: &str, delimiter: u8) -> String {
     let bytes = text.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut in_quote = false;
+    let mut at_field_start = true;
     let mut i = 0;
     while i < bytes.len() {
         let b = bytes[i];
         if b == b'"' {
-            in_quote = !in_quote;
+            if in_quote {
+                match bytes.get(i + 1).copied() {
+                    Some(b'"') => {
+                        out.extend_from_slice(b"\"\"");
+                        i += 2;
+                        continue;
+                    }
+                    Some(next) if next == delimiter || next == b'\n' || next == b'\r' => {
+                        in_quote = false;
+                        at_field_start = false;
+                        out.push(b'"');
+                        i += 1;
+                        continue;
+                    }
+                    None => {
+                        in_quote = false;
+                        at_field_start = false;
+                        out.push(b'"');
+                        i += 1;
+                        continue;
+                    }
+                    Some(_) => {
+                        out.extend_from_slice(b"\"\"");
+                        i += 1;
+                        continue;
+                    }
+                }
+            } else if at_field_start {
+                in_quote = true;
+            }
+            at_field_start = false;
             out.push(b'"');
             i += 1;
             continue;
@@ -267,6 +300,7 @@ fn normalise_line_endings(text: &str) -> String {
         if !in_quote && b == b'\r' {
             // CR or CRLF outside a quoted region → single LF.
             out.push(b'\n');
+            at_field_start = true;
             if i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
                 i += 2;
             } else {
@@ -275,57 +309,15 @@ fn normalise_line_endings(text: &str) -> String {
             continue;
         }
         out.push(b);
+        if !in_quote {
+            at_field_start = b == delimiter || b == b'\n';
+        }
         i += 1;
     }
     // The input was a valid `&str` and we only ever (a) copied bytes
     // through verbatim or (b) replaced an ASCII `\r` (or `\r\n`) with an
     // ASCII `\n`. Both preserve UTF-8 validity.
     String::from_utf8(out).expect("byte-level normalise preserves UTF-8")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalise_lf_passthrough() {
-        assert_eq!(normalise_line_endings("a\nb\n"), "a\nb\n");
-    }
-
-    #[test]
-    fn normalise_crlf_to_lf() {
-        assert_eq!(normalise_line_endings("a\r\nb\r\n"), "a\nb\n");
-    }
-
-    #[test]
-    fn normalise_bare_cr_to_lf() {
-        assert_eq!(normalise_line_endings("a\rb\rc"), "a\nb\nc");
-    }
-
-    #[test]
-    fn normalise_mixed() {
-        assert_eq!(
-            normalise_line_endings("a,b,c\n1,2,3\r\n4,5,6\r7,8,9\n"),
-            "a,b,c\n1,2,3\n4,5,6\n7,8,9\n"
-        );
-    }
-
-    #[test]
-    fn normalise_preserves_quoted_cr_lf() {
-        // CR/LF inside a quoted field stay as-is (Excel embeds them this way).
-        assert_eq!(
-            normalise_line_endings("\"line1\nline2\",x\n"),
-            "\"line1\nline2\",x\n"
-        );
-        assert_eq!(normalise_line_endings("\"x\r\ny\",z\r\n"), "\"x\r\ny\",z\n");
-    }
-
-    #[test]
-    fn normalise_preserves_utf8_multibyte() {
-        // 'é' is 0xC3 0xA9 — neither is `"` (0x22) or `\r` (0x0D).
-        let s = "café\r\n";
-        assert_eq!(normalise_line_endings(s), "café\n");
-    }
 }
 
 /// Count of data rows after stripping trailing all-empty rows.
@@ -339,4 +331,60 @@ fn trailing_data_row_count(cells: &[CellData], parsed_rows: u32) -> u32 {
         None => 0,
     }
     .min(parsed_rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalise_lf_passthrough() {
+        assert_eq!(normalise_line_endings("a\nb\n", b','), "a\nb\n");
+    }
+
+    #[test]
+    fn normalise_crlf_to_lf() {
+        assert_eq!(normalise_line_endings("a\r\nb\r\n", b','), "a\nb\n");
+    }
+
+    #[test]
+    fn normalise_bare_cr_to_lf() {
+        assert_eq!(normalise_line_endings("a\rb\rc", b','), "a\nb\nc");
+    }
+
+    #[test]
+    fn normalise_mixed() {
+        assert_eq!(
+            normalise_line_endings("a,b,c\n1,2,3\r\n4,5,6\r7,8,9\n", b','),
+            "a,b,c\n1,2,3\n4,5,6\n7,8,9\n"
+        );
+    }
+
+    #[test]
+    fn normalise_preserves_quoted_cr_lf() {
+        // CR/LF inside a quoted field stay as-is (Excel embeds them this way).
+        assert_eq!(
+            normalise_line_endings("\"line1\nline2\",x\n", b','),
+            "\"line1\nline2\",x\n"
+        );
+        assert_eq!(
+            normalise_line_endings("\"x\r\ny\",z\r\n", b','),
+            "\"x\r\ny\",z\n"
+        );
+    }
+
+    #[test]
+    fn normalise_preserves_utf8_multibyte() {
+        // 'é' is 0xC3 0xA9 — neither is `"` (0x22) or `\r` (0x0D).
+        let s = "café\r\n";
+        assert_eq!(normalise_line_endings(s, b','), "café\n");
+    }
+
+    #[test]
+    fn normalise_escapes_literal_quote_inside_unclosed_field() {
+        assert_eq!(
+            normalise_line_endings("alice,\"hello\nbob,\"world", b','),
+            "alice,\"hello\nbob,\"\"world"
+        );
+    }
 }

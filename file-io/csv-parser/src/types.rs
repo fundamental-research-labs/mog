@@ -11,9 +11,10 @@ use domain_types::ParseOutput;
 /// Result of a successful CSV import.
 ///
 /// `output` carries the per-cell `style_id` references and the 4-entry
-/// style palette (`General`, `m/d/yyyy`, `h:mm:ss`, `@`). The `warnings`
-/// channel surfaces recoverable parser observations — the caller should
-/// NOT treat a non-empty warnings vec as failure.
+/// style palette (`General`, `m/d/yyyy`, `h:mm:ss`, `@`, plus CSV-specific
+/// display formats). The `warnings` channel surfaces recoverable parser
+/// observations — the caller should NOT treat a non-empty warnings vec as
+/// failure.
 #[derive(Debug, Clone)]
 pub struct CsvParseResult {
     /// Single-sheet `ParseOutput` ready for the existing XLSX hydration

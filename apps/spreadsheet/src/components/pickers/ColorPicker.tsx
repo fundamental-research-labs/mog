@@ -281,6 +281,7 @@ export function ColorPicker({
   const [hslInput, setHslInput] = useState<HSL>(initialHsl);
 
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const pickerRootRef = useRef<HTMLDivElement>(null);
   const nativeColorInputRef = useRef<HTMLInputElement>(null);
 
   // Live preview ref for screen reader announcements
@@ -405,6 +406,16 @@ export function ColorPicker({
     onClose?.();
   }, [inputMode, handleHexSubmit, rgbInput, hslInput, onChange, onClose]);
 
+  const focusSwatch = useCallback((index: number) => {
+    setFocusedIndex(index);
+    window.requestAnimationFrame(() => {
+      const swatches = pickerRootRef.current?.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="color-swatch"]',
+      );
+      swatches?.[index]?.focus();
+    });
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const cols = 10;
@@ -412,7 +423,7 @@ export function ColorPicker({
 
       if (focusedIndex === null) {
         if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-          setFocusedIndex(0);
+          focusSwatch(0);
           e.preventDefault();
         }
         return;
@@ -420,19 +431,19 @@ export function ColorPicker({
 
       switch (e.key) {
         case 'ArrowRight':
-          setFocusedIndex((focusedIndex + 1) % totalColors);
+          focusSwatch((focusedIndex + 1) % totalColors);
           e.preventDefault();
           break;
         case 'ArrowLeft':
-          setFocusedIndex((focusedIndex - 1 + totalColors) % totalColors);
+          focusSwatch((focusedIndex - 1 + totalColors) % totalColors);
           e.preventDefault();
           break;
         case 'ArrowDown':
-          setFocusedIndex(Math.min(focusedIndex + cols, totalColors - 1));
+          focusSwatch(Math.min(focusedIndex + cols, totalColors - 1));
           e.preventDefault();
           break;
         case 'ArrowUp':
-          setFocusedIndex(Math.max(focusedIndex - cols, 0));
+          focusSwatch(Math.max(focusedIndex - cols, 0));
           e.preventDefault();
           break;
         case 'Enter':
@@ -446,7 +457,7 @@ export function ColorPicker({
           break;
       }
     },
-    [focusedIndex, allColors, handleColorClick, onClose],
+    [focusedIndex, allColors, focusSwatch, handleColorClick, onClose],
   );
 
   // NOTE: Click-outside handling is now managed by the parent Popover/RibbonDropdownPanel.
@@ -470,6 +481,7 @@ export function ColorPicker({
 
   return (
     <div
+      ref={pickerRootRef}
       className="w-[196px] p-2 bg-ss-surface rounded-ss-md border border-ss-border shadow-ss-md"
       onKeyDown={handleKeyDown}
       role="dialog"
@@ -506,8 +518,11 @@ export function ColorPicker({
                 selected={value?.toUpperCase() === color.toUpperCase()}
                 focused={focusedIndex === idx}
                 onClick={() => handleColorClick(color)}
+                onFocus={() => setFocusedIndex(idx)}
                 onMouseEnter={() => setFocusedIndex(idx)}
-                tabIndex={focusedIndex === idx ? 0 : -1}
+                tabIndex={
+                  focusedIndex === null ? (idx === 0 ? 0 : -1) : focusedIndex === idx ? 0 : -1
+                }
               />
             );
           })}
@@ -527,8 +542,11 @@ export function ColorPicker({
                   selected={value?.toUpperCase() === color.toUpperCase()}
                   focused={focusedIndex === idx}
                   onClick={() => handleColorClick(color)}
+                  onFocus={() => setFocusedIndex(idx)}
                   onMouseEnter={() => setFocusedIndex(idx)}
-                  tabIndex={focusedIndex === idx ? 0 : -1}
+                  tabIndex={
+                    focusedIndex === null ? (idx === 0 ? 0 : -1) : focusedIndex === idx ? 0 : -1
+                  }
                 />
               );
             })}
@@ -549,8 +567,11 @@ export function ColorPicker({
                 selected={value?.toUpperCase() === color.toUpperCase()}
                 focused={focusedIndex === idx}
                 onClick={() => handleColorClick(color)}
+                onFocus={() => setFocusedIndex(idx)}
                 onMouseEnter={() => setFocusedIndex(idx)}
-                tabIndex={focusedIndex === idx ? 0 : -1}
+                tabIndex={
+                  focusedIndex === null ? (idx === 0 ? 0 : -1) : focusedIndex === idx ? 0 : -1
+                }
               />
             );
           })}

@@ -37,7 +37,6 @@ export interface SwitchProps {
 const trackClasses = [
   'relative inline-flex h-5 w-9 flex-shrink-0',
   'cursor-pointer rounded-full border-2 border-transparent',
-  'transition-colors duration-200 ease-in-out',
   // OFF state background
   'bg-ss-border',
   // ON state background — bg-ss-primary resolves to rgb(33,115,70)
@@ -51,7 +50,6 @@ const trackClasses = [
 // Thumb moves left/right based on data-state
 const thumbClasses = [
   'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm',
-  'transition-transform duration-200 ease-in-out',
   // OFF position
   'translate-x-0.5',
   // ON position

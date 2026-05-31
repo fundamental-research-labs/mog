@@ -14,7 +14,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
-import { RAW_BUBBLE_SIZE_FIELD } from '../../core/config-to-spec/fields';
+import { RAW_BUBBLE_SIZE_FIELD } from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   ExportOptions,

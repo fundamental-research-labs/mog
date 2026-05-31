@@ -17,7 +17,7 @@ import {
   effectiveBarGeometryFromSpec,
   effectiveGapWidth,
   effectiveOverlap,
-} from '../../core/config-to-spec/bar-geometry';
+} from '../../core/chart-ir/bar-geometry';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   BarDirection,

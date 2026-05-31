@@ -10,11 +10,11 @@ import {
   effectiveBarGeometryFromSpec,
   excelBarSlotGeometry,
   hasExcelBarGeometrySpec,
-} from '../../core/config-to-spec/bar-geometry';
+} from '../../core/chart-ir/bar-geometry';
 import {
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
-} from '../../core/config-to-spec/fields';
+} from '../../core/chart-ir/fields';
 import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';

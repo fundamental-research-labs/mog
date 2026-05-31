@@ -113,20 +113,36 @@ describe('Number Format Handlers — preset format strings', () => {
 });
 
 describe('Number Format Handlers — decimal adjustment', () => {
-  function createMockDepsWithNumberFormat(numberFormat: string | undefined): ActionDependencies {
+  function createMockDepsWithNumberFormat(
+    numberFormat: string | undefined,
+    displayText?: string,
+  ): ActionDependencies {
     const deps = createMockDeps() as any;
     const ws = deps.workbook.getSheetById();
     ws.viewport = {
-      getCellData: jest.fn().mockReturnValue({ format: { numberFormat } }),
+      getCellData: jest.fn().mockReturnValue({ format: { numberFormat }, displayText }),
     };
     deps.workbook.activeSheet = ws;
     return deps as ActionDependencies;
   }
 
-  it('DECREASE_DECIMALS starts unformatted cells from two decimals', async () => {
-    const deps = createMockDepsWithNumberFormat('General');
+  it('DECREASE_DECIMALS steps a General cell down from its displayed decimals', async () => {
+    // "1.23456" shows 5 decimals → one step down is 4 decimals, not a jump to 1.
+    const deps = createMockDepsWithNumberFormat('General', '1.23456');
     await NumberFormatHandlers.DECREASE_DECIMALS(deps);
-    expect(getAppliedFormat(deps)).toBe('0.0');
+    expect(getAppliedFormat(deps)).toBe('0.0000');
+  });
+
+  it('INCREASE_DECIMALS steps a General cell up from its displayed decimals', async () => {
+    const deps = createMockDepsWithNumberFormat('General', '1.2');
+    await NumberFormatHandlers.INCREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.00');
+  });
+
+  it('DECREASE_DECIMALS clamps a whole-number General cell at zero', async () => {
+    const deps = createMockDepsWithNumberFormat('General', '5');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0');
   });
 
   it('DECREASE_DECIMALS keeps explicit zero-decimal formats clamped at zero', async () => {

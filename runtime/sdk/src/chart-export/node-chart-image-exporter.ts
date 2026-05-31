@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 
 import { normalizeImageExportOptions } from '@mog/charts/export';
 import type { ChartImageExporter } from '@mog-sdk/contracts/api';
-import type { IChartBridge } from '@mog-sdk/contracts/bridges';
+import type { ChartMark, IChartBridge } from '@mog-sdk/contracts/bridges';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { ImageExportOptions } from '@mog-sdk/contracts/data/charts';
 
@@ -17,7 +17,16 @@ type NativeChartRasterAddon = {
   readonly render_chart_marks_image?: (requestJson: string) => NativeChartRasterResult;
 };
 
-type SerializableMarkType = 'rect' | 'path' | 'line' | 'area' | 'arc' | 'symbol' | 'text';
+type ChartMarkStyle = ChartMark['style'];
+type ChartPaint = NonNullable<ChartMarkStyle['fillPaint']>;
+type ChartTextMark = Extract<ChartMark, { type: 'text' }>;
+type ChartSymbolMark = Extract<ChartMark, { type: 'symbol' }>;
+
+type SerializableMarkType = ChartMark['type'];
+type SerializableSymbolShape = Extract<
+  ChartSymbolMark['shape'],
+  'circle' | 'square' | 'diamond' | 'cross' | 'triangle-up' | 'triangle-down'
+>;
 
 type SerializableStyle = {
   fill?: string;
@@ -35,29 +44,64 @@ type SerializableClip = {
   height: number;
 };
 
-type SerializableMark = {
+type SerializableMarkBase = {
   type: SerializableMarkType;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  path?: string;
-  innerRadius?: number;
-  outerRadius?: number;
-  startAngle?: number;
-  endAngle?: number;
-  text?: string;
-  fontSize?: number;
-  fontFamily?: string;
-  textAlign?: 'left' | 'center' | 'right';
-  textBaseline?: 'top' | 'middle' | 'bottom';
-  rotation?: number;
-  fontWeight?: 'normal' | 'bold' | number;
-  shape?: 'circle' | 'square' | 'diamond' | 'cross' | 'triangle-up' | 'triangle-down';
-  size?: number;
   clip?: SerializableClip;
   style: SerializableStyle;
 };
+
+type SerializableRectMark = SerializableMarkBase & {
+  type: 'rect';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type SerializablePathMark = SerializableMarkBase & {
+  type: 'path';
+  x: number;
+  y: number;
+  path: string;
+};
+
+type SerializableArcMark = SerializableMarkBase & {
+  type: 'arc';
+  x: number;
+  y: number;
+  innerRadius: number;
+  outerRadius: number;
+  startAngle: number;
+  endAngle: number;
+};
+
+type SerializableSymbolMark = SerializableMarkBase & {
+  type: 'symbol';
+  x: number;
+  y: number;
+  shape: SerializableSymbolShape;
+  size: number;
+};
+
+type SerializableTextMark = SerializableMarkBase & {
+  type: 'text';
+  x: number;
+  y: number;
+  text: string;
+  fontSize: number;
+  fontFamily: string;
+  textAlign: 'left' | 'center' | 'right';
+  textBaseline: 'top' | 'middle' | 'bottom';
+  rotation?: number;
+  fontWeight?: 'normal' | 'bold' | number;
+};
+
+type SerializableMark =
+  | SerializableRectMark
+  | SerializablePathMark
+  | SerializableArcMark
+  | SerializableSymbolMark
+  | SerializableTextMark;
 
 export function createNodeChartImageExporterFactory(
   addon: NativeChartRasterAddon,
@@ -150,97 +194,106 @@ function createNativeChartRasterBackend(addon: NativeChartRasterAddon): NativeCh
   };
 }
 
-function serializeMark(mark: unknown, index: number): SerializableMark {
-  const source = record(mark, index, 'mark');
-  const type = stringField(source, 'type', index) as SerializableMarkType;
-  const style = serializeStyle(source, index);
-  const clip = serializeClip(source, index);
+function serializeMark(mark: ChartMark, index: number): SerializableMark {
+  const style = serializeStyle(mark.style, index);
+  const clip = serializeClip(mark.clip, index);
 
-  switch (type) {
+  switch (mark.type) {
     case 'rect':
       return {
-        type,
-        x: numberField(source, 'x', index),
-        y: numberField(source, 'y', index),
-        width: numberField(source, 'width', index),
-        height: numberField(source, 'height', index),
+        type: mark.type,
+        x: finiteNumber(mark.x, 'x', index),
+        y: finiteNumber(mark.y, 'y', index),
+        width: finiteNumber(mark.width, 'width', index),
+        height: finiteNumber(mark.height, 'height', index),
         ...(clip ? { clip } : {}),
         style,
       };
     case 'path':
-    case 'line':
-    case 'area':
       return {
-        type,
-        x: optionalNumberField(source, 'x', index) ?? 0,
-        y: optionalNumberField(source, 'y', index) ?? 0,
-        path: stringField(source, 'path', index),
+        type: mark.type,
+        x: finiteNumber(mark.x, 'x', index),
+        y: finiteNumber(mark.y, 'y', index),
+        path: stringValue(mark.path, 'path', index),
         ...(clip ? { clip } : {}),
         style,
       };
     case 'arc':
       return {
-        type,
-        x: numberField(source, 'x', index),
-        y: numberField(source, 'y', index),
-        innerRadius: numberField(source, 'innerRadius', index),
-        outerRadius: numberField(source, 'outerRadius', index),
-        startAngle: numberField(source, 'startAngle', index),
-        endAngle: numberField(source, 'endAngle', index),
+        type: mark.type,
+        x: finiteNumber(mark.x, 'x', index),
+        y: finiteNumber(mark.y, 'y', index),
+        innerRadius: finiteNumber(mark.innerRadius, 'innerRadius', index),
+        outerRadius: finiteNumber(mark.outerRadius, 'outerRadius', index),
+        startAngle: finiteNumber(mark.startAngle, 'startAngle', index),
+        endAngle: finiteNumber(mark.endAngle, 'endAngle', index),
         ...(clip ? { clip } : {}),
         style,
       };
     case 'symbol':
       return {
-        type,
-        x: numberField(source, 'x', index),
-        y: numberField(source, 'y', index),
-        shape: symbolShapeField(source, index),
-        size: numberField(source, 'size', index),
+        type: mark.type,
+        x: finiteNumber(mark.x, 'x', index),
+        y: finiteNumber(mark.y, 'y', index),
+        shape: symbolShapeField(mark.shape, index),
+        size: finiteNumber(mark.size, 'size', index),
         ...(clip ? { clip } : {}),
         style,
       };
     case 'text':
       return {
-        type,
-        x: numberField(source, 'x', index),
-        y: numberField(source, 'y', index),
-        text: stringField(source, 'text', index),
-        fontSize: numberField(source, 'fontSize', index),
-        fontFamily: stringField(source, 'fontFamily', index),
-        textAlign: textAlignField(source, index),
-        textBaseline: textBaselineField(source, index),
-        rotation: optionalNumberField(source, 'rotation', index),
-        fontWeight: fontWeightField(source, index),
+        type: mark.type,
+        x: finiteNumber(mark.x, 'x', index),
+        y: finiteNumber(mark.y, 'y', index),
+        text: stringValue(mark.text, 'text', index),
+        fontSize: finiteNumber(mark.fontSize, 'fontSize', index),
+        fontFamily: stringValue(mark.fontFamily, 'fontFamily', index),
+        textAlign: textAlignField(mark.textAlign, index),
+        textBaseline: textBaselineField(mark.textBaseline, index),
+        rotation: optionalFiniteNumber(mark.rotation, 'rotation', index),
+        fontWeight: fontWeightField(mark.fontWeight, index),
         ...(clip ? { clip } : {}),
         style,
       };
     default:
+      // Runtime guard for untyped custom bridge implementations.
+      const type = (mark as { type?: unknown }).type;
       throw new Error(`Unsupported chart mark type "${String(type)}" at index ${index}`);
   }
 }
 
-function serializeClip(source: Record<string, unknown>, index: number): SerializableClip | undefined {
-  if (source.clip === undefined) return undefined;
-  const clip = record(source.clip, index, 'clip');
+function serializeClip(clip: ChartMark['clip'], index: number): SerializableClip | undefined {
+  if (clip === undefined) return undefined;
   return {
-    x: numberField(clip, 'x', index),
-    y: numberField(clip, 'y', index),
-    width: numberField(clip, 'width', index),
-    height: numberField(clip, 'height', index),
+    x: finiteNumber(clip.x, 'clip.x', index),
+    y: finiteNumber(clip.y, 'clip.y', index),
+    width: finiteNumber(clip.width, 'clip.width', index),
+    height: finiteNumber(clip.height, 'clip.height', index),
   };
 }
 
-function serializeStyle(source: Record<string, unknown>, index: number): SerializableStyle {
-  const nested = source.style === undefined ? {} : record(source.style, index, 'style');
+function serializeStyle(source: ChartMarkStyle, index: number): SerializableStyle {
   const style: SerializableStyle = {};
-  optionalStringInto(style, 'fill', nested.fill ?? source.fill, index);
-  optionalStringInto(style, 'stroke', nested.stroke ?? source.stroke, index);
-  optionalNumberInto(style, 'strokeWidth', nested.strokeWidth ?? source.strokeWidth, index);
-  optionalNumberInto(style, 'opacity', nested.opacity ?? source.opacity, index);
-  optionalNumberInto(style, 'cornerRadius', nested.cornerRadius ?? source.cornerRadius, index);
 
-  const strokeDash = nested.strokeDash ?? source.strokeDash;
+  const fillPaint = serializablePaint(source.fillPaint);
+  if (fillPaint.kind === 'color') {
+    style.fill = fillPaint.color;
+  } else if (fillPaint.kind !== 'none') {
+    optionalStringInto(style, 'fill', source.fill, index);
+  }
+
+  const strokePaint = serializablePaint(source.line?.paint ?? source.strokePaint);
+  if (strokePaint.kind === 'color') {
+    style.stroke = strokePaint.color;
+  } else if (strokePaint.kind !== 'none') {
+    optionalStringInto(style, 'stroke', source.stroke, index);
+  }
+
+  optionalNumberInto(style, 'strokeWidth', source.line?.width ?? source.strokeWidth, index);
+  optionalNumberInto(style, 'opacity', source.opacity, index);
+  optionalNumberInto(style, 'cornerRadius', source.cornerRadius, index);
+
+  const strokeDash = source.line?.dash ?? source.strokeDash;
   if (strokeDash !== undefined) {
     if (!Array.isArray(strokeDash)) {
       throw new Error(`Invalid chart mark at index ${index}: style.strokeDash must be an array`);
@@ -258,32 +311,19 @@ function serializeStyle(source: Record<string, unknown>, index: number): Seriali
   return style;
 }
 
-function record(value: unknown, index: number, name: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Invalid chart mark at index ${index}: ${name} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function numberField(source: Record<string, unknown>, field: string, index: number): number {
-  const value = source[field];
+function finiteNumber(value: unknown, field: string, index: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`Invalid chart mark at index ${index}: ${field} must be a finite number`);
   }
   return value;
 }
 
-function optionalNumberField(
-  source: Record<string, unknown>,
-  field: string,
-  index: number,
-): number | undefined {
-  if (source[field] === undefined) return undefined;
-  return numberField(source, field, index);
+function optionalFiniteNumber(value: unknown, field: string, index: number): number | undefined {
+  if (value === undefined) return undefined;
+  return finiteNumber(value, field, index);
 }
 
-function stringField(source: Record<string, unknown>, field: string, index: number): string {
-  const value = source[field];
+function stringValue(value: unknown, field: string, index: number): string {
   if (typeof value !== 'string') {
     throw new Error(`Invalid chart mark at index ${index}: ${field} must be a string`);
   }
@@ -316,29 +356,17 @@ function optionalNumberInto(
   style[field] = value;
 }
 
-function textAlignField(
-  source: Record<string, unknown>,
-  index: number,
-): 'left' | 'center' | 'right' {
-  const value = stringField(source, 'textAlign', index);
+function textAlignField(value: unknown, index: number): 'left' | 'center' | 'right' {
   if (value === 'left' || value === 'center' || value === 'right') return value;
   throw new Error(`Invalid chart mark at index ${index}: unsupported textAlign "${value}"`);
 }
 
-function textBaselineField(
-  source: Record<string, unknown>,
-  index: number,
-): 'top' | 'middle' | 'bottom' {
-  const value = stringField(source, 'textBaseline', index);
+function textBaselineField(value: unknown, index: number): 'top' | 'middle' | 'bottom' {
   if (value === 'top' || value === 'middle' || value === 'bottom') return value;
   throw new Error(`Invalid chart mark at index ${index}: unsupported textBaseline "${value}"`);
 }
 
-function symbolShapeField(
-  source: Record<string, unknown>,
-  index: number,
-): 'circle' | 'square' | 'diamond' | 'cross' | 'triangle-up' | 'triangle-down' {
-  const value = stringField(source, 'shape', index);
+function symbolShapeField(value: unknown, index: number): SerializableSymbolShape {
   if (
     value === 'circle' ||
     value === 'square' ||
@@ -353,14 +381,55 @@ function symbolShapeField(
 }
 
 function fontWeightField(
-  source: Record<string, unknown>,
+  value: ChartTextMark['fontWeight'],
   index: number,
 ): 'normal' | 'bold' | number | undefined {
-  const value = source.fontWeight;
   if (value === undefined) return undefined;
   if (value === 'normal' || value === 'bold') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   throw new Error(
     `Invalid chart mark at index ${index}: fontWeight must be "normal", "bold", or a finite number`,
   );
+}
+
+type SerializablePaint =
+  | { kind: 'none' }
+  | { kind: 'unsupported' }
+  | { kind: 'color'; color: string };
+
+function serializablePaint(paint: ChartPaint | undefined): SerializablePaint {
+  if (!paint) return { kind: 'unsupported' };
+
+  switch (paint.type) {
+    case 'none':
+      return { kind: 'none' };
+    case 'solid':
+      return { kind: 'color', color: withPaintOpacity(paint.color, paint.opacity) };
+    case 'pattern': {
+      const color = paint.foreground ?? paint.background;
+      return color
+        ? { kind: 'color', color: withPaintOpacity(color, paint.opacity) }
+        : { kind: 'unsupported' };
+    }
+    case 'groupInherited':
+      return serializablePaint(paint.fallback);
+    case 'linearGradient':
+    case 'radialGradient':
+    case 'rectangularGradient':
+    case 'image':
+      return { kind: 'unsupported' };
+  }
+}
+
+function withPaintOpacity(color: string, opacity: number | undefined): string {
+  if (opacity === undefined || opacity >= 1) return color;
+
+  const normalized = color.startsWith('#') ? color.slice(1) : color;
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return color;
+
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  const alpha = Math.max(0, Math.min(1, opacity));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

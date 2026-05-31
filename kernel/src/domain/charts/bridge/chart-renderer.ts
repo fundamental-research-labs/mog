@@ -72,7 +72,7 @@ export function renderChartMarks(
   ctx.clip();
 
   for (const mark of marks) {
-    renderMark(ctx, mark as Parameters<typeof renderMark>[1]);
+    renderMark(ctx, mark);
   }
 
   ctx.restore();

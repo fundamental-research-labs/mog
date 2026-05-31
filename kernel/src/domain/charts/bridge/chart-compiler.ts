@@ -177,7 +177,7 @@ function compileChartMarksOutcome(input: CompileChartMarksInput): CompileChartMa
       : compile(compileInput.spec);
 
     stage = 'collectMarks';
-    const marks = collectMarks(compileResult) as ChartMark[];
+    const marks = collectMarks(compileResult);
     stage = 'layout';
     const layout = extractLayoutSnapshot(compileResult);
 

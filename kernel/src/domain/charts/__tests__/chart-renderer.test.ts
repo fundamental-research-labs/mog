@@ -27,8 +27,7 @@ function createRecordingCtx(): { ctx: CanvasRenderingContext2D; ops: Op[] } {
     restore: () => ops.push({ kind: 'restore' }),
     translate: (x: number, y: number) => ops.push({ kind: 'translate', x, y }),
     beginPath: () => ops.push({ kind: 'beginPath' }),
-    rect: (x: number, y: number, w: number, h: number) =>
-      ops.push({ kind: 'rect', x, y, w, h }),
+    rect: (x: number, y: number, w: number, h: number) => ops.push({ kind: 'rect', x, y, w, h }),
     clip: () => ops.push({ kind: 'clip' }),
     set fillStyle(v: string) {
       fillStyle = v;
@@ -132,7 +131,7 @@ describe('chart renderer', () => {
         width: 30,
         height: 40,
         style: { fill: '#123456' },
-      } as ChartMark,
+      },
     ];
 
     renderChartMarks(ctx, marks, bounds);

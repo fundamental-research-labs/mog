@@ -3,7 +3,7 @@ use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
-use crate::snapshot::RecalcResult;
+use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
@@ -307,7 +307,9 @@ pub(in crate::storage::engine) fn mutation_copy_range(
         }
     }
 
-    // Apply format edits
+    // Apply format edits and surface them as changed cells so viewport patches
+    // refresh format-only pastes even when no value/formula changes.
+    let mut format_changes: Vec<CellChange> = Vec::with_capacity(format_edits.len());
     for (sheet_id, row, col, format) in &format_edits {
         let Some(cell_id) = super::super::super::cell_editing::ensure_cell_id_mirrored(
             stores, mirror, sheet_id, *row, *col,
@@ -323,13 +325,36 @@ pub(in crate::storage::engine) fn mutation_copy_range(
             &cell_hex,
             format,
         );
+        let value = mirror
+            .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
+            .cloned()
+            .unwrap_or(CellValue::Null);
+        format_changes.push(CellChange {
+            cell_id: cell_id.to_uuid_string(),
+            sheet_id: sheet_id.to_uuid_string(),
+            position: Some(CellPosition {
+                row: *row,
+                col: *col,
+            }),
+            value,
+            display_text: None,
+            format_idx: None,
+            extra_flags: 0,
+            old_value: None,
+        });
     }
 
     mutation.observer.set_suppressed(false);
 
+    let mut format_recalc = RecalcResult::empty();
+    format_recalc.changed_cells = format_changes;
+
     if cell_edits.is_empty() {
-        return Ok(RecalcResult::empty());
+        return Ok(format_recalc);
     }
 
-    mutation_set_cells_by_position_raw(stores, mirror, mutation, cell_edits, false)
+    let mut recalc =
+        mutation_set_cells_by_position_raw(stores, mirror, mutation, cell_edits, false)?;
+    super::patches::merge_recalc_results(&mut recalc, format_recalc);
+    Ok(recalc)
 }

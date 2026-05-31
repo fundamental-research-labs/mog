@@ -339,12 +339,14 @@ fn test_copy_range_transpose() {
 
 #[test]
 fn test_copy_range_formats_only() {
+    use crate::storage::engine::mutation::MutationOutput;
     use domain_types::CellFormat;
 
     let snap = copy_range_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
 
     let sid = sheet_id();
+    let _ = engine.register_viewport("main", &sid, 0, 0, 10, 5);
 
     // Set A1 format to bold
     let cell_hex = id_to_hex(cell_id_a1().as_u128());
@@ -361,7 +363,7 @@ fn test_copy_range_formats_only() {
     );
 
     // Copy A1 format to A5 (formats only)
-    let _output = engine
+    let output = engine
         .apply_mutation(EngineMutation::CopyRange {
             source_sheet_id: sid,
             src_start_row: 0,
@@ -376,6 +378,29 @@ fn test_copy_range_formats_only() {
             transpose: false,
         })
         .unwrap();
+    let result = match output {
+        MutationOutput::Recalc(result) => result,
+        _ => panic!("expected Recalc output"),
+    };
+
+    let a5_change = result
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)) == Some((4, 0)));
+    assert!(
+        a5_change.is_some(),
+        "formats-only copy should report A5 in changed_cells so viewport patches refresh it"
+    );
+
+    let patches = engine.flush_viewport_patches();
+    let mutation_bytes =
+        extract_first_viewport_mutation(&patches).expect("formats-only copy should emit patches");
+    let patch_positions = extract_patch_positions(&mutation_bytes);
+    assert!(
+        patch_positions.contains(&(4, 0)),
+        "formats-only copy should emit a viewport patch for A5, got {patch_positions:?}"
+    );
 
     // A5 should have bold format
     // Find A5's cell_id from grid

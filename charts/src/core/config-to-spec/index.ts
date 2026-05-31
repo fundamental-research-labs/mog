@@ -6,35 +6,22 @@
  *
  * Pure function - no DOM dependencies.
  */
-import type { ChartSpec, DataRow, Transform } from '../../grammar/spec';
+import type { ChartSpec, Transform } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
+import { buildAnnotationLayers } from './annotation-layers';
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
-import { buildAnalysisLineLayers } from './layers/analysis-lines';
 import { buildComboLayers } from './layers/combo';
-import { buildDataLabelLayer, buildDataLabelLayers, buildLeaderLineLayers } from './layers/data-labels';
+import { buildDataLabelLayer } from './layers/data-labels';
 import { buildDataTableLayers } from './layers/data-table';
-import { buildErrorBarLayers } from './layers/error-bars';
 import { buildFunnelLayers } from './layers/funnel';
-import { buildMarkerLayers, buildPointStyleLayers } from './layers/markers';
 import { buildParetoLayers } from './layers/pareto';
-import {
-  buildPerSeriesLineLayers,
-  shouldBuildPerSeriesLineLayers,
-} from './layers/series-lines';
+import { buildPerSeriesLineLayers, shouldBuildPerSeriesLineLayers } from './layers/series-lines';
 import { buildStockLayers, hasStockVolumeLayer } from './layers/stock';
-import { buildTrendlineLayers } from './layers/trendlines';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
-import {
-  DATA_LABEL_LEADER_VISIBLE_FIELD,
-  DATA_LABEL_VISIBLE_FIELD,
-  ERROR_BAR_VISIBLE_FIELD,
-  MARKER_VISIBLE_FIELD,
-  POINT_STYLE_VISIBLE_FIELD,
-} from './fields';
 import {
   buildChartDimensions,
   buildLayerSpec,
@@ -217,37 +204,6 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
     config: configSpec,
     transforms,
   });
-}
-
-function buildAnnotationLayers(
-  config: ChartConfig,
-  data: ChartData,
-  encoding: ReturnType<typeof buildEncoding>,
-  rows: DataRow[],
-  options: { includeMarkers?: boolean } = {},
-): ChartSpec[] {
-  return [
-    ...buildAnalysisLineLayers(config, encoding, rows),
-    ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
-    ...buildTrendlineLayers(config, data, encoding, rows),
-    ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
-    ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
-    ...buildDataTableLayers(config, data),
-    ...(isAreaChart(config.type) && hasRowFlag(rows, POINT_STYLE_VISIBLE_FIELD)
-      ? buildPointStyleLayers(encoding)
-      : []),
-    ...(options.includeMarkers !== false && hasRowFlag(rows, MARKER_VISIBLE_FIELD)
-      ? buildMarkerLayers(encoding)
-      : []),
-  ];
-}
-
-function hasRowFlag(rows: DataRow[], field: string): boolean {
-  return rows.some((row) => row[field] === true);
-}
-
-function isAreaChart(type: ChartConfig['type']): boolean {
-  return type === 'area' || type === 'area3d';
 }
 
 function isPreservedOnlyChartExFamily(type: ChartConfig['type']): boolean {

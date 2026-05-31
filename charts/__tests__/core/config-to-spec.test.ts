@@ -94,7 +94,10 @@ const STOCK_SERIES_DATA: ChartData = {
   ],
 };
 
-function expectRowContaining(row: Record<string, unknown>, expected: Record<string, unknown>): void {
+function expectRowContaining(
+  row: Record<string, unknown>,
+  expected: Record<string, unknown>,
+): void {
   expect(row).toEqual(expect.objectContaining(expected));
 }
 
@@ -1313,7 +1316,11 @@ describe('buildConfigSpec - colors', () => {
   it('should derive repeated imported theme colors from source series index', () => {
     const config = makeConfig({
       series: [
-        { name: 'Staffing', idx: 0, format: { fill: { type: 'solid', color: { theme: 'accent1' } } } },
+        {
+          name: 'Staffing',
+          idx: 0,
+          format: { fill: { type: 'solid', color: { theme: 'accent1' } } },
+        },
         { name: 'APAC', idx: 6, format: { fill: { type: 'solid', color: { theme: 'accent1' } } } },
       ],
     });
@@ -1497,18 +1504,17 @@ describe('buildTrendlineTransform', () => {
 // =============================================================================
 
 describe('buildMark - radar', () => {
-  it('should produce line with linear-closed for basic radar', () => {
+  it('should produce a radar mark for basic radar', () => {
     const config = makeConfig({ type: 'radar' });
     const mark = buildMark(config) as MarkSpec;
-    expect(mark.type).toBe('line');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
   });
 
-  it('should produce area with linear-closed for radarFilled', () => {
+  it('should produce a filled radar mark for radarFilled', () => {
     const config = makeConfig({ type: 'radar', radarFilled: true });
     const mark = buildMark(config) as MarkSpec;
-    expect(mark.type).toBe('area');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
+    expect(mark.fillOpacity).toBeGreaterThan(0);
   });
 
   it('should add point=true for radarMarkers', () => {
@@ -1520,8 +1526,8 @@ describe('buildMark - radar', () => {
   it('should combine radarFilled and radarMarkers', () => {
     const config = makeConfig({ type: 'radar', radarFilled: true, radarMarkers: true });
     const mark = buildMark(config) as MarkSpec;
-    expect(mark.type).toBe('area');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
+    expect(mark.fillOpacity).toBeGreaterThan(0);
     expect(mark.point).toBe(true);
   });
 });
@@ -1744,9 +1750,11 @@ describe('configToSpec - integration', () => {
     });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
 
-    expect(spec.layer?.some((layer) => layer.transform?.some((transform) => transform.type === 'regression'))).toBe(
-      true,
-    );
+    expect(
+      spec.layer?.some((layer) =>
+        layer.transform?.some((transform) => transform.type === 'regression'),
+      ),
+    ).toBe(true);
   });
 
   it('should not include transforms when no trendline', () => {
@@ -1803,12 +1811,11 @@ describe('configToSpec - integration', () => {
     expect(spec.height).toBe(400);
   });
 
-  it('should produce radar mark with linear-closed interpolation', () => {
+  it('should produce a native radar mark', () => {
     const config = makeConfig({ type: 'radar' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     const mark = spec.mark as MarkSpec;
-    expect(mark.type).toBe('line');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
   });
 
   it('should produce data label layer in combo chart', () => {
@@ -1974,8 +1981,7 @@ describe('configToSpec - compile round-trip', () => {
     const result = compile(spec, undefined, { width: 600, height: 400 });
     const firstStack = result.marks.filter(
       (mark) =>
-        mark.type === 'rect' &&
-        (mark.datum as Record<string, unknown>).category === categories[0],
+        mark.type === 'rect' && (mark.datum as Record<string, unknown>).category === categories[0],
     );
     const legendLabels = result.legends
       .filter((mark) => mark.type === 'text')
@@ -2309,20 +2315,19 @@ describe('configToSpec - funnel chart', () => {
 });
 
 describe('configToSpec - radar verification', () => {
-  it('should produce linear-closed for basic radar', () => {
+  it('should produce a native radar mark for basic radar', () => {
     const config = makeConfig({ type: 'radar' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     const mark = spec.mark as MarkSpec;
-    expect(mark.type).toBe('line');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
   });
 
-  it('should produce area with linear-closed for filled radar', () => {
+  it('should produce a filled native radar mark', () => {
     const config = makeConfig({ type: 'radar', radarFilled: true });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
     const mark = spec.mark as MarkSpec;
-    expect(mark.type).toBe('area');
-    expect(mark.interpolate).toBe('linear-closed');
+    expect(mark.type).toBe('radar');
+    expect(mark.fillOpacity).toBeGreaterThan(0);
   });
 
   it('should add markers for radar with radarMarkers', () => {
@@ -2877,29 +2882,38 @@ describe('configToSpec dropped fields', () => {
 
   describe('dataLabels.position and format', () => {
     it('maps format string to text channel format', () => {
-      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
-        type: 'column',
-        dataLabels: { show: true, format: '0.00' },
-      }));
+      const rows = chartDataToRows(
+        SINGLE_SERIES_DATA,
+        makeConfig({
+          type: 'column',
+          dataLabels: { show: true, format: '0.00' },
+        }),
+      );
 
       expect(rows[0][DATA_LABEL_TEXT_FIELD]).toBe('10.00');
     });
 
     it('maps top position to negative baseline offset', () => {
-      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
-        type: 'column',
-        dataLabels: { show: true, position: 'top' },
-      }));
+      const rows = chartDataToRows(
+        SINGLE_SERIES_DATA,
+        makeConfig({
+          type: 'column',
+          dataLabels: { show: true, position: 'top' },
+        }),
+      );
 
       expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(-10);
       expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('bottom');
     });
 
     it('maps inside position without offset', () => {
-      const rows = chartDataToRows(SINGLE_SERIES_DATA, makeConfig({
-        type: 'column',
-        dataLabels: { show: true, position: 'inside' },
-      }));
+      const rows = chartDataToRows(
+        SINGLE_SERIES_DATA,
+        makeConfig({
+          type: 'column',
+          dataLabels: { show: true, position: 'inside' },
+        }),
+      );
 
       expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(0);
       expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('middle');

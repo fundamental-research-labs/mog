@@ -186,20 +186,24 @@ describe('CoordinateSystem.getClickPositionInCell', () => {
       // Scroll the viewport
       coords.setViewport({ scrollTop: 100, scrollLeft: 200, width: 1000, height: 600 });
 
-      // Cell (5, 3) - not frozen (row >= 2, col >= 1)
-      // Position is affected by scroll
-      const clickPos = coords.getClickPositionInCell(TEST_SHEET_ID, viewportPoint(200, 100), {
-        row: 5,
-        col: 3,
-      });
+      // Cell (8, 4) is below/right of the frozen regions after scroll.
+      const cell = { row: 8, col: 4 };
+      const cellRect = coords.cellToViewport(TEST_SHEET_ID, cell);
+      expect(cellRect).not.toBeNull();
+      if (!cellRect) return;
+
+      const clickPos = coords.getClickPositionInCell(
+        TEST_SHEET_ID,
+        viewportPoint(cellRect.x + cellRect.width / 2, cellRect.y + cellRect.height / 2),
+        cell,
+      );
 
       expect(clickPos).not.toBeNull();
-      // The actual position values depend on cellToViewport's scroll handling
       if (clickPos) {
-        expect(clickPos.x).toBeGreaterThanOrEqual(0);
-        expect(clickPos.y).toBeGreaterThanOrEqual(0);
-        expect(clickPos.width).toBe(DEFAULT_COL_WIDTH);
-        expect(clickPos.height).toBe(DEFAULT_ROW_HEIGHT);
+        expect(clickPos.x).toBeCloseTo(cellRect.width / 2, 0);
+        expect(clickPos.y).toBeCloseTo(cellRect.height / 2, 0);
+        expect(clickPos.width).toBe(cellRect.width);
+        expect(clickPos.height).toBe(cellRect.height);
       }
     });
 
@@ -207,19 +211,26 @@ describe('CoordinateSystem.getClickPositionInCell', () => {
       // Scroll vertically but not horizontally
       coords.setViewport({ scrollTop: 100, scrollLeft: 0, width: 1000, height: 600 });
 
-      // Cell (5, 0) - frozen column (col = 0 < 1), scrollable row (row = 5 >= 2)
+      // Cell (8, 0) is in the frozen column but visible below the frozen rows.
+      const cell = { row: 8, col: 0 };
+      const cellRect = coords.cellToViewport(TEST_SHEET_ID, cell);
+      expect(cellRect).not.toBeNull();
+      if (!cellRect) return;
+
       const clickPos = coords.getClickPositionInCell(
         TEST_SHEET_ID,
-        viewportPoint(ROW_HEADER_WIDTH + 50, COL_HEADER_HEIGHT + 50),
-        { row: 5, col: 0 },
+        viewportPoint(cellRect.x + cellRect.width / 2, cellRect.y + cellRect.height / 2),
+        cell,
       );
 
       expect(clickPos).not.toBeNull();
       if (clickPos) {
         // x position is not affected by scrollLeft (frozen column)
-        // y position IS affected by scrollTop
-        expect(clickPos.width).toBe(DEFAULT_COL_WIDTH);
-        expect(clickPos.height).toBe(DEFAULT_ROW_HEIGHT);
+        expect(cellRect.x).toBe(ROW_HEADER_WIDTH);
+        expect(clickPos.x).toBeCloseTo(cellRect.width / 2, 0);
+        expect(clickPos.y).toBeCloseTo(cellRect.height / 2, 0);
+        expect(clickPos.width).toBe(cellRect.width);
+        expect(clickPos.height).toBe(cellRect.height);
       }
     });
   });
@@ -419,8 +430,8 @@ describe('CoordinateSystem.getClickPositionInCell', () => {
           // Click should be at the center of the cell
           expect(clickPos.x).toBeCloseTo(cellRect.width / 2, 0);
           expect(clickPos.y).toBeCloseTo(cellRect.height / 2, 0);
-          expect(clickPos.width).toBe(DEFAULT_COL_WIDTH * 1.5);
-          expect(clickPos.height).toBe(DEFAULT_ROW_HEIGHT * 1.5);
+          expect(clickPos.width).toBe(cellRect.width);
+          expect(clickPos.height).toBe(cellRect.height);
         }
       }
     });

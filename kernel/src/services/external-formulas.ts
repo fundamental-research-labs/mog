@@ -5,7 +5,7 @@ import type {
 } from '../bridges/compute/compute-types.gen';
 import { getExternalWorkbookSession } from './workbook-links/session-registry';
 import type { PersistedWorkbookLinkRecord } from './workbook-links/types';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 interface ExternalFormulaCell {
   readonly sheetId: SheetId;
@@ -93,7 +93,7 @@ export function applyExternalFormulaBatchReadbacks(
   const entries = response.entries.map((entry) => {
     if (entry.status !== 'ok') return entry;
 
-    const result = applyExternalFormulaReadbacks(ctx, entry.sheetId as SheetId, entry.result);
+    const result = applyExternalFormulaReadbacks(ctx, toSheetId(entry.sheetId), entry.result);
     if (result === entry.result) return entry;
 
     changed = true;

@@ -12,7 +12,7 @@ import type {
   ScenarioConfig,
   WorkbookScenarios,
 } from '@mog-sdk/contracts/api';
-import { type SheetId, sheetId } from '@mog-sdk/contracts/core';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
 import { getOrCreateCellId } from '../../domain/cells/cell-identity';
 import { KernelError } from '../../errors';
@@ -93,7 +93,7 @@ export class WorkbookScenariosImpl implements WorkbookScenarios {
     if (activePos) return { sheetId: activeSheetId, row: activePos.row, col: activePos.col };
 
     for (const candidateId of await this.deps.getSheetOrder()) {
-      const candidateSheetId = sheetId(String(candidateId));
+      const candidateSheetId = candidateId;
       if (candidateSheetId === activeSheetId) continue;
       const pos = await this.ctx.computeBridge.getCellPosition(candidateSheetId, cellRef);
       if (pos) return { sheetId: candidateSheetId, row: pos.row, col: pos.col };

@@ -685,7 +685,7 @@ export function RibbonDropdownSubmenu({
               aria-haspopup="true"
               aria-expanded={isOpen}
               iconSlot={icon ?? null}
-              trailingSlot={<span className="ml-2 text-ss-text-secondary">&#9656;</span>}
+              trailingSlot={<span className="ml-2 text-ss-text-secondary order-3">&#9656;</span>}
             >
               {label}
             </MenuItemRow>

@@ -292,6 +292,79 @@ describe('ChartDataResolver', () => {
     expect(result.data[1]).not.toHaveProperty('value');
   });
 
+  it('uses compiler bubble row semantics in the public resolveChartData facade', async () => {
+    const getCellData = jest.fn(async () => null);
+    const resolver = new ChartDataResolver(
+      ctx({
+        getChart: jest.fn(async () =>
+          chart({
+            chartType: 'bubble',
+            dataRange: undefined,
+            sizeRepresents: 'w',
+            series: [
+              {
+                name: 'Bubbles',
+                valueSourceKind: 'literal',
+                valueCache: {
+                  pointCount: 2,
+                  points: [
+                    { idx: 0, value: '10' },
+                    { idx: 1, value: '20' },
+                  ],
+                },
+                categorySourceKind: 'literal',
+                categoryCache: {
+                  pointCount: 2,
+                  points: [
+                    { idx: 0, value: '1' },
+                    { idx: 1, value: '2' },
+                  ],
+                },
+                bubbleSizeSourceKind: 'literal',
+                bubbleSizeCache: {
+                  pointCount: 2,
+                  points: [
+                    { idx: 0, value: '10' },
+                    { idx: 1, value: '20' },
+                  ],
+                },
+              },
+            ],
+          }),
+        ),
+        getCellData,
+      }),
+    );
+
+    const result = await resolver.resolveChartData(SHEET_A, CHART_ID);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(getCellData).not.toHaveBeenCalled();
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        category: '1',
+        x: 1,
+        value: 10,
+        y: 10,
+        size: 5,
+        __mogRawBubbleSize: 10,
+        series: 'Bubbles',
+        __mogPointIndex: 0,
+      }),
+      expect.objectContaining({
+        category: '2',
+        x: 2,
+        value: 20,
+        y: 20,
+        size: 20,
+        __mogRawBubbleSize: 20,
+        series: 'Bubbles',
+        __mogPointIndex: 1,
+      }),
+    ]);
+  });
+
   it('resolves render-ready range data for a chart id and sheet id', async () => {
     const getCellData = jest.fn(async (_sheetId, _row: number, col: number) => ({
       value: { type: 'number', value: [10, 20, 30][col] ?? null },

@@ -390,6 +390,46 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(edited_frame.client_data_locks_with_sheet, None);
     assert_eq!(edited_frame.client_data_prints_with_sheet, Some(false));
     assert_eq!(edited_frame.raw_alternate_content, None);
+
+    let mut unlocked = spec.to_floating_object("sheet-abc", 9);
+    unlocked.common.locked = false;
+    if let FloatingObjectData::Chart(ref mut cd) = unlocked.data {
+        let frame = cd
+            .ooxml
+            .as_mut()
+            .and_then(|ooxml| ooxml.drawing_frame.as_mut())
+            .expect("drawing frame should be preserved");
+        frame.raw_alternate_content = Some("<mc:AlternateContent/>".to_string());
+        let nv = &mut frame.graphic_frame.nv_graphic_frame_pr;
+        nv.c_nv_graphic_frame_pr.no_select = true;
+        nv.c_nv_graphic_frame_pr.no_move = true;
+        nv.no_drilldown = true;
+        nv.no_change_aspect_explicit = Some(true);
+        nv.c_nv_graphic_frame_pr.no_change_aspect = true;
+        nv.has_graphic_frame_locks = true;
+        nv.c_nv_graphic_frame_pr_ext_lst =
+            Some(r#"<a:extLst><a:ext uri="{frame-locks}"/></a:extLst>"#.to_string());
+    }
+
+    let unlocked_roundtrip =
+        ChartSpec::from_floating_object(&unlocked).expect("chart spec from unlocked object");
+    let unlocked_frame = unlocked_roundtrip
+        .chart_frame
+        .as_ref()
+        .expect("unlocked drawing frame should be preserved");
+    let unlocked_nv = &unlocked_frame.graphic_frame.nv_graphic_frame_pr;
+    assert_eq!(unlocked_frame.client_data_locks_with_sheet, Some(false));
+    assert!(!unlocked_nv.c_nv_graphic_frame_pr.no_select);
+    assert!(!unlocked_nv.c_nv_graphic_frame_pr.no_move);
+    assert!(!unlocked_nv.no_drilldown);
+    assert_eq!(unlocked_nv.no_change_aspect_explicit, Some(true));
+    assert!(unlocked_nv.c_nv_graphic_frame_pr.no_change_aspect);
+    assert!(unlocked_nv.has_graphic_frame_locks);
+    assert_eq!(
+        unlocked_nv.c_nv_graphic_frame_pr_ext_lst.as_deref(),
+        Some(r#"<a:extLst><a:ext uri="{frame-locks}"/></a:extLst>"#)
+    );
+    assert_eq!(unlocked_frame.raw_alternate_content, None);
 }
 
 #[test]

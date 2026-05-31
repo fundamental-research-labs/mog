@@ -396,11 +396,11 @@ impl ChartSpec {
             } else {
                 frame.client_data_locks_with_sheet = Some(false);
                 let nv = &mut frame.graphic_frame.nv_graphic_frame_pr;
-                nv.c_nv_graphic_frame_pr = Default::default();
-                nv.has_graphic_frame_locks = false;
-                nv.no_change_aspect_explicit = None;
+                nv.c_nv_graphic_frame_pr.no_grp = false;
+                nv.c_nv_graphic_frame_pr.no_select = false;
+                nv.c_nv_graphic_frame_pr.no_move = false;
+                nv.c_nv_graphic_frame_pr.no_resize = false;
                 nv.no_drilldown = false;
-                nv.c_nv_graphic_frame_pr_ext_lst = None;
             }
         }
     }

@@ -262,6 +262,8 @@ pub struct ChartExRef {
     pub name: String,
     /// Unique ID for the cNvPr
     pub id: u32,
+    /// Whether hidden (cNvPr/@hidden)
+    pub hidden: bool,
     /// Graphic frame transform offset x.
     pub xfrm_off_x: i64,
     /// xfrm offset y

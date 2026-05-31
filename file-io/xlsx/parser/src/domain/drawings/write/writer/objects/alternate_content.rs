@@ -184,6 +184,9 @@ impl DrawingWriter {
             w.start_element("xdr:cNvPr")
                 .attr_num("id", cx_ref.id)
                 .attr("name", &cx_ref.name);
+            if cx_ref.hidden {
+                w.attr("hidden", "1");
+            }
             if let Some(ref ext_lst) = cx_ref.nv_ext_lst {
                 w.end_attrs();
                 self.write_raw_xml(w, ext_lst);

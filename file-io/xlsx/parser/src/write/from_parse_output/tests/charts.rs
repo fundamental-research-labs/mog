@@ -1082,6 +1082,7 @@ fn edited_chart_ex_frame_suppresses_raw_anchor_replay_and_exports_current_transf
     floating.common.rotation = 45.0;
     floating.common.flip_h = true;
     floating.common.flip_v = true;
+    floating.common.visible = false;
     floating.common.printable = false;
     let edited_chart =
         ChartSpec::from_floating_object(&floating).expect("chart spec from edited object");
@@ -1099,6 +1100,7 @@ fn edited_chart_ex_frame_suppresses_raw_anchor_replay_and_exports_current_transf
 
     assert!(archive.contains("xl/charts/chartEx7.xml"));
     assert!(!drawing_xml.contains("RAW-CHARTEX-ANCHOR"));
+    assert!(drawing_xml.contains(r#"<xdr:cNvPr id="77" name="ChartEx Raw" hidden="1"/>"#));
     assert!(drawing_xml.contains(r#"<xdr:xfrm rot="2700000" flipH="1" flipV="1">"#));
     assert!(drawing_xml.contains(r#"<xdr:clientData fPrintsWithSheet="0"/>"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");

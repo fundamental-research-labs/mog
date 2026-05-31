@@ -834,6 +834,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .and_then(|cnv| (cnv.id.value() != 0).then_some(cnv.id.value()))
                             .or(chart_spec.cnv_pr_id)
                             .unwrap_or((cx_local_idx + 100) as u32),
+                        hidden: frame_cnv
+                            .map(|cnv| cnv.hidden)
+                            .unwrap_or(chart_spec.cnv_pr_hidden),
                         xfrm_off_x: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.off_x())
                             .unwrap_or(chart_spec.position.anchor_col_offset),

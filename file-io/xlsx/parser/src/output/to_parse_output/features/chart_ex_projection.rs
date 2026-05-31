@@ -1590,8 +1590,9 @@ fn cell_text(cell: Option<&FullCellData>) -> String {
 mod tests {
     use super::*;
     use ooxml_types::chart_ex::{
-        ChartExAxis, ChartExChart, ChartExChartData, ChartExFormula, ChartExLayoutVisibility,
-        ChartExLegend, ChartExPlotArea, ChartExScaling, ChartExSubtotals, ChartExTxData,
+        ChartExAxis, ChartExChart, ChartExChartData, ChartExDataLabelVisibility, ChartExFormula,
+        ChartExLayoutVisibility, ChartExLegend, ChartExNumberFormat, ChartExPlotArea,
+        ChartExScaling, ChartExSubtotals, ChartExTxData,
     };
     use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
@@ -2342,6 +2343,46 @@ mod tests {
     }
 
     #[test]
+    fn projects_chart_ex_data_labels_to_chart_and_series_contracts() {
+        let mut chart_space =
+            chart_space_with_series(ChartExLayoutId::Funnel, cat_val_dimensions(), None);
+        chart_space.chart.plot_area.plot_area_region.series[0].data_labels =
+            Some(ChartExDataLabels {
+                pos: Some("outEnd".to_string()),
+                visibility: Some(ChartExDataLabelVisibility {
+                    series_name: Some(false),
+                    category_name: Some(true),
+                    value: Some(true),
+                }),
+                num_fmt: Some(ChartExNumberFormat {
+                    format_code: "#,##0".to_string(),
+                    source_linked: Some(false),
+                }),
+                separator: Some("; ".to_string()),
+                ..Default::default()
+            });
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        let chart_labels = projected.data_labels.expect("chart-level data labels");
+        assert_eq!(chart_labels.position.as_deref(), Some("outEnd"));
+        assert_eq!(chart_labels.show_value, Some(true));
+        assert_eq!(chart_labels.show_category_name, Some(true));
+        assert_eq!(chart_labels.show_series_name, Some(false));
+        assert_eq!(chart_labels.number_format.as_deref(), Some("#,##0"));
+        assert_eq!(chart_labels.link_number_format, Some(false));
+        assert_eq!(chart_labels.separator.as_deref(), Some("; "));
+
+        let series_labels = projected.series[0]
+            .data_labels
+            .as_ref()
+            .expect("series-level data labels");
+        assert_eq!(series_labels.position.as_deref(), Some("outEnd"));
+        assert_eq!(series_labels.show_value, Some(true));
+    }
+
+    #[test]
     fn projects_hierarchy_rows_for_treemap_and_sunburst() {
         let sheet = sheet_with_cells(vec![
             sheet_cell(0, 0, "Americas"),
@@ -2390,18 +2431,14 @@ mod tests {
             assert_eq!(hierarchy.value_formula.as_deref(), Some("Sheet1!C1:C2"));
             assert_eq!(hierarchy.parent_label_layout.as_deref(), Some("banner"));
             assert!(hierarchy.rows.iter().any(|row| row.id == "Americas"));
-            assert!(
-                hierarchy
-                    .rows
-                    .iter()
-                    .any(|row| row.id == "Americas/US" && row.value == Some(10.0))
-            );
-            assert!(
-                hierarchy
-                    .rows
-                    .iter()
-                    .any(|row| row.id == "Americas/CA" && row.value == Some(20.0))
-            );
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/US" && row.value == Some(10.0)));
+            assert!(hierarchy
+                .rows
+                .iter()
+                .any(|row| row.id == "Americas/CA" && row.value == Some(20.0)));
             assert_eq!(
                 projected.import_status.unwrap().renderability,
                 domain_types::ImportRenderability::NotRenderable
@@ -2593,6 +2630,29 @@ mod tests {
         assert_eq!(
             status.diagnostics[0].code,
             Some(domain_types::ImportDiagnosticCode::UnsupportedFeature)
+        );
+    }
+
+    #[test]
+    fn projects_region_map_source_formulas_while_marking_rendering_unsupported() {
+        let chart_space =
+            chart_space_with_series(ChartExLayoutId::RegionMap, cat_val_dimensions(), None);
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        assert_eq!(projected.chart_type, ChartType::RegionMap);
+        assert_eq!(projected.data_range.as_deref(), Some("Sheet1!A1:B3"));
+        assert_eq!(
+            projected.region_map,
+            Some(RegionMapConfigData {
+                region_formula: Some("Sheet1!A1:A3".to_string()),
+                value_formula: Some("Sheet1!B1:B3".to_string()),
+            })
+        );
+        assert_eq!(
+            projected.import_status.unwrap().renderability,
+            domain_types::ImportRenderability::NotRenderable
         );
     }
 }

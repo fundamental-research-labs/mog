@@ -97,12 +97,23 @@ pub(super) fn build_chart_text_rich_runs(
     let runs = runs
         .iter()
         .filter(|run| !run.text.is_empty())
-        .map(|run| {
+        .flat_map(|run| {
             let font = run.font.as_ref().or(default_font);
-            TextRunContent::Run(TextRun {
-                text: run.text.clone(),
-                props: font.map(build_run_properties).unwrap_or_default(),
-            })
+            run.text
+                .split('\n')
+                .enumerate()
+                .flat_map(move |(index, text)| {
+                    let line_break = (index > 0).then(|| TextRunContent::LineBreak {
+                        props: font.map(build_run_properties),
+                    });
+                    let text_run = (!text.is_empty()).then(|| {
+                        TextRunContent::Run(TextRun {
+                            text: text.to_string(),
+                            props: font.map(build_run_properties).unwrap_or_default(),
+                        })
+                    });
+                    line_break.into_iter().chain(text_run)
+                })
         })
         .collect();
 
@@ -210,14 +221,16 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
 }
 
 pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLabel {
+    let default_font = dl.visual_format.as_ref().and_then(|f| f.font.as_ref());
     let tx = dl
-        .text
-        .as_ref()
-        .map(|text| {
-            build_chart_text_rich(
-                text,
-                dl.visual_format.as_ref().and_then(|f| f.font.as_ref()),
-            )
+        .rich_text
+        .as_deref()
+        .filter(|runs| runs.iter().any(|run| !run.text.is_empty()))
+        .map(|runs| build_chart_text_rich_runs(runs, default_font))
+        .or_else(|| {
+            dl.text
+                .as_ref()
+                .map(|text| build_chart_text_rich(text, default_font))
         })
         .or_else(|| {
             dl.formula.as_ref().map(|formula| {
@@ -387,6 +400,77 @@ mod tests {
         assert_eq!(second.text, "FY26");
         assert_eq!(second.props.italic, Some(true));
         assert_eq!(second.props.size.map(|size| size.value()), Some(1400));
+    }
+
+    #[test]
+    fn build_rich_text_runs_preserves_line_breaks() {
+        let rich_text = vec![ChartFormatStringData {
+            text: "Revenue\nFY26".to_string(),
+            font: Some(font(Some("Aptos"), Some(11.0), None, None)),
+        }];
+
+        let ChartText::Rich(body) = build_chart_text_rich_runs(&rich_text, None) else {
+            panic!("expected rich chart text");
+        };
+
+        let paragraph = &body.paragraphs[0];
+        assert_eq!(paragraph.runs.len(), 3);
+        let TextRunContent::Run(first) = &paragraph.runs[0] else {
+            panic!("expected first text run");
+        };
+        assert_eq!(first.text, "Revenue");
+        assert!(matches!(
+            paragraph.runs[1],
+            TextRunContent::LineBreak { props: Some(_) }
+        ));
+        let TextRunContent::Run(second) = &paragraph.runs[2] else {
+            panic!("expected second text run");
+        };
+        assert_eq!(second.text, "FY26");
+    }
+
+    #[test]
+    fn build_data_label_override_preserves_rich_text_runs() {
+        let label = DataLabelData {
+            show: true,
+            delete: None,
+            position: None,
+            format: None,
+            show_value: None,
+            show_category_name: None,
+            show_series_name: None,
+            show_percentage: None,
+            show_bubble_size: None,
+            show_legend_key: None,
+            separator: None,
+            show_leader_lines: None,
+            text: Some("plain fallback".to_string()),
+            visual_format: None,
+            number_format: None,
+            text_orientation: None,
+            rich_text: Some(vec![ChartFormatStringData {
+                text: "Rich".to_string(),
+                font: Some(font(None, Some(12.0), Some(true), None)),
+            }]),
+            auto_text: None,
+            horizontal_alignment: None,
+            vertical_alignment: None,
+            link_number_format: None,
+            geometric_shape_type: None,
+            formula: Some("Sheet1!$A$1".to_string()),
+            leader_lines_format: None,
+            layout: None,
+        };
+
+        let label = build_data_label_override(0, &label);
+        let Some(ChartText::Rich(body)) = label.text else {
+            panic!("expected rich data-label text");
+        };
+        let TextRunContent::Run(run) = &body.paragraphs[0].runs[0] else {
+            panic!("expected rich text run");
+        };
+        assert_eq!(run.text, "Rich");
+        assert_eq!(run.props.bold, Some(true));
     }
 
     #[test]

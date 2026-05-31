@@ -185,17 +185,53 @@ pub fn compute_object_pixel_bounds(
             );
             let col_offset = read_col_offset();
             let row_offset = read_row_offset();
-            let width = anchor_field_aliased(KEY_EXTENT_CX_EMU, "extentCx")
+            let mut width = anchor_field_aliased(KEY_EXTENT_CX_EMU, "extentCx")
                 .map(emu_to_px)
                 .or_else(|| obj_json.get("width").and_then(|v| v.as_f64()))
                 .unwrap_or(0.0);
-            let height = anchor_field_aliased(KEY_EXTENT_CY_EMU, "extentCy")
+            let mut height = anchor_field_aliased(KEY_EXTENT_CY_EMU, "extentCy")
                 .map(emu_to_px)
                 .or_else(|| obj_json.get("height").and_then(|v| v.as_f64()))
                 .unwrap_or(0.0);
 
             let x = layout.get_col_position(anchor_col).0 + col_offset;
             let y = layout.get_row_position(anchor_row).0 + row_offset;
+            let has_end_anchor = anchor_obj
+                .and_then(|a| a.get("endRow"))
+                .or_else(|| obj_json.get("endRow"))
+                .is_some()
+                || anchor_obj
+                    .and_then(|a| a.get("endCol"))
+                    .or_else(|| obj_json.get("endCol"))
+                    .is_some()
+                || obj_json.get("toAnchorCellId").is_some();
+
+            if has_end_anchor && (width <= 0.0 || height <= 0.0) {
+                let (to_row, to_col) = resolve_anchor_pos(
+                    grid_index,
+                    obj_json,
+                    anchor_obj,
+                    "toAnchorCellId",
+                    "endRow",
+                    "endCol",
+                );
+                let to_col_offset = anchor_field_aliased(KEY_END_COL_OFFSET_EMU, "endColOffset")
+                    .map(emu_to_px)
+                    .or_else(|| obj_json.get("toXOffset").and_then(|v| v.as_f64()))
+                    .unwrap_or(0.0);
+                let to_row_offset = anchor_field_aliased(KEY_END_ROW_OFFSET_EMU, "endRowOffset")
+                    .map(emu_to_px)
+                    .or_else(|| obj_json.get("toYOffset").and_then(|v| v.as_f64()))
+                    .unwrap_or(0.0);
+                let to_x = layout.get_col_position(to_col).0 + to_col_offset;
+                let to_y = layout.get_row_position(to_row).0 + to_row_offset;
+                if width <= 0.0 {
+                    width = (to_x - x).abs();
+                }
+                if height <= 0.0 {
+                    height = (to_y - y).abs();
+                }
+            }
 
             Some(FloatingObjectBounds {
                 x: value_types::FiniteF64::must(x),

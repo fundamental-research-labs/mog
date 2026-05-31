@@ -23,6 +23,7 @@ import type { FormControl } from '@mog-sdk/contracts/form-controls';
 import { ButtonOverlayControl } from './ButtonOverlayControl';
 import { CheckboxOverlayControl } from './CheckboxOverlayControl';
 import { ComboBoxOverlayControl } from './ComboBoxOverlayControl';
+import { ListBoxOverlayControl } from './ListBoxOverlayControl';
 
 // =============================================================================
 // Types
@@ -47,8 +48,6 @@ export interface ResolvedFormControl {
   height: number;
   /** Linked cell position, when the control stores its value in a cell. */
   linkedCellPosition?: { row: number; col: number };
-  /** Anchor cell position used to track geometry changes after resize/layout settles. */
-  anchorPosition: { row: number; col: number };
   /** Resolved items for comboBox controls (from static or dynamic source) */
   resolvedItems?: string[];
 }
@@ -97,6 +96,8 @@ const ControlRenderer = memo(
           <ButtonOverlayControl
             control={control}
             cellValue={cellValue}
+            width={width}
+            height={height}
             onCellValueChange={onCellValueChange}
           />
         );
@@ -105,6 +106,19 @@ const ControlRenderer = memo(
       case 'comboBox':
         content = (
           <ComboBoxOverlayControl
+            control={control}
+            cellValue={cellValue}
+            width={width}
+            height={height}
+            resolvedItems={resolvedItems ?? control.items ?? []}
+            onCellValueChange={onCellValueChange}
+          />
+        );
+        break;
+
+      case 'listBox':
+        content = (
+          <ListBoxOverlayControl
             control={control}
             cellValue={cellValue}
             width={width}

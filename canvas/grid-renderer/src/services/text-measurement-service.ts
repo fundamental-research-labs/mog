@@ -554,13 +554,23 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
     const font = buildCellFont(format, undefined, displayText);
     const fontSize = format?.fontSize ?? 11;
     const lineHeight = fontSize * DEFAULT_LINE_HEIGHT_FACTOR;
+    const hasHardLineBreaks = /[\r\n]/.test(displayText);
 
-    if (format?.wrapText && availableWidth > CELL_PADDING * 2) {
-      // Calculate wrapped lines
+    if ((format?.wrapText || hasHardLineBreaks) && availableWidth > CELL_PADDING * 2) {
+      // Explicit hard line breaks count as separate rendered lines even
+      // when wrapText itself is not enabled.
       const usableWidth = availableWidth - CELL_PADDING * 2;
       const lines = this.wrapTextToLines(displayText, font, usableWidth);
       const totalHeight = lines.length * lineHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING;
       return Math.max(totalHeight, MIN_ROW_HEIGHT);
+    }
+
+    if (hasHardLineBreaks) {
+      const lineCount = displayText.split(/\r\n|\r|\n/).length;
+      return Math.max(
+        lineCount * lineHeight + CELL_PADDING * 2 + ROW_AUTOFIT_PADDING,
+        MIN_ROW_HEIGHT,
+      );
     }
 
     // Single line height

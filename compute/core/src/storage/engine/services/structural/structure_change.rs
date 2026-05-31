@@ -7,8 +7,10 @@ use value_types::ComputeError;
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, RecalcResult, StructureChangeResult, StructureChangeType};
+use crate::storage::engine::construction;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::engine::validation;
+use crate::storage::sheet::dimensions;
 use crate::storage::sheet::structural::StructuralOps;
 
 use super::super::metadata_shift;
@@ -50,6 +52,16 @@ pub(in crate::storage::engine) fn apply_structure_change(
 
     let doc = stores.storage.doc();
     let sheets_map = doc.get_or_insert_map("sheets");
+    let inherited_insert_row_height = match change {
+        StructureChange::InsertRows { at, .. } => dimensions::get_row_height_explicit(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            *at,
+            Some(grid),
+        ),
+        _ => None,
+    };
 
     // Pre-delete re-anchor pass: shrink any IdentityRangeRef whose endpoint
     // sits inside the doomed row/col band to the nearest surviving cell so
@@ -85,6 +97,18 @@ pub(in crate::storage::engine) fn apply_structure_change(
     match change {
         StructureChange::InsertRows { at, count, .. } => {
             StructuralOps::insert_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
+            if let Some(height) = inherited_insert_row_height {
+                for row in *at..(*at + *count) {
+                    dimensions::set_row_height(
+                        stores.storage.doc(),
+                        stores.storage.sheets(),
+                        sheet_id,
+                        row,
+                        height,
+                        Some(grid),
+                    )?;
+                }
+            }
         }
         StructureChange::DeleteRows { at, count, .. } => {
             validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
@@ -137,6 +161,17 @@ pub(in crate::storage::engine) fn apply_structure_change(
             .iter()
             .map(|(sid, grid)| (*sid, grid.row_ids_ordered(), grid.col_ids_ordered())),
     );
+
+    if let Some(grid) = stores.grid_indexes.get(sheet_id) {
+        let layout = construction::build_layout_index_for_sheet(
+            &stores.storage,
+            sheet_id,
+            grid.row_count(),
+            grid.col_count(),
+            Some(grid),
+        );
+        stores.layout_indexes.insert(*sheet_id, layout);
+    }
 
     // Delegate to ComputeCore for formula reparsing and full recalc.
     // Note: ComputeCore.structure_change() regenerates A1 formula strings

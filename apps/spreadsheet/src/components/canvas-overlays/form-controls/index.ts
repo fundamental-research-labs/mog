@@ -33,3 +33,6 @@ export type { ButtonOverlayControlProps } from './ButtonOverlayControl';
 
 export { ComboBoxOverlayControl } from './ComboBoxOverlayControl';
 export type { ComboBoxOverlayControlProps } from './ComboBoxOverlayControl';
+
+export { ListBoxOverlayControl } from './ListBoxOverlayControl';
+export type { ListBoxOverlayControlProps } from './ListBoxOverlayControl';

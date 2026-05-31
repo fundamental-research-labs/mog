@@ -75,33 +75,14 @@ export function FormControlLayerContainer() {
       ws.on('formControl:updated', bump),
       ws.on('formControl:deleted', bump),
       ws.on('cellChanged', bump),
+      ws.on('row:height-changed', bump),
+      ws.on('column:width-changed', bump),
     ];
 
     return () => {
       for (const dispose of disposers) dispose();
     };
   }, [sheetId, ws]);
-
-  useEffect(() => {
-    if (!geometry?.observe || resolvedControls.length === 0) return;
-
-    let disposed = false;
-    const bump = () => {
-      if (!disposed) {
-        setRefreshVersion((version) => version + 1);
-      }
-    };
-    const disposers = resolvedControls.map((resolved) =>
-      geometry.observe!(resolved.anchorPosition, bump),
-    );
-
-    return () => {
-      disposed = true;
-      for (const dispose of disposers) {
-        dispose.dispose();
-      }
-    };
-  }, [geometry, resolvedControls]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CELL VALUE CHANGE HANDLER
@@ -114,7 +95,7 @@ export function FormControlLayerContainer() {
       if (!control) return;
 
       const linkedCellId =
-        control.type === 'checkbox' || control.type === 'comboBox'
+        control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox'
           ? control.linkedCellId
           : control.type === 'button'
             ? control.linkedCellId
@@ -189,10 +170,6 @@ interface GeometryLike {
     width: number;
     height: number;
   } | null;
-  observe?: (
-    anchor: { row: number; col: number },
-    listener: (rect: { x: number; y: number; width: number; height: number } | null) => void,
-  ) => { dispose: () => void };
 }
 
 interface ViewportLike {
@@ -247,7 +224,7 @@ async function resolveControlPositions(
     let linkedCellPosition: { row: number; col: number } | undefined;
     let resolvedItems: string[] | undefined;
 
-    if (control.type === 'checkbox' || control.type === 'comboBox') {
+    if (control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox') {
       const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
       if (linkedPosition) {
         linkedCellPosition = linkedPosition;
@@ -255,8 +232,8 @@ async function resolveControlPositions(
         cellValue = cell.value;
       }
 
-      if (control.type === 'comboBox') {
-        resolvedItems = await resolveComboBoxItems(control, ws);
+      if (control.type === 'comboBox' || control.type === 'listBox') {
+        resolvedItems = await resolveListItems(control, ws);
       }
     } else if (control.type === 'button' && control.linkedCellId) {
       const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
@@ -281,7 +258,6 @@ async function resolveControlPositions(
       y,
       width,
       height,
-      anchorPosition,
       cellValue,
       linkedCellPosition,
       resolvedItems,
@@ -291,8 +267,8 @@ async function resolveControlPositions(
   return resolved;
 }
 
-async function resolveComboBoxItems(
-  control: Extract<FormControl, { type: 'comboBox' }>,
+async function resolveListItems(
+  control: Extract<FormControl, { type: 'comboBox' | 'listBox' }>,
   ws: WorksheetLike,
 ): Promise<string[]> {
   if (!control.itemsSourceRef) {

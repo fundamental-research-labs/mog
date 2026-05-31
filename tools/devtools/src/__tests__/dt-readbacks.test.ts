@@ -270,7 +270,7 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     const d = drawings[0];
     expect(d.id).toBe('pic-1');
     expect(d.kind).toBe('image');
-    expect(d.boundsPx).toEqual({ x: 100, y: 24, w: 200, h: 96 });
+    expect(d.boundsPx).toEqual({ x: 150, y: 48, w: 200, h: 96 });
     expect(d.visible).toBe(true);
     expect(d.src).toBe('mog://image/abc.png');
     // anchor.from snaps (100, 24) → row 1, col 1; anchor.to snaps (300, 120) → row 5, col 3.
@@ -413,7 +413,7 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(drawings[0]).toMatchObject({
       id: 'fc-checkbox-1',
       kind: 'formControl',
-      anchor: { from: { row: 2, col: 2 } },
+      anchor: { from: { row: 1, col: 1 } },
       boundsPx: { x: 200, y: 48, w: 18, h: 18 },
       visible: true,
     });
@@ -429,6 +429,12 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     });
     const h = await runtime.api.getRenderedRowHeight(null, 3);
     expect(h).toBe(60);
+    expect(runtime.api.viewport.getCellBounds(3, 0)).toEqual({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 60,
+    });
   });
 
   test('getRenderedRowHeight returns null when the renderer cannot resolve bounds', async () => {

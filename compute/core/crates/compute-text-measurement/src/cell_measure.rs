@@ -45,7 +45,7 @@ pub fn measure_cell_width(
         return 0.0;
     }
 
-    let font_size_px = font_size_pt * 4.0 / 3.0; // pt -> px (96dpi / 72pt)
+    let font_size_px = font_size_pt;
 
     let (_font_id, entry) = match font_db.resolve_styled(font_family, bold, italic) {
         Some(r) => r,
@@ -91,7 +91,7 @@ pub fn measure_cell_height(
         return 0.0;
     }
 
-    let font_size_px = font_size_pt * 4.0 / 3.0;
+    let font_size_px = font_size_pt;
 
     let (_font_id, entry) = match font_db.resolve_styled(font_family, bold, italic) {
         Some(r) => r,
@@ -153,7 +153,7 @@ pub fn measure_rotated_cell(
         return (w, h);
     }
 
-    let font_size_px = font_size_pt * 4.0 / 3.0;
+    let font_size_px = font_size_pt;
     let (_font_id, entry) = match font_db.resolve_styled(font_family, bold, italic) {
         Some(r) => r,
         None => return (0.0, 0.0),

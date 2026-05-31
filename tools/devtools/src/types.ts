@@ -356,7 +356,12 @@ export interface DevToolsConsoleAPI {
   bridge(filter?: string): void;
 
   // Viewport buffer
-  viewport(viewportId?: string): void;
+  viewport: ((viewportId?: string) => void) & {
+    getCellBounds(
+      row: number,
+      col: number,
+    ): { x: number; y: number; width: number; height: number } | null;
+  };
   cell(row: number, col: number, viewportId?: string): void;
 
   // Viewport buffer events

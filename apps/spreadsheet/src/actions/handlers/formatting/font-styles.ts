@@ -192,24 +192,14 @@ export const TOGGLE_ITALIC: AsyncActionHandler = async (deps) =>
 export const TOGGLE_STRIKETHROUGH: AsyncActionHandler = async (deps) =>
   toggleFormatProperty(deps, 'strikethrough');
 export const TOGGLE_WRAP_TEXT: AsyncActionHandler = async (deps) => {
-  // Read current wrapText state before toggling
-  const ws = deps.workbook.activeSheet;
-  const { activeCell, ranges } = getSelectionContext(deps);
-  const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
-  const currentFormat = activeCellData?.format as Record<string, unknown> | undefined;
-  const currentWrap = (currentFormat?.wrapText as boolean) ?? false;
-  const enablingWrap = !currentWrap;
+  const { ranges } = getSelectionContext(deps);
+  const result = await toggleFormatProperty(deps, 'wrapText');
 
-  // When enabling word wrap, auto-fit affected rows so height grows to fit wrapped content
-  if (enablingWrap) {
-    return deps.workbook.undoGroup(async () => {
-      const result = await toggleFormatProperty(deps, 'wrapText');
-      await autoFitRowsForRangeChange(deps, ranges);
-      return result;
-    });
-  }
+  // Re-fit affected rows after both enabling and disabling word wrap.
+  // Disabling wrap should shrink rows that were previously auto-grown.
+  await autoFitRowsForRangeChange(deps, ranges);
 
-  return toggleFormatProperty(deps, 'wrapText');
+  return result;
 };
 
 // =============================================================================

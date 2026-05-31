@@ -289,18 +289,23 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
-  applyCartesianValueAxisDefaults(encoding);
+  applyCartesianValueAxisDefaults(encoding, { includeZero: !isXYChart });
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
 }
 
-function applyCartesianValueAxisDefaults(encoding: EncodingSpec): void {
+function applyCartesianValueAxisDefaults(
+  encoding: EncodingSpec,
+  options: { includeZero: boolean },
+): void {
   if (encoding.x?.field === VALUE_FIELD || encoding.x?.field === SCATTER_X_FIELD) {
-    applyAutoValueAxisTicks(encoding.x);
+    applyAutoValueAxisTicks(encoding.x, {
+      includeZero: options.includeZero && encoding.x.field === VALUE_FIELD,
+    });
   }
   if (encoding.y?.field === VALUE_FIELD) {
-    applyAutoValueAxisTicks(encoding.y);
+    applyAutoValueAxisTicks(encoding.y, { includeZero: options.includeZero });
   }
 }
 

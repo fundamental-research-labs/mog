@@ -181,7 +181,9 @@ function buildSeriesEncoding(input: {
     applyAutoValueAxisTicks(encoding.x);
   }
   if (encoding.y?.field === VALUE_FIELD) {
-    applyAutoValueAxisTicks(encoding.y);
+    applyAutoValueAxisTicks(encoding.y, {
+      includeZero: !isQuantitativeXSeries(input.seriesConf, input.seriesType, input.config),
+    });
   }
 
   return encoding;

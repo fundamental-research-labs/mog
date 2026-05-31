@@ -157,6 +157,17 @@ describe('Linear Scale Creation', () => {
     expect((scale as any)(100)).toBe(250);
   });
 
+  test('does not expand explicit domain bounds when zero inclusion is enabled', () => {
+    const channel: ChannelSpec = {
+      field: 'x',
+      type: 'quantitative',
+      scale: { domain: [29, 33], zero: true, nice: false },
+    };
+    const scale = createScaleForChannel(channel, quantitativeData, [0, 500], 'bar');
+
+    expect((scale as any).domain()).toEqual([29, 33]);
+  });
+
   test('handles reverse option', () => {
     const channel: ChannelSpec = {
       field: 'x',

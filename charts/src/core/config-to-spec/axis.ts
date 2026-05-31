@@ -77,7 +77,10 @@ export function buildAxisScaleSpec(
   return Object.keys(scaleSpec).length > 0 ? scaleSpec : undefined;
 }
 
-export function applyAutoValueAxisTicks(channel: ChannelSpec | undefined): void {
+export function applyAutoValueAxisTicks(
+  channel: ChannelSpec | undefined,
+  options: { includeZero?: boolean } = {},
+): void {
   if (!channel || channel.type !== 'quantitative') return;
 
   if (channel.axis !== null && channel.axis !== undefined) {
@@ -97,8 +100,23 @@ export function applyAutoValueAxisTicks(channel: ChannelSpec | undefined): void 
     if (scaleSpec.nice === undefined || scaleSpec.nice === true) {
       scaleSpec.nice = AUTO_VALUE_AXIS_TICK_COUNT;
     }
+    if (
+      options.includeZero &&
+      scaleSpec.zero === undefined &&
+      !hasFullyExplicitNumericDomain(scaleSpec)
+    ) {
+      scaleSpec.zero = true;
+    }
     channel.scale = scaleSpec;
   }
+}
+
+function hasFullyExplicitNumericDomain(scaleSpec: ScaleSpec): boolean {
+  const domain = Array.isArray(scaleSpec.domain) ? scaleSpec.domain : undefined;
+  return (
+    explicitDomainBound(domain, 0) !== undefined &&
+    explicitDomainBound(domain, 1) !== undefined
+  );
 }
 
 function axisConfigToScaleType(axisConf: SingleAxisConfig): ScaleType | undefined {

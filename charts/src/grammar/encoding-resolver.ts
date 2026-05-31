@@ -335,22 +335,21 @@ function createLinearScale(
   markType?: string,
 ): ChartScale {
   const numericValues = values.filter((v) => typeof v === 'number' && !isNaN(v));
+  const explicitMin = numericDomainBound(scaleSpec?.domain, 0);
+  const explicitMax = numericDomainBound(scaleSpec?.domain, 1);
 
-  let min =
-    numericDomainBound(scaleSpec?.domain, 0) ??
-    (numericValues.length > 0 ? safeMin(numericValues) : 0);
-  let max =
-    numericDomainBound(scaleSpec?.domain, 1) ??
-    (numericValues.length > 0 ? safeMax(numericValues) : 1);
+  let min = explicitMin ?? (numericValues.length > 0 ? safeMin(numericValues) : 0);
+  let max = explicitMax ?? (numericValues.length > 0 ? safeMax(numericValues) : 1);
 
   // Handle zero: only default to including zero for bar/area marks (Vega-Lite convention).
   // Other mark types (line, point, etc.) scale to the data range by default.
+  // Explicit domain bounds always win; zero only fills automatic bounds.
   const zeroMarks = new Set(['bar', 'area', 'arc', 'radar']);
   const defaultZero = zeroMarks.has(markType ?? 'bar');
   const includeZero = scaleSpec?.zero ?? defaultZero;
   if (includeZero) {
-    if (min > 0) min = 0;
-    if (max < 0) max = 0;
+    if (explicitMin === undefined && min > 0) min = 0;
+    if (explicitMax === undefined && max < 0) max = 0;
   }
 
   // Handle reverse

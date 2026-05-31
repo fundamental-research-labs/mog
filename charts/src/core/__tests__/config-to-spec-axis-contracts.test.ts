@@ -380,4 +380,100 @@ describe('configToSpec axis render contracts', () => {
     expect(result.scales.y?.domain?.()).toEqual([0, 250]);
     expect(axisLabelTexts(result, 'y-axis')).toEqual(['0', '50', '100', '150', '200', '250']);
   });
+
+  it('honors explicit imported primary bounds in a dual-axis column-line combo', () => {
+    const categories = [
+      'slot-01',
+      'slot-02',
+      'slot-03',
+      'slot-04',
+      'slot-05',
+      'slot-06',
+      'slot-07',
+      'slot-08',
+      'slot-09',
+      'slot-10',
+      'slot-11',
+      'slot-12',
+      'slot-13',
+      'slot-14',
+      'slot-15',
+    ];
+    const primaryValues = [
+      29.8, 30.1, 30.4, 30.7, 31, 31.2, 31.4, 31.6, 31.7, 31.8, 31.9, 32, 32.1,
+      32.2, 32.3,
+    ];
+    const secondaryValues = [
+      327, 495, 485, 486, 612, 575, 503, 498, 517, 540, 522, 558, 571, 599, 615,
+    ];
+    const data: ChartData = {
+      categories,
+      series: [
+        {
+          name: 'Synthetic primary series',
+          data: categories.map((x, index) => ({ x, y: primaryValues[index] })),
+        },
+        {
+          name: 'Synthetic secondary series',
+          yAxisIndex: 1,
+          data: categories.map((x, index) => ({ x, y: secondaryValues[index] })),
+        },
+      ],
+    };
+    const spec = asLayerSpec(
+      {
+        type: 'combo',
+        subType: 'clustered',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 20,
+        height: 10,
+        axis: {
+          categoryAxis: { visible: true, title: 'Synthetic category' },
+          valueAxis: {
+            visible: true,
+            title: 'Synthetic primary axis',
+            min: 29,
+            max: 33,
+            majorUnit: 1,
+            gridLines: true,
+          },
+          secondaryValueAxis: {
+            visible: true,
+            position: 'r',
+          },
+        },
+        series: [
+          { name: 'Synthetic primary series', type: 'column' },
+          { name: 'Synthetic secondary series', type: 'line', yAxisIndex: 1 },
+        ],
+      } as ChartConfig,
+      data,
+    );
+
+    expect(spec.layer[0]?.encoding?.y?.scale).toMatchObject({
+      domain: [29, 33],
+      nice: false,
+    });
+    expect(spec.layer[0]?.encoding?.y?.scale).not.toHaveProperty('zero');
+    expect(spec.layer[1]?.encoding?.y?.scale).toMatchObject({
+      nice: 5,
+      zero: true,
+    });
+
+    const result = compile(spec, undefined, { width: 1454, height: 724 });
+
+    expect(result.scales.y?.domain?.()).toEqual([29, 33]);
+    expect(axisLabelTexts(result, 'y-axis')).toEqual(['29', '30', '31', '32', '33']);
+    expect(axisLabelTexts(result, 'y-axis-right')).toEqual([
+      '0',
+      '100',
+      '200',
+      '300',
+      '400',
+      '500',
+      '600',
+      '700',
+    ]);
+  });
 });

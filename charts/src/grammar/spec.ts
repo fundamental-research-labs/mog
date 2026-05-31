@@ -335,6 +335,8 @@ export interface AxisSpec {
   labelFormatByValue?: Record<string, string>;
   /** Per-category display text keyed by the raw category value. */
   labelTextByValue?: Record<string, string>;
+  /** Per-category hierarchical display labels, ordered from parent to child. */
+  multiLevelLabelsByValue?: Record<string, string[]>;
   formatType?: 'number' | 'time';
   orient?: AxisOrient;
   offset?: number;

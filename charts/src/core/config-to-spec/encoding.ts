@@ -175,7 +175,13 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   applySecondaryCategoryAxis(config, encoding, isHorizontal);
   applyBarCategorySpacingScale(config, encoding, isHorizontal);
   if (!isXYChart) {
-    applyCategoryAxisLabels(data, encoding, isHorizontal, useStableCategoryKeys);
+    applyCategoryAxisLabels(
+      data,
+      encoding,
+      isHorizontal,
+      useStableCategoryKeys,
+      config.categoryLabelLevel,
+    );
   }
 
   // Color encoding for multi-series.

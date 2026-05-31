@@ -20,6 +20,7 @@ type AxisPart =
   | 'tick'
   | 'minorTick'
   | 'label'
+  | 'multiLevelLabel'
   | 'grid'
   | 'minorGrid'
   | 'title'
@@ -69,6 +70,22 @@ function displayUnitTickValue(axisSpec: AxisSpec, tick: unknown): unknown {
   if (factor === undefined || factor <= 0 || !Number.isFinite(factor)) return tick;
   const numeric = typeof tick === 'number' ? tick : Number(tick);
   return Number.isFinite(numeric) ? numeric / factor : tick;
+}
+
+function axisMultiLevelLabels(
+  axisSpec: AxisSpec,
+  tick: unknown,
+): Array<{ text: string; level: number }> | undefined {
+  const labels = axisSpec.multiLevelLabelsByValue?.[String(tick)];
+  if (!labels || labels.length <= 1 || !labels.some((label) => label !== '')) return undefined;
+  return labels.map((label, level) => ({ text: label, level }));
+}
+
+function multiLevelAxisDatum(
+  role: string,
+  level: number,
+): { role: string; axisPart: AxisPart; level: number } {
+  return { ...axisDatum(role, 'multiLevelLabel'), level };
 }
 
 /**
@@ -260,22 +277,45 @@ export function generateXAxis(
       const tickExtent = axisSpec.ticks === false ? 0 : (axisSpec.tickSize ?? 6);
       const labelPadding = axisSpec.labelPadding ?? (labelAngle ? 2 : 3);
       const labelLayout = xLabelLayout(axisSpec, y, tickExtent, labelPadding, layout, orient);
-
-      marks.push({
-        type: 'text',
-        x,
-        y: labelLayout.y,
-        text: labelText,
-        datum: axisDatum(role, 'label'),
-        fontSize,
-        fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
-        textAlign: 'center',
-        textBaseline: labelLayout.baseline,
-        rotation: labelAngle ? (labelAngle * Math.PI) / 180 : undefined,
-        style: {
-          fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
-        },
-      } as TextMark);
+      const multiLevelLabels = labelAngle === 0 ? axisMultiLevelLabels(axisSpec, tick) : undefined;
+      if (multiLevelLabels) {
+        const outward = xAxisLabelSide(axisSpec, orient) === 'top' ? -1 : 1;
+        const lineHeight = fontSize + 2;
+        const orderedLabels = [...multiLevelLabels].reverse();
+        for (let levelIndex = 0; levelIndex < orderedLabels.length; levelIndex += 1) {
+          const levelLabel = orderedLabels[levelIndex];
+          marks.push({
+            type: 'text',
+            x,
+            y: labelLayout.y + outward * lineHeight * levelIndex,
+            text: levelLabel.text,
+            datum: multiLevelAxisDatum(role, levelLabel.level),
+            fontSize,
+            fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
+            textAlign: 'center',
+            textBaseline: labelLayout.baseline,
+            style: {
+              fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
+            },
+          } as TextMark);
+        }
+      } else {
+        marks.push({
+          type: 'text',
+          x,
+          y: labelLayout.y,
+          text: labelText,
+          datum: axisDatum(role, 'label'),
+          fontSize,
+          fontFamily: axisSpec.labelFontFamily ?? 'system-ui, sans-serif',
+          textAlign: 'center',
+          textBaseline: labelLayout.baseline,
+          rotation: labelAngle ? (labelAngle * Math.PI) / 180 : undefined,
+          style: {
+            fill: labelResult.color ?? axisSpec.labelColor ?? '#000',
+          },
+        } as TextMark);
+      }
     }
     labelIndex++;
 

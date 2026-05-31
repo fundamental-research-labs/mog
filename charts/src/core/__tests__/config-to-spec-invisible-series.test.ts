@@ -228,12 +228,35 @@ describe('configToSpec invisible stacked bar series', () => {
         '__mogCategory:1': 'North / Q1',
         '__mogCategory:2': '',
       },
+      multiLevelLabelsByValue: {
+        '__mogCategory:0': ['North', 'Q1'],
+        '__mogCategory:1': ['North', 'Q1'],
+        '__mogCategory:2': ['South', ''],
+      },
     });
     expect(inlineRows(spec).map((row) => row.category)).toEqual([
       '__mogCategory:0',
       '__mogCategory:1',
       '__mogCategory:2',
     ]);
+
+    const result = compile(spec);
+    const axisLevelLabels = result.axes.filter((mark): mark is TextMark => {
+      const datum = mark.datum as { axisPart?: string } | undefined;
+      return mark.type === 'text' && datum?.axisPart === 'multiLevelLabel';
+    });
+    expect(axisLevelLabels.map((mark) => mark.text)).toEqual([
+      'Q1',
+      'North',
+      'Q1',
+      'North',
+      '',
+      'South',
+    ]);
+    expect(axisLevelLabels.map((mark) => (mark.datum as { level: number }).level)).toEqual([
+      1, 0, 1, 0, 1, 0,
+    ]);
+    expect(spec.config?.layoutHints?.bottomMargin).toBeGreaterThanOrEqual(43);
   });
 
   it('reserves enough y-axis margin for long imported category labels with chart fonts', () => {

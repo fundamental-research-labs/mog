@@ -57,6 +57,18 @@ export function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): n
   const fontSize = x.axis?.labelFontSize ?? 11;
   const labelPadding = x.axis?.labelPadding ?? (labelAngle ? 2 : 3);
   const tickExtent = x.axis?.ticks === false ? 0 : (x.axis?.tickSize ?? 6);
+  const multiLevelLabelCount = maxMultiLevelLabelCount(x.axis);
+
+  if (
+    Math.abs(labelAngle) <= 1 &&
+    multiLevelLabelCount > 1 &&
+    xAxisLabelSideForMargin(x.axis) === 'bottom'
+  ) {
+    return Math.max(
+      32,
+      Math.ceil(tickExtent + labelPadding + multiLevelLabelCount * (fontSize + 2) + 8),
+    );
+  }
 
   if (Math.abs(labelAngle) > 1) {
     const labelWidth = estimateXAxisMaxLabelWidth(x, fontSize);
@@ -127,4 +139,16 @@ function estimateXAxisMaxLabelWidth(x: ChannelSpec, fontSize: number): number {
     }),
   );
   return Math.ceil(maxLabelLength * fontSize * 0.52);
+}
+
+function maxMultiLevelLabelCount(axis: AxisSpec | null | undefined): number {
+  const labelsByValue = axis?.multiLevelLabelsByValue;
+  if (!labelsByValue) return 0;
+  return Math.max(0, ...Object.values(labelsByValue).map((labels) => labels.length));
+}
+
+function xAxisLabelSideForMargin(axis: AxisSpec | null | undefined): 'top' | 'bottom' {
+  if (axis?.labelPosition === 'high') return 'top';
+  if (axis?.labelPosition === 'low') return 'bottom';
+  return axis?.orient === 'top' ? 'top' : 'bottom';
 }

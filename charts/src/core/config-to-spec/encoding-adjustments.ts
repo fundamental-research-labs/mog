@@ -26,6 +26,7 @@ export function applyCategoryAxisLabels(
   encoding: EncodingSpec,
   isHorizontal: boolean,
   useStableCategoryKeys: boolean,
+  categoryLabelLevel?: number,
 ): void {
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
   if (!categoryChannel || categoryChannel.axis === null) return;
@@ -47,7 +48,16 @@ export function applyCategoryAxisLabels(
       }
     });
   }
-  if (Object.keys(labelTextByValue).length === 0 && Object.keys(labelFormatByValue).length === 0) {
+
+  const multiLevelLabelsByValue =
+    categoryLabelLevel === undefined
+      ? multiLevelCategoryLabelsByValue(data, useStableCategoryKeys)
+      : {};
+  if (
+    Object.keys(labelTextByValue).length === 0 &&
+    Object.keys(labelFormatByValue).length === 0 &&
+    Object.keys(multiLevelLabelsByValue).length === 0
+  ) {
     return;
   }
 
@@ -55,14 +65,34 @@ export function applyCategoryAxisLabels(
     ...(categoryChannel.axis ?? {}),
     ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
     ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
+    ...(Object.keys(multiLevelLabelsByValue).length > 0 ? { multiLevelLabelsByValue } : {}),
   };
   if (categoryChannel.secondaryAxis !== null && categoryChannel.secondaryAxis !== undefined) {
     categoryChannel.secondaryAxis = {
       ...categoryChannel.secondaryAxis,
       ...(Object.keys(labelTextByValue).length > 0 ? { labelTextByValue } : {}),
       ...(Object.keys(labelFormatByValue).length > 0 ? { labelFormatByValue } : {}),
+      ...(Object.keys(multiLevelLabelsByValue).length > 0 ? { multiLevelLabelsByValue } : {}),
     };
   }
+}
+
+function multiLevelCategoryLabelsByValue(
+  data: ChartData,
+  useStableCategoryKeys: boolean,
+): Record<string, string[]> {
+  const levels = data.categoryLevels;
+  if (!levels?.length) return {};
+
+  const sortedLevels = [...levels].sort((a, b) => a.level - b.level);
+  const labelsByValue: Record<string, string[]> = {};
+  data.categories.forEach((category, pointIndex) => {
+    const labels = sortedLevels.map((level) => categoryDisplayLabel(level.labels[pointIndex]));
+    if (!labels.some((label) => label !== '')) return;
+    const key = useStableCategoryKeys ? categoryKeyForIndex(pointIndex) : String(category);
+    labelsByValue[key] = labels;
+  });
+  return labelsByValue;
 }
 
 export function applyStackedValueDomain(

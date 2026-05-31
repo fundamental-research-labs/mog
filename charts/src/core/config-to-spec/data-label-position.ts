@@ -19,9 +19,9 @@ export function labelPlacement(
         baseline: 'top',
         valueDelta: (v: number) => -Math.abs(v) * 0.08,
       };
+    case 'outside':
     case 'outsideEnd':
     case 'top':
-    case 'bestFit':
     case 'callout':
       return {
         dx: 0,
@@ -30,6 +30,16 @@ export function labelPlacement(
         baseline: 'bottom',
         valueDelta: (v: number) => Math.max(Math.abs(v) * 0.08, 1),
       };
+    case 'bestFit':
+      return isPie
+        ? { dx: 0, dy: 0, align: 'center', baseline: 'middle', valueDelta: () => 0 }
+        : {
+            dx: 0,
+            dy: -10,
+            align: 'center',
+            baseline: 'bottom',
+            valueDelta: (v: number) => Math.max(Math.abs(v) * 0.08, 1),
+          };
     case 'center':
     case 'inside':
     case 'insideEnd':

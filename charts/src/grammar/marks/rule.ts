@@ -12,6 +12,7 @@ import { resolveStrokeColor } from '../../algebra/color';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { directPosition } from './direct-position';
 import { centeredScalePosition, definedStyle } from './helpers';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
@@ -141,27 +142,4 @@ export function generateRuleMarks(
   }
 
   return marks;
-}
-
-function directPosition(
-  datum: DataRow,
-  field: string | undefined,
-  layout: Layout,
-  axis: 'x' | 'y',
-  coordinateSystem: MarkSpec['coordinateSystem'],
-): number | undefined {
-  const value = datumNumber(datum, field);
-  if (value === undefined) return undefined;
-  if (coordinateSystem === 'chartFraction') {
-    return axis === 'x' ? value * layout.width : value * layout.height;
-  }
-  if (coordinateSystem === 'dataTableFraction') {
-    const table = layout.dataTable;
-    if (!table) return undefined;
-    return axis === 'x' ? table.x + value * table.width : table.y + value * table.height;
-  }
-  if (coordinateSystem !== 'plotFraction') return value;
-  return axis === 'x'
-    ? layout.plotArea.x + value * layout.plotArea.width
-    : layout.plotArea.y + value * layout.plotArea.height;
 }

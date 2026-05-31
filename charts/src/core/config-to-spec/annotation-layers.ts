@@ -27,8 +27,10 @@ export function buildAnnotationLayers(
     ...buildAnalysisLineLayers(config, encoding, rows),
     ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
     ...buildTrendlineLayers(config, data, encoding, rows),
-    ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),
-    ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding) : []),
+    ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD)
+      ? buildLeaderLineLayers(encoding, config)
+      : []),
+    ...(hasRowFlag(rows, DATA_LABEL_VISIBLE_FIELD) ? buildDataLabelLayers(encoding, config) : []),
     ...buildDataTableLayers(config, data),
     ...(isAreaChart(config.type) && hasRowFlag(rows, POINT_STYLE_VISIBLE_FIELD)
       ? buildPointStyleLayers(encoding)

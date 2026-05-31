@@ -1,5 +1,5 @@
 import type { EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
-import type { DataLabelConfig } from '../../../types';
+import type { ChartConfig, DataLabelConfig } from '../../../types';
 import {
   CATEGORY_FIELD,
   DATA_LABEL_ALIGN_FIELD,
@@ -34,13 +34,15 @@ import {
 export function buildDataLabelLayer(
   dataLabels: DataLabelConfig,
   encoding: EncodingSpec,
+  config?: ChartConfig,
 ): UnitSpec | undefined {
   if (!dataLabels.show) return undefined;
-  return buildDataLabelLayers(encoding)[0];
+  return buildDataLabelLayers(encoding, config)[0];
 }
 
-export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
+export function buildDataLabelLayers(encoding: EncodingSpec, config?: ChartConfig): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
+  const automaticCoordinateSystem = automaticLabelCoordinateSystem(position, config);
   const automaticTransform = [
     { type: 'filter' as const, filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } },
     { type: 'filter' as const, filter: `!${DATA_LABEL_LAYOUT_TARGET_FIELD}` },
@@ -59,7 +61,7 @@ export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
       ? {
           xField: DATA_LABEL_X_FIELD,
           yField: DATA_LABEL_Y_FIELD,
-          coordinateSystem: 'plotFraction' as const,
+          coordinateSystem: automaticCoordinateSystem,
         }
       : {}),
   };
@@ -78,8 +80,9 @@ export function buildDataLabelLayers(encoding: EncodingSpec): UnitSpec[] {
   ];
 }
 
-export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
+export function buildLeaderLineLayers(encoding: EncodingSpec, config?: ChartConfig): UnitSpec[] {
   const position = dataLabelPositionEncoding(encoding);
+  const automaticCoordinateSystem = automaticLabelCoordinateSystem(position, config);
   const automaticTransform = [
     { type: 'filter' as const, filter: { field: DATA_LABEL_VISIBLE_FIELD, equal: true } },
     { type: 'filter' as const, filter: { field: DATA_LABEL_LEADER_VISIBLE_FIELD, equal: true } },
@@ -102,7 +105,7 @@ export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
               yField: DATA_LABEL_ANCHOR_Y_FIELD,
               x2Field: DATA_LABEL_X_FIELD,
               y2Field: DATA_LABEL_Y_FIELD,
-              coordinateSystem: 'plotFraction' as const,
+              coordinateSystem: automaticCoordinateSystem,
             }
           : {}),
       },
@@ -121,6 +124,17 @@ export function buildLeaderLineLayers(encoding: EncodingSpec): UnitSpec[] {
     layers.push(manualLeaderLineLayer(position, 'outer'), manualLeaderLineLayer(position, 'inner'));
   }
   return layers;
+}
+
+function automaticLabelCoordinateSystem(
+  position: ReturnType<typeof dataLabelPositionEncoding>,
+  config: ChartConfig | undefined,
+): MarkSpec['coordinateSystem'] {
+  return !position && config && isPieLikeChart(config.type) ? 'plotRadiusFraction' : 'plotFraction';
+}
+
+function isPieLikeChart(type: ChartConfig['type']): boolean {
+  return type === 'pie' || type === 'doughnut' || type === 'pie3d' || type === 'ofPie';
 }
 
 function manualDataLabelLayer(

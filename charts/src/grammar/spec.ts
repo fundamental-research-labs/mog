@@ -629,7 +629,12 @@ export interface MarkSpec {
   /** Datum field for direct secondary y position */
   y2Field?: string;
   /** Coordinate system for direct mark fields. */
-  coordinateSystem?: 'plotFraction' | 'chartFraction' | 'dataTableFraction' | 'pixel';
+  coordinateSystem?:
+    | 'plotFraction'
+    | 'plotRadiusFraction'
+    | 'chartFraction'
+    | 'dataTableFraction'
+    | 'pixel';
   /** Opacity (0-1) */
   opacity?: number;
   /** Fill opacity (0-1) */

@@ -44,7 +44,6 @@ export function pieLabelCoordinates(
   const outside =
     position === 'outside' ||
     position === 'outsideEnd' ||
-    position === 'bestFit' ||
     position === 'callout';
   const center = position === 'center';
   const anchorRadius = 0.42;

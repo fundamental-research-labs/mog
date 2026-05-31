@@ -26,6 +26,8 @@ import {
   DATA_LABEL_BASELINE_FIELD,
   DATA_LABEL_DY_FIELD,
   DATA_LABEL_TEXT_FIELD,
+  DATA_LABEL_X_FIELD,
+  DATA_LABEL_Y_FIELD,
   LINE_SEGMENT_FIELD,
   SERIES_INDEX_FIELD,
   SERIES_FILL_FIELD,
@@ -40,7 +42,7 @@ import {
 } from '../../src/core/config-to-spec/fields';
 import { formatTickValue } from '../../src/grammar/axis-generator';
 import { compile } from '../../src/grammar/compiler';
-import type { PathMark, SymbolMark } from '../../src/primitives/types';
+import type { ArcMark, PathMark, SymbolMark, TextMark } from '../../src/primitives/types';
 import type { EncodingSpec, LayerSpec, MarkSpec } from '../../src/grammar/spec';
 import type { ChartConfig, ChartData, ChartType, StoredChartConfig } from '../../src/types';
 
@@ -2917,6 +2919,81 @@ describe('configToSpec dropped fields', () => {
 
       expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(0);
       expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('middle');
+    });
+
+    it('maps pie bestFit labels onto the slice instead of outside', () => {
+      const rows = chartDataToRows(
+        SINGLE_SERIES_DATA,
+        makeConfig({
+          type: 'doughnut',
+          dataLabels: {
+            show: true,
+            position: 'bestFit',
+            showCategoryName: true,
+            showPercentage: true,
+          },
+        }),
+      );
+
+      expect(rows[0][DATA_LABEL_DY_FIELD]).toBe(0);
+      expect(rows[0][DATA_LABEL_BASELINE_FIELD]).toBe('middle');
+      expect(typeof rows[0][DATA_LABEL_X_FIELD]).toBe('number');
+      expect(typeof rows[0][DATA_LABEL_Y_FIELD]).toBe('number');
+    });
+
+    it('scales wide pie data labels from the pie radius, not plot width', () => {
+      const data: ChartData = {
+        categories: ['A', 'B', 'C', 'D'],
+        series: [
+          {
+            name: 'Slices',
+            data: [
+              { x: 'A', y: 10 },
+              { x: 'B', y: 10 },
+              { x: 'C', y: 10 },
+              { x: 'D', y: 10 },
+            ],
+          },
+        ],
+      };
+      const spec = configToSpec(
+        makeConfig({
+          type: 'doughnut',
+          width: 20,
+          height: 10,
+          dataLabels: {
+            show: true,
+            position: 'bestFit',
+            showCategoryName: true,
+            showPercentage: true,
+          },
+        }),
+        data,
+      );
+
+      expect(
+        spec.layer?.some(
+          (layer) =>
+            typeof layer.mark === 'object' &&
+            layer.mark.type === 'text' &&
+            layer.mark.coordinateSystem === 'plotRadiusFraction',
+        ),
+      ).toBe(true);
+
+      const result = compile(spec, undefined, {
+        skipAxes: true,
+        skipLegend: true,
+        skipTitle: true,
+      });
+      const arc = result.marks.find((mark): mark is ArcMark => mark.type === 'arc');
+      const labels = result.marks.filter((mark): mark is TextMark => mark.type === 'text');
+
+      expect(arc).toBeDefined();
+      expect(labels).toHaveLength(data.categories.length);
+      const maxLabelDistance = Math.max(
+        ...labels.map((label) => Math.hypot(label.x - arc!.x, label.y - arc!.y)),
+      );
+      expect(maxLabelDistance).toBeLessThan(arc!.outerRadius * 0.9);
     });
   });
 

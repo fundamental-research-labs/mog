@@ -453,6 +453,38 @@ fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
 }
 
 #[test]
+fn test_parse_individual_data_label_with_rich_text() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:dLbl>
+                    <c:idx val="2"/>
+                    <c:tx>
+                        <c:rich>
+                            <a:bodyPr/>
+                            <a:p>
+                                <a:r><a:rPr b="1"/><a:t>Custom</a:t></a:r>
+                            </a:p>
+                        </c:rich>
+                    </c:tx>
+                    <c:showVal val="0"/>
+                </c:dLbl>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    let labels = series.d_lbls.as_ref().expect("data labels");
+    assert_eq!(labels.d_lbl.len(), 1);
+    let label = &labels.d_lbl[0];
+    assert_eq!(label.idx, 2);
+    assert!(matches!(
+        label.text,
+        Some(ooxml_types::charts::ChartText::Rich(_))
+    ));
+}
+
+#[test]
 fn test_parse_trendline_with_label() {
     let xml = br#"<c:trendline>
             <c:trendlineType val="linear"/>

@@ -4,7 +4,7 @@ use crate::infra::scanner::{
 use crate::infra::xml::decode_xml_entities;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
-use super::{DataLabelOptions, DataLabelPosition, parse_chart_ext_lst};
+use super::{parse_chart_ext_lst, parse_str_ref, DataLabelOptions, DataLabelPosition};
 use crate::domain::charts::{parse_shape_properties, parse_text_body};
 
 pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
@@ -239,6 +239,24 @@ pub(crate) fn parse_individual_data_label(xml: &[u8]) -> ooxml_types::charts::Da
             if start < end {
                 label.separator = Some(String::from_utf8_lossy(&xml[start..end]).to_string());
             }
+        }
+    }
+
+    // Parse custom text
+    if let Some(tx_start) = find_tag_simd(xml, b"tx", 0) {
+        let tx_end = find_closing_tag(xml, b"tx", tx_start).unwrap_or(xml.len());
+        let tx_xml = &xml[tx_start..tx_end];
+        if let Some(rich_start) = find_tag_simd(tx_xml, b"rich", 0) {
+            let rich_end = find_closing_tag(tx_xml, b"rich", rich_start).unwrap_or(tx_xml.len());
+            label.text = Some(ooxml_types::charts::ChartText::Rich(parse_text_body(
+                &tx_xml[rich_start..rich_end],
+            )));
+        } else if let Some(strref_start) = find_tag_simd(tx_xml, b"strRef", 0) {
+            let strref_end =
+                find_closing_tag(tx_xml, b"strRef", strref_start).unwrap_or(tx_xml.len());
+            label.text = Some(ooxml_types::charts::ChartText::StrRef(parse_str_ref(
+                &tx_xml[strref_start..strref_end],
+            )));
         }
     }
 

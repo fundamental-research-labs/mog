@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use super::ChartOoxmlProps;
 use crate::domain::chart::{
     AxisData, BoxplotConfigData, ChartDataTableData, ChartFormatData, ChartFormatStringData,
-    ChartSeriesData, ChartSubType, ChartType, ChartView3DData, DataLabelData,
+    ChartLineSettingsData, ChartSeriesData, ChartSubType, ChartType, ChartView3DData,
+    DataLabelData,
     HierarchyChartConfigData, HistogramConfigData, LegendData, PieSliceData, PivotChartOptionsData,
-    RegionMapConfigData, SeriesOrientation, TrendlineData, WaterfallOptions,
+    RegionMapConfigData, SeriesOrientation, TrendlineData, UpDownBarsData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
 
@@ -178,6 +179,14 @@ pub struct ChartData {
     pub title_formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub drop_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub high_low_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_down_bars: Option<UpDownBarsData>,
 
     // ── Bar shape (3D decorative charts) ──
     /// Mark shape for 3D bar/column charts: "box", "cylinder", "cone", "pyramid".

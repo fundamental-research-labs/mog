@@ -8,8 +8,9 @@ use domain_types::chart::{
 use domain_types::{ChartType, ImportObjectStatus};
 use ooxml_types::chart_ex::{
     ChartExAxis, ChartExBinning, ChartExBoundValue, ChartExChartData, ChartExData,
-    ChartExDataLabels, ChartExDimension, ChartExLayoutId, ChartExLayoutProperties,
-    ChartExPlotAreaRegion, ChartExSeries, ChartExSpace, ChartExText, ChartExTitle,
+    ChartExDataLabels, ChartExDimension, ChartExFormatOverride, ChartExLayoutId,
+    ChartExLayoutProperties, ChartExPlotAreaRegion, ChartExSeries, ChartExSpace, ChartExText,
+    ChartExTitle,
 };
 
 use crate::domain::charts::read::{
@@ -31,6 +32,8 @@ pub(super) struct ChartExProjection {
     pub(super) title_format: Option<ChartFormatData>,
     pub(super) title_rich_text: Option<Vec<domain_types::chart::ChartFormatStringData>>,
     pub(super) title_formula: Option<String>,
+    pub(super) title_h_align: Option<String>,
+    pub(super) title_v_align: Option<String>,
     pub(super) waterfall: Option<WaterfallOptions>,
     pub(super) histogram: Option<HistogramConfigData>,
     pub(super) boxplot: Option<BoxplotConfigData>,
@@ -85,7 +88,7 @@ pub(super) fn project_chart_ex_space(
         .and_then(project_chart_ex_title_format);
 
     let mut formulas = Vec::new();
-    let series = project_chart_ex_series(region, &data_by_id, &mut formulas);
+    let series = project_chart_ex_series(region, &data_by_id, &chart_space.fmt_ovrs, &mut formulas);
     let data_range = synthesize_data_range(&formulas);
     let data_labels = region.series.iter().find_map(|s| {
         s.data_labels
@@ -131,6 +134,16 @@ pub(super) fn project_chart_ex_space(
         title_format,
         title_rich_text,
         title_formula,
+        title_h_align: chart_space
+            .chart
+            .title
+            .as_ref()
+            .and_then(project_chart_ex_title_h_align),
+        title_v_align: chart_space
+            .chart
+            .title
+            .as_ref()
+            .and_then(project_chart_ex_title_v_align),
         waterfall,
         histogram,
         boxplot,
@@ -193,7 +206,22 @@ pub(super) fn chart_ex_import_status(
         return Some(chart_import_status(
             domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
             "Imported ChartEx chart was preserved but has no value data range".to_string(),
-            domain_types::ImportRenderability::Placeholder,
+            domain_types::ImportRenderability::NotRenderable,
+            original_path,
+            title,
+        ));
+    }
+
+    if chart_type_requires_categories(chart_type)
+        && series.iter().all(|series| series.categories.is_none())
+    {
+        return Some(chart_import_status(
+            domain_types::ImportDiagnosticCode::ChartPartMissingDataRange,
+            format!(
+                "Imported ChartEx `{}` chart was preserved but has no category data range",
+                chart_type.as_str()
+            ),
+            domain_types::ImportRenderability::NotRenderable,
             original_path,
             title,
         ));
@@ -211,6 +239,13 @@ pub(super) fn chart_ex_import_status(
     }
 
     None
+}
+
+fn chart_type_requires_categories(chart_type: &ChartType) -> bool {
+    matches!(
+        chart_type,
+        ChartType::Waterfall | ChartType::Funnel | ChartType::Boxplot
+    )
 }
 
 fn chart_import_status(
@@ -241,6 +276,7 @@ fn chart_ex_data_by_id(chart_data: &ChartExChartData) -> HashMap<u32, &ChartExDa
 fn project_chart_ex_series(
     region: &ChartExPlotAreaRegion,
     data_by_id: &HashMap<u32, &ChartExData>,
+    format_overrides: &[ChartExFormatOverride],
     formulas: &mut Vec<String>,
 ) -> Vec<ChartSeriesData> {
     region
@@ -269,6 +305,7 @@ fn project_chart_ex_series(
                 value_cache: None,
                 categories,
                 category_cache: None,
+                category_levels: None,
                 category_label_format: None,
                 bubble_size: None,
                 bubble_size_cache: None,
@@ -291,7 +328,7 @@ fn project_chart_ex_series(
                 y_error_bars: None,
                 idx: Some(idx as u32),
                 order: Some(idx as u32),
-                format: extract_chart_format(series.sp_pr.as_ref(), None),
+                format: project_chart_ex_series_format(series, idx, format_overrides),
                 bar_shape: None,
                 invert_color: None,
                 marker_background_color: None,
@@ -308,6 +345,52 @@ fn project_chart_ex_series(
             })
         })
         .collect()
+}
+
+fn project_chart_ex_series_format(
+    series: &ChartExSeries,
+    series_idx: usize,
+    format_overrides: &[ChartExFormatOverride],
+) -> Option<ChartFormatData> {
+    let base = extract_chart_format(series.sp_pr.as_ref(), None);
+    let override_idx = series.format_idx.unwrap_or(series_idx as u32);
+    let override_format = format_overrides
+        .iter()
+        .find(|override_format| override_format.idx == override_idx)
+        .and_then(|override_format| extract_chart_format(override_format.sp_pr.as_ref(), None));
+    merge_chart_format(base, override_format)
+}
+
+fn merge_chart_format(
+    base: Option<ChartFormatData>,
+    override_format: Option<ChartFormatData>,
+) -> Option<ChartFormatData> {
+    match (base, override_format) {
+        (Some(mut base), Some(override_format)) => {
+            if override_format.fill.is_some() {
+                base.fill = override_format.fill;
+            }
+            if override_format.line.is_some() {
+                base.line = override_format.line;
+            }
+            if override_format.font.is_some() {
+                base.font = override_format.font;
+            }
+            if override_format.text_rotation.is_some() {
+                base.text_rotation = override_format.text_rotation;
+            }
+            if override_format.text_vertical_type.is_some() {
+                base.text_vertical_type = override_format.text_vertical_type;
+            }
+            if override_format.shadow.is_some() {
+                base.shadow = override_format.shadow;
+            }
+            Some(base)
+        }
+        (Some(base), None) => Some(base),
+        (None, Some(override_format)) => Some(override_format),
+        (None, None) => None,
+    }
 }
 
 fn chart_ex_data_for_series<'a>(
@@ -448,6 +531,36 @@ fn project_chart_ex_title_format(title: &ChartExTitle) -> Option<ChartFormatData
     format
 }
 
+fn project_chart_ex_title_h_align(title: &ChartExTitle) -> Option<String> {
+    title
+        .align
+        .as_deref()
+        .and_then(chart_ex_horizontal_alignment)
+}
+
+fn project_chart_ex_title_v_align(title: &ChartExTitle) -> Option<String> {
+    title.pos.as_deref().and_then(chart_ex_vertical_alignment)
+}
+
+fn chart_ex_horizontal_alignment(align: &str) -> Option<String> {
+    let mapped = match align {
+        "l" => "left",
+        "ctr" => "center",
+        "r" => "right",
+        _ => return None,
+    };
+    Some(mapped.to_string())
+}
+
+fn chart_ex_vertical_alignment(pos: &str) -> Option<String> {
+    let mapped = match pos {
+        "t" => "top",
+        "b" => "bottom",
+        _ => return None,
+    };
+    Some(mapped.to_string())
+}
+
 fn project_chart_ex_legend(legend: &ooxml_types::chart_ex::ChartExLegend) -> LegendData {
     LegendData {
         show: true,
@@ -482,17 +595,23 @@ fn chart_ex_position(pos: &str) -> &'static str {
 fn project_chart_ex_axes(axes: &[ChartExAxis]) -> Option<AxisData> {
     let mut category_axis = None;
     let mut value_axis = None;
+    let mut secondary_category_axis = None;
+    let mut secondary_value_axis = None;
 
     for axis in axes {
         match axis.scaling {
             Some(ooxml_types::chart_ex::ChartExScaling::Category { .. }) => {
                 if category_axis.is_none() {
                     category_axis = Some(project_chart_ex_axis(axis, "category"));
+                } else if secondary_category_axis.is_none() {
+                    secondary_category_axis = Some(project_chart_ex_axis(axis, "category"));
                 }
             }
             Some(ooxml_types::chart_ex::ChartExScaling::Value { .. }) => {
                 if value_axis.is_none() {
                     value_axis = Some(project_chart_ex_axis(axis, "value"));
+                } else if secondary_value_axis.is_none() {
+                    secondary_value_axis = Some(project_chart_ex_axis(axis, "value"));
                 }
             }
             None => {}
@@ -506,8 +625,8 @@ fn project_chart_ex_axes(axes: &[ChartExAxis]) -> Option<AxisData> {
     Some(AxisData {
         category_axis,
         value_axis,
-        secondary_category_axis: None,
-        secondary_value_axis: None,
+        secondary_category_axis,
+        secondary_value_axis,
         series_axis: None,
     })
 }
@@ -596,6 +715,7 @@ fn project_chart_ex_data_labels(labels: &ChartExDataLabels) -> Option<DataLabelD
 
     Some(DataLabelData {
         show: true,
+        delete: None,
         position: labels.pos.clone(),
         format: None,
         show_value: labels
@@ -627,6 +747,7 @@ fn project_chart_ex_data_labels(labels: &ChartExDataLabels) -> Option<DataLabelD
         geometric_shape_type: None,
         formula: None,
         leader_lines_format: None,
+        layout: None,
     })
 }
 
@@ -646,8 +767,12 @@ fn project_chart_ex_points(series: &ChartExSeries) -> Option<Vec<PointFormatData
             });
             Some(PointFormatData {
                 idx: point.idx,
+                invert_if_negative: None,
+                explosion: None,
+                bubble_3d: None,
                 fill: None,
                 border,
+                line_format: None,
                 data_label: None,
                 visual_format: extract_chart_format(Some(sp_pr), None),
                 marker_background_color: None,
@@ -912,6 +1037,7 @@ mod tests {
         ChartExChart, ChartExChartData, ChartExFormula, ChartExLayoutVisibility, ChartExPlotArea,
         ChartExSubtotals, ChartExTxData,
     };
+    use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
     fn formula(content: &str) -> ChartExFormula {
         ChartExFormula {
@@ -923,6 +1049,64 @@ mod tests {
     fn full_sheet() -> FullParsedSheet {
         FullParsedSheet {
             name: "Sheet1".to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn chart_series(
+        chart_type: ChartType,
+        categories: Option<&str>,
+        values: Option<&str>,
+    ) -> ChartSeriesData {
+        ChartSeriesData {
+            name: None,
+            r#type: Some(chart_type),
+            color: None,
+            values: values.map(str::to_string),
+            value_cache: None,
+            categories: categories.map(str::to_string),
+            category_cache: None,
+            category_levels: None,
+            category_label_format: None,
+            bubble_size: None,
+            bubble_size_cache: None,
+            smooth: None,
+            explosion: None,
+            invert_if_negative: None,
+            y_axis_index: None,
+            show_markers: None,
+            marker_size: None,
+            marker_style: None,
+            line_width: None,
+            points: None,
+            data_labels: None,
+            trendlines: None,
+            error_bars: None,
+            x_error_bars: None,
+            y_error_bars: None,
+            idx: None,
+            order: None,
+            format: None,
+            bar_shape: None,
+            invert_color: None,
+            marker_background_color: None,
+            marker_foreground_color: None,
+            filtered: None,
+            show_shadow: None,
+            show_connector_lines: None,
+            leader_line_format: None,
+            show_leader_lines: None,
+        }
+    }
+
+    fn solid_shape(hex: &str) -> ShapeProperties {
+        ShapeProperties {
+            fill: Some(DrawingFill::Solid(SolidFill {
+                color: DrawingColor::SrgbClr {
+                    val: hex.to_string(),
+                    transforms: Vec::new(),
+                },
+            })),
             ..Default::default()
         }
     }
@@ -1031,6 +1215,137 @@ mod tests {
     }
 
     #[test]
+    fn supported_category_families_missing_categories_are_not_renderable() {
+        for chart_type in [ChartType::Waterfall, ChartType::Funnel, ChartType::Boxplot] {
+            let status = chart_ex_import_status(
+                &chart_type,
+                &[chart_series(chart_type.clone(), None, Some("Sheet1!B1:B3"))],
+                Some("Sheet1!B1:B3"),
+                "xl/charts/chartEx1.xml",
+                None,
+            )
+            .expect("missing required categories should be diagnosed");
+
+            assert_eq!(
+                status.renderability,
+                domain_types::ImportRenderability::NotRenderable
+            );
+            assert_eq!(
+                status.diagnostics[0].code,
+                Some(domain_types::ImportDiagnosticCode::ChartPartMissingDataRange)
+            );
+        }
+    }
+
+    #[test]
+    fn applies_format_overrides_to_matching_series_format_index() {
+        let mut chart_space = ChartExSpace::default();
+        chart_space.chart_data = ChartExChartData {
+            data: vec![ChartExData {
+                id: 0,
+                dimensions: vec![
+                    ChartExDimension::String {
+                        dim_type: "cat".to_string(),
+                        formula: formula("Sheet1!A1:A3"),
+                    },
+                    ChartExDimension::Numeric {
+                        dim_type: "val".to_string(),
+                        formula: formula("Sheet1!B1:B3"),
+                    },
+                ],
+            }],
+        };
+        chart_space.fmt_ovrs = vec![ChartExFormatOverride {
+            idx: 7,
+            sp_pr: Some(solid_shape("FF0000")),
+        }];
+        chart_space.chart = ChartExChart {
+            plot_area: ChartExPlotArea {
+                plot_area_region: ChartExPlotAreaRegion {
+                    series: vec![ChartExSeries {
+                        layout_id: ChartExLayoutId::Funnel,
+                        data_id: Some(0),
+                        format_idx: Some(7),
+                        sp_pr: Some(solid_shape("00FF00")),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        let fill = projected.series[0]
+            .format
+            .as_ref()
+            .and_then(|format| format.fill.as_ref())
+            .expect("override fill should be projected");
+        assert_eq!(
+            fill,
+            &domain_types::chart::ChartFillData::Solid {
+                color: domain_types::chart::ChartColorData::Hex("FF0000".to_string()),
+                transparency: None,
+            }
+        );
+    }
+
+    #[test]
+    fn projects_secondary_chart_ex_axes_and_title_alignment() {
+        let chart_space = ChartExSpace {
+            chart: ChartExChart {
+                title: Some(ChartExTitle {
+                    pos: Some("t".to_string()),
+                    align: Some("ctr".to_string()),
+                    ..Default::default()
+                }),
+                plot_area: ChartExPlotArea {
+                    axes: vec![
+                        ChartExAxis {
+                            scaling: Some(ooxml_types::chart_ex::ChartExScaling::Category {
+                                gap_width: None,
+                            }),
+                            ..Default::default()
+                        },
+                        ChartExAxis {
+                            scaling: Some(ooxml_types::chart_ex::ChartExScaling::Value {
+                                min: Some("1".to_string()),
+                                max: Some("10".to_string()),
+                            }),
+                            ..Default::default()
+                        },
+                        ChartExAxis {
+                            scaling: Some(ooxml_types::chart_ex::ChartExScaling::Value {
+                                min: Some("0".to_string()),
+                                max: Some("100".to_string()),
+                            }),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let projected =
+            project_chart_ex_space(&chart_space, &full_sheet(), "xl/charts/chartEx1.xml");
+
+        let axes = projected.axes.expect("axes should be projected");
+        assert_eq!(axes.value_axis.and_then(|axis| axis.min), Some(1.0));
+        assert_eq!(
+            axes.secondary_value_axis.and_then(|axis| axis.max),
+            Some(100.0)
+        );
+        assert_eq!(projected.title_h_align.as_deref(), Some("center"));
+        assert_eq!(projected.title_v_align.as_deref(), Some("top"));
+    }
+
+    #[test]
     fn projects_histogram_and_boxplot_options() {
         let histogram = project_histogram_binning(&ChartExBinning {
             bin_count: Some(8),
@@ -1051,44 +1366,11 @@ mod tests {
     fn unsupported_chart_ex_families_are_preserved_not_renderable() {
         let status = chart_ex_import_status(
             &ChartType::RegionMap,
-            &[ChartSeriesData {
-                name: None,
-                r#type: Some(ChartType::RegionMap),
-                color: None,
-                values: Some("Sheet1!B1:B2".to_string()),
-                value_cache: None,
-                categories: Some("Sheet1!A1:A2".to_string()),
-                category_cache: None,
-                category_label_format: None,
-                bubble_size: None,
-                bubble_size_cache: None,
-                smooth: None,
-                explosion: None,
-                invert_if_negative: None,
-                y_axis_index: None,
-                show_markers: None,
-                marker_size: None,
-                marker_style: None,
-                line_width: None,
-                points: None,
-                data_labels: None,
-                trendlines: None,
-                error_bars: None,
-                x_error_bars: None,
-                y_error_bars: None,
-                idx: None,
-                order: None,
-                format: None,
-                bar_shape: None,
-                invert_color: None,
-                marker_background_color: None,
-                marker_foreground_color: None,
-                filtered: None,
-                show_shadow: None,
-                show_connector_lines: None,
-                leader_line_format: None,
-                show_leader_lines: None,
-            }],
+            &[chart_series(
+                ChartType::RegionMap,
+                Some("Sheet1!A1:A2"),
+                Some("Sheet1!B1:B2"),
+            )],
             Some("Sheet1!A1:B2"),
             "xl/charts/chartEx2.xml",
             Some("Map"),

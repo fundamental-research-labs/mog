@@ -2,9 +2,10 @@ use super::axes::resolve_group_y_axis_index;
 use super::common::map_ooxml_chart_type_to_domain;
 use super::data_refs::{extract_cat_ref_formula, extract_num_ref_formula};
 use super::formatting::{extract_chart_format, extract_chart_line, extract_fill_color};
-use super::labels::extract_data_label_data;
+use super::labels::{extract_data_label_data, extract_individual_data_label_data};
 use super::markers::extract_marker_config;
 use super::text::extract_chart_text_string;
+use std::collections::BTreeMap;
 
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -60,6 +61,8 @@ pub(super) fn extract_single_series(
     let categories = extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
     let category_cache =
         extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
+    let category_levels =
+        extract_cat_level_cache(&s.cat).or_else(|| extract_cat_level_cache(&s.x_val));
     let category_label_format =
         extract_category_label_format(&s.cat).or_else(|| extract_category_label_format(&s.x_val));
 
@@ -67,33 +70,53 @@ pub(super) fn extract_single_series(
     let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
 
     // Markers
-    let (show_markers, marker_size, marker_style) = extract_marker_config(&s.marker);
+    let (
+        show_markers,
+        marker_size,
+        marker_style,
+        marker_background_color,
+        marker_foreground_color,
+    ) = extract_marker_config(&s.marker);
 
     // Per-point formatting
-    let points = if s.d_pt.is_empty() {
-        None
-    } else {
-        Some(
-            s.d_pt
-                .iter()
-                .map(|pt| {
-                    let fill = pt.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
-                    let visual_format = extract_chart_format(pt.sp_pr.as_ref(), None);
-                    domain_types::chart::PointFormatData {
-                        idx: pt.idx,
-                        fill,
-                        border: None,
-                        data_label: None,
-                        visual_format,
-                        marker_background_color: None,
-                        marker_foreground_color: None,
-                        marker_size: None,
-                        marker_style: None,
-                    }
-                })
-                .collect(),
-        )
-    };
+    let mut point_formats: BTreeMap<u32, domain_types::chart::PointFormatData> = BTreeMap::new();
+    for pt in &s.d_pt {
+        let fill = pt.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
+        let visual_format = extract_chart_format(pt.sp_pr.as_ref(), None);
+        let line_format = pt
+            .sp_pr
+            .as_ref()
+            .and_then(|sp| sp.ln.as_ref())
+            .map(|ln| extract_chart_line(ln));
+        let (
+            _point_show_markers,
+            point_marker_size,
+            point_marker_style,
+            point_marker_background_color,
+            point_marker_foreground_color,
+        ) = extract_marker_config(&pt.marker);
+        let entry = point_formats
+            .entry(pt.idx)
+            .or_insert_with(|| point_format(pt.idx));
+        entry.invert_if_negative = pt.invert_if_negative;
+        entry.explosion = pt.explosion;
+        entry.bubble_3d = pt.bubble_3d;
+        entry.fill = fill;
+        entry.line_format = line_format;
+        entry.visual_format = visual_format;
+        entry.marker_size = point_marker_size;
+        entry.marker_style = point_marker_style;
+        entry.marker_background_color = point_marker_background_color;
+        entry.marker_foreground_color = point_marker_foreground_color;
+    }
+    let labels_from_options = s.d_lbls.iter().flat_map(|labels| labels.d_lbl.iter());
+    for label in labels_from_options.chain(s.d_lbl.iter()) {
+        let entry = point_formats
+            .entry(label.idx)
+            .or_insert_with(|| point_format(label.idx));
+        entry.data_label = Some(extract_individual_data_label_data(label, s.d_lbls.as_ref()));
+    }
+    let points = (!point_formats.is_empty()).then(|| point_formats.into_values().collect());
 
     // Trendlines
     let trendlines = if s.trendline.is_empty() {
@@ -161,6 +184,7 @@ pub(super) fn extract_single_series(
         value_cache,
         categories,
         category_cache,
+        category_levels,
         category_label_format,
         bubble_size,
         bubble_size_cache,
@@ -183,13 +207,31 @@ pub(super) fn extract_single_series(
         format,
         bar_shape,
         invert_color: None,
-        marker_background_color: None,
-        marker_foreground_color: None,
+        marker_background_color,
+        marker_foreground_color,
         filtered: None,
         show_shadow: None,
         show_connector_lines: None,
         leader_line_format: None,
         show_leader_lines: None,
+    }
+}
+
+fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
+    domain_types::chart::PointFormatData {
+        idx,
+        invert_if_negative: None,
+        explosion: None,
+        bubble_3d: None,
+        fill: None,
+        border: None,
+        line_format: None,
+        data_label: None,
+        visual_format: None,
+        marker_background_color: None,
+        marker_foreground_color: None,
+        marker_size: None,
+        marker_style: None,
     }
 }
 
@@ -221,6 +263,50 @@ fn extract_cat_point_cache(
         CatDataSource::StrRef(str_ref) => str_ref.str_cache.as_ref().map(str_data_to_point_cache),
         CatDataSource::StrLit(str_data) => Some(str_data_to_point_cache(str_data)),
         CatDataSource::MultiLvlStrRef(_) => None,
+    }
+}
+
+fn extract_cat_level_cache(
+    src: &Option<ooxml_types::charts::CatDataSource>,
+) -> Option<domain_types::chart::ChartSeriesCategoryLevelsCacheData> {
+    use ooxml_types::charts::CatDataSource;
+
+    match src.as_ref()? {
+        CatDataSource::MultiLvlStrRef(multi_lvl_ref) => multi_lvl_ref
+            .multi_lvl_str_cache
+            .as_ref()
+            .map(multi_lvl_str_data_to_category_levels_cache),
+        _ => None,
+    }
+}
+
+fn multi_lvl_str_data_to_category_levels_cache(
+    data: &ooxml_types::charts::MultiLvlStrData,
+) -> domain_types::chart::ChartSeriesCategoryLevelsCacheData {
+    domain_types::chart::ChartSeriesCategoryLevelsCacheData {
+        point_count: data.pt_count,
+        levels: data
+            .levels
+            .iter()
+            .enumerate()
+            .map(
+                |(level, level_data)| domain_types::chart::ChartSeriesCategoryLevelCacheData {
+                    level: level as u32,
+                    point_count: level_data.pt_count,
+                    points: level_data
+                        .pts
+                        .iter()
+                        .map(
+                            |point| domain_types::chart::ChartSeriesPointCachePointData {
+                                idx: point.idx,
+                                value: point.v.clone(),
+                                format_code: None,
+                            },
+                        )
+                        .collect(),
+                },
+            )
+            .collect(),
     }
 }
 
@@ -328,6 +414,8 @@ fn extract_error_bars_new(
             value: eb.val,
             no_end_cap: eb.no_end_cap,
             line_format,
+            plus_source: eb.plus.as_ref().map(num_data_source_to_error_bar_source),
+            minus_source: eb.minus.as_ref().map(num_data_source_to_error_bar_source),
         };
         match eb.err_dir {
             Some(ooxml_types::charts::ErrorBarDirection::X) => x_bars = Some(data),
@@ -339,13 +427,31 @@ fn extract_error_bars_new(
     (general, x_bars, y_bars)
 }
 
+fn num_data_source_to_error_bar_source(
+    src: &ooxml_types::charts::NumDataSource,
+) -> domain_types::chart::ErrorBarSourceData {
+    use ooxml_types::charts::NumDataSource;
+
+    match src {
+        NumDataSource::Ref(num_ref) => domain_types::chart::ErrorBarSourceData {
+            formula: Some(num_ref.f.clone()),
+            cache: num_ref.num_cache.as_ref().map(num_data_to_point_cache),
+        },
+        NumDataSource::Lit(num_data) => domain_types::chart::ErrorBarSourceData {
+            formula: None,
+            cache: Some(num_data_to_point_cache(num_data)),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ooxml_types::charts::{
         AxisType, BarChartConfig, CatDataSource, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
-        ChartSpace, ChartType, ChartTypeConfig, LineChartConfig, NumData, NumDataSource, NumPoint,
-        NumRef, PlotArea, Scaling,
+        ChartSpace, ChartText, ChartType, ChartTypeConfig, DataLabel, DataLabelOptions,
+        DataLabelPosition, LineChartConfig, MultiLvlStrData, MultiLvlStrRef, NumData,
+        NumDataSource, NumPoint, NumRef, PlotArea, Scaling, StrData, StrPoint,
     };
 
     fn axis(
@@ -506,6 +612,66 @@ mod tests {
     }
 
     #[test]
+    fn preserves_multi_level_category_cache_by_point_index() {
+        let series = ooxml_types::charts::ChartSeries {
+            cat: Some(CatDataSource::MultiLvlStrRef(MultiLvlStrRef {
+                f: "Sheet1!$A$2:$B$4".to_string(),
+                multi_lvl_str_cache: Some(MultiLvlStrData {
+                    pt_count: Some(3),
+                    levels: vec![
+                        StrData {
+                            pt_count: Some(3),
+                            pts: vec![
+                                StrPoint {
+                                    idx: 0,
+                                    v: "North".to_string(),
+                                },
+                                StrPoint {
+                                    idx: 2,
+                                    v: "South".to_string(),
+                                },
+                            ],
+                            extensions: vec![],
+                        },
+                        StrData {
+                            pt_count: Some(3),
+                            pts: vec![
+                                StrPoint {
+                                    idx: 0,
+                                    v: "Q1".to_string(),
+                                },
+                                StrPoint {
+                                    idx: 1,
+                                    v: "Q2".to_string(),
+                                },
+                            ],
+                            extensions: vec![],
+                        },
+                    ],
+                    extensions: vec![],
+                }),
+                extensions: vec![],
+            })),
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+        let levels = extracted.category_levels.expect("category levels");
+
+        assert_eq!(extracted.categories.as_deref(), Some("Sheet1!$A$2:$B$4"));
+        assert!(extracted.category_cache.is_none());
+        assert_eq!(levels.point_count, Some(3));
+        assert_eq!(levels.levels.len(), 2);
+        assert_eq!(levels.levels[0].level, 0);
+        assert_eq!(levels.levels[0].point_count, Some(3));
+        assert_eq!(levels.levels[0].points[1].idx, 2);
+        assert_eq!(levels.levels[0].points[1].value, "South");
+        assert_eq!(levels.levels[1].level, 1);
+        assert_eq!(levels.levels[1].points[1].idx, 1);
+        assert_eq!(levels.levels[1].points[1].value, "Q2");
+    }
+
+    #[test]
     fn assigns_series_y_axis_index_from_combo_group_axis_ids() {
         let cs = ChartSpace {
             chart: Chart {
@@ -549,6 +715,51 @@ mod tests {
         assert_eq!(extracted.len(), 2);
         assert_eq!(extracted[0].y_axis_index, Some(0));
         assert_eq!(extracted[1].y_axis_index, Some(1));
+    }
+
+    #[test]
+    fn projects_individual_data_labels_as_point_overrides() {
+        let series = ooxml_types::charts::ChartSeries {
+            d_lbls: Some(DataLabelOptions {
+                show_value: true,
+                position: DataLabelPosition::OutsideEnd,
+                separator: Some("; ".to_string()),
+                ..Default::default()
+            }),
+            d_lbl: vec![DataLabel {
+                idx: 2,
+                text: Some(ChartText::Rich(crate::domain::charts::parse_text_body(
+                    br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                              xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                        <a:p><a:r><a:rPr i="1"/><a:t>Point Label</a:t></a:r></a:p>
+                    </c:rich>"#,
+                ))),
+                position: Some(DataLabelPosition::Top),
+                num_fmt: Some(ooxml_types::charts::NumFmt {
+                    format_code: "0.00".to_string(),
+                    source_linked: Some(false),
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let extracted = extract_single_series(&series, None, None);
+        let point = extracted
+            .points
+            .as_ref()
+            .and_then(|points| points.first())
+            .expect("point override");
+        let label = point.data_label.as_ref().expect("data label override");
+
+        assert_eq!(point.idx, 2);
+        assert!(label.show);
+        assert_eq!(label.text.as_deref(), Some("Point Label"));
+        assert_eq!(label.position.as_deref(), Some("top"));
+        assert_eq!(label.separator.as_deref(), Some("; "));
+        assert_eq!(label.number_format.as_deref(), Some("0.00"));
+        assert_eq!(label.link_number_format, Some(false));
+        assert_eq!(label.rich_text.as_ref().map(Vec::len), Some(1));
     }
 
     #[test]

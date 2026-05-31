@@ -5,7 +5,7 @@ use super::common::{
 };
 use super::data_refs::reconstruct_data_range_from_chart_space;
 use super::formatting::{
-    extract_chart_format, extract_chart_rich_text, extract_title_chart_format,
+    extract_chart_format, extract_chart_line, extract_chart_rich_text, extract_title_chart_format,
 };
 use super::labels::extract_data_label_data;
 use super::legend::extract_legend_from_chart_space;
@@ -80,6 +80,9 @@ pub fn extract_chart_spec_from_chart_space(
         split_value,
     ) = first_group
         .map(|g| extract_scalar_fields_from_config(&g.config))
+        .unwrap_or_default();
+    let (drop_lines, high_low_lines, series_lines, up_down_bars) = first_group
+        .map(|g| extract_analysis_fields_from_config(&g.config))
         .unwrap_or_default();
 
     // -------------------------------------------------------------------------
@@ -211,6 +214,10 @@ pub fn extract_chart_spec_from_chart_space(
         title_rich_text,
         title_formula: None,
         data_table,
+        drop_lines,
+        high_low_lines,
+        series_lines,
+        up_down_bars,
         waterfall: None,
         histogram: None,
         boxplot: None,
@@ -269,6 +276,92 @@ pub fn extract_chart_spec_from_chart_space(
         client_data_prints_with_sheet: anchor.client_data_prints_with_sheet,
         anchor_index: anchor.anchor_index,
         import_status,
+    }
+}
+
+fn extract_analysis_fields_from_config(
+    config: &ooxml_types::charts::ChartTypeConfig,
+) -> (
+    Option<domain_types::chart::ChartLineSettingsData>,
+    Option<domain_types::chart::ChartLineSettingsData>,
+    Option<domain_types::chart::ChartLineSettingsData>,
+    Option<domain_types::chart::UpDownBarsData>,
+) {
+    use ooxml_types::charts::ChartTypeConfig;
+
+    match config {
+        ChartTypeConfig::Bar(cfg) => (
+            None,
+            None,
+            cfg.ser_lines.first().map(extract_chart_line_settings),
+            None,
+        ),
+        ChartTypeConfig::Line(cfg) => (
+            cfg.drop_lines.as_ref().map(extract_chart_line_settings),
+            cfg.hi_low_lines.as_ref().map(extract_chart_line_settings),
+            None,
+            cfg.up_down_bars.as_ref().map(extract_up_down_bars_data),
+        ),
+        ChartTypeConfig::Line3D(cfg) => (
+            cfg.drop_lines.as_ref().map(extract_chart_line_settings),
+            None,
+            None,
+            None,
+        ),
+        ChartTypeConfig::Area(cfg) => (
+            cfg.drop_lines.as_ref().map(extract_chart_line_settings),
+            None,
+            None,
+            None,
+        ),
+        ChartTypeConfig::Area3D(cfg) => (
+            cfg.drop_lines.as_ref().map(extract_chart_line_settings),
+            None,
+            None,
+            None,
+        ),
+        ChartTypeConfig::Stock(cfg) => (
+            cfg.drop_lines.as_ref().map(extract_chart_line_settings),
+            cfg.hi_low_lines.as_ref().map(extract_chart_line_settings),
+            None,
+            cfg.up_down_bars.as_ref().map(extract_up_down_bars_data),
+        ),
+        ChartTypeConfig::OfPie(cfg) => (
+            None,
+            None,
+            cfg.ser_lines.first().map(extract_chart_line_settings),
+            None,
+        ),
+        _ => Default::default(),
+    }
+}
+
+fn extract_chart_line_settings(
+    lines: &ooxml_types::charts::ChartLines,
+) -> domain_types::chart::ChartLineSettingsData {
+    domain_types::chart::ChartLineSettingsData {
+        visible: Some(true),
+        format: lines
+            .sp_pr
+            .as_ref()
+            .and_then(|sp_pr| sp_pr.ln.as_ref())
+            .map(extract_chart_line),
+    }
+}
+
+fn extract_up_down_bars_data(
+    bars: &ooxml_types::charts::UpDownBars,
+) -> domain_types::chart::UpDownBarsData {
+    domain_types::chart::UpDownBarsData {
+        gap_width: bars.gap_width,
+        up_format: bars
+            .up_bars
+            .as_ref()
+            .and_then(|sp_pr| extract_chart_format(Some(sp_pr), None)),
+        down_format: bars
+            .down_bars
+            .as_ref()
+            .and_then(|sp_pr| extract_chart_format(Some(sp_pr), None)),
     }
 }
 

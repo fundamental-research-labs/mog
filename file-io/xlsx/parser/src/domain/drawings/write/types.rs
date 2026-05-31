@@ -270,6 +270,12 @@ pub struct ChartExRef {
     pub xfrm_ext_cx: i64,
     /// xfrm extent cy
     pub xfrm_ext_cy: i64,
+    /// xfrm rotation in 60,000ths of a degree.
+    pub xfrm_rot: Option<i32>,
+    /// xfrm horizontal flip.
+    pub xfrm_flip_h: Option<bool>,
+    /// xfrm vertical flip.
+    pub xfrm_flip_v: Option<bool>,
     /// Macro name (@macro attribute on graphicFrame).
     /// `Some("")` preserves `macro=""` for round-trip fidelity.
     /// `None` means the attribute was absent and should not be emitted.
@@ -332,6 +338,12 @@ pub struct ChartRef {
     pub xfrm_ext_cx: i64,
     /// Transform: extent cy
     pub xfrm_ext_cy: i64,
+    /// Transform: rotation in 60,000ths of a degree.
+    pub xfrm_rot: Option<i32>,
+    /// Transform: horizontal flip.
+    pub xfrm_flip_h: Option<bool>,
+    /// Transform: vertical flip.
+    pub xfrm_flip_v: Option<bool>,
 }
 
 /// Text box / shape with full-fidelity round-trip support.

@@ -264,8 +264,47 @@ fn chart_frame_props_match_spec(
         && chart_spec.cnv_pr_hidden == cnv.hidden
         && chart_spec.anchor_edit_as.as_ref() == frame.edit_as.as_ref()
         && chart_spec.macro_name.as_ref() == gf.macro_name.as_ref()
+        && chart_spec.no_change_aspect
+            == nv
+                .no_change_aspect_explicit
+                .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true))
+        && chart_spec.has_graphic_frame_locks == nv.has_graphic_frame_locks
+        && chart_spec.xfrm_off_x == gf.xfrm.off_x()
+        && chart_spec.xfrm_off_y == gf.xfrm.off_y()
+        && chart_spec.xfrm_ext_cx == gf.xfrm.ext_cx() as i64
+        && chart_spec.xfrm_ext_cy == gf.xfrm.ext_cy() as i64
         && chart_spec.client_data_locks_with_sheet == frame.client_data_locks_with_sheet
         && chart_spec.client_data_prints_with_sheet == frame.client_data_prints_with_sheet
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.relationship_id.as_deref())
+            == frame.relationship_id.as_deref()
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.relationship_target.as_deref())
+            == frame.relationship_target.as_deref()
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.rotation)
+            == Some(frame.graphic_frame.xfrm.rotation)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.flip_h)
+            == Some(frame.graphic_frame.xfrm.flip_h)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.flip_v)
+            == Some(frame.graphic_frame.xfrm.flip_v)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.raw_alternate_content.as_deref())
+            == frame.raw_alternate_content.as_deref()
 }
 
 fn has_modeled_chart_space_state_except_imported_title(

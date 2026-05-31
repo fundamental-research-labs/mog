@@ -182,6 +182,10 @@ fn chart_spec_to_floating_object_preserves_fields() {
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         waterfall: None,
         histogram: None,
         boxplot: None,
@@ -251,8 +255,9 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(fo.common.height, 400.0);
     assert_eq!(fo.common.z_index, 3);
     assert_eq!(fo.common.name, "Chart 1");
-    assert!(fo.common.locked);
-    assert!(fo.common.visible);
+    assert!(!fo.common.locked);
+    assert!(!fo.common.visible);
+    assert!(fo.common.printable);
 
     // Anchor
     assert_eq!(fo.common.anchor.anchor_row, 5);
@@ -368,6 +373,10 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         waterfall: None,
         histogram: None,
         boxplot: None,
@@ -490,6 +499,10 @@ fn chart_spec_roundtrip_via_floating_object() {
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         waterfall: None,
         histogram: None,
         boxplot: None,
@@ -625,6 +638,10 @@ fn chart_spec_roundtrip_minimal() {
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         waterfall: None,
         histogram: None,
         boxplot: None,
@@ -808,6 +825,7 @@ fn chart_data_serde_roundtrip() {
             value_cache: None,
             categories: None,
             category_cache: None,
+            category_levels: None,
             category_label_format: None,
             bubble_size: None,
             bubble_size_cache: None,
@@ -825,7 +843,6 @@ fn chart_data_serde_roundtrip() {
             error_bars: None,
             x_error_bars: None,
             y_error_bars: None,
-            category_levels: None,
             idx: None,
             order: None,
             format: None,
@@ -841,6 +858,7 @@ fn chart_data_serde_roundtrip() {
         }]),
         data_labels: Some(DataLabelData {
             show: true,
+            delete: None,
             position: None,
             format: None,
             show_value: None,
@@ -863,6 +881,7 @@ fn chart_data_serde_roundtrip() {
             geometric_shape_type: None,
             formula: None,
             leader_lines_format: None,
+            layout: None,
         }),
         pie_slice: None,
         trendline: None,
@@ -912,6 +931,10 @@ fn chart_data_serde_roundtrip() {
         title_rich_text: None,
         title_formula: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,

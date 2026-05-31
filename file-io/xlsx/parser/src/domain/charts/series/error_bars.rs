@@ -2,7 +2,7 @@ use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_tag_simd,
 };
 
-use super::data_sources::parse_num_ref;
+use super::data_sources::{parse_num_data, parse_num_ref};
 use super::xml_values::parse_bool_val;
 use super::{
     ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType, NumDataSource,
@@ -60,11 +60,18 @@ pub fn parse_error_bars(xml: &[u8]) -> ErrorBars {
     // Parse plus values → Option<NumDataSource>
     if let Some(plus_start) = find_tag_simd(xml, b"plus", 0) {
         let plus_end = find_closing_tag(xml, b"plus", plus_start).unwrap_or(xml.len());
-        if let Some(numref_start) = find_tag_simd(&xml[plus_start..plus_end], b"numRef", 0) {
+        let plus_xml = &xml[plus_start..plus_end];
+        if let Some(numref_start) = find_tag_simd(plus_xml, b"numRef", 0) {
             let numref_end = find_closing_tag(&xml[plus_start..plus_end], b"numRef", numref_start)
                 .unwrap_or(plus_end - plus_start);
             err_bars.plus = Some(NumDataSource::Ref(parse_num_ref(
                 &xml[plus_start + numref_start..plus_start + numref_end],
+            )));
+        } else if let Some(numlit_start) = find_tag_simd(plus_xml, b"numLit", 0) {
+            let numlit_end =
+                find_closing_tag(plus_xml, b"numLit", numlit_start).unwrap_or(plus_xml.len());
+            err_bars.plus = Some(NumDataSource::Lit(parse_num_data(
+                &plus_xml[numlit_start..numlit_end],
             )));
         }
     }
@@ -72,12 +79,19 @@ pub fn parse_error_bars(xml: &[u8]) -> ErrorBars {
     // Parse minus values → Option<NumDataSource>
     if let Some(minus_start) = find_tag_simd(xml, b"minus", 0) {
         let minus_end = find_closing_tag(xml, b"minus", minus_start).unwrap_or(xml.len());
-        if let Some(numref_start) = find_tag_simd(&xml[minus_start..minus_end], b"numRef", 0) {
+        let minus_xml = &xml[minus_start..minus_end];
+        if let Some(numref_start) = find_tag_simd(minus_xml, b"numRef", 0) {
             let numref_end =
                 find_closing_tag(&xml[minus_start..minus_end], b"numRef", numref_start)
                     .unwrap_or(minus_end - minus_start);
             err_bars.minus = Some(NumDataSource::Ref(parse_num_ref(
                 &xml[minus_start + numref_start..minus_start + numref_end],
+            )));
+        } else if let Some(numlit_start) = find_tag_simd(minus_xml, b"numLit", 0) {
+            let numlit_end =
+                find_closing_tag(minus_xml, b"numLit", numlit_start).unwrap_or(minus_xml.len());
+            err_bars.minus = Some(NumDataSource::Lit(parse_num_data(
+                &minus_xml[numlit_start..numlit_end],
             )));
         }
     }

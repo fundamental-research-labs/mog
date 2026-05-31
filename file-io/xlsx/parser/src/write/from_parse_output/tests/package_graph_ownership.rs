@@ -13,7 +13,7 @@ fn archive_for_empty_modeled_workbook() -> crate::XlsxArchive<'static> {
 #[test]
 fn package_graph_ownership_matrix_covers_round_6_feature_plans() {
     use crate::write::package_ownership::{
-        PackageFeatureOwner, modeled_feature_part_must_not_be_opaque, ownership_contract,
+        modeled_feature_part_must_not_be_opaque, ownership_contract, PackageFeatureOwner,
     };
 
     for owner in [

@@ -70,6 +70,10 @@ pub struct ChartLineData {
     pub dash_style: Option<ChartDashStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transparency: Option<f64>,
+    /// Explicit `a:ln/a:noFill`. Absent line formatting is not the same as a
+    /// modeled transparent/no-line stroke.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub no_fill: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

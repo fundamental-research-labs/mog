@@ -1,17 +1,17 @@
 use domain_types::chart::{
-    ChartSeriesData, ChartType as DomainChartType, ErrorBarData, PointFormatData, TrendlineData,
-    TrendlineLabelData,
+    ChartSeriesData, ChartSeriesPointCacheData, ChartType as DomainChartType, ErrorBarData,
+    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
-    ErrorValueType, Marker, MarkerStyle, NumDataSource, NumFmt, NumRef, SeriesTextSource, StrRef,
-    Trendline, TrendlineLabel, TrendlineType,
+    ErrorValueType, Marker, MarkerStyle, NumData, NumDataSource, NumFmt, NumPoint, NumRef,
+    SeriesTextSource, StrRef, Trendline, TrendlineLabel, TrendlineType,
 };
 use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
 use super::{
-    elements::{build_chart_text_rich, build_data_labels},
-    formatting::{build_outline, build_shape_properties, build_text_body},
+    elements::{build_chart_text_rich, build_data_label_override, build_data_labels},
+    formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
 };
 
 // =============================================================================
@@ -99,8 +99,29 @@ pub(super) fn build_series(
         err_bars.push(build_error_bars(eb));
     }
 
-    // Series-level data labels
-    let d_lbls = sd.data_labels.as_ref().map(build_data_labels);
+    // Series-level and per-point data labels
+    let mut d_lbls = sd.data_labels.as_ref().map(build_data_labels);
+    let point_labels: Vec<_> = sd
+        .points
+        .as_ref()
+        .map(|points| {
+            points
+                .iter()
+                .filter_map(|point| {
+                    point
+                        .data_label
+                        .as_ref()
+                        .map(|label| build_data_label_override(point.idx, label))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if !point_labels.is_empty() {
+        d_lbls
+            .get_or_insert_with(Default::default)
+            .d_lbl
+            .extend(point_labels);
+    }
 
     // Shape properties from format
     let sp_pr = sd.format.as_ref().and_then(build_shape_properties);
@@ -133,7 +154,12 @@ pub(super) fn build_series(
 
 pub(super) fn build_marker(sd: &ChartSeriesData) -> Option<Marker> {
     // Only build marker if there's marker info
-    if sd.show_markers.is_none() && sd.marker_size.is_none() && sd.marker_style.is_none() {
+    if sd.show_markers.is_none()
+        && sd.marker_size.is_none()
+        && sd.marker_style.is_none()
+        && sd.marker_background_color.is_none()
+        && sd.marker_foreground_color.is_none()
+    {
         return None;
     }
 
@@ -154,6 +180,10 @@ pub(super) fn build_marker(sd: &ChartSeriesData) -> Option<Marker> {
     Some(Marker {
         symbol,
         size: sd.marker_size,
+        sp_pr: build_marker_shape_properties(
+            sd.marker_background_color.as_ref(),
+            sd.marker_foreground_color.as_ref(),
+        ),
         ..Default::default()
     })
 }
@@ -163,6 +193,12 @@ pub(super) fn build_data_point(pt: &PointFormatData) -> DataPointOverride {
         .visual_format
         .as_ref()
         .and_then(build_shape_properties)
+        .or_else(|| {
+            pt.line_format.as_ref().map(|line| ShapeProperties {
+                ln: Some(build_outline(line)),
+                ..Default::default()
+            })
+        })
         .or_else(|| {
             // Legacy: simple fill color string
             pt.fill.as_ref().map(|hex| ShapeProperties {
@@ -178,9 +214,60 @@ pub(super) fn build_data_point(pt: &PointFormatData) -> DataPointOverride {
 
     DataPointOverride {
         idx: pt.idx,
+        invert_if_negative: pt.invert_if_negative,
+        marker: build_point_marker(pt),
+        bubble_3d: pt.bubble_3d,
+        explosion: pt.explosion,
         sp_pr,
         ..Default::default()
     }
+}
+
+fn build_point_marker(pt: &PointFormatData) -> Option<Marker> {
+    if pt.marker_size.is_none()
+        && pt.marker_style.is_none()
+        && pt.marker_background_color.is_none()
+        && pt.marker_foreground_color.is_none()
+    {
+        return None;
+    }
+
+    Some(Marker {
+        symbol: pt.marker_style.as_deref().map(MarkerStyle::from_ooxml),
+        size: pt.marker_size,
+        sp_pr: build_marker_shape_properties(
+            pt.marker_background_color.as_ref(),
+            pt.marker_foreground_color.as_ref(),
+        ),
+        ..Default::default()
+    })
+}
+
+fn build_marker_shape_properties(
+    fill: Option<&domain_types::chart::ChartColorData>,
+    line: Option<&domain_types::chart::ChartColorData>,
+) -> Option<ShapeProperties> {
+    if fill.is_none() && line.is_none() {
+        return None;
+    }
+
+    Some(ShapeProperties {
+        fill: fill.map(|color| {
+            DrawingFill::Solid(SolidFill {
+                color: build_drawing_color(color),
+            })
+        }),
+        ln: line.map(|color| {
+            build_outline(&domain_types::chart::ChartLineData {
+                color: Some(color.clone()),
+                width: None,
+                dash_style: None,
+                transparency: None,
+                no_fill: None,
+            })
+        }),
+        ..Default::default()
+    })
 }
 
 // =============================================================================
@@ -265,6 +352,38 @@ pub(super) fn build_error_bars(eb: &ErrorBarData) -> ErrorBars {
         no_end_cap: eb.no_end_cap,
         val: eb.value,
         sp_pr,
+        plus: eb.plus_source.as_ref().map(build_error_bar_source),
+        minus: eb.minus_source.as_ref().map(build_error_bar_source),
         ..Default::default()
+    }
+}
+
+fn build_error_bar_source(source: &ErrorBarSourceData) -> NumDataSource {
+    let cache = source.cache.as_ref().map(build_num_data_from_point_cache);
+    if let Some(formula) = source.formula.as_ref() {
+        NumDataSource::Ref(NumRef {
+            f: formula.clone(),
+            num_cache: cache,
+            ..Default::default()
+        })
+    } else {
+        NumDataSource::Lit(cache.unwrap_or_default())
+    }
+}
+
+fn build_num_data_from_point_cache(cache: &ChartSeriesPointCacheData) -> NumData {
+    NumData {
+        format_code: cache.format_code.clone(),
+        pt_count: cache.point_count,
+        pts: cache
+            .points
+            .iter()
+            .map(|point| NumPoint {
+                idx: point.idx,
+                v: point.value.clone(),
+                format_code: point.format_code.clone(),
+            })
+            .collect(),
+        extensions: Vec::new(),
     }
 }

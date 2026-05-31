@@ -9,14 +9,36 @@ use super::floating_object::{
 };
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
-    ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
-    ChartView3DData, DataLabelData, LegendData, ObjectSize, StandardChartExportAuthority,
-    StandardChartProvenance, WaterfallOptions,
+    ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData, ChartSubType,
+    ChartType, ChartView3DData, DataLabelData, LegendData, ObjectSize,
+    StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
 };
 use super::{
     BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
     RegionMapConfigData,
 };
+
+/// Chart-level line feature such as drop lines, high-low lines, or series lines.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartLineSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub visible: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub format: Option<ChartLineData>,
+}
+
+/// Up/down bar settings for line and stock charts.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpDownBarsData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub gap_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_format: Option<ChartFormatData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub down_format: Option<ChartFormatData>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +99,14 @@ pub struct ChartSpec {
     pub title_formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub drop_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub high_low_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_down_bars: Option<UpDownBarsData>,
 
     // -- ChartEx family-specific config/data projections --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -272,6 +302,49 @@ pub struct PivotChartOptionsData {
 }
 
 impl ChartSpec {
+    fn drawing_frame_common_state(
+        frame: Option<&ChartDrawingFrameOoxmlProps>,
+        legacy_hidden: bool,
+        legacy_prints_with_sheet: Option<bool>,
+    ) -> (f64, bool, bool, bool, bool, bool, String) {
+        let Some(frame) = frame else {
+            return (
+                0.0,
+                false,
+                false,
+                true,
+                !legacy_hidden,
+                legacy_prints_with_sheet.unwrap_or(true),
+                String::new(),
+            );
+        };
+
+        let gf = &frame.graphic_frame;
+        let nv = &gf.nv_graphic_frame_pr;
+        let cnv = &nv.c_nv_pr;
+        let locks = &nv.c_nv_graphic_frame_pr;
+        let rotation = gf
+            .xfrm
+            .rotation
+            .map(|rot| rot.value() as f64 / 60_000.0)
+            .unwrap_or(0.0);
+        let flip_h = gf.xfrm.flip_h.unwrap_or(false);
+        let flip_v = gf.xfrm.flip_v.unwrap_or(false);
+        let locked = frame.client_data_locks_with_sheet.unwrap_or(true)
+            || locks.no_grp
+            || locks.no_select
+            || locks.no_move
+            || locks.no_resize
+            || nv.no_drilldown;
+        let visible = !cnv.hidden;
+        let printable = frame.client_data_prints_with_sheet.unwrap_or(true);
+        let name = (!cnv.name.is_empty())
+            .then(|| cnv.name.clone())
+            .unwrap_or_default();
+
+        (rotation, flip_h, flip_v, locked, visible, printable, name)
+    }
+
     /// Convert a `FloatingObject` back into a `ChartSpec` for XLSX export.
     ///
     /// Returns `None` if the object is not a chart.
@@ -419,6 +492,10 @@ impl ChartSpec {
             title_rich_text: chart_data.title_rich_text.clone(),
             title_formula: chart_data.title_formula.clone(),
             data_table: chart_data.data_table.clone(),
+            drop_lines: chart_data.drop_lines.clone(),
+            high_low_lines: chart_data.high_low_lines.clone(),
+            series_lines: chart_data.series_lines.clone(),
+            up_down_bars: chart_data.up_down_bars.clone(),
             waterfall: chart_data.waterfall.clone(),
             histogram: chart_data.histogram.clone(),
             boxplot: chart_data.boxplot.clone(),
@@ -576,7 +653,7 @@ impl ChartSpec {
         } else {
             Some(ChartOoxmlProps {
                 definition,
-                drawing_frame,
+                drawing_frame: drawing_frame.clone(),
                 chart_relationships: self.chart_relationships.clone(),
                 chart_auxiliary_files: self.chart_auxiliary_files.clone(),
                 chart_auxiliary_parts: self.chart_auxiliary_parts.clone(),
@@ -596,6 +673,12 @@ impl ChartSpec {
             } else {
                 AnchorMode::OneCell
             };
+        let (rotation, flip_h, flip_v, locked, visible, printable, frame_name) =
+            Self::drawing_frame_common_state(
+                drawing_frame.as_ref(),
+                self.cnv_pr_hidden,
+                self.client_data_prints_with_sheet,
+            );
 
         let common = FloatingObjectCommon {
             id: format!("chart-import-{}", index),
@@ -618,20 +701,15 @@ impl ChartSpec {
             width: self.size.width,
             height: self.size.height,
             z_index: self.z_index,
-            rotation: 0.0,
-            flip_h: false,
-            flip_v: false,
-            locked: true,
-            visible: true,
-            printable: true,
+            rotation,
+            flip_h,
+            flip_v,
+            locked,
+            visible,
+            printable,
             opacity: 1.0,
-            name: self
-                .chart_frame
-                .as_ref()
-                .and_then(|frame| {
-                    let name = &frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.name;
-                    (!name.is_empty()).then(|| name.clone())
-                })
+            name: (!frame_name.is_empty())
+                .then_some(frame_name)
                 .or_else(|| self.cnv_pr_name.clone())
                 .unwrap_or_default(),
             created_at: 0,
@@ -720,6 +798,10 @@ impl ChartSpec {
             title_rich_text: self.title_rich_text.clone(),
             title_formula: self.title_formula.clone(),
             data_table: self.data_table.clone(),
+            drop_lines: self.drop_lines.clone(),
+            high_low_lines: self.high_low_lines.clone(),
+            series_lines: self.series_lines.clone(),
+            up_down_bars: self.up_down_bars.clone(),
             // Bar shape
             bar_shape: self.bar_shape.clone(),
             // 3D

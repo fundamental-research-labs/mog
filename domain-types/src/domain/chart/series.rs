@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::formatting::{ChartColorData, ChartFormatData};
+use super::formatting::{ChartColorData, ChartFormatData, ChartLineData};
 use super::{ChartType, DataLabelData, ErrorBarData, TrendlineData};
 
 /// Runtime series data — carries both range references and visual config.
@@ -199,10 +199,18 @@ pub struct CategoryPointLabelFormatData {
 pub struct PointFormatData {
     #[serde(default)]
     pub idx: u32,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub invert_if_negative: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub explosion: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bubble_3d: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fill: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub border: Option<ChartBorderData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub line_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_label: Option<DataLabelData>,
     #[serde(skip_serializing_if = "Option::is_none")]

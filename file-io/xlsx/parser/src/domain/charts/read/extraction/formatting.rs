@@ -213,6 +213,7 @@ pub(crate) fn extract_chart_line(
         width,
         dash_style,
         transparency,
+        no_fill: matches!(outline.fill.as_ref(), Some(LineFill::NoFill)).then_some(true),
     }
 }
 
@@ -446,7 +447,7 @@ fn chart_text_vertical_type_from_ooxml(
 }
 
 /// Extract ChartColorData from a DrawingColor.
-fn extract_chart_color(
+pub(crate) fn extract_chart_color(
     color: &ooxml_types::drawings::DrawingColor,
 ) -> Option<domain_types::chart::ChartColorData> {
     use ooxml_types::drawings::DrawingColor;

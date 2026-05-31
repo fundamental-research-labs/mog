@@ -849,6 +849,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or((chart_spec.size.height as i64) * 9525),
+                        xfrm_rot: chart_frame
+                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
+                            .map(|rot| rot.value()),
+                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
+                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
                         macro_name: chart_frame
                             .and_then(|frame| frame.graphic_frame.macro_name.clone())
                             .or_else(|| chart_spec.macro_name.clone()),
@@ -1016,6 +1021,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or(chart_spec.xfrm_ext_cy),
+                        xfrm_rot: chart_frame
+                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
+                            .map(|rot| rot.value()),
+                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
+                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
                     };
                     if let (Some(x), Some(y)) = (
                         chart_spec.position.absolute_x,

@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::drawings::ManualLayout;
+
 use super::TrendlineLabelData;
 use super::formatting::{ChartFormatData, ChartFormatStringData, ChartLineData};
+use super::series::ChartSeriesPointCacheData;
 
 /// Data label configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -9,6 +12,10 @@ use super::formatting::{ChartFormatData, ChartFormatStringData, ChartLineData};
 pub struct DataLabelData {
     #[serde(default)]
     pub show: bool,
+    /// Explicit OOXML delete/suppression. This is distinct from an absent label
+    /// and from an effective hidden label inherited from parent defaults.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub delete: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,6 +62,8 @@ pub struct DataLabelData {
     pub formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub leader_lines_format: Option<ChartLineData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub layout: Option<ManualLayout>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -107,4 +116,17 @@ pub struct ErrorBarData {
     pub no_end_cap: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line_format: Option<ChartLineData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plus_source: Option<ErrorBarSourceData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub minus_source: Option<ErrorBarSourceData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorBarSourceData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache: Option<ChartSeriesPointCacheData>,
 }

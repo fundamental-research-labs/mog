@@ -147,10 +147,14 @@ pub(super) fn build_drawing_fill(fill: &ChartFillData) -> DrawingFill {
 pub(super) fn build_outline(line: &ChartLineData) -> Outline {
     let width = line.width.map(|pts| (pts * 12700.0) as i64); // points to EMUs
 
-    let fill = line.color.as_ref().map(|c| {
-        let dc = build_drawing_color(c);
-        LineFill::Solid(SolidFill { color: dc })
-    });
+    let fill = if line.no_fill == Some(true) {
+        Some(LineFill::NoFill)
+    } else {
+        line.color.as_ref().map(|c| {
+            let dc = build_drawing_color(c);
+            LineFill::Solid(SolidFill { color: dc })
+        })
+    };
 
     let dash = line.dash_style.as_ref().map(|ds| {
         let style = match ds {

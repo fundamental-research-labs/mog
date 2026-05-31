@@ -3,12 +3,12 @@ use domain_types::chart::{
     LegendEntryData,
 };
 use ooxml_types::charts::{
-    self, ChartSurface, ChartText, DataLabelOptions, DataLabelPosition, DataTableConfig,
-    LegendPosition, NumFmt, View3D,
+    self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
+    DataTableConfig, LegendPosition, NumFmt, StrRef, View3D,
 };
 use ooxml_types::drawings::{Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent};
 
-use super::formatting::{build_run_properties, build_shape_properties, build_text_body};
+use super::formatting::{build_outline, build_run_properties, build_shape_properties, build_text_body};
 
 pub(super) fn build_title(
     text: Option<&str>,
@@ -109,17 +109,7 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
     let position = dl
         .position
         .as_deref()
-        .map(|s| match s {
-            "outside" | "outsideEnd" | "outEnd" => DataLabelPosition::OutsideEnd,
-            "inside" | "insideEnd" | "inEnd" => DataLabelPosition::InsideEnd,
-            "insideBase" | "inBase" => DataLabelPosition::InsideBase,
-            "top" | "t" => DataLabelPosition::Top,
-            "bottom" | "b" => DataLabelPosition::Bottom,
-            "left" | "l" => DataLabelPosition::Left,
-            "right" | "r" => DataLabelPosition::Right,
-            "center" | "ctr" => DataLabelPosition::Center,
-            _ => DataLabelPosition::BestFit,
-        })
+        .map(data_label_position_from_domain)
         .unwrap_or_default();
 
     let num_fmt = dl.number_format.clone();
@@ -132,6 +122,7 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
     let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
 
     DataLabelOptions {
+        delete: dl.delete,
         show_value: dl.show_value.unwrap_or(false),
         show_category: dl.show_category_name.unwrap_or(false),
         show_series_name: dl.show_series_name.unwrap_or(false),
@@ -145,7 +136,68 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
         sp_pr,
         tx_pr,
         show_leader_lines: dl.show_leader_lines,
+        leader_lines: dl.leader_lines_format.as_ref().map(|line| ChartLines {
+            sp_pr: Some(ooxml_types::drawings::ShapeProperties {
+                ln: Some(build_outline(line)),
+                ..Default::default()
+            }),
+        }),
         ..Default::default()
+    }
+}
+
+pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLabel {
+    let tx = dl
+        .text
+        .as_ref()
+        .map(|text| build_chart_text_rich(text, dl.visual_format.as_ref().and_then(|f| f.font.as_ref())))
+        .or_else(|| {
+            dl.formula.as_ref().map(|formula| {
+                ChartText::StrRef(StrRef {
+                    f: formula.clone(),
+                    ..Default::default()
+                })
+            })
+        });
+    let sp_pr = dl.visual_format.as_ref().and_then(build_shape_properties);
+    let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
+    let num_fmt = dl.number_format.as_ref().map(|code| NumFmt {
+        format_code: code.clone(),
+        source_linked: dl.link_number_format,
+    });
+
+    DataLabel {
+        idx,
+        layout: dl.layout.clone().map(Into::into),
+        text: tx,
+        sp_pr,
+        tx_pr,
+        num_fmt,
+        delete: dl.delete,
+        show_value: dl.show_value,
+        show_category: dl.show_category_name,
+        show_series_name: dl.show_series_name,
+        show_percent: dl.show_percentage,
+        show_legend_key: dl.show_legend_key,
+        show_bubble_size: dl.show_bubble_size,
+        position: dl.position.as_deref().map(data_label_position_from_domain),
+        separator: dl.separator.clone(),
+        extensions: Vec::new(),
+    }
+}
+
+fn data_label_position_from_domain(value: &str) -> DataLabelPosition {
+    match value {
+        "outside" | "outsideEnd" | "outEnd" => DataLabelPosition::OutsideEnd,
+        "inside" | "insideEnd" | "inEnd" => DataLabelPosition::InsideEnd,
+        "insideBase" | "inBase" => DataLabelPosition::InsideBase,
+        "top" | "t" => DataLabelPosition::Top,
+        "bottom" | "b" => DataLabelPosition::Bottom,
+        "left" | "l" => DataLabelPosition::Left,
+        "right" | "r" => DataLabelPosition::Right,
+        "center" | "ctr" => DataLabelPosition::Center,
+        "bestFit" => DataLabelPosition::BestFit,
+        _ => DataLabelPosition::BestFit,
     }
 }
 

@@ -1,12 +1,20 @@
 use domain_types::{
     ChartDefinition,
-    chart::{ChartSpec, ChartSubType, ChartType as DomainChartType},
+    chart::{
+        ChartLineSettingsData, ChartSpec, ChartSubType, ChartType as DomainChartType,
+        UpDownBarsData,
+    },
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,
 };
 
-use super::{elements::build_data_labels, ranges::series_for_export, series::build_series};
+use super::{
+    elements::build_data_labels,
+    formatting::{build_outline, build_shape_properties},
+    ranges::series_for_export,
+    series::build_series,
+};
 
 // =============================================================================
 // Chart Groups
@@ -133,15 +141,24 @@ pub(super) fn build_default_config(
                 grouping: Some(grouping),
                 gap_width: spec.gap_width,
                 overlap: spec.overlap,
+                ser_lines: spec
+                    .series_lines
+                    .as_ref()
+                    .map(build_chart_lines_vec)
+                    .unwrap_or_default(),
                 ..Default::default()
             })
         }
         OoxmlChartType::Line => ChartTypeConfig::Line(charts::LineChartConfig {
             grouping,
+            drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
+            hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
+            up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
             ..Default::default()
         }),
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
             grouping,
+            drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Pie => ChartTypeConfig::Pie(charts::PieChartConfig {
@@ -156,10 +173,12 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Area => ChartTypeConfig::Area(charts::AreaChartConfig {
             grouping: Some(grouping),
+            drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Area3D => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
             grouping: Some(grouping),
+            drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig::default()),
@@ -172,7 +191,12 @@ pub(super) fn build_default_config(
         OoxmlChartType::Surface3D => {
             ChartTypeConfig::Surface3D(charts::SurfaceChartConfig::default())
         }
-        OoxmlChartType::Stock => ChartTypeConfig::Stock(charts::StockChartConfig::default()),
+        OoxmlChartType::Stock => ChartTypeConfig::Stock(charts::StockChartConfig {
+            drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
+            hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
+            up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
+            ..Default::default()
+        }),
         OoxmlChartType::OfPie => ChartTypeConfig::OfPie(charts::OfPieChartConfig {
             split_type: spec
                 .split_type
@@ -180,6 +204,11 @@ pub(super) fn build_default_config(
                 .map(charts::SplitType::from_ooxml),
             split_pos: spec.split_value,
             gap_width: spec.gap_width,
+            ser_lines: spec
+                .series_lines
+                .as_ref()
+                .map(build_chart_lines_vec)
+                .unwrap_or_default(),
             ..Default::default()
         }),
         _ => ChartTypeConfig::Bar(charts::BarChartConfig::default()),
@@ -197,14 +226,43 @@ pub(super) fn inject_series_into_config(
         ChartTypeConfig::Bar(c) => ChartTypeConfig::Bar(charts::BarChartConfig {
             gap_width: spec.gap_width.or(c.gap_width),
             overlap: spec.overlap.or(c.overlap),
+            ser_lines: spec
+                .series_lines
+                .as_ref()
+                .map(build_chart_lines_vec)
+                .unwrap_or_else(|| c.ser_lines.clone()),
             ..c.clone()
         }),
         ChartTypeConfig::Bar3D(c) => ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
             gap_width: spec.gap_width.or(c.gap_width),
             ..c.clone()
         }),
-        ChartTypeConfig::Line(c) => ChartTypeConfig::Line(c.clone()),
-        ChartTypeConfig::Line3D(c) => ChartTypeConfig::Line3D(c.clone()),
+        ChartTypeConfig::Line(c) => ChartTypeConfig::Line(charts::LineChartConfig {
+            drop_lines: spec
+                .drop_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.drop_lines.clone()),
+            hi_low_lines: spec
+                .high_low_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.hi_low_lines.clone()),
+            up_down_bars: spec
+                .up_down_bars
+                .as_ref()
+                .map(build_up_down_bars)
+                .or_else(|| c.up_down_bars.clone()),
+            ..c.clone()
+        }),
+        ChartTypeConfig::Line3D(c) => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
+            drop_lines: spec
+                .drop_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.drop_lines.clone()),
+            ..c.clone()
+        }),
         ChartTypeConfig::Pie(c) => ChartTypeConfig::Pie(charts::PieChartConfig {
             first_slice_ang: spec.first_slice_angle.or(c.first_slice_ang),
             ..c.clone()
@@ -215,8 +273,22 @@ pub(super) fn inject_series_into_config(
             first_slice_ang: spec.first_slice_angle.or(c.first_slice_ang),
             ..c.clone()
         }),
-        ChartTypeConfig::Area(c) => ChartTypeConfig::Area(c.clone()),
-        ChartTypeConfig::Area3D(c) => ChartTypeConfig::Area3D(c.clone()),
+        ChartTypeConfig::Area(c) => ChartTypeConfig::Area(charts::AreaChartConfig {
+            drop_lines: spec
+                .drop_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.drop_lines.clone()),
+            ..c.clone()
+        }),
+        ChartTypeConfig::Area3D(c) => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
+            drop_lines: spec
+                .drop_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.drop_lines.clone()),
+            ..c.clone()
+        }),
         ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(c.clone()),
         ChartTypeConfig::Bubble(c) => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
             bubble_scale: spec.bubble_scale.or(c.bubble_scale),
@@ -225,7 +297,24 @@ pub(super) fn inject_series_into_config(
         ChartTypeConfig::Radar(c) => ChartTypeConfig::Radar(c.clone()),
         ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(c.clone()),
         ChartTypeConfig::Surface3D(c) => ChartTypeConfig::Surface3D(c.clone()),
-        ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(c.clone()),
+        ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(charts::StockChartConfig {
+            drop_lines: spec
+                .drop_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.drop_lines.clone()),
+            hi_low_lines: spec
+                .high_low_lines
+                .as_ref()
+                .map(build_chart_lines)
+                .or_else(|| c.hi_low_lines.clone()),
+            up_down_bars: spec
+                .up_down_bars
+                .as_ref()
+                .map(build_up_down_bars)
+                .or_else(|| c.up_down_bars.clone()),
+            ..c.clone()
+        }),
         ChartTypeConfig::OfPie(c) => ChartTypeConfig::OfPie(charts::OfPieChartConfig {
             split_type: spec
                 .split_type
@@ -234,8 +323,39 @@ pub(super) fn inject_series_into_config(
                 .or(c.split_type),
             split_pos: spec.split_value.or(c.split_pos),
             gap_width: spec.gap_width.or(c.gap_width),
+            ser_lines: spec
+                .series_lines
+                .as_ref()
+                .map(build_chart_lines_vec)
+                .unwrap_or_else(|| c.ser_lines.clone()),
             ..c.clone()
         }),
         ChartTypeConfig::Combo => ChartTypeConfig::Combo,
+    }
+}
+
+fn build_chart_lines(settings: &ChartLineSettingsData) -> charts::ChartLines {
+    charts::ChartLines {
+        sp_pr: settings.format.as_ref().map(|line| charts::ShapeProperties {
+            ln: Some(build_outline(line)),
+            ..Default::default()
+        }),
+    }
+}
+
+fn build_chart_lines_vec(settings: &ChartLineSettingsData) -> Vec<charts::ChartLines> {
+    if settings.visible == Some(false) {
+        Vec::new()
+    } else {
+        vec![build_chart_lines(settings)]
+    }
+}
+
+fn build_up_down_bars(settings: &UpDownBarsData) -> charts::UpDownBars {
+    charts::UpDownBars {
+        gap_width: settings.gap_width,
+        up_bars: settings.up_format.as_ref().and_then(build_shape_properties),
+        down_bars: settings.down_format.as_ref().and_then(build_shape_properties),
+        ..Default::default()
     }
 }

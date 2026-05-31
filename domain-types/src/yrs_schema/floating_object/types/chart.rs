@@ -208,6 +208,18 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.data_table) {
         entries.push(("dataTable".into(), a));
     }
+    if let Some(a) = option_sub_object(&d.drop_lines) {
+        entries.push(("dropLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.high_low_lines) {
+        entries.push(("highLowLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.series_lines) {
+        entries.push(("seriesLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.up_down_bars) {
+        entries.push(("upDownBars".into(), a));
+    }
     if let Some(a) = option_sub_object(&d.view_3d) {
         entries.push(("view3d".into(), a));
     }
@@ -325,6 +337,10 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         title_rich_text: read_sub_object(map, txn, "titleRichText"),
         title_formula: read_string(map, txn, "titleFormula"),
         data_table: read_sub_object(map, txn, "dataTable"),
+        drop_lines: read_sub_object(map, txn, "dropLines"),
+        high_low_lines: read_sub_object(map, txn, "highLowLines"),
+        series_lines: read_sub_object(map, txn, "seriesLines"),
+        up_down_bars: read_sub_object(map, txn, "upDownBars"),
         view_3d: read_sub_object(map, txn, "view3d"),
         floor_format: read_sub_object(map, txn, "floorFormat"),
         side_wall_format: read_sub_object(map, txn, "sideWallFormat"),

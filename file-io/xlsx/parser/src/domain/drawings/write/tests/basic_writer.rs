@@ -354,6 +354,9 @@ fn test_add_chart() {
             xfrm_off_y: 0,
             xfrm_ext_cx: 0,
             xfrm_ext_cy: 0,
+            xfrm_rot: Some(5_400_000),
+            xfrm_flip_h: Some(true),
+            xfrm_flip_v: Some(false),
             ..Default::default()
         },
     );
@@ -364,7 +367,8 @@ fn test_add_chart() {
     assert!(xml_str.contains("<xdr:graphicFrame>"));
     assert!(xml_str.contains("<xdr:nvGraphicFramePr>"));
     assert!(xml_str.contains("name=\"Chart 1\""));
-    assert!(xml_str.contains("<xdr:xfrm>"));
+    assert!(xml_str.contains("<xdr:xfrm"));
+    assert!(xml_str.contains("<xdr:xfrm rot=\"5400000\" flipH=\"1\" flipV=\"0\">"));
     assert!(xml_str.contains("<a:graphic>"));
     assert!(xml_str.contains("<a:graphicData"));
     assert!(xml_str.contains(&format!("uri=\"{}\"", NS_C)));
@@ -400,6 +404,9 @@ fn chart_ex_preserves_cnvpr_ext_lst() {
             xfrm_off_y: 1724025,
             xfrm_ext_cx: 4307417,
             xfrm_ext_cy: 2905125,
+            xfrm_rot: Some(2_700_000),
+            xfrm_flip_h: Some(false),
+            xfrm_flip_v: Some(true),
             macro_name: Some(String::new()),
             nv_ext_lst: Some(
                 r#"<a:extLst><a:ext uri="{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}"><a16:creationId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" id="{747C816B-D48A-63FE-35C7-CC1AE1ADA584}"/></a:ext></a:extLst>"#
@@ -423,6 +430,7 @@ fn chart_ex_preserves_cnvpr_ext_lst() {
     assert!(xml_str.contains("id=\"{747C816B-D48A-63FE-35C7-CC1AE1ADA584}\""));
     assert!(xml_str.contains("</xdr:cNvPr>"));
     assert!(xml_str.contains("<a:graphicFrameLocks noChangeAspect=\"0\"/>"));
+    assert!(xml_str.contains("<xdr:xfrm rot=\"2700000\" flipH=\"0\" flipV=\"1\">"));
     assert!(xml_str.contains("<a:off x=\"4413250\" y=\"1724025\"/>"));
     assert!(xml_str.contains("<a:ext cx=\"4307417\" cy=\"2905125\"/>"));
 }

@@ -56,7 +56,13 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
             let bubble_size = extract_num_ref_formula(&s.bubble_size);
 
             // Markers
-            let (show_markers, marker_size, marker_style) = extract_marker_config(&s.marker);
+            let (
+                show_markers,
+                marker_size,
+                marker_style,
+                marker_background_color,
+                marker_foreground_color,
+            ) = extract_marker_config(&s.marker);
 
             // Per-point formatting
             let points = if s.d_pt.is_empty() {
@@ -69,8 +75,12 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                             let fill = pt.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
                             domain_types::chart::PointFormatData {
                                 idx: pt.idx,
+                                invert_if_negative: pt.invert_if_negative,
+                                explosion: pt.explosion,
+                                bubble_3d: pt.bubble_3d,
                                 fill,
                                 border: None,
+                                line_format: None,
                                 data_label: None,
                                 visual_format: None,
                                 marker_background_color: None,
@@ -124,6 +134,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 value_cache: None,
                 categories,
                 category_cache: None,
+                category_levels: None,
                 category_label_format: None,
                 bubble_size,
                 bubble_size_cache: None,
@@ -134,7 +145,6 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 show_markers,
                 marker_size,
                 marker_style,
-                category_levels: None,
                 line_width: None,
                 points,
                 data_labels,
@@ -147,8 +157,8 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 format: None,
                 bar_shape: None,
                 invert_color: None,
-                marker_background_color: None,
-                marker_foreground_color: None,
+                marker_background_color,
+                marker_foreground_color,
                 filtered: None,
                 show_shadow: None,
                 show_connector_lines: None,
@@ -179,6 +189,8 @@ fn extract_error_bars_typed(
             value: eb.val,
             no_end_cap: None,
             line_format: None,
+            plus_source: None,
+            minus_source: None,
         };
         match eb.err_dir {
             Some(ooxml_types::charts::ErrorBarDirection::X) => x_bars = Some(data),

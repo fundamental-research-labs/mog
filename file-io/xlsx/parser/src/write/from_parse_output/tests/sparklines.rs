@@ -111,10 +111,8 @@ fn sparkline_groups_are_authoritative_ext_lst_source_without_relationships() {
     assert!(sheet_xml.contains("<xm:f>&apos;Sheet 1&apos;!A1:C1</xm:f>"));
     assert!(sheet_xml.contains("<xm:sqref>A2</xm:sqref>"));
     assert!(sheet_xml.contains("<xm:sqref>A3</xm:sqref>"));
-    assert!(
-        archive
-            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
-            .is_err()
-    );
+    assert!(archive
+        .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+        .is_err());
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

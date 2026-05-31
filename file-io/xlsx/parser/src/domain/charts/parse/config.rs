@@ -54,9 +54,7 @@ fn parse_bar_config(xml: &[u8]) -> BarChartConfig {
     if let Some(start) = find_tag_simd(xml, b"overlap", 0) {
         cfg.overlap = attrs::parse_i32_attr(&xml[start..], b"val=\"");
     }
-    if find_tag_simd(xml, b"serLines", 0).is_some() {
-        cfg.ser_lines.push(ChartLines::default());
-    }
+    cfg.ser_lines = parse_all_chart_lines(xml, b"serLines");
     // Parse chart-type-level extLst (after axId elements, contains filtered series).
     cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
@@ -104,12 +102,8 @@ fn parse_line_config(xml: &[u8]) -> LineChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if find_tag_simd(xml, b"dropLines", 0).is_some() {
-        cfg.drop_lines = Some(ChartLines::default());
-    }
-    if find_tag_simd(xml, b"hiLowLines", 0).is_some() {
-        cfg.hi_low_lines = Some(ChartLines::default());
-    }
+    cfg.drop_lines = parse_chart_lines(xml, b"dropLines");
+    cfg.hi_low_lines = parse_chart_lines(xml, b"hiLowLines");
     if find_tag_simd(xml, b"upDownBars", 0).is_some() {
         cfg.up_down_bars = Some(parse_up_down_bars(xml));
     }
@@ -172,9 +166,7 @@ fn parse_line3d_config(xml: &[u8]) -> Line3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if find_tag_simd(xml, b"dropLines", 0).is_some() {
-        cfg.drop_lines = Some(ChartLines::default());
-    }
+    cfg.drop_lines = parse_chart_lines(xml, b"dropLines");
     if let Some(start) = find_tag_simd(xml, b"gapDepth", 0) {
         cfg.gap_depth = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
@@ -232,9 +224,7 @@ fn parse_area_config(xml: &[u8]) -> AreaChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if find_tag_simd(xml, b"dropLines", 0).is_some() {
-        cfg.drop_lines = Some(ChartLines::default());
-    }
+    cfg.drop_lines = parse_chart_lines(xml, b"dropLines");
     cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
@@ -250,9 +240,7 @@ fn parse_area3d_config(xml: &[u8]) -> Area3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if find_tag_simd(xml, b"dropLines", 0).is_some() {
-        cfg.drop_lines = Some(ChartLines::default());
-    }
+    cfg.drop_lines = parse_chart_lines(xml, b"dropLines");
     if let Some(start) = find_tag_simd(xml, b"gapDepth", 0) {
         cfg.gap_depth = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
@@ -345,12 +333,8 @@ fn parse_surface_config(xml: &[u8]) -> SurfaceChartConfig {
 /// Parse stock chart config.
 fn parse_stock_config(xml: &[u8]) -> StockChartConfig {
     let mut cfg = StockChartConfig::default();
-    if find_tag_simd(xml, b"dropLines", 0).is_some() {
-        cfg.drop_lines = Some(ChartLines::default());
-    }
-    if find_tag_simd(xml, b"hiLowLines", 0).is_some() {
-        cfg.hi_low_lines = Some(ChartLines::default());
-    }
+    cfg.drop_lines = parse_chart_lines(xml, b"dropLines");
+    cfg.hi_low_lines = parse_chart_lines(xml, b"hiLowLines");
     if find_tag_simd(xml, b"upDownBars", 0).is_some() {
         cfg.up_down_bars = Some(parse_up_down_bars(xml));
     }
@@ -399,9 +383,7 @@ fn parse_ofpie_config(xml: &[u8]) -> OfPieChartConfig {
             cfg.cust_split = Some(indices);
         }
     }
-    if find_tag_simd(xml, b"serLines", 0).is_some() {
-        cfg.ser_lines.push(ChartLines::default());
-    }
+    cfg.ser_lines = parse_all_chart_lines(xml, b"serLines");
     cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
 }
@@ -415,6 +397,44 @@ fn parse_up_down_bars(xml: &[u8]) -> UpDownBars {
         if let Some(start) = find_tag_simd(udb_bytes, b"gapWidth", 0) {
             udb.gap_width = attrs::parse_u32_attr(&udb_bytes[start..], b"val=\"");
         }
+        if let Some(up_start) = find_tag_simd(udb_bytes, b"upBars", 0) {
+            let up_end = find_closing_tag(udb_bytes, b"upBars", up_start).unwrap_or(udb_bytes.len());
+            udb.up_bars = parse_shape_properties_child(&udb_bytes[up_start..up_end]);
+        }
+        if let Some(down_start) = find_tag_simd(udb_bytes, b"downBars", 0) {
+            let down_end =
+                find_closing_tag(udb_bytes, b"downBars", down_start).unwrap_or(udb_bytes.len());
+            udb.down_bars = parse_shape_properties_child(&udb_bytes[down_start..down_end]);
+        }
+        udb.extensions = parse_chart_type_ext_lst(udb_bytes);
     }
     udb
+}
+
+fn parse_chart_lines(xml: &[u8], tag: &[u8]) -> Option<ChartLines> {
+    let start = find_tag_simd(xml, tag, 0)?;
+    let end = find_closing_tag(xml, tag, start).unwrap_or(xml.len());
+    let line_xml = &xml[start..end];
+    Some(ChartLines {
+        sp_pr: parse_shape_properties_child(line_xml),
+    })
+}
+
+fn parse_all_chart_lines(xml: &[u8], tag: &[u8]) -> Vec<ChartLines> {
+    let mut lines = Vec::new();
+    let mut pos = 0;
+    while let Some(start) = find_tag_simd(xml, tag, pos) {
+        let end = find_closing_tag(xml, tag, start).unwrap_or(xml.len());
+        lines.push(ChartLines {
+            sp_pr: parse_shape_properties_child(&xml[start..end]),
+        });
+        pos = end;
+    }
+    lines
+}
+
+fn parse_shape_properties_child(xml: &[u8]) -> Option<ooxml_types::charts::ShapeProperties> {
+    let sp_start = find_tag_simd(xml, b"spPr", 0)?;
+    let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
+    Some(parse_shape_properties(&xml[sp_start..sp_end]))
 }

@@ -474,9 +474,13 @@ impl ComputeCore {
         self.sheet_order.insert(sheet_id, next_pos);
         self.rebuild_ordered_sheets_cache();
 
-        // Parse formulas for the new sheet using bulk parallel parsing.
-        // These are new cells with no prior edges, so set_precedents_fresh is safe.
-        self.bulk_parse_and_register(mirror, formula_cells);
+        // Register only the formulas on the added sheet. `bulk_parse_and_register`
+        // rebuilds the whole graph from the supplied formula list, which is
+        // correct during full snapshot initialization but would drop dependency
+        // edges for existing sheets during a sheet copy/add.
+        for (cell_id, sheet_id, formula) in formula_cells {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+        }
 
         Ok(())
     }

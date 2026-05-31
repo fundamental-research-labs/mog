@@ -719,7 +719,7 @@ mod tests {
                 let value = if i % 2 == 0 {
                     CellValue::number(42.0)
                 } else {
-                    CellValue::number(3.14)
+                    CellValue::number(3.125)
                 };
                 make_cell(i as u32, 0, value)
             })
@@ -755,7 +755,7 @@ mod tests {
         let cells: Vec<CellData> = (0..total)
             .map(|i| {
                 let value = if i < half {
-                    CellValue::number(3.14)
+                    CellValue::number(3.125)
                 } else {
                     CellValue::number((large + i as i64) as f64)
                 };

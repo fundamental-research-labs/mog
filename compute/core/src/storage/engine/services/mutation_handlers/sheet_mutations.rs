@@ -201,10 +201,6 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
     stores.merge_indexes.remove(sheet_id);
     stores.layout_indexes.remove(sheet_id);
 
-    // 4. Regenerate formula strings — references to the deleted sheet
-    //    should now display as #REF! in the formula bar.
-    stores.compute.regenerate_formula_strings(mirror);
-
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {
         sheet_id: sheet_id_str,

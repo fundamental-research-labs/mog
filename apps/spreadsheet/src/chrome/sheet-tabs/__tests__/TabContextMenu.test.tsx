@@ -120,11 +120,11 @@ describe('TabContextMenu — workbook structure protection', () => {
     expect(move!.disabled).toBe(true);
   });
 
-  it('disables Duplicate when workbook structure is protected', () => {
+  it('disables Copy when workbook structure is protected', () => {
     render(<TabContextMenu {...defaultProps} isWorkbookStructureProtected={true} />);
-    const duplicate = findMenuItem('Duplicate');
-    expect(duplicate).toBeDefined();
-    expect(duplicate!.disabled).toBe(true);
+    const copy = findMenuItem('Copy');
+    expect(copy).toBeDefined();
+    expect(copy!.disabled).toBe(true);
   });
 
   it('disables Hide when workbook structure is protected', () => {
@@ -150,7 +150,7 @@ describe('TabContextMenu — workbook structure protection', () => {
 
   it('does NOT disable Protect Sheet when workbook structure is protected', () => {
     render(<TabContextMenu {...defaultProps} isWorkbookStructureProtected={true} />);
-    const protectSheet = findMenuItem('Protect Sheet...');
+    const protectSheet = findMenuItem('Protect Sheet');
     expect(protectSheet).toBeDefined();
     expect(protectSheet!.disabled).toBeFalsy();
   });
@@ -161,7 +161,7 @@ describe('TabContextMenu — workbook structure protection', () => {
     expect(findMenuItem('Insert')!.disabled).toBeFalsy();
     expect(findMenuItem('Rename')!.disabled).toBeFalsy();
     expect(findMenuItem('Move or Copy...')!.disabled).toBeFalsy();
-    expect(findMenuItem('Duplicate')!.disabled).toBeFalsy();
+    expect(findMenuItem('Copy')!.disabled).toBeFalsy();
     // Delete and Hide require visibleSheetCount > 1 (which is 3 in defaults)
     expect(findMenuItem('Delete')!.disabled).toBeFalsy();
     expect(findMenuItem('Hide')!.disabled).toBeFalsy();

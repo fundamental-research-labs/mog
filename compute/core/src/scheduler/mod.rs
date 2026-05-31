@@ -475,13 +475,9 @@ impl ComputeCore {
         self.sheet_order.insert(sheet_id, next_pos);
         self.rebuild_ordered_sheets_cache();
 
-        // Register only the formulas on the added sheet. `bulk_parse_and_register`
-        // rebuilds the whole graph from the supplied formula list, which is
-        // correct during full snapshot initialization but would drop dependency
-        // edges for existing sheets during a sheet copy/add.
-        for (cell_id, sheet_id, formula) in formula_cells {
-            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
-        }
+        // Parse formulas for the new sheet using bulk parallel parsing.
+        // These are new cells with no prior edges, so set_precedents_fresh is safe.
+        self.bulk_parse_and_register(mirror, formula_cells);
 
         Ok(())
     }
@@ -515,6 +511,8 @@ impl ComputeCore {
         }
         let external_dependents: Vec<CellId> = ext_dep_set.into_iter().collect();
 
+        self.regenerate_formula_strings_for_sheet_delete(mirror, sheet_id);
+
         // Remove from graph and caches
         for cell_id in &cell_ids {
             self.graph.remove_cell(cell_id);
@@ -535,9 +533,8 @@ impl ComputeCore {
         self.sheet_order.remove(sheet_id);
         self.rebuild_ordered_sheets_cache();
 
-        mirror.remove_sheet(sheet_id);
-
         // Recalc external dependents so they pick up #REF! from the missing sheet.
+        mirror.remove_sheet(sheet_id);
         if external_dependents.is_empty() {
             Ok(RecalcResult::empty())
         } else {

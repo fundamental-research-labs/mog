@@ -20,7 +20,7 @@ import type { FunctionArgument } from '@mog-sdk/contracts/utils';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import { globalRegistry } from '@mog/spreadsheet-utils/function-registry';
 import { ensureFunctionCatalog } from '@mog/spreadsheet-utils/function-catalog';
-import * as Charts from '../../domain/charts';
+import { getAll as getAllCharts } from '../../domain/charts/chart-store';
 import { getFirstId, getMeta, getOrder } from '../../domain/sheets/sheet-meta';
 
 import type { DocumentContext } from '../../context';
@@ -76,7 +76,7 @@ async function getSheetSnapshot(
 ): Promise<SheetSnapshot> {
   const meta = await getMeta(ctx, sheetId);
   const stats = await calculateSheetStats(ctx, sheetId);
-  const charts = await Charts.getAll(ctx, sheetId);
+  const charts = await getAllCharts(ctx, sheetId);
 
   return {
     id: sheetId,

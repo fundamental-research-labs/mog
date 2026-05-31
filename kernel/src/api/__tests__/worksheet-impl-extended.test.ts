@@ -165,7 +165,7 @@ jest.unstable_mockModule('../../domain/cells/cell-iteration', () => ({
   getCurrentRegion: jest.fn(),
   getDataBoundsForRange: jest.fn(),
 }));
-jest.unstable_mockModule('../../domain/charts', () => ({ getAll: jest.fn() }));
+jest.unstable_mockModule('../../domain/charts/chart-store', () => ({ getAll: jest.fn() }));
 jest.unstable_mockModule('../../domain/formulas/named-ranges', () => ({
   getVisible: jest.fn(),
   getRefersToA1: jest.fn(),

@@ -24,7 +24,6 @@ import type {
   MarkSpec,
   MarkType,
   ScaleSpec,
-  TitleSpec,
   Transform,
   UnitSpec,
 } from '../grammar/spec';
@@ -69,11 +68,14 @@ import { buildStockLayers } from './config-to-spec/layers/stock';
 import { buildWaterfallLayers } from './config-to-spec/layers/waterfall';
 import { hasSecondaryYAxis } from './config-to-spec/secondary-axis';
 import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
+import { buildTitle } from './config-to-spec/title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-spec/transforms';
+import { linePointsToCanvasPx, pointsToCanvasPx } from './config-to-spec/units';
 
 export {
   buildDataLabelLayer,
   buildStockLayers,
+  buildTitle,
   buildTrendlineTransform,
   buildWaterfallLayers,
   buildWaterfallTransforms,
@@ -152,14 +154,6 @@ function normalizeAxisLabelAngle(
   if (Math.abs(degrees) > 90) return undefined;
   if (Math.abs(degrees) <= 90) return degrees;
   return undefined;
-}
-
-function pointsToCanvasPx(sizePt: number | undefined): number | undefined {
-  return sizePt === undefined ? undefined : sizePt * 2;
-}
-
-function linePointsToCanvasPx(widthPt: number | undefined): number | undefined {
-  return widthPt === undefined ? undefined : Math.max(1, widthPt * 2);
 }
 
 function hasVisibleLineStyle(line: unknown): boolean {
@@ -284,42 +278,6 @@ function shouldIncludePointInRows(point: ChartDataPoint, config?: ChartConfig): 
     return config?.displayBlanksAs === 'zero';
   }
   return false;
-}
-
-// =============================================================================
-// Title
-// =============================================================================
-
-/**
- * Build a TitleSpec from config.title / config.subtitle.
- */
-export function buildTitle(config: ChartConfig): TitleSpec | string | undefined {
-  if (!config.title) return undefined;
-  const font = config.titleFormat?.font;
-  const titleSpec: TitleSpec = {
-    text: config.title,
-    ...(config.subtitle ? { subtitle: config.subtitle } : {}),
-  };
-  if (font?.size !== undefined) titleSpec.fontSize = pointsToCanvasPx(font.size);
-  if (font?.name) titleSpec.fontFamily = font.name;
-  if (font?.bold) titleSpec.fontWeight = 'bold';
-  if (font?.italic !== undefined) titleSpec.fontStyle = font.italic ? 'italic' : 'normal';
-  const titleColor = resolveChartTextColor(font?.color);
-  if (titleColor) titleSpec.color = titleColor;
-
-  if (
-    !config.subtitle &&
-    titleSpec.fontSize === undefined &&
-    titleSpec.fontWeight === undefined &&
-    titleSpec.fontStyle === undefined &&
-    titleSpec.color === undefined
-  ) {
-    return config.title;
-  }
-  if (!config.subtitle) return titleSpec;
-  return {
-    ...titleSpec,
-  };
 }
 
 // =============================================================================

@@ -22,6 +22,10 @@ import type { DocumentContext } from '../../context/types';
 import { resolveGroupRange } from './helpers';
 import { getGroups } from './queries';
 
+function getSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
+  return summaryAfter ? end + 1 : start - 1;
+}
+
 // =============================================================================
 // Query Functions
 // =============================================================================
@@ -82,6 +86,9 @@ export async function getRowOutlineLevels(
     const containingGroups = resolvedGroups.filter(
       ({ range }) => row >= range.start && row <= range.end,
     );
+    const summaryGroups = resolvedGroups.filter(
+      ({ range }) => row === getSummaryIndex(range.start, range.end, summaryRowsBelow),
+    );
 
     // Calculate level (max level of containing groups)
     const level =
@@ -90,20 +97,13 @@ export async function getRowOutlineLevels(
         : 0;
 
     // Check if row is visible (not hidden by any collapsed group)
-    const visible = !containingGroups.some(({ group, range }) => {
-      if (!group.collapsed) return false;
-      // Summary row is always visible
-      const isSummaryRow = summaryRowsBelow ? row === range.end : row === range.start;
-      return !isSummaryRow;
-    });
+    const visible = !containingGroups.some(({ group }) => group.collapsed);
 
     // Check if this is a summary row
-    const isSummary = containingGroups.some(({ range }) => {
-      return summaryRowsBelow ? row === range.end : row === range.start;
-    });
+    const isSummary = summaryGroups.length > 0;
 
     // Get group IDs (innermost to outermost)
-    const groupIds = containingGroups
+    const groupIds = [...containingGroups, ...summaryGroups]
       .sort((a, b) => b.group.level - a.group.level)
       .map(({ group }) => group.id);
 
@@ -156,6 +156,9 @@ export async function getColumnOutlineLevels(
     const containingGroups = resolvedGroups.filter(
       ({ range }) => col >= range.start && col <= range.end,
     );
+    const summaryGroups = resolvedGroups.filter(
+      ({ range }) => col === getSummaryIndex(range.start, range.end, summaryColumnsRight),
+    );
 
     // Calculate level (max level of containing groups)
     const level =
@@ -164,20 +167,13 @@ export async function getColumnOutlineLevels(
         : 0;
 
     // Check if column is visible (not hidden by any collapsed group)
-    const visible = !containingGroups.some(({ group, range }) => {
-      if (!group.collapsed) return false;
-      // Summary column is always visible
-      const isSummaryCol = summaryColumnsRight ? col === range.end : col === range.start;
-      return !isSummaryCol;
-    });
+    const visible = !containingGroups.some(({ group }) => group.collapsed);
 
     // Check if this is a summary column
-    const isSummary = containingGroups.some(({ range }) => {
-      return summaryColumnsRight ? col === range.end : col === range.start;
-    });
+    const isSummary = summaryGroups.length > 0;
 
     // Get group IDs (innermost to outermost)
-    const groupIds = containingGroups
+    const groupIds = [...containingGroups, ...summaryGroups]
       .sort((a, b) => b.group.level - a.group.level)
       .map(({ group }) => group.id);
 

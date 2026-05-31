@@ -128,21 +128,22 @@ export function clearRowGrouping(
 
 /**
  * Get rows that would be affected by collapsing/expanding a group.
- * For row groups, returns rows that are hidden/shown (excludes summary row).
+ * For row groups, returns detail rows that are hidden/shown. Summary rows are
+ * adjacent to the group and are not included in GroupDefinition.start/end.
  *
  * Fetches group data from ComputeBridge and computes affected rows locally.
  *
  * @param ctx - Store context
  * @param sheetId - Sheet ID
  * @param groupId - Group ID to query
- * @param summaryRowsBelow - Whether summary row is below (default: true)
+ * @param _summaryRowsBelow - Retained for API compatibility
  * @returns Promise of row indices that would be hidden/shown
  */
 export async function getAffectedRowsByGroup(
   ctx: DocumentContext,
   sheetId: SheetId,
   groupId: string,
-  summaryRowsBelow: boolean = true,
+  _summaryRowsBelow: boolean = true,
 ): Promise<number[]> {
   const groups = await ctx.computeBridge.getGroups(sheetId, 'row');
   const group = groups.find((g: any) => g.id === groupId);
@@ -150,10 +151,7 @@ export async function getAffectedRowsByGroup(
 
   const rows: number[] = [];
   for (let row = group.start; row <= group.end; row++) {
-    const isSummaryRow = summaryRowsBelow ? row === group.end : row === group.start;
-    if (!isSummaryRow) {
-      rows.push(row);
-    }
+    rows.push(row);
   }
 
   return rows;

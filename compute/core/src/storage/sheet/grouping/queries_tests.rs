@@ -59,7 +59,7 @@ fn test_affected_rows() {
     let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
     assert_eq!(
         get_affected_rows_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![2, 3, 4]
+        vec![2, 3, 4, 5]
     );
 }
 
@@ -78,7 +78,7 @@ fn test_affected_rows_summary_above() {
     let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
     assert_eq!(
         get_affected_rows_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![3, 4, 5]
+        vec![2, 3, 4, 5]
     );
 }
 
@@ -88,6 +88,6 @@ fn test_affected_columns() {
     let g = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 4).unwrap();
     assert_eq!(
         get_affected_columns_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![1, 2, 3]
+        vec![1, 2, 3, 4]
     );
 }

@@ -46,6 +46,10 @@ const OUTLINE_BAR_COLOR = '#9aa0a6';
 const OUTLINE_BUTTON_BG = '#ffffff';
 const OUTLINE_BUTTON_BORDER = '#dadce0';
 
+function getSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
+  return summaryAfter ? end + 1 : start - 1;
+}
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -600,9 +604,13 @@ export class HeadersLayer extends BaseLayer implements OnceLayerWithChrome {
                 this.renderRowLevelBars(ctx, 0, y, h, outlineLevel.level);
               }
 
-              // Collapse buttons at group end rows
+              // Collapse buttons at adjacent summary rows
               for (const group of rowGroups) {
-                const buttonRow = groupingConfig.summaryRowsBelow ? group.end : group.start;
+                const buttonRow = getSummaryIndex(
+                  group.start,
+                  group.end,
+                  groupingConfig.summaryRowsBelow,
+                );
                 if (buttonRow === row) {
                   const buttonX = (group.level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
                   const buttonY = y + h / 2;
@@ -660,9 +668,13 @@ export class HeadersLayer extends BaseLayer implements OnceLayerWithChrome {
                 this.renderColLevelBars(ctx, x, 0, w, outlineLevel.level);
               }
 
-              // Collapse buttons at group end columns
+              // Collapse buttons at adjacent summary columns
               for (const group of colGroups) {
-                const buttonCol = groupingConfig.summaryColumnsRight ? group.end : group.start;
+                const buttonCol = getSummaryIndex(
+                  group.start,
+                  group.end,
+                  groupingConfig.summaryColumnsRight,
+                );
                 if (buttonCol === col) {
                   const buttonX = x + w / 2;
                   const buttonY =

@@ -12,6 +12,17 @@ pub fn evaluate_blanks(value: &CellValue, blanks: bool) -> bool {
     if blanks { blank } else { !blank }
 }
 
+/// Evaluate a contains-blanks CF rule with cell metadata.
+///
+/// Formula cells are not blank in spreadsheet conditional formatting semantics,
+/// even when the formula result is an empty string.
+pub fn evaluate_blanks_for_cell(value: &CellValue, blanks: bool, has_formula: bool) -> bool {
+    if !has_formula {
+        return evaluate_blanks(value, blanks);
+    }
+    !blanks
+}
+
 /// Evaluate a contains-errors CF rule.
 /// `errors=true`: match error cells; `errors=false`: match non-error cells.
 pub fn evaluate_errors(value: &CellValue, errors: bool) -> bool {

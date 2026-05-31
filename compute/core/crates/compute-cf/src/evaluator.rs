@@ -48,6 +48,18 @@ pub fn evaluate_rule(
     formula_result: Option<&CellValue>,
     now: NaiveDate,
 ) -> Option<CFMatchResult> {
+    evaluate_rule_for_cell(value, rule, stats, formula_result, now, false)
+}
+
+/// Evaluate a single CF rule with metadata for the target cell.
+pub fn evaluate_rule_for_cell(
+    value: &CellValue,
+    rule: &CFRule,
+    stats: &RangeStatistics,
+    formula_result: Option<&CellValue>,
+    now: NaiveDate,
+    has_formula: bool,
+) -> Option<CFMatchResult> {
     match &rule.kind {
         // -----------------------------------------------------------------
         // Style-based rules: return CFMatchResult with style
@@ -109,7 +121,7 @@ pub fn evaluate_rule(
         }
 
         CFRuleKind::ContainsBlanks { blanks } => {
-            if !rules::blanks_errors::evaluate_blanks(value, *blanks) {
+            if !rules::blanks_errors::evaluate_blanks_for_cell(value, *blanks, has_formula) {
                 return None;
             }
             Some(CFMatchResult::from_style(rule.style.clone()))
@@ -211,6 +223,20 @@ impl CascadeEvaluator {
         formula_result: Option<&CellValue>,
         now: NaiveDate,
     ) -> &mut Self {
+        self.apply_for_cell(value, rule, stats, formula_result, now, false)
+    }
+
+    /// Evaluate a single rule with metadata for the target cell and merge the
+    /// result if it matches.
+    pub fn apply_for_cell(
+        &mut self,
+        value: &CellValue,
+        rule: &CFRule,
+        stats: &RangeStatistics,
+        formula_result: Option<&CellValue>,
+        now: NaiveDate,
+        has_formula: bool,
+    ) -> &mut Self {
         let is_visual = rule.kind.is_visual();
 
         // Skip if this category has been stopped
@@ -221,7 +247,9 @@ impl CascadeEvaluator {
             return self;
         }
 
-        if let Some(rule_result) = evaluate_rule(value, rule, stats, formula_result, now) {
+        if let Some(rule_result) =
+            evaluate_rule_for_cell(value, rule, stats, formula_result, now, has_formula)
+        {
             self.result = Some(match self.result.take() {
                 Some(existing) => priority::merge_results(existing, rule_result),
                 None => rule_result,

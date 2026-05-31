@@ -86,6 +86,26 @@ function getRuleTypeName(type: CFRuleType): string {
   }
 }
 
+function getRuleDisplayName(rule: CFRule): string {
+  if (rule.type !== 'cellValue') {
+    return getRuleTypeName(rule.type);
+  }
+
+  const cvRule = rule as CFCellValueRule;
+  const operatorNames: Record<string, string> = {
+    greaterThan: 'Greater Than',
+    lessThan: 'Less Than',
+    greaterThanOrEqual: 'Greater Than Or Equal',
+    lessThanOrEqual: 'Less Than Or Equal',
+    equal: 'Equal To',
+    notEqual: 'Not Equal To',
+    between: 'Between',
+    notBetween: 'Not Between',
+  };
+
+  return operatorNames[cvRule.operator] ?? getRuleTypeName(rule.type);
+}
+
 /**
  * Get description for a rule
  */
@@ -274,7 +294,7 @@ export function CFRuleRow({
         </div>
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="text-body-sm font-medium text-text whitespace-nowrap overflow-hidden text-ellipsis">
-            {getRuleTypeName(rule.type)}
+            {getRuleDisplayName(rule)}
             {sheetName && (
               <span className="text-caption text-ss-text-secondary bg-ss-surface-secondary px-1.5 py-0.5 rounded-full ml-2">
                 {sheetName}

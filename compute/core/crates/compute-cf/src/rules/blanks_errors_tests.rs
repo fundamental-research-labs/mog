@@ -94,6 +94,15 @@ fn test_blanks_true_empty_string() {
 }
 
 #[test]
+fn test_blanks_true_formula_empty_string_is_not_blank() {
+    assert!(!evaluate_blanks_for_cell(
+        &CellValue::Text("".into()),
+        true,
+        true
+    ));
+}
+
+#[test]
 fn test_blanks_true_nonempty_string() {
     assert!(!evaluate_blanks(&CellValue::Text("hi".into()), true));
 }
@@ -115,6 +124,15 @@ fn test_blanks_false_null() {
 #[test]
 fn test_blanks_false_empty_string() {
     assert!(!evaluate_blanks(&CellValue::Text("".into()), false));
+}
+
+#[test]
+fn test_blanks_false_formula_empty_string_is_non_blank() {
+    assert!(evaluate_blanks_for_cell(
+        &CellValue::Text("".into()),
+        false,
+        true
+    ));
 }
 
 #[test]

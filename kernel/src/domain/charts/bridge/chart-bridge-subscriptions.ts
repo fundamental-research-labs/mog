@@ -24,26 +24,24 @@ import {
   getChartInvalidationsAffectedByRange,
 } from './chart-reference-invalidation';
 import {
+  handleChartFloatingObjectCreated,
+  handleChartFloatingObjectDeleted,
+  handleChartFloatingObjectUpdated,
+  handleChartSheetDeleted,
+  type ChartFloatingObjectEventContext,
+  type ChartFloatingObjectEventRenderCache,
+} from './chart-floating-object-events';
+import {
   buildStructuralRangeUpdate,
   type StructuralRangeUpdate,
 } from './chart-structural-range-updates';
-import { hasImportStatus, isChartPayload } from './import-render-status';
-import { isPositionOnlyUpdate } from './position-only-update';
 
-export interface ChartBridgeSubscriptionRenderCache {
-  getSheetId(chartId: string): SheetId | undefined;
-  setSheetId(chartId: string, sheetId: SheetId): void;
-  deleteSheetId(chartId: string, sheetId?: SheetId): boolean;
-  deleteSheet(sheetId: SheetId): string[];
-  deleteChartCaches(chartId: string, sheetId?: SheetId): void;
-  syncImportRenderStatus(chartId: string, payload: unknown, sheetId?: SheetId): boolean;
-}
+export interface ChartBridgeSubscriptionRenderCache extends ChartFloatingObjectEventRenderCache {}
 
-export interface ChartBridgeSubscriptionContext {
+export interface ChartBridgeSubscriptionContext extends ChartFloatingObjectEventContext {
   ctx: DocumentContext;
   renderCache: ChartBridgeSubscriptionRenderCache;
   isLive(): boolean;
-  invalidateChart(chartId: string, sheetId?: SheetId): void;
   clearAllCaches(): void;
 }
 
@@ -98,66 +96,57 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
     }),
   );
 
-  // Subscribe to floating object events for chart-type objects.
-  // This handles the live mutation path: when charts are created or updated
-  // as floating objects, we invalidate the marks cache so the next render
-  // fetches fresh data from ComputeBridge.
-  //
-  // The handlers also maintain chartId -> sheetId state so the sync paint path
-  // can resolve the sheet in O(1) without awaiting.
+  // Keep the event-bus boundary here: listeners own liveness checks and raw
+  // event sheetId branding, then delegate chart-specific floating-object policy.
   cleanups.push(
     deps.ctx.eventBus.on<FloatingObjectCreatedEvent>('floatingObject:created', (event) => {
       if (!liveDeps.isLive()) return;
-      if (event.objectType === 'chart' || isChartPayload(event.data)) {
-        const eventSheetId = toSheetId(event.sheetId);
-        deps.renderCache.setSheetId(event.objectId, eventSheetId);
-        if (!deps.renderCache.syncImportRenderStatus(event.objectId, event.data, eventSheetId)) {
-          deps.invalidateChart(event.objectId, eventSheetId);
-        }
-      }
+      handleChartFloatingObjectCreated(
+        deps,
+        {
+          objectId: event.objectId,
+          objectType: event.objectType,
+          data: event.data,
+        },
+        toSheetId(event.sheetId),
+      );
     }),
   );
 
   cleanups.push(
     deps.ctx.eventBus.on<FloatingObjectUpdatedEvent>('floatingObject:updated', (event) => {
       if (!liveDeps.isLive()) return;
-      if (isChartPayload(event.data)) {
-        const eventSheetId = toSheetId(event.sheetId);
-        if (deps.renderCache.getSheetId(event.objectId) !== eventSheetId) {
-          deps.renderCache.setSheetId(event.objectId, eventSheetId);
-        }
-        const importStatusPayload = hasImportStatus(event.changes) ? event.changes : event.data;
-        const hasTerminalImportStatus = deps.renderCache.syncImportRenderStatus(
-          event.objectId,
-          importStatusPayload,
-          eventSheetId,
-        );
-        if (hasTerminalImportStatus) return;
-
-        const fields = event.changedFields ?? [];
-        if (!isPositionOnlyUpdate(fields)) {
-          deps.invalidateChart(event.objectId, eventSheetId);
-        }
-      }
+      handleChartFloatingObjectUpdated(
+        deps,
+        {
+          objectId: event.objectId,
+          data: event.data,
+          changes: event.changes,
+          changedFields: event.changedFields,
+        },
+        toSheetId(event.sheetId),
+      );
     }),
   );
 
   cleanups.push(
     deps.ctx.eventBus.on<FloatingObjectDeletedEvent>('floatingObject:deleted', (event) => {
       if (!liveDeps.isLive()) return;
-      if (event.objectType === 'chart') {
-        const eventSheetId = toSheetId(event.sheetId);
-        deps.renderCache.deleteSheetId(event.objectId, eventSheetId);
-        deps.renderCache.deleteChartCaches(event.objectId, eventSheetId);
-      }
+      handleChartFloatingObjectDeleted(
+        deps,
+        {
+          objectId: event.objectId,
+          objectType: event.objectType,
+        },
+        toSheetId(event.sheetId),
+      );
     }),
   );
 
   cleanups.push(
     deps.ctx.eventBus.on<SheetDeletedEvent>('sheet:deleted', (event) => {
       if (!liveDeps.isLive()) return;
-      const deletedSheetId = toSheetId(event.sheetId);
-      deps.renderCache.deleteSheet(deletedSheetId);
+      handleChartSheetDeleted(deps, toSheetId(event.sheetId));
     }),
   );
 

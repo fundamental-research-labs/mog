@@ -283,6 +283,65 @@ describe('resolved spec snapshot helpers', () => {
     });
   });
 
+  it('reports preserve-only imported layout, data-table, 3D, and pivot surfaces', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 1, anchorCol: 2 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'column',
+        anchorRow: 1,
+        anchorCol: 2,
+        width: 4,
+        height: 5,
+        plotLayout: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+        titleLayout: { x: 0.2, y: 0.05 },
+        legend: {
+          show: true,
+          visible: true,
+          position: 'right',
+          layout: { x: 0.8, y: 0.1 },
+        },
+        dataLabels: { show: true, showValue: true, layout: { x: 0.3, y: 0.4 } },
+        trendlines: [{ label: { text: 'y = x', layout: { x: 0.4, y: 0.2 } } }],
+        dataTable: { visible: true, showKeys: true },
+        showAllFieldButtons: true,
+        pivotOptions: { showAxisFieldButtons: false, showValueFieldButtons: true },
+        view3d: { rotX: 30, rotY: 20 },
+        floorFormat: { fill: { type: 'solid', color: '#eeeeee' } },
+      } as ChartConfig,
+      chartData: { categories: ['A'], series: [{ name: 'Revenue', data: [{ x: 'A', y: 1 }] }] },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
+      'pivot chart field buttons are preserved but not rendered (showAllFieldButtons, showAxisFieldButtons, showValueFieldButtons)',
+      'manual plot layout is preserved but not rendered',
+      'manual title layout is preserved but not rendered',
+      'manual legend layout is preserved but not rendered',
+      'manual data-label layout is preserved but not rendered',
+      'trendline label layout is preserved but not rendered',
+      'chart data table is preserved but not rendered',
+      'view3D camera/depth is preserved but rendered as a 2D approximation',
+      'floor/sideWall/backWall surfaces are preserved but not rendered',
+    ]);
+  });
+
   it('does not flag supported secondary value axes as unsupported', () => {
     const sheetId = toSheetId('sheet-1');
     const snapshot = buildResolvedChartSpecSnapshot({

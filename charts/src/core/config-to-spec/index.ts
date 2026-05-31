@@ -153,7 +153,7 @@ function buildAnnotationLayers(
   rows: DataRow[],
 ): ChartSpec[] {
   return [
-    ...buildAnalysisLineLayers(config, encoding),
+    ...buildAnalysisLineLayers(config, encoding, rows),
     ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
     ...buildTrendlineLayers(config, data, encoding),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD) ? buildLeaderLineLayers(encoding) : []),

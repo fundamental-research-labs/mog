@@ -3,6 +3,7 @@
  */
 
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
@@ -161,7 +162,7 @@ export async function refreshChartTableLink(
 
   await update(ctx, sheetId, chartId, {
     // Data range will be resolved by the compute core from tableRange
-    dataRange: `${String.fromCharCode(65 + tableRange.startCol)}${tableRange.startRow + 2}:${String.fromCharCode(65 + tableRange.endCol)}${tableRange.endRow + 1}`,
+    dataRange: `${toA1(tableRange.startRow + 1, tableRange.startCol)}:${toA1(tableRange.endRow, tableRange.endCol)}`,
     tableColumnNames: seriesNames,
   });
 }

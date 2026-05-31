@@ -17,6 +17,7 @@ import {
 import {
   isChartLinkedToTable,
   linkChartToTable,
+  refreshChartTableLink,
   unlinkChartFromTable,
 } from '../chart-table-links';
 import { bringToFront, getChartsInZOrder } from '../chart-z-order';
@@ -274,5 +275,36 @@ describe('chart-table-links', () => {
     });
     expect(bridge.unlinkChartFromTable).toHaveBeenCalledWith(SHEET_ID, 'chart-1');
     expect(bridge.isChartLinkedToTable).toHaveBeenCalledWith(SHEET_ID, 'chart-1');
+  });
+
+  it('refreshes table data ranges with multi-letter columns', async () => {
+    const linkedChart = chart({
+      sourceTableId: 'table-1',
+      useTableColumnNamesAsLabels: true,
+    });
+    const { ctx, bridge } = createMockContext({
+      getChart: jest.fn(async (_sheetId: SheetId, chartId: string) =>
+        chartId === linkedChart.id ? linkedChart : null,
+      ),
+    });
+
+    await refreshChartTableLink(
+      ctx,
+      SHEET_ID,
+      linkedChart.id,
+      {
+        sheetId: SHEET_ID,
+        startRow: 0,
+        startCol: 26,
+        endRow: 9,
+        endCol: 28,
+      },
+      ['AA Header', 'AB Header', 'AC Header'],
+    );
+
+    expect(bridge.updateChart).toHaveBeenCalledWith(SHEET_ID, linkedChart.id, {
+      dataRange: 'AA2:AC10',
+      tableColumnNames: ['AA Header', 'AB Header', 'AC Header'],
+    });
   });
 });

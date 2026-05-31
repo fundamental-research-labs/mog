@@ -12,28 +12,17 @@
  * Pure function - no DOM dependencies.
  */
 import type {
-  AxisSpec,
-  ChannelSpec,
   ChartSpec,
-  ConfigSpec,
   DataRow,
   EncodingSpec,
   LayerSpec,
   MarkSpec,
   MarkType,
-  ScaleSpec,
   Transform,
   UnitSpec,
 } from '../grammar/spec';
 import type { ChartConfig, ChartData, ChartDataPoint, ChartType, SeriesConfig } from '../types';
-import { formatExcelSerialDateTick, formatTickValue } from '../grammar/axis-generator';
-import { generateTicks, niceLinear } from '../primitives/scales/linear';
-import {
-  resolveFormatFillColor,
-  resolveFormatFillOpacity,
-  resolveLineColor,
-  resolveSolidFillColor,
-} from '../utils/chart-colors';
+import { resolveFormatFillOpacity, resolveLineColor } from '../utils/chart-colors';
 import {
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
@@ -45,13 +34,13 @@ import {
 import {
   buildAxisScaleSpec,
   categoryKeyForIndex,
-  explicitDomainBound,
   isHorizontalBarType,
   mapAxisConfigToAxisSpec,
   shouldUseDateSerialCategoryAxis,
   shouldUseStableCategoryKeys,
   toFiniteNumber,
 } from './config-to-spec/axis';
+import { buildConfigSpec } from './config-to-spec/config-spec';
 import { buildEncoding, isLegendShown } from './config-to-spec/encoding';
 import { buildDataLabelLayer } from './config-to-spec/layers/data-labels';
 import { buildStockLayers } from './config-to-spec/layers/stock';
@@ -62,7 +51,6 @@ import {
   hasVisibleLineStyle,
   isNoFillNoLineSeries,
   resolveSeriesColor,
-  resolvedCategoryColors,
 } from './config-to-spec/series-style';
 import { resolveStackMode, resolveSubTypeMarkProps } from './config-to-spec/subtypes';
 import { buildTitle } from './config-to-spec/title';
@@ -70,6 +58,7 @@ import { buildTrendlineTransform, buildWaterfallTransforms } from './config-to-s
 import { linePointsToCanvasPx } from './config-to-spec/units';
 
 export {
+  buildConfigSpec,
   buildEncoding,
   buildDataLabelLayer,
   buildStockLayers,
@@ -286,198 +275,6 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Simple mark type string
   return baseType;
-}
-
-// =============================================================================
-// Config Spec Builder (global config options)
-// =============================================================================
-
-/**
- * Build the ConfigSpec from chart-level settings: stacking, colors, data labels.
- */
-export function buildConfigSpec(
-  config: ChartConfig,
-  encoding?: EncodingSpec,
-  data?: ChartData,
-): ConfigSpec | undefined {
-  const configSpec: ConfigSpec = {};
-  let hasConfig = false;
-
-  // Stacking
-  const stack = resolveStackMode(config);
-  if (stack !== undefined) {
-    configSpec.stack = stack;
-    hasConfig = true;
-  }
-
-  if (typeof config.gapWidth === 'number') {
-    configSpec.gapWidth = config.gapWidth;
-    hasConfig = true;
-  }
-  if (typeof config.overlap === 'number') {
-    configSpec.overlap = config.overlap;
-    hasConfig = true;
-  }
-
-  // Colors
-  const categoryColors = resolvedCategoryColors(config);
-  if (categoryColors && categoryColors.length > 0) {
-    configSpec.range = { category: categoryColors };
-    hasConfig = true;
-  }
-
-  const background =
-    resolveFormatFillColor(config.chartFormat) ??
-    resolveSolidFillColor(config.chartArea?.fill) ??
-    resolveFormatFillColor(config.chartArea?.format);
-  if (background) {
-    configSpec.background = background;
-    hasConfig = true;
-  }
-
-  const leftYAxisLabelWidth =
-    estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
-  const rightYAxisLabelWidth = estimateSecondaryYAxisLabelWidth(config, data);
-  const bottomMargin = estimateXAxisBottomMargin(encoding);
-  if (
-    leftYAxisLabelWidth !== undefined ||
-    rightYAxisLabelWidth !== undefined ||
-    bottomMargin !== undefined
-  ) {
-    configSpec.layoutHints = {
-      ...(leftYAxisLabelWidth !== undefined
-        ? { leftYAxisLabelWidth, yAxisLabelWidth: leftYAxisLabelWidth }
-        : {}),
-      ...(rightYAxisLabelWidth !== undefined ? { rightYAxisLabelWidth } : {}),
-      ...(bottomMargin !== undefined ? { bottomMargin } : {}),
-    };
-    hasConfig = true;
-  }
-
-  return hasConfig ? configSpec : undefined;
-}
-
-function estimateNominalYAxisLabelWidth(
-  encoding: EncodingSpec | undefined,
-  data: ChartData | undefined,
-): number | undefined {
-  const y = encoding?.y;
-  if (!y || y.type === 'quantitative' || y.axis === null || y.axis?.labels === false) {
-    return undefined;
-  }
-
-  const labels = data?.categories ?? [];
-  if (labels.length === 0) return undefined;
-
-  const maxLabelLength = Math.max(0, ...labels.map((label) => String(label ?? '').length));
-  if (maxLabelLength === 0) return undefined;
-
-  const fontSize = y.axis?.labelFontSize ?? 11;
-  const estimatedWidth = Math.ceil(maxLabelLength * fontSize * 0.52);
-  return Math.max(60, Math.min(660, estimatedWidth));
-}
-
-function estimateYAxisLabelWidth(encoding: EncodingSpec | undefined): number | undefined {
-  const y = encoding?.y;
-  if (!y || y.type !== 'quantitative' || y.axis === null || y.axis?.labels === false) {
-    return undefined;
-  }
-
-  return estimateQuantitativeAxisLabelWidth(y.axis, y.scale, y.format);
-}
-
-function estimateSecondaryYAxisLabelWidth(
-  config: ChartConfig,
-  data: ChartData | undefined,
-): number | undefined {
-  if (!hasSecondaryYAxis(config, data)) return undefined;
-  const secondaryAxis = config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
-  if (!secondaryAxis) return undefined;
-
-  const axis = mapAxisConfigToAxisSpec(secondaryAxis);
-  const scale = buildAxisScaleSpec(secondaryAxis, false);
-  return estimateQuantitativeAxisLabelWidth(axis, scale, axis.format);
-}
-
-function estimateQuantitativeAxisLabelWidth(
-  axis: AxisSpec | undefined,
-  scale: ScaleSpec | null | undefined,
-  format: string | undefined,
-): number | undefined {
-  if (axis?.labels === false) return undefined;
-
-  const scaleDomain = Array.isArray(scale?.domain) ? scale.domain : undefined;
-  const min = explicitDomainBound(scaleDomain, 0);
-  const max = explicitDomainBound(scaleDomain, 1);
-  if (min === undefined || max === undefined) return undefined;
-
-  const tickCount = axis?.tickCount ?? 10;
-  const domain =
-    scale?.nice === false
-      ? ([min, max] as [number, number])
-      : niceLinear(min, max, typeof scale?.nice === 'number' ? scale.nice : tickCount);
-  const ticks = generateTicks(domain[0], domain[1], tickCount);
-  const values = ticks.length > 0 ? ticks : domain;
-  const maxLabelLength = Math.max(
-    0,
-    ...values.map((value) => formatTickValue(value, format ?? axis?.format).length),
-  );
-  if (maxLabelLength === 0) return undefined;
-
-  const fontSize = axis?.labelFontSize ?? 11;
-  const maxMagnitude = Math.max(Math.abs(domain[0]), Math.abs(domain[1]));
-  const charWidthRatio = maxMagnitude >= 1_000_000 ? 0.6 : 0.52;
-  const estimatedWidth = Math.ceil(maxLabelLength * fontSize * charWidthRatio);
-  return Math.max(36, Math.min(320, estimatedWidth));
-}
-
-function estimateXAxisBottomMargin(encoding: EncodingSpec | undefined): number | undefined {
-  const x = encoding?.x;
-  const y = encoding?.y;
-  if (!x || x.axis === null || x.axis?.labels === false) return undefined;
-
-  const labelAngle = x.axis?.labelAngle ?? 0;
-  const fontSize = x.axis?.labelFontSize ?? 11;
-  const labelPadding = x.axis?.labelPadding ?? (labelAngle ? 2 : 3);
-  const tickExtent = x.axis?.ticks === false ? 0 : (x.axis?.tickSize ?? 6);
-
-  if (Math.abs(labelAngle) > 1) {
-    const labelWidth = estimateXAxisMaxLabelWidth(x, fontSize);
-    const radians = (Math.abs(labelAngle) * Math.PI) / 180;
-    const rotatedHeight = Math.sin(radians) * labelWidth + Math.cos(radians) * fontSize;
-    return Math.max(40, Math.ceil(tickExtent + labelPadding + rotatedHeight + 8));
-  }
-
-  if (!y || y.type !== 'quantitative' || x.axis?.crossesAt !== 'automatic') {
-    return undefined;
-  }
-
-  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
-  const min = explicitDomainBound(scaleDomain, 0);
-  const max = explicitDomainBound(scaleDomain, 1);
-  if (min === undefined || max === undefined || min >= 0 || max <= 0) return undefined;
-
-  return Math.max(24, Math.ceil(fontSize + labelPadding + 3));
-}
-
-function estimateXAxisMaxLabelWidth(x: ChannelSpec, fontSize: number): number {
-  const axis = x.axis;
-  const format = x.format ?? axis?.format;
-  const scaleDomain = Array.isArray(x.scale?.domain) ? x.scale.domain : undefined;
-  const candidates = scaleDomain?.filter((value) => value !== undefined) ?? [];
-  if (candidates.length === 0) return fontSize * 8;
-
-  const maxLabelLength = Math.max(
-    1,
-    ...candidates.map((value) => {
-      const text =
-        axis?.formatType === 'time'
-          ? formatExcelSerialDateTick(value, format)
-          : formatTickValue(value, format);
-      return text.length;
-    }),
-  );
-  return Math.ceil(maxLabelLength * fontSize * 0.52);
 }
 
 // =============================================================================

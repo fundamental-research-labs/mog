@@ -174,7 +174,6 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
   if (!isOpen) return null;
 
   const isEditMode = mode === 'edit';
-  const hasValidUrl = !validateUrl(url);
 
   return (
     <Dialog
@@ -251,7 +250,7 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
           <Button variant="secondary" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleOk} disabled={!hasValidUrl}>
+          <Button variant="primary" onClick={handleOk}>
             {isEditMode ? 'Update' : 'OK'}
           </Button>
         </div>

@@ -24,6 +24,7 @@ import type {
   ConnectorObject,
   ChartObject,
   EquationObject,
+  FormControlObject,
   DiagramObject,
   OleObjectObject,
 } from '@mog-sdk/contracts/floating-objects';
@@ -651,6 +652,7 @@ type WireTextbox = FloatingObjectCommon & { type: 'textbox' } & TextboxData;
 type WireConnector = FloatingObjectCommon & { type: 'connector' } & ConnectorData;
 type WireChart = FloatingObjectCommon & { type: 'chart' } & ChartData;
 type WireEquation = FloatingObjectCommon & { type: 'equation' } & EquationData;
+type WireFormControl = FloatingObjectCommon & { type: 'formControl' } & Record<string, unknown>;
 type WireDiagram = FloatingObjectCommon & { type: 'diagram' } & DiagramData;
 type WireDrawing = FloatingObjectCommon & { type: 'drawing' } & DrawingData;
 type WireOleObject = FloatingObjectCommon & { type: 'oleObject' } & OleObjectData;
@@ -802,6 +804,14 @@ function toEquationObject(d: WireEquation): EquationObject {
   };
 }
 
+function toFormControlObject(d: WireFormControl): FormControlObject {
+  return {
+    ...buildBaseFields(d),
+    type: 'formControl' as const,
+    controlType: typeof d.controlType === 'string' ? d.controlType : undefined,
+  };
+}
+
 function toDiagramObject(d: WireDiagram): DiagramObject {
   return {
     ...buildBaseFields(d),
@@ -877,6 +887,8 @@ export function toFloatingObject(data: WireFloatingObject): FloatingObject {
       return toChartObject(data);
     case 'equation':
       return toEquationObject(data);
+    case 'formControl':
+      return toFormControlObject(data as WireFormControl);
     case 'diagram':
       return toDiagramObject(data);
     case 'oleObject':
@@ -885,7 +897,6 @@ export function toFloatingObject(data: WireFloatingObject): FloatingObject {
       return toDrawingObject(data);
     case 'slicer':
     case 'camera':
-    case 'formControl':
     default: {
       // Fallback: treat unknown/unsupported types as shapes.
       // Build a minimal shape from the common fields.

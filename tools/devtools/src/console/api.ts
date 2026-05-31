@@ -297,6 +297,32 @@ export function createConsoleAPI(
       const dims = geometry?.getPositionDimensions?.();
       const snapped = snapCellFromPositionDimensions(dims, docX, docY);
       if (snapped) return snapped;
+      if (typeof geometry?.getCellRect === 'function') {
+        const visible = geometry.getVisibleRange?.() ?? {
+          startRow: 0,
+          startCol: 0,
+          endRow: 200,
+          endCol: 50,
+        };
+        const startRow = Math.max(0, Number(visible.startRow ?? 0));
+        const startCol = Math.max(0, Number(visible.startCol ?? 0));
+        const endRow = Math.min(startRow + 500, Number(visible.endRow ?? startRow + 200));
+        const endCol = Math.min(startCol + 200, Number(visible.endCol ?? startCol + 50));
+        for (let row = startRow; row <= endRow; row++) {
+          for (let col = startCol; col <= endCol; col++) {
+            const rect = geometry.getCellRect({ row, col });
+            if (
+              rect &&
+              docX >= rect.x &&
+              docX <= rect.x + rect.width &&
+              docY >= rect.y &&
+              docY <= rect.y + rect.height
+            ) {
+              return { row, col };
+            }
+          }
+        }
+      }
     } catch {
       // fall through
     }
@@ -414,6 +440,13 @@ export function createConsoleAPI(
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function readIntegerAttribute(element: FormControlElementLike, name: string): number | null {
+    const value = element.getAttribute?.(name);
+    if (value == null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   function isRenderedFormControlElement(element: FormControlElementLike): boolean {
     const rect = element.getBoundingClientRect?.();
     if (!rect || rect.width <= 0 || rect.height <= 0) return false;
@@ -428,10 +461,7 @@ export function createConsoleAPI(
     return true;
   }
 
-  function getRenderedDomFormControls(
-    ws: any,
-    existingIds: Set<string>,
-  ): import('../types').DrawingDescriptor[] {
+  function getRenderedDomFormControls(ws: any): import('../types').DrawingDescriptor[] {
     const doc =
       typeof document !== 'undefined'
         ? document
@@ -449,12 +479,16 @@ export function createConsoleAPI(
       if (!isRenderedFormControlElement(element)) continue;
 
       const id = element.getAttribute?.('data-form-control-id');
-      if (!id || existingIds.has(id)) continue;
+      if (!id) continue;
 
       const rect = element.getBoundingClientRect!();
       const x = readCssPx(element.style?.left) ?? rect.x ?? rect.left ?? 0;
       const y = readCssPx(element.style?.top) ?? rect.y ?? rect.top ?? 0;
-      const fromCell = safeCellSnap(ws, x, y);
+      const linkedRow = readIntegerAttribute(element, 'data-form-control-linked-row');
+      const linkedCol = readIntegerAttribute(element, 'data-form-control-linked-col');
+      const linkedCell =
+        linkedRow !== null && linkedCol !== null ? { row: linkedRow, col: linkedCol } : null;
+      const fromCell = linkedCell ?? safeCellSnap(ws, x, y);
       const toCell = safeCellSnap(ws, x + rect.width, y + rect.height);
 
       out.push({
@@ -1895,8 +1929,16 @@ export function createConsoleAPI(
         const activeSheetId =
           typeof ws?.getSheetId === 'function' ? String(ws.getSheetId()) : undefined;
         if (!sheetId || !activeSheetId || sheetId === activeSheetId) {
-          const existingIds = new Set(out.map((drawing) => drawing.id));
-          out.push(...getRenderedDomFormControls(ws, existingIds));
+          const domFormControls = getRenderedDomFormControls(ws);
+          if (domFormControls.length > 0) {
+            const domIds = new Set(domFormControls.map((drawing) => drawing.id));
+            for (let index = out.length - 1; index >= 0; index--) {
+              if (domIds.has(out[index].id)) {
+                out.splice(index, 1);
+              }
+            }
+            out.push(...domFormControls);
+          }
         }
         return out;
       } catch {
@@ -2209,9 +2251,7 @@ export function createConsoleAPI(
         if (tabText) return tabText;
 
         const wb = getActiveWorkbook();
-        const ws = wb?.activeSheet as
-          | { name?: unknown; getName?: () => unknown }
-          | undefined;
+        const ws = wb?.activeSheet as { name?: unknown; getName?: () => unknown } | undefined;
         if (typeof ws?.name === 'string' && ws.name) return ws.name;
         const name = ws?.getName?.();
         return typeof name === 'string' && name ? name : null;

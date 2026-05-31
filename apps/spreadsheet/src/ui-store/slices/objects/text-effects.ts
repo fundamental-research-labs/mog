@@ -112,7 +112,7 @@ export interface TextEffectSlice extends TextEffectUIState {
 
   /**
    * Open the TextEffect gallery/picker dialog.
-   * Sets a default preset selection.
+   * Requires an explicit preset selection before insertion.
    */
   openTextEffectGallery: () => void;
 
@@ -234,7 +234,7 @@ export const createTextEffectSlice: StateCreator<TextEffectSlice, [], [], TextEf
   openTextEffectGallery: () => {
     set({
       isTextEffectGalleryOpen: true,
-      gallerySelectedPreset: 'textArchUp', // Default selection
+      gallerySelectedPreset: null,
     });
   },
 

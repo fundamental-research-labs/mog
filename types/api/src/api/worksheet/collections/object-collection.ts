@@ -6,6 +6,7 @@
  * or type-narrow from the base handle.
  */
 import type { ObjectBounds } from '@mog/types-objects/objects/floating-object-manager';
+import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { TextWarpPreset } from '@mog/types-objects/text-effects';
 import type { FloatingObjectInfo } from '../../types';
 import type { FloatingObjectHandle } from '../handles/floating-object-handle';
@@ -15,6 +16,8 @@ export interface WorksheetObjectCollection {
   get(id: string): Promise<FloatingObjectHandle | null>;
   /** Get summary info (with spatial fields) for a floating object. Returns null if not found. */
   getInfo(id: string): Promise<FloatingObjectInfo | null>;
+  /** Get the full domain object for readback/diagnostic callers. */
+  getFullObject(id: string): Promise<FloatingObject | null>;
   /** List all floating objects on the sheet. */
   list(): Promise<FloatingObjectHandle[]>;
   /** Remove multiple floating objects. Returns count of successfully removed. */

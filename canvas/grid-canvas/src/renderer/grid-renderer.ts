@@ -1994,6 +1994,9 @@ export class GridRendererImpl implements GridRenderer {
     if (obj.type === 'shape' && (obj.shapeType as string) === 'group') {
       return null;
     }
+    if (obj.type === 'formControl') {
+      return null;
+    }
 
     const visibleValue = (obj as unknown as { visible?: unknown }).visible;
     const base = {

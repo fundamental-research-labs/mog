@@ -53,6 +53,7 @@ const API_FLOATING_OBJECT_TYPES: ReadonlySet<string> = new Set([
   'chart',
   'drawing',
   'connector',
+  'formControl',
   'slicer',
 ]);
 

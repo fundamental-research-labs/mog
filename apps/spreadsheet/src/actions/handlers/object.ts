@@ -771,8 +771,7 @@ export const INSERT_SHAPE: AsyncActionHandler = async (deps, payload): Promise<A
 };
 
 /**
- * Start Shape Insert — creates the default visible shape and keeps insertion mode armed
- * so a follow-up worksheet drag can define an explicitly sized shape.
+ * Start Shape Insert — arms drag-to-draw mode for the selected shape.
  * Payload: { shapeType: ShapeType }
  */
 export const START_SHAPE_INSERT: AsyncActionHandler = async (
@@ -782,10 +781,6 @@ export const START_SHAPE_INSERT: AsyncActionHandler = async (
   const { shapeType } = payload || {};
   if (!shapeType) {
     return { handled: false, error: 'Missing shapeType' };
-  }
-  const result = await INSERT_SHAPE(deps, payload);
-  if (!result.handled) {
-    return result;
   }
   deps.commands.object.startInsert(shapeType);
   return handled();
@@ -854,7 +849,6 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
       width: DEFAULT_CHECKBOX_WIDTH,
       height: DEFAULT_CHECKBOX_HEIGHT,
     });
-    await ws.setCell(position.row, position.col, false);
     await ws.formats.set(position.row, position.col, {
       numberFormat: CHECKBOX_LINKED_CELL_HIDDEN_FORMAT,
     });

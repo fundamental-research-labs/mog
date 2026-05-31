@@ -47,6 +47,42 @@ def test_text_formatted_cells_store_string_inputs_without_apostrophe() -> None:
         wb.dispose()
 
 
+def test_conditional_format_reorder_undo_uses_native_order() -> None:
+    wb = mog.create_workbook()
+    try:
+        ws = wb.active_sheet
+        cell_range = [{"startRow": 0, "startCol": 0, "endRow": 9, "endCol": 0}]
+        for value, color, operator in [
+            (90, "#00FF00", "greaterThan"),
+            (50, "#FFFF00", "greaterThan"),
+            (10, "#FF0000", "lessThan"),
+        ]:
+            ws.conditional_formats.add(
+                cell_range,
+                [
+                    {
+                        "type": "cellValue",
+                        "operator": operator,
+                        "value1": value,
+                        "style": {"backgroundColor": color},
+                    }
+                ],
+            )
+
+        original = [item["id"] for item in ws.conditional_formats.list()]
+        ws.conditional_formats.reorder([original[2], original[0], original[1]])
+        assert [item["id"] for item in ws.conditional_formats.list()] == [
+            original[2],
+            original[0],
+            original[1],
+        ]
+
+        wb.history.undo()
+        assert [item["id"] for item in ws.conditional_formats.list()] == original
+    finally:
+        wb.dispose()
+
+
 def test_to_buffer_is_real_export_or_explicit_unsupported() -> None:
     wb = mog.create_workbook()
     try:

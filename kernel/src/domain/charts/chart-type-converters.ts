@@ -240,7 +240,10 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     pivotSeriesKey: c.pivotSeriesKey,
     pivotDataFieldIndex: c.pivotDataFieldIndex,
     projectionAuthority: c.projectionAuthority,
-    projectionDiagnostics: c.projectionDiagnostics,
+    // projectionDiagnostics is intentionally NOT emitted: it maps to a non-Option
+    // Vec on the Rust side, and a present-but-undefined value (which is what it
+    // always is — the field is never populated) makes serde_wasm_bindgen fail the
+    // entire series-array deserialization, silently dropping every series update.
     showShadow: c.showShadow,
     showConnectorLines: c.showConnectorLines,
     leaderLineFormat: chartFormatToWire(c.leaderLineFormat),

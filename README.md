@@ -3,6 +3,8 @@
 Mog is a spreadsheet engine, app runtime, and SDK stack for building
 workbook-aware agents, automations, and embedded spreadsheet experiences.
 
+Try it live at [mog.shortcut.ai](https://mog.shortcut.ai/).
+
 ## Choose Your Path
 
 | I want to... | Start here | Useful command |

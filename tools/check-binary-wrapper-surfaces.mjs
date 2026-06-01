@@ -141,6 +141,7 @@ const KNOWN_DISPOSITIONS = {
 
   // Import/export bytes
   compute_export_to_xlsx_bytes: 'cooperative-legacy',
+  compute_export_to_xlsx_bytes_context_stripped: 'cooperative-legacy',
   compute_import_from_xlsx_bytes: 'cooperative-legacy',
   compute_import_from_xlsx_bytes_deferred: 'cooperative-legacy',
   compute_import_from_csv_bytes: 'cooperative-legacy',

@@ -14,6 +14,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
+import { displayStringOrNull } from '@mog-sdk/contracts/core';
 
 import {
   callUIStoreAction,
@@ -162,14 +163,9 @@ function countDisplayedDecimals(displayText: string | null | undefined): number 
  * General "1.23456" would collapse straight to one decimal instead of stepping
  * 1.2346 → 1.235 → …
  */
-function getBaseDecimals(
-  currentFormat: string,
-  displayText: string | null | undefined,
-): number {
+function getBaseDecimals(currentFormat: string, displayText: string | null | undefined): number {
   const isGeneralFormat = currentFormat === '' || currentFormat === 'General';
-  return isGeneralFormat
-    ? countDisplayedDecimals(displayText)
-    : getDecimalCount(currentFormat);
+  return isGeneralFormat ? countDisplayedDecimals(displayText) : getDecimalCount(currentFormat);
 }
 
 /**
@@ -219,7 +215,10 @@ export const INCREASE_DECIMALS: AsyncActionHandler = async (deps) => {
   const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
   const activeCellFormat = activeCellData?.format as Record<string, unknown> | undefined;
   const currentFormat = (activeCellFormat?.numberFormat as string) ?? 'General';
-  const baseDecimals = getBaseDecimals(currentFormat, activeCellData?.displayText);
+  const baseDecimals = getBaseDecimals(
+    currentFormat,
+    displayStringOrNull(activeCellData?.displayText ?? null),
+  );
   const newDecimals = Math.min(baseDecimals + 1, 10);
   const newFormat = formatWithDecimals(currentFormat, newDecimals);
 
@@ -254,7 +253,10 @@ export const DECREASE_DECIMALS: AsyncActionHandler = async (deps) => {
   // Step down from the decimals actually shown. For General cells that means
   // the digits displayed (so "1.23456" walks 1.2346 → 1.235 → …); explicit
   // formats use their own code, so "0" correctly clamps at zero.
-  const baseDecimals = getBaseDecimals(currentFormat, activeCellData?.displayText);
+  const baseDecimals = getBaseDecimals(
+    currentFormat,
+    displayStringOrNull(activeCellData?.displayText ?? null),
+  );
   const newDecimals = Math.max(baseDecimals - 1, 0);
   const newFormat = formatWithDecimals(currentFormat, newDecimals);
 

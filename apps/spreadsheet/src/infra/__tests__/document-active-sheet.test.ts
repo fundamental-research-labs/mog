@@ -59,10 +59,7 @@ describe('subscribeActiveSheetPersistence', () => {
     store.setActiveSheet(second);
     unsubscribe();
 
-    expect(workbook.setCustomSetting).toHaveBeenCalledWith(
-      ACTIVE_SHEET_CUSTOM_SETTING_KEY,
-      second,
-    );
+    expect(workbook.setCustomSetting).toHaveBeenCalledWith(ACTIVE_SHEET_CUSTOM_SETTING_KEY, second);
   });
 
   it('waits for import durability and then persists only the latest active sheet', async () => {
@@ -101,10 +98,7 @@ describe('subscribeActiveSheetPersistence', () => {
     unsubscribe();
 
     expect(workbook.setCustomSetting).toHaveBeenCalledTimes(1);
-    expect(workbook.setCustomSetting).toHaveBeenCalledWith(
-      ACTIVE_SHEET_CUSTOM_SETTING_KEY,
-      third,
-    );
+    expect(workbook.setCustomSetting).toHaveBeenCalledWith(ACTIVE_SHEET_CUSTOM_SETTING_KEY, third);
   });
 
   it('does not persist a deferred active sheet after unsubscribe', async () => {

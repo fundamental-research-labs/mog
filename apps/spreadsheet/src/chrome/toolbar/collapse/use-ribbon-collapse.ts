@@ -22,13 +22,7 @@
  *
  */
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 import type { CollapseLevel, RibbonCollapseState } from '@mog-sdk/contracts/ribbon';
 
@@ -228,8 +222,7 @@ export function useRibbonCollapse(
       }
     }
 
-    const overflowing =
-      panel.scrollWidth > panel.clientWidth + OVERFLOW_TOLERANCE_PX;
+    const overflowing = panel.scrollWidth > panel.clientWidth + OVERFLOW_TOLERANCE_PX;
 
     if (overflowing && state.level < MAX_COLLAPSE_LEVEL) {
       // scrollWidth is the natural width of the *current* (overflowing) level —

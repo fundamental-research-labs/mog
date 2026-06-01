@@ -42,7 +42,8 @@ function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableCo
   // panel reflects the active pivot (Rows/Columns/Values) instead of showing
   // every field as unplaced.
   const placements: PivotFieldPlacementFlat[] = pivot.placements.map((placement) => ({
-    placementId: `${pivot.id}:${placement.area}:${placement.fieldId}:${placement.position}` as PivotFieldPlacementFlat['placementId'],
+    placementId:
+      `${pivot.id}:${placement.area}:${placement.fieldId}:${placement.position}` as PivotFieldPlacementFlat['placementId'],
     fieldId: placement.fieldId,
     area: placement.area as PivotFieldArea,
     position: placement.position,

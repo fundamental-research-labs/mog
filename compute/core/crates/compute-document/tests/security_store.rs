@@ -10,8 +10,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use compute_document::schema::{init_canonical_schema, KEY_SECURITY};
 use compute_document::SecurityStore;
+use compute_document::schema::{KEY_SECURITY, init_canonical_schema};
 use compute_security::{
     AccessLevel, AccessPolicy, AccessTarget, PolicyId, PolicyMetadata, TagMatcher,
 };

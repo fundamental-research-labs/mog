@@ -493,6 +493,29 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       break;
   }
 
+  // Single source of truth for the editor's glyph typography. BOTH the
+  // caret-owning <textarea> and (for formulas) the FormulaHighlighter overlay
+  // read from this, so the visible text and the caret can never drift out of
+  // size/baseline alignment again.
+  //
+  // The size is the cell's *resolved* font scaled by zoom (textPosition.
+  // scaledFont) — never a hardcoded value — so large user fonts and any zoom
+  // level flow through to the editor automatically.
+  //
+  // IMPORTANT: never merge this with `undefined` font longhands in the same
+  // style object. React writes '' for undefined style values, and a trailing
+  // `fontFamily: undefined` after the `font` shorthand clears the shorthand,
+  // collapsing the layer back to the inherited 16px default (the regression
+  // that made formula text huge and misaligned).
+  const textTypography: React.CSSProperties = textPosition
+    ? { font: textPosition.scaledFont, lineHeight: `${scaledLineHeight}px` }
+    : {
+        fontFamily: cellStyles.fontFamily,
+        fontSize: cellStyles.fontSize,
+        fontWeight: cellStyles.fontWeight,
+        lineHeight: cellStyles.lineHeight,
+      };
+
   const baseEditorStyle = textPosition
     ? {
         // WYSIWYG: Use exact position from computeTextPosition()
@@ -505,8 +528,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
         height: effectiveCellRect.height,
         // Typography from resolved style - use scaledFont for zoom-correct rendering
         // Canvas uses ctx.scale(zoom) to scale text; DOM needs explicit font size scaling
-        font: textPosition.scaledFont,
-        lineHeight: `${scaledLineHeight}px`,
+        ...textTypography,
         color: style.color,
         backgroundColor: cellFormat?.backgroundColor || 'var(--color-ss-surface, #ffffff)',
         // Padding matching canvas
@@ -698,11 +720,10 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
           <div
             className="absolute inset-0 overflow-hidden"
             style={{
-              font: textPosition?.scaledFont,
-              fontFamily: textPosition ? undefined : cellStyles.fontFamily,
-              fontSize: textPosition ? undefined : cellStyles.fontSize,
-              fontWeight: textPosition ? undefined : cellStyles.fontWeight,
-              lineHeight: textPosition ? undefined : cellStyles.lineHeight,
+              // Same typography object the caret-owning textarea uses, so the
+              // highlighted formula text renders at the exact size/baseline as
+              // the caret (and as the canvas would draw it).
+              ...textTypography,
               paddingLeft: style.paddingX,
               paddingRight: style.paddingX,
               paddingTop: verticalPaddingTop,

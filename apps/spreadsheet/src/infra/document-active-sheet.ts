@@ -13,6 +13,11 @@ interface ActiveSheetStore<TState extends ActiveSheetStoreState> {
   subscribe(listener: (state: TState, previousState: TState) => void): () => void;
 }
 
+export interface ImportDurabilityGate {
+  readonly isImportDurabilityPending: boolean;
+  awaitImportDurability(): Promise<void>;
+}
+
 function isVisibleSheet(workbook: WorkbookInternal, candidate: string | null | undefined): boolean {
   if (!candidate) return false;
 
@@ -76,12 +81,50 @@ export function persistActiveSheetId(workbook: WorkbookInternal, activeSheetId: 
 export function subscribeActiveSheetPersistence<TState extends ActiveSheetStoreState>({
   workbook,
   uiStore,
+  importDurability,
 }: {
   workbook: WorkbookInternal;
   uiStore: ActiveSheetStore<TState>;
+  importDurability?: ImportDurabilityGate;
 }): () => void {
-  return uiStore.subscribe((state, previousState) => {
+  let disposed = false;
+  let pendingActiveSheetId: SheetId | null = null;
+  let pendingPersist: Promise<void> | null = null;
+
+  const schedulePostImportPersist = (): void => {
+    if (!importDurability || pendingPersist) return;
+
+    pendingPersist = importDurability
+      .awaitImportDurability()
+      .then(() => {
+        const activeSheetId = pendingActiveSheetId;
+        pendingActiveSheetId = null;
+        if (!disposed && activeSheetId) {
+          persistActiveSheetId(workbook, activeSheetId);
+        }
+      })
+      .catch((error) => {
+        pendingActiveSheetId = null;
+        console.warn('[SpreadsheetApp] Failed to persist active sheet after import:', error);
+      })
+      .finally(() => {
+        pendingPersist = null;
+      });
+  };
+
+  const unsubscribe = uiStore.subscribe((state, previousState) => {
     if (state.activeSheetId === previousState.activeSheetId) return;
+    if (importDurability?.isImportDurabilityPending) {
+      pendingActiveSheetId = state.activeSheetId;
+      schedulePostImportPersist();
+      return;
+    }
     persistActiveSheetId(workbook, state.activeSheetId);
   });
+
+  return () => {
+    disposed = true;
+    pendingActiveSheetId = null;
+    unsubscribe();
+  };
 }

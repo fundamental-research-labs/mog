@@ -147,6 +147,87 @@ describe('extractChartLayout', () => {
     expect(layout.plotArea.height).toBeCloseTo(internalPlot.height * PX_TO_PT, 5);
   });
 
+  it('applies manual plot, title, and legend layout hints', () => {
+    const result = compile(
+      makeBarSpec({
+        title: 'Manual Layout',
+        data: {
+          values: [
+            { category: 'A', value: 10, group: 'North' },
+            { category: 'B', value: 20, group: 'South' },
+            { category: 'C', value: 30, group: 'North' },
+          ],
+        },
+        encoding: {
+          x: { field: 'category', type: 'nominal' },
+          y: { field: 'value', type: 'quantitative' },
+          color: { field: 'group', type: 'nominal' },
+        },
+        config: {
+          layoutHints: {
+            manualPlotArea: { xMode: 'edge', yMode: 'edge', x: 0.1, y: 0.2, w: 0.5, h: 0.4 },
+            manualTitle: { xMode: 'edge', yMode: 'edge', x: 0.2, y: 0.05, w: 0.5, h: 0.1 },
+            manualLegend: {
+              xMode: 'edge',
+              yMode: 'edge',
+              wMode: 'edge',
+              hMode: 'edge',
+              x: 0.65,
+              y: 0.1,
+              w: 0.95,
+              h: 0.3,
+            },
+          },
+        },
+      }),
+    );
+
+    const layout = extractChartLayout(result);
+
+    expect(layout.plotArea.left).toBeCloseTo(60 * PX_TO_PT, 5);
+    expect(layout.plotArea.top).toBeCloseTo(80 * PX_TO_PT, 5);
+    expect(layout.plotArea.width).toBeCloseTo(300 * PX_TO_PT, 5);
+    expect(layout.plotArea.height).toBeCloseTo(160 * PX_TO_PT, 5);
+
+    expect(layout.title).toBeDefined();
+    expect(layout.title!.left).toBeCloseTo(120 * PX_TO_PT, 5);
+    expect(layout.title!.top).toBeCloseTo(20 * PX_TO_PT, 5);
+    expect(layout.title!.width).toBeCloseTo(300 * PX_TO_PT, 5);
+    expect(layout.title!.height).toBeCloseTo(40 * PX_TO_PT, 5);
+
+    expect(layout.legend).toBeDefined();
+    expect(layout.legend!.left).toBeCloseTo(390 * PX_TO_PT, 5);
+    expect(layout.legend!.top).toBeCloseTo(40 * PX_TO_PT, 5);
+    expect(layout.legend!.width).toBeCloseTo(180 * PX_TO_PT, 5);
+    expect(layout.legend!.height).toBeCloseTo(80 * PX_TO_PT, 5);
+  });
+
+  it('applies factor manual coordinates relative to the auto layout rectangle', () => {
+    const result = compile(
+      makeBarSpec({
+        title: 'Factor Layout',
+        config: {
+          layoutHints: {
+            manualTitle: {
+              xMode: 'factor',
+              yMode: 'factor',
+              x: 0.1,
+              y: 0.1,
+              w: 0.5,
+              h: 0.2,
+            },
+          },
+        },
+      }),
+    );
+
+    const layout = extractChartLayout(result);
+
+    expect(layout.title).toBeDefined();
+    expect(layout.title!.left).toBeCloseTo(60 * PX_TO_PT, 5);
+    expect(layout.title!.top).toBeCloseTo(60 * PX_TO_PT, 5);
+  });
+
   it('updates layout when chart dimensions change', () => {
     const smallResult = compile(makeBarSpec({ width: 300, height: 200 }));
     const largeResult = compile(makeBarSpec({ width: 900, height: 600 }));
@@ -179,5 +260,94 @@ describe('extractChartLayout', () => {
     const layout = extractChartLayout(result);
 
     expect(layout.dataLabels).toEqual([]);
+  });
+
+  it('extracts data-label bounds from generated text marks', () => {
+    const result = compile({
+      width: 400,
+      height: 200,
+      data: {
+        values: [
+          {
+            category: 'A',
+            value: 10,
+            __mogDataLabelVisible: true,
+            __mogPointIndex: 0,
+            __mogSeriesIndex: 0,
+            __mogDataLabelText: '10',
+            __mogDataLabelLayoutX: 0.25,
+            __mogDataLabelLayoutY: 0.3,
+          },
+        ],
+      },
+      layer: [
+        {
+          mark: 'bar',
+          encoding: {
+            x: { field: 'category', type: 'nominal' },
+            y: { field: 'value', type: 'quantitative' },
+          },
+        },
+        {
+          mark: {
+            type: 'text',
+            xField: '__mogDataLabelLayoutX',
+            yField: '__mogDataLabelLayoutY',
+            coordinateSystem: 'chartFraction',
+            align: 'left',
+            textBaseline: 'top',
+          },
+          encoding: {
+            text: { field: '__mogDataLabelText', type: 'nominal' },
+          },
+        },
+      ],
+    });
+    const layout = extractChartLayout(result);
+
+    expect(layout.dataLabels).toHaveLength(1);
+    expect(layout.dataLabels[0]).toMatchObject({
+      left: 100 * PX_TO_PT,
+      top: 60 * PX_TO_PT,
+      seriesIndex: 0,
+      pointIndex: 0,
+    });
+    expect(layout.dataLabels[0].width).toBeGreaterThan(0);
+  });
+
+  it('includes data-table bounds when layout reserves a table band', () => {
+    const result = compile(
+      makeBarSpec({
+        config: {
+          layoutHints: {
+            dataTable: { rowCount: 3, height: 62 },
+          },
+        },
+      }),
+    );
+    const layout = extractChartLayout(result);
+
+    expect(layout.dataTable).toBeDefined();
+    expect(layout.dataTable!.top).toBeGreaterThan(layout.plotArea.top);
+    expect(layout.dataTable!.width).toBeCloseTo(layout.plotArea.width, 5);
+  });
+
+  it('skips data-table fraction text marks when no table band exists', () => {
+    const result = compile({
+      width: 300,
+      height: 200,
+      data: {
+        values: [{ x: 0.5, y: 0.5, text: 'Revenue' }],
+      },
+      mark: {
+        type: 'text',
+        xField: 'x',
+        yField: 'y',
+        coordinateSystem: 'dataTableFraction',
+      },
+      encoding: { text: { field: 'text', type: 'nominal' } },
+    });
+
+    expect(result.marks.some((mark) => mark.type === 'text')).toBe(false);
   });
 });

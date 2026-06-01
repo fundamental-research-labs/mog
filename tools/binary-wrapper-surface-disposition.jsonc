@@ -1611,6 +1611,9 @@
   "compute_set_table_bool_option": {
     "disposition": "cooperative-legacy",
   },
+  "compute_set_table_totals_function": {
+    "disposition": "cooperative-legacy",
+  },
   "compute_set_table_style": {
     "disposition": "cooperative-legacy",
   },

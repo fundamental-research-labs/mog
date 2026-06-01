@@ -14,7 +14,15 @@
  * Uses RibbonButton for consistent button styling (single source of truth).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import { useActiveCell, useUIStore } from '../../../internal-api';
 import { parseCSV } from '../../../domain/clipboard/clipboard-parser';
 import {
@@ -44,6 +52,7 @@ import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 import {
   AdvancedFilterIcon,
   CircleInvalidDataIcon,
@@ -140,6 +149,19 @@ function csvToCellUpdates(text: string): CsvCellUpdate[] {
   return parseCSV(stripUtf8Bom(text)).flatMap((row, rowIndex) =>
     row.map((value, colIndex) => ({ row: rowIndex, col: colIndex, value })),
   );
+}
+
+function isValidImportUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 // =============================================================================
@@ -247,6 +269,10 @@ export function DataRibbon({
   const isGetDataDropdownOpen = useUIStore((s) => s.ribbonDropdowns['data.get-data'] ?? false);
   const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
   const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
+  const [isFromWebDialogOpen, setIsFromWebDialogOpen] = useState(false);
+  const [fromWebUrl, setFromWebUrl] = useState('');
+  const [fromWebValidationText, setFromWebValidationText] = useState('');
+  const fromWebUrlInputRef = useRef<HTMLInputElement>(null);
   const setIsGetDataDropdownOpen = useCallback(
     (open: boolean) =>
       open ? openRibbonDropdown('data.get-data') : closeRibbonDropdown('data.get-data'),
@@ -338,6 +364,18 @@ export function DataRibbon({
     workbook,
   ]);
 
+  const closeFromWebDialog = useCallback(() => {
+    setIsFromWebDialogOpen(false);
+    setFromWebUrl('');
+    setFromWebValidationText('');
+  }, []);
+
+  const openFromWebDialog = useCallback(() => {
+    setFromWebUrl('');
+    setFromWebValidationText('');
+    setIsFromWebDialogOpen(true);
+  }, []);
+
   const handleImportFromWeb = useCallback(() => {
     setIsGetDataDropdownOpen(false);
     if (hostCommands) {
@@ -350,8 +388,46 @@ export function DataRibbon({
     }
     if (onImportFromWeb) {
       onImportFromWeb();
+      return;
     }
-  }, [hostCommands, onImportFromWeb, setIsGetDataDropdownOpen]);
+    openFromWebDialog();
+  }, [hostCommands, onImportFromWeb, openFromWebDialog, setIsGetDataDropdownOpen]);
+
+  const handleFromWebUrlChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const nextUrl = event.currentTarget.value;
+    setFromWebUrl(nextUrl);
+    setFromWebValidationText(
+      nextUrl.length > 0 && !isValidImportUrl(nextUrl) ? 'Enter a valid URL' : '',
+    );
+  }, []);
+
+  const handleFromWebSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!isValidImportUrl(fromWebUrl)) {
+        setFromWebValidationText('Enter a valid URL');
+        fromWebUrlInputRef.current?.focus();
+        return;
+      }
+      closeFromWebDialog();
+    },
+    [closeFromWebDialog, fromWebUrl],
+  );
+
+  const handleFromWebKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        closeFromWebDialog();
+      }
+    },
+    [closeFromWebDialog],
+  );
+
+  useEffect(() => {
+    if (isFromWebDialogOpen) {
+      fromWebUrlInputRef.current?.focus();
+    }
+  }, [isFromWebDialogOpen]);
 
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
   const handleGroupClick = useCallback(() => {
@@ -471,36 +547,103 @@ export function DataRibbon({
                 aria-label="Import data options"
               >
                 {/* From CSV */}
-                <RibbonDropdownItem
-                  dataValue="csv"
-                  icon={<CsvFileIcon />}
-                  onClick={handleImportCsv}
-                >
-                  From CSV
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromCsv">
+                  <RibbonDropdownItem
+                    dataValue="csv"
+                    icon={<CsvFileIcon />}
+                    onClick={handleImportCsv}
+                  >
+                    From CSV
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
 
                 {/* From JSON */}
-                <RibbonDropdownItem
-                  dataValue="json"
-                  icon={<JsonFileIcon />}
-                  onClick={handleImportJson}
-                >
-                  From JSON
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromJson">
+                  <RibbonDropdownItem
+                    dataValue="json"
+                    icon={<JsonFileIcon />}
+                    onClick={handleImportJson}
+                  >
+                    From JSON
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
 
                 {/* From Web (uses existing Bind Sheet functionality) */}
-                <RibbonDropdownItem
-                  dataValue="web"
-                  icon={<WebIcon />}
-                  onClick={handleImportFromWeb}
-                >
-                  From Web
-                </RibbonDropdownItem>
+                <RibbonVisibilityItem item="fromWeb">
+                  <RibbonDropdownItem
+                    dataValue="web"
+                    icon={<WebIcon />}
+                    onClick={handleImportFromWeb}
+                  >
+                    From Web
+                  </RibbonDropdownItem>
+                </RibbonVisibilityItem>
               </div>
             </RibbonDropdownPanel>
           </div>
         </div>
       </ToolbarGroup>
+
+      {isFromWebDialogOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center bg-black/20 pt-24"
+          onMouseDown={closeFromWebDialog}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="from-web-import-title"
+            className="w-[min(420px,calc(100vw-32px))] rounded border border-ss-border bg-ss-surface p-4 shadow-ss-lg"
+            onKeyDown={handleFromWebKeyDown}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <form onSubmit={handleFromWebSubmit} className="flex flex-col gap-3">
+              <div>
+                <h2 id="from-web-import-title" className="text-sm font-semibold text-ss-text">
+                  From Web
+                </h2>
+                <p className="mt-1 text-xs text-ss-text-secondary">Import data from a web URL.</p>
+              </div>
+              <label className="flex flex-col gap-1 text-xs font-medium text-ss-text">
+                Web URL
+                <input
+                  ref={fromWebUrlInputRef}
+                  type="url"
+                  value={fromWebUrl}
+                  onChange={handleFromWebUrlChange}
+                  aria-invalid={fromWebValidationText ? 'true' : 'false'}
+                  aria-describedby="from-web-import-validation"
+                  placeholder="https://example.com/data.csv"
+                  className="h-8 rounded border border-ss-border bg-ss-surface px-2 text-sm font-normal text-ss-text outline-none focus:border-ss-accent"
+                />
+              </label>
+              <p
+                id="from-web-import-validation"
+                role={fromWebValidationText ? 'alert' : undefined}
+                className="min-h-4 text-xs text-ss-error"
+              >
+                {fromWebValidationText}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-ss-border px-3 py-1.5 text-sm text-ss-text"
+                  onClick={closeFromWebDialog}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded bg-ss-accent px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  disabled={!isValidImportUrl(fromWebUrl)}
+                >
+                  Import
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {/* 2. Sort & Filter Group */}
       <ToolbarGroup

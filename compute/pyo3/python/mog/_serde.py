@@ -157,10 +157,22 @@ def deserialize_cell_value(raw: Any) -> CellValue:
         return None
 
     if isinstance(raw, str):
-        # Try parsing as JSON in case it's a JSON string
-        try:
-            raw = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        if raw == "":
+            return None
+        if raw == "\x00":
+            return ""
+        # Bridge.call_json already unwraps native JSON once. If the result is
+        # a Python str, it is a text cell value and must not be decoded again
+        # (e.g. text "11" is not the number 11).
+        if raw.startswith(('"', "{", "[")):
+            try:
+                decoded = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return raw
+            if isinstance(decoded, str):
+                return "" if decoded == "\x00" else decoded
+            raw = decoded
+        else:
             return raw
 
     if isinstance(raw, dict):
@@ -177,7 +189,7 @@ def deserialize_cell_value(raw: Any) -> CellValue:
                     return i
             return n
         if "String" in raw:
-            return raw["String"]
+            return "" if raw["String"] == "\x00" else raw["String"]
         if "Bool" in raw:
             return raw["Bool"]
         if "Error" in raw:

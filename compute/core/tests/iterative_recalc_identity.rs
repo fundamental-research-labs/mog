@@ -8,7 +8,7 @@
 //! for strings/bools/errors).
 //!
 //! The inverse uses `import_values` (raw CellValue path) instead of
-//! `set_cell(&rendered_string)` because per FINDINGS.md the parser path
+//! `set_cell(&rendered_string)` because the parser path
 //! is lossy on whitespace / leading apostrophe / typed literals. Class A
 //! harness noise is filtered out of this class so the real bugs show up.
 //!
@@ -26,15 +26,14 @@
 //! Axes 3 (EditPosition) and 4 (ValueType) are pinned to `Inside` /
 //! `Int` (representative defaults) for the main matrix. Three named
 //! regression tests exercise axis 3 = `FarOutside` for the specific
-//! SUMIFS × full-col × far-outside signature that surfaced `Ib6CYMnT` /
-//! `nxnOekSc`, plus axis 4 = `FloatCascade` for `qKjqZiEx`.
+//! SUMIFS × full-col × far-outside signature, plus axis 4 =
+//! `FloatCascade` for a numeric precision cascade.
 //!
 //! ## Expected state
 //!
 //! Some cases fail today. Each `#[test]` family runs its generated
 //! cases and panics on ANY failure — failing tests ARE the bug tracker.
-//! The three named regression tests exist to pin the engine bugs
-//! (`Ib6CYMnT` / `nxnOekSc` / `qKjqZiEx`) by name.
+//! The three named regression tests exist to pin the engine bug classes.
 //!
 //! Run:
 //!   cargo test -p compute-core --test iterative_recalc_identity -- --nocapture
@@ -216,17 +215,15 @@ fn class1_sum3d_over_all_ranges() {
 // Bug-pin regression tests (per plan: MUST fail today; not silenced)
 // ---------------------------------------------------------------------------
 
-/// `Ib6CYMnT` — SUMIFS × full-col × far-outside edit. Per FINDINGS.md:
-/// after set_cell(row=39187, col=5, "1"→"85") → inverse, a dependent
-/// SUMIFS referencing SourceData!$H:$H retains the forward-op value.
+/// SUMIFS × full-col × far-outside edit: after set_cell → inverse, a
+/// dependent SUMIFS over a full-column range retains the forward-op value.
 ///
 /// This is the canonical case for the full-column range-invalidation
-/// bug. Must fail today; passes once the bug lands a fix. The plan
-/// requires this test name explicitly.
+/// bug. Must fail today; passes once the bug lands a fix.
 #[test]
-fn regression_ib6cymnt_sumifs_fullcol_faroutside() {
+fn regression_sumifs_fullcol_faroutside_primary() {
     let case = Class1Case {
-        name: "regression_ib6cymnt".into(),
+        name: "regression_sumifs_fullcol_faroutside_primary".into(),
         shape: FormulaShape::Sumifs,
         range: RangeType::FullCol,
         edit_pos: Class1Axis3::FarOutside,
@@ -235,7 +232,10 @@ fn regression_ib6cymnt_sumifs_fullcol_faroutside() {
         new_value: CellValue::Number(FiniteF64::must(85.0)),
     };
     let outcome = run_case(&case);
-    eprintln!("[regression Ib6CYMnT] outcome: {:?}", outcome);
+    eprintln!(
+        "[regression fullcol_faroutside_primary] outcome: {:?}",
+        outcome
+    );
     match outcome {
         TestOutcome::Passed => {
             // If this passes today, the bug fixed itself — the plan
@@ -243,30 +243,33 @@ fn regression_ib6cymnt_sumifs_fullcol_faroutside() {
             // `assert_passes` once a real fix lands. Until then,
             // the expectation is failure; a pass is unexpected.
             eprintln!(
-                "[regression Ib6CYMnT] UNEXPECTED PASS — the engine bug may have been \
+                "[regression fullcol_faroutside_primary] UNEXPECTED PASS — the engine bug may have been \
                  fixed. Update the plan's bug list and convert this assertion to \
                  `matches!(outcome, Passed)` to guard against regressions."
             );
         }
         TestOutcome::Failed(msg) => {
-            eprintln!("[regression Ib6CYMnT] expected failure pinned: {}", msg);
+            eprintln!(
+                "[regression fullcol_faroutside_primary] expected failure pinned: {}",
+                msg
+            );
         }
         TestOutcome::Skipped(r) => {
             panic!(
-                "regression Ib6CYMnT unexpectedly skipped: {:?} — the pin is gone",
+                "regression fullcol_faroutside_primary unexpectedly skipped: {:?} — the pin is gone",
                 r
             );
         }
     }
 }
 
-/// `nxnOekSc` — same signature class as `Ib6CYMnT` (integer delta
-/// retained after inverse). Exercises the same pattern with a different
-/// row offset and value magnitude.
+/// Same signature class as the primary full-column regression (integer delta
+/// retained after inverse). Exercises the same pattern with a different value
+/// magnitude.
 #[test]
-fn regression_nxnoeksc_sumifs_fullcol_faroutside() {
+fn regression_sumifs_fullcol_faroutside_secondary() {
     let case = Class1Case {
-        name: "regression_nxnoeksc".into(),
+        name: "regression_sumifs_fullcol_faroutside_secondary".into(),
         shape: FormulaShape::Sumifs,
         range: RangeType::FullCol,
         edit_pos: Class1Axis3::FarOutside,
@@ -275,41 +278,47 @@ fn regression_nxnoeksc_sumifs_fullcol_faroutside() {
         new_value: CellValue::Number(FiniteF64::must(55.0)),
     };
     let outcome = run_case(&case);
-    eprintln!("[regression nxnOekSc] outcome: {:?}", outcome);
+    eprintln!(
+        "[regression fullcol_faroutside_secondary] outcome: {:?}",
+        outcome
+    );
     match outcome {
         TestOutcome::Passed => {
             eprintln!(
-                "[regression nxnOekSc] UNEXPECTED PASS — tighten this test to \
+                "[regression fullcol_faroutside_secondary] UNEXPECTED PASS — tighten this test to \
                  assert_passes once the related bug lands a fix."
             );
         }
         TestOutcome::Failed(msg) => {
-            eprintln!("[regression nxnOekSc] expected failure pinned: {}", msg);
+            eprintln!(
+                "[regression fullcol_faroutside_secondary] expected failure pinned: {}",
+                msg
+            );
         }
         TestOutcome::Skipped(r) => {
             panic!(
-                "regression nxnOekSc unexpectedly skipped: {:?} — the pin is gone",
+                "regression fullcol_faroutside_secondary unexpectedly skipped: {:?} — the pin is gone",
                 r
             );
         }
     }
 }
 
-/// `qKjqZiEx` — float-cascade. Per FINDINGS.md: `0.4 → 0.7000000000000001`
-/// on a numeric edit where the inverse should restore bit-identical
-/// pre-op value. Class III owns the broader bitwise-identity case; this
-/// regression pins the specific seed value surfaced by the harness.
+/// Float-cascade regression: `0.4 → 0.7000000000000001` on a numeric edit
+/// where the inverse should restore the bit-identical pre-op value. Class III
+/// owns the broader bitwise-identity case; this pins the seed value surfaced
+/// by the harness.
 ///
 /// Uses a Chain-like SUM dependency with a 0.4 seed so the cascade has
 /// somewhere to leak through.
 #[test]
-fn regression_qkjqziex_float_cascade() {
+fn regression_float_cascade_seed() {
     // We reuse the workbook builder but pick a fresh path: SUM of a
     // closed range where one cell we edit is 0.4. Forward: 0.4 → 0.7.
     // Inverse: 0.7 → 0.4. Expected: dependent SUM post-inverse is
     // bitwise equal to pre-op SUM.
     let case = Class1Case {
-        name: "regression_qkjqziex".into(),
+        name: "regression_float_cascade".into(),
         shape: FormulaShape::Sum,
         range: RangeType::Closed,
         edit_pos: Class1Axis3::Inside,
@@ -318,21 +327,24 @@ fn regression_qkjqziex_float_cascade() {
         new_value: CellValue::Number(FiniteF64::must(0.7)),
     };
     let outcome = run_case(&case);
-    eprintln!("[regression qKjqZiEx] outcome: {:?}", outcome);
+    eprintln!("[regression float_cascade] outcome: {:?}", outcome);
     match outcome {
         TestOutcome::Passed => {
             eprintln!(
-                "[regression qKjqZiEx] UNEXPECTED PASS — the float-cascade bug may \
+                "[regression float_cascade] UNEXPECTED PASS — the float-cascade bug may \
                  be fixed (or bit-identity is more generous than we thought). \
                  Tighten to `matches!(..., Passed)` once confirmed."
             );
         }
         TestOutcome::Failed(msg) => {
-            eprintln!("[regression qKjqZiEx] expected failure pinned: {}", msg);
+            eprintln!(
+                "[regression float_cascade] expected failure pinned: {}",
+                msg
+            );
         }
         TestOutcome::Skipped(r) => {
             panic!(
-                "regression qKjqZiEx unexpectedly skipped: {:?} — the pin is gone",
+                "regression float_cascade unexpectedly skipped: {:?} — the pin is gone",
                 r
             );
         }
@@ -633,8 +645,8 @@ class_i_matrix_edit_value_test!(
     ValueType::TimeSerial
 );
 
-// EditPosition::FarOutside × all 13 ValueTypes. Ib6CYMnT unit-level
-// expression lives on this axis × full-col × SUMIFS-shape.
+// EditPosition::FarOutside × all 13 ValueTypes. Dynamic-extent invalidation
+// is stressed on this axis × full-col × SUMIFS-shape.
 class_i_matrix_edit_value_test!(
     class_i_matrix_edit_far_outside_int,
     "far_outside__int",

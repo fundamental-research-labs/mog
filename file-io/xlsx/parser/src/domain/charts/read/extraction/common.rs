@@ -4,35 +4,108 @@ pub(in crate::domain::charts::read) fn chart_import_status_for_renderability(
     part_path: Option<&str>,
     object_name: Option<&str>,
 ) -> Option<domain_types::ImportObjectStatus> {
-    if !series.is_empty() || data_range.is_some() {
+    if has_renderable_chart_data(series, data_range) {
         return None;
     }
 
-    let diagnostic_id = domain_types::deterministic_diagnostic_id(
-        &domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
-        part_path,
-        None,
-        None,
-        None,
-        object_name,
-    );
-    let reference = domain_types::ImportDiagnosticRef {
-        id: Some(diagnostic_id),
-        part: part_path.map(str::to_string),
-        object_name: object_name.map(str::to_string),
-        feature_kind: Some(domain_types::ImportFeatureKind::Chart),
-        ..domain_types::ImportDiagnosticRef::default()
-    };
+    Some(crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: domain_types::ImportDiagnosticCode::ChartPartEmptySeries,
+            message: "Imported chart was preserved but has no renderable series data".to_string(),
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::Placeholder,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id: None,
+        },
+    ))
+}
 
-    Some(domain_types::ImportObjectStatus {
-        source: domain_types::ImportSource::Xlsx,
-        feature_kind: domain_types::ImportFeatureKind::Chart,
-        recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
-        renderability: domain_types::ImportRenderability::Placeholder,
-        editability: domain_types::ImportEditability::PartiallyEditable,
-        diagnostics: vec![reference.clone()],
-        reference: Some(reference),
-    })
+fn has_renderable_chart_data(
+    series: &[domain_types::chart::ChartSeriesData],
+    data_range: Option<&str>,
+) -> bool {
+    data_range.is_some_and(|range| !range.trim().is_empty())
+        || series.iter().any(series_has_renderable_value_dimension)
+}
+
+fn series_has_renderable_value_dimension(series: &domain_types::chart::ChartSeriesData) -> bool {
+    series
+        .values
+        .as_deref()
+        .is_some_and(|range| !range.trim().is_empty())
+        || series
+            .value_cache
+            .as_ref()
+            .is_some_and(point_cache_has_renderable_points)
+}
+
+fn point_cache_has_renderable_points(
+    cache: &domain_types::chart::ChartSeriesPointCacheData,
+) -> bool {
+    match cache.point_count {
+        Some(count) => count > 0,
+        None => !cache.points.is_empty(),
+    }
+}
+
+pub(in crate::domain::charts::read) fn chart_import_status_for_unsupported_chart_type(
+    raw_chart_type: &str,
+    part_path: Option<&str>,
+    object_name: Option<&str>,
+) -> Option<domain_types::ImportObjectStatus> {
+    let token = raw_chart_type.trim();
+    if token.is_empty() {
+        return None;
+    }
+
+    Some(crate::domain::charts::chart_import_status_with_diagnostic(
+        crate::domain::charts::ChartImportDiagnosticInput {
+            code: domain_types::ImportDiagnosticCode::UnsupportedChartType,
+            message: format!("Standard chart type `{token}` is not supported for rendering"),
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::NotRenderable,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            part_path,
+            object_name,
+            object_id: None,
+        },
+    ))
+}
+
+pub(in crate::domain::charts::read) fn chart_import_status_for_surface_family(
+    _chart_type: &domain_types::ChartType,
+    _wireframe: Option<bool>,
+    _surface_top_view: Option<bool>,
+    _part_path: Option<&str>,
+    _object_name: Option<&str>,
+) -> Option<domain_types::ImportObjectStatus> {
+    // Surface charts are renderability-neutral here; data and unsupported-type
+    // gates remain responsible for terminal import statuses.
+    None
+}
+
+pub(in crate::domain::charts::read) fn merge_chart_import_statuses(
+    primary: Option<domain_types::ImportObjectStatus>,
+    secondary: Option<domain_types::ImportObjectStatus>,
+) -> Option<domain_types::ImportObjectStatus> {
+    match (primary, secondary) {
+        (Some(mut primary), Some(secondary)) => {
+            for diagnostic in secondary.diagnostics {
+                if !primary
+                    .diagnostics
+                    .iter()
+                    .any(|existing| existing.id == diagnostic.id)
+                {
+                    primary.diagnostics.push(diagnostic);
+                }
+            }
+            Some(primary)
+        }
+        (Some(status), None) | (None, Some(status)) => Some(status),
+        (None, None) => None,
+    }
 }
 
 /// Map ooxml ChartType + config to domain ChartType.
@@ -50,7 +123,13 @@ pub(super) fn map_ooxml_chart_type_to_domain(
             },
             _ => domain_types::ChartType::Column,
         },
-        OT::Bar3D => domain_types::ChartType::Bar3D,
+        OT::Bar3D => match config {
+            CTC::Bar3D(c) => match c.bar_dir {
+                BarDirection::Bar => domain_types::ChartType::Bar3D,
+                BarDirection::Column => domain_types::ChartType::Column3D,
+            },
+            _ => domain_types::ChartType::Column3D,
+        },
         OT::Line => domain_types::ChartType::Line,
         OT::Line3D => domain_types::ChartType::Line3D,
         OT::Pie => domain_types::ChartType::Pie,
@@ -66,6 +145,69 @@ pub(super) fn map_ooxml_chart_type_to_domain(
         OT::Surface3D => domain_types::ChartType::Surface3D,
         OT::OfPie => domain_types::ChartType::OfPie,
         OT::Combo => domain_types::ChartType::Combo,
-        OT::Unknown => domain_types::ChartType::Column,
+        OT::Unknown => domain_types::ChartType::Unknown(String::new()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_view_surface_family_is_renderable() {
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface,
+                None,
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface,
+                Some(true),
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                Some(true),
+                Some(true),
+                None,
+                None,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn perspective_surface_family_is_renderable_as_projected_paths() {
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                None,
+                Some(false),
+                None,
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            chart_import_status_for_surface_family(
+                &domain_types::ChartType::Surface3D,
+                Some(true),
+                Some(false),
+                None,
+                None,
+            )
+            .is_none()
+        );
     }
 }

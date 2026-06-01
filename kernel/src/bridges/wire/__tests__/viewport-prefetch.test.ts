@@ -62,7 +62,7 @@ describe('computePrefetchBounds', () => {
     expect(result.startRow).toBe(0); // max(0, 600 - 1000)
     expect(result.startCol).toBe(0); // max(0, 10 - 20) = 0, clamped
     expect(result.endRow).toBe(1000); // min(1000, 650 + 1000)
-    expect(result.endCol).toBe(50); // 30 + 20
+    expect(result.endCol).toBe(94); // 30 + 64
   });
 
   it('respects custom overscan config', () => {
@@ -91,7 +91,7 @@ describe('computePrefetchBounds', () => {
     const result = computePrefetchBounds(visible, sheetDims);
 
     expect(result.endRow).toBe(1000); // min(1000, 1000 + 1000) = 1000
-    expect(result.endCol).toBe(200); // min(200, 200 + 20) = 200
+    expect(result.endCol).toBe(200); // min(200, 200 + 64) = 200
   });
 });
 

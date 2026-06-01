@@ -56,6 +56,7 @@ export const CheckboxOverlay = memo(function CheckboxOverlay({ element }: Checkb
         margin: 0,
       }}
       aria-label={`Checkbox at row ${metadata.row + 1}, column ${metadata.col + 1}${metadata.checked ? ' (checked)' : ' (unchecked)'}`}
+      data-no-grid-pointer="true"
       className="focus:outline focus:outline-2 focus:outline-ss-primary"
     />
   );

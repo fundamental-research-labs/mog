@@ -748,6 +748,17 @@ pub(in crate::storage::engine) fn convert_table_to_range(
         })?;
 
     let sheet_id_str = table.sheet_id.clone();
+    let table_filter = SheetId::from_uuid_str(&table.sheet_id)
+        .ok()
+        .and_then(|sheet_id| {
+            filters::get_table_filter(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                &sheet_id,
+                &table.id,
+            )
+            .map(|filter| (sheet_id, filter.id))
+        });
 
     let table_info = structured_ref_updater::TableRangeInfo {
         name: table.name.clone(),
@@ -772,7 +783,7 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     );
 
     stores.compute.remove_table(mirror, table_name);
-    remove_table_from_yrs(stores, table_name);
+    remove_table_from_yrs_with_filter(stores, table_name, table_filter.as_ref());
 
     let mut result = MutationResult::empty();
     result.table_changes.push(TableChange {

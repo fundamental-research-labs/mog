@@ -3,8 +3,8 @@ use domain_types::{
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
 };
 use ooxml_types::charts::{
-    self, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween, LabelAlignment, NumFmt,
-    Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
+    self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
+    LabelAlignment, NumFmt, Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
 };
 use ooxml_types::drawings::ShapeProperties;
 
@@ -21,15 +21,9 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
     if let (Some(ChartDefinition::Chart(chart_space)), Some(axes_data)) =
         (spec.definition.as_ref(), spec.axes.as_ref())
     {
-        let axes_ordered: Vec<_> = chart_space
-            .chart
-            .plot_area
-            .axes
-            .iter()
-            .map(|axis| axis.ax_id)
-            .collect();
-        if !axes_ordered.is_empty() {
-            return build_axes_from_ordered(axes_data, &axes_ordered);
+        let original_axes = &chart_space.chart.plot_area.axes;
+        if !original_axes.is_empty() {
+            return build_axes_from_original(axes_data, original_axes);
         }
     }
 
@@ -84,16 +78,53 @@ pub(super) fn build_default_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
         spec.chart_type,
         DomainChartType::Scatter | DomainChartType::Bubble
     ) {
-        return vec![
+        let mut axes = vec![
             build_single_axis_with_ids(&default_axis, AxisType::Value, cat_id, val_id),
             build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
         ];
+        if modeled_series_needs_secondary_axis(spec) {
+            axes.push(build_single_axis_with_ids(
+                &default_axis,
+                AxisType::Value,
+                333333333,
+                444444444,
+            ));
+            axes.push(build_single_axis_with_ids(
+                &default_axis,
+                AxisType::Value,
+                444444444,
+                333333333,
+            ));
+        }
+        return axes;
     }
 
-    vec![
+    let mut axes = vec![
         build_single_axis_with_ids(&default_axis, AxisType::Category, cat_id, val_id),
         build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
-    ]
+    ];
+    if modeled_series_needs_secondary_axis(spec) {
+        axes.push(build_single_axis_with_ids(
+            &default_axis,
+            AxisType::Category,
+            333333333,
+            444444444,
+        ));
+        axes.push(build_single_axis_with_ids(
+            &default_axis,
+            AxisType::Value,
+            444444444,
+            333333333,
+        ));
+    }
+
+    axes
+}
+
+fn modeled_series_needs_secondary_axis(spec: &ChartSpec) -> bool {
+    spec.series
+        .iter()
+        .any(|series| series.y_axis_index == Some(1))
 }
 
 pub(super) fn chart_type_requires_axes(chart_type: &DomainChartType) -> bool {
@@ -106,39 +137,138 @@ pub(super) fn chart_type_requires_axes(chart_type: &DomainChartType) -> bool {
     )
 }
 
-pub(super) fn build_axes_from_ordered(axes_data: &AxisData, ordered_ids: &[u32]) -> Vec<ChartAxis> {
-    // Map axis IDs to their axis data by convention:
-    // First pair: cat+val, second pair: secondary cat+val, fifth: series axis
-    let all: Vec<(u32, Option<&SingleAxisData>, AxisType)> = ordered_ids
-        .iter()
-        .enumerate()
-        .filter_map(|(i, &id)| {
-            let (axis_data, axis_type) = match i {
-                0 => (axes_data.category_axis.as_ref(), AxisType::Category),
-                1 => (axes_data.value_axis.as_ref(), AxisType::Value),
-                2 => (
-                    axes_data.secondary_category_axis.as_ref(),
-                    AxisType::Category,
-                ),
-                3 => (axes_data.secondary_value_axis.as_ref(), AxisType::Value),
-                4 => (axes_data.series_axis.as_ref(), AxisType::Series),
-                _ => return None,
-            };
-            Some((id, axis_data, axis_type))
-        })
-        .collect();
-
-    // Pair axes for cross_ax
-    let ids: Vec<u32> = all.iter().map(|(id, _, _)| *id).collect();
+pub(super) fn build_axes_from_original(
+    axes_data: &AxisData,
+    original_axes: &[ChartAxis],
+) -> Vec<ChartAxis> {
+    let role_ids = original_axis_role_ids(original_axes);
     let default_sad = SingleAxisData::default();
-    all.iter()
-        .map(|(id, data, axis_type)| {
-            // Determine cross axis ID
-            let cross_ax = determine_cross_ax(*id, *axis_type, &ids);
-            let sad = data.unwrap_or(&default_sad);
-            build_single_axis_with_ids(sad, *axis_type, *id, cross_ax)
+
+    original_axes
+        .iter()
+        .map(|axis| {
+            let sad = single_axis_data_for_original_axis(axes_data, &role_ids, axis)
+                .unwrap_or(&default_sad);
+            let cross_ax = if axis.cross_ax != 0 {
+                axis.cross_ax
+            } else {
+                determine_cross_ax(
+                    axis.ax_id,
+                    axis.axis_type,
+                    &original_axes
+                        .iter()
+                        .map(|original| original.ax_id)
+                        .collect::<Vec<_>>(),
+                )
+            };
+            build_single_axis_with_ids(sad, axis.axis_type, axis.ax_id, cross_ax)
         })
         .collect()
+}
+
+#[derive(Default)]
+struct OriginalAxisRoleIds {
+    category: Option<u32>,
+    secondary_category: Option<u32>,
+    value: Option<u32>,
+    secondary_value: Option<u32>,
+    series: Option<u32>,
+}
+
+fn original_axis_role_ids(original_axes: &[ChartAxis]) -> OriginalAxisRoleIds {
+    let mut roles = OriginalAxisRoleIds::default();
+    let category_axes: Vec<&ChartAxis> = original_axes
+        .iter()
+        .filter(|axis| matches!(axis.axis_type, AxisType::Category | AxisType::Date))
+        .collect();
+    let value_axes: Vec<&ChartAxis> = original_axes
+        .iter()
+        .filter(|axis| axis.axis_type == AxisType::Value)
+        .collect();
+
+    roles.category = category_axes
+        .iter()
+        .find(|axis| is_primary_axis_position(axis.ax_pos))
+        .or_else(|| category_axes.first())
+        .map(|axis| axis.ax_id);
+    roles.secondary_category = category_axes
+        .iter()
+        .find(|axis| Some(axis.ax_id) != roles.category && is_secondary_axis_position(axis.ax_pos))
+        .or_else(|| {
+            category_axes
+                .iter()
+                .find(|axis| Some(axis.ax_id) != roles.category)
+        })
+        .map(|axis| axis.ax_id);
+
+    let has_horizontal_value_axis = value_axes.iter().any(|axis| {
+        matches!(
+            axis.ax_pos,
+            ChartAxisPosition::Bottom | ChartAxisPosition::Top
+        )
+    });
+    if has_horizontal_value_axis {
+        roles.value = value_axes.first().map(|axis| axis.ax_id);
+        roles.secondary_value = value_axes
+            .iter()
+            .find(|axis| Some(axis.ax_id) != roles.value)
+            .map(|axis| axis.ax_id);
+    } else {
+        roles.value = value_axes
+            .iter()
+            .find(|axis| is_primary_axis_position(axis.ax_pos))
+            .or_else(|| value_axes.first())
+            .map(|axis| axis.ax_id);
+        roles.secondary_value = value_axes
+            .iter()
+            .find(|axis| Some(axis.ax_id) != roles.value && is_secondary_axis_position(axis.ax_pos))
+            .or_else(|| {
+                value_axes
+                    .iter()
+                    .find(|axis| Some(axis.ax_id) != roles.value)
+            })
+            .map(|axis| axis.ax_id);
+    }
+
+    roles.series = original_axes
+        .iter()
+        .find(|axis| axis.axis_type == AxisType::Series)
+        .map(|axis| axis.ax_id);
+    roles
+}
+
+fn single_axis_data_for_original_axis<'a>(
+    axes_data: &'a AxisData,
+    role_ids: &OriginalAxisRoleIds,
+    axis: &ChartAxis,
+) -> Option<&'a SingleAxisData> {
+    if Some(axis.ax_id) == role_ids.category {
+        return axes_data.category_axis.as_ref();
+    }
+    if Some(axis.ax_id) == role_ids.secondary_category {
+        return axes_data.secondary_category_axis.as_ref();
+    }
+    if Some(axis.ax_id) == role_ids.value {
+        return axes_data.value_axis.as_ref();
+    }
+    if Some(axis.ax_id) == role_ids.secondary_value {
+        return axes_data.secondary_value_axis.as_ref();
+    }
+    if Some(axis.ax_id) == role_ids.series {
+        return axes_data.series_axis.as_ref();
+    }
+    None
+}
+
+fn is_primary_axis_position(position: ChartAxisPosition) -> bool {
+    matches!(
+        position,
+        ChartAxisPosition::Bottom | ChartAxisPosition::Left
+    )
+}
+
+fn is_secondary_axis_position(position: ChartAxisPosition) -> bool {
+    matches!(position, ChartAxisPosition::Top | ChartAxisPosition::Right)
 }
 
 pub(super) fn determine_cross_ax(id: u32, _axis_type: AxisType, ids: &[u32]) -> u32 {
@@ -182,6 +312,10 @@ pub(super) fn build_single_axis_with_ids(
         })
         .unwrap_or(axis_type);
 
+    let log_base = sad
+        .log_base
+        .or_else(|| matches!(sad.scale_type.as_deref(), Some("logarithmic")).then_some(10.0));
+
     let scaling = Scaling {
         orientation: if sad.reverse == Some(true) {
             Orientation::MaxMin
@@ -190,18 +324,18 @@ pub(super) fn build_single_axis_with_ids(
         },
         min: sad.min,
         max: sad.max,
-        log_base: sad.log_base,
+        log_base,
         ..Default::default()
     };
 
     let title = sad
         .title
         .as_ref()
-        .map(|t| build_title_element(t, sad.title_format.as_ref()));
+        .map(|t| build_title_element(t, sad.title_format.as_ref(), None));
 
     let num_fmt = sad.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
-        source_linked: Some(false),
+        source_linked: sad.link_number_format,
     });
 
     let major_gridlines = sad.grid_lines.and_then(|show| {
@@ -272,6 +406,8 @@ pub(super) fn build_single_axis_with_ids(
     let major_time_unit = sad.major_time_unit.as_deref().map(TimeUnit::from_ooxml);
     let minor_time_unit = sad.minor_time_unit.as_deref().map(TimeUnit::from_ooxml);
 
+    let (crosses, crosses_at) = reconstruct_crossing(sad);
+
     let sp_pr = sad.format.as_ref().and_then(build_shape_properties);
     let tx_pr = sad.format.as_ref().and_then(build_text_body);
 
@@ -294,7 +430,11 @@ pub(super) fn build_single_axis_with_ids(
         sp_pr,
         tx_pr,
         cross_ax,
+        crosses,
+        crosses_at,
         cross_between,
+        tick_lbl_skip: sad.tick_label_spacing,
+        tick_mark_skip: sad.tick_mark_spacing,
         major_unit: sad.major_unit,
         minor_unit: sad.minor_unit,
         disp_units,
@@ -308,6 +448,22 @@ pub(super) fn build_single_axis_with_ids(
     }
 }
 
+fn reconstruct_crossing(sad: &SingleAxisData) -> (AxisCrosses, Option<f64>) {
+    match sad.crosses_at.as_deref() {
+        Some("custom") => (AxisCrosses::AutoZero, sad.crosses_at_value),
+        Some("min") => (AxisCrosses::Min, None),
+        Some("max") => (AxisCrosses::Max, None),
+        Some("automatic") | None => {
+            if sad.crosses_at_value.is_some() {
+                (AxisCrosses::AutoZero, sad.crosses_at_value)
+            } else {
+                (AxisCrosses::AutoZero, None)
+            }
+        }
+        Some(_) => (AxisCrosses::AutoZero, None),
+    }
+}
+
 pub(super) fn build_display_units(sad: &SingleAxisData) -> Option<charts::DisplayUnits> {
     let built_in = sad
         .display_unit
@@ -316,17 +472,43 @@ pub(super) fn build_display_units(sad: &SingleAxisData) -> Option<charts::Displa
     let custom = sad.custom_display_unit.map(charts::DisplayUnitKind::Custom);
     let kind = built_in.or(custom);
 
-    if kind.is_none() && sad.display_unit_label.is_none() {
+    if kind.is_none()
+        && sad.display_unit_label.is_none()
+        && sad.display_unit_label_layout.is_none()
+        && sad.display_unit_label_format.is_none()
+    {
         return None;
     }
 
-    let disp_units_lbl = sad
-        .display_unit_label
-        .as_ref()
-        .map(|text| charts::DisplayUnitsLabel {
-            tx: Some(build_chart_text_rich(text, None)),
-            ..Default::default()
-        });
+    let disp_units_lbl = if sad.display_unit_label.is_some()
+        || sad.display_unit_label_layout.is_some()
+        || sad.display_unit_label_format.is_some()
+    {
+        let tx = sad
+            .display_unit_label
+            .as_ref()
+            .map(|text| build_chart_text_rich(text, None));
+        let layout = sad
+            .display_unit_label_layout
+            .as_ref()
+            .map(|layout| layout.clone().into());
+        let sp_pr = sad
+            .display_unit_label_format
+            .as_ref()
+            .and_then(build_shape_properties);
+        let tx_pr = sad
+            .display_unit_label_format
+            .as_ref()
+            .and_then(build_text_body);
+        Some(charts::DisplayUnitsLabel {
+            layout,
+            tx,
+            sp_pr,
+            tx_pr,
+        })
+    } else {
+        None
+    };
 
     Some(charts::DisplayUnits {
         kind,

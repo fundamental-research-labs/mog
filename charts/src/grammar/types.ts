@@ -17,6 +17,8 @@ import type { Layout } from './spec';
  * Compiled chart result.
  */
 export interface CompileResult {
+  /** Background marks that must render before all chart content */
+  background?: AnyMark[];
   /** Data marks (bars, lines, points, etc.) */
   marks: AnyMark[];
   /** Axis marks (lines, ticks, labels) */

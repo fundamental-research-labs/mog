@@ -305,6 +305,12 @@ export class DocumentLifecycleSystem {
   /** Stable import durability barrier for deferred import hydration. */
   private deferredHydrationPromise: Promise<void> | null = null;
 
+  /** Pending delayed import durability timer, promoted by explicit barriers. */
+  private deferredHydrationTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Starts a scheduled deferred hydration run before its background timer fires. */
+  private startDeferredHydrationNow: (() => void) | null = null;
+
   /** True while imported content has not reached a full durable checkpoint. */
   private importDurabilityPending = false;
 
@@ -858,7 +864,7 @@ export class DocumentLifecycleSystem {
   }
 
   ensureDeferredHydration(): Promise<void> {
-    return this.scheduleDeferredHydration();
+    return this.scheduleDeferredHydration({ immediate: true });
   }
 
   async awaitMaterialized(_scope: SheetId | 'allSheets' = 'allSheets'): Promise<void> {
@@ -870,8 +876,13 @@ export class DocumentLifecycleSystem {
    * Call AFTER the first viewport paint to avoid blocking the UI.
    * The heavy Yrs write (~2s) runs asynchronously.
    */
-  scheduleDeferredHydration(): Promise<void> {
-    if (this.deferredHydrationPromise) return this.deferredHydrationPromise;
+  scheduleDeferredHydration(options?: { immediate?: boolean }): Promise<void> {
+    if (this.deferredHydrationPromise) {
+      if (options?.immediate) {
+        this.startDeferredHydrationNow?.();
+      }
+      return this.deferredHydrationPromise;
+    }
     if (!this.deferredHydrationPending) return Promise.resolve();
     const snap = this.actor.getSnapshot();
     const bridge = snap.context.computeBridge;
@@ -898,26 +909,65 @@ export class DocumentLifecycleSystem {
       if (m) {
         slog('documentLifecycle.deferredHydrationMeasure', { durationMs: m.duration });
       }
+
+      // Deferred hydration just populated engine state that the first-paint
+      // viewport buffers never saw — most notably the CF render cache
+      // (`init_cf_caches`), which carries data-bar fill ratios and icon-set
+      // buckets. Those render extras live only in the viewport binary buffer
+      // (unlike color-scale/style fills, which read through the live
+      // displayed-format cascade), so a coordinator whose buffer was committed
+      // before completion keeps showing no bars/icons until some unrelated
+      // scroll/resize forces a refetch. Mirror the post-Provider-replay path
+      // (see `forceRefreshAllViewports` in attachProviders) and refresh every
+      // registered coordinator from Rust now that the cache is complete. No-op
+      // when no coordinator is registered yet.
+      try {
+        await bridge.forceRefreshAllViewports();
+      } catch (err) {
+        slog('documentLifecycle.deferredHydrationForceRefreshAllViewportsFailed', { error: err });
+      }
+
       this.deferredHydrationPending = false;
     };
 
-    // Use setTimeout(0) to defer to the next macrotask. The lifecycle
-    // phases (attaching → ready) use Promise-based microtasks, so a
-    // macrotask fires after they all resolve and the React tree mounts.
-    // This ensures the viewport renders before the heavy WASM work.
+    // Use a macrotask after the app's first paint. Host-backed browser imports
+    // get a grace period so the user-visible open path can finish first-contact
+    // interactions before the heavy durability barrier runs. Explicit
+    // durability/materialization barriers promote the scheduled run immediately,
+    // so close/dispose never waits out the background grace period.
     this.importDurabilityPending = true;
+    const delayMs =
+      !options?.immediate && this.hostLifecycleInput !== undefined && this.environment === 'browser'
+        ? 60_000
+        : 0;
     const scheduled = new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
+      const start = () => {
+        if (this.startDeferredHydrationNow !== start) return;
+        if (this.deferredHydrationTimer !== null) {
+          clearTimeout(this.deferredHydrationTimer);
+        }
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         void run().then(resolve, reject);
-      }, 0);
+      };
+      this.startDeferredHydrationNow = start;
+      if (delayMs > 0) {
+        this.deferredHydrationTimer = setTimeout(start, delayMs);
+      } else {
+        start();
+      }
     });
     this.deferredHydrationPromise = scheduled
       .catch((err) => {
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         this.deferredHydrationPromise = null;
         this.deferredHydrationPending = true;
         throw err;
       })
       .finally(() => {
+        this.deferredHydrationTimer = null;
+        this.startDeferredHydrationNow = null;
         this.importDurabilityPending = this.deferredHydrationPending;
       });
     void this.deferredHydrationPromise.catch((err) => {
@@ -1194,7 +1244,6 @@ export class DocumentLifecycleSystem {
       const lifecycleInput = this.hostLifecycleInput;
       const storageConfig = lifecycleInput.storage.handoff.storage;
       const durability = storageConfig.durability;
-      let providerAttached = false;
       const requiresProviderAttach =
         durability !== 'ephemeral' || storageConfig.providers.some((p) => p.required);
       const { preflightAuthorizedStorage } = await import('./host-storage-preflight');
@@ -1319,7 +1368,6 @@ export class DocumentLifecycleSystem {
                 }
               : undefined,
           );
-          providerAttached = true;
           this.hostProviderMaterializerHandles.push(handle);
           if (input.importInitialize) {
             this.recordImportInitializeProviderRefId(handle.providerRefId);
@@ -1441,7 +1489,6 @@ export class DocumentLifecycleSystem {
             } else {
               await input.rustDocument.attachProvider(instance.provider);
             }
-            providerAttached = true;
           }
 
           // Transition storage phase to the selected ready mode
@@ -1459,14 +1506,6 @@ export class DocumentLifecycleSystem {
             `Host-backed storage requires provider attachment for durability '${durability}', but no registered provider factory matched the authorized storage config`,
           );
         }
-      }
-
-      if (input.importInitialize && this.deferredHydrationPending) {
-        await this.completeImportDurability(
-          input.computeBridge,
-          input.rustDocument,
-          providerAttached,
-        );
       }
 
       const skipDefaultSheet = input.skipDefaultSheet ?? false;
@@ -1522,14 +1561,6 @@ export class DocumentLifecycleSystem {
       providerAttached = true;
     }
 
-    if (input.importInitialize && this.deferredHydrationPending) {
-      await this.completeImportDurability(
-        input.computeBridge,
-        input.rustDocument,
-        providerAttached,
-      );
-    }
-
     // Sheet truth lands post-attach.
     //
     // `executeStartBridge` deferred default-sheet creation: this is where
@@ -1562,7 +1593,7 @@ export class DocumentLifecycleSystem {
         // state mirror sees a full SheetSettingsChange + WorkbookSettingsChange
         // on first paint — same shape as XLSX/CSV import.
         await input.computeBridge.createDefaultSheet('Sheet1');
-      } else if (providerAttached) {
+      } else if (providerAttached && !this.deferredHydrationPending) {
         // Pure-replay path: Provider attach replayed Yrs updates via
         // `syncApply`, populating the engine without ever flowing a
         // `MutationResult` through the kernel mirror. Emit a
@@ -1617,6 +1648,14 @@ export class DocumentLifecycleSystem {
     return { sheetIds };
   }
 
+  private async settleDeferredImportMirror(computeBridge: ComputeBridge): Promise<void> {
+    try {
+      await computeBridge.settleForMirror();
+    } catch (err) {
+      slog('documentLifecycle.deferredImportSettleForMirrorFailed', { error: err });
+    }
+  }
+
   private async completeImportDurability(
     bridge: ComputeBridge,
     rustDocument: RustDocument,
@@ -1666,6 +1705,7 @@ export class DocumentLifecycleSystem {
 
       this.deferredHydrationPending = false;
       this.importDurabilityPending = false;
+      this.updateStoragePhase(previousPhase);
       return {
         status: 'durable',
         checkpointedProviderRefIds: providerRefIds,
@@ -1676,6 +1716,7 @@ export class DocumentLifecycleSystem {
     await bridge.completeDeferredHydration();
     this.deferredHydrationPending = false;
     this.importDurabilityPending = false;
+    this.updateStoragePhase(previousPhase);
     return {
       status: 'skipped',
       checkpointedProviderRefIds: [],
@@ -1940,6 +1981,7 @@ export class DocumentLifecycleSystem {
       this.importDurabilityPending = true;
 
       // Get sheet IDs from the engine (populated by Rust import)
+      await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
 
       // Identity formula conversion is already done in Rust during
@@ -2009,6 +2051,7 @@ export class DocumentLifecycleSystem {
       this.deferredHydrationPending = true;
       this.importDurabilityPending = true;
 
+      await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
 
       return {

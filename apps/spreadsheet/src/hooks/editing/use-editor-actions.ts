@@ -78,6 +78,9 @@ export interface UseEditorActionsReturn {
   /** Set cursor position */
   setCursor: (position: number) => void;
 
+  /** Mirror a DOM text selection */
+  setTextSelection: (cursorPosition: number, selectionAnchor: number) => void;
+
   /** Commit the edit with optional direction to move selection */
   commit: (direction: Direction | 'none') => void;
 
@@ -232,6 +235,13 @@ export function useEditorActions(): UseEditorActionsReturn {
         }
 
         const ws = wb.getSheetById(sheetId);
+        const projectionSource = await ws.bindings.getProjectionSource(cell.row, cell.col);
+        if (
+          projectionSource != null &&
+          (projectionSource.row !== cell.row || projectionSource.col !== cell.col)
+        ) {
+          return protectionError('You cannot change part of an array formula.');
+        }
 
         // CSE partial-array rejection now lives in Rust (`compute-core`
         // returns `ComputeError::PartialArrayWrite` from `set_cell` for
@@ -295,6 +305,13 @@ export function useEditorActions(): UseEditorActionsReturn {
   const setCursor = useMemo(
     () => (position: number) => {
       commands.setCursor(position);
+    },
+    [commands],
+  );
+
+  const setTextSelection = useMemo(
+    () => (cursorPosition: number, selectionAnchor: number) => {
+      commands.setTextSelection(cursorPosition, selectionAnchor);
     },
     [commands],
   );
@@ -427,6 +444,7 @@ export function useEditorActions(): UseEditorActionsReturn {
       canEditCell,
       input,
       setCursor,
+      setTextSelection,
       commit,
       commitWithKey,
       cancel,
@@ -448,6 +466,7 @@ export function useEditorActions(): UseEditorActionsReturn {
       canEditCell,
       input,
       setCursor,
+      setTextSelection,
       commit,
       commitWithKey,
       cancel,

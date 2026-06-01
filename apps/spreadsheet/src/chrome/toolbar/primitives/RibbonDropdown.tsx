@@ -37,7 +37,7 @@ import {
   useState,
 } from 'react';
 
-import { Popover, PopoverContent, PopoverTrigger } from '@mog/shell';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@mog/shell';
 
 // =============================================================================
 // Context for nested dropdowns
@@ -90,6 +90,8 @@ interface RibbonDropdownProps {
    * dedicated `<div data-testid="...">` keep working unchanged.
    */
   menuTestId?: string;
+  /** Additional stable selectors for compatibility with older scenario contracts. */
+  menuTestIdAliases?: readonly string[];
   /**
    * Manual trigger mode - when true, the trigger element controls when to open/close.
    * Use this for SplitButton or other triggers with multiple click zones where
@@ -180,9 +182,8 @@ export function RibbonDropdown({
   containerClassName = '',
   menuLabel,
   menuTestId,
-  // manualTrigger is kept for backwards compatibility but no longer used.
-  // Radix Popover handles triggering via onOpenChange - callers control open state directly.
-  manualTrigger: _manualTrigger = false,
+  menuTestIdAliases = [],
+  manualTrigger = false,
 }: RibbonDropdownProps) {
   const { side, align } = mapPositionToSideAlign(position);
 
@@ -200,12 +201,27 @@ export function RibbonDropdown({
     [handleClose],
   );
 
+  const contentWithAliases = menuTestIdAliases.reduceRight<ReactNode>(
+    (content, alias) => (
+      <div role="menu" aria-label={menuLabel} data-testid={alias}>
+        {content}
+      </div>
+    ),
+    children,
+  );
+
   return (
     <RibbonDropdownContext.Provider value={contextValue}>
       <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <div className={containerClassName}>{trigger}</div>
-        </PopoverTrigger>
+        {manualTrigger ? (
+          <PopoverAnchor asChild>
+            <div className={containerClassName}>{trigger}</div>
+          </PopoverAnchor>
+        ) : (
+          <PopoverTrigger asChild>
+            <div className={containerClassName}>{trigger}</div>
+          </PopoverTrigger>
+        )}
         <PopoverContent
           side={side}
           align={align}
@@ -215,7 +231,7 @@ export function RibbonDropdown({
           aria-label={menuLabel}
           data-testid={menuTestId}
         >
-          {children}
+          {contentWithAliases}
         </PopoverContent>
       </Popover>
     </RibbonDropdownContext.Provider>
@@ -411,9 +427,9 @@ const MenuItemRow = forwardRef<HTMLDivElement, MenuItemRowProps>(function MenuIt
       data-value={dataValue}
       {...rest}
     >
-      <span className="w-4 h-4 flex items-center justify-center shrink-0">{iconSlot}</span>
-      <span className="flex-1">{children}</span>
+      <span className="flex-1 order-2">{children}</span>
       {trailingSlot}
+      <span className="w-4 h-4 flex items-center justify-center shrink-0 order-1">{iconSlot}</span>
     </div>
   );
 });
@@ -532,7 +548,8 @@ export function RibbonDropdownItem({
       iconSlot={isSelected ? SelectedCheckmark : (icon ?? null)}
       trailingSlot={
         shortcut ? (
-          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0">
+          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0 order-3">
+            {' '}
             {shortcut}
           </span>
         ) : null
@@ -668,7 +685,7 @@ export function RibbonDropdownSubmenu({
               aria-haspopup="true"
               aria-expanded={isOpen}
               iconSlot={icon ?? null}
-              trailingSlot={<span className="ml-2 text-ss-text-secondary">&#9656;</span>}
+              trailingSlot={<span className="ml-2 text-ss-text-secondary order-3">&#9656;</span>}
             >
               {label}
             </MenuItemRow>

@@ -100,25 +100,44 @@ export function getRichTextEditingContext(deps: ActionDependencies): RichTextEdi
   // Check if editor is in richTextEditing state via accessor
   const isRichTextEditing = deps.accessors.editor.isRichTextEditing();
 
-  if (!isRichTextEditing) {
-    return null;
+  if (isRichTextEditing) {
+    // Extract selection information via accessors
+    const selectionStart = deps.accessors.editor.getCharSelectionStart();
+    const selectionEnd = deps.accessors.editor.getCharSelectionEnd();
+    const hasCharSelection = deps.accessors.editor.hasCharSelection();
+    const segments: RichTextSegment[] = deps.accessors.editor.getRichTextSegments() ?? [];
+    const currentFormat = deps.accessors.editor.getCurrentFormat() ?? undefined;
+
+    return {
+      isRichTextEditing: true,
+      selectionStart,
+      selectionEnd,
+      hasCharSelection,
+      segments,
+      currentFormat,
+    };
   }
 
-  // Extract selection information via accessors
-  const selectionStart = deps.accessors.editor.getCharSelectionStart();
-  const selectionEnd = deps.accessors.editor.getCharSelectionEnd();
-  const hasCharSelection = deps.accessors.editor.hasCharSelection();
-  const segments: RichTextSegment[] = deps.accessors.editor.getRichTextSegments() ?? [];
-  const currentFormat = deps.accessors.editor.getCurrentFormat() ?? undefined;
+  if (deps.accessors.editor.isEditing() && deps.accessors.editor.hasSelection()) {
+    const value = deps.accessors.editor.getValue();
+    const cursorPosition = deps.accessors.editor.getCursorPosition();
+    const selectionAnchor = deps.accessors.editor.getSelectionAnchor();
+    const selectionStart = Math.min(cursorPosition, selectionAnchor);
+    const selectionEnd = Math.max(cursorPosition, selectionAnchor);
+    const segments: RichTextSegment[] =
+      deps.accessors.editor.getRichTextSegments() ?? (value ? [{ text: value }] : []);
 
-  return {
-    isRichTextEditing: true,
-    selectionStart,
-    selectionEnd,
-    hasCharSelection,
-    segments,
-    currentFormat,
-  };
+    return {
+      isRichTextEditing: false,
+      selectionStart,
+      selectionEnd,
+      hasCharSelection: selectionStart !== selectionEnd,
+      segments,
+      currentFormat: undefined,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -198,6 +217,16 @@ export function applyCharFormat(
   deps: ActionDependencies,
   format: Partial<TextFormat>,
 ): ActionResult {
+  if (!deps.accessors.editor.isRichTextEditing() && deps.accessors.editor.hasSelection()) {
+    const value = deps.accessors.editor.getValue();
+    const cursorPosition = deps.accessors.editor.getCursorPosition();
+    const selectionAnchor = deps.accessors.editor.getSelectionAnchor();
+    const selectionStart = Math.min(cursorPosition, selectionAnchor);
+    const selectionEnd = Math.max(cursorPosition, selectionAnchor);
+    const segments: RichTextSegment[] = value ? [{ text: value }] : [];
+    deps.commands.editor.startRichTextEditing(segments);
+    deps.commands.editor.charSelectionChanged(selectionStart, selectionEnd);
+  }
   deps.commands.editor.applyCharFormat(format);
   return handled();
 }

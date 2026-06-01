@@ -285,6 +285,20 @@ function GoalSeekResults({
         {result?.errorMessage && (
           <div className="text-body-sm text-ss-text-secondary">{result.errorMessage}</div>
         )}
+        <div className="bg-ss-surface-secondary rounded p-3 space-y-2">
+          <div className="flex justify-between text-body-sm">
+            <span className="text-ss-text-secondary">Target cell:</span>
+            <span className="text-text font-medium">{setCell}</span>
+          </div>
+          <div className="flex justify-between text-body-sm">
+            <span className="text-ss-text-secondary">Target value:</span>
+            <span className="text-text font-medium">{toValue}</span>
+          </div>
+          <div className="flex justify-between text-body-sm">
+            <span className="text-ss-text-secondary">Changing cell:</span>
+            <span className="text-text font-medium">{byChangingCell}</span>
+          </div>
+        </div>
         <div className="text-body-sm text-ss-text-secondary">
           <p>This can happen when:</p>
           <ul className="list-disc ml-5 mt-1 space-y-1">

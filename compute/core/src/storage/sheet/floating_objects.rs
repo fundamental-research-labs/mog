@@ -17,6 +17,7 @@ mod ids;
 mod keys;
 mod mutations;
 mod objects;
+mod order;
 mod sheet_map;
 mod units;
 mod z_order;

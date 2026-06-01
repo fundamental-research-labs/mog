@@ -1,4 +1,4 @@
-//! Parity tests for liability-calculation spreadsheet patterns.
+//! Parity tests for wide merge and spacer-dimension spreadsheet patterns.
 //!
 //! Two bug patterns are covered:
 //! 1. Wide horizontal merges with empty sub-cells (A1:P1 = 16 columns)
@@ -108,18 +108,16 @@ fn parse_wide_merge_empty_subcells() {
     assert_eq!(merge.end_col, 15, "merge end_col (A1:P1 = cols 0..15)");
 
     // --- Cell value assertions ---
-    // Cell (0,0) should have text "Liability Calculations"
+    // Cell (0,0) should have the wide merge header text.
     let top_left = sheet
         .cells
         .iter()
         .find(|c| c.row == 0 && c.col == 0)
         .expect("cell (0,0) should exist");
     match &top_left.value {
-        CellValue::Text(s) => assert_eq!(
-            s.as_ref(),
-            "Liability Calculations",
-            "cell (0,0) text content"
-        ),
+        CellValue::Text(s) => {
+            assert_eq!(s.as_ref(), "Wide Merge Header", "cell (0,0) text content")
+        }
         other => panic!("cell (0,0) expected Text, got {:?}", other),
     }
 
@@ -259,11 +257,7 @@ fn parse_spacer_content_dimensions() {
 fn roundtrip_wide_horizontal_merge() {
     let mut po = make_single_sheet(
         "Merges",
-        vec![cell(
-            0,
-            0,
-            CellValue::Text(Arc::from("Liability Calculations")),
-        )],
+        vec![cell(0, 0, CellValue::Text(Arc::from("Wide Merge Header")))],
     );
 
     // Widen the sheet to cover the merge range.
@@ -302,7 +296,7 @@ fn roundtrip_wide_horizontal_merge() {
         .find(|c| c.row == 0 && c.col == 0)
         .expect("cell (0,0) should exist after round-trip");
     match &top_left.value {
-        CellValue::Text(s) => assert_eq!(s.as_ref(), "Liability Calculations"),
+        CellValue::Text(s) => assert_eq!(s.as_ref(), "Wide Merge Header"),
         other => panic!("cell (0,0) expected Text after round-trip, got {:?}", other),
     }
 

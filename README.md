@@ -45,6 +45,9 @@ Use `@mog-sdk/embed` for browser, React, and Web Component embeds. See:
 This is a large monorepo. Start with the package or surface you are changing,
 then run the smallest relevant verification gate.
 
+Use `dev-v0.7.2` as the exclusive development branch for this repo unless a
+task explicitly names another branch. Do not base new local work on `dev`.
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck
@@ -64,7 +67,7 @@ pnpm check:external-fixtures
 ```
 
 CI and non-eval publish readiness gates are documented in
-[CI Gates](docs/CI-GATES.md).
+[CI Gates](docs/development/ci-gates.md).
 
 If you are a coding agent, read [AGENTS.md](AGENTS.md) before editing code.
 
@@ -83,9 +86,9 @@ If you are a coding agent, read [AGENTS.md](AGENTS.md) before editing code.
 
 ## Docs
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [CI gates](docs/CI-GATES.md)
-- [TypeScript package boundaries](docs/TYPESCRIPT-PACKAGE-BOUNDARIES.md)
+- [Architecture](docs/architecture/README.md)
+- [CI gates](docs/development/ci-gates.md)
+- [TypeScript package boundaries](docs/architecture/typescript-package-boundaries.md)
 - [Trademark notices](TRADEMARKS.md)
 
 ## License

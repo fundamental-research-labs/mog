@@ -13,28 +13,14 @@ Asymmetry vs. TS surface (intentional, documented in R8.4 decision pin):
   today, so scenario 2 (canonicalization observability) is exercised
   through ``wb.make_principal`` instead, which rides the same intern pool.
 
-Skipped when ``mog._native`` isn't built — run ``maturin develop`` from
-``compute/pyo3`` first.
+Requires ``mog._native`` to be built — run ``maturin develop`` from
+``compute/pyo3`` first. Missing native extension is a package-health failure.
 """
 from __future__ import annotations
 
 import pytest
 
-
-_native_available: bool
-try:
-    import mog  # noqa: F401  (import to trigger availability check)
-    from mog._native import ComputeEngine  # noqa: F401
-
-    _native_available = True
-except ImportError:
-    _native_available = False
-
-
-pytestmark = pytest.mark.skipif(
-    not _native_available,
-    reason="mog._native not built — run `maturin develop` from compute/pyo3",
-)
+from mog._native import ComputeEngine  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ export function createCommentAccessor(actor: CommentActor): CommentAccessor {
     getTarget: () => commentSelectors.target(snap()),
     getEditingCommentId: () => commentSelectors.editingCommentId(snap()),
     getDraftContent: () => commentSelectors.draftContent(snap()),
+    getComposeCommentType: () => commentSelectors.composeCommentType(snap()),
     getDeletingCommentId: () => commentSelectors.deletingCommentId(snap()),
 
     // ===========================================================================

@@ -541,7 +541,8 @@ describe('Select All', () => {
     });
 
     // Selects from A1 to MAX_ROWS-1, MAX_COLS-1
-    expect(result.activeCell).toEqual(cell(0, 0));
+    expect(result.activeCell).toEqual(cell(10, 10));
+    expect(result.anchor).toEqual(cell(10, 10));
     expect(result.pendingRange).toEqual({
       startRow: 0,
       startCol: 0,

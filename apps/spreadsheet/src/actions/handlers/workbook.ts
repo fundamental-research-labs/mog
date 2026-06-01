@@ -120,6 +120,18 @@ function inferSpanAxis(bounds: SelectionBounds): GroupingAxis | null {
   return null;
 }
 
+function findInnermostContainingGroup(
+  groups: GroupRecord[],
+  start: number,
+  end: number,
+): GroupRecord | null {
+  return (
+    groups
+      .filter((group) => group.start <= start && group.end >= end)
+      .sort((a, b) => b.level - a.level || a.end - a.start - (b.end - b.start))[0] ?? null
+  );
+}
+
 /** Minimal shape of `GroupDefinition` used by the show/hide detail iterators. */
 interface GroupRecord {
   id: string;
@@ -247,7 +259,9 @@ export const GROUP: AsyncActionHandler = async (deps) => {
 /**
  * Alt+Shift+Left - Ungroup selected rows or columns.
  * Mirrors GROUP's axis decision: full-row/full-column intent first,
- * then the legacy row-first span fallback.
+ * then the legacy row-first span fallback. A single active cell falls
+ * back to the innermost containing outline group, matching Excel's
+ * shortcut behavior for a cell inside an existing group.
  */
 export const UNGROUP: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
@@ -268,6 +282,30 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
     await ws.outline.ungroupColumns(bounds.startCol, bounds.endCol);
     return handled();
   }
+
+  const state = await ws.outline.getState();
+  const rowGroup = findInnermostContainingGroup(
+    state.rowGroups as GroupRecord[],
+    bounds.startRow,
+    bounds.endRow,
+  );
+  if (rowGroup) {
+    wb.setPendingUndoDescription(`Ungroup rows ${rowGroup.start + 1}-${rowGroup.end + 1}`);
+    await ws.outline.ungroupRows(rowGroup.start, rowGroup.end);
+    return handled();
+  }
+
+  const columnGroup = findInnermostContainingGroup(
+    state.columnGroups as GroupRecord[],
+    bounds.startCol,
+    bounds.endCol,
+  );
+  if (columnGroup) {
+    wb.setPendingUndoDescription(`Ungroup columns ${columnGroup.start + 1}-${columnGroup.end + 1}`);
+    await ws.outline.ungroupColumns(columnGroup.start, columnGroup.end);
+    return handled();
+  }
+
   return notHandled('disabled');
 };
 

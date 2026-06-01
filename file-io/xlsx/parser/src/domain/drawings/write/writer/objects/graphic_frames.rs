@@ -70,7 +70,17 @@ impl DrawingWriter {
         w.end_element("xdr:nvGraphicFramePr");
 
         // Transform — preserve original values for round-trip fidelity
-        w.start_element("xdr:xfrm").end_attrs();
+        w.start_element("xdr:xfrm");
+        if let Some(rot) = chart.xfrm_rot {
+            w.attr_num("rot", rot);
+        }
+        if let Some(flip_h) = chart.xfrm_flip_h {
+            w.attr("flipH", if flip_h { "1" } else { "0" });
+        }
+        if let Some(flip_v) = chart.xfrm_flip_v {
+            w.attr("flipV", if flip_v { "1" } else { "0" });
+        }
+        w.end_attrs();
         {
             w.start_element("a:off")
                 .attr_num("x", chart.xfrm_off_x)

@@ -235,6 +235,11 @@ export const editorMachine = setup({
           { actions: ['updateValue', 'closePicker'] },
         ],
         SET_CURSOR: { actions: 'setCursor' },
+        TEXT_SELECTION_CHANGED: { actions: 'setTextSelection' },
+        START_RICH_TEXT_EDITING: {
+          target: 'richTextEditing.editMode',
+          actions: 'startRichTextEditing',
+        },
         IME_START: { target: 'imeComposing', actions: ['startIMEComposition', 'closePicker'] },
         COMMIT: { target: 'validating', actions: ['storeCommitDirection', 'closePicker'] },
         PICKER_COMMIT: { target: 'validating', actions: ['applyPickerCommit', 'closePicker'] },
@@ -385,6 +390,7 @@ export const editorMachine = setup({
           { actions: ['updateValue', 'computeFormulaContext'] },
         ],
         SET_CURSOR: { actions: ['setCursor', 'computeFormulaContext'] },
+        TEXT_SELECTION_CHANGED: { actions: ['setTextSelection', 'computeFormulaContext'] },
         IME_START: { target: 'imeComposing', actions: ['startIMEComposition', 'hideSuggestions'] },
         FORMULA_RANGE_SELECTED: { actions: ['insertFormulaRange', 'computeFormulaContext'] },
         // C.3/H.3: Update formula range reference after drag-resize
@@ -393,7 +399,11 @@ export const editorMachine = setup({
         CYCLE_REFERENCE: { actions: ['cycleReference', 'computeFormulaContext'] },
         COMMIT: {
           target: 'validating',
-          actions: ['storeCommitDirection', 'resetAutocompleteState'],
+          actions: [
+            'completePointModeFormulaForCommit',
+            'storeCommitDirection',
+            'resetAutocompleteState',
+          ],
         },
         // Ctrl+Shift+Enter to commit as array formula (CSE)
         ENTER_ARRAY_FORMULA: {
@@ -539,10 +549,11 @@ export const editorMachine = setup({
         CLEAR_CHAR_FORMAT: { actions: 'clearCharFormat' },
 
         SET_CURSOR: { actions: 'setCursor' },
+        TEXT_SELECTION_CHANGED: { actions: 'setTextSelection' },
         IME_START: { target: 'imeComposing', actions: 'startIMEComposition' },
         COMMIT: {
           target: 'validating',
-          actions: ['storeCommitDirection', 'resetRichTextState'],
+          actions: 'storeCommitDirection',
         },
         CANCEL: {
           target: 'inactive',
@@ -653,6 +664,11 @@ export const editorMachine = setup({
           actions: ['commitIMEComposition', 'storeBlurAsCommit'],
         },
 
+        COMMIT: {
+          target: 'validating',
+          actions: ['commitIMEComposition', 'storeCommitDirection'],
+        },
+
         // IME must complete before these actions can happen
         // In practice, browser enforces this, but we model it explicitly
         // CANCEL (second ESC) cancels the entire edit
@@ -716,6 +732,24 @@ export const editorMachine = setup({
           { guard: 'isInEditMode', target: 'editing.editMode' },
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode' },
+        ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: 'selectCurrentValue',
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: 'selectCurrentValue',
+          },
+          { target: 'editing.enterMode', actions: 'selectCurrentValue' },
         ],
 
         // Remote events - guards removed, coordinator filters
@@ -821,6 +855,24 @@ export const editorMachine = setup({
           { guard: 'isInEditMode', target: 'editing.editMode', actions: 'clearError' },
           // Regular + Enter Mode (default)
           { target: 'editing.enterMode', actions: 'clearError' },
+        ],
+        RETRY_SELECT_ALL: [
+          {
+            guard: and(['isFormula', 'isInEditMode']),
+            target: 'formulaEditing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isFormula',
+            target: 'formulaEditing.enterMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          {
+            guard: 'isInEditMode',
+            target: 'editing.editMode',
+            actions: ['clearError', 'selectCurrentValue'],
+          },
+          { target: 'editing.enterMode', actions: ['clearError', 'selectCurrentValue'] },
         ],
         CANCEL: { target: 'inactive', actions: 'resetContext' },
         INPUT: [

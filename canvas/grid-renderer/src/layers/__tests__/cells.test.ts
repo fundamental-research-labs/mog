@@ -669,5 +669,69 @@ describe('CellsLayer', () => {
       expect(texts).not.toContain('0');
       expect(texts).toContain('5');
     });
+
+    it('renders accounting formats as split currency and numeric tokens', () => {
+      const accountingFormat = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)';
+      const reader = createMockReader(
+        new Map([
+          [
+            '0,0',
+            {
+              valueType: 1,
+              numberValue: 1234.5,
+              displayText: ' $1,234.50 ',
+              format: { numberFormat: accountingFormat },
+            },
+          ],
+          [
+            '1,0',
+            {
+              valueType: 1,
+              numberValue: -987.65,
+              displayText: ' $(987.65)',
+              format: { numberFormat: accountingFormat },
+            },
+          ],
+          [
+            '2,0',
+            {
+              valueType: 1,
+              numberValue: 0,
+              displayText: ' $-   ',
+              format: { numberFormat: accountingFormat },
+            },
+          ],
+        ]),
+      );
+      const layer = createLayerWithReader(reader);
+      const ctx = createMockContext();
+
+      layer.render(
+        ctx,
+        createRegionWithViewport({
+          startRow: 0,
+          startCol: 0,
+          endRow: 2,
+          endCol: 0,
+        }),
+        createFrame(),
+      );
+
+      const calls = (ctx.fillText as jest.Mock).mock.calls.map((call: unknown[]) => ({
+        text: call[0] as string,
+        x: call[1] as number,
+      }));
+      const texts = calls.map((call) => call.text);
+
+      expect(texts).toEqual(expect.arrayContaining(['$', '1,234.50', '(987.65)', '-']));
+      expect(texts).not.toContain(' $1,234.50 ');
+      expect(texts).not.toContain(' $(987.65)');
+      expect(texts).not.toContain(' $-   ');
+      expect(texts.filter((text) => text === '$')).toHaveLength(3);
+
+      const currencyCall = calls.find((call) => call.text === '$');
+      const positiveAmountCall = calls.find((call) => call.text === '1,234.50');
+      expect(currencyCall?.x).toBeLessThan(positiveAmountCall?.x ?? 0);
+    });
   });
 });

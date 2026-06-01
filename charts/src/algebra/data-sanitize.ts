@@ -86,24 +86,34 @@ export function extendDataForLayerFields(
   mergedEncoding: EncodingSpec,
   layers: ChartSpec[],
 ): DataRow[] {
-  // Positional channels that need shared scale domains
-  const channels: (keyof EncodingSpec)[] = ['x', 'y'];
+  // Positional channels that need shared scale domains. Secondary endpoints
+  // share their primary axis scale, so x2/y2 fields must also be projected
+  // into the x/y domain data.
+  const channelGroups: Array<{
+    primary: keyof EncodingSpec;
+    related: Array<keyof EncodingSpec>;
+  }> = [
+    { primary: 'x', related: ['x', 'x2'] },
+    { primary: 'y', related: ['y', 'y2'] },
+  ];
 
-  // Collect alternative fields per channel: fields used by layers that differ
-  // from the merged encoding's field for that channel
+  // Collect alternative fields per primary scale channel: fields used by
+  // layers that differ from the merged encoding's field for that channel.
   const altFieldsByChannel = new Map<string, Set<string>>();
 
-  for (const channel of channels) {
-    const mergedChannel = mergedEncoding[channel] as ChannelSpec | undefined;
+  for (const { primary, related } of channelGroups) {
+    const mergedChannel = mergedEncoding[primary] as ChannelSpec | undefined;
     if (!mergedChannel?.field) continue;
 
     const mergedField = mergedChannel.field;
     const altFields = new Set<string>();
 
     for (const layer of layers) {
-      const layerChannel = layer.encoding?.[channel] as ChannelSpec | undefined;
-      if (layerChannel?.field && layerChannel.field !== mergedField) {
-        altFields.add(layerChannel.field);
+      for (const channel of related) {
+        const layerChannel = layer.encoding?.[channel] as ChannelSpec | undefined;
+        if (layerChannel?.field && layerChannel.field !== mergedField) {
+          altFields.add(layerChannel.field);
+        }
       }
     }
 

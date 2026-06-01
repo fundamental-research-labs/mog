@@ -25,6 +25,7 @@
 
 pub mod axes;
 pub mod chart_ex;
+mod import_diagnostics;
 pub mod model;
 pub mod parse;
 pub mod read;
@@ -35,6 +36,7 @@ pub mod write_canonical;
 mod xml_helpers;
 
 pub use axes::*;
+pub(crate) use import_diagnostics::*;
 pub use model::*;
 pub use series::*;
 pub use types::*;

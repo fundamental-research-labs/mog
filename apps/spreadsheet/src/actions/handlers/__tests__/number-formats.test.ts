@@ -81,10 +81,10 @@ describe('Number Format Handlers — preset format strings', () => {
     expect(getAppliedFormat(deps)).toBe('#,##0.00');
   });
 
-  it('FORMAT_TIME applies h:mm:ss AM/PM', async () => {
+  it('FORMAT_TIME applies h:mm AM/PM', async () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_TIME(deps);
-    expect(getAppliedFormat(deps)).toBe('h:mm:ss AM/PM');
+    expect(getAppliedFormat(deps)).toBe('h:mm AM/PM');
   });
 
   it('FORMAT_CURRENCY applies $#,##0.00', async () => {
@@ -109,5 +109,51 @@ describe('Number Format Handlers — preset format strings', () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_COMMA(deps);
     expect(getAppliedFormat(deps)).toBe('#,##0.00');
+  });
+});
+
+describe('Number Format Handlers — decimal adjustment', () => {
+  function createMockDepsWithNumberFormat(
+    numberFormat: string | undefined,
+    displayText?: string,
+  ): ActionDependencies {
+    const deps = createMockDeps() as any;
+    const ws = deps.workbook.getSheetById();
+    ws.viewport = {
+      getCellData: jest.fn().mockReturnValue({ format: { numberFormat }, displayText }),
+    };
+    deps.workbook.activeSheet = ws;
+    return deps as ActionDependencies;
+  }
+
+  it('DECREASE_DECIMALS steps a General cell down from its displayed decimals', async () => {
+    // "1.23456" shows 5 decimals → one step down is 4 decimals, not a jump to 1.
+    const deps = createMockDepsWithNumberFormat('General', '1.23456');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.0000');
+  });
+
+  it('INCREASE_DECIMALS steps a General cell up from its displayed decimals', async () => {
+    const deps = createMockDepsWithNumberFormat('General', '1.2');
+    await NumberFormatHandlers.INCREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.00');
+  });
+
+  it('DECREASE_DECIMALS clamps a whole-number General cell at zero', async () => {
+    const deps = createMockDepsWithNumberFormat('General', '5');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0');
+  });
+
+  it('DECREASE_DECIMALS keeps explicit zero-decimal formats clamped at zero', async () => {
+    const deps = createMockDepsWithNumberFormat('0');
+    await NumberFormatHandlers.DECREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0');
+  });
+
+  it('INCREASE_DECIMALS increments explicit zero-decimal formats', async () => {
+    const deps = createMockDepsWithNumberFormat('0');
+    await NumberFormatHandlers.INCREASE_DECIMALS(deps);
+    expect(getAppliedFormat(deps)).toBe('0.0');
   });
 });

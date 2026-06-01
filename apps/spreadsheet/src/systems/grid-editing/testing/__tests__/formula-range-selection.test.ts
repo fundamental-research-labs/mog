@@ -56,6 +56,20 @@ describe('Formula Range Selection', () => {
     expect(sim.isSelectingRangeForFormula()).toBe(true);
   });
 
+  it('plain arrow in formula point-mode preserves the editing active cell', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 0 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=');
+    await sim.flush();
+
+    sim.arrow('right');
+    await sim.flush();
+
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+    expect(sim.selectionRanges()[0]).toEqual({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 });
+    expect(sim.editorValue()).toBe('=B1');
+  });
+
   it('Shift+Up extends formula range upward', async () => {
     sim = createGridSimulator({ activeCell: { row: 4, col: 1 }, sheetId: 'sheet-1' });
 
@@ -155,5 +169,27 @@ describe('Formula Range Selection', () => {
 
     // Active cell should remain at original position
     expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
+  });
+
+  it('cancel after point-mode reference restores edited cell selection', async () => {
+    sim = createGridSimulator({ activeCell: { row: 4, col: 1 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=');
+    await sim.flush();
+
+    sim.arrow('down');
+    await sim.flush();
+
+    expect(sim.editorValue()).toBe('=B6');
+    expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
+    expect(sim.selectionRanges()).toEqual([{ startRow: 5, startCol: 1, endRow: 5, endCol: 1 }]);
+
+    sim.cancelEdit();
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.isSelectingRangeForFormula()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
+    expect(sim.selectionRanges()).toEqual([{ startRow: 4, startCol: 1, endRow: 4, endCol: 1 }]);
   });
 });

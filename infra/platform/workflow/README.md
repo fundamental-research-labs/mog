@@ -204,4 +204,4 @@ black src/ tests/
 
 ## Related Documentation
 
-- [Development Philosophy](../../docs/DEVELOPMENT-PHILOSOPHY.md) - Development principles
+- [Repository instructions](../../../AGENTS.md) - Development principles

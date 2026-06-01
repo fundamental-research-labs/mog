@@ -163,7 +163,7 @@ class SecurityAPI:
     def remove_template(self, template_id: str) -> None:
         """Remove every policy emitted by the named template."""
         self._bridge.call(
-            "compute_wb_security_remove_template", json.dumps(template_id)
+            "compute_wb_security_remove_template", template_id
         )
 
     # -----------------------------------------------------------------
@@ -176,12 +176,13 @@ class SecurityAPI:
         return list(result) if isinstance(result, list) else []
 
     def effective_access(
-        self, target: Dict[str, Any], principal: Dict[str, List[str]]
+        self, principal: Dict[str, List[str]], target: Dict[str, Any]
     ) -> str:
         """Resolve the principal's effective access level for ``target``.
-        ``target`` and ``principal`` are dicts in their respective serde
+        ``principal`` and ``target`` are dicts in their respective serde
         wire shapes (see :class:`Target` and :class:`Principal`).
         """
+        principal, target = _normalize_principal_target(principal, target)
         # Rust `wb_security_effective_access(target, principal_tags: Vec<String>)`
         # takes a flat tag list — unwrap the `{tags}` envelope here.
         return self._bridge.call(
@@ -191,16 +192,19 @@ class SecurityAPI:
         )
 
     def explain_access(
-        self, target: Dict[str, Any], principal: Dict[str, List[str]]
+        self, principal: Dict[str, List[str]], target: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Full derivation trace — one-to-one with
         ``AccessExplanation`` on the Rust side."""
+        principal, target = _normalize_principal_target(principal, target)
         result = self._bridge.call_json(
             "compute_wb_security_explain_access",
             json.dumps(target),
             json.dumps(_principal_tags(principal)),
         )
-        return result if isinstance(result, dict) else {}
+        if not isinstance(result, dict):
+            return {}
+        return _normalize_access_explanation(result)
 
     def drain_events(self) -> List[Dict[str, Any]]:
         """Drain pending :class:`SecurityEvent` entries from the engine's
@@ -228,6 +232,27 @@ def _principal_tags(principal: Any) -> List[str]:
     return [str(t) for t in principal]
 
 
+def _normalize_principal_target(
+    principal: Any, target: Any
+) -> tuple[Any, Dict[str, Any]]:
+    """Accept the old positional ``(target, principal)`` order too."""
+    if _looks_like_target(principal) and _looks_like_principal(target):
+        return target, principal
+    return principal, target
+
+
+def _looks_like_target(value: Any) -> bool:
+    return isinstance(value, dict) and isinstance(value.get("kind"), str)
+
+
+def _looks_like_principal(value: Any) -> bool:
+    if isinstance(value, dict):
+        return "tags" in value
+    if isinstance(value, (str, bytes)):
+        return False
+    return isinstance(value, (list, tuple, set))
+
+
 def _normalize_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     """Fill in defaults for fields SDK callers tend to omit.
 
@@ -247,3 +272,18 @@ def _normalize_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
         {"createdBy": "sdk", "createdAt": 0, "templateId": None},
     )
     return out
+
+
+def _normalize_access_explanation(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize Rust ``AccessExplanation`` keys to the SDK camelCase shape."""
+    normalized = dict(result)
+    for source, target in [
+        ("effective_tags", "effectiveTags"),
+        ("candidate_policies", "candidatePolicies"),
+        ("sorted_policies", "sortedPolicies"),
+        ("matched_policy", "matchedPolicy"),
+        ("clamp_fired", "clampFired"),
+    ]:
+        if source in normalized and target not in normalized:
+            normalized[target] = normalized[source]
+    return normalized

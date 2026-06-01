@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::formatting::{ChartFormatData, ChartLineData};
+use crate::domain::drawings::ManualLayout;
+
+use super::formatting::{ChartFormatData, ChartFormatStringData, ChartLineData};
 
 /// Chart axes configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,6 +60,8 @@ pub struct SingleAxisData {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_rich_text: Option<Vec<ChartFormatStringData>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub gridline_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub minor_gridline_format: Option<ChartLineData>,
@@ -75,6 +79,10 @@ pub struct SingleAxisData {
     pub custom_display_unit: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub display_unit_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub display_unit_label_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub display_unit_label_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub label_alignment: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -105,7 +113,8 @@ pub struct SingleAxisData {
     /// Whether tick marks are between categories (true) or on categories (false).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_between_categories: Option<bool>,
-    /// Text orientation angle in degrees (-90 to 90).
+    /// Text orientation angle in degrees (-90 to 90). OOXML vertical text mode
+    /// is carried separately on ChartFormatData::text_vertical_type.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub text_orientation: Option<f64>,
     /// Horizontal alignment for axis labels: "left", "center", "right", etc.

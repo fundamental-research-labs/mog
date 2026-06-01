@@ -31,7 +31,6 @@ impl YrsComputeEngine {
         let locale = self.settings.locale.clone();
         let mut to_apply: Vec<(SheetId, u32, u32, String)> = Vec::new();
 
-        let culture = self.settings.locale.clone();
         for (sheet_id, row, col, text) in candidates {
             // 1. Skip formulas and apostrophe-prefixed literal text — those
             //    never round-trip through date detection.
@@ -186,6 +185,154 @@ impl YrsComputeEngine {
         for (sheet_id, row, col, fmt) in to_apply {
             let format = CellFormat {
                 number_format: Some(fmt),
+                ..Default::default()
+            };
+            services::formatting::set_format_for_ranges(
+                &mut self.stores,
+                &self.mirror,
+                &sheet_id,
+                &[(row, col, row, col)],
+                &format,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(in crate::storage::engine) fn apply_inferred_currency_formats(
+        &mut self,
+        candidates: &[(SheetId, u32, u32, String)],
+    ) -> Result<(), ComputeError> {
+        let mut to_apply: Vec<(SheetId, u32, u32, String)> = Vec::new();
+
+        for (sheet_id, row, col, text) in candidates {
+            let trimmed = text.trim();
+            if trimmed.is_empty() || trimmed.starts_with('=') || trimmed.starts_with('\'') {
+                continue;
+            }
+
+            if !matches!(
+                self.mirror
+                    .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
+                Some(value_types::CellValue::Number(_))
+            ) {
+                continue;
+            }
+
+            let Some(format) = inferred_currency_format(trimmed) else {
+                continue;
+            };
+
+            let cell_id =
+                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
+                    Some(id) => id,
+                    None => continue,
+                };
+            let cell_hex = id_to_hex(cell_id.as_u128());
+            let table_fmt =
+                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format(
+                &self.stores.storage,
+                sheet_id,
+                &cell_hex,
+                *row,
+                *col,
+                table_fmt.as_ref(),
+                self.stores.grid_indexes.get(sheet_id),
+                self.mirror.get_sheet(sheet_id),
+            );
+            let has_explicit_format = effective
+                .number_format
+                .as_deref()
+                .is_some_and(is_non_general_number_format);
+            if has_explicit_format {
+                continue;
+            }
+
+            to_apply.push((*sheet_id, *row, *col, format.to_string()));
+        }
+
+        if to_apply.is_empty() {
+            return Ok(());
+        }
+
+        let _guard = self.mutation.suppress_guard();
+        for (sheet_id, row, col, fmt) in to_apply {
+            let format = CellFormat {
+                number_format: Some(fmt),
+                ..Default::default()
+            };
+            services::formatting::set_format_for_ranges(
+                &mut self.stores,
+                &self.mirror,
+                &sheet_id,
+                &[(row, col, row, col)],
+                &format,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(in crate::storage::engine) fn apply_inferred_percent_formats(
+        &mut self,
+        candidates: &[(SheetId, u32, u32, String)],
+    ) -> Result<(), ComputeError> {
+        let mut to_apply: Vec<(SheetId, u32, u32)> = Vec::new();
+
+        for (sheet_id, row, col, text) in candidates {
+            let trimmed = text.trim();
+            if trimmed.is_empty()
+                || trimmed.starts_with('=')
+                || trimmed.starts_with('\'')
+                || !trimmed.ends_with('%')
+            {
+                continue;
+            }
+
+            if !matches!(
+                self.mirror
+                    .get_cell_value_at(sheet_id, cell_types::SheetPos::new(*row, *col)),
+                Some(value_types::CellValue::Number(_))
+            ) {
+                continue;
+            }
+
+            let cell_id =
+                match services::cell_editing::find_cell_id_at(&self.stores, sheet_id, *row, *col) {
+                    Some(id) => id,
+                    None => continue,
+                };
+            let cell_hex = id_to_hex(cell_id.as_u128());
+            let table_fmt =
+                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+            let effective = crate::storage::properties::get_effective_format(
+                &self.stores.storage,
+                sheet_id,
+                &cell_hex,
+                *row,
+                *col,
+                table_fmt.as_ref(),
+                self.stores.grid_indexes.get(sheet_id),
+                self.mirror.get_sheet(sheet_id),
+            );
+            if effective
+                .number_format
+                .as_deref()
+                .is_some_and(is_non_general_number_format)
+            {
+                continue;
+            }
+
+            to_apply.push((*sheet_id, *row, *col));
+        }
+
+        if to_apply.is_empty() {
+            return Ok(());
+        }
+
+        let _guard = self.mutation.suppress_guard();
+        for (sheet_id, row, col) in to_apply {
+            let format = CellFormat {
+                number_format: Some("0%".to_string()),
                 ..Default::default()
             };
             services::formatting::set_format_for_ranges(
@@ -400,6 +547,16 @@ fn inferred_time_format(text: &str, culture: &str) -> Option<&'static str> {
         (false, true) => "h:mm:ss",
         (false, false) => "h:mm",
     })
+}
+
+fn inferred_currency_format(text: &str) -> Option<&'static str> {
+    let has_currency = text
+        .chars()
+        .any(|ch| matches!(ch, '$' | '€' | '£' | '¥' | '₹' | '₽' | '¢' | '₩'));
+    if !has_currency || !text.chars().any(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    Some("$#,##0.00")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

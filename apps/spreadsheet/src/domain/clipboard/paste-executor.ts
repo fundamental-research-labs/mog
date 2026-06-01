@@ -872,6 +872,16 @@ export async function executePaste(
             : coreCopyType === 'values'
               ? clipboardHasValue || clipboardHasFormula
               : false;
+    // Cross-sheet pastes DO use the core copy_range fast path. The engine
+    // reads the source range from its own mirror (not the active-sheet
+    // viewport), so a non-active source sheet is read correctly, blank source
+    // positions clear the target atomically, and naked relative refs rebind to
+    // the target sheet via build_cross_sheet_adjusted_formula — none of which
+    // the TS cell-by-cell path (which writes captured formula strings
+    // verbatim, without positional rebasing) can do. The earlier cross-sheet
+    // no-op was NOT the engine read failing; it was a redundant TS blank-clear
+    // pass that read the source through the active-only viewport (see the
+    // copy_range call below).
     const useCoreCopyRange =
       isInternalSource &&
       clipboardHasCorePayload &&
@@ -1111,10 +1121,23 @@ export async function executePaste(
     // synthesis above cannot do. Secondary payloads (comments, hyperlinks, etc.)
     // still go through TS below.
     if (useCoreCopyRange && store.copyRange) {
-      const originalSource = data.sourceRanges[0];
+      // copy_range owns the full-rectangle write atomically — including
+      // clearing target cells whose source position is blank. For All /
+      // Values / Formulas (skip_blanks=false) the engine pushes
+      // CellValue::Null for every blank source position, so pre-existing
+      // target content is overwritten in the same CRDT transaction (see
+      // range_operations/copy.rs and the test_copy_range_skip_blanks
+      // assertion that a blank source clears the target).
+      //
+      // Do NOT layer a second TS blank-clear pass on top. It would be
+      // redundant with the engine, non-atomic (a separate setCellValues
+      // mutation + IPC round-trip), and — critically — wrong for cross-sheet
+      // paste: the source read is viewport-scoped to the *active* sheet, so
+      // when the source sheet isn't active every source cell reads as blank
+      // and the clears wipe the values copy_range just wrote.
       await store.copyRange(
         toSheetId(data.sourceSheetId),
-        originalSource,
+        data.sourceRanges[0],
         sheetId,
         target.row,
         target.col,

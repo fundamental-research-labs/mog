@@ -13,13 +13,16 @@
 
 import { jest } from '@jest/globals';
 
-// Mock Charts.get / getChartDataRange so the bridge doesn't try to talk to
-// the real ComputeBridge. The bridge uses `import * as Charts from
-// './chart-crud'` so a module-level mock intercepts everything.
-jest.mock('../chart-crud', () => ({
+// Mock chart store / range reference modules so the bridge doesn't try to talk
+// to the real ComputeBridge in tests that exercise the production compile path.
+jest.mock('../chart-store', () => ({
   get: jest.fn(),
   getAll: jest.fn(async () => [] as unknown[]),
-  getChartDataRange: jest.fn(),
+  update: jest.fn(),
+}));
+
+jest.mock('../chart-range-references', () => ({
+  resolveChartRangeReferences: jest.fn(),
 }));
 
 // Mock cell-reads so the cell-accessor pre-fetch returns null cleanly
@@ -29,6 +32,7 @@ jest.mock('../../cells/cell-reads', () => ({
 }));
 
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
+import type { ChartLayoutSnapshot, ChartMark } from '@mog-sdk/contracts/bridges';
 import type {
   FloatingObjectCreatedEvent,
   FloatingObjectDeletedEvent,
@@ -36,10 +40,13 @@ import type {
   IEventBus,
   SheetDeletedEvent,
 } from '@mog-sdk/contracts/events';
+import type { ChartExportOptionsSnapshot } from '@mog-sdk/contracts/data/charts';
 
 import type { DocumentContext } from '../../../context/types';
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import { ChartBridge } from '../chart-bridge';
+import type { ChartRenderCache } from '../bridge/chart-render-cache';
+import { normalizeChartRenderFrame } from '../bridge/chart-render-frame';
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
 const SHEET_B: SheetId = toSheetId('sheet-b');
@@ -79,6 +86,10 @@ function createTestCtx() {
   const eventBus = createTestEventBus();
   const ctx = { eventBus } as unknown as DocumentContext;
   return { ctx, eventBus };
+}
+
+function getRenderCache(bridge: ChartBridge): ChartRenderCache {
+  return (bridge as unknown as { renderCache: ChartRenderCache }).renderCache;
 }
 
 /**
@@ -211,9 +222,20 @@ function bounds() {
   return { x: 100, y: 100, width: 200, height: 150 };
 }
 
+function renderFrame() {
+  return normalizeChartRenderFrame(bounds());
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
+
+async function flushAsyncHandlers(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // sync paint contract
@@ -240,15 +262,8 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    // Pretend a previous compile populated the cache and committed cleanly
-    // (mark commit clears dirtyCharts; emitChartCreated's invalidateChart
-    // sets it, so we mirror what a real compile commit would have left).
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.delete(CHART_1);
+    // Pretend a previous compile populated the cache and committed cleanly.
+    getRenderCache(bridge).commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
 
     const spy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -265,11 +280,12 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(true);
     bridge.stop();
   });
@@ -280,8 +296,7 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const key = `${SHEET_A}::${CHART_1}`;
-    (bridge as unknown as { pendingCompilations: Set<string> }).pendingCompilations.add(key);
+    getRenderCache(bridge).beginCompilation(CHART_1, SHEET_A);
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -298,11 +313,15 @@ describe('renderCached — sync paint contract', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    (bridge as unknown as { errorCache: Map<string, unknown> }).errorCache.set(CHART_1, {
-      code: 'EMPTY_DATA',
-      message: 'no data',
-      chartId: CHART_1,
-    });
+    getRenderCache(bridge).commitError(
+      CHART_1,
+      {
+        code: 'EMPTY_DATA',
+        message: 'no data',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: canvasCtx, ops } = createRecordingCtx();
@@ -343,13 +362,11 @@ describe('renderCached — sync paint contract', () => {
     const { ctx } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
-    const internals = bridge as unknown as {
-      chartImportRenderStatus: Map<string, { terminal: true; message: string; raw: unknown }>;
-    };
-    internals.chartImportRenderStatus.set(CHART_1, {
-      terminal: true,
-      message: 'Imported chart cannot be rendered yet',
-      raw: { renderable: false },
+    getRenderCache(bridge).syncImportRenderStatus(CHART_1, {
+      importStatus: {
+        renderable: false,
+        message: 'Imported chart cannot be rendered yet',
+      },
     });
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
@@ -384,24 +401,237 @@ describe('renderCached — sync paint contract', () => {
     bridge.stop();
   });
 
+  it('getMarksAtSize returns known terminal import status without fetching chart data', async () => {
+    const { ctx, eventBus } = createTestCtx();
+    const computeBridge = {
+      getChart: jest.fn(),
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = computeBridge;
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A, {
+      ...fakeChart,
+      importStatus: {
+        state: 'non-renderable',
+        message: 'Imported chart cannot be exported',
+      },
+    });
+
+    const result = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect('code' in result).toBe(true);
+    if (!('code' in result)) return;
+    expect(result).toMatchObject({
+      code: 'RENDER_FAILED',
+      message: 'Imported chart cannot be exported',
+      chartId: CHART_1,
+      details: {
+        importStatus: {
+          state: 'non-renderable',
+          message: 'Imported chart cannot be exported',
+        },
+      },
+    });
+    expect(computeBridge.getChart).not.toHaveBeenCalled();
+    bridge.stop();
+  });
+
+  it('getRenderSnapshotAtSize returns fetched terminal import status before range resolution', async () => {
+    const { ctx } = createTestCtx();
+    const chart = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      importStatus: {
+        renderable: false,
+        message: 'ChartEx layout is preserved but not renderable',
+      },
+    } as unknown as ChartFloatingObject;
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const result = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      format: 'png',
+      width: 600,
+      height: 400,
+      pixelRatio: 1,
+      physicalWidth: 600,
+      physicalHeight: 400,
+      backgroundColor: '#ffffff',
+    });
+
+    expect('code' in result).toBe(true);
+    if (!('code' in result)) return;
+    expect(result).toMatchObject({
+      code: 'RENDER_FAILED',
+      message: 'ChartEx layout is preserved but not renderable',
+      chartId: CHART_1,
+      details: {
+        importStatus: {
+          renderable: false,
+          message: 'ChartEx layout is preserved but not renderable',
+        },
+      },
+    });
+    expect(rangeReferencesMock.resolveChartRangeReferences).not.toHaveBeenCalled();
+  });
+
+  it('export-sized public compiles return marks and diagnostics without mutating UI render caches', async () => {
+    const { ctx, eventBus } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'bar',
+      dataRange: '',
+      importStatus: {
+        source: 'xlsx',
+        recoverability: 'partiallySupported',
+        renderability: 'renderable',
+        diagnostics: [
+          {
+            code: 'unsupportedFeature',
+            message: 'Pivot chart formatting is preserved for export but not rendered',
+          },
+        ],
+      },
+      series: [
+        {
+          name: 'Revenue',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A2:B2',
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          index: 0,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: {
+            kind: 'seriesCategories',
+            source: 'series',
+            ref: 'Sheet1!A2:B2',
+            range: range(1),
+          },
+        },
+      ],
+      diagnostics: [],
+    });
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw = row === 0 ? [10, 20][col] : row === 1 ? ['Q1', 'Q2'][col] : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw = row === 0 ? [10, 20][col] : row === 1 ? ['Q1', 'Q2'][col] : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const renderCache = getRenderCache(bridge);
+    const cachedMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const cachedLayout: ChartLayoutSnapshot = {
+      plotArea: { left: 0.1, top: 0.2, width: 0.3, height: 0.4 },
+    };
+    renderCache.commitMarks(CHART_1, cachedMarks, { sheetId: SHEET_A, layout: cachedLayout });
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+
+    const cacheUpdates: string[] = [];
+    bridge.onCacheUpdate((chartId) => cacheUpdates.push(chartId));
+    const dirtyKeysBefore = renderCache.getDirtyChartKeys();
+    const exportOptions: ChartExportOptionsSnapshot = {
+      format: 'png',
+      width: 640,
+      height: 360,
+      physicalWidth: 640,
+      physicalHeight: 360,
+      pixelRatio: 1,
+      backgroundColor: '#ffffff',
+    };
+
+    const marksAtSize = await bridge.getMarksAtSize(SHEET_A, CHART_1, 640, 360);
+    const snapshot = await bridge.getRenderSnapshotAtSize(
+      SHEET_A,
+      CHART_1,
+      640,
+      360,
+      exportOptions,
+    );
+
+    expect(Array.isArray(marksAtSize)).toBe(true);
+    expect('code' in snapshot).toBe(false);
+    if (!Array.isArray(marksAtSize) || 'code' in snapshot) return;
+    expect(marksAtSize.length).toBeGreaterThan(0);
+    expect(snapshot.marks).toEqual(marksAtSize);
+    expect(snapshot.resolvedChartSpec.implementation).toMatchObject({
+      renderAuthority: 'chartBridge',
+      renderStatus: 'renderable',
+      compilerPathId: 'ts-grammar',
+    });
+    expect(snapshot.resolvedChartSpec.export).toEqual(exportOptions);
+    expect(snapshot.resolvedChartSpec.diagnostics.unsupportedFeatures).toContain(
+      'Pivot chart formatting is preserved for export but not rendered',
+    );
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(cachedMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(cachedLayout);
+    expect(renderCache.getDirtyChartKeys()).toEqual(dirtyKeysBefore);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(cacheUpdates).toEqual([]);
+    bridge.stop();
+  });
+
   it('stale-but-show: paints existing marks AND triggers a recompile when dirty', () => {
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
+    renderCache.invalidateChart(CHART_1, SHEET_A);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     // No placeholder — the stale marks render, not a "Chart loading…" overlay.
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(false);
     bridge.stop();
@@ -414,14 +644,9 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(`${SHEET_A}::${CHART_1}`, []);
-    internals.markCache.set(`${SHEET_B}::${CHART_1}`, []);
-    internals.dirtyCharts.delete(`${SHEET_A}::${CHART_1}`);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, frame: renderFrame() });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, frame: renderFrame() });
 
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled');
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
@@ -442,18 +667,17 @@ describe('renderCached — sync paint contract', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-    };
-    internals.errorCache.set(`${SHEET_A}::${CHART_1}`, {
-      code: 'EMPTY_DATA',
-      message: 'sheet A empty',
-      chartId: CHART_1,
-    });
-    internals.markCache.set(`${SHEET_B}::${CHART_1}`, []);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'EMPTY_DATA',
+        message: 'sheet A empty',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, frame: renderFrame() });
 
     const { ctx: sheetACtx, ops: sheetAOps } = createRecordingCtx();
     bridge.renderCached(CHART_1, sheetACtx, bounds(), SHEET_A);
@@ -463,6 +687,63 @@ describe('renderCached — sync paint contract', () => {
     expect(sheetAOps.some((o) => o.kind === 'fillRect' && o.style === '#f8d7da')).toBe(true);
     expect(sheetBOps.some((o) => o.kind === 'fillRect' && o.style === '#f8d7da')).toBe(false);
     expect(sheetBOps.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(false);
+    bridge.stop();
+  });
+
+  it('same imported chartId keeps cache lifecycle state sheet-scoped', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks: ChartMark[] = [];
+    const sheetBMarks: ChartMark[] = [];
+    const layoutA = { plotArea: { left: 0.1, top: 0.2, width: 0.3, height: 0.4 } };
+    const layoutB = { plotArea: { left: 0.5, top: 0.6, width: 0.7, height: 0.8 } };
+
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A, layout: layoutA });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B, layout: layoutB });
+
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(sheetAMarks);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toEqual(layoutA);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_B)).toEqual(layoutB);
+
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
+
+    expect(renderCache.isChartDirty(CHART_1, SHEET_A)).toBe(true);
+    expect(renderCache.isChartDirty(CHART_1, SHEET_B)).toBe(false);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(true);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_B)).toBe(false);
+
+    renderCache.syncImportRenderStatus(
+      CHART_1,
+      {
+        importStatus: {
+          renderable: false,
+          message: 'Sheet A imported chart is unsupported',
+        },
+      },
+      SHEET_A,
+    );
+
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_A)?.message).toBe(
+      'Sheet A imported chart is unsupported',
+    );
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_B)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)?.message).toBe(
+      'Sheet A imported chart is unsupported',
+    );
+    expect(renderCache.getCachedError(CHART_1, SHEET_B)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedLayout(CHART_1, SHEET_B)).toEqual(layoutB);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_B)).toBe(false);
     bridge.stop();
   });
 });
@@ -538,11 +819,11 @@ describe('onCacheUpdate listener lifecycle', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { pendingCompilations: Set<string> };
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
     bridge.stop();
 
-    expect(internals.pendingCompilations.size).toBe(0);
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
   });
 
   it('unsubscribe closure created before stop() is safe to call after stop()', () => {
@@ -565,11 +846,11 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     const bridge = new ChartBridge(ctx);
     bridge.start();
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
+    const renderCache = getRenderCache(bridge);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
 
     emitChartCreated(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
     bridge.stop();
   });
 
@@ -579,28 +860,53 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      chartSheetIndex: Map<string, SheetId>;
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      chartImportRenderStatus: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-      pendingCompilations: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.errorCache.set(CHART_1, { code: 'EMPTY_DATA' });
-    internals.chartImportRenderStatus.set(CHART_1, { terminal: true });
-    internals.dirtyCharts.add(CHART_1);
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitError(
+      CHART_1,
+      { code: 'EMPTY_DATA', message: 'empty', chartId: CHART_1 },
+      SHEET_A,
+    );
+    renderCache.syncImportRenderStatus(
+      CHART_1,
+      { importStatus: { state: 'non-renderable', message: 'Unsupported imported chart' } },
+      SHEET_A,
+    );
+    renderCache.invalidateChart(CHART_1, SHEET_A);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
 
     emitChartDeleted(eventBus, CHART_1, SHEET_A);
 
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
-    expect(internals.markCache.has(CHART_1)).toBe(false);
-    expect(internals.errorCache.has(CHART_1)).toBe(false);
-    expect(internals.chartImportRenderStatus.has(CHART_1)).toBe(false);
-    expect(internals.dirtyCharts.has(CHART_1)).toBe(false);
-    expect(internals.pendingCompilations.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getImportRenderStatus(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getDirtyChartKeys()).not.toContain(renderCache.cacheKey(CHART_1, SHEET_A));
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
+    bridge.stop();
+  });
+
+  it('floatingObject:deleted removes only the matching sheet context for duplicated chart ids', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const sheetBMarks = [{ type: 'group', children: [{ type: 'text' }] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B });
+
+    emitChartDeleted(eventBus, CHART_1, SHEET_A);
+
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_B)).toBe(true);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
     bridge.stop();
   });
 
@@ -609,12 +915,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     const bridge = new ChartBridge(ctx);
     bridge.start();
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
+    const renderCache = getRenderCache(bridge);
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartDeleted(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
     emitChartCreated(eventBus, CHART_1, SHEET_A);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
     bridge.stop();
   });
 
@@ -626,39 +932,90 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_2, SHEET_B);
 
-    const internals = bridge as unknown as {
-      chartSheetIndex: Map<string, SheetId>;
-      markCache: Map<string, unknown[]>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.markCache.set(CHART_2, []);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_2, [], { sheetId: SHEET_B });
 
     emitSheetDeleted(eventBus, SHEET_A);
 
-    expect(internals.chartSheetIndex.has(CHART_1)).toBe(false);
-    expect(internals.markCache.has(CHART_1)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
     // Chart on the surviving sheet untouched.
-    expect(internals.chartSheetIndex.get(CHART_2)).toBe(SHEET_B);
-    expect(internals.markCache.has(CHART_2)).toBe(true);
+    expect(renderCache.getSheetId(CHART_2)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_2, SHEET_B)).toEqual([]);
     bridge.stop();
   });
 
-  it('cross-sheet :updated forward-looking handler updates the index', () => {
-    // Charts cannot move between sheets in the current API. The conditional
-    // re-set in the :updated handler costs nothing today and prevents silent
-    // drift if cross-sheet move ever lands.
+  it('sheet:deleted removes only deleted-sheet contexts for duplicated chart ids', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+    emitChartCreated(eventBus, CHART_1, SHEET_B);
+
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    const sheetBMarks = [{ type: 'group', children: [{ type: 'text' }] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
+    renderCache.commitMarks(CHART_1, sheetBMarks, { sheetId: SHEET_B });
+
+    emitSheetDeleted(eventBus, SHEET_A);
+
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_B)).toBe(true);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_B)).toBe(sheetBMarks);
+    bridge.stop();
+  });
+
+  it('cross-sheet :updated moves sheet context and clears old sheet caches', () => {
     const { ctx, eventBus } = createTestCtx();
     const bridge = new ChartBridge(ctx);
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as { chartSheetIndex: Map<string, SheetId> };
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_A);
+    const renderCache = getRenderCache(bridge);
+    const sheetAMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];
+    renderCache.commitMarks(CHART_1, sheetAMarks, { sheetId: SHEET_A });
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBe(sheetAMarks);
 
-    // Hypothetical future cross-sheet move event.
     emitChartUpdated(eventBus, CHART_1, SHEET_B, ['anchorRow', 'anchorCol']);
-    expect(internals.chartSheetIndex.get(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.hasSheetId(CHART_1, SHEET_A)).toBe(false);
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_B);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.chartIdsForSheet(SHEET_A)).toEqual([]);
+    expect(renderCache.chartIdsForSheet(SHEET_B)).toEqual([CHART_1]);
     bridge.stop();
+  });
+
+  it('clearAllCaches leaves the sheet index intact', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const renderCache = getRenderCache(bridge);
+
+    bridge.clearAllCaches();
+
+    expect(renderCache.getSheetId(CHART_1)).toBe(SHEET_A);
+    bridge.stop();
+  });
+
+  it('stop() clears the sheet index', () => {
+    const { ctx, eventBus } = createTestCtx();
+    const bridge = new ChartBridge(ctx);
+    bridge.start();
+    emitChartCreated(eventBus, CHART_1, SHEET_A);
+
+    const renderCache = getRenderCache(bridge);
+
+    bridge.stop();
+
+    expect(renderCache.hasSheetId(CHART_1)).toBe(false);
   });
 
   it('position-only :updated does not invalidate the marks cache', () => {
@@ -667,16 +1024,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      dirtyCharts: Set<string>;
-    };
-    internals.markCache.set(CHART_1, []);
-    internals.dirtyCharts.delete(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A });
 
     emitChartUpdated(eventBus, CHART_1, SHEET_A, ['anchorRow', 'anchorCol', 'width', 'height']);
 
-    expect(internals.dirtyCharts.has(CHART_1)).toBe(false);
+    expect(renderCache.getDirtyChartKeys()).not.toContain(renderCache.cacheKey(CHART_1, SHEET_A));
     bridge.stop();
   });
 
@@ -691,11 +1044,12 @@ describe('chartSheetIndex maintenance via floating-object events', () => {
 
     emitChartUpdated(eventBus, CHART_1, SHEET_A, ['chartType'], fakeChart);
 
+    const frame = renderFrame();
     const ensureSpy = jest.spyOn(bridge, 'ensureCompiled').mockResolvedValue(undefined);
     const { ctx: canvasCtx, ops } = createRecordingCtx();
     bridge.renderCached(CHART_1, canvasCtx, bounds());
 
-    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(ensureSpy).toHaveBeenCalledWith(CHART_1, SHEET_A, frame);
     expect(ops.some((o) => o.kind === 'fillText' && o.text === 'Chart loading…')).toBe(true);
     expect(ops.some((o) => o.kind === 'fillRect' && o.style === '#f8d7da')).toBe(false);
     bridge.stop();
@@ -716,18 +1070,15 @@ describe('getMarks listener-fire on real cache commits', () => {
     const seen: string[] = [];
     bridge.onCacheUpdate((id) => seen.push(id));
 
-    (
-      bridge as unknown as {
-        commitError: (
-          chartId: string,
-          error: { code: string; message: string; chartId: string },
-        ) => void;
-      }
-    ).commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
+    getRenderCache(bridge).commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
     expect(seen).toEqual([CHART_1]);
 
     // Subsequent renderCached must paint the error (precedence over loading).
@@ -743,20 +1094,18 @@ describe('getMarks listener-fire on real cache commits', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      pendingCompilations: Set<string>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-      ) => void;
-    };
-    internals.pendingCompilations.add(CHART_1);
-    internals.commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
-    expect(internals.pendingCompilations.size).toBe(0);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
     bridge.stop();
   });
 
@@ -767,15 +1116,8 @@ describe('getMarks listener-fire on real cache commits', () => {
     emitChartCreated(eventBus, CHART_1, SHEET_A);
     emitChartCreated(eventBus, CHART_1, SHEET_B);
 
-    const internals = bridge as unknown as {
-      errorCache: Map<string, unknown>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-        sheetId?: SheetId,
-      ) => void;
-    };
-    internals.commitError(
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitError(
       CHART_1,
       {
         code: 'CHART_NOT_FOUND',
@@ -785,9 +1127,482 @@ describe('getMarks listener-fire on real cache commits', () => {
       SHEET_A,
     );
 
-    expect(internals.errorCache.has(`${SHEET_A}::${CHART_1}`)).toBe(true);
-    expect(internals.errorCache.has(`${SHEET_B}::${CHART_1}`)).toBe(false);
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeDefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_B)).toBeUndefined();
     bridge.stop();
+  });
+});
+
+describe('resolveChartData imported visibility semantics', () => {
+  it('omits explicit imported series whose source value row is hidden when plotVisibleOnly is true', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'column',
+      dataRange: '',
+      plotVisibleOnly: true,
+      series: [
+        {
+          name: 'Visible',
+          values: 'Sheet1!A1:C1',
+          categories: 'Sheet1!A10:C10',
+          idx: 0,
+        },
+        {
+          name: 'Hidden',
+          values: 'Sheet1!A2:C2',
+          categories: 'Sheet1!A10:C10',
+          idx: 1,
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 2,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:C1', range: range(0) },
+          categories: { ref: 'Sheet1!A10:C10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:C2', range: range(1) },
+          categories: { ref: 'Sheet1!A10:C10', range: range(9) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20, 30][col]
+          : row === 1
+            ? [100, 200, 300][col]
+            : row === 9
+              ? ['FY19', 'FY20', 'FY21'][col]
+              : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => [1]),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20, 30][col]
+            : row === 1
+              ? [100, 200, 300][col]
+              : row === 9
+                ? ['FY19', 'FY20', 'FY21'][col]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const result = await bridge.resolveChartData(SHEET_A, CHART_1);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        category: 'FY19',
+        x: 'FY19',
+        y: 10,
+        value: 10,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      }),
+      expect.objectContaining({
+        category: 'FY20',
+        x: 'FY20',
+        y: 20,
+        value: 20,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      }),
+      expect.objectContaining({
+        category: 'FY21',
+        x: 'FY21',
+        y: 30,
+        value: 30,
+        series: 'Visible',
+        sourceSeriesIndex: 0,
+        sourceSeriesKey: 'idx:0',
+      }),
+    ]);
+  });
+
+  it('keeps source series colors aligned after plotVisibleOnly filters hidden series', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'column',
+      dataRange: '',
+      plotVisibleOnly: true,
+      series: [
+        {
+          name: 'Visible',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A10:B10',
+          idx: 0,
+          format: { fill: { type: 'solid', color: { theme: 'accent1' } } },
+        },
+        {
+          name: 'Hidden',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!A10:B10',
+          idx: 1,
+          format: { fill: { type: 'solid', color: { theme: 'accent2' } } },
+        },
+        {
+          name: 'Later',
+          values: 'Sheet1!A3:B3',
+          categories: 'Sheet1!A10:B10',
+          idx: 2,
+          format: { fill: { type: 'solid', color: { theme: 'accent3' } } },
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+        {
+          values: { ref: 'Sheet1!A3:B3', range: range(2) },
+          categories: { ref: 'Sheet1!A10:B10', range: range(9) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20][col]
+          : row === 1
+            ? [100, 200][col]
+            : row === 2
+              ? [30, 40][col]
+              : row === 9
+                ? ['FY19', 'FY20'][col]
+                : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => [1]),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20][col]
+            : row === 1
+              ? [100, 200][col]
+              : row === 2
+                ? [30, 40][col]
+                : row === 9
+                  ? ['FY19', 'FY20'][col]
+                  : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const marks = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect(Array.isArray(marks)).toBe(true);
+    if (!Array.isArray(marks)) return;
+    const visibleMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Visible',
+    ) as any;
+    const laterMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Later',
+    ) as any;
+    const hiddenMark = marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.series === 'Hidden',
+    );
+
+    expect(hiddenMark).toBeUndefined();
+    expect(visibleMark?.style.fill).toBe('#4472C4');
+    expect(laterMark?.style.fill).toBe('#A5A5A5');
+  });
+
+  it('resolves imported chart scheme colors against the workbook theme', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'line',
+      dataRange: '',
+      legend: { show: true, position: 'bottom' },
+      series: [
+        {
+          name: 'Theme accent 3',
+          values: 'Sheet1!A1:B1',
+          categories: 'Sheet1!A3:B3',
+          format: { line: { color: { theme: 'accent3' }, width: 2.25 } },
+        },
+        {
+          name: 'Theme accent 2',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!A3:B3',
+          format: { line: { color: { theme: 'accent2' }, width: 2.25 } },
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol: 0,
+      endCol: 1,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          values: { ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: { ref: 'Sheet1!A3:B3', range: range(2) },
+        },
+        {
+          values: { ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: { ref: 'Sheet1!A3:B3', range: range(2) },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      const raw =
+        row === 0
+          ? [10, 20][col]
+          : row === 1
+            ? [30, 15][col]
+            : row === 2
+              ? ['Jan', 'Feb'][col]
+              : null;
+      return raw ?? null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getWorkbookTheme: jest.fn(async () => ({
+        colors: [
+          { name: 'accent2', color: '#C0504D' },
+          { name: 'accent3', color: '#9BBB59' },
+        ],
+        majorFont: null,
+        minorFont: null,
+      })),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0
+            ? [10, 20][col]
+            : row === 1
+              ? [30, 15][col]
+              : row === 2
+                ? ['Jan', 'Feb'][col]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        if (typeof raw === 'string') return { value: { type: 'text', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const marks = await bridge.getMarksAtSize(SHEET_A, CHART_1, 600, 400);
+
+    expect(Array.isArray(marks)).toBe(true);
+    if (!Array.isArray(marks)) return;
+    const lineMarks = marks.filter(
+      (mark) => mark.type === 'path' && Array.isArray((mark as any).datum),
+    ) as any[];
+    const legendLineMarks = marks.filter(
+      (mark) => mark.type === 'path' && (mark as any).datum?.entryIndex !== undefined,
+    ) as any[];
+
+    expect(lineMarks.map((mark) => mark.style.stroke)).toEqual(['#9BBB59', '#C0504D']);
+    expect(legendLineMarks.map((mark) => mark.style.stroke)).toEqual(['#9BBB59', '#C0504D']);
+  });
+
+  it('snapshots explicit per-series categories from point x values', async () => {
+    const { ctx } = createTestCtx();
+    const chart: ChartFloatingObject = {
+      ...fakeChart,
+      id: CHART_1,
+      sheetId: SHEET_A as unknown as string,
+      chartType: 'line',
+      dataRange: '',
+      series: [
+        {
+          name: 'Generated categories',
+          values: 'Sheet1!A1:B1',
+          idx: 0,
+        },
+        {
+          name: 'Date categories',
+          values: 'Sheet1!A2:B2',
+          categories: 'Sheet1!O1:P1',
+          idx: 1,
+        },
+      ],
+    } as unknown as ChartFloatingObject;
+    const range = (row: number, startCol = 0, endCol = 1) => ({
+      sheetId: SHEET_A as unknown as string,
+      startRow: row,
+      endRow: row,
+      startCol,
+      endCol,
+    });
+    const chartStoreMock = jest.requireMock('../chart-store') as {
+      get: jest.Mock;
+    };
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    chartStoreMock.get.mockResolvedValue(chart);
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: null,
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [
+        {
+          index: 0,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A1:B1', range: range(0) },
+          categories: null,
+        },
+        {
+          index: 1,
+          values: { kind: 'seriesValues', source: 'series', ref: 'Sheet1!A2:B2', range: range(1) },
+          categories: {
+            kind: 'seriesCategories',
+            source: 'series',
+            ref: 'Sheet1!O1:P1',
+            range: range(0, 14, 15),
+          },
+        },
+      ],
+      diagnostics: [],
+    } as unknown);
+    const cellReadsMock = jest.requireMock('../../cells/cell-reads') as { getValue: jest.Mock };
+    cellReadsMock.getValue.mockImplementation(async (_ctx, _sheetId, row, col) => {
+      if (row === 0 && col <= 1) return [10, 20][col];
+      if (row === 1) return [null, 40][col];
+      if (row === 0 && col >= 14) return [43952, 43983][col - 14];
+      return null;
+    });
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = {
+      getChart: jest.fn(async () => chart),
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
+      getHiddenRows: jest.fn(async () => []),
+      getHiddenColumns: jest.fn(async () => []),
+      getCellIdAt: jest.fn(async () => null),
+      getProjectionSource: jest.fn(async () => null),
+      getCellData: jest.fn(async (_sheetId: SheetId, row: number, col: number) => {
+        const raw =
+          row === 0 && col <= 1
+            ? [10, 20][col]
+            : row === 1
+              ? [null, 40][col]
+              : row === 0 && col >= 14
+                ? [43952, 43983][col - 14]
+                : null;
+        if (typeof raw === 'number') return { value: { type: 'number', value: raw } };
+        return null;
+      }),
+    };
+    const bridge = new ChartBridge(ctx);
+
+    const snapshot = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      format: 'png',
+      width: 600,
+      height: 400,
+      pixelRatio: 1,
+      physicalWidth: 600,
+      physicalHeight: 400,
+      backgroundColor: '#ffffff',
+    });
+
+    expect('code' in snapshot).toBe(false);
+    if ('code' in snapshot) return;
+    expect(snapshot.resolvedChartSpec.resolved.series[0]?.categories).toEqual([]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.categories).toEqual([43952, 43983]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.values).toEqual([null, 40]);
+    expect(snapshot.resolvedChartSpec.resolved.series[1]?.blankMask).toEqual([true, false]);
   });
 });
 
@@ -805,14 +1620,9 @@ describe('getLayout sheet-scoped cache contract', () => {
     const layoutB = {
       plotArea: { left: 0.5, top: 0.6, width: 0.7, height: 0.8 },
     };
-    const internals = bridge as unknown as {
-      layoutCache: Map<string, unknown>;
-      dirtyCharts: Set<string>;
-    };
-    internals.layoutCache.set(`${SHEET_A}::${CHART_1}`, layoutA);
-    internals.layoutCache.set(`${SHEET_B}::${CHART_1}`, layoutB);
-    internals.dirtyCharts.delete(`${SHEET_A}::${CHART_1}`);
-    internals.dirtyCharts.delete(`${SHEET_B}::${CHART_1}`);
+    const renderCache = getRenderCache(bridge);
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_A, layout: layoutA });
+    renderCache.commitMarks(CHART_1, [], { sheetId: SHEET_B, layout: layoutB });
 
     await expect(bridge.getLayout(SHEET_A, CHART_1)).resolves.toEqual(layoutA);
     await expect(bridge.getLayout(SHEET_B, CHART_1)).resolves.toEqual(layoutB);
@@ -880,10 +1690,31 @@ describe('renderCached preserves rotation under withRenderContext-style wrap', (
 describe('chart invalidation event fanout', () => {
   it('cells:batch-changed scans affected charts once for the batch bounding range', async () => {
     const { ctx, eventBus } = createTestCtx();
+    const computeBridge = {
+      getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getAllCharts: jest.fn(async () => [
+        { ...fakeChart, sheetId: SHEET_A as unknown as string, dataRange: 'B5:F11' },
+      ]),
+    };
+    (ctx as unknown as { computeBridge: unknown }).computeBridge = computeBridge;
+    const rangeReferencesMock = jest.requireMock('../chart-range-references') as {
+      resolveChartRangeReferences: jest.Mock;
+    };
+    rangeReferencesMock.resolveChartRangeReferences.mockResolvedValue({
+      dataRange: {
+        kind: 'dataRange',
+        source: 'a1',
+        range: { sheetId: SHEET_A, startRow: 4, startCol: 1, endRow: 10, endCol: 5 },
+      },
+      categoryRange: null,
+      seriesRange: null,
+      seriesReferences: [],
+      diagnostics: [],
+    });
     const bridge = new ChartBridge(ctx);
+    const invalidateSpy = jest.spyOn(bridge, 'invalidateChart');
     bridge.start();
-
-    const affectedSpy = jest.spyOn(bridge, 'getChartsAffectedByRange').mockResolvedValue([CHART_1]);
+    expect(eventBus.handlers.get('cells:batch-changed')?.size).toBe(1);
 
     eventBus.emit({
       type: 'cells:batch-changed',
@@ -896,17 +1727,15 @@ describe('chart invalidation event fanout', () => {
       ],
       source: 'formula',
     });
-    await Promise.resolve();
+    await flushAsyncHandlers();
 
-    expect(affectedSpy).toHaveBeenCalledTimes(1);
-    expect(affectedSpy).toHaveBeenCalledWith(SHEET_A, {
-      sheetId: SHEET_A,
-      startRow: 4,
-      startCol: 1,
-      endRow: 10,
-      endCol: 5,
-    });
-    expect((bridge as unknown as { dirtyCharts: Set<string> }).dirtyCharts.has(CHART_1)).toBe(true);
+    expect(computeBridge.getSheetOrder).toHaveBeenCalledTimes(1);
+    expect(computeBridge.getAllCharts).toHaveBeenCalledTimes(1);
+    expect(computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_A);
+    expect(invalidateSpy).toHaveBeenCalledWith(CHART_1, SHEET_A);
+    expect(getRenderCache(bridge).getDirtyChartKeys()).toContain(
+      getRenderCache(bridge).cacheKey(CHART_1, SHEET_A),
+    );
     bridge.stop();
   });
 });
@@ -922,26 +1751,22 @@ describe('stop() mid-compile', () => {
     bridge.start();
     emitChartCreated(eventBus, CHART_1, SHEET_A);
 
-    const internals = bridge as unknown as {
-      markCache: Map<string, unknown[]>;
-      errorCache: Map<string, unknown>;
-      pendingCompilations: Set<string>;
-      commitError: (
-        chartId: string,
-        error: { code: string; message: string; chartId: string },
-      ) => void;
-    };
-    internals.pendingCompilations.add(CHART_1);
+    const renderCache = getRenderCache(bridge);
+    renderCache.beginCompilation(CHART_1, SHEET_A);
     bridge.stop();
-    internals.commitError(CHART_1, {
-      code: 'CHART_NOT_FOUND',
-      message: 'Chart not found',
-      chartId: CHART_1,
-    });
+    renderCache.commitError(
+      CHART_1,
+      {
+        code: 'CHART_NOT_FOUND',
+        message: 'Chart not found',
+        chartId: CHART_1,
+      },
+      SHEET_A,
+    );
 
     // Caches stayed empty after the post-stop resolution.
-    expect(internals.markCache.size).toBe(0);
-    expect(internals.errorCache.size).toBe(0);
-    expect(internals.pendingCompilations.size).toBe(0);
+    expect(renderCache.getCachedMarks(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.getCachedError(CHART_1, SHEET_A)).toBeUndefined();
+    expect(renderCache.isCompilationPending(CHART_1, SHEET_A)).toBe(false);
   });
 });

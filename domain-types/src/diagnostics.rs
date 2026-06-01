@@ -80,6 +80,10 @@ pub struct ImportDiagnosticRef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<ImportDiagnosticCode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship_id: Option<String>,
@@ -507,6 +511,8 @@ mod tests {
                 message: "Unsupported chart extension".to_string(),
                 reference: Some(ImportDiagnosticRef {
                     id: None,
+                    code: None,
+                    message: None,
                     part: Some("xl/charts/chart1.xml".to_string()),
                     relationship_id: None,
                     relationship_target: None,

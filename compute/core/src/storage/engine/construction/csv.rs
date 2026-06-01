@@ -33,11 +33,9 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
 
     if !parsed.warnings.is_empty() {
         // Surface CSV warnings via tracing (matches XLSX diagnostics
-        // handling). EncodingFallback means chardetng chose a non-UTF-8
-        // encoding — this is informational, not a hard error, because
-        // chardetng can misdetect valid UTF-8 CSVs (e.g. those with
-        // BOM-less ASCII-only content). The file is still loaded with
-        // the detected encoding; invalid sequences become U+FFFD.
+        // handling). Encoding warnings are informational, not hard errors:
+        // BOM-less malformed UTF-8 is loaded with replacement chars, and
+        // explicit encoding overrides are still decoded leniently.
         tracing::warn!(
             warning_count = parsed.warnings.len(),
             detected_encoding = %parsed.detected_encoding,

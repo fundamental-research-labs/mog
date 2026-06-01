@@ -2,13 +2,16 @@ use super::super::GLOBAL_REGISTRY;
 use super::evaluator::Evaluator;
 use crate::eval::context::traits::{EvalDataAccess, EvalMetadata};
 use cell_types::col_to_letter;
-use compute_parser::{ASTNode, CellRefNode, RangeRef};
+use compute_parser::{ASTNode, BinOp, CellRefNode, RangeRef};
 use formula_types::CellRef;
 use value_types::{CellError, CellValue, ComputeError};
 
-fn areas_reference_count(node: &ASTNode) -> usize {
+fn areas_reference_count(node: &ASTNode) -> Option<usize> {
     match node {
-        ASTNode::Union { ranges } => ranges.iter().map(areas_reference_count).sum(),
+        ASTNode::Union { ranges } => ranges
+            .iter()
+            .map(areas_reference_count)
+            .try_fold(0usize, |acc, count| count.map(|count| acc + count)),
         ASTNode::Paren(inner)
         | ASTNode::SheetRef { inner, .. }
         | ASTNode::UnresolvedSheetRef { inner, .. }
@@ -16,12 +19,29 @@ fn areas_reference_count(node: &ASTNode) -> usize {
         | ASTNode::UnresolvedThreeDRef { inner, .. }
         | ASTNode::ExternalSheetRef { inner, .. }
         | ASTNode::ExternalThreeDRef { inner, .. } => areas_reference_count(inner),
+        ASTNode::RangeOp { start, end } => {
+            if areas_reference_count(start).is_some() && areas_reference_count(end).is_some() {
+                Some(1)
+            } else {
+                None
+            }
+        }
+        ASTNode::BinaryOp {
+            op: BinOp::Intersect,
+            left,
+            right,
+        } => {
+            if areas_reference_count(left).is_some() && areas_reference_count(right).is_some() {
+                Some(1)
+            } else {
+                None
+            }
+        }
         ASTNode::CellReference(_)
         | ASTNode::Range(_)
-        | ASTNode::RangeOp { .. }
         | ASTNode::StructuredRef(_)
-        | ASTNode::ExternalNameRef { .. } => 1,
-        _ => 1,
+        | ASTNode::ExternalNameRef { .. } => Some(1),
+        _ => None,
     }
 }
 
@@ -357,7 +377,9 @@ impl<'a, D: EvalDataAccess, M: EvalMetadata> Evaluator<'a, D, M> {
         if args.len() != 1 {
             return Ok(CellValue::Error(CellError::Value, None));
         }
-        let count = areas_reference_count(&args[0]);
+        let Some(count) = areas_reference_count(&args[0]) else {
+            return Ok(CellValue::Error(CellError::Value, None));
+        };
         Ok(CellValue::number(count as f64))
     }
 }

@@ -14,9 +14,23 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         Some(ChartDefinition::Chart(chart_space)) => Some(&chart_space.chart),
         _ => None,
     };
+    let imported_title_layout: Option<domain_types::domain::drawings::ManualLayout> =
+        imported_chart
+            .and_then(|chart| chart.title.as_ref())
+            .and_then(|title| title.layout.as_ref())
+            .map(Into::into);
+    let title_layout = spec
+        .title_layout
+        .as_ref()
+        .or(imported_title_layout.as_ref());
 
     charts::Chart {
-        title: build_title(spec.title.as_deref(), spec.title_format.as_ref()),
+        title: build_title(
+            spec.title.as_deref(),
+            spec.title_format.as_ref(),
+            spec.title_rich_text.as_deref(),
+            title_layout,
+        ),
         auto_title_deleted: spec.auto_title_deleted,
         view_3d: spec.view_3d.as_ref().map(build_view_3d),
         floor: build_surface(spec.floor_format.as_ref()),
@@ -30,6 +44,29 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
             .as_deref()
             .map(DisplayBlanksAs::from_ooxml),
         show_d_lbls_over_max: spec.show_data_labels_over_max,
+        show_all_field_buttons: spec
+            .show_all_field_buttons
+            .or_else(|| imported_chart.and_then(|chart| chart.show_all_field_buttons)),
+        show_axis_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_axis_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_axis_field_buttons)),
+        show_legend_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_legend_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_legend_field_buttons)),
+        show_value_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_value_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_value_field_buttons)),
+        show_report_filter_field_buttons: spec
+            .pivot_options
+            .as_ref()
+            .and_then(|options| options.show_report_filter_field_buttons)
+            .or_else(|| imported_chart.and_then(|chart| chart.show_report_filter_field_buttons)),
         pivot_fmts: imported_chart
             .map(|chart| chart.pivot_fmts.clone())
             .unwrap_or_default(),
@@ -47,7 +84,11 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
     };
 
     charts::PlotArea {
-        layout: imported_plot_area.and_then(|plot_area| plot_area.layout.clone()),
+        layout: spec
+            .plot_layout
+            .clone()
+            .map(Into::into)
+            .or_else(|| imported_plot_area.and_then(|plot_area| plot_area.layout.clone())),
         chart_groups: build_chart_groups(spec),
         axes: build_axes(spec),
         d_table: spec.data_table.as_ref().map(build_data_table),

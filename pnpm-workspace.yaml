@@ -72,5 +72,12 @@ packages:
   - 'ui'
   - 'views/sheet-view'
 
+overrides:
+  react-icons: 5.5.0
+
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - esbuild

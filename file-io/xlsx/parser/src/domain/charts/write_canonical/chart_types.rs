@@ -51,6 +51,11 @@ pub(super) fn emit_plot_area(w: &mut XmlWriter, pa: &ooxml_types::charts::PlotAr
 }
 
 fn emit_chart_group(w: &mut XmlWriter, group: &ChartGroup) {
+    if let Some(raw_xml) = group.raw_chart_group_xml.as_deref() {
+        let _ = write_raw_xml_if_relationship_safe(w, raw_xml);
+        return;
+    }
+
     let ct = group.raw_chart_type_attr.as_deref();
     match &group.config {
         ChartTypeConfig::Bar(cfg) => {

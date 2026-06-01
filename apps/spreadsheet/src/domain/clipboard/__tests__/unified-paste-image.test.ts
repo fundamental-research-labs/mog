@@ -265,6 +265,36 @@ describe('unifiedPaste — image routing', () => {
     expect((commands as any).pasteSpecial).not.toHaveBeenCalled();
   });
 
+  it('routes changed system clipboard text through external paste', async () => {
+    installClipboard([makeClipItem({ 'text/plain': blobLike('system-only', 'text/plain') })]);
+    const commands = makeCommands();
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            data: {
+              textSignature: 'Hello World',
+              sourceRanges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+              sourceSheetId: 'sheet-1',
+              cells: { '0,0': { raw: 'Hello World' } },
+            },
+          },
+          matches: () => true,
+        }) as any,
+      commands,
+    });
+
+    expect((commands as any).paste).not.toHaveBeenCalled();
+    expect((commands as any).externalPaste).toHaveBeenCalledWith({
+      text: 'system-only',
+      targetCell: ACTIVE_CELL,
+      html: undefined,
+      options: expect.objectContaining({ values: false, formats: false, skipHiddenRows: true }),
+    });
+  });
+
   it('no-ops external plain text when the saved default is formats only', async () => {
     installClipboard([makeClipItem({ 'text/plain': blobLike('A', 'text/plain') })]);
     const commands = makeCommands();
@@ -294,5 +324,29 @@ describe('unifiedPaste — image routing', () => {
 
     expect((commands as any).externalPaste).not.toHaveBeenCalled();
     expect((commands as any).paste).not.toHaveBeenCalled();
+  });
+
+  it('suppresses canceled internal clipboard text instead of pasting it as external text', async () => {
+    installClipboard([makeClipItem({ 'text/plain': blobLike('One\tTwo', 'text/plain') })]);
+    const commands = makeCommands();
+    const suppressNextUndo = jest.fn();
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            data: null,
+            suppressedTextSignature: 'One\tTwo',
+          },
+          matches: () => false,
+        }) as any,
+      commands,
+      suppressNextUndo,
+    });
+
+    expect((commands as any).externalPaste).not.toHaveBeenCalled();
+    expect((commands as any).paste).not.toHaveBeenCalled();
+    expect(suppressNextUndo).toHaveBeenCalledTimes(1);
   });
 });

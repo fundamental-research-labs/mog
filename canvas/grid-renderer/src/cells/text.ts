@@ -243,10 +243,11 @@ export function getCellStyle(
 
 /**
  * Get default alignment based on value type.
- * Numbers align right, text aligns left (Excel behavior).
+ * Numbers align right, booleans center, text aligns left (Excel behavior).
  */
-export function getDefaultAlignment(value: unknown): 'left' | 'right' {
+export function getDefaultAlignment(value: unknown): 'left' | 'center' | 'right' {
   if (typeof value === 'number') return 'right';
+  if (typeof value === 'boolean') return 'center';
   return 'left';
 }
 

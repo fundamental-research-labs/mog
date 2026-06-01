@@ -43,6 +43,30 @@ function propagateResolved(comments: Comment[]): Comment[] {
   return comments;
 }
 
+function richTextToPlainText(comment: Comment): string {
+  const candidate = comment as Comment & {
+    content?: unknown;
+    runs?: Array<{ text?: unknown }>;
+  };
+  if (typeof candidate.content === 'string') return candidate.content;
+  if (Array.isArray(candidate.runs)) {
+    return candidate.runs.map((run) => (typeof run.text === 'string' ? run.text : '')).join('');
+  }
+  return '';
+}
+
+function normalizeComment(comment: Comment): Comment {
+  const content = richTextToPlainText(comment);
+  if (!content || (comment as { content?: unknown }).content === content) {
+    return comment;
+  }
+  return { ...comment, content };
+}
+
+function normalizeComments(comments: Comment[]): Comment[] {
+  return propagateResolved(comments.map(normalizeComment));
+}
+
 export class WorksheetCommentsImpl implements WorksheetComments {
   constructor(
     private readonly ctx: DocumentContext,
@@ -144,7 +168,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     if (comments.length === 0) return null;
     const first = comments[0];
     if (!first) return null;
-    const content = first.content ?? (first.runs.map((r) => r.text).join('') || '');
+    const content = richTextToPlainText(first);
     return {
       content,
       author: first.author,
@@ -281,7 +305,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   async listNotes(): Promise<Note[]> {
     const comments = await this.ctx.computeBridge.getAllNotes(this.sheetId);
     return comments.map((c) => {
-      const content = c.content ?? (c.runs.map((r) => r.text).join('') || '');
+      const content = richTextToPlainText(c);
       return {
         content,
         author: c.author,
@@ -341,7 +365,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
 
   async list(): Promise<Comment[]> {
     const comments = await this.ctx.computeBridge.getAllComments(this.sheetId);
-    return propagateResolved(comments);
+    return normalizeComments(comments);
   }
 
   async getForCell(a: string | number, b?: number): Promise<Comment[]> {
@@ -351,7 +375,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
-    return comments;
+    return normalizeComments(comments);
   }
 
   async addReply(commentId: string, text: string, author: string): Promise<Comment> {
@@ -369,7 +393,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       author,
       { parentId: commentId, commentType: 'threadedComment' },
     );
-    return comment;
+    return normalizeComment(comment);
   }
 
   async convertNoteToThread(commentId: string): Promise<Comment> {
@@ -381,7 +405,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         'convertNoteToThread: no comment returned in MutationResult.data',
       );
     }
-    return comment;
+    return normalizeComment(comment);
   }
 
   async getThread(commentId: string): Promise<Comment[]> {
@@ -391,12 +415,12 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     }
     const threadId = comment.threadId ?? comment.id;
     const thread = await this.ctx.computeBridge.getCommentThread(this.sheetId, threadId);
-    return propagateResolved(thread);
+    return normalizeComments(thread);
   }
 
   async getById(commentId: string): Promise<Comment | null> {
     const comment = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
-    return comment ?? null;
+    return comment ? normalizeComment(comment) : null;
   }
 
   async getLocation(commentId: string): Promise<string | null> {

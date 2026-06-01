@@ -60,6 +60,36 @@ fn compute_header_only() {
     );
 
     let result = compute(&config, &data, Some(&expand_all()));
+    assert!(result.errors.is_none(), "errors: {:?}", result.errors);
+    assert!(
+        result.rows.is_empty(),
+        "Header-only data should produce no data rows, got {}",
+        result.rows.len()
+    );
+    assert_eq!(result.source_row_count, 0);
+}
+
+#[test]
+fn compute_with_show_values_as_header_only() {
+    let data = vec![vec![
+        cv_text("Region"),
+        cv_text("Product"),
+        cv_text("Quarter"),
+        cv_text("Sales"),
+        cv_text("Units"),
+    ]];
+    let config = build_spreadjs_config(
+        "header_only_show_values_as",
+        &spreadjs_sales_fields(),
+        &["Region"],
+        &[],
+        &[("Sales", AggregateFunction::Sum)],
+        vec![],
+        &data,
+    );
+
+    let result = compute_with_show_values_as(&config, &data, Some(&expand_all()));
+    assert!(result.errors.is_none(), "errors: {:?}", result.errors);
     assert!(
         result.rows.is_empty(),
         "Header-only data should produce no data rows, got {}",

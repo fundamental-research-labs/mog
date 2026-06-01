@@ -28,6 +28,7 @@ import type {
   SheetDisposable,
   SheetPoint,
   SheetRect,
+  SheetSize,
 } from '../public-types';
 import { mapMergeRegion } from './type-mappers';
 
@@ -117,6 +118,13 @@ export class SheetViewGeometry implements ISheetViewGeometry {
       endCol: range.endCol,
     });
     return results.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
+  }
+
+  getCellRenderedSize(cell: CellAddress): SheetSize | null {
+    const renderer = this._internals.getRenderer();
+    const result = renderer.getCellRenderedSize(cell.row, cell.col);
+    if (!result) return null;
+    return { width: result.width, height: result.height };
   }
 
   getDimensions(anchor: SheetAnchor): DimensionInfo[] {

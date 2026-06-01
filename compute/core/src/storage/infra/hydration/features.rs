@@ -874,15 +874,40 @@ pub(super) fn hydrate_outline_groups(
 
 /// Hydrate floating objects using structured Y.Map entries via
 /// `yrs_schema::floating_object`.
+pub(super) struct FloatingObjectHydrationMaps<'a> {
+    pub(super) floating_objects: &'a MapRef,
+    pub(super) floating_object_order: &'a yrs::ArrayRef,
+    pub(super) cells: &'a MapRef,
+}
+
 pub(super) fn hydrate_floating_objects(
     txn: &mut yrs::TransactionMut,
-    floating_objects_map: &MapRef,
+    maps: FloatingObjectHydrationMaps<'_>,
+    pos_map: &mut HashMap<String, String>,
     sheet_id: &cell_types::SheetId,
     objects: &[domain_types::domain::floating_object::FloatingObject],
+    allocator: &mut impl IdAllocator,
 ) {
     for obj in objects.iter() {
         let mut obj = obj.clone();
         obj.common.sheet_id = sheet_id.to_uuid_string();
+        obj.common.id = sheet_unique_floating_object_id(&obj.common.id, sheet_id);
+        let anchor = &obj.common.anchor;
+        let anchor_hex = get_or_create_cell_id_for_pos(
+            maps.cells,
+            pos_map,
+            txn,
+            anchor.anchor_row,
+            anchor.anchor_col,
+            allocator,
+        );
+        obj.common.anchor_cell_id.get_or_insert(anchor_hex);
+        if let (Some(end_row), Some(end_col)) = (anchor.end_row, anchor.end_col) {
+            let to_anchor_hex = get_or_create_cell_id_for_pos(
+                maps.cells, pos_map, txn, end_row, end_col, allocator,
+            );
+            obj.common.to_anchor_cell_id.get_or_insert(to_anchor_hex);
+        }
         // Use the object's own ID as the Y.Map key so that get-by-ID lookups
         // (which use `map.get(txn, object_id)`) find the correct entry.
         // Previously this used `fobj-{index}` which only accidentally matched
@@ -891,8 +916,33 @@ pub(super) fn hydrate_floating_objects(
         let key = &obj.common.id;
         let entries = yrs_schema::floating_object::to_yrs_prelim(&obj);
         let obj_prelim: MapPrelim = entries.into_iter().collect();
-        floating_objects_map.insert(txn, key.as_str(), obj_prelim);
+        maps.floating_objects.insert(txn, key.as_str(), obj_prelim);
+        maps.floating_object_order
+            .push_back(txn, Any::String(Arc::from(key.as_str())));
     }
+}
+
+fn sheet_unique_floating_object_id(id: &str, sheet_id: &cell_types::SheetId) -> String {
+    if is_parser_local_floating_object_id(id) {
+        format!("{}-{}", id, sheet_id.to_uuid_string())
+    } else {
+        id.to_string()
+    }
+}
+
+fn is_parser_local_floating_object_id(id: &str) -> bool {
+    let suffix = if let Some(rest) = id.strip_prefix("fobj-fc-") {
+        rest
+    } else if let Some(rest) = id.strip_prefix("fobj-ole-") {
+        rest
+    } else if let Some(rest) = id.strip_prefix("fobj-conn-") {
+        rest
+    } else if let Some(rest) = id.strip_prefix("fobj-") {
+        rest
+    } else {
+        return false;
+    };
+    !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit())
 }
 
 // NOTE: The old `hydrate_slicers` function (which stored JSON blobs in
@@ -962,5 +1012,33 @@ mod tests {
 
         assert_eq!(pos_map.get("4:2"), Some(&id_to_hex(0xA).to_string()));
         assert_eq!(cells_map.len(&txn), 0);
+    }
+
+    #[test]
+    fn parser_local_floating_object_ids_are_sheet_unique() {
+        let sheet_id = cell_types::SheetId::from_raw(0x12);
+
+        assert_eq!(
+            sheet_unique_floating_object_id("fobj-0", &sheet_id),
+            format!("fobj-0-{}", sheet_id.to_uuid_string())
+        );
+        assert_eq!(
+            sheet_unique_floating_object_id("fobj-fc-4", &sheet_id),
+            format!("fobj-fc-4-{}", sheet_id.to_uuid_string())
+        );
+    }
+
+    #[test]
+    fn globally_unique_floating_object_ids_are_preserved() {
+        let sheet_id = cell_types::SheetId::from_raw(0x12);
+
+        assert_eq!(
+            sheet_unique_floating_object_id("fobj-1780000000000-a", &sheet_id),
+            "fobj-1780000000000-a"
+        );
+        assert_eq!(
+            sheet_unique_floating_object_id("chart-import-0", &sheet_id),
+            "chart-import-0"
+        );
     }
 }

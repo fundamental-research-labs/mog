@@ -11,11 +11,9 @@
 //!   spreadsheet engine ships, is to refuse the spill: the anchor displays
 //!   `#SPILL!` and no projection cells are written.
 //!
-//! The companion app-eval scenario
-//! `dev/app-eval/scenarios/array-formulas/spill-into-merged-cell.spec.ts`
-//! already covers this end-to-end through the UI. This test pins the same
-//! behavior at the compute-core layer so the regression is caught at the unit
-//! boundary, not just by the slow app-eval suite.
+//! A companion UI scenario already covers this end-to-end. This test pins the
+//! same behavior at the compute-core layer so the regression is caught at the
+//! unit boundary, not just by the slow UI suite.
 //!
 //! Run:
 //!   cargo test -p compute-core --test spill_blocker_merged_region -- --nocapture

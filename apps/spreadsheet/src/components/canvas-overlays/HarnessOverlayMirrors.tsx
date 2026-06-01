@@ -2,10 +2,8 @@
  * HarnessOverlayMirrors
  *
  * Some overlay surfaces (validation circles, flash-fill ghost preview) are
- * rendered exclusively on the canvas. The audit
- * (`dev/app-eval/audit/AUDIT-SUMMARY.md`) found that specs assert on these
- * surfaces by reading UIStore state directly inside `page.evaluate(...)`,
- * which the lint flags. The right fix is a Playwright observer
+ * rendered exclusively on the canvas. The eval harness asserts on these
+ * surfaces through Playwright observers
  * (`getValidationCircles`, `getFlashFillPreviewCells`) that reads the
  * RENDERED state through DOM — not UIStore.
  *
@@ -21,9 +19,9 @@
  *
  */
 
-import { memo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 
-import { useUIStore } from '../../internal-api';
+import { useCoordinator, useUIStore } from '../../internal-api';
 import type { FlashFillPreviewValue } from '../../ui-store/slices/editing/flash-fill';
 
 // =============================================================================
@@ -38,39 +36,75 @@ import type { FlashFillPreviewValue } from '../../ui-store/slices/editing/flash-
  * (`getValidationCircles`) collects these into `Array<{row, col}>`.
  */
 const ValidationCirclesMirror = memo(function ValidationCirclesMirror() {
+  const coordinator = useCoordinator();
   const visible = useUIStore((s) => s.validationCirclesVisible);
   const cells = useUIStore((s) => s.validationCircleCells);
   const activeSheetId = useUIStore((s) => s.activeSheetId);
+  const [scrollTick, setScrollTick] = useState(0);
+
+  useEffect(() => {
+    const inputCoord = coordinator.input.inputCoordinator;
+    return inputCoord.onScrollChange(() => {
+      setScrollTick((v) => v + 1);
+    });
+  }, [coordinator]);
+
+  const out = useMemo(() => {
+    void scrollTick;
+    if (!visible) return [];
+    const geometry = coordinator.renderer.getGeometry();
+    const prefix = activeSheetId ? `${activeSheetId}:` : '';
+    const result: Array<{
+      row: number;
+      col: number;
+      rect: { x: number; y: number; width: number; height: number };
+    }> = [];
+
+    for (const key of cells) {
+      if (prefix && !key.startsWith(prefix)) continue;
+      const parts = key.split(':');
+      if (parts.length !== 3) continue;
+      const row = Number(parts[1]);
+      const col = Number(parts[2]);
+      if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
+      const rect = geometry?.getCellPageRect({ row, col });
+      if (!rect) continue;
+      result.push({ row, col, rect });
+    }
+
+    return result;
+  }, [activeSheetId, cells, coordinator, scrollTick, visible]);
 
   if (!visible) return null;
-
-  // Filter the cell-key set to the active sheet (keys are "sheetId:row:col").
-  const prefix = activeSheetId ? `${activeSheetId}:` : '';
-  const out: Array<{ row: number; col: number }> = [];
-  for (const key of cells) {
-    if (prefix && !key.startsWith(prefix)) continue;
-    const parts = key.split(':');
-    if (parts.length !== 3) continue;
-    const row = Number(parts[1]);
-    const col = Number(parts[2]);
-    if (!Number.isFinite(row) || !Number.isFinite(col)) continue;
-    out.push({ row, col });
-  }
 
   return (
     <div
       data-testid="validation-circles-mirror"
       aria-hidden="true"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         width: 0,
         height: 0,
-        overflow: 'hidden',
+        overflow: 'visible',
         pointerEvents: 'none',
       }}
     >
-      {out.map(({ row, col }) => (
-        <span key={`${row}:${col}`} data-testid="validation-circle" data-row={row} data-col={col} />
+      {out.map(({ row, col, rect }) => (
+        <span
+          key={`${row}:${col}`}
+          data-testid="validation-circle"
+          data-row={row}
+          data-col={col}
+          style={{
+            position: 'fixed',
+            left: rect.x,
+            top: rect.y,
+            width: rect.width,
+            height: rect.height,
+            opacity: 0,
+            pointerEvents: 'none',
+          }}
+        />
       ))}
     </div>
   );

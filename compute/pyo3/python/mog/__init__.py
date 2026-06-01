@@ -27,7 +27,13 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from mog.errors import AddressError, ComputeError, MogError
+from mog.errors import (
+    AddressError,
+    ComputeError,
+    MogError,
+    NativeApiError,
+    UnsupportedApiError,
+)
 from mog.sub_apis.security import AccessLevel, Principal, Target, Template
 from mog.types import CellError, CellInfo, CellValue, DataBounds, MutationResult
 from mog.workbook import Workbook
@@ -96,5 +102,7 @@ __all__ = [
     # Errors
     "MogError",
     "ComputeError",
+    "NativeApiError",
     "AddressError",
+    "UnsupportedApiError",
 ]

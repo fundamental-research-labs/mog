@@ -49,7 +49,12 @@ fn degraded_object_diagnostic(
         return None;
     }
 
-    let mut reference = status.reference.clone().unwrap_or_default();
+    let status_reference = status
+        .diagnostics
+        .iter()
+        .find(|reference| reference.code.is_some() || reference.message.is_some())
+        .or(status.reference.as_ref());
+    let mut reference = status_reference.cloned().unwrap_or_default();
     if reference.part.is_none() {
         reference.part = Some(format!("sheet:{}", sheet_idx));
     }
@@ -61,17 +66,19 @@ fn degraded_object_diagnostic(
     }
 
     let code = diagnostic_code_for_status(status);
-    let id = domain_types::deterministic_diagnostic_id(
-        &code,
-        reference.part.as_deref(),
-        reference.relationship_id.as_deref(),
-        None,
-        None,
-        reference
-            .object_id
-            .as_deref()
-            .or(reference.object_name.as_deref()),
-    );
+    let id = reference.id.clone().unwrap_or_else(|| {
+        domain_types::deterministic_diagnostic_id(
+            &code,
+            reference.part.as_deref(),
+            reference.relationship_id.as_deref(),
+            None,
+            None,
+            reference
+                .object_id
+                .as_deref()
+                .or(reference.object_name.as_deref()),
+        )
+    });
 
     Some(domain_types::ImportDiagnostic {
         id,
@@ -87,6 +94,20 @@ fn degraded_object_diagnostic(
 fn diagnostic_code_for_status(
     status: &domain_types::ImportObjectStatus,
 ) -> domain_types::ImportDiagnosticCode {
+    if let Some(code) = status
+        .diagnostics
+        .iter()
+        .find_map(|reference| reference.code.clone())
+        .or_else(|| {
+            status
+                .reference
+                .as_ref()
+                .and_then(|reference| reference.code.clone())
+        })
+    {
+        return code;
+    }
+
     match status.recoverability {
         domain_types::ImportRecoverability::SecurityDisabled => {
             domain_types::ImportDiagnosticCode::SecurityDisabledActiveContent
@@ -117,6 +138,20 @@ fn diagnostic_severity_for_status(
 }
 
 fn diagnostic_message_for_status(status: &domain_types::ImportObjectStatus) -> String {
+    if let Some(message) = status
+        .diagnostics
+        .iter()
+        .find_map(|reference| reference.message.clone())
+        .or_else(|| {
+            status
+                .reference
+                .as_ref()
+                .and_then(|reference| reference.message.clone())
+        })
+    {
+        return message;
+    }
+
     match (status.feature_kind, status.recoverability) {
         (
             domain_types::ImportFeatureKind::Chart,
@@ -283,5 +318,42 @@ fn count_wordart_text_effects_in_content(
             .map(count_wordart_text_effects_in_content)
             .sum(),
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn degraded_chart_status_uses_specific_diagnostic_ref_code_and_message() {
+        let status = domain_types::ImportObjectStatus {
+            source: domain_types::ImportSource::Xlsx,
+            feature_kind: domain_types::ImportFeatureKind::Chart,
+            recoverability: domain_types::ImportRecoverability::PreservedNotRenderable,
+            renderability: domain_types::ImportRenderability::NotRenderable,
+            editability: domain_types::ImportEditability::PartiallyEditable,
+            diagnostics: vec![domain_types::ImportDiagnosticRef {
+                id: Some("chart-type-diag".to_string()),
+                code: Some(domain_types::ImportDiagnosticCode::UnsupportedChartType),
+                message: Some("Unsupported chart family `futureChart`".to_string()),
+                part: Some("xl/charts/chart1.xml".to_string()),
+                object_name: Some("Modern chart".to_string()),
+                feature_kind: Some(domain_types::ImportFeatureKind::Chart),
+                ..domain_types::ImportDiagnosticRef::default()
+            }],
+            reference: None,
+        };
+
+        let diagnostic = degraded_object_diagnostic(&status, 3).expect("diagnostic");
+        assert_eq!(diagnostic.id, "chart-type-diag");
+        assert_eq!(
+            diagnostic.code,
+            domain_types::ImportDiagnosticCode::UnsupportedChartType
+        );
+        assert_eq!(diagnostic.message, "Unsupported chart family `futureChart`");
+        let reference = diagnostic.reference.expect("reference");
+        assert_eq!(reference.sheet_index, Some(3));
+        assert_eq!(reference.part.as_deref(), Some("xl/charts/chart1.xml"));
     }
 }

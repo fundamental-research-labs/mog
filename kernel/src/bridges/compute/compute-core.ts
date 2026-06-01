@@ -1197,6 +1197,19 @@ export class ComputeCore {
   }
 
   /**
+   * Mirror the latest TS-visible viewport bounds into the buffer gate.
+   * This is synchronous and intentionally does not touch Rust registration.
+   */
+  updateViewportVisibleWindow(
+    viewportId: string,
+    sheetId: SheetId,
+    bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
+  ): void {
+    if (!this.isInitialized) return;
+    this.fetchManager?.updateVisibleWindow(viewportId, sheetId, bounds);
+  }
+
+  /**
    * Get the per-viewport binary buffer for a specific viewport region.
    * Returns null if the viewport hasn't been registered or fetched yet.
    */

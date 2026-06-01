@@ -13,6 +13,25 @@ export interface ImportedPivotFieldMetadata {
   readonly name: string;
 }
 
+/** Area a field occupies in an imported pivot's layout. */
+export type ImportedPivotArea = 'row' | 'column' | 'value' | 'filter';
+
+/**
+ * A single field placement read from the imported pivot definition
+ * (`<rowFields>`, `<colFields>`, `<pageFields>`, `<dataFields>`). Lets the
+ * runtime reconstruct the pivot's layout wells for the field panel rather
+ * than presenting every field as unplaced.
+ */
+export interface ImportedPivotPlacementMetadata {
+  readonly fieldId: string;
+  readonly area: ImportedPivotArea;
+  readonly position: number;
+  /** Aggregate (value area only), mapped from the OOXML `subtotal` attribute. */
+  readonly aggregateFunction?: string;
+  /** Custom caption (value area only), from the `dataField` `name` attribute. */
+  readonly displayName?: string;
+}
+
 export interface ImportedPivotTableMetadata {
   readonly id: string;
   readonly name: string;
@@ -22,6 +41,7 @@ export interface ImportedPivotTableMetadata {
   readonly sourceRange?: string;
   readonly cacheId?: number;
   readonly fields: readonly ImportedPivotFieldMetadata[];
+  readonly placements: readonly ImportedPivotPlacementMetadata[];
   readonly readOnly: true;
 }
 
@@ -268,6 +288,86 @@ function parseSourceRange(cacheXml: string | null): string | undefined {
   return ref ? (sheet ? `'${sheet.replace(/'/g, "''")}'!${ref}` : ref) : undefined;
 }
 
+/**
+ * Map an OOXML `subtotal` attribute (ST_DataConsolidateFunction) to the
+ * app's AggregateFunction string. Excel's "Count" (`count`) is COUNTA, while
+ * "Count Numbers" (`countNums`) is COUNT — hence the cross-mapping. Unknown
+ * or absent values default to "sum" (the OOXML default for a data field).
+ */
+const SUBTOTAL_TO_AGGREGATE: Readonly<Record<string, string>> = {
+  sum: 'sum',
+  count: 'counta',
+  countNums: 'count',
+  average: 'average',
+  max: 'max',
+  min: 'min',
+  product: 'product',
+  stdDev: 'stdev',
+  stdDevp: 'stdevp',
+  var: 'var',
+  varp: 'varp',
+};
+
+function mapSubtotal(subtotal: string | null): string {
+  if (!subtotal) return 'sum';
+  return SUBTOTAL_TO_AGGREGATE[subtotal] ?? 'sum';
+}
+
+/**
+ * Read the field layout from a pivot definition document. Field indices in
+ * `<rowFields>`/`<colFields>` (`x`), `<pageFields>` (`fld`), and
+ * `<dataFields>` (`fld`) map 1:1 onto the pivot field list, so we key
+ * placements by `field-${index}` to match the ids assigned in
+ * `parsePivotDefinition`/`parseCacheFields`. The synthetic "∑ Values"
+ * marker (`x="-2"`) carries no field and is skipped.
+ */
+function parsePivotPlacements(doc: Document): ImportedPivotPlacementMetadata[] {
+  const placements: ImportedPivotPlacementMetadata[] = [];
+
+  const readAxis = (containerName: string, area: 'row' | 'column') => {
+    const container = localElements(doc, containerName)[0];
+    if (!container) return;
+    let position = 0;
+    for (const fieldEl of localElements(container, 'field')) {
+      const index = Number(fieldEl.getAttribute('x'));
+      if (!Number.isInteger(index) || index < 0) continue;
+      placements.push({ fieldId: `field-${index}`, area, position: position++ });
+    }
+  };
+
+  readAxis('rowFields', 'row');
+  readAxis('colFields', 'column');
+
+  const pageContainer = localElements(doc, 'pageFields')[0];
+  if (pageContainer) {
+    let position = 0;
+    for (const pageField of localElements(pageContainer, 'pageField')) {
+      const index = Number(pageField.getAttribute('fld'));
+      if (!Number.isInteger(index) || index < 0) continue;
+      placements.push({ fieldId: `field-${index}`, area: 'filter', position: position++ });
+    }
+  }
+
+  const dataContainer = localElements(doc, 'dataFields')[0];
+  if (dataContainer) {
+    let position = 0;
+    for (const dataField of localElements(dataContainer, 'dataField')) {
+      const index = Number(dataField.getAttribute('fld'));
+      if (!Number.isInteger(index) || index < 0) continue;
+      const displayName = dataField.getAttribute('name') ?? undefined;
+      placements.push({
+        fieldId: `field-${index}`,
+        area: 'value',
+        position: position++,
+        aggregateFunction: mapSubtotal(dataField.getAttribute('subtotal')),
+        ...(displayName ? { displayName } : {}),
+      });
+    }
+  }
+
+  return placements;
+}
+
 function parsePivotDefinition(args: {
   xml: string;
   sheetName: string;
@@ -300,6 +400,7 @@ function parsePivotDefinition(args: {
     sourceRange: args.sourceRange,
     cacheId: Number.isFinite(cacheId) ? cacheId : undefined,
     fields: pivotFields.length > 0 ? pivotFields : args.cacheFields,
+    placements: parsePivotPlacements(doc),
     readOnly: true,
   };
 }

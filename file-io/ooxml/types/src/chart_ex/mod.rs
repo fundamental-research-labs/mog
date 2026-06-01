@@ -266,6 +266,25 @@ impl ChartExLayoutId {
             Self::Other(s) => s,
         }
     }
+
+    /// Canonical public/runtime chart type token for render-bound ChartEx families.
+    ///
+    /// OOXML layout IDs remain export/replay authority. This helper deliberately
+    /// returns public chart type spellings, so OOXML aliases such as
+    /// `paretoLine` and `boxWhisker` lower to `pareto` and `boxplot`.
+    pub fn to_public_chart_type(&self) -> Option<&str> {
+        match self {
+            Self::Waterfall => Some("waterfall"),
+            Self::Treemap => Some("treemap"),
+            Self::Sunburst => Some("sunburst"),
+            Self::Funnel => Some("funnel"),
+            Self::RegionMap => Some("regionMap"),
+            Self::Histogram => Some("histogram"),
+            Self::Pareto => Some("pareto"),
+            Self::BoxWhisker => Some("boxplot"),
+            Self::ClusteredBar | Self::Other(_) => None,
+        }
+    }
 }
 
 // =============================================================================

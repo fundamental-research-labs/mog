@@ -663,20 +663,6 @@ export function useConditionalFormatting(
   // Clear Operations
   // ==========================================================================
 
-  /**
-   * Clear CF rules from the current selection.
-   *
-   * Excel-compatible partial overlap handling.
-   * When a CF range partially overlaps the cleared selection, the range is
-   * split into non-overlapping portions (up to 4 rectangular regions) rather
-   * than being deleted entirely.
-   *
-   * Example:
-   * - Rule applies to: A1:D10
-   * - User clears CF from: B5:C8
-   * - Result: Rule is split into 4 regions (top, bottom, left, right strips)
-   *
-   */
   const clearFromSelection = useCallback((): void => {
     const selection = getSelectedRangeOnDemand();
     if (!selection) return;
@@ -684,36 +670,7 @@ export function useConditionalFormatting(
     void (async () => {
       try {
         const ws = wb.getSheetById(sheetId);
-        const allFormats = await ws.conditionalFormats.list();
-
-        for (const format of allFormats) {
-          if (!format.ranges || format.ranges.length === 0) continue;
-
-          const newRanges: CellRange[] = [];
-          let hasChanges = false;
-
-          for (const range of format.ranges) {
-            if (rangesOverlap(range, selection)) {
-              const remaining = subtractRange(range, selection);
-              newRanges.push(...remaining);
-              hasChanges = true;
-            } else {
-              newRanges.push(range);
-            }
-          }
-
-          if (hasChanges) {
-            // Delete the old format
-            await ws.conditionalFormats.remove(format.id);
-            // Re-create with remaining ranges (if any)
-            if (newRanges.length > 0) {
-              await ws.conditionalFormats.add(
-                newRanges,
-                format.rules.map((r) => toRuleInput(r)),
-              );
-            }
-          }
-        }
+        await ws.conditionalFormats.clearInRanges([selection]);
         reload();
       } catch (e) {
         console.error('[use-conditional-formatting] clearFromSelection failed:', e);

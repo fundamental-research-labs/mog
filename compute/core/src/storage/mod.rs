@@ -116,6 +116,47 @@ pub(crate) fn next_id_uuid_string() -> String {
 #[cfg(test)]
 use compute_document::cell_serde::{identity_refs_from_json, identity_refs_to_json};
 
+pub(crate) static RUNTIME_METADATA_ID_ALLOC: std::sync::LazyLock<cell_types::IdAllocator> =
+    std::sync::LazyLock::new(new_runtime_metadata_id_allocator);
+
+fn random_nonzero_runtime_partition() -> u64 {
+    loop {
+        let bytes = *uuid::Uuid::new_v4().as_bytes();
+        let partition = u64::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
+        if partition != 0 && partition != cell_types::VIRTUAL_CELL_SENTINEL {
+            return partition;
+        }
+    }
+}
+
+pub(crate) fn new_runtime_metadata_id_allocator() -> cell_types::IdAllocator {
+    cell_types::IdAllocator::with_client_partition(random_nonzero_runtime_partition())
+}
+
+pub(crate) fn metadata_id_allocator_for_doc_client(client_id: u64) -> cell_types::IdAllocator {
+    if client_id != 0 && client_id != cell_types::VIRTUAL_CELL_SENTINEL {
+        cell_types::IdAllocator::with_client_partition(client_id)
+    } else {
+        new_runtime_metadata_id_allocator()
+    }
+}
+
+fn new_runtime_doc() -> Doc {
+    loop {
+        // Yrs/Yjs client clocks are encoded in the 32-bit client-id space.
+        // Keep runtime IDs in that space so state vectors round-trip exactly,
+        // while still rejecting the zero partition used by local-only IDs.
+        let bytes = *uuid::Uuid::new_v4().as_bytes();
+        let client_id = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as u64;
+        if client_id == 0 {
+            continue;
+        }
+        return Doc::with_client_id(client_id);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // YrsStorage
 // ---------------------------------------------------------------------------
@@ -178,7 +219,7 @@ impl YrsStorage {
     /// See: `compute-collab/tests/provider_replay.rs` test
     /// `provider_replay_after_independent_bootstrap`.
     pub fn new() -> Self {
-        let doc = Doc::new();
+        let doc = new_runtime_doc();
 
         // Pre-create the **root** maps so they exist for all future txns.
         // Root maps in yrs are interned by name and merge cleanly across
@@ -236,7 +277,7 @@ impl YrsStorage {
         // root types exist in the doc, and `get_or_insert_map` finds
         // them by name.
 
-        let doc = Doc::new();
+        let doc = new_runtime_doc();
         {
             let update = yrs::Update::decode_v1(state)
                 .map_err(|e| compute_collab::SyncError::UpdateDecode(e.to_string()))?;

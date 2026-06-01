@@ -2,22 +2,22 @@ use super::*;
 
 /// R1: Three-sheet TRANSPOSE → SUM cascade (snapshot path).
 ///
-/// Reproduces the exact Rev Build pattern from the XLSX:
-///   Sheet "Monthly":  C1:C5 = [0, 0, 1, 7, 192]       (vertical source)
-///   Sheet "Annual":   C1:C5 = [197, 448, 475, 529, 377] (vertical source)
-///   Sheet "Rev Build":
-///     Row 0: B1 = TRANSPOSE(Monthly!C1:C5)  → should spill B1:F1 = [0,0,1,7,192]
-///     Row 1: B2 = TRANSPOSE(Annual!C1:C5)   → should spill B2:F2 = [197,448,475,529,377]
+/// Reproduces a synthetic three-sheet output pattern:
+///   Sheet "SourceA":  C1:C5 = [0, 0, 1, 7, 192]       (vertical source)
+///   Sheet "SourceB":   C1:C5 = [197, 448, 475, 529, 377] (vertical source)
+///   Sheet "Output":
+///     Row 0: B1 = TRANSPOSE(SourceA!C1:C5)  → should spill B1:F1 = [0,0,1,7,192]
+///     Row 1: B2 = TRANSPOSE(SourceB!C1:C5)   → should spill B2:F2 = [197,448,475,529,377]
 ///     Row 2: B3 = SUM(B1:B2), C3 = SUM(C1:C2), D3 = SUM(D1:D2), etc.
 ///
-/// Bug: Q28:AN28 remain null in the XLSX because TRANSPOSE doesn't spill.
+/// Bug class: downstream spill targets remain null because TRANSPOSE doesn't spill.
 /// Then SUM(col) = 0 instead of correct values.
 #[test]
 fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
     let snapshot = build_snapshot(vec![
-        // Sheet 0: "Monthly" — vertical source data in column C (col 2)
+        // Sheet 0: "SourceA" — vertical source data in column C (col 2)
         (
-            "Monthly",
+            "SourceA",
             10,
             10,
             vec![
@@ -28,9 +28,9 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
                 (4, 2, CellValue::number(192.0), None), // C5 = 192
             ],
         ),
-        // Sheet 1: "Annual" — vertical source data in column C (col 2)
+        // Sheet 1: "SourceB" — vertical source data in column C (col 2)
         (
-            "Annual",
+            "SourceB",
             10,
             10,
             vec![
@@ -41,16 +41,16 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
                 (4, 2, CellValue::number(377.0), None), // C5 = 377
             ],
         ),
-        // Sheet 2: "Rev Build" — TRANSPOSE + SUM
+        // Sheet 2: "Output" — TRANSPOSE + SUM
         (
-            "Rev Build",
+            "Output",
             10,
             10,
             vec![
-                // Row 0: TRANSPOSE(Monthly!C1:C5) → B1:F1 horizontal spill
-                (0, 1, CellValue::Null, Some("TRANSPOSE(Monthly!C1:C5)")),
-                // Row 1: TRANSPOSE(Annual!C1:C5) → B2:F2 horizontal spill
-                (1, 1, CellValue::Null, Some("TRANSPOSE(Annual!C1:C5)")),
+                // Row 0: TRANSPOSE(SourceA!C1:C5) → B1:F1 horizontal spill
+                (0, 1, CellValue::Null, Some("TRANSPOSE(SourceA!C1:C5)")),
+                // Row 1: TRANSPOSE(SourceB!C1:C5) → B2:F2 horizontal spill
+                (1, 1, CellValue::Null, Some("TRANSPOSE(SourceB!C1:C5)")),
                 // Row 2: SUM of each column pair from rows 0 and 1
                 (2, 1, CellValue::Null, Some("SUM(B1:B2)")), // B3
                 (2, 2, CellValue::Null, Some("SUM(C1:C2)")), // C3
@@ -64,7 +64,7 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
     let mut core = ComputeCore::new();
     core.init_from_snapshot(&mut mirror, snapshot)
         .expect("init failed");
-    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Rev Build");
+    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
     let b1 = CellId::from_uuid_str(&cell_uuid(2, 0, 1)).expect("b1");
     let b2 = CellId::from_uuid_str(&cell_uuid(2, 1, 1)).expect("b2");
     let b3 = CellId::from_uuid_str(&cell_uuid(2, 2, 1)).expect("b3");
@@ -74,22 +74,22 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
     let f3 = CellId::from_uuid_str(&cell_uuid(2, 2, 5)).expect("f3");
 
     // TRANSPOSE anchors should have their first values
-    assert_mirror_number(&mirror, &b1, 0.0, "B1 TRANSPOSE(Monthly) source");
-    assert_mirror_number(&mirror, &b2, 197.0, "B2 TRANSPOSE(Annual) source");
+    assert_mirror_number(&mirror, &b1, 0.0, "B1 TRANSPOSE(SourceA) source");
+    assert_mirror_number(&mirror, &b2, 197.0, "B2 TRANSPOSE(SourceB) source");
 
-    // Spill targets for row 0 (Monthly): C1=0, D1=1, E1=7, F1=192
-    assert_col_data_null_or_zero(&mirror, &sid2, 0, 2, "C1 Monthly spill (0)");
-    assert_col_data_number(&mirror, &sid2, 0, 3, 1.0, "D1 Monthly spill");
-    assert_col_data_number(&mirror, &sid2, 0, 4, 7.0, "E1 Monthly spill");
-    assert_col_data_number(&mirror, &sid2, 0, 5, 192.0, "F1 Monthly spill");
+    // Spill targets for row 0 (SourceA): C1=0, D1=1, E1=7, F1=192
+    assert_col_data_null_or_zero(&mirror, &sid2, 0, 2, "C1 SourceA spill (0)");
+    assert_col_data_number(&mirror, &sid2, 0, 3, 1.0, "D1 SourceA spill");
+    assert_col_data_number(&mirror, &sid2, 0, 4, 7.0, "E1 SourceA spill");
+    assert_col_data_number(&mirror, &sid2, 0, 5, 192.0, "F1 SourceA spill");
 
-    // Spill targets for row 1 (Annual): C2=448, D2=475, E2=529, F2=377
-    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "C2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "D2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "E2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "F2 Annual spill");
+    // Spill targets for row 1 (SourceB): C2=448, D2=475, E2=529, F2=377
+    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "C2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "D2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "E2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "F2 SourceB spill");
 
-    // SUM of each column: Monthly + Annual
+    // SUM of each column: SourceA + SourceB
     // B3 = SUM(B1:B2) = 0 + 197 = 197
     assert_mirror_number(&mirror, &b3, 197.0, "B3 SUM(B1:B2)");
     // C3 = SUM(C1:C2) = 0 + 448 = 448
@@ -104,13 +104,13 @@ fn test_xlsx_repro_three_sheet_transpose_sum_cascade() {
 
 /// R2: Chained TRANSPOSE — TRANSPOSE reads from another TRANSPOSE's spill targets.
 ///
-/// This is the exact pattern from the XLSX where:
-///   "Rev Build"!P29 = TRANSPOSE('Cohort - Basic - Annual'!C5:C29)
+/// Synthetic chained TRANSPOSE pattern:
+///   "Output"!P29 = TRANSPOSE('SourceB'!C5:C29)
 ///     → spills P29:AN29 = [197, 448, 475, 529, 377, ...]
-///   "Forecasted Cohort"!D5 = TRANSPOSE('Rev Build'!P29:T29)
+///   "Projection"!D5 = TRANSPOSE('Output'!P29:T29)
 ///     → reads the spill range and transposes back to vertical D5:D9
 ///
-/// The bug: "Rev Build"!Q29:T29 are null (TRANSPOSE didn't spill),
+/// Bug class: "Output"!Q29:T29 are null (TRANSPOSE didn't spill),
 /// so the second TRANSPOSE gets [197, null, null, null, null],
 /// and D6:D9 are null instead of [448, 475, 529, 377].
 #[test]
@@ -186,10 +186,10 @@ fn test_xlsx_repro_chained_transpose_cross_sheet() {
 
 /// R3: IF formula reading from chained TRANSPOSE spill target.
 ///
-/// Reproduces the Forecasted Cohort pattern:
+/// Reproduces the projection pattern:
 ///   Sheet "Source": A1:A5 = [197, 448, 475, 529, 377]
 ///   Sheet "Bridge": B1 = TRANSPOSE(Source!A1:A5) → B1:F1 = [197,448,475,529,377]
-///   Sheet "Forecast":
+///   Sheet "Projection":
 ///     D1 = TRANSPOSE(Bridge!B1:F1) → D1:D5 = [197,448,475,529,377]
 ///     E1 = IF($D1>0, $D1*2, 0)  → 197*2 = 394  (reads TRANSPOSE anchor)
 ///     E2 = IF($D2>0, $D2*2, 0)  → 448*2 = 896  (reads spill target D2)
@@ -220,9 +220,9 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
             10,
             vec![(0, 1, CellValue::Null, Some("TRANSPOSE(Source!A1:A5)"))],
         ),
-        // Sheet 2: "Forecast" — chained TRANSPOSE back to vertical + IF formulas
+        // Sheet 2: "Projection" — chained TRANSPOSE back to vertical + IF formulas
         (
-            "Forecast",
+            "Projection",
             10,
             10,
             vec![
@@ -241,7 +241,7 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
     let mut core = ComputeCore::new();
     core.init_from_snapshot(&mut mirror, snapshot)
         .expect("init failed");
-    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Forecast");
+    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Projection");
     let d1 = CellId::from_uuid_str(&cell_uuid(2, 0, 3)).expect("d1");
     let e1 = CellId::from_uuid_str(&cell_uuid(2, 0, 4)).expect("e1");
     let e2 = CellId::from_uuid_str(&cell_uuid(2, 1, 4)).expect("e2");
@@ -250,38 +250,63 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
     let e5 = CellId::from_uuid_str(&cell_uuid(2, 4, 4)).expect("e5");
 
     // D1 = TRANSPOSE anchor = 197
-    assert_mirror_number(&mirror, &d1, 197.0, "Forecast!D1 TRANSPOSE source");
+    assert_mirror_number(&mirror, &d1, 197.0, "Projection!D1 TRANSPOSE source");
 
     // D column spill targets
-    assert_col_data_number(&mirror, &sid2, 1, 3, 448.0, "Forecast!D2 spill");
-    assert_col_data_number(&mirror, &sid2, 2, 3, 475.0, "Forecast!D3 spill");
-    assert_col_data_number(&mirror, &sid2, 3, 3, 529.0, "Forecast!D4 spill");
-    assert_col_data_number(&mirror, &sid2, 4, 3, 377.0, "Forecast!D5 spill");
+    assert_col_data_number(&mirror, &sid2, 1, 3, 448.0, "Projection!D2 spill");
+    assert_col_data_number(&mirror, &sid2, 2, 3, 475.0, "Projection!D3 spill");
+    assert_col_data_number(&mirror, &sid2, 3, 3, 529.0, "Projection!D4 spill");
+    assert_col_data_number(&mirror, &sid2, 4, 3, 377.0, "Projection!D5 spill");
 
     // IF formulas should read from D column spill targets
     // E1 = IF(197>0, 197*2, 0) = 394
-    assert_mirror_number(&mirror, &e1, 394.0, "Forecast!E1 IF reads TRANSPOSE anchor");
+    assert_mirror_number(
+        &mirror,
+        &e1,
+        394.0,
+        "Projection!E1 IF reads TRANSPOSE anchor",
+    );
     // E2 = IF(448>0, 448*2, 0) = 896
-    assert_mirror_number(&mirror, &e2, 896.0, "Forecast!E2 IF reads spill target D2");
+    assert_mirror_number(
+        &mirror,
+        &e2,
+        896.0,
+        "Projection!E2 IF reads spill target D2",
+    );
     // E3 = IF(475>0, 475*2, 0) = 950
-    assert_mirror_number(&mirror, &e3, 950.0, "Forecast!E3 IF reads spill target D3");
+    assert_mirror_number(
+        &mirror,
+        &e3,
+        950.0,
+        "Projection!E3 IF reads spill target D3",
+    );
     // E4 = IF(529>0, 529*2, 0) = 1058
-    assert_mirror_number(&mirror, &e4, 1058.0, "Forecast!E4 IF reads spill target D4");
+    assert_mirror_number(
+        &mirror,
+        &e4,
+        1058.0,
+        "Projection!E4 IF reads spill target D4",
+    );
     // E5 = IF(377>0, 377*2, 0) = 754
-    assert_mirror_number(&mirror, &e5, 754.0, "Forecast!E5 IF reads spill target D5");
+    assert_mirror_number(
+        &mirror,
+        &e5,
+        754.0,
+        "Projection!E5 IF reads spill target D5",
+    );
 }
 
 /// R4: Full cascade — 4 sheets, TRANSPOSE → SUM → TRANSPOSE → IF.
 ///
 /// This reproduces the complete 4-layer cascade from the XLSX file:
-///   Sheet "Monthly":  C1:C5 = [0, 0, 1, 7, 192]           (cohort data)
-///   Sheet "Annual":   C1:C5 = [197, 448, 475, 529, 377]    (cohort data)
-///   Sheet "Rev Build":
-///     B1 = TRANSPOSE(Monthly!C1:C5) → spill B1:F1          (horizontal)
-///     B2 = TRANSPOSE(Annual!C1:C5)  → spill B2:F2          (horizontal)
+///   Sheet "SourceA":  C1:C5 = [0, 0, 1, 7, 192]           (cohort data)
+///   Sheet "SourceB":   C1:C5 = [197, 448, 475, 529, 377]    (cohort data)
+///   Sheet "Output":
+///     B1 = TRANSPOSE(SourceA!C1:C5) → spill B1:F1          (horizontal)
+///     B2 = TRANSPOSE(SourceB!C1:C5)  → spill B2:F2          (horizontal)
 ///     B3 = SUM(B1:B2), C3=SUM(C1:C2), D3=SUM(D1:D2), ...  (column sums)
-///   Sheet "Forecast":
-///     A1 = TRANSPOSE('Rev Build'!B2:F2) → spill A1:A5      (back to vertical)
+///   Sheet "Projection":
+///     A1 = TRANSPOSE('Output'!B2:F2) → spill A1:A5      (back to vertical)
 ///     B1 = IF($A1>0, $A1*2, 0)                              (reads anchor)
 ///     B2 = IF($A2>0, $A2*2, 0)                              (reads spill target)
 ///
@@ -290,9 +315,9 @@ fn test_xlsx_repro_if_reads_chained_transpose_spill() {
 #[test]
 fn test_xlsx_repro_full_four_sheet_cascade() {
     let snapshot = build_snapshot(vec![
-        // Sheet 0: "Monthly"
+        // Sheet 0: "SourceA"
         (
-            "Monthly",
+            "SourceA",
             10,
             10,
             vec![
@@ -303,9 +328,9 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
                 (4, 2, CellValue::number(192.0), None),
             ],
         ),
-        // Sheet 1: "Annual"
+        // Sheet 1: "SourceB"
         (
-            "Annual",
+            "SourceB",
             10,
             10,
             vec![
@@ -316,14 +341,14 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
                 (4, 2, CellValue::number(377.0), None),
             ],
         ),
-        // Sheet 2: "Rev Build" — two TRANSPOSEs + SUM row
+        // Sheet 2: "Output" — two TRANSPOSEs + SUM row
         (
-            "Rev Build",
+            "Output",
             10,
             10,
             vec![
-                (0, 1, CellValue::Null, Some("TRANSPOSE(Monthly!C1:C5)")), // B1
-                (1, 1, CellValue::Null, Some("TRANSPOSE(Annual!C1:C5)")),  // B2
+                (0, 1, CellValue::Null, Some("TRANSPOSE(SourceA!C1:C5)")), // B1
+                (1, 1, CellValue::Null, Some("TRANSPOSE(SourceB!C1:C5)")), // B2
                 (2, 1, CellValue::Null, Some("SUM(B1:B2)")),               // B3
                 (2, 2, CellValue::Null, Some("SUM(C1:C2)")),               // C3
                 (2, 3, CellValue::Null, Some("SUM(D1:D2)")),               // D3
@@ -331,14 +356,14 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
                 (2, 5, CellValue::Null, Some("SUM(F1:F2)")),               // F3
             ],
         ),
-        // Sheet 3: "Forecast" — chained TRANSPOSE + IF
+        // Sheet 3: "Projection" — chained TRANSPOSE + IF
         (
-            "Forecast",
+            "Projection",
             10,
             10,
             vec![
-                // A1 = TRANSPOSE('Rev Build'!B2:F2) → vertical A1:A5
-                (0, 0, CellValue::Null, Some("TRANSPOSE('Rev Build'!B2:F2)")),
+                // A1 = TRANSPOSE('Output'!B2:F2) → vertical A1:A5
+                (0, 0, CellValue::Null, Some("TRANSPOSE('Output'!B2:F2)")),
                 // B column: IF formulas reading from A column (spill targets)
                 (0, 1, CellValue::Null, Some("IF($A1>0,$A1*2,0)")),
                 (1, 1, CellValue::Null, Some("IF($A2>0,$A2*2,0)")),
@@ -352,10 +377,10 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
     let mut core = ComputeCore::new();
     core.init_from_snapshot(&mut mirror, snapshot)
         .expect("init failed");
-    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Rev Build");
-    let sid3 = SheetId::from_uuid_str(&sheet_uuid(3)).expect("sid Forecast");
+    let sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
+    let sid3 = SheetId::from_uuid_str(&sheet_uuid(3)).expect("sid Projection");
 
-    // === Rev Build assertions ===
+    // === Output assertions ===
     let rb_b1 = CellId::from_uuid_str(&cell_uuid(2, 0, 1)).expect("rb b1");
     let rb_b2 = CellId::from_uuid_str(&cell_uuid(2, 1, 1)).expect("rb b2");
     let rb_b3 = CellId::from_uuid_str(&cell_uuid(2, 2, 1)).expect("rb b3");
@@ -363,61 +388,51 @@ fn test_xlsx_repro_full_four_sheet_cascade() {
     let rb_d3 = CellId::from_uuid_str(&cell_uuid(2, 2, 3)).expect("rb d3");
 
     // TRANSPOSE anchors
-    assert_mirror_number(
-        &mirror,
-        &rb_b1,
-        0.0,
-        "Rev Build!B1 Monthly TRANSPOSE anchor",
-    );
-    assert_mirror_number(
-        &mirror,
-        &rb_b2,
-        197.0,
-        "Rev Build!B2 Annual TRANSPOSE anchor",
-    );
+    assert_mirror_number(&mirror, &rb_b1, 0.0, "Output!B1 SourceA TRANSPOSE anchor");
+    assert_mirror_number(&mirror, &rb_b2, 197.0, "Output!B2 SourceB TRANSPOSE anchor");
 
-    // Rev Build spill — Annual row (row 1): C2=448, D2=475, E2=529, F2=377
-    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "Rev Build!C2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "Rev Build!D2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "Rev Build!E2 Annual spill");
-    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "Rev Build!F2 Annual spill");
+    // Output spill — SourceB row (row 1): C2=448, D2=475, E2=529, F2=377
+    assert_col_data_number(&mirror, &sid2, 1, 2, 448.0, "Output!C2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 3, 475.0, "Output!D2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 4, 529.0, "Output!E2 SourceB spill");
+    assert_col_data_number(&mirror, &sid2, 1, 5, 377.0, "Output!F2 SourceB spill");
 
     // SUM row
-    assert_mirror_number(&mirror, &rb_b3, 197.0, "Rev Build!B3 SUM");
-    assert_mirror_number(&mirror, &rb_c3, 448.0, "Rev Build!C3 SUM");
-    assert_mirror_number(&mirror, &rb_d3, 476.0, "Rev Build!D3 SUM");
+    assert_mirror_number(&mirror, &rb_b3, 197.0, "Output!B3 SUM");
+    assert_mirror_number(&mirror, &rb_c3, 448.0, "Output!C3 SUM");
+    assert_mirror_number(&mirror, &rb_d3, 476.0, "Output!D3 SUM");
 
-    // === Forecast assertions ===
+    // === Projection assertions ===
     let fc_a1 = CellId::from_uuid_str(&cell_uuid(3, 0, 0)).expect("fc a1");
     let fc_b1 = CellId::from_uuid_str(&cell_uuid(3, 0, 1)).expect("fc b1");
     let fc_b2 = CellId::from_uuid_str(&cell_uuid(3, 1, 1)).expect("fc b2");
     let fc_b3 = CellId::from_uuid_str(&cell_uuid(3, 2, 1)).expect("fc b3");
 
-    // Forecast!A1 = chained TRANSPOSE anchor (first value from Annual row = 197)
+    // Projection!A1 = chained TRANSPOSE anchor (first value from SourceB row = 197)
     assert_mirror_number(
         &mirror,
         &fc_a1,
         197.0,
-        "Forecast!A1 chained TRANSPOSE anchor",
+        "Projection!A1 chained TRANSPOSE anchor",
     );
 
-    // Forecast spill targets: A2=448, A3=475, A4=529, A5=377
-    assert_col_data_number(&mirror, &sid3, 1, 0, 448.0, "Forecast!A2 chained spill");
-    assert_col_data_number(&mirror, &sid3, 2, 0, 475.0, "Forecast!A3 chained spill");
-    assert_col_data_number(&mirror, &sid3, 3, 0, 529.0, "Forecast!A4 chained spill");
-    assert_col_data_number(&mirror, &sid3, 4, 0, 377.0, "Forecast!A5 chained spill");
+    // Projection spill targets: A2=448, A3=475, A4=529, A5=377
+    assert_col_data_number(&mirror, &sid3, 1, 0, 448.0, "Projection!A2 chained spill");
+    assert_col_data_number(&mirror, &sid3, 2, 0, 475.0, "Projection!A3 chained spill");
+    assert_col_data_number(&mirror, &sid3, 3, 0, 529.0, "Projection!A4 chained spill");
+    assert_col_data_number(&mirror, &sid3, 4, 0, 377.0, "Projection!A5 chained spill");
 
     // IF formulas
-    assert_mirror_number(&mirror, &fc_b1, 394.0, "Forecast!B1 IF(A1>0)"); // 197*2
-    assert_mirror_number(&mirror, &fc_b2, 896.0, "Forecast!B2 IF(A2>0)"); // 448*2
-    assert_mirror_number(&mirror, &fc_b3, 950.0, "Forecast!B3 IF(A3>0)"); // 475*2
+    assert_mirror_number(&mirror, &fc_b1, 394.0, "Projection!B1 IF(A1>0)"); // 197*2
+    assert_mirror_number(&mirror, &fc_b2, 896.0, "Projection!B2 IF(A2>0)"); // 448*2
+    assert_mirror_number(&mirror, &fc_b3, 950.0, "Projection!B3 IF(A3>0)"); // 475*2
 }
 
-/// R5: INDEX reading from TRANSPOSE spill targets — the Rev Build row 51 pattern.
+/// R5: INDEX reading from TRANSPOSE spill targets.
 ///
 /// In the XLSX:
-///   "Forecast"!D5 = TRANSPOSE(...) → spills D5:D29
-///   "Rev Build"!S51 = INDEX('Forecast'!$D:$D, 8)
+///   "Projection"!D5 = TRANSPOSE(...) → spills D5:D29
+///   "Output"!S51 = INDEX('Projection'!$D:$D, 8)
 ///     → should return D8 (a spill target from the TRANSPOSE above)
 ///
 /// The bug: D8 is null because TRANSPOSE didn't spill, so INDEX returns null.
@@ -437,9 +452,9 @@ fn test_xlsx_repro_index_reads_transpose_spill() {
                 (0, 4, CellValue::number(50.0), None), // E1
             ],
         ),
-        // Sheet 1: "Forecast" — TRANSPOSE(horizontal) → vertical spill in column A
+        // Sheet 1: "Projection" — TRANSPOSE(horizontal) → vertical spill in column A
         (
-            "Forecast",
+            "Projection",
             10,
             10,
             vec![
@@ -447,22 +462,22 @@ fn test_xlsx_repro_index_reads_transpose_spill() {
                 (0, 0, CellValue::Null, Some("TRANSPOSE(Source!A1:E1)")),
             ],
         ),
-        // Sheet 2: "Rev Build" — INDEX reading from Forecast's column A (spill targets)
+        // Sheet 2: "Output" — INDEX reading from Projection's column A (spill targets)
         (
-            "Rev Build",
+            "Output",
             10,
             10,
             vec![
-                // A1 = INDEX(Forecast!$A:$A, 1) → should be 10 (anchor)
-                (0, 0, CellValue::Null, Some("INDEX(Forecast!$A:$A,1)")),
-                // A2 = INDEX(Forecast!$A:$A, 2) → should be 20 (spill target)
-                (1, 0, CellValue::Null, Some("INDEX(Forecast!$A:$A,2)")),
-                // A3 = INDEX(Forecast!$A:$A, 3) → should be 30 (spill target)
-                (2, 0, CellValue::Null, Some("INDEX(Forecast!$A:$A,3)")),
-                // A4 = INDEX(Forecast!$A:$A, 4) → should be 40 (spill target)
-                (3, 0, CellValue::Null, Some("INDEX(Forecast!$A:$A,4)")),
-                // A5 = INDEX(Forecast!$A:$A, 5) → should be 50 (spill target)
-                (4, 0, CellValue::Null, Some("INDEX(Forecast!$A:$A,5)")),
+                // A1 = INDEX(Projection!$A:$A, 1) → should be 10 (anchor)
+                (0, 0, CellValue::Null, Some("INDEX(Projection!$A:$A,1)")),
+                // A2 = INDEX(Projection!$A:$A, 2) → should be 20 (spill target)
+                (1, 0, CellValue::Null, Some("INDEX(Projection!$A:$A,2)")),
+                // A3 = INDEX(Projection!$A:$A, 3) → should be 30 (spill target)
+                (2, 0, CellValue::Null, Some("INDEX(Projection!$A:$A,3)")),
+                // A4 = INDEX(Projection!$A:$A, 4) → should be 40 (spill target)
+                (3, 0, CellValue::Null, Some("INDEX(Projection!$A:$A,4)")),
+                // A5 = INDEX(Projection!$A:$A, 5) → should be 50 (spill target)
+                (4, 0, CellValue::Null, Some("INDEX(Projection!$A:$A,5)")),
             ],
         ),
     ]);
@@ -470,36 +485,36 @@ fn test_xlsx_repro_index_reads_transpose_spill() {
     let mut core = ComputeCore::new();
     core.init_from_snapshot(&mut mirror, snapshot)
         .expect("init failed");
-    let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid Forecast");
-    let _sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Rev Build");
+    let sid1 = SheetId::from_uuid_str(&sheet_uuid(1)).expect("sid Projection");
+    let _sid2 = SheetId::from_uuid_str(&sheet_uuid(2)).expect("sid Output");
 
-    // Forecast!A1 = TRANSPOSE anchor = 10
+    // Projection!A1 = TRANSPOSE anchor = 10
     let fc_a1 = CellId::from_uuid_str(&cell_uuid(1, 0, 0)).expect("fc a1");
-    assert_mirror_number(&mirror, &fc_a1, 10.0, "Forecast!A1 TRANSPOSE anchor");
+    assert_mirror_number(&mirror, &fc_a1, 10.0, "Projection!A1 TRANSPOSE anchor");
 
-    // Forecast spill: A2=20, A3=30, A4=40, A5=50
-    assert_col_data_number(&mirror, &sid1, 1, 0, 20.0, "Forecast!A2 spill");
-    assert_col_data_number(&mirror, &sid1, 2, 0, 30.0, "Forecast!A3 spill");
-    assert_col_data_number(&mirror, &sid1, 3, 0, 40.0, "Forecast!A4 spill");
-    assert_col_data_number(&mirror, &sid1, 4, 0, 50.0, "Forecast!A5 spill");
+    // Projection spill: A2=20, A3=30, A4=40, A5=50
+    assert_col_data_number(&mirror, &sid1, 1, 0, 20.0, "Projection!A2 spill");
+    assert_col_data_number(&mirror, &sid1, 2, 0, 30.0, "Projection!A3 spill");
+    assert_col_data_number(&mirror, &sid1, 3, 0, 40.0, "Projection!A4 spill");
+    assert_col_data_number(&mirror, &sid1, 4, 0, 50.0, "Projection!A5 spill");
 
-    // Rev Build!A1:A5 = INDEX reads from Forecast spill targets
+    // Output!A1:A5 = INDEX reads from Projection spill targets
     let rb_a1 = CellId::from_uuid_str(&cell_uuid(2, 0, 0)).expect("rb a1");
     let rb_a2 = CellId::from_uuid_str(&cell_uuid(2, 1, 0)).expect("rb a2");
     let rb_a3 = CellId::from_uuid_str(&cell_uuid(2, 2, 0)).expect("rb a3");
     let rb_a4 = CellId::from_uuid_str(&cell_uuid(2, 3, 0)).expect("rb a4");
     let rb_a5 = CellId::from_uuid_str(&cell_uuid(2, 4, 0)).expect("rb a5");
 
-    assert_mirror_number(&mirror, &rb_a1, 10.0, "Rev Build!A1 INDEX(A:A,1)");
-    assert_mirror_number(&mirror, &rb_a2, 20.0, "Rev Build!A2 INDEX(A:A,2)");
-    assert_mirror_number(&mirror, &rb_a3, 30.0, "Rev Build!A3 INDEX(A:A,3)");
-    assert_mirror_number(&mirror, &rb_a4, 40.0, "Rev Build!A4 INDEX(A:A,4)");
-    assert_mirror_number(&mirror, &rb_a5, 50.0, "Rev Build!A5 INDEX(A:A,5)");
+    assert_mirror_number(&mirror, &rb_a1, 10.0, "Output!A1 INDEX(A:A,1)");
+    assert_mirror_number(&mirror, &rb_a2, 20.0, "Output!A2 INDEX(A:A,2)");
+    assert_mirror_number(&mirror, &rb_a3, 30.0, "Output!A3 INDEX(A:A,3)");
+    assert_mirror_number(&mirror, &rb_a4, 40.0, "Output!A4 INDEX(A:A,4)");
+    assert_mirror_number(&mirror, &rb_a5, 50.0, "Output!A5 INDEX(A:A,5)");
 }
 
 /// R6: SUMIFS reading from TRANSPOSE spill targets with date criteria.
 ///
-/// Reproduces the Rev Build SUMIFS pattern:
+/// Reproduces the output SUMIFS pattern:
 ///   Row 2: date headers (col B through F)
 ///   Row 0: B1 = TRANSPOSE(...) → spill B1:F1 (monthly values)
 ///   Row 1: B2 = TRANSPOSE(...) → spill B2:F2 (annual values)

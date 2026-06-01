@@ -385,9 +385,9 @@ fn test_transpose_spill_with_sum_in_snapshot() {
     assert_mirror_number(&mirror, &g1, 150.0, "G1 SUM over TRANSPOSE spill");
 }
 
-/// Test 4: TRANSPOSE with array_ref in snapshot — the XLSX pre-registration path.
+/// Test 4: TRANSPOSE with array_ref in snapshot — the import pre-registration path.
 ///
-/// This is the exact scenario from the bYbEjX4h file: TRANSPOSE formula has
+/// TRANSPOSE formula has
 /// array_ref="B1:F1" which causes projection pre-registration during snapshot
 /// loading. The hypothesis is that pre-registration prevents delta emission,
 /// which prevents stabilization of dependent formulas like SUM.

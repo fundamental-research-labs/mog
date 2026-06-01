@@ -16,13 +16,15 @@ use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::{
     KEY_BINDINGS, KEY_CELL_PROPERTIES, KEY_CELLS, KEY_CF_RULES, KEY_COL_FORMATS, KEY_COL_ORDER,
     KEY_COL_WIDTHS, KEY_COMMENTS, KEY_CONDITIONAL_FORMAT, KEY_FILTER_HIDDEN_ROWS, KEY_FILTERS,
-    KEY_FLOATING_OBJECT_GROUPS, KEY_FLOATING_OBJECTS, KEY_FORMULA_REFS, KEY_GRID_INDEX,
-    KEY_GROUPING, KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS, KEY_MERGES, KEY_NAME,
-    KEY_PIVOT_TABLES, KEY_PROPERTIES, KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS,
-    KEY_RANGES, KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_ROW_ORDER, KEY_SCHEMAS, KEY_SORTING,
-    KEY_SPARKLINES, KEY_VALIDATION_RULES, write_schema_version,
+    KEY_FLOATING_OBJECT_GROUPS, KEY_FLOATING_OBJECT_ORDER, KEY_FLOATING_OBJECTS, KEY_FORMULA_REFS,
+    KEY_GRID_ID_TO_POS, KEY_GRID_INDEX, KEY_GRID_POS_TO_ID, KEY_GROUPING, KEY_HIDDEN_COLS,
+    KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS, KEY_MERGES, KEY_NAME, KEY_PIVOT_TABLES,
+    KEY_PROPERTIES, KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS, KEY_RANGES,
+    KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_ROW_ORDER, KEY_SCHEMAS, KEY_SORTING, KEY_SPARKLINES,
+    KEY_VALIDATION_RULES, write_schema_version,
 };
 use compute_document::undo::ORIGIN_USER_EDIT;
+use domain_types::yrs_schema::comment as comment_schema;
 // Note: ORIGIN_BOOTSTRAP is supplied by callers via `*_with_origin` and never
 // referenced directly here — this file only needs to know it can accept any
 // caller-supplied origin.
@@ -178,8 +180,8 @@ fn write_grid_index_remapped(
     };
     for (sub_key, sub_val) in entries {
         match (sub_key.as_str(), sub_val) {
-            ("posToId", YValue::Map(pos_entries)) => {
-                let new_pos: MapRef = new_gi.insert(txn, "posToId", MapPrelim::default());
+            (KEY_GRID_POS_TO_ID, YValue::Map(pos_entries)) => {
+                let new_pos: MapRef = new_gi.insert(txn, KEY_GRID_POS_TO_ID, MapPrelim::default());
                 for (pos, v) in pos_entries {
                     if let YValue::Any(Any::String(old_hex)) = v {
                         let new_val = remap
@@ -192,8 +194,8 @@ fn write_grid_index_remapped(
                     }
                 }
             }
-            ("idToPos", YValue::Map(id_entries)) => {
-                let new_id: MapRef = new_gi.insert(txn, "idToPos", MapPrelim::default());
+            (KEY_GRID_ID_TO_POS, YValue::Map(id_entries)) => {
+                let new_id: MapRef = new_gi.insert(txn, KEY_GRID_ID_TO_POS, MapPrelim::default());
                 for (old_hex, v) in id_entries {
                     let new_key = remap
                         .get(old_hex)
@@ -203,6 +205,63 @@ fn write_grid_index_remapped(
                 }
             }
             _ => write_y_value_into_map(&new_gi, txn, sub_key, sub_val),
+        }
+    }
+}
+
+fn write_cell_properties_remapped(
+    new_sheet: &MapRef,
+    txn: &mut yrs::TransactionMut,
+    value: &YValue,
+    remap: &HashMap<String, String>,
+) {
+    let new_props: MapRef = new_sheet.insert(txn, KEY_CELL_PROPERTIES, MapPrelim::default());
+    let YValue::Map(entries) = value else {
+        return;
+    };
+    for (old_hex, prop_val) in entries {
+        let new_key = remap
+            .get(old_hex)
+            .cloned()
+            .unwrap_or_else(|| old_hex.clone());
+        write_y_value_into_map(&new_props, txn, &new_key, prop_val);
+    }
+}
+
+fn write_comments_remapped(
+    new_sheet: &MapRef,
+    txn: &mut yrs::TransactionMut,
+    value: &YValue,
+    remap: &HashMap<String, String>,
+) {
+    let new_comments: MapRef = new_sheet.insert(txn, KEY_COMMENTS, MapPrelim::default());
+    let YValue::Map(entries) = value else {
+        return;
+    };
+    for (comment_id, comment_val) in entries {
+        match comment_val {
+            YValue::Map(comment_entries) => {
+                let new_comment: MapRef =
+                    new_comments.insert(txn, comment_id.as_str(), MapPrelim::default());
+                for (key, field_val) in comment_entries {
+                    if key == comment_schema::KEY_CELL_REF
+                        && let YValue::Any(Any::String(old_ref)) = field_val
+                    {
+                        let new_ref = remap
+                            .get(old_ref.as_ref())
+                            .cloned()
+                            .unwrap_or_else(|| old_ref.to_string());
+                        new_comment.insert(
+                            txn,
+                            key.as_str(),
+                            Any::String(Arc::from(new_ref.as_str())),
+                        );
+                        continue;
+                    }
+                    write_y_value_into_map(&new_comment, txn, key, field_val);
+                }
+            }
+            _ => write_y_value_into_map(&new_comments, txn, comment_id, comment_val),
         }
     }
 }
@@ -228,6 +287,23 @@ fn remap_formula_refs(refs_json: &str, remap: &HashMap<String, String>) -> Strin
         }
     }
     serde_json::to_string(&arr).unwrap_or_else(|_| refs_json.to_string())
+}
+
+fn looks_like_hex_cell_id(value: &str) -> bool {
+    value.len() == 32 && value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn ensure_cell_id_remap(
+    remap: &mut HashMap<String, String>,
+    old_hex: &str,
+    id_alloc: &cell_types::IdAllocator,
+) {
+    if !looks_like_hex_cell_id(old_hex) || remap.contains_key(old_hex) {
+        return;
+    }
+    let new_cell_id = id_alloc.next_cell_id();
+    let new_cell_hex = id_to_hex(new_cell_id.as_u128());
+    remap.insert(old_hex.to_string(), new_cell_hex.to_string());
 }
 
 impl YrsStorage {
@@ -321,7 +397,7 @@ impl YrsStorage {
         let new_hex = id_to_hex(new_id.as_u128());
 
         // Pass 1: Read source sheet into a recursive YValue tree, plus build
-        // the CellId remap table from the `cells` sub-map.
+        // the CellId remap table from every source keyed by CellId.
         let rows;
         let cols;
         let mut top_entries: Vec<(String, YValue)> = Vec::new();
@@ -352,9 +428,39 @@ impl YrsStorage {
 
             if let Some(Out::YMap(cells_map)) = source_map.get(&txn, KEY_CELLS) {
                 for (old_hex, _) in cells_map.iter(&txn) {
-                    let new_cell_id = id_alloc.next_cell_id();
-                    let new_cell_hex = id_to_hex(new_cell_id.as_u128());
-                    cell_id_remap.insert(old_hex.to_string(), new_cell_hex.to_string());
+                    ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
+                }
+            }
+
+            if let Some(Out::YMap(grid_index)) = source_map.get(&txn, KEY_GRID_INDEX) {
+                if let Some(Out::YMap(pos_to_id)) = grid_index.get(&txn, KEY_GRID_POS_TO_ID) {
+                    for (_, value) in pos_to_id.iter(&txn) {
+                        if let Out::Any(Any::String(old_hex)) = value {
+                            ensure_cell_id_remap(&mut cell_id_remap, old_hex.as_ref(), id_alloc);
+                        }
+                    }
+                }
+                if let Some(Out::YMap(id_to_pos)) = grid_index.get(&txn, KEY_GRID_ID_TO_POS) {
+                    for (old_hex, _) in id_to_pos.iter(&txn) {
+                        ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
+                    }
+                }
+            }
+
+            if let Some(Out::YMap(cell_properties)) = source_map.get(&txn, KEY_CELL_PROPERTIES) {
+                for (old_hex, _) in cell_properties.iter(&txn) {
+                    ensure_cell_id_remap(&mut cell_id_remap, &old_hex, id_alloc);
+                }
+            }
+
+            if let Some(Out::YMap(comments_map)) = source_map.get(&txn, KEY_COMMENTS) {
+                for (_, value) in comments_map.iter(&txn) {
+                    if let Out::YMap(comment_map) = value
+                        && let Some(Out::Any(Any::String(old_ref))) =
+                            comment_map.get(&txn, comment_schema::KEY_CELL_REF)
+                    {
+                        ensure_cell_id_remap(&mut cell_id_remap, old_ref.as_ref(), id_alloc);
+                    }
                 }
             }
 
@@ -382,6 +488,12 @@ impl YrsStorage {
                     KEY_CELLS => write_cells_remapped(&new_sheet, &mut txn, value, &cell_id_remap),
                     KEY_GRID_INDEX => {
                         write_grid_index_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
+                    }
+                    KEY_CELL_PROPERTIES => {
+                        write_cell_properties_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
+                    }
+                    KEY_COMMENTS => {
+                        write_comments_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
                     }
                     _ => write_y_value_into_map(&new_sheet, &mut txn, key, value),
                 }
@@ -602,6 +714,7 @@ impl YrsStorage {
                 let empty = MapPrelim::from([] as [(&str, Any); 0]);
                 sheet_map.insert(&mut txn, key, empty);
             }
+            sheet_map.insert(&mut txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
         }
 
         // Update mirror

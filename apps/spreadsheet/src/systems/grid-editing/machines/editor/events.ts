@@ -65,6 +65,12 @@ export const EditorEvents = {
     position,
   }),
 
+  setTextSelection: (cursorPosition: number, selectionAnchor: number): EditorEvent => ({
+    type: 'TEXT_SELECTION_CHANGED',
+    anchor: selectionAnchor,
+    cursorPosition,
+  }),
+
   // IME events
   imeStart: (): EditorEvent => ({
     type: 'IME_START',
@@ -141,6 +147,10 @@ export const EditorEvents = {
 
   retry: (): EditorEvent => ({
     type: 'RETRY',
+  }),
+
+  retrySelectAll: (): EditorEvent => ({
+    type: 'RETRY_SELECT_ALL',
   }),
 
   // Remote collaboration events
@@ -253,9 +263,10 @@ export const EditorEvents = {
     index,
   }),
 
-  acceptSuggestion: (name: string): EditorEvent => ({
+  acceptSuggestion: (name: string, appendOpeningParen = true): EditorEvent => ({
     type: 'ACCEPT_SUGGESTION',
     name,
+    appendOpeningParen,
   }),
 
   navigateSuggestion: (direction: 'up' | 'down'): EditorEvent => ({

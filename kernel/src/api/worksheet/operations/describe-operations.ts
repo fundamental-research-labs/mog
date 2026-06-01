@@ -24,7 +24,7 @@ import type { DocumentContext } from './shared';
 
 import { isCellError } from '@mog/spreadsheet-utils/errors';
 
-import * as Charts from '../../../domain/charts';
+import { getAll as getAllCharts } from '../../../domain/charts/chart-store';
 import * as NamedRanges from '../../../domain/formulas/named-ranges';
 import { getMeta } from '../../../domain/sheets/sheet-meta';
 import * as TablesCore from '../../../domain/tables/core';
@@ -400,7 +400,7 @@ export async function summarize(
   }
 
   // Charts
-  const charts = await Charts.getAll(ctx, sheetId);
+  const charts = await getAllCharts(ctx, sheetId);
   if (charts.length > 0) {
     const chartNames = charts.map((c) => c.id).join(', ');
     lines.push(`Charts: ${charts.length} (${chartNames})`);

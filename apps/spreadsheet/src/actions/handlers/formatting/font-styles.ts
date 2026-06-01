@@ -15,7 +15,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
-import type { CellFormat } from '@mog-sdk/contracts/core';
+import type { CellFormat, CellRange } from '@mog-sdk/contracts/core';
 import type { TextFormat } from '@mog-sdk/contracts/rich-text';
 
 import {
@@ -192,20 +192,12 @@ export const TOGGLE_ITALIC: AsyncActionHandler = async (deps) =>
 export const TOGGLE_STRIKETHROUGH: AsyncActionHandler = async (deps) =>
   toggleFormatProperty(deps, 'strikethrough');
 export const TOGGLE_WRAP_TEXT: AsyncActionHandler = async (deps) => {
-  // Read current wrapText state before toggling
-  const ws = deps.workbook.activeSheet;
-  const { activeCell, ranges } = getSelectionContext(deps);
-  const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
-  const currentFormat = activeCellData?.format as Record<string, unknown> | undefined;
-  const currentWrap = (currentFormat?.wrapText as boolean) ?? false;
-  const enablingWrap = !currentWrap;
-
+  const { ranges } = getSelectionContext(deps);
   const result = await toggleFormatProperty(deps, 'wrapText');
 
-  // When enabling word wrap, auto-fit affected rows so height grows to fit wrapped content
-  if (enablingWrap) {
-    await autoFitRowsForRangeChange(deps, ranges);
-  }
+  // Re-fit affected rows after both enabling and disabling word wrap.
+  // Disabling wrap should shrink rows that were previously auto-grown.
+  await autoFitRowsForRangeChange(deps, ranges);
 
   return result;
 };
@@ -236,20 +228,23 @@ export const APPLY_FONT_FORMAT: AsyncActionHandler = async (deps) => {
     return handled();
   }
 
-  // Apply to all selected ranges on ALL selected sheets
-  // Uses setFormatForRanges for O(1) full row/column performance
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, pendingFontFormat);
+  const applyPendingFormat = async () => {
+    // Apply to all selected ranges on ALL selected sheets
+    // Uses setFormatForRanges for O(1) full row/column performance
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.formats.setRanges(ranges, pendingFontFormat);
+    }
+  };
+
+  if (pendingFontFormat.fontSize != null) {
+    await applyFontSizeWithRowAutoFit(deps, ranges, applyPendingFormat);
+  } else {
+    await applyPendingFormat();
   }
 
   // Clear pending format
   getUIStore(deps).getState().clearPendingFontFormat();
-
-  // Auto-fit affected rows so height adjusts to new font size (Excel behavior)
-  if (pendingFontFormat.fontSize != null) {
-    await autoFitRowsForRangeChange(deps, ranges);
-  }
 
   return handled();
 };
@@ -276,6 +271,17 @@ export const APPLY_FONT_FORMAT: AsyncActionHandler = async (deps) => {
  * row count is user-bounded and an eager auto-fit is the right call.
  */
 const autoFitRowsForRangeChange = autoFitRowsForBoundedRanges;
+
+async function applyFontSizeWithRowAutoFit(
+  deps: ActionDependencies,
+  ranges: CellRange[],
+  applyFormat: () => Promise<void>,
+): Promise<void> {
+  await deps.workbook.undoGroup(async () => {
+    await applyFormat();
+    await autoFitRowsForRangeChange(deps, ranges);
+  });
+}
 
 /**
  * Set font size for selected cells.
@@ -304,15 +310,14 @@ export const SET_FONT_SIZE: AsyncActionHandler = async (deps, payload?: { size: 
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  // Apply to all selected ranges on ALL selected sheets
-  // Uses setFormatForRanges for O(1) full row/column performance
-  for (const sheetId of targetSheetIds) {
-    const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, { fontSize: payload.size });
-  }
-
-  // Auto-fit affected rows so height adjusts to new font size (Excel behavior)
-  await autoFitRowsForRangeChange(deps, ranges);
+  await applyFontSizeWithRowAutoFit(deps, ranges, async () => {
+    // Apply to all selected ranges on ALL selected sheets
+    // Uses setFormatForRanges for O(1) full row/column performance
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      await ws.formats.setRanges(ranges, { fontSize: payload.size });
+    }
+  });
 
   return handled();
 };
@@ -512,15 +517,14 @@ export const INCREASE_FONT_SIZE: AsyncActionHandler = async (deps) => {
     newSize = nextPreset ?? Math.min(currentSize + 1, MAX_FONT_SIZE);
   }
 
-  // Apply to all selected ranges on ALL selected sheets
-  // Uses setFormatForRanges for O(1) full row/column performance
-  for (const sheetId of targetSheetIds) {
-    const targetWs = deps.workbook.getSheetById(sheetId);
-    await targetWs.formats.setRanges(ranges, { fontSize: newSize });
-  }
-
-  // Auto-fit affected rows so height grows to accommodate larger font (Excel behavior)
-  await autoFitRowsForRangeChange(deps, ranges);
+  await applyFontSizeWithRowAutoFit(deps, ranges, async () => {
+    // Apply to all selected ranges on ALL selected sheets
+    // Uses setFormatForRanges for O(1) full row/column performance
+    for (const sheetId of targetSheetIds) {
+      const targetWs = deps.workbook.getSheetById(sheetId);
+      await targetWs.formats.setRanges(ranges, { fontSize: newSize });
+    }
+  });
 
   return handled();
 };
@@ -563,15 +567,14 @@ export const DECREASE_FONT_SIZE: AsyncActionHandler = async (deps) => {
         : Math.max(currentSize - 1, MIN_FONT_SIZE);
   }
 
-  // Apply to all selected ranges on ALL selected sheets
-  // Uses setFormatForRanges for O(1) full row/column performance
-  for (const sheetId of targetSheetIds) {
-    const targetWs = deps.workbook.getSheetById(sheetId);
-    await targetWs.formats.setRanges(ranges, { fontSize: newSize });
-  }
-
-  // Auto-fit affected rows so height adjusts to smaller font (Excel behavior)
-  await autoFitRowsForRangeChange(deps, ranges);
+  await applyFontSizeWithRowAutoFit(deps, ranges, async () => {
+    // Apply to all selected ranges on ALL selected sheets
+    // Uses setFormatForRanges for O(1) full row/column performance
+    for (const sheetId of targetSheetIds) {
+      const targetWs = deps.workbook.getSheetById(sheetId);
+      await targetWs.formats.setRanges(ranges, { fontSize: newSize });
+    }
+  });
 
   return handled();
 };

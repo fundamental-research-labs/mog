@@ -28,6 +28,8 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
             d_lbls: chart.data_labels.clone(),
             ax_id: ax_ids,
             raw_chart_type_attr: chart.raw_chart_type_attr.clone(),
+            raw_chart_element_name: None,
+            raw_chart_group_xml: None,
         }]
     } else {
         Vec::new()
@@ -41,7 +43,7 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
         style: chart.style.map(|s| s as u8),
         style_alternate_content: chart.style_alternate_content.clone(),
         style_after_chart: chart.style_after_chart,
-        clr_map_ovr: None,
+        clr_map_ovr: chart.clr_map_ovr.clone(),
         protection: chart.protection.clone(),
         chart: oc::Chart {
             title: chart.title.clone(),
@@ -62,6 +64,11 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
             plot_vis_only: Some(chart.display_options.plot_vis_only),
             disp_blanks_as: Some(chart.display_options.disp_blanks_as),
             show_d_lbls_over_max: Some(chart.display_options.show_data_lbls_over_max),
+            show_all_field_buttons: chart.show_all_field_buttons,
+            show_axis_field_buttons: chart.show_axis_field_buttons,
+            show_legend_field_buttons: chart.show_legend_field_buttons,
+            show_value_field_buttons: chart.show_value_field_buttons,
+            show_report_filter_field_buttons: chart.show_report_filter_field_buttons,
             pivot_fmts: chart.pivot_fmts.clone(),
             extensions: chart.chart_extensions.clone(),
             has_empty_ext_lst: chart.has_empty_chart_ext_lst,

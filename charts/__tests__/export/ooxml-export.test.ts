@@ -15,8 +15,10 @@ import {
   toOOXML,
 } from '../../src/export';
 import { quoteSheetName } from '@mog/spreadsheet-utils';
+import { chartDataToRows, configToSpec } from '../../src/core/config-to-spec';
 import { sanitizeNumericValue } from '../../src/export/ooxml/shared-xml';
 import type { ChartSpec, DataRow } from '../../src/grammar/spec';
+import type { ChartData, StoredChartConfig } from '../../src/types';
 
 // =============================================================================
 // Test Data
@@ -166,6 +168,47 @@ describe('toOOXML', () => {
 
       expect(result.chartXml).toContain('<c:smooth val="1"/>');
     });
+
+    it('exports chart-level blank and hidden-cell settings from configToSpec', () => {
+      const data: ChartData = {
+        categories: ['A', 'B', 'C'],
+        series: [
+          {
+            name: 'Series 1',
+            data: [
+              { x: 'A', y: 10 },
+              { x: 'B', y: 0, valueState: 'blank' },
+              { x: 'C', y: 30 },
+            ],
+          },
+        ],
+      };
+      const config: StoredChartConfig = {
+        id: 'blank-export-test',
+        type: 'line',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 8,
+        height: 5,
+        displayBlanksAs: 'span',
+        plotVisibleOnly: false,
+      };
+
+      const spec = configToSpec(config, data);
+      const rows = chartDataToRows(data, config);
+      const result = toOOXML(spec, rows);
+
+      expect(spec.config).toMatchObject({
+        displayBlanksAs: 'span',
+        plotVisibleOnly: false,
+      });
+      expect(result.chartXml).toContain('<c:plotVisOnly val="0"/>');
+      expect(result.chartXml).toContain('<c:dispBlanksAs val="span"/>');
+      expect(result.chartXml).toContain('<c:ptCount val="3"/>');
+      expect(result.chartXml).toContain('<c:pt idx="0"><c:v>10</c:v></c:pt>');
+      expect(result.chartXml).not.toContain('<c:pt idx="1"><c:v>0</c:v></c:pt>');
+      expect(result.chartXml).toContain('<c:pt idx="2"><c:v>30</c:v></c:pt>');
+    });
   });
 
   describe('pie chart', () => {
@@ -306,6 +349,18 @@ describe('toOOXML', () => {
     });
   });
 });
+
+function stockConfig(subType: StoredChartConfig['subType']): StoredChartConfig {
+  return {
+    id: 'stock-export-test',
+    type: 'stock',
+    subType,
+    anchorRow: 0,
+    anchorCol: 0,
+    width: 8,
+    height: 5,
+  };
+}
 
 // =============================================================================
 // canExportToOOXML Tests
@@ -950,6 +1005,29 @@ describe('Radar and stock chart export', () => {
       { category: 'Feb', open: 105, high: 120, low: 95, close: 115 },
     ];
 
+    const stockVolumeHLCData: DataRow[] = [
+      { category: 'Jan', volume: 1000, high: 110, low: 90, close: 105 },
+      { category: 'Feb', volume: 1500, high: 120, low: 95, close: 115 },
+    ];
+
+    const stockVolumeOHLCData: DataRow[] = [
+      { category: 'Jan', volume: 1000, open: 95, high: 110, low: 90, close: 105 },
+      { category: 'Feb', volume: 1500, open: 105, high: 120, low: 95, close: 115 },
+    ];
+
+    const productionVolumeStockData: ChartData = {
+      categories: ['Jan', 'Feb'],
+      series: [
+        {
+          name: 'Stock',
+          data: [
+            { x: 'Jan', y: 105, volume: 1000, open: 95, high: 110, low: 90, close: 105 },
+            { x: 'Feb', y: 115, volume: 1500, open: 105, high: 120, low: 95, close: 115 },
+          ],
+        },
+      ],
+    };
+
     it('generates HLC stock chart (3 series) when no open field', () => {
       const spec: ChartSpec = {
         mark: 'rule',
@@ -1001,6 +1079,106 @@ describe('Radar and stock chart export', () => {
       expect(result.chartXml).toContain('<?xml version="1.0"');
       expect(result.chartXml).toContain('<c:chartSpace');
       expect(result.chartXml).toContain('</c:chartSpace>');
+    });
+
+    it('generates volume-HLC stock combo with a volume bar chart group', () => {
+      const spec: ChartSpec = {
+        mark: 'rule',
+        encoding: {
+          x: { field: 'category', type: 'nominal' },
+          y: { field: 'value', type: 'quantitative' },
+        },
+      };
+
+      const result = toOOXML(spec, stockVolumeHLCData);
+      const barChartIndex = result.chartXml.indexOf('<c:barChart>');
+      const stockChartIndex = result.chartXml.indexOf('<c:stockChart>');
+
+      expect(barChartIndex).toBeGreaterThanOrEqual(0);
+      expect(stockChartIndex).toBeGreaterThan(barChartIndex);
+      expect(result.chartXml.match(/<c:barChart>/g)).toHaveLength(1);
+      expect(result.chartXml.match(/<c:stockChart>/g)).toHaveLength(1);
+      expect(result.chartXml).toContain('<c:v>Volume</c:v>');
+      expect(result.chartXml).not.toContain('<c:v>Open</c:v>');
+      expect(result.chartXml).toContain('<c:v>High</c:v>');
+      expect(result.chartXml).toContain('<c:v>Low</c:v>');
+      expect(result.chartXml).toContain('<c:v>Close</c:v>');
+      expect(result.chartXml).toContain('<c:f>Sheet1!$B$2:$B$3</c:f>');
+      expect(result.chartXml).toContain('<c:f>Sheet1!$E$2:$E$3</c:f>');
+      expect(result.chartXml.match(/<c:catAx>/g)).toHaveLength(2);
+      expect(result.chartXml.match(/<c:valAx>/g)).toHaveLength(2);
+    });
+
+    it('generates volume-OHLC stock combo without treating volume as a stock series', () => {
+      const spec: ChartSpec = {
+        mark: 'rule',
+        encoding: {
+          x: { field: 'category', type: 'nominal' },
+          y: { field: 'value', type: 'quantitative' },
+        },
+      };
+
+      const result = toOOXML(spec, stockVolumeOHLCData);
+      const barXml = result.chartXml.slice(
+        result.chartXml.indexOf('<c:barChart>'),
+        result.chartXml.indexOf('</c:barChart>'),
+      );
+      const stockXml = result.chartXml.slice(
+        result.chartXml.indexOf('<c:stockChart>'),
+        result.chartXml.indexOf('</c:stockChart>'),
+      );
+
+      expect(barXml.match(/<c:ser>/g)).toHaveLength(1);
+      expect(barXml).toContain('<c:v>Volume</c:v>');
+      expect(barXml).toContain('<c:f>Sheet1!$B$2:$B$3</c:f>');
+      expect(stockXml.match(/<c:ser>/g)).toHaveLength(4);
+      expect(stockXml).not.toContain('<c:v>Volume</c:v>');
+      expect(stockXml).toContain('<c:v>Open</c:v>');
+      expect(stockXml).toContain('<c:v>High</c:v>');
+      expect(stockXml).toContain('<c:v>Low</c:v>');
+      expect(stockXml).toContain('<c:v>Close</c:v>');
+      expect(stockXml).toContain('<c:f>Sheet1!$C$2:$C$3</c:f>');
+      expect(stockXml).toContain('<c:f>Sheet1!$F$2:$F$3</c:f>');
+    });
+
+    it('exports production volume-HLC layer specs natively instead of image fallback', () => {
+      const config = stockConfig('volume-hlc' as any);
+      const spec = configToSpec(config, productionVolumeStockData);
+      const rows = chartDataToRows(productionVolumeStockData, config);
+
+      expect(shouldUseImageFallback(spec)).toBe(false);
+      expect(canExportToOOXML(spec)).toBe(true);
+      expect(getOOXMLChartElement(spec)).toBe('stockChart');
+
+      const result = toOOXML(spec, rows);
+
+      expect(result.chartXml).toContain('<c:barChart>');
+      expect(result.chartXml).toContain('<c:stockChart>');
+      expect(result.chartXml).toContain('<c:v>Volume</c:v>');
+      expect(result.chartXml).not.toContain('<c:v>Open</c:v>');
+      expect(result.chartXml).toContain('<c:v>High</c:v>');
+      expect(result.chartXml).toContain('<c:v>Low</c:v>');
+      expect(result.chartXml).toContain('<c:v>Close</c:v>');
+    });
+
+    it('exports production volume-OHLC layer specs natively instead of image fallback', () => {
+      const config = stockConfig('volume-ohlc' as any);
+      const spec = configToSpec(config, productionVolumeStockData);
+      const rows = chartDataToRows(productionVolumeStockData, config);
+
+      expect(shouldUseImageFallback(spec)).toBe(false);
+      expect(canExportToOOXML(spec)).toBe(true);
+      expect(getOOXMLChartElement(spec)).toBe('stockChart');
+
+      const result = toOOXML(spec, rows);
+
+      expect(result.chartXml).toContain('<c:barChart>');
+      expect(result.chartXml).toContain('<c:stockChart>');
+      expect(result.chartXml).toContain('<c:v>Volume</c:v>');
+      expect(result.chartXml).toContain('<c:v>Open</c:v>');
+      expect(result.chartXml).toContain('<c:v>High</c:v>');
+      expect(result.chartXml).toContain('<c:v>Low</c:v>');
+      expect(result.chartXml).toContain('<c:v>Close</c:v>');
     });
   });
 });

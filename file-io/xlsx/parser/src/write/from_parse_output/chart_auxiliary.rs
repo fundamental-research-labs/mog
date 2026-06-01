@@ -125,12 +125,9 @@ fn chart_identity_path(chart_spec: &ChartSpec) -> Option<String> {
     )))
 }
 
-pub(super) fn chart_external_data_relationship<'a>(
-    chart_spec: &'a ChartSpec,
-) -> Option<(
-    &'a ooxml_types::charts::ExternalData,
-    &'a ChartRelationshipData,
-)> {
+pub(super) fn chart_external_data_relationship(
+    chart_spec: &ChartSpec,
+) -> Option<(&ooxml_types::charts::ExternalData, &ChartRelationshipData)> {
     let external_data = match chart_spec.definition.as_ref()? {
         ChartDefinition::Chart(chart_space) => chart_space.external_data.as_ref()?,
         ChartDefinition::ChartEx(_) => return None,
@@ -140,6 +137,15 @@ pub(super) fn chart_external_data_relationship<'a>(
         .iter()
         .find(|rel| rel.r_id == external_data.r_id)?;
     Some((external_data, relationship))
+}
+
+pub(super) fn chart_external_data_relationship_is_supported(rel: &ChartRelationshipData) -> bool {
+    rel.relationship_type.as_deref() == Some(crate::infra::opc::REL_EXTERNAL_LINK)
+        && crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+        && rel
+            .target
+            .as_deref()
+            .is_some_and(|target| !target.trim().is_empty())
 }
 
 fn chart_user_shapes_relationship_id(chart_spec: &ChartSpec) -> Option<&str> {

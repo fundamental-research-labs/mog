@@ -233,4 +233,28 @@ fn relocate_precedent_regenerates_dependent_formula_text() {
         .expect("C1 moved value");
     assert_eq!(c1.value, CellValue::Number(FiniteF64::must(10.0)));
     assert!(c1.formula.is_none());
+
+    engine.undo().expect("undo relocate");
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=A1*2"));
+
+    let undo_row = engine.query_range(&sid, 0, 0, 0, 2);
+    let undo_b1 = undo_row
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 1)
+        .expect("B1 formula cell after undo");
+    assert_eq!(undo_b1.value, CellValue::Number(FiniteF64::must(20.0)));
+    assert_eq!(undo_b1.formula.as_deref(), Some("=A1*2"));
+
+    engine.redo().expect("redo relocate");
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=C1*2"));
+
+    let redo_row = engine.query_range(&sid, 0, 0, 0, 2);
+    let redo_b1 = redo_row
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 1)
+        .expect("B1 formula cell after redo");
+    assert_eq!(redo_b1.value, CellValue::Number(FiniteF64::must(20.0)));
+    assert_eq!(redo_b1.formula.as_deref(), Some("=C1*2"));
 }

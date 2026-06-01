@@ -240,10 +240,11 @@ createWorkbook()
             │    └─ LazyNapiTransport → compute-core-napi.node (Rust)
             ├─ ComputeBridge (async cell ops, recalc)
             └─ DocumentContext (kernel services, event bus)
-                 └─ Workbook / Worksheet (unified API)
+                 ├─ Workbook / Worksheet (unified API)
+                 └─ NodeChartImageExporter → native mark raster backend
 ```
 
-The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (Canvas, DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed.
+The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed. Chart image export is supported in Node for PNG/JPEG through `sheet.charts.exportImage(...)`; chart marks are compiled in TypeScript via the shared chart bridge, then rasterized by the native backend.
 
 ## Prerequisites
 

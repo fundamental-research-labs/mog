@@ -5,6 +5,9 @@
 
 use cell_types::SheetId;
 use compute_screenshot::ScreenshotOptions;
+use compute_screenshot::canvas::CssRect;
+use compute_screenshot::charts::ChartOverlay;
+use domain_types::domain::floating_object::FloatingObjectData;
 
 use bridge_core as bridge;
 
@@ -62,6 +65,25 @@ impl YrsComputeEngine {
         // trailing entry is the sentinel (top edge of `exc_end_row`), which
         // the renderer needs to know the bottom edge of the last cell. No
         // manual append needed: the wire contract carries it inline.
+        let row_origin = viewport_data.row_positions.first().copied().unwrap_or(0.0);
+        let col_origin = viewport_data.col_positions.first().copied().unwrap_or(0.0);
+        let data_width = viewport_data
+            .col_positions
+            .last()
+            .map(|last| last - col_origin)
+            .unwrap_or(0.0);
+        let data_height = viewport_data
+            .row_positions
+            .last()
+            .map(|last| last - row_origin)
+            .unwrap_or(0.0);
+        let chart_overlays = self.build_chart_screenshot_overlays(
+            sheet_id,
+            col_origin,
+            row_origin,
+            data_width,
+            data_height,
+        );
 
         // Positions from the layout index are absolute (relative to the
         // sheet origin).  Shift them so position[0] = 0, giving the
@@ -85,6 +107,76 @@ impl YrsComputeEngine {
             max_height,
         };
 
-        compute_screenshot::render_sheet_to_png(&viewport_data, &self.stores.font_db, &options)
+        compute_screenshot::render_sheet_to_png_with_charts(
+            &viewport_data,
+            &self.stores.font_db,
+            &options,
+            &chart_overlays,
+        )
+    }
+
+    fn build_chart_screenshot_overlays(
+        &self,
+        sheet_id: &SheetId,
+        col_origin: f64,
+        row_origin: f64,
+        data_width: f64,
+        data_height: f64,
+    ) -> Vec<ChartOverlay> {
+        let grid = self.stores.grid_indexes.get(sheet_id);
+        let layout = self.stores.layout_indexes.get(sheet_id);
+
+        super::services::objects::get_all_charts(&self.stores, sheet_id)
+            .into_iter()
+            .filter(|chart| chart.common.visible && chart.common.printable)
+            .filter_map(|chart| {
+                let json = serde_json::to_value(&chart).ok()?;
+                let bounds = crate::storage::sheet::floating_objects::compute_object_pixel_bounds(
+                    grid, layout, &json,
+                )?;
+                let x = bounds.x.get();
+                let y = bounds.y.get();
+                let w = bounds.width.get();
+                let h = bounds.height.get();
+                if w <= 0.0 || h <= 0.0 {
+                    return None;
+                }
+
+                let local_x = x - col_origin;
+                let local_y = y - row_origin;
+                if local_x + w < 0.0
+                    || local_y + h < 0.0
+                    || local_x > data_width
+                    || local_y > data_height
+                {
+                    return None;
+                }
+
+                let FloatingObjectData::Chart(mut chart_data) = chart.data else {
+                    return None;
+                };
+
+                let series_count = chart_data
+                    .series
+                    .as_ref()
+                    .map(|series| series.len())
+                    .unwrap_or(0)
+                    .max(1);
+                let mut colors = chart_data.colors.take().unwrap_or_default();
+                if let Some(series) = &chart_data.series {
+                    colors.extend(series.iter().filter_map(|series| series.color.clone()));
+                }
+
+                Some(ChartOverlay {
+                    rect: CssRect::new(local_x as f32, local_y as f32, w as f32, h as f32),
+                    chart_type: chart_data.chart_type.as_str().to_string(),
+                    title: chart_data.title.take(),
+                    colors,
+                    series_count,
+                    point_count: 4,
+                    z_index: chart.common.z_index,
+                })
+            })
+            .collect()
     }
 }

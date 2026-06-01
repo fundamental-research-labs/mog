@@ -1,13 +1,10 @@
 //! Integration tests for formula accuracy issue #1: null_mismatch / cross-sheet references.
 //!
-//! Problem: Simple cross-sheet references like `Events!AY202` return `null` instead of the
-//! expected value (typically `0`). Same-sheet references like `N23` also return `null` in
-//! some cases. The issue is that cells beyond the snapshot's loaded range aren't being
-//! populated, so references to them resolve to `CellValue::Null` instead of their actual values.
-//!
-//! Corpus examples:
-//!   - `P&L!R18C73` has formula `Events!AY202` -> actual=null, expected=0
-//!   - `Assumptions!R25C5` has formula `N23` -> actual=null, expected=0
+//! Problem: cross-sheet references to distant cells and same-sheet references to
+//! empty cells can return `null` instead of the Excel-compatible value. The issue
+//! is that cells beyond the snapshot's loaded range aren't being populated, so
+//! references to them resolve to `CellValue::Null` instead of their actual or
+//! coerced values.
 //!
 //! Run:
 //!   cargo test -p compute-core --test formula_accuracy_null_mismatch -- --nocapture
@@ -223,8 +220,8 @@ fn test_cross_sheet_ref_to_empty_cell() {
 // Test 3: Cross-sheet reference to a distant cell (row 200+)
 // ---------------------------------------------------------------------------
 
-/// Sheet1!A1 has formula `=Events!AY202`, Events sheet has a value at row 201 col 50
-/// (AY = col index 50). This tests resolution of cells far beyond typical buffer ranges.
+/// Sheet1!A1 has a formula pointing at a distant cell on another sheet. This
+/// tests resolution of cells far beyond typical buffer ranges.
 #[test]
 fn test_cross_sheet_ref_to_distant_cell() {
     let snapshot = build_snapshot(vec![
@@ -233,12 +230,12 @@ fn test_cross_sheet_ref_to_distant_cell() {
             10,
             10,
             vec![
-                // A1: formula referencing Events!AY202  (row 201, col 50 zero-indexed)
-                (0, 0, CellValue::Null, Some("Events!AY202")),
+                // A1: formula referencing SourceData!AY202 (row 201, col 50 zero-indexed)
+                (0, 0, CellValue::Null, Some("SourceData!AY202")),
             ],
         ),
         (
-            "Events",
+            "SourceData",
             300, // large enough row count
             60,  // large enough col count
             vec![
@@ -291,7 +288,7 @@ fn test_cross_sheet_ref_to_distant_cell() {
 #[test]
 fn test_same_sheet_ref_to_empty_cell_returns_zero_in_arithmetic() {
     let snapshot = build_snapshot(vec![(
-        "Assumptions",
+        "Input",
         100,
         20,
         vec![
@@ -337,7 +334,7 @@ fn test_same_sheet_ref_to_empty_cell_returns_zero_in_arithmetic() {
     // (the cell displays as empty but the formula result is 0).
     //
     // BUG: The engine evaluates =N23 to Null (same as initial value), so no change
-    // is emitted. The corpus expects 0. This is the null_mismatch bug:
+    // is emitted. Excel-compatible behavior expects 0. This is the null_mismatch bug:
     // bare references to empty cells should resolve to Number(0), not Null.
     let val_a2 = find_changed_value(&result, 0, 1, 0);
     match val_a2 {

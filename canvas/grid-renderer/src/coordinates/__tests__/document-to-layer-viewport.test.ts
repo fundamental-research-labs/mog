@@ -372,37 +372,60 @@ describe('CoordinateSystem.documentToLayerViewport', () => {
     });
 
     it('applies scroll to objects in non-frozen region', () => {
-      coords.setViewport({ scrollTop: 100, scrollLeft: 200, width: 1000, height: 600 });
+      const frozenRowsHeight = 2 * DEFAULT_ROW_HEIGHT;
+      const frozenColsWidth = 3 * DEFAULT_COL_WIDTH;
+      coords.setViewport({ scrollTop: 100, scrollLeft: 0, width: 1000, height: 600 });
 
-      // Object past frozen region (x > 300, y > 42)
-      const docRect = documentRect(400, 100, 100, 50);
+      // Object past frozen region, then scrolled partly behind frozen rows.
+      const docRect = documentRect(frozenColsWidth + 40, 100, 100, 50);
 
       const layerRect = coords.documentToLayerViewport(TEST_SHEET_ID, docRect);
 
-      // Should subtract both scroll offsets
+      // Scrollable content hidden behind frozen rows is clipped.
       expect(layerRect).toEqual({
-        x: 400 - 200, // 200
-        y: 100 - 100, // 0
+        x: frozenColsWidth + 40,
+        y: frozenRowsHeight,
         width: 100,
-        height: 50,
+        height: 50 - frozenRowsHeight,
       });
     });
 
-    it('handles object spanning frozen and non-frozen regions correctly', () => {
-      coords.setViewport({ scrollTop: 100, scrollLeft: 200, width: 1000, height: 600 });
+    it('clips scrollable objects against frozen row and column boundaries', () => {
+      const frozenRowsHeight = 2 * DEFAULT_ROW_HEIGHT;
+      const frozenColsWidth = 3 * DEFAULT_COL_WIDTH;
+      coords.setViewport({
+        scrollTop: 100,
+        scrollLeft: frozenColsWidth + 8,
+        width: 1000,
+        height: 600,
+      });
 
-      // Object starting in frozen column region but extending into scrollable
-      // Frozen cols width = 300, object at x=200 with width=200 (extends to 400)
-      const docRect = documentRect(200, 100, 200, 50);
+      // Object is non-frozen but partly covered by both frozen panes after scroll.
+      const docRect = documentRect(frozenColsWidth + 8, 100, frozenColsWidth + 16, 50);
 
       const layerRect = coords.documentToLayerViewport(TEST_SHEET_ID, docRect);
 
-      // Object starts in frozen column (x=200 < 300), so no horizontal scroll
       expect(layerRect).toEqual({
-        x: 200, // Frozen column: no scroll subtraction
-        y: 0, // Non-frozen row: scroll subtracted
-        width: 200,
-        height: 50,
+        x: frozenColsWidth,
+        y: frozenRowsHeight,
+        width: 16,
+        height: 50 - frozenRowsHeight,
+      });
+    });
+
+    it('clips documentToViewport page-geometry coords at the frozen row boundary', () => {
+      coords.setViewport({ scrollTop: 100, scrollLeft: 0, width: 1000, height: 600 });
+      const frozenRowsHeight = 2 * DEFAULT_ROW_HEIGHT;
+
+      const docRect = documentRect(100, 100, 100, 50);
+
+      const viewportRect = coords.documentToViewport(TEST_SHEET_ID, docRect);
+
+      expect(viewportRect).toEqual({
+        x: 100 + ROW_HEADER_WIDTH,
+        y: frozenRowsHeight + COL_HEADER_HEIGHT,
+        width: 100,
+        height: 50 - frozenRowsHeight,
       });
     });
   });

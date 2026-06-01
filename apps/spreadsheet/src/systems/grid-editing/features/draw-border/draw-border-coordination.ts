@@ -154,7 +154,7 @@ function eraseCellBorder(
   const existingFormat = cellData?.format ?? {};
   mutations.setFormat(sheetId, row, col, {
     ...existingFormat,
-    borders: undefined,
+    borders: {},
   });
 }
 

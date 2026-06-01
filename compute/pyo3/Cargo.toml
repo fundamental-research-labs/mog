@@ -16,6 +16,7 @@ formula-types = { path = "../core/crates/types/formula-types" }
 cell-types = { path = "../core/crates/types/cell-types" }
 value-types = { path = "../core/crates/types/value-types" }
 snapshot-types = { path = "../core/crates/types/snapshot-types" }
+domain-types = { path = "../../domain-types" }
 compute-parser = { path = "../core/crates/compute-parser" }
 compute-formats = { path = "../core/crates/compute-formats" }
 compute-charts = { path = "../core/crates/compute-charts" }

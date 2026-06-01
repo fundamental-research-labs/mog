@@ -166,7 +166,9 @@ export function FilterDropdownContent({
   }, [wb, activeSheetId, filterId, headerCellId, col]);
 
   // Detect column type for showing appropriate filter submenu (B4: Excel-parity)
-  const columnType = detectColumnType((dropdownData?.items ?? []).map((item) => item.value));
+  const columnType =
+    dropdownData?.columnType ??
+    detectColumnType((dropdownData?.items ?? []).map((item) => item.value));
 
   // Check if column has colors (for showing Color Filters submenu)
   const [hasColors, setHasColors] = useState(false);
@@ -301,7 +303,7 @@ export function FilterDropdownContent({
 
   return (
     <div
-      className="flex min-h-0 w-full flex-col overflow-hidden"
+      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-testid="filter-dropdown-content"
     >
       {/* Sort buttons section */}
@@ -488,14 +490,7 @@ export function FilterDropdownContent({
       </div>
 
       {/* Filter content */}
-      <div
-        className="min-h-0 overflow-y-auto p-3"
-        data-testid="filter-values-panel"
-        style={{
-          maxHeight:
-            'min(300px, max(160px, calc(var(--radix-popper-available-height, 450px) - 150px)))',
-        }}
-      >
+      <div className="min-h-0 flex-1 overflow-hidden p-3" data-testid="filter-values-panel">
         {activeTab === 'values' ? (
           columnType === 'date' ? (
             dropdownData && (

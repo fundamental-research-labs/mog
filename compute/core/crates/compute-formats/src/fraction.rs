@@ -141,8 +141,7 @@ pub(crate) fn format_fraction(value: f64, section: &FormatSection, section_count
         if idx == slash_pos {
             // Emit numerator if not yet
             if !num_emitted {
-                // Excel parity (per the test fixture
-                // dev/app-eval/scenarios/formatting-deep/number-format-fraction.spec.ts):
+                // Excel parity (per the UI fraction-formatting fixture):
                 // when the numerator has actual digits we emit just those digits,
                 // letting the literal separator before the fraction zone (the
                 // space in `# ??/??`) and the slash itself provide visual

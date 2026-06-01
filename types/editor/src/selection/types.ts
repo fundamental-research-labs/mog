@@ -9,7 +9,7 @@
  *
  */
 
-import type { CellRange } from '@mog/types-core';
+import type { CellRange, SheetId } from '@mog/types-core';
 import type { CellCoord } from '@mog/types-viewport/rendering/primitives';
 
 /**
@@ -34,6 +34,8 @@ export type SelectionDirection = 'down-right' | 'down-left' | 'up-right' | 'up-l
  * Used by DocumentContext to track selection state with undo operations.
  */
 export interface SelectionCheckpoint {
+  /** The sheet where the selection was captured */
+  sheetId?: SheetId;
   /** The selected ranges */
   ranges: CellRange[];
   /** The active cell within selection */

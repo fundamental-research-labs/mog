@@ -12,6 +12,7 @@ use super::codec::{
 };
 use super::ids::{generate_object_id, now_millis};
 use super::keys::FO_UPDATED_AT;
+use super::order::{append_object_id_if_missing, remove_object_id};
 use super::sheet_map::get_sheet_submap;
 
 pub fn set_floating_object(
@@ -31,6 +32,7 @@ pub fn set_floating_object(
         })?;
 
     write_object_from_json(&mut txn, &map, object_id, json);
+    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, object_id);
     Ok(())
 }
 
@@ -80,6 +82,7 @@ pub fn delete_floating_object(
     }
 
     map.remove(&mut txn, object_id);
+    remove_object_id(&mut txn, sheets, &sheet_hex, object_id);
     true
 }
 
@@ -141,6 +144,7 @@ pub fn create_floating_object(
     }
 
     write_object_from_json(&mut txn, &map, &object_id, &obj);
+    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &object_id);
 
     Ok(object_id)
 }

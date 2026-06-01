@@ -63,6 +63,22 @@ function stringRange(range: unknown[]): string[] {
   return range.filter((v): v is string => typeof v === 'string');
 }
 
+function categoricalDomainValues(values: unknown[], scaleSpec?: ScaleSpec | null): string[] {
+  const source = Array.isArray(scaleSpec?.domain) ? scaleSpec.domain : values;
+  const domain: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of source) {
+    if (value === undefined || value === null) continue;
+    const key = String(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    domain.push(key);
+  }
+
+  return domain;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -109,6 +125,8 @@ export interface ResolvedEncoding {
 export interface ResolvedEncodings {
   x?: ResolvedEncoding;
   y?: ResolvedEncoding;
+  x2?: ResolvedEncoding;
+  y2?: ResolvedEncoding;
   color?: ResolvedEncoding;
   fill?: ResolvedEncoding;
   stroke?: ResolvedEncoding;
@@ -317,22 +335,21 @@ function createLinearScale(
   markType?: string,
 ): ChartScale {
   const numericValues = values.filter((v) => typeof v === 'number' && !isNaN(v));
+  const explicitMin = numericDomainBound(scaleSpec?.domain, 0);
+  const explicitMax = numericDomainBound(scaleSpec?.domain, 1);
 
-  let min =
-    numericDomainBound(scaleSpec?.domain, 0) ??
-    (numericValues.length > 0 ? safeMin(numericValues) : 0);
-  let max =
-    numericDomainBound(scaleSpec?.domain, 1) ??
-    (numericValues.length > 0 ? safeMax(numericValues) : 1);
+  let min = explicitMin ?? (numericValues.length > 0 ? safeMin(numericValues) : 0);
+  let max = explicitMax ?? (numericValues.length > 0 ? safeMax(numericValues) : 1);
 
   // Handle zero: only default to including zero for bar/area marks (Vega-Lite convention).
   // Other mark types (line, point, etc.) scale to the data range by default.
-  const zeroMarks = new Set(['bar', 'area', 'arc']);
+  // Explicit domain bounds always win; zero only fills automatic bounds.
+  const zeroMarks = new Set(['bar', 'area', 'arc', 'radar']);
   const defaultZero = zeroMarks.has(markType ?? 'bar');
   const includeZero = scaleSpec?.zero ?? defaultZero;
   if (includeZero) {
-    if (min > 0) min = 0;
-    if (max < 0) max = 0;
+    if (explicitMin === undefined && min > 0) min = 0;
+    if (explicitMax === undefined && max < 0) max = 0;
   }
 
   // Handle reverse
@@ -507,7 +524,8 @@ function createBandScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const domainValues = categoricalDomainValues(values, scaleSpec);
+  const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.1;
   const paddingInner = scaleSpec?.paddingInner ?? padding;
   const paddingOuter = scaleSpec?.paddingOuter ?? padding;
@@ -529,8 +547,9 @@ function createBandScale(
 
   const bandScale: ChartScale = Object.assign(
     (value: unknown): number => {
+      if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
-      if (index === -1) return rangeStart;
+      if (index === -1) return NaN;
       const start = rangeStart + paddingOuter * step + index * step;
       return start;
     },
@@ -562,7 +581,8 @@ function createPointScale(
   range: [number, number],
   scaleSpec?: ScaleSpec | null,
 ): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const domainValues = categoricalDomainValues(values, scaleSpec);
+  const uniqueValues = scaleSpec?.reverse ? [...domainValues].reverse() : domainValues;
   const padding = scaleSpec?.padding ?? 0.5;
 
   // Point scales always place items from the lower pixel value toward the
@@ -574,8 +594,9 @@ function createPointScale(
 
   const pointScale: ChartScale = Object.assign(
     (value: unknown): number => {
+      if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
-      if (index === -1) return rangeStart + absExtent / 2;
+      if (index === -1) return NaN;
       return rangeStart + padding * step + index * step;
     },
     {
@@ -675,7 +696,7 @@ function createSequentialColorScale(values: number[], scaleSpec?: ScaleSpec | nu
  * Create a categorical color scale.
  */
 function createCategoricalColorScale(values: unknown[], scaleSpec?: ScaleSpec | null): ChartScale {
-  const uniqueValues = [...new Set(values.map(String))];
+  const uniqueValues = categoricalDomainValues(values, scaleSpec);
   const colors =
     (scaleSpec?.range ? stringRange(scaleSpec.range) : undefined) ?? DEFAULT_CATEGORY_COLORS;
 
@@ -705,6 +726,15 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
     return Object.assign((_v: unknown): number | string => constVal, {});
   }
 
+  // Absolute size channels use Vega-Lite's scale:null convention. Marker
+  // sizes imported from Excel are already lowered to symbol area units.
+  if (channel.scale === null) {
+    return Object.assign((value: unknown): number => {
+      const v = typeof value === 'number' ? value : parseFloat(String(value));
+      return Number.isFinite(v) && v > 0 ? v : 64;
+    }, {});
+  }
+
   const field = channel.field;
   if (!field) {
     return Object.assign((_v: unknown): number | string => 64, {});
@@ -713,8 +743,9 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   const values = extractNumericValues(data, field);
   const max = values.length > 0 ? safeMax(values) : 1;
 
-  // Size range (area in pixels)
-  const maxSize = 400;
+  // Size range is symbol area in pixels.
+  const minSize = numericDomainBound(channel.scale?.range, 0) ?? 0;
+  const maxSize = numericDomainBound(channel.scale?.range, 1) ?? 400;
 
   // Proportional mapping: size = value * (maxSize / maxValue)
   // This ensures size(a)/size(b) = a/b for all positive values,
@@ -723,7 +754,7 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
 
   return Object.assign((value: unknown): number => {
     const v = typeof value === 'number' ? value : parseFloat(String(value));
-    if (!isFinite(v) || v <= 0) return 4; // minimum visible size for non-finite/zero/negative
+    if (!isFinite(v) || v <= 0) return minSize;
     // Use pure linear mapping for positive values to preserve proportionality.
     // Do NOT clamp to a minimum -- the linear relationship must hold exactly
     // so that size(a)/size(b) = a/b for any pair of positive values.
@@ -747,14 +778,19 @@ function createOpacityScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = extractNumericValues(data, field);
-  const min = values.length > 0 ? safeMin(values) : 0;
-  const max = values.length > 0 ? safeMax(values) : 1;
+  const min =
+    numericDomainBound(channel.scale?.domain, 0) ?? (values.length > 0 ? safeMin(values) : 0);
+  const max =
+    numericDomainBound(channel.scale?.domain, 1) ?? (values.length > 0 ? safeMax(values) : 1);
+  const rangeStart = numericDomainBound(channel.scale?.range, 0) ?? 0.3;
+  const rangeEnd = numericDomainBound(channel.scale?.range, 1) ?? 1;
 
   return Object.assign((value: unknown): number => {
     const v = typeof value === 'number' ? value : parseFloat(String(value));
-    if (isNaN(v)) return 0.3;
+    if (isNaN(v)) return rangeStart;
     const t = max !== min ? (v - min) / (max - min) : 0.5;
-    return 0.3 + t * 0.7; // Range from 0.3 to 1.0
+    const clampedT = Math.max(0, Math.min(1, t));
+    return rangeStart + clampedT * (rangeEnd - rangeStart);
   }, {});
 }
 
@@ -774,9 +810,10 @@ function createShapeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = data.map((d) => d[field]);
-  const uniqueValues = [...new Set(values.map(String))];
+  const uniqueValues = categoricalDomainValues(values);
 
   return Object.assign((value: unknown): string => {
+    if (value === undefined || value === null) return DEFAULT_SHAPES[0];
     const index = uniqueValues.indexOf(String(value));
     if (index === -1) return DEFAULT_SHAPES[0];
     return DEFAULT_SHAPES[index % DEFAULT_SHAPES.length];
@@ -827,6 +864,12 @@ export function resolveEncodings(
   }
   if (encoding.y) {
     resolved.y = resolveEncoding(encoding.y, data, scales.y);
+  }
+  if (encoding.x2) {
+    resolved.x2 = resolveEncoding(encoding.x2, data, scales.x);
+  }
+  if (encoding.y2) {
+    resolved.y2 = resolveEncoding(encoding.y2, data, scales.y);
   }
   if (encoding.color) {
     resolved.color = resolveEncoding(encoding.color, data, scales.color);

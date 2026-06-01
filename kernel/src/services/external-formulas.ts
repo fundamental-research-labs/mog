@@ -1,7 +1,8 @@
 import type { DocumentContext } from '../context/types';
+import type { BatchRangeResponse, RangeQueryResult } from '../bridges/compute/compute-types.gen';
 import { getExternalWorkbookSession } from './workbook-links/session-registry';
 import type { PersistedWorkbookLinkRecord } from './workbook-links/types';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 interface ExternalFormulaCell {
   readonly sheetId: SheetId;
@@ -38,6 +39,15 @@ export function trackExternalFormulaWrite(
   }
 }
 
+export function getTrackedExternalFormula(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+): string | undefined {
+  return formulasByContext.get(ctx)?.get(cellKey(sheetId, row, col))?.formula;
+}
+
 export async function prepareExternalFormulaWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
@@ -54,6 +64,60 @@ export async function prepareExternalFormulaWrite(
     return value;
   }
   return materializeFormula(ctx, value);
+}
+
+export function applyExternalFormulaReadbacks(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  result: RangeQueryResult,
+): RangeQueryResult {
+  let changed = false;
+  const cells = result.cells.map((cell) => {
+    const formula = getTrackedExternalFormula(ctx, sheetId, cell.row, cell.col);
+    if (!formula || cell.formula === formula) return cell;
+    changed = true;
+    return { ...cell, formula };
+  });
+
+  return changed ? { ...result, cells } : result;
+}
+
+export function applyExternalFormulaBatchReadbacks(
+  ctx: DocumentContext,
+  response: BatchRangeResponse,
+): BatchRangeResponse {
+  let changed = false;
+  const entries = response.entries.map((entry) => {
+    if (entry.status !== 'ok') return entry;
+
+    const result = applyExternalFormulaReadbacks(ctx, toSheetId(entry.sheetId), entry.result);
+    if (result === entry.result) return entry;
+
+    changed = true;
+    return { ...entry, result };
+  });
+
+  return changed ? { ...response, entries } : response;
+}
+
+export function installExternalFormulaReadbacks(ctx: DocumentContext): void {
+  const bridge = ctx.computeBridge;
+
+  if (typeof bridge.queryRange === 'function') {
+    const queryRange = bridge.queryRange.bind(bridge);
+    bridge.queryRange = async (sheetId, startRow, startCol, endRow, endCol) =>
+      applyExternalFormulaReadbacks(
+        ctx,
+        sheetId,
+        await queryRange(sheetId, startRow, startCol, endRow, endCol),
+      );
+  }
+
+  if (typeof bridge.queryRanges === 'function') {
+    const queryRanges = bridge.queryRanges.bind(bridge);
+    bridge.queryRanges = async (requests) =>
+      applyExternalFormulaBatchReadbacks(ctx, await queryRanges(requests));
+  }
 }
 
 export function maskExternalFormulaRefsForValidation(formula: string): string {
@@ -110,11 +174,8 @@ async function readExternalReference(
   if (!link) return 'NA()';
 
   const scope = ctx.workbookLinkScope();
-  let status = ctx.workbookLinks.getRuntimeStatus(link.linkId, scope);
-  if (!status || status.status === 'unresolved' || status.status === 'loading') {
-    await ctx.workbookLinks.refresh(link.linkId, scope);
-    status = ctx.workbookLinks.getRuntimeStatus(link.linkId, scope);
-  }
+  await ctx.workbookLinks.refresh(link.linkId, scope);
+  const status = ctx.workbookLinks.getRuntimeStatus(link.linkId, scope);
   if (!status || status.status !== 'ready') return 'NA()';
 
   const sessionId =

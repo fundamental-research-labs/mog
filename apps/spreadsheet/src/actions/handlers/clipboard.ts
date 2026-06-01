@@ -50,7 +50,14 @@ import { blobToDataUrl } from '../../utils/blob-to-data-url';
 
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { getUIStore, handled } from './handler-utils';
-import { waitForPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
+import {
+  trackActiveClipboardPaste,
+  waitForPendingClipboardPaste,
+} from '../../systems/grid-editing/coordination/pending-clipboard-paste';
+import {
+  trackPendingClipboardCapture,
+  waitForPendingClipboardCapture,
+} from '../../systems/grid-editing/coordination/pending-clipboard-capture';
 
 // =============================================================================
 // Type Helpers
@@ -535,7 +542,7 @@ export const COPY: ActionHandler = (deps) => {
 
   // ASYNC: Bridge work runs in background via .then/.catch chain.
   // Handler returns handled() synchronously below.
-  createCopyCutDeps(deps, sheetId, mutableRanges)
+  const capturePromise = createCopyCutDeps(deps, sheetId, mutableRanges)
     .then((copyCutDeps) => {
       const data = copyCutDeps.buildData(mutableRanges);
       const tsv = copyCutDeps.generateTSV(mutableRanges);
@@ -570,6 +577,7 @@ export const COPY: ActionHandler = (deps) => {
       rejectData(err);
       console.error('Copy failed:', err);
     });
+  trackPendingClipboardCapture(capturePromise);
 
   return handled();
 };
@@ -626,7 +634,7 @@ export const CUT: ActionHandler = (deps) => {
 
   // ASYNC: Bridge work runs in background via .then/.catch chain.
   // Handler returns handled() synchronously below.
-  createCopyCutDeps(deps, sheetId, mutableRanges)
+  const capturePromise = createCopyCutDeps(deps, sheetId, mutableRanges)
     .then((copyCutDeps) => {
       const data = copyCutDeps.buildData(mutableRanges);
       const tsv = copyCutDeps.generateTSV(mutableRanges);
@@ -660,6 +668,7 @@ export const CUT: ActionHandler = (deps) => {
       rejectData(err);
       console.error('Cut failed:', err);
     });
+  trackPendingClipboardCapture(capturePromise);
 
   return handled();
 };
@@ -712,6 +721,8 @@ const runPaste: AsyncActionHandler = async (deps) => {
     return deferred();
   }
 
+  await waitForPendingClipboardCapture();
+
   // If a chart was previously copied/cut, delegate to chart paste instead of
   // cell paste. The chart clipboard is stored in UIStore independently of the
   // XState clipboard machine (which only tracks cell ranges).
@@ -725,10 +736,11 @@ const runPaste: AsyncActionHandler = async (deps) => {
 
   // Await async operation - unifiedPaste reads system clipboard
   // and routes to appropriate paste method (internal or external)
-  await unifiedPaste(activeCell, {
+  const pastePromise = unifiedPaste(activeCell, {
     getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
     commands: deps.commands.clipboard,
     waitForPasteCommit: waitForPendingClipboardPaste,
+    suppressNextUndo: () => uiStore.getState().suppressNextUndo(),
     pasteImage: async (blob, anchorCell) => {
       const sheetId = deps.getActiveSheetId();
       const ws = deps.workbook.getSheetById(sheetId);
@@ -739,6 +751,8 @@ const runPaste: AsyncActionHandler = async (deps) => {
       });
     },
   });
+  trackActiveClipboardPaste(pastePromise);
+  await pastePromise;
 
   // Accessibility announcement for paste operation
   uiStore.getState().announce('Pasted', 'polite');

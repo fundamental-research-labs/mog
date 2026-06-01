@@ -26,7 +26,7 @@ export interface UseGridMouseOptions {
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** Coordinator for hit testing floating objects and outlines */
   coordinator: SheetCoordinator;
-  /** Callback for hyperlink Ctrl+click */
+  /** Callback for hyperlink activation click */
   onHyperlinkClick?: (cell: CellCoord) => boolean;
   /** Callback for context menu */
   onContextMenu?: (options: ContextMenuOptions) => void;

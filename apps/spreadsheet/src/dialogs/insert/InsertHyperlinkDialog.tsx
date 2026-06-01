@@ -103,14 +103,10 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
   useEffect(() => {
     if (isOpen) {
       setUrl(existingUrl ?? '');
-      setDisplayText('');
+      setDisplayText(cellValue ?? '');
       setError(null);
-      // Focus URL input after dialog renders
-      setTimeout(() => {
-        urlInputRef.current?.focus();
-      }, 50);
     }
-  }, [isOpen, existingUrl]);
+  }, [isOpen, existingUrl, cellValue]);
 
   // Validate URL on change
   const handleUrlChange = useCallback(
@@ -150,6 +146,10 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
         await wsRef.setCell(targetRow, targetCol, trimmedDisplayText);
       }
       await wsRef.hyperlinks.set(targetRow, targetCol, trimmedUrl);
+      await wsRef.formats.set(targetRow, targetCol, {
+        fontColor: '#0563C1',
+        underlineType: 'single',
+      });
     })();
 
     // Call callback if provided
@@ -174,7 +174,6 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
   if (!isOpen) return null;
 
   const isEditMode = mode === 'edit';
-  const hasValidUrl = !validateUrl(url);
 
   return (
     <Dialog
@@ -251,7 +250,7 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
           <Button variant="secondary" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleOk} disabled={!hasValidUrl}>
+          <Button variant="primary" onClick={handleOk}>
             {isEditMode ? 'Update' : 'OK'}
           </Button>
         </div>

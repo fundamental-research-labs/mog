@@ -11,6 +11,21 @@ import type { ArcMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { definedStyle, renderableDataRows } from './helpers';
+
+const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
+
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 /**
  * Generate arc/pie marks.
@@ -23,6 +38,7 @@ export function generateArcMarks(
   layout: Layout,
 ): ArcMark[] {
   const marks: ArcMark[] = [];
+  const renderData = renderableDataRows(data);
 
   // Calculate center
   const cx = layout.plotArea.x + layout.plotArea.width / 2;
@@ -41,7 +57,7 @@ export function generateArcMarks(
   let total = 0;
   const values: number[] = [];
 
-  for (const datum of data) {
+  for (const datum of renderData) {
     const value = encodings.theta?.accessor(datum) ?? encodings.size?.accessor(datum);
     const numValue = typeof value === 'number' && isFinite(value) ? Math.abs(value) : 0;
     values.push(numValue);
@@ -59,10 +75,10 @@ export function generateArcMarks(
     for (const v of values) {
       angles.push((v / total) * TWO_PI);
     }
-  } else if (data.length > 0) {
+  } else if (renderData.length > 0) {
     // Equal distribution when all values are zero/null/NaN
-    const equalAngle = TWO_PI / data.length;
-    for (let i = 0; i < data.length; i++) {
+    const equalAngle = TWO_PI / renderData.length;
+    for (let i = 0; i < renderData.length; i++) {
       angles.push(equalAngle);
     }
   }
@@ -99,10 +115,10 @@ export function generateArcMarks(
     // The angle_sum invariant still holds because it adds n * padAngle back.
   }
 
-  let startAngle = -Math.PI / 2; // Start at 12 o'clock
+  let startAngle = markSpec.startAngle ?? 0;
 
-  for (let i = 0; i < data.length; i++) {
-    const datum = data[i];
+  for (let i = 0; i < renderData.length; i++) {
+    const datum = renderData[i];
     const angle = angles[i];
     const endAngle = startAngle + angle;
 
@@ -129,20 +145,31 @@ export function generateArcMarks(
       }
     }
 
+    const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0;
+    const midAngle = (paddedStart + paddedEnd) / 2;
+    const explosionOffset = explosion > 0 ? Math.min(outerRadius * 0.25, explosion) : 0;
+    const explosionVector = arcAngleUnitVector(midAngle);
+
     marks.push({
       type: 'arc',
-      x: cx,
-      y: cy,
+      x: cx + explosionVector.x * explosionOffset,
+      y: cy + explosionVector.y * explosionOffset,
       innerRadius,
       outerRadius,
       startAngle: paddedStart,
       endAngle: paddedEnd,
       datum: arcDatum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke ?? '#fff',
-        strokeWidth: markSpec.strokeWidth ?? 1,
+        fill: datumString(datum, markSpec.fillField) ?? color,
+        stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke ?? '#fff',
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
 
@@ -150,4 +177,9 @@ export function generateArcMarks(
   }
 
   return marks;
+}
+
+function arcAngleUnitVector(angle: number): { x: number; y: number } {
+  const canvasAngle = angle - Math.PI / 2;
+  return { x: Math.cos(canvasAngle), y: Math.sin(canvasAngle) };
 }

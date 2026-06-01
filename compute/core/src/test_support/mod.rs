@@ -11,7 +11,7 @@ pub mod yrs_canonical;
 
 /// Re-export of the XLSX-import snapshot builder for integration tests that
 /// need to drive the engine through the real parse → snapshot → from_snapshot
-/// init path (e.g. the `nxnOekSc` iterative-recalc reducer). The underlying
+/// init path. The underlying
 /// `import` module is `pub(crate)` in default builds; this re-export keeps
 /// the production crate boundary tight while giving `tests/` access through
 /// the designated test-support surface.

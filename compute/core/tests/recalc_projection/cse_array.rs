@@ -75,7 +75,7 @@ fn test_single_cell_cse_transpose_implicit_intersection() {
 }
 
 /// Single-cell CSE with negation: -TRANSPOSE($H$10:$T$10) with array_ref="D20:D20"
-/// This mirrors the exact pattern from the corpus failures (FT-003).
+/// The single-cell array ref must not spill the transposed source range.
 #[test]
 fn test_single_cell_cse_negated_transpose() {
     let snapshot = build_snapshot_with_array_ref(vec![(

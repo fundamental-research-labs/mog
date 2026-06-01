@@ -16,6 +16,8 @@ import type { CellId } from '@mog/types-core/cell-identity';
 import type { RichText } from '@mog/types-core/rich-text';
 import type { SheetId } from '@mog/types-core';
 
+export type ComposeCommentType = 'note' | 'threadedComment';
+
 // =============================================================================
 // STATE TYPE (minimal version for selectors)
 // =============================================================================
@@ -47,6 +49,8 @@ export interface CommentState {
     editingCommentId: string | null;
     /** Draft content while editing/composing (rich text segments) */
     draftContent: RichText;
+    /** Type to create when saving a fresh composed comment */
+    composeCommentType: ComposeCommentType;
     /** Comment ID pending deletion (in confirmingDelete state) */
     deletingCommentId: string | null;
   };
@@ -83,6 +87,9 @@ export interface CommentAccessor {
 
   /** Get the draft content while editing/composing */
   getDraftContent(): RichText;
+
+  /** Get the type to create when saving a fresh composed comment */
+  getComposeCommentType(): ComposeCommentType;
 
   /** Get the comment ID pending deletion */
   getDeletingCommentId(): string | null;

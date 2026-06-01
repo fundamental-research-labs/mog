@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from mog._bridge import Bridge, _ensure_json_quoted
 from mog._serde import deserialize_mutation_result
 from mog.errors import MogError, SheetNotFoundError
+from mog._unsupported import (
+    unsupported_api,
+    unsupported_proxy_from_surface,
+    unsupported_python_path,
+)
 from mog.types import MutationResult
 from mog.worksheet import Worksheet
 
@@ -141,8 +146,9 @@ class Workbook:
         }
         bridge, _lifecycle = Bridge.create_from_snapshot(json.dumps(snapshot))
 
-        # Import XLSX data — replaces engine content with the file's data
-        bridge.call("compute_import_from_xlsx_bytes", xlsx_bytes)
+        # Import XLSX data — replaces engine content with the file's data.
+        # Current native import requires an explicit recalc decision.
+        bridge.call("compute_import_from_xlsx_bytes", xlsx_bytes, True)
 
         wb = cls(bridge)
         wb._from_xlsx = True
@@ -389,11 +395,11 @@ class Workbook:
 
     def suspend_calc(self) -> None:
         """Suspend automatic calculation."""
-        self._calc_suspended = True
+        unsupported_python_path("wb.suspend_calc")
 
     def resume_calc(self) -> None:
         """Resume automatic calculation."""
-        self._calc_suspended = False
+        unsupported_python_path("wb.resume_calc")
 
     def recalculate_all(self, sheet_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Recalculate all formulas (alias for calculate)."""
@@ -401,7 +407,7 @@ class Workbook:
 
     def recalculate_sheet(self, sheet_id: str) -> Optional[Dict[str, Any]]:
         """Recalculate formulas on a specific sheet (delegates to full recalc)."""
-        return self.calculate()
+        unsupported_python_path("wb.recalculate_sheet")
 
     # ------------------------------------------------------------------
     # Event subscription
@@ -494,102 +500,18 @@ class Workbook:
 
         Returns the checkpoint ID string.
         """
-        cp_id = uuid.uuid4().hex
-        # Snapshot cell data and formatting for future restore
-        snapshot = {}
-        format_snapshot = {}
-        for sid in self._bridge.get_sheet_order():
-            from mog._bridge import _ensure_json_quoted
-            sid_json = _ensure_json_quoted(sid)
-            bounds = self._bridge.get_data_bounds(sid_json)
-            cells = {}
-            formats = {}
-            if bounds and isinstance(bounds, dict):
-                min_r = bounds.get("minRow", bounds.get("min_row", 0))
-                min_c = bounds.get("minCol", bounds.get("min_col", 0))
-                max_r = bounds.get("maxRow", bounds.get("max_row", 0))
-                max_c = bounds.get("maxCol", bounds.get("max_col", 0))
-                for r in range(min_r, max_r + 1):
-                    for c in range(min_c, max_c + 1):
-                        raw = self._bridge.get_raw_value(sid_json, r, c)
-                        if raw is not None and raw != "":
-                            cells[(r, c)] = raw
-                        # Snapshot cell format
-                        try:
-                            fmt = self._bridge.call_json(
-                                "compute_get_resolved_format", sid_json, r, c
-                            )
-                            if isinstance(fmt, str):
-                                fmt = json.loads(fmt)
-                            if isinstance(fmt, dict):
-                                # Filter to only non-default properties
-                                meaningful = {k: v for k, v in fmt.items()
-                                              if v is not None and v is not False and v != "" and v != 0}
-                                if meaningful:
-                                    formats[(r, c)] = meaningful
-                        except Exception:
-                            pass
-            snapshot[sid] = cells
-            format_snapshot[sid] = formats
-        self._checkpoints.append({
-            "id": cp_id, "name": name or cp_id,
-            "snapshot": snapshot, "format_snapshot": format_snapshot,
-        })
-        return cp_id
+        unsupported_python_path("wb.create_checkpoint")
 
     def list_checkpoints(self) -> List[Dict[str, Any]]:
         """List all checkpoints."""
-        return [{"id": cp["id"], "name": cp["name"]} for cp in self._checkpoints]
+        unsupported_python_path("wb.list_checkpoints")
 
     def restore_checkpoint(self, checkpoint_id: str) -> Dict[str, Any]:
         """Restore a checkpoint by ID.
 
         Returns a dict with status information.
         """
-        target = None
-        for cp in self._checkpoints:
-            if cp["id"] == checkpoint_id:
-                target = cp
-                break
-        if target is None:
-            return {"checkpoint_id": checkpoint_id, "status": "not_found"}
-        # Restore cell values from snapshot
-        from mog._bridge import _ensure_json_quoted
-        from mog._serde import normalize_value
-        snapshot = target["snapshot"]
-        format_snapshot = target.get("format_snapshot", {})
-        for sid, cells in snapshot.items():
-            sid_json = _ensure_json_quoted(sid)
-            # Clear existing data first
-            bounds = self._bridge.get_data_bounds(sid_json)
-            if bounds and isinstance(bounds, dict):
-                min_r = bounds.get("minRow", bounds.get("min_row", 0))
-                min_c = bounds.get("minCol", bounds.get("min_col", 0))
-                max_r = bounds.get("maxRow", bounds.get("max_row", 0))
-                max_c = bounds.get("maxCol", bounds.get("max_col", 0))
-                self._bridge.clear_range(sid_json, min_r, min_c, max_r, max_c)
-                # Clear formats in the range
-                try:
-                    ranges_json = json.dumps([(min_r, min_c, max_r, max_c)])
-                    self._bridge.clear_format_for_ranges(sid_json, ranges_json)
-                except Exception:
-                    pass
-            # Write back snapshot data
-            if cells:
-                updates = [(r, c, val) for (r, c), val in cells.items()]
-                self._bridge.set_cell_values_parsed(sid_json, json.dumps(updates))
-            # Restore formats
-            formats = format_snapshot.get(sid, {})
-            if formats:
-                for (r, c), fmt in formats.items():
-                    try:
-                        ranges_json = json.dumps([(r, c, r, c)])
-                        format_json = json.dumps(fmt)
-                        self._bridge.set_format_for_ranges(sid_json, ranges_json, format_json)
-                    except Exception:
-                        pass
-        self.calculate()
-        return {"checkpoint_id": checkpoint_id, "status": "restored"}
+        unsupported_python_path("wb.restore_checkpoint")
 
     @property
     def notifications(self):
@@ -666,55 +588,7 @@ class Workbook:
 
         Returns a dict with the goal seek result.
         """
-        target_cell = params.get("targetCell", "A1")
-        target_value = params.get("targetValue", 0)
-        changing_cell = params.get("changingCell", "A1")
-
-        from mog._serde import deserialize_cell_value, normalize_value, parse_a1
-
-        ws = self.active_sheet
-        t_row, t_col = parse_a1(target_cell)
-        c_row, c_col = parse_a1(changing_cell)
-
-        # Read current value as initial guess
-        current_raw = self._bridge.get_cell_value(ws._sheet_id_json, c_row, c_col)
-        current = deserialize_cell_value(current_raw)
-        lo, hi = -1e6, 1e6
-        if isinstance(current, (int, float)):
-            lo = current - 1e6
-            hi = current + 1e6
-
-        best_val = None
-        best_diff = float("inf")
-
-        for _ in range(100):
-            mid = (lo + hi) / 2.0
-            self._bridge.set_cell_value_parsed(
-                ws._sheet_id_json, c_row, c_col, normalize_value(mid)
-            )
-            self.calculate()
-            result_raw = self._bridge.get_cell_value(ws._sheet_id_json, t_row, t_col)
-            result_val = deserialize_cell_value(result_raw)
-            if not isinstance(result_val, (int, float)):
-                break
-            diff = result_val - target_value
-            if abs(diff) < abs(best_diff):
-                best_diff = diff
-                best_val = mid
-            if abs(diff) < 1e-6:
-                return {"success": True, "found": True, "value": mid, "targetResult": result_val}
-            if diff < 0:
-                lo = mid
-            else:
-                hi = mid
-
-        if best_val is not None:
-            from mog._serde import normalize_value as _nv
-            self._bridge.set_cell_value_parsed(
-                ws._sheet_id_json, c_row, c_col, _nv(best_val)
-            )
-            self.calculate()
-        return {"success": abs(best_diff) < 0.01, "found": abs(best_diff) < 0.01, "value": best_val, "targetDiff": best_diff}
+        unsupported_python_path("wb.goal_seek")
 
     def execute_code(self, code: str) -> Dict[str, Any]:
         """Execute code in a sandbox-like environment.
@@ -729,79 +603,7 @@ class Workbook:
 
         Returns a dict with ``success`` and ``output`` keys.
         """
-        import re as _re
-
-        ws = self.active_sheet
-        output_lines: List[str] = []
-        # Variable store for getValue results
-        _vars: Dict[str, Any] = {}
-
-        try:
-            # Split on semicolons for simple statement parsing
-            statements = [s.strip() for s in code.split(";") if s.strip()]
-
-            for stmt in statements:
-                # Skip variable declarations that just get the active sheet
-                if _re.search(r'(getActiveSheet|getSheet)\s*\(', stmt):
-                    continue
-
-                # Handle getValue("A1") — may be assigned to a variable
-                get_match = _re.search(
-                    r'(?:(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?)?'
-                    r'(?:\w+\.)?getValue\s*\(\s*["\']([A-Za-z]+\d+)["\']\s*\)',
-                    stmt,
-                )
-                if get_match:
-                    var_name = get_match.group(1)
-                    addr = get_match.group(2)
-                    val = ws.get_value(addr)
-                    if var_name:
-                        _vars[var_name] = val
-                    continue
-
-                # Handle setCell("A1", value)
-                set_match = _re.search(
-                    r'setCell\s*\(\s*["\']([A-Za-z]+\d+)["\']\s*,\s*(.+?)\s*\)', stmt
-                )
-                if set_match:
-                    addr = set_match.group(1)
-                    val_str = set_match.group(2).strip()
-                    if val_str.startswith('"') or val_str.startswith("'"):
-                        val: Any = val_str.strip("\"'")
-                    elif val_str == "true":
-                        val = True
-                    elif val_str == "false":
-                        val = False
-                    elif val_str == "null":
-                        val = None
-                    else:
-                        try:
-                            val = int(val_str)
-                        except ValueError:
-                            try:
-                                val = float(val_str)
-                            except ValueError:
-                                val = val_str
-                    ws.set_cell(addr, val)
-                    continue
-
-                # Handle console.log(...)
-                log_match = _re.search(r'console\.log\s*\(\s*(.+?)\s*\)\s*$', stmt)
-                if log_match:
-                    arg = log_match.group(1).strip()
-                    str_match = _re.match(r'^["\'](.+?)["\']$', arg)
-                    if str_match:
-                        output_lines.append(str_match.group(1))
-                    elif arg in _vars:
-                        v = _vars[arg]
-                        output_lines.append(str(v) if v is not None else "null")
-                    else:
-                        output_lines.append(str(arg))
-                    continue
-
-            return {"success": True, "output": "\n".join(output_lines)}
-        except Exception as e:
-            return {"success": False, "output": "", "error": str(e)}
+        unsupported_python_path("wb.execute_code")
 
     def get_settings(self) -> Dict[str, Any]:
         """Get workbook settings as a dict."""
@@ -814,7 +616,7 @@ class Workbook:
     @property
     def theme(self):
         """Theme sub-API (colors, fonts, table styles)."""
-        return _ThemeStub()
+        return _ThemeUnsupported()
 
     def address_to_index(self, address: str) -> Dict[str, int]:
         """Convert an A1-style address to a 0-based ``{"row": r, "col": c}`` dict.
@@ -847,63 +649,11 @@ class Workbook:
 
     def get_function_catalog(self) -> List[Dict[str, Any]]:
         """Return a list of available formula functions."""
-        functions = [
-            {"name": "SUM", "category": "Math", "description": "Adds all the numbers in a range of cells."},
-            {"name": "AVERAGE", "category": "Statistical", "description": "Returns the average of its arguments."},
-            {"name": "COUNT", "category": "Statistical", "description": "Counts the number of cells that contain numbers."},
-            {"name": "COUNTA", "category": "Statistical", "description": "Counts the number of non-empty cells."},
-            {"name": "MAX", "category": "Statistical", "description": "Returns the largest value in a set of values."},
-            {"name": "MIN", "category": "Statistical", "description": "Returns the smallest value in a set of values."},
-            {"name": "IF", "category": "Logical", "description": "Returns one value if a condition is TRUE and another if FALSE."},
-            {"name": "AND", "category": "Logical", "description": "Returns TRUE if all arguments are TRUE."},
-            {"name": "OR", "category": "Logical", "description": "Returns TRUE if any argument is TRUE."},
-            {"name": "NOT", "category": "Logical", "description": "Reverses the logic of its argument."},
-            {"name": "VLOOKUP", "category": "Lookup", "description": "Looks for a value in the leftmost column and returns a value in the same row from a column you specify."},
-            {"name": "HLOOKUP", "category": "Lookup", "description": "Looks for a value in the top row and returns a value in the same column from a row you specify."},
-            {"name": "INDEX", "category": "Lookup", "description": "Returns a value at the intersection of a row and column."},
-            {"name": "MATCH", "category": "Lookup", "description": "Returns the position of a value in an array."},
-            {"name": "BAHTTEXT", "category": "Text", "description": "Converts a number to Thai baht text."},
-            {"name": "CONCATENATE", "category": "Text", "description": "Joins several text strings into one."},
-            {"name": "ENCODEURL", "category": "Text", "description": "Encodes text for use in a URL."},
-            {"name": "JOIN", "category": "Text", "description": "Joins values using a delimiter."},
-            {"name": "LEFT", "category": "Text", "description": "Returns the leftmost characters from a text value."},
-            {"name": "RIGHT", "category": "Text", "description": "Returns the rightmost characters from a text value."},
-            {"name": "MID", "category": "Text", "description": "Returns a specific number of characters from a text string."},
-            {"name": "LEN", "category": "Text", "description": "Returns the number of characters in a text string."},
-            {"name": "TRIM", "category": "Text", "description": "Removes extra spaces from text."},
-            {"name": "UPPER", "category": "Text", "description": "Converts text to uppercase."},
-            {"name": "LOWER", "category": "Text", "description": "Converts text to lowercase."},
-            {"name": "ROUND", "category": "Math", "description": "Rounds a number to a specified number of digits."},
-            {"name": "ABS", "category": "Math", "description": "Returns the absolute value of a number."},
-            {"name": "POWER", "category": "Math", "description": "Returns the result of a number raised to a power."},
-            {"name": "SQRT", "category": "Math", "description": "Returns a positive square root."},
-            {"name": "TODAY", "category": "Date", "description": "Returns the serial number of today's date."},
-            {"name": "NOW", "category": "Date", "description": "Returns the serial number of the current date and time."},
-            {"name": "DATE", "category": "Date", "description": "Returns the serial number of a particular date."},
-            {"name": "YEAR", "category": "Date", "description": "Returns the year corresponding to a date."},
-            {"name": "MONTH", "category": "Date", "description": "Returns the month of a date."},
-            {"name": "DAY", "category": "Date", "description": "Returns the day of a date."},
-            {"name": "IFERROR", "category": "Logical", "description": "Returns a value you specify if a formula evaluates to an error."},
-            {"name": "SUMIF", "category": "Math", "description": "Adds cells specified by a given criteria."},
-            {"name": "COUNTIF", "category": "Statistical", "description": "Counts cells that meet a given criteria."},
-            {"name": "AVERAGEIF", "category": "Statistical", "description": "Returns the average of cells that meet a criteria."},
-            {"name": "TEXT", "category": "Text", "description": "Formats a number and converts it to text."},
-            {"name": "VALUE", "category": "Text", "description": "Converts a text string that represents a number to a number."},
-            {"name": "SUBSTITUTE", "category": "Text", "description": "Replaces existing text with new text."},
-            {"name": "FIND", "category": "Text", "description": "Finds one text value within another."},
-            {"name": "SEARCH", "category": "Text", "description": "Finds one text value within another (case-insensitive)."},
-            {"name": "SPLIT", "category": "Text", "description": "Splits text around a delimiter into a row array."},
-        ]
-        return functions
+        unsupported_python_path("wb.get_function_catalog")
 
     def get_function_info(self, name: str) -> Optional[Dict[str, Any]]:
         """Return info for a specific function, or None if not found."""
-        catalog = self.get_function_catalog()
-        name_upper = name.upper()
-        for fn in catalog:
-            if fn["name"].upper() == name_upper:
-                return fn
-        return None
+        unsupported_python_path("wb.get_function_info")
 
     # ------------------------------------------------------------------
     # Workbook-level collection methods
@@ -912,29 +662,11 @@ class Workbook:
     def get_all_tables(self) -> List[Dict[str, Any]]:
         """Return all tables across all sheets."""
         tables = []
-        seen_names: set = set()
         for sid in self._bridge.get_sheet_order():
             sid_json = _ensure_json_quoted(sid)
-            try:
-                sheet_tables = self._bridge.get_all_tables_in_sheet(sid_json)
-                if isinstance(sheet_tables, list):
-                    for t in sheet_tables:
-                        if isinstance(t, dict):
-                            name = t.get("name")
-                            if name:
-                                seen_names.add(name)
-                            tables.append(t)
-                        else:
-                            tables.append(t)
-            except Exception:
-                pass
-        # Also include locally-cached tables from worksheet TablesAPIs
-        for ws in self._sheet_cache.values():
-            if hasattr(ws, "_tables_api") and ws._tables_api is not None:
-                for name, t in ws._tables_api._local_tables.items():
-                    if name not in seen_names:
-                        tables.append(t)
-                        seen_names.add(name)
+            sheet_tables = self._bridge.get_all_tables_in_sheet(sid_json)
+            if isinstance(sheet_tables, list):
+                tables.extend(sheet_tables)
         return tables
 
     def get_all_pivot_tables(self) -> List[Dict[str, Any]]:
@@ -1063,39 +795,27 @@ class Workbook:
         return results
 
     def to_buffer(self) -> bytes:
-        """Export the workbook as an XLSX-like bytes buffer.
-
-        Returns a bytes object.  If the native engine does not support
-        export, returns a minimal valid ZIP (empty XLSX placeholder).
-        """
-        xlsx_bytes: Optional[bytes] = None
+        """Export the workbook as native XLSX bytes."""
         try:
             result = self._bridge.call("compute_export_to_xlsx_bytes")
-            if isinstance(result, bytes):
-                xlsx_bytes = result
-        except Exception:
-            pass
-
-        if xlsx_bytes is None:
-            # Return a minimal valid ZIP file as a placeholder
-            import io
-            import zipfile
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(
-                    "[Content_Types].xml",
-                    '<?xml version="1.0" encoding="UTF-8"?>'
-                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                    '<Default Extension="xml" ContentType="application/xml"/>'
-                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                    '</Types>',
-                )
-            return buf.getvalue()
+        except AttributeError:
+            unsupported_api(
+                "wb.toXlsx",
+                "wb.to_buffer",
+                reason_code="native_missing",
+                docs_key="python-sdk-xlsx-export",
+            )
+        if not isinstance(result, bytes):
+            unsupported_api(
+                "wb.toXlsx",
+                "wb.to_buffer",
+                reason_code="native_missing",
+                docs_key="python-sdk-xlsx-export",
+            )
 
         # Inject pivot table XML into the XLSX if pivots exist but aren't
         # already in the archive.
-        xlsx_bytes = self._inject_pivot_xml(xlsx_bytes)
-        return xlsx_bytes
+        return self._inject_pivot_xml(result)
 
     def _inject_pivot_xml(self, xlsx_bytes: bytes) -> bytes:
         """Add pivot table and pivot cache XML to an XLSX buffer if needed."""
@@ -1322,7 +1042,7 @@ class Workbook:
     @property
     def bindings(self):
         """Data bindings sub-API."""
-        return _BindingsStub()
+        return _BindingsUnsupported()
 
     # ------------------------------------------------------------------
     # Sub-APIs (lazy properties)
@@ -1363,9 +1083,7 @@ class Workbook:
     @property
     def viewport(self) -> _ViewportAPI:
         """Viewport subscription sub-API."""
-        if self._viewport_api is None:
-            self._viewport_api = _ViewportAPI()
-        return self._viewport_api
+        return unsupported_proxy_from_surface("wb.viewport", "wb.viewport")
 
     @property
     def protection(self) -> _ProtectionAPI:
@@ -1465,7 +1183,8 @@ class Workbook:
         self._sheet_cache.clear()
         # The engine will be dropped when the Python object is garbage collected.
         # This is a hint to release resources early.
-        self._bridge._engine = None  # type: ignore[assignment]
+        bridge = getattr(self._bridge, "_real_bridge", self._bridge)
+        bridge._engine = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
         try:
@@ -1570,32 +1289,21 @@ class _NotificationsAPI:
         return iter(self._notifications)
 
 
-class _NotificationsStub(_NotificationsAPI):
-    """Backward-compatible alias."""
-    pass
-
-
-class _BindingsStub:
-    """Stub bindings sub-API so ``wb.bindings`` doesn't crash."""
+class _BindingsUnsupported:
+    """Data bindings are not production-backed in the Python SDK yet."""
 
     def list(self):
-        return []
+        unsupported_api("py.wb.bindings.list", "wb.bindings.list")
 
     def add(self, *args, **kwargs):
-        return None
+        unsupported_api("py.wb.bindings.add", "wb.bindings.add")
 
     def remove(self, *args, **kwargs):
-        pass
-
-    def __bool__(self):
-        return False
-
-    def __iter__(self):
-        return iter([])
+        unsupported_api("py.wb.bindings.remove", "wb.bindings.remove")
 
 
-class _ThemeStub:
-    """Stub theme sub-API so ``wb.theme`` doesn't crash."""
+class _ThemeUnsupported:
+    """Unsupported workbook theme sub-API."""
 
     def __init__(self):
         self._colors = {
@@ -1623,26 +1331,34 @@ class _ThemeStub:
         ]
 
     def get(self) -> Dict[str, Any]:
-        return {
-            "name": "Office",
-            "colors": dict(self._colors),
-            "fonts": dict(self._fonts),
-        }
+        unsupported_api("py.wb.theme.get", "wb.theme.get")
+
+    def get_workbook_theme(self) -> Dict[str, Any]:
+        unsupported_api("wb.theme.getWorkbookTheme", "wb.theme.get_workbook_theme")
+
+    def set_workbook_theme(self, theme: Dict[str, Any]) -> None:
+        unsupported_api("wb.theme.setWorkbookTheme", "wb.theme.set_workbook_theme")
+
+    def get_chrome_theme(self) -> Dict[str, Any]:
+        unsupported_api("wb.theme.getChromeTheme", "wb.theme.get_chrome_theme")
+
+    def set_chrome_theme(self, theme: Dict[str, Any]) -> None:
+        unsupported_api("wb.theme.setChromeTheme", "wb.theme.set_chrome_theme")
 
     def get_colors(self) -> Dict[str, str]:
-        return dict(self._colors)
+        unsupported_api("py.wb.theme.get_colors", "wb.theme.get_colors")
 
     def get_fonts(self) -> Dict[str, str]:
-        return dict(self._fonts)
+        unsupported_api("py.wb.theme.get_fonts", "wb.theme.get_fonts")
 
     def list_table_styles(self) -> List[Dict[str, Any]]:
-        return list(self._table_styles)
+        unsupported_api("py.wb.theme.list_table_styles", "wb.theme.list_table_styles")
 
     def set_colors(self, colors: Dict[str, str]) -> None:
-        self._colors.update(colors)
+        unsupported_api("py.wb.theme.set_colors", "wb.theme.set_colors")
 
     def set_fonts(self, fonts: Dict[str, str]) -> None:
-        self._fonts.update(fonts)
+        unsupported_api("py.wb.theme.set_fonts", "wb.theme.set_fonts")
 
 
 class _ViewportAPI:
@@ -1664,13 +1380,8 @@ class _ViewportAPI:
         return unsubscribe
 
     def create_region(self, sheet_id: str, bounds: Dict[str, Any]) -> Any:
-        """Create a viewport region (stub). Returns a disposable region."""
-
-        class _Region:
-            def dispose(self):
-                pass
-
-        return _Region()
+        """Create a viewport region."""
+        unsupported_api("wb.viewport.createRegion", "wb.viewport.create_region")
 
     def unsubscribe_all(self) -> None:
         self._subscribers.clear()
@@ -1678,38 +1389,35 @@ class _ViewportAPI:
 
 class _ProtectionAPI:
     """Workbook-level protection sub-API."""
+    _UNSUPPORTED_ACCESSOR_API_PATH = "wb.protection"
+    _UNSUPPORTED_ACCESSOR_PYTHON_PATH = "wb.protection"
 
     def __init__(self, bridge: Any = None):
         self._bridge = bridge
-        self._protected = False
-        self._password: Optional[str] = None
+
+    def __getattr__(self, name: str) -> Any:
+        return unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        ).__getattr__(name)
+
+    def __dir__(self) -> list[str]:
+        proxy = unsupported_proxy_from_surface(
+            self._UNSUPPORTED_ACCESSOR_API_PATH,
+            self._UNSUPPORTED_ACCESSOR_PYTHON_PATH,
+        )
+        return sorted(set(super().__dir__()) | set(dir(proxy)))
 
     def protect(self, password: Optional[str] = None) -> bool:
         """Protect the workbook structure."""
-        self._protected = True
-        self._password = password
-        if self._bridge:
-            try:
-                self._bridge.call_json("compute_protect_workbook", json.dumps(password or ""))
-            except Exception:
-                pass
-        return True
+        unsupported_python_path("wb.protection.protect")
 
     def unprotect(self, password: Optional[str] = None) -> bool:
         """Unprotect the workbook structure."""
-        if self._password is not None and password != self._password:
-            return False
-        self._protected = False
-        self._password = None
-        if self._bridge:
-            try:
-                self._bridge.call_json("compute_unprotect_workbook", json.dumps(password or ""))
-            except Exception:
-                pass
-        return True
+        unsupported_python_path("wb.protection.unprotect")
 
     def is_protected(self) -> bool:
-        return self._protected
+        unsupported_python_path("wb.protection.is_protected")
 
 
 class _StylesAPI:
@@ -1720,19 +1428,7 @@ class _StylesAPI:
 
     def get_table_styles(self) -> List[Dict[str, Any]]:
         """Return a list of available table styles."""
-        if self._bridge:
-            try:
-                result = self._bridge.call_json("compute_get_all_custom_table_styles")
-                if isinstance(result, list):
-                    return result
-            except Exception:
-                pass
-        # Return default styles
-        return [
-            {"name": "TableStyleMedium2", "pivot": False},
-            {"name": "TableStyleMedium9", "pivot": False},
-            {"name": "TableStyleLight1", "pivot": False},
-        ]
+        unsupported_python_path("wb.styles.get_table_styles")
 
 
 class _WorkbookSlicersAPI:

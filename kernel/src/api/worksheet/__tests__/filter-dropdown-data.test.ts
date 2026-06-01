@@ -16,6 +16,7 @@ function createMockCtx(): any {
       getCellPosition: jest.fn().mockResolvedValue(null),
       getCellIdAt: jest.fn().mockResolvedValue(null),
       getCellValue: jest.fn().mockResolvedValue(null),
+      getResolvedFormat: jest.fn().mockResolvedValue({ numberFormat: 'General' }),
       tableEvaluateColumnFilter: jest.fn().mockResolvedValue(new Uint8Array()),
       tableBuildFilterDropdown: jest.fn().mockResolvedValue({
         items: [],
@@ -75,7 +76,80 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
       { type: 'values', included: [], includeBlanks: true },
       null,
     );
-    expect(result).toBe(dropdownData);
+    expect(result).toEqual({ ...dropdownData, columnType: 'text' });
+  });
+
+  it('classifies plain serial-like numbers as numbers unless their cells have date formats', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-b',
+      dataEndCellId: 'data-end',
+      columnFilters: {},
+    };
+    const dropdownData = {
+      items: [
+        { value: 1, displayText: '1', count: 1, selected: true },
+        { value: 2, displayText: '2', count: 1, selected: true },
+        { value: 3, displayText: '3', count: 1, selected: true },
+      ],
+      hasBlank: false,
+      blankCount: 0,
+      blankSelected: true,
+      totalRowCount: 3,
+    };
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 3, col: 0 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.getCellValue
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(3);
+    ctx.computeBridge.getResolvedFormat.mockResolvedValue({ numberFormat: 'General' });
+    ctx.computeBridge.tableBuildFilterDropdown.mockResolvedValue(dropdownData);
+
+    const result = await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith([1, 2, 3], null, null);
+    expect(result).toEqual({ ...dropdownData, columnType: 'number' });
+  });
+
+  it('classifies numeric serials as dates when the cells carry date number formats', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-b',
+      dataEndCellId: 'data-end',
+      columnFilters: {},
+    };
+    const dropdownData = {
+      items: [
+        { value: 45292, displayText: '2024-01-01', count: 1, selected: true },
+        { value: 45293, displayText: '2024-01-02', count: 1, selected: true },
+      ],
+      hasBlank: false,
+      blankCount: 0,
+      blankSelected: true,
+      totalRowCount: 2,
+    };
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 2, col: 0 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.getCellValue.mockResolvedValueOnce(45292).mockResolvedValueOnce(45293);
+    ctx.computeBridge.getResolvedFormat.mockResolvedValue({ numberFormat: 'yyyy-mm-dd' });
+    ctx.computeBridge.tableBuildFilterDropdown.mockResolvedValue(dropdownData);
+
+    const result = await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(result).toEqual({ ...dropdownData, columnType: 'date' });
   });
 
   it('composes visibility from other filtered columns', async () => {

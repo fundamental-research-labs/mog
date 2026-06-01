@@ -158,7 +158,7 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
     const { deps, setRangesMock } = createMockDeps({ ranges: [range] });
 
     // The "No Border" preset emits the {style:'none'} shape (not empty {}),
-    // and the handler's 'none' branch clears via `borders: undefined`.
+    // and the handler's 'none' branch clears via an explicit empty borders patch.
     await APPLY_BORDERS(deps, {
       borders: {
         top: { style: 'none' },
@@ -170,7 +170,7 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
     });
 
     expect(setRangesMock).toHaveBeenCalledTimes(1);
-    expect(setRangesMock).toHaveBeenCalledWith([range], { borders: undefined });
+    expect(setRangesMock).toHaveBeenCalledWith([range], { borders: {} });
   });
 
   it('records the payload as last-used on every direct-mode apply', async () => {

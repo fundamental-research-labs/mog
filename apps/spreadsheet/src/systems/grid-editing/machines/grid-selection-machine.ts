@@ -106,6 +106,11 @@ export const selectionMachine = setup({
         // the prior anchor.
         MOUSE_DOWN: [
           {
+            guard: 'isAdditiveShiftOnlyClick',
+            target: 'multiSelecting',
+            actions: ['addSingleCellToSelectionAndExitAdditive', 'emitUserSelectionChanged'],
+          },
+          {
             guard: 'isShiftAndCtrlClick',
             target: 'multiSelecting',
             actions: ['startMultiSelectAndExtend', 'emitUserSelectionChanged'],
@@ -575,10 +580,10 @@ export const selectionMachine = setup({
         KEY_ARROW: [
           {
             guard: 'isShiftArrow',
-            actions: ['extendSelection', 'emitUserSelectionChanged'],
+            actions: ['extendFormulaRange', 'emitUserSelectionChanged'],
           },
           {
-            actions: ['moveActiveCell', 'emitUserSelectionChanged'],
+            actions: ['moveFormulaRange', 'emitUserSelectionChanged'],
           },
         ],
         EXIT_FORMULA_RANGE_MODE: {
@@ -605,10 +610,17 @@ export const selectionMachine = setup({
       states: {
         idle: {
           on: {
-            MOUSE_DOWN: {
-              target: 'dragging',
-              actions: 'setFormulaRange',
-            },
+            MOUSE_DOWN: [
+              {
+                guard: 'isShiftClick',
+                target: 'dragging',
+                actions: ['extendToCell', 'emitUserSelectionChanged'],
+              },
+              {
+                target: 'dragging',
+                actions: 'setFormulaRange',
+              },
+            ],
           },
         },
         dragging: {

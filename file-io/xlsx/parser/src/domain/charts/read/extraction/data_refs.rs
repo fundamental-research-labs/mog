@@ -157,15 +157,15 @@ pub(super) fn reconstruct_data_range(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedChartRef {
-    sheet: Option<String>,
-    start_row: u32,
-    start_col: u32,
-    end_row: u32,
-    end_col: u32,
+pub(crate) struct ParsedChartRef {
+    pub(crate) sheet: Option<String>,
+    pub(crate) start_row: u32,
+    pub(crate) start_col: u32,
+    pub(crate) end_row: u32,
+    pub(crate) end_col: u32,
 }
 
-pub(super) fn synthesize_rectangular_data_range(formulas: &[&str]) -> Option<String> {
+pub(crate) fn synthesize_rectangular_data_range(formulas: &[&str]) -> Option<String> {
     use std::collections::HashSet;
 
     if formulas.is_empty() {
@@ -212,7 +212,7 @@ pub(super) fn synthesize_rectangular_data_range(formulas: &[&str]) -> Option<Str
     })
 }
 
-fn parse_chart_a1_ref(input: &str) -> Option<ParsedChartRef> {
+pub(crate) fn parse_chart_a1_ref(input: &str) -> Option<ParsedChartRef> {
     let trimmed = input.trim();
     if trimmed.is_empty() || trimmed.contains(',') {
         return None;

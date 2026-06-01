@@ -10,6 +10,11 @@ const ribbonVisibility = {
   pageLayout: {
     themes: false,
   },
+  data: {
+    importData: {
+      fromWeb: false,
+    },
+  },
 };
 ```
 

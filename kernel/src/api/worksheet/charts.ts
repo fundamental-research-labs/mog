@@ -21,10 +21,12 @@ import type {
   ChartBorder,
   DataLabelConfig,
   DataTableConfig,
+  HierarchyChartConfig,
   HistogramConfig,
   ImageExportOptions,
   LegendEntryConfig,
   PointFormat,
+  RegionMapConfig,
   SeriesConfig,
   TrendlineConfig,
 } from '@mog-sdk/contracts/data/charts';
@@ -36,15 +38,31 @@ import type { ChartLayoutSnapshot } from '@mog-sdk/contracts/bridges';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
   axisConfigToWire,
+  chartFormatStringToWire,
+  chartFormatToWire,
+  chartStyleContextToWire,
   dataLabelConfigToWire,
+  dataTableConfigToWire,
   legendConfigToWire,
   seriesConfigArrayToWire,
+  trendlineConfigArrayToWire,
   wireToAxisConfig,
+  wireToBoxplotConfig,
+  wireToChartFormat,
+  wireToChartFormatString,
+  wireToChartStyleContext,
   wireToDataLabelConfig,
+  wireToDataTableConfig,
+  wireToHierarchyChartConfig,
+  wireToHistogramConfig,
   wireToLegendConfig,
+  wireToRegionMapConfig,
   wireToSeriesConfigArray,
+  wireToSizeRepresents,
+  wireToTrendlineConfigArray,
 } from '../../domain/charts/chart-type-converters';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
+import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 
 // =============================================================================
@@ -69,6 +87,80 @@ function numericField(fields: Record<string, unknown>, key: string): number | un
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function waterfallConfigToWire(
+  waterfall: NonNullable<ChartConfig['waterfall']>,
+): NonNullable<ChartFloatingObject['waterfall']> {
+  return {
+    ...(waterfall.subtotalIndices !== undefined || waterfall.totalIndices !== undefined
+      ? { subtotalIndices: waterfall.subtotalIndices ?? waterfall.totalIndices }
+      : {}),
+    ...(waterfall.showConnectorLines !== undefined
+      ? { showConnectorLines: waterfall.showConnectorLines }
+      : {}),
+  };
+}
+
+function waterfallConfigFromWire(waterfall: ChartFloatingObject['waterfall']): Chart['waterfall'] {
+  if (!waterfall) return undefined;
+  return {
+    ...(waterfall.subtotalIndices !== undefined
+      ? {
+          subtotalIndices: waterfall.subtotalIndices,
+          totalIndices: waterfall.subtotalIndices,
+        }
+      : {}),
+    ...(waterfall.showConnectorLines !== undefined
+      ? { showConnectorLines: waterfall.showConnectorLines }
+      : {}),
+  };
+}
+
+function histogramConfigToWire(
+  histogram: HistogramConfig | undefined,
+): ChartFloatingObject['histogram'] {
+  if (!histogram) return undefined;
+  return {
+    binCount: histogram.binCount,
+    binWidth: histogram.binWidth,
+    overflowBin: histogram.overflowBin,
+    overflowBinValue: histogram.overflowBinValue,
+    underflowBin: histogram.underflowBin,
+    underflowBinValue: histogram.underflowBinValue,
+  };
+}
+
+function boxplotConfigToWire(boxplot: BoxplotConfig | undefined): ChartFloatingObject['boxplot'] {
+  if (!boxplot) return undefined;
+  return {
+    showOutlierPoints: boxplot.showOutlierPoints ?? boxplot.showOutliers,
+    showMeanMarkers: boxplot.showMeanMarkers ?? boxplot.showMean,
+    showMeanLine: boxplot.showMeanLine,
+    quartileMethod: boxplot.quartileMethod,
+  };
+}
+
+function hierarchyChartConfigToWire(
+  hierarchy: HierarchyChartConfig | undefined,
+): ChartFloatingObject['hierarchy'] {
+  if (!hierarchy) return undefined;
+  return {
+    rows: hierarchy.rows,
+    categoryFormulas: hierarchy.categoryFormulas,
+    valueFormula: hierarchy.valueFormula,
+    parentLabelLayout: hierarchy.parentLabelLayout,
+  };
+}
+
+function regionMapConfigToWire(
+  regionMap: RegionMapConfig | undefined,
+): ChartFloatingObject['regionMap'] {
+  if (!regionMap) return undefined;
+  return {
+    regionFormula: regionMap.regionFormula,
+    valueFormula: regionMap.valueFormula,
+  };
+}
+
 function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 'type'>>): void {
   if (config.type && UNSUPPORTED_NATIVE_XLSX_CHART_TYPES.has(config.type)) {
     throw invalidChartConfig(
@@ -82,6 +174,10 @@ function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 
 // =============================================================================
 
 type AnyAxisConfig = Record<string, unknown>;
+
+function isDegreeTextRotation(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 90;
+}
 
 /**
  * Derive OfficeJS-compatible axis fields on read.
@@ -110,9 +206,11 @@ function deriveAxisFieldsForRead(axis: unknown): typeof axis {
     } else if (s.crossBetween === 'midCat') {
       derived.isBetweenCategories = false;
     }
-    // textOrientation from format.textRotation
+    // textOrientation is a degree rotation field. OOXML vertical text mode is
+    // carried separately as format.textVerticalType and large Excel sentinel
+    // values like -1000 are not label rotation degrees.
     const fmt = s.format as AnyAxisConfig | undefined;
-    if (fmt?.textRotation != null) {
+    if (isDegreeTextRotation(fmt?.textRotation)) {
       derived.textOrientation = fmt.textRotation;
     }
     // alignment from labelAlignment
@@ -161,8 +259,8 @@ function syncAxisFieldsToInternal(axis: unknown): typeof axis {
     } else if (s.isBetweenCategories === false) {
       s.crossBetween = 'midCat';
     }
-    // textOrientation → format.textRotation
-    if (s.textOrientation != null) {
+    // textOrientation → format.textRotation only for true degree rotations.
+    if (isDegreeTextRotation(s.textOrientation)) {
       const fmt = (s.format ?? {}) as AnyAxisConfig;
       s.format = { ...fmt, textRotation: s.textOrientation };
     }
@@ -469,21 +567,35 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
         )
       : undefined,
     pieSlice,
-    trendline: config.trendlines ?? (config.trendline ? [config.trendline] : undefined),
+    trendline: trendlineConfigArrayToWire(
+      config.trendlines ?? (config.trendline ? [config.trendline] : undefined),
+    ),
     showLines: config.showLines,
     smoothLines: config.smoothLines,
     radarFilled: config.radarFilled,
     radarMarkers: config.radarMarkers,
-    waterfall: config.waterfall,
+    waterfall: config.waterfall ? waterfallConfigToWire(config.waterfall) : undefined,
+    histogram: histogramConfigToWire(config.histogram),
+    boxplot: boxplotConfigToWire(config.boxplot),
+    hierarchy: hierarchyChartConfigToWire(config.hierarchy),
+    regionMap: regionMapConfigToWire(config.regionMap),
     displayBlanksAs: config.displayBlanksAs,
     plotVisibleOnly: config.plotVisibleOnly,
     gapWidth: config.gapWidth,
+    gapDepth: config.gapDepth,
     overlap: config.overlap,
     doughnutHoleSize: config.doughnutHoleSize,
     firstSliceAngle: config.firstSliceAngle,
     bubbleScale: config.bubbleScale,
+    showNegBubbles: config.showNegBubbles,
+    sizeRepresents: config.sizeRepresents,
+    bubble3dEffect: config.bubble3DEffect,
     splitType: config.splitType,
     splitValue: config.splitValue,
+    barShape: config.barShape,
+    wireframe: config.wireframe,
+    surfaceTopView: config.surfaceTopView,
+    colorScheme: config.colorScheme,
     widthCells: config.width,
     heightCells: config.height,
     // rich formatting fields
@@ -491,12 +603,12 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     roundedCorners: config.roundedCorners,
     autoTitleDeleted: config.autoTitleDeleted,
     showDataLabelsOverMax: config.showDataLabelsOverMaximum,
-    chartFormat: config.chartFormat,
-    plotFormat: config.plotFormat,
-    titleFormat: config.titleFormat,
-    titleRichText: config.titleRichText,
+    chartFormat: chartFormatToWire(config.chartFormat),
+    plotFormat: chartFormatToWire(config.plotFormat),
+    titleFormat: chartFormatToWire(config.titleFormat),
+    titleRichText: config.titleRichText?.map(chartFormatStringToWire),
     titleFormula: config.titleFormula,
-    dataTable: config.dataTable,
+    dataTable: dataTableConfigToWire(config.dataTable),
     categoryLabelLevel: config.categoryLabelLevel,
     seriesNameLevel: config.seriesNameLevel,
     showAllFieldButtons: config.showAllFieldButtons,
@@ -506,6 +618,12 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     titleVAlign: config.chartTitle?.verticalAlignment,
     titleShowShadow: config.chartTitle?.showShadow,
     pivotOptions: config.pivotOptions,
+    pivotProjection: config.pivotProjection,
+    chartStyleContext: chartStyleContextToWire(config.chartStyleContext),
+    view3d: config.view3d,
+    floorFormat: chartFormatToWire(config.floorFormat),
+    sideWallFormat: chartFormatToWire(config.sideWallFormat),
+    backWallFormat: chartFormatToWire(config.backWallFormat),
   };
 }
 
@@ -590,25 +708,40 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
 
   if (updates.pieSlice !== undefined) result.pieSlice = updates.pieSlice;
   if (updates.trendlines !== undefined) {
-    result.trendline = updates.trendlines;
+    result.trendline = trendlineConfigArrayToWire(updates.trendlines);
   } else if (updates.trendline !== undefined) {
-    result.trendline = updates.trendline ? [updates.trendline] : undefined;
+    result.trendline = trendlineConfigArrayToWire(
+      updates.trendline ? [updates.trendline] : undefined,
+    );
   }
   if (updates.showLines !== undefined) result.showLines = updates.showLines;
   if (updates.smoothLines !== undefined) result.smoothLines = updates.smoothLines;
   if (updates.radarFilled !== undefined) result.radarFilled = updates.radarFilled;
   if (updates.radarMarkers !== undefined) result.radarMarkers = updates.radarMarkers;
-  if (updates.waterfall !== undefined) result.waterfall = updates.waterfall;
+  if (updates.waterfall !== undefined) result.waterfall = waterfallConfigToWire(updates.waterfall);
+  if (updates.histogram !== undefined) result.histogram = histogramConfigToWire(updates.histogram);
+  if (updates.boxplot !== undefined) result.boxplot = boxplotConfigToWire(updates.boxplot);
+  if (updates.hierarchy !== undefined)
+    result.hierarchy = hierarchyChartConfigToWire(updates.hierarchy);
+  if (updates.regionMap !== undefined) result.regionMap = regionMapConfigToWire(updates.regionMap);
 
   if (updates.displayBlanksAs !== undefined) result.displayBlanksAs = updates.displayBlanksAs;
   if (updates.plotVisibleOnly !== undefined) result.plotVisibleOnly = updates.plotVisibleOnly;
   if (updates.gapWidth !== undefined) result.gapWidth = updates.gapWidth;
+  if (updates.gapDepth !== undefined) result.gapDepth = updates.gapDepth;
   if (updates.overlap !== undefined) result.overlap = updates.overlap;
   if (updates.doughnutHoleSize !== undefined) result.doughnutHoleSize = updates.doughnutHoleSize;
   if (updates.firstSliceAngle !== undefined) result.firstSliceAngle = updates.firstSliceAngle;
   if (updates.bubbleScale !== undefined) result.bubbleScale = updates.bubbleScale;
+  if (updates.showNegBubbles !== undefined) result.showNegBubbles = updates.showNegBubbles;
+  if (updates.sizeRepresents !== undefined) result.sizeRepresents = updates.sizeRepresents;
+  if (updates.bubble3DEffect !== undefined) result.bubble3dEffect = updates.bubble3DEffect;
   if (updates.splitType !== undefined) result.splitType = updates.splitType;
   if (updates.splitValue !== undefined) result.splitValue = updates.splitValue;
+  if (updates.barShape !== undefined) result.barShape = updates.barShape;
+  if (updates.wireframe !== undefined) result.wireframe = updates.wireframe;
+  if (updates.surfaceTopView !== undefined) result.surfaceTopView = updates.surfaceTopView;
+  if (updates.colorScheme !== undefined) result.colorScheme = updates.colorScheme;
 
   if (updates.name !== undefined) result.name = updates.name;
 
@@ -618,12 +751,15 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
   if (updates.autoTitleDeleted !== undefined) result.autoTitleDeleted = updates.autoTitleDeleted;
   if (updates.showDataLabelsOverMaximum !== undefined)
     result.showDataLabelsOverMax = updates.showDataLabelsOverMaximum;
-  if (updates.chartFormat !== undefined) result.chartFormat = updates.chartFormat;
-  if (updates.plotFormat !== undefined) result.plotFormat = updates.plotFormat;
-  if (updates.titleFormat !== undefined) result.titleFormat = updates.titleFormat;
-  if (updates.titleRichText !== undefined) result.titleRichText = updates.titleRichText;
+  if (updates.chartFormat !== undefined)
+    result.chartFormat = chartFormatToWire(updates.chartFormat);
+  if (updates.plotFormat !== undefined) result.plotFormat = chartFormatToWire(updates.plotFormat);
+  if (updates.titleFormat !== undefined)
+    result.titleFormat = chartFormatToWire(updates.titleFormat);
+  if (updates.titleRichText !== undefined)
+    result.titleRichText = updates.titleRichText?.map(chartFormatStringToWire);
   if (updates.titleFormula !== undefined) result.titleFormula = updates.titleFormula;
-  if (updates.dataTable !== undefined) result.dataTable = updates.dataTable;
+  if (updates.dataTable !== undefined) result.dataTable = dataTableConfigToWire(updates.dataTable);
   if (updates.categoryLabelLevel !== undefined)
     result.categoryLabelLevel = updates.categoryLabelLevel;
   if (updates.seriesNameLevel !== undefined) result.seriesNameLevel = updates.seriesNameLevel;
@@ -637,6 +773,16 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
     result.titleShowShadow = updates.chartTitle.showShadow;
   }
   if (updates.pivotOptions !== undefined) result.pivotOptions = updates.pivotOptions;
+  if (updates.pivotProjection !== undefined) result.pivotProjection = updates.pivotProjection;
+  if (updates.chartStyleContext !== undefined)
+    result.chartStyleContext = chartStyleContextToWire(updates.chartStyleContext);
+  if (updates.view3d !== undefined) result.view3d = updates.view3d;
+  if (updates.floorFormat !== undefined)
+    result.floorFormat = chartFormatToWire(updates.floorFormat);
+  if (updates.sideWallFormat !== undefined)
+    result.sideWallFormat = chartFormatToWire(updates.sideWallFormat);
+  if (updates.backWallFormat !== undefined)
+    result.backWallFormat = chartFormatToWire(updates.backWallFormat);
 
   return result;
 }
@@ -717,34 +863,46 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
       ? (deriveDataLabelsForRead(dataLabelsConfig) as Chart['dataLabels'])
       : undefined,
     pieSlice: chart.pieSlice,
-    trendline: Array.isArray(chart.trendline) ? chart.trendline[0] : chart.trendline,
-    trendlines: chart.trendline,
+    trendline: wireToTrendlineConfigArray(chart.trendline)?.[0],
+    trendlines: wireToTrendlineConfigArray(chart.trendline),
     showLines: chart.showLines,
     smoothLines: chart.smoothLines,
     radarFilled: chart.radarFilled,
     radarMarkers: chart.radarMarkers,
-    waterfall: chart.waterfall as Chart['waterfall'],
+    waterfall: waterfallConfigFromWire(chart.waterfall),
+    histogram: wireToHistogramConfig(chart.histogram),
+    boxplot: wireToBoxplotConfig(chart.boxplot),
+    hierarchy: wireToHierarchyChartConfig(chart.hierarchy),
+    regionMap: wireToRegionMapConfig(chart.regionMap),
     displayBlanksAs: chart.displayBlanksAs as Chart['displayBlanksAs'],
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
+    gapDepth: chart.gapDepth,
     overlap: chart.overlap,
     doughnutHoleSize: chart.doughnutHoleSize,
     firstSliceAngle: chart.firstSliceAngle,
     bubbleScale: chart.bubbleScale,
+    showNegBubbles: chart.showNegBubbles,
+    sizeRepresents: wireToSizeRepresents(chart.sizeRepresents),
+    bubble3DEffect: chart.bubble3dEffect,
     splitType: chart.splitType as Chart['splitType'],
     splitValue: chart.splitValue,
+    barShape: chart.barShape as Chart['barShape'],
+    wireframe: chart.wireframe,
+    surfaceTopView: chart.surfaceTopView,
+    colorScheme: chart.colorScheme,
     name: chart.name || undefined,
     // rich formatting fields
     style: chart.style,
     roundedCorners: chart.roundedCorners,
     autoTitleDeleted: chart.autoTitleDeleted,
     showDataLabelsOverMaximum: chart.showDataLabelsOverMax,
-    chartFormat: chart.chartFormat as Chart['chartFormat'],
-    plotFormat: chart.plotFormat as Chart['plotFormat'],
-    titleFormat: chart.titleFormat as Chart['titleFormat'],
-    titleRichText: chart.titleRichText,
+    chartFormat: wireToChartFormat(chart.chartFormat),
+    plotFormat: wireToChartFormat(chart.plotFormat),
+    titleFormat: wireToChartFormat(chart.titleFormat),
+    titleRichText: chart.titleRichText?.map(wireToChartFormatString),
     titleFormula: chart.titleFormula,
-    dataTable: chart.dataTable as Chart['dataTable'],
+    dataTable: wireToDataTableConfig(chart.dataTable),
     categoryLabelLevel: chart.categoryLabelLevel,
     seriesNameLevel: chart.seriesNameLevel,
     showAllFieldButtons: chart.showAllFieldButtons,
@@ -772,6 +930,12 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
       ...(chart.titleShowShadow != null ? { showShadow: chart.titleShowShadow } : {}),
     } as Chart['chartTitle'],
     pivotOptions: chart.pivotOptions as Chart['pivotOptions'],
+    pivotProjection: chart.pivotProjection as Chart['pivotProjection'],
+    chartStyleContext: wireToChartStyleContext(chart.chartStyleContext),
+    view3d: chart.view3d,
+    floorFormat: wireToChartFormat(chart.floorFormat),
+    sideWallFormat: wireToChartFormat(chart.sideWallFormat),
+    backWallFormat: wireToChartFormat(chart.backWallFormat),
     createdAt: chart.createdAt,
     updatedAt: chart.updatedAt,
   };
@@ -783,6 +947,31 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   if (topPt !== undefined) result.topPt = topPt;
 
   return result;
+}
+
+function importedDrawingFrameAnchorIndex(chart: ChartFloatingObject): number | undefined {
+  const anchorIndex = chart.ooxml?.drawingFrame?.anchorIndex;
+  return typeof anchorIndex === 'number' && Number.isFinite(anchorIndex) ? anchorIndex : undefined;
+}
+
+function orderChartsForList(charts: ChartFloatingObject[]): ChartFloatingObject[] {
+  const entries = charts.map((chart, originalIndex) => ({
+    chart,
+    originalIndex,
+    anchorIndex: importedDrawingFrameAnchorIndex(chart),
+  }));
+
+  const orderedImportedEntries = entries
+    .filter(
+      (entry): entry is typeof entry & { anchorIndex: number } => entry.anchorIndex !== undefined,
+    )
+    .sort((a, b) => a.anchorIndex - b.anchorIndex || a.originalIndex - b.originalIndex);
+
+  let importedEntryIndex = 0;
+  return entries.map((entry) => {
+    if (entry.anchorIndex === undefined) return entry.chart;
+    return orderedImportedEntries[importedEntryIndex++].chart;
+  });
 }
 
 // =============================================================================
@@ -942,7 +1131,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     const charts = (await this.ctx.computeBridge.getAllCharts(
       this.sheetId,
     )) as ChartFloatingObject[];
-    return charts.map(serializedChartToChart);
+    return orderChartsForList(charts).map(serializedChartToChart);
   }
 
   async clear(): Promise<void> {
@@ -977,13 +1166,20 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     )) as ChartFloatingObject | null;
     if (!raw) throw chartNotFound(chartId);
 
-    if (this.exporter) {
-      const dataUrl = await this.exporter.exportImage(this.sheetId, chartId, options);
-      if (dataUrl) return dataUrl;
-      throw operationFailed('exportChartImage', 'Exporter returned null');
+    const exporter = this.exporter ?? this.ctx.chartImageExporter;
+    if (exporter) {
+      try {
+        const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
+        if (dataUrl) return dataUrl;
+        throw operationFailed('exportChartImage', 'Exporter returned null');
+      } catch (error) {
+        if (error instanceof KernelError) throw error;
+        const reason = error instanceof Error ? error.message : String(error);
+        throw operationFailed('exportChartImage', reason);
+      }
     }
 
-    throw operationFailed('exportChartImage', 'Not implemented in headless mode');
+    throw operationFailed('exportChartImage', 'No chart image exporter registered');
   }
 
   async setDataRange(chartId: string, range: string): Promise<void> {

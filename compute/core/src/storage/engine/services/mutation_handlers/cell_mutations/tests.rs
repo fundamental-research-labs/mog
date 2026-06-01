@@ -1,9 +1,10 @@
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, SheetId, SheetPos};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
-use value_types::{CellValue, ComputeError};
+use value_types::{CellError, CellValue, ComputeError};
 
 use super::*;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::mutation::CellInput;
 
 const SHEET_UUID: &str = "aa000000000000000000000000000001";
 const A1_UUID: &str = "aa000000000000000000000000000101";
@@ -214,6 +215,65 @@ fn mutation_clear_range_full_cse_extent_clears_anchor() {
     assert!(
         cell_change_at(&result.recalc.changed_cells, 0, 0).is_some(),
         "CSE anchor should be reported as changed",
+    );
+}
+
+#[test]
+fn mutation_clear_range_dynamic_spill_member_creates_blank_blocker() {
+    let snapshot = snapshot_with_cells(vec![CellData {
+        cell_id: A1_UUID.to_string(),
+        row: 0,
+        col: 0,
+        value: CellValue::Null,
+        formula: None,
+        identity_formula: None,
+        array_ref: None,
+    }]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
+    let a1_id = CellId::from_uuid_str(A1_UUID).expect("A1 uuid");
+
+    engine
+        .set_cell(
+            &sheet_id,
+            a1_id,
+            0,
+            0,
+            CellInput::Parse {
+                text: "=SEQUENCE(4)".to_string(),
+            },
+        )
+        .expect("set SEQUENCE spill");
+
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
+            .cloned(),
+        Some(CellValue::number(3.0)),
+        "precondition: A3 should be projected from A1",
+    );
+
+    let (_patches, result) = engine
+        .clear_range(&sheet_id, 2, 0, 2, 0)
+        .expect("clear projected member");
+
+    assert_eq!(
+        engine.mirror().get_cell_value(&a1_id).cloned(),
+        Some(CellValue::Error(CellError::Spill, None)),
+        "A1 should recalc to #SPILL! after A3 becomes a blocker",
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
+            .cloned(),
+        Some(CellValue::Text(String::new().into())),
+        "A3 should become an explicit blank text blocker",
+    );
+    assert!(
+        cell_change_at(&result.recalc.changed_cells, 0, 0).is_some(),
+        "anchor transition to #SPILL! should be reported",
     );
 }
 

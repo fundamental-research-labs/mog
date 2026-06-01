@@ -26,6 +26,8 @@ use compute_core::engine_types::*;
 #[allow(unused_imports)]
 use compute_core::engine_types::{bindings, cell_ops, sparklines};
 #[allow(unused_imports)]
+use domain_types::domain::comment::{Comment, CommentMention, CommentType};
+#[allow(unused_imports)]
 use formula_types::*;
 #[allow(unused_imports)]
 use snapshot_types::*;
@@ -63,6 +65,7 @@ bridge_pyo3::generate_class!(
     struct ComputeEngine(compute_api::ComputeService);,
     compute_api::__bridge_descriptor_ComputeService_service_lifecycle,
     compute_api::__bridge_descriptor_ComputeService_core,
+    compute_api::__bridge_descriptor_ComputeService_core_undo,
     compute_api::__bridge_descriptor_ComputeService_viewport,
     compute_api::__bridge_descriptor_ComputeService_tables,
     compute_api::__bridge_descriptor_ComputeService_features,
@@ -74,6 +77,8 @@ bridge_pyo3::generate_class!(
     compute_api::__bridge_descriptor_ComputeService_atomics,
     compute_api::__bridge_descriptor_ComputeService_layout,
     compute_api::__bridge_descriptor_ComputeService_objects,
+    compute_api::__bridge_descriptor_ComputeService_objects_comments,
+    compute_api::__bridge_descriptor_ComputeService_objects_pivots,
     compute_api::__bridge_descriptor_ComputeService_delegations,
     compute_api::__bridge_descriptor_ComputeService_viewport_registry,
     compute_api::__bridge_descriptor_ComputeService_export,
@@ -103,6 +108,7 @@ bridge_pyo3::generate!(
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ComputeEngine>()?;
+    m.add_function(pyo3::wrap_pyfunction!(pivot_detect_fields, m)?)?;
     // Pure (stateless) functions will be registered once bridge-pyo3
     // generates the registration helpers. For now the class-based
     // ComputeEngine is the primary API surface.

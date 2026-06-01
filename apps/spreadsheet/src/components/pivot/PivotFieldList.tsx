@@ -134,10 +134,11 @@ export function PivotFieldList({
       .filter((f): f is PivotField & PivotFieldPlacement => f !== null);
   };
 
-  // Get unplaced fields
-  const availableFields = fields.filter(
-    (f) => !placements.some((p) => p.fieldId === f.id && p.area !== 'value'),
-  );
+  // Excel's "Choose fields to add to report" list shows every source field
+  // regardless of placement (placed fields stay listed, just also appearing in
+  // their wells). Mirror that so an imported/configured pivot's full field set
+  // is always visible here.
+  const availableFields = fields;
 
   // Drag handlers
   const handleDragStart = useCallback(

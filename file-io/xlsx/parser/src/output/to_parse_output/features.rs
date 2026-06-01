@@ -35,6 +35,8 @@ use crate::output::results::{
 use super::non_empty;
 
 #[allow(clippy::string_slice)]
+mod chart_ex_projection;
+#[allow(clippy::string_slice)]
 mod charts;
 mod comments;
 #[allow(clippy::string_slice)]

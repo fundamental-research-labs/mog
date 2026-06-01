@@ -110,7 +110,7 @@ export type FindReplaceEvent =
   | { type: 'SET_ACTIVE_SHEET'; sheetId: SheetId }
   // Search
   | { type: 'SEARCH' }
-  | { type: 'SEARCH_COMPLETE'; results: SearchResult[] }
+  | { type: 'SEARCH_COMPLETE'; results: SearchResult[]; initialCurrentIndex?: number }
   | { type: 'SEARCH_ERROR'; message: string }
   // Navigation
   | { type: 'FIND_NEXT' }
@@ -170,9 +170,10 @@ export const FindReplaceEvents = {
   search: (): FindReplaceEvent => ({ type: 'SEARCH' }),
 
   /** Search completed with results */
-  searchComplete: (results: SearchResult[]): FindReplaceEvent => ({
+  searchComplete: (results: SearchResult[], initialCurrentIndex?: number): FindReplaceEvent => ({
     type: 'SEARCH_COMPLETE',
     results,
+    initialCurrentIndex,
   }),
 
   /** Search failed */
@@ -289,9 +290,16 @@ export const findReplaceMachine = setup({
     /** Store search results */
     storeResults: assign(({ event }) => {
       if (event.type !== 'SEARCH_COMPLETE') return {};
+      const maxIndex = event.results.length - 1;
+      const initialCurrentIndex =
+        event.initialCurrentIndex == null
+          ? event.results.length > 0
+            ? 0
+            : -1
+          : Math.max(-1, Math.min(event.initialCurrentIndex, maxIndex));
       return {
         results: event.results,
-        currentIndex: event.results.length > 0 ? 0 : -1,
+        currentIndex: initialCurrentIndex,
         resultsStale: false,
         errorMessage: null,
       };
@@ -318,6 +326,9 @@ export const findReplaceMachine = setup({
     /** Decrement current index (wrap around) */
     decrementIndex: assign(({ context }) => {
       if (context.results.length === 0) return { currentIndex: -1 };
+      if (context.currentIndex < 0) {
+        return { currentIndex: context.results.length - 1 };
+      }
       return {
         currentIndex: (context.currentIndex - 1 + context.results.length) % context.results.length,
       };

@@ -283,8 +283,10 @@ export {
   getImportedPivotMetadata,
 } from './services/document/imported-pivot-metadata';
 export type {
+  ImportedPivotArea,
   ImportedPivotFieldMetadata,
   ImportedPivotMetadataSet,
+  ImportedPivotPlacementMetadata,
   ImportedPivotRange,
   ImportedPivotTableMetadata,
 } from './services/document/imported-pivot-metadata';

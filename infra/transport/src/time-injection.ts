@@ -6,8 +6,8 @@
  * current time as an Excel serial number so NOW()/TODAY() functions work.
  *
  * Critically: the injected serial must be in the **user's calendar frame**,
- * not the host process's UTC. On a Modal worker running a US user's agent,
- * `chrono::Utc::now()` would give "now in UTC" — but Excel's TODAY() means
+ * not the host process's UTC. On a host running in a different timezone,
+ * `chrono::Utc::now()` would give "now in UTC" -- but Excel's TODAY() means
  * "today in the user's calendar", which is up to a calendar day off. The
  * caller supplies a `getUserTimezone()` callback that resolves the active
  * session's IANA timezone so we can convert the host instant into the right

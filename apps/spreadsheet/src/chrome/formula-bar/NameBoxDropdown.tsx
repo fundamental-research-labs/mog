@@ -59,6 +59,8 @@ export interface NameBoxDropdownProps {
   className?: string;
 }
 
+const INVALID_NAME_MESSAGE = 'The name you entered is not valid.';
+
 // =============================================================================
 // Store Adapter
 // =============================================================================
@@ -151,6 +153,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [filterText, setFilterText] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -323,6 +326,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // Handle clicking on the name box to open dropdown
   const handleNameBoxClick = useCallback(() => {
     if (!isEditing) {
+      setValidationError(null);
       setIsEditing(true);
       setInputValue(cellAddress);
       setIsOpen(false);
@@ -335,6 +339,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle double-click to edit (navigate by typing)
   const handleDoubleClick = useCallback(() => {
+    setValidationError(null);
     setIsEditing(true);
     setInputValue(cellAddress);
     setIsOpen(false);
@@ -347,6 +352,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input change while editing
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setValidationError(null);
     setInputValue(e.target.value);
   }, []);
 
@@ -477,6 +483,26 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // ranges "A1:A100" — parseCellRange is a superset of parseCellAddress).
       const parsed = parseCellRange(address);
       if (parsed) {
+        const currentRange = ranges[0];
+        const isSingleCellRef =
+          !trimmedAddress.includes(':') &&
+          parsed.startRow === parsed.endRow &&
+          parsed.startCol === parsed.endCol;
+        const isNoOpSelection =
+          ranges.length === 1 &&
+          currentRange != null &&
+          currentRange.startRow === parsed.startRow &&
+          currentRange.startCol === parsed.startCol &&
+          currentRange.endRow === parsed.endRow &&
+          currentRange.endCol === parsed.endCol &&
+          activeCell.row === parsed.startRow &&
+          activeCell.col === parsed.startCol;
+
+        if (isSingleCellRef && isNoOpSelection) {
+          setValidationError(INVALID_NAME_MESSAGE);
+          return;
+        }
+
         // If sheet is specified and different, switch sheets first
         if (parsed.sheetName) {
           const sheets = storeAdapter.getSheets();
@@ -526,10 +552,14 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             initialRefersTo: refersTo,
           });
         }
+      } else {
+        setValidationError(INVALID_NAME_MESSAGE);
       }
     },
     [
       ranges,
+      activeCell.row,
+      activeCell.col,
       selectionCommands,
       storeAdapter,
       activeSheetId,
@@ -598,6 +628,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         coordinator.input.focusGrid();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);
         coordinator.input.focusGrid();
@@ -789,6 +820,16 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           </div>
         </PopoverContent>
       </Popover>
+
+      {validationError && (
+        <div
+          role="alert"
+          data-testid="name-box-validation-error"
+          className="absolute left-0 top-full z-ss-popover mt-1 w-[220px] rounded border border-red-200 bg-ss-surface px-2 py-1 text-caption text-red-600 shadow-ss-md"
+        >
+          {validationError}
+        </div>
+      )}
 
       {/* Name Box Context Menu */}
       <Popover open={contextMenuOpen} onOpenChange={(open) => !open && setContextMenuOpen(false)}>

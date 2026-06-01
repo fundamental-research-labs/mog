@@ -39,6 +39,7 @@ import {
 } from '../../domain/editor/cursor-position';
 import {
   detectTableRefContext,
+  formatNameForInsertion,
   getNameSuggestions,
   type NameSuggestion,
 } from '../../domain/editor/name-completion';
@@ -101,7 +102,7 @@ export interface UseFormulaAutocompleteReturn {
   acceptCurrentSuggestion: () => void;
 
   /** Accept a specific function or name suggestion */
-  acceptSuggestion: (name: string) => void;
+  acceptSuggestion: (name: string, appendOpeningParen?: boolean) => void;
 
   /** Navigate suggestions up or down */
   navigateSuggestions: (direction: 'up' | 'down') => void;
@@ -479,22 +480,26 @@ export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
   // ═══════════════════════════════════════════════════════════════════════════
 
   const acceptSuggestion = useCallback(
-    (name: string) => {
-      editorActor.send({ type: 'ACCEPT_SUGGESTION', name });
+    (name: string, appendOpeningParen = true) => {
+      editorActor.send({ type: 'ACCEPT_SUGGESTION', name, appendOpeningParen });
     },
     [editorActor],
   );
 
   const acceptCurrentSuggestion = useCallback(() => {
-    // Combine functions and names for indexing
-    const allSuggestions = [
-      ...functionSuggestions.map((fn) => fn.name),
-      ...nameSuggestions.map((ns) => ns.name),
-    ];
+    const totalSuggestions = functionSuggestions.length + nameSuggestions.length;
+    const clampedIndex = Math.min(selectedSuggestionIndex, totalSuggestions - 1);
 
-    const clampedIndex = Math.min(selectedSuggestionIndex, allSuggestions.length - 1);
-    if (clampedIndex >= 0 && allSuggestions[clampedIndex]) {
-      acceptSuggestion(allSuggestions[clampedIndex]);
+    if (clampedIndex < 0) return;
+    const functionSuggestion = functionSuggestions[clampedIndex];
+    if (functionSuggestion) {
+      acceptSuggestion(functionSuggestion.name, true);
+      return;
+    }
+
+    const nameSuggestion = nameSuggestions[clampedIndex - functionSuggestions.length];
+    if (nameSuggestion) {
+      acceptSuggestion(formatNameForInsertion(nameSuggestion), false);
     }
   }, [functionSuggestions, nameSuggestions, selectedSuggestionIndex, acceptSuggestion]);
 

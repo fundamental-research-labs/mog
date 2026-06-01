@@ -7,6 +7,9 @@ use crate::snapshot::{
     WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::engine::stores::EngineStores;
+use domain_types::units::{
+    CharWidth, Points, char_width_to_pixels, platform_mdw, points_to_pixels,
+};
 
 /// Build a minimal [`MutationResult`] for deferred-hydration mode.
 ///
@@ -155,6 +158,16 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
         }
 
         // Sheet settings with real data from parse output view
+        let default_row_height = sheet_data
+            .dimensions
+            .default_row_height
+            .map(|height| points_to_pixels(Points(height)).0)
+            .unwrap_or(20.0);
+        let default_col_width = sheet_data
+            .dimensions
+            .default_col_width
+            .map(|width| char_width_to_pixels(CharWidth(width), platform_mdw()).0)
+            .unwrap_or(64.0);
         let sheet_settings = domain_types::domain::sheet::SheetSettings {
             show_gridlines: sheet_data.view.show_gridlines,
             show_row_headers: sheet_data.view.show_row_col_headers,
@@ -167,8 +180,8 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
             show_formulas: sheet_data.view.show_formulas,
             zoom_scale: sheet_data.view.zoom_scale,
             protection_options: None,
-            default_row_height: sheet_data.dimensions.default_row_height.unwrap_or(20.0),
-            default_col_width: sheet_data.dimensions.default_col_width.unwrap_or(64.0),
+            default_row_height,
+            default_col_width,
         };
         let settings_value =
             serde_json::to_value(&sheet_settings).expect("SheetSettings must serialize to JSON");

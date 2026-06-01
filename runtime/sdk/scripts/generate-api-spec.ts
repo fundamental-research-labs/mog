@@ -12,7 +12,9 @@
  *
  * Run:  npx tsx runtime/sdk/scripts/generate-api-spec.ts
  *
- * Output: runtime/sdk/src/generated/api-spec.json
+ * Output:
+ *   runtime/sdk/src/generated/api-spec.json
+ *   runtime/sdk/src/generated/api-spec.schema.json
  */
 
 import * as ts from 'typescript';
@@ -29,9 +31,8 @@ import {
 // Paths
 // ---------------------------------------------------------------------------
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '../../..');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '../../..');
 const CONTRACTS_API_DIR = path.resolve(REPO_ROOT, 'contracts/src/api');
 const CONTRACTS_SRC_DIR = path.resolve(REPO_ROOT, 'contracts/src');
 // Post contracts-dag, most API type definitions live in `types/*/src` (see
@@ -41,6 +42,11 @@ const CONTRACTS_SRC_DIR = path.resolve(REPO_ROOT, 'contracts/src');
 const TYPES_SRC_DIR = path.resolve(REPO_ROOT, 'types');
 const TYPES_API_DIR = path.resolve(REPO_ROOT, 'types/api/src/api');
 const OUTPUT_FILE = path.resolve(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
+const OUTPUT_SCHEMA_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-spec.schema.json',
+);
+const SCHEMA_VERSION = '1';
 
 // ---------------------------------------------------------------------------
 // Exclude lists (OK to hand-maintain — these hide internal plumbing)
@@ -145,6 +151,46 @@ function getSignatureText(member: ts.TypeElement, sourceFile: ts.SourceFile): st
     .replace(/\n\s+\n/g, '\n');
 }
 
+function toRepoPath(filePath: string): string {
+  return path.relative(REPO_ROOT, filePath).split(path.sep).join('/');
+}
+
+function getSourceLocation(sourceFile: ts.SourceFile, node: ts.Node): SourceLocation {
+  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+  return {
+    file: toRepoPath(sourceFile.fileName),
+    line: position.line + 1,
+  };
+}
+
+const packageNameCache = new Map<string, string>();
+function getOwnerPackage(filePath: string): string {
+  let dir = path.dirname(filePath);
+  while (dir.startsWith(REPO_ROOT)) {
+    const packageJsonPath = path.join(dir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      if (!packageNameCache.has(packageJsonPath)) {
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+          name?: string;
+        };
+        packageNameCache.set(packageJsonPath, packageJson.name ?? '@mog/spreadsheet');
+      }
+      return packageNameCache.get(packageJsonPath)!;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return '@mog/spreadsheet';
+}
+
+function compactTypeText(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1')
+    .trim();
+}
+
 /** Extract all PascalCase identifiers that look like domain type references. */
 function collectTypeRefs(signature: string): string[] {
   const seen = new Set<string>();
@@ -180,14 +226,99 @@ function pickOverload(overloads: ts.TypeElement[], sourceFile: ts.SourceFile): t
 // Types
 // ---------------------------------------------------------------------------
 
+type ApiRoot = 'workbook' | 'worksheet' | 'subApi';
+type ParentAlias = 'wb' | 'ws';
+type Visibility = 'public' | 'internal' | 'deprecated';
+type ApiMemberKind = 'method' | 'property' | 'subApiAccessor';
+type AsyncModel = 'sync' | 'promise';
+
+interface SourceLocation {
+  file: string;
+  line: number;
+}
+
+interface OwnershipMetadata {
+  package: string;
+}
+
+interface AliasMetadata {
+  aliasOf: string | null;
+  aliases: string[];
+  replacement: string | null;
+}
+
+interface DeprecationMetadata {
+  deprecated: boolean;
+  message: string | null;
+  replacement: string | null;
+  since: string | null;
+}
+
+type NormalizedType =
+  | { kind: 'primitive'; name: string }
+  | { kind: 'literal'; value: string | number | boolean | null }
+  | { kind: 'array'; items: NormalizedType }
+  | { kind: 'tuple'; items: NormalizedType[] }
+  | { kind: 'objectRef'; name: string }
+  | { kind: 'function'; params: ParameterEntry[]; returns: NormalizedType }
+  | { kind: 'promise'; inner: NormalizedType }
+  | { kind: 'union'; items: NormalizedType[] }
+  | { kind: 'intersection'; items: NormalizedType[] }
+  | { kind: 'record'; key: NormalizedType; value: NormalizedType }
+  | { kind: 'unknown' }
+  | { kind: 'void' };
+
+interface ParameterEntry {
+  name: string;
+  position: number;
+  optional: boolean;
+  rest: boolean;
+  default: string | null;
+  type: NormalizedType;
+  typeText: string;
+}
+
+interface ReturnEntry {
+  type: NormalizedType;
+  typeText: string;
+}
+
+interface TypeScriptTextEntry {
+  signature: string;
+  parameters: Array<{ name: string; typeText: string }>;
+  returnTypeText: string;
+}
+
 interface FunctionEntry {
   signature: string;
   docstring: string;
   usedTypes: string[];
+  stableId: string;
+  canonicalPath: string;
+  root: ApiRoot;
+  parentRoot?: 'workbook' | 'worksheet';
+  interface: string;
+  method: string;
+  kind: ApiMemberKind;
+  visibility: Visibility;
+  asyncModel: AsyncModel;
+  parameters: ParameterEntry[];
+  returns: ReturnEntry;
+  typeScript: TypeScriptTextEntry;
+  ownership: OwnershipMetadata;
+  ownerPackage: string;
+  alias: AliasMetadata;
+  deprecation: DeprecationMetadata;
+  source: SourceLocation;
+  targetInterface?: string;
 }
 
 interface InterfaceEntry {
   docstring: string;
+  source: SourceLocation;
+  ownership: OwnershipMetadata;
+  ownerPackage: string;
+  members: Record<string, FunctionEntry>;
   functions: Record<string, FunctionEntry>;
 }
 
@@ -197,16 +328,16 @@ interface TypeEntry {
   isEnum?: boolean;
   values?: Record<string, string>;
   docstring?: string;
-}
-
-interface SubApiMap {
-  [accessor: string]: string; // accessor name -> interface name
+  source: SourceLocation;
+  ownership: OwnershipMetadata;
+  ownerPackage: string;
 }
 
 interface ApiSpec {
+  schemaVersion: '1';
   subApis: {
-    wb: SubApiMap;
-    ws: SubApiMap;
+    workbook: Record<string, FunctionEntry>;
+    worksheet: Record<string, FunctionEntry>;
   };
   interfaces: Record<string, InterfaceEntry>;
   types: Record<string, TypeEntry>;
@@ -215,7 +346,280 @@ interface ApiSpec {
     Record<string, { code: string; example: string; description?: string }>
   >;
   defaultFormats?: Record<string, string>;
-  generated: string;
+}
+
+function literalValueFromNode(
+  node: ts.LiteralTypeNode['literal'],
+  sourceFile: ts.SourceFile,
+): string | number | boolean | null {
+  if (node.kind === ts.SyntaxKind.NullKeyword) return null;
+  if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
+  if (ts.isStringLiteral(node)) return node.text;
+  if (ts.isNumericLiteral(node)) return Number(node.text);
+  if (ts.isPrefixUnaryExpression(node) && ts.isNumericLiteral(node.operand)) {
+    const value = Number(node.operand.text);
+    return node.operator === ts.SyntaxKind.MinusToken ? -value : value;
+  }
+  return compactTypeText(node.getText(sourceFile));
+}
+
+function normalizeTypeNode(
+  node: ts.TypeNode | undefined,
+  sourceFile: ts.SourceFile,
+): NormalizedType {
+  if (!node) return { kind: 'unknown' };
+
+  if (ts.isParenthesizedTypeNode(node)) {
+    return normalizeTypeNode(node.type, sourceFile);
+  }
+
+  if (ts.isArrayTypeNode(node)) {
+    return { kind: 'array', items: normalizeTypeNode(node.elementType, sourceFile) };
+  }
+
+  if (ts.isTupleTypeNode(node)) {
+    return {
+      kind: 'tuple',
+      items: node.elements.map((element) => {
+        if (ts.isNamedTupleMember(element)) return normalizeTypeNode(element.type, sourceFile);
+        if (ts.isRestTypeNode(element)) return normalizeTypeNode(element.type, sourceFile);
+        return normalizeTypeNode(element, sourceFile);
+      }),
+    };
+  }
+
+  if (ts.isUnionTypeNode(node)) {
+    return { kind: 'union', items: node.types.map((item) => normalizeTypeNode(item, sourceFile)) };
+  }
+
+  if (ts.isIntersectionTypeNode(node)) {
+    return {
+      kind: 'intersection',
+      items: node.types.map((item) => normalizeTypeNode(item, sourceFile)),
+    };
+  }
+
+  if (ts.isLiteralTypeNode(node)) {
+    return { kind: 'literal', value: literalValueFromNode(node.literal, sourceFile) };
+  }
+
+  if (ts.isFunctionTypeNode(node)) {
+    return {
+      kind: 'function',
+      params: node.parameters.map((param, index) => createParameterEntry(param, index, sourceFile)),
+      returns: normalizeTypeNode(node.type, sourceFile),
+    };
+  }
+
+  if (ts.isTypeReferenceNode(node)) {
+    const name = node.typeName.getText(sourceFile);
+    const args = node.typeArguments ?? [];
+    if (name === 'Promise' && args.length === 1) {
+      return { kind: 'promise', inner: normalizeTypeNode(args[0], sourceFile) };
+    }
+    if ((name === 'Array' || name === 'ReadonlyArray') && args.length === 1) {
+      return { kind: 'array', items: normalizeTypeNode(args[0], sourceFile) };
+    }
+    if (name === 'Record' && args.length === 2) {
+      return {
+        kind: 'record',
+        key: normalizeTypeNode(args[0], sourceFile),
+        value: normalizeTypeNode(args[1], sourceFile),
+      };
+    }
+    return { kind: 'objectRef', name: compactTypeText(node.getText(sourceFile)) };
+  }
+
+  if (ts.isTypeLiteralNode(node)) {
+    const indexSignature = node.members.find(ts.isIndexSignatureDeclaration);
+    if (indexSignature?.parameters.length === 1 && indexSignature.type) {
+      return {
+        kind: 'record',
+        key: normalizeTypeNode(indexSignature.parameters[0].type, sourceFile),
+        value: normalizeTypeNode(indexSignature.type, sourceFile),
+      };
+    }
+    return { kind: 'objectRef', name: compactTypeText(node.getText(sourceFile)) };
+  }
+
+  if (ts.isTypeOperatorNode(node)) {
+    if (node.operator === ts.SyntaxKind.ReadonlyKeyword) {
+      return normalizeTypeNode(node.type, sourceFile);
+    }
+    return { kind: 'objectRef', name: compactTypeText(node.getText(sourceFile)) };
+  }
+
+  if (
+    ts.isIndexedAccessTypeNode(node) ||
+    ts.isConditionalTypeNode(node) ||
+    ts.isInferTypeNode(node)
+  ) {
+    return { kind: 'objectRef', name: compactTypeText(node.getText(sourceFile)) };
+  }
+
+  switch (node.kind) {
+    case ts.SyntaxKind.StringKeyword:
+      return { kind: 'primitive', name: 'string' };
+    case ts.SyntaxKind.NumberKeyword:
+      return { kind: 'primitive', name: 'number' };
+    case ts.SyntaxKind.BooleanKeyword:
+      return { kind: 'primitive', name: 'boolean' };
+    case ts.SyntaxKind.BigIntKeyword:
+      return { kind: 'primitive', name: 'bigint' };
+    case ts.SyntaxKind.SymbolKeyword:
+      return { kind: 'primitive', name: 'symbol' };
+    case ts.SyntaxKind.ObjectKeyword:
+      return { kind: 'primitive', name: 'object' };
+    case ts.SyntaxKind.VoidKeyword:
+      return { kind: 'void' };
+    case ts.SyntaxKind.UnknownKeyword:
+      return { kind: 'unknown' };
+    case ts.SyntaxKind.AnyKeyword:
+    case ts.SyntaxKind.NeverKeyword:
+      return { kind: 'unknown' };
+    case ts.SyntaxKind.UndefinedKeyword:
+      return { kind: 'literal', value: 'undefined' };
+    default:
+      return { kind: 'objectRef', name: compactTypeText(node.getText(sourceFile)) };
+  }
+}
+
+function createParameterEntry(
+  param: ts.ParameterDeclaration,
+  position: number,
+  sourceFile: ts.SourceFile,
+): ParameterEntry {
+  const initializer = param.initializer?.getText(sourceFile) ?? null;
+  const typeText = compactTypeText(param.type?.getText(sourceFile) ?? 'unknown');
+  return {
+    name: param.name.getText(sourceFile),
+    position,
+    optional: Boolean(param.questionToken || initializer),
+    rest: Boolean(param.dotDotDotToken),
+    default: initializer,
+    type: normalizeTypeNode(param.type, sourceFile),
+    typeText,
+  };
+}
+
+function getMemberKind(member: ts.TypeElement): Extract<ApiMemberKind, 'method' | 'property'> {
+  return ts.isMethodSignature(member) ? 'method' : 'property';
+}
+
+function getMemberReturnTypeNode(member: ts.TypeElement): ts.TypeNode | undefined {
+  if (ts.isMethodSignature(member)) return member.type;
+  if (ts.isPropertySignature(member)) return member.type;
+  return undefined;
+}
+
+function getMemberParameters(member: ts.TypeElement, sourceFile: ts.SourceFile): ParameterEntry[] {
+  if (!ts.isMethodSignature(member)) return [];
+  return member.parameters.map((param, index) => createParameterEntry(param, index, sourceFile));
+}
+
+function getPropertyTargetInterface(
+  member: ts.TypeElement,
+  sourceFile: ts.SourceFile,
+): string | undefined {
+  if (!ts.isPropertySignature(member)) return undefined;
+  const typeText = member.type?.getText(sourceFile) ?? '';
+  if (!/^[A-Z][A-Za-z0-9]+$/.test(typeText)) return undefined;
+  if (BUILTIN_TYPE_NAMES.has(typeText)) return undefined;
+  return findInterfaceFile(typeText) ? typeText : undefined;
+}
+
+function isPromiseTypeNode(node: ts.TypeNode | undefined): boolean {
+  return Boolean(
+    node &&
+    ts.isTypeReferenceNode(node) &&
+    node.typeName.getText() === 'Promise' &&
+    node.typeArguments?.length === 1,
+  );
+}
+
+function parseDeprecation(docstring: string): DeprecationMetadata {
+  const match = docstring.match(/@deprecated\s*([^\n]*(?:\n(?!@)\s*[^\n]*)*)?/);
+  const message = match?.[1]?.trim() || null;
+  const replacement = message?.match(/use\s+`([^`]+)`/i)?.[1] ?? null;
+  return {
+    deprecated: Boolean(match),
+    message,
+    replacement,
+    since: null,
+  };
+}
+
+function createMemberEntry(options: {
+  interfaceName: string;
+  memberName: string;
+  member: ts.TypeElement;
+  sourceFile: ts.SourceFile;
+  canonicalPath: string;
+  root: ApiRoot;
+  parentRoot?: 'workbook' | 'worksheet';
+  kind: ApiMemberKind;
+  targetInterface?: string;
+}): FunctionEntry {
+  const {
+    interfaceName,
+    memberName,
+    member,
+    sourceFile,
+    canonicalPath,
+    root,
+    parentRoot,
+    kind,
+    targetInterface,
+  } = options;
+  const signature = getSignatureText(member, sourceFile);
+  const docstring = getJSDocText(member);
+  const returnTypeNode = getMemberReturnTypeNode(member);
+  const parameters = kind === 'subApiAccessor' ? [] : getMemberParameters(member, sourceFile);
+  const returnTypeText = compactTypeText(returnTypeNode?.getText(sourceFile) ?? 'unknown');
+  const deprecation = parseDeprecation(docstring);
+  const ownerPackage = getOwnerPackage(sourceFile.fileName);
+
+  return {
+    signature,
+    docstring,
+    usedTypes: collectTypeRefs(signature),
+    stableId: `${interfaceName}.${memberName}`,
+    canonicalPath,
+    root,
+    ...(parentRoot ? { parentRoot } : {}),
+    interface: interfaceName,
+    method: memberName,
+    kind,
+    visibility: deprecation.deprecated ? 'deprecated' : 'public',
+    asyncModel: isPromiseTypeNode(returnTypeNode) ? 'promise' : 'sync',
+    parameters,
+    returns: {
+      type: normalizeTypeNode(returnTypeNode, sourceFile),
+      typeText: returnTypeText,
+    },
+    typeScript: {
+      signature,
+      parameters: parameters.map((param) => ({ name: param.name, typeText: param.typeText })),
+      returnTypeText,
+    },
+    ownership: { package: ownerPackage },
+    ownerPackage,
+    alias: {
+      aliasOf: null,
+      aliases: [],
+      replacement: null,
+    },
+    deprecation,
+    source: getSourceLocation(sourceFile, member),
+    ...(targetInterface ? { targetInterface } : {}),
+  };
+}
+
+function sortRecord<T>(record: Record<string, T>): Record<string, T> {
+  const sorted: Record<string, T> = {};
+  for (const key of Object.keys(record).sort()) sorted[key] = record[key];
+  return sorted;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +629,9 @@ interface ApiSpec {
 interface SubApiInfo {
   accessor: string; // e.g. "charts"
   interfaceName: string; // e.g. "WorksheetCharts"
-  parent: 'wb' | 'ws';
+  parent: ParentAlias;
+  member: ts.PropertySignature;
+  sourceFile: ts.SourceFile;
 }
 
 /**
@@ -236,7 +642,7 @@ interface SubApiInfo {
 function discoverSubApis(
   node: ts.InterfaceDeclaration,
   sourceFile: ts.SourceFile,
-  parent: 'wb' | 'ws',
+  parent: ParentAlias,
   excludedMembers: Set<string>,
 ): SubApiInfo[] {
   const results: SubApiInfo[] = [];
@@ -264,7 +670,7 @@ function discoverSubApis(
     // Skip internal interfaces
     if (interfaceName === 'WorksheetInternal') continue;
 
-    results.push({ accessor: name, interfaceName, parent });
+    results.push({ accessor: name, interfaceName, parent, member, sourceFile });
   }
 
   return results;
@@ -278,43 +684,71 @@ function extractInterface(
   node: ts.InterfaceDeclaration,
   sourceFile: ts.SourceFile,
   excludedMembers: Set<string>,
+  options: {
+    root: ApiRoot;
+    pathPrefix: string;
+    parentRoot?: 'workbook' | 'worksheet';
+    skipMembers?: Set<string>;
+  } = { root: 'subApi', pathPrefix: node.name.text },
 ): InterfaceEntry {
   const docstring = getJSDocText(node);
+  const ownerPackage = getOwnerPackage(sourceFile.fileName);
+  const members: Record<string, FunctionEntry> = {};
   const functions: Record<string, FunctionEntry> = {};
+  const skipMembers = options.skipMembers ?? new Set<string>();
 
   const byName = new Map<string, ts.TypeElement[]>();
   for (const member of node.members) {
     const name = (member as any).name?.getText(sourceFile) ?? '';
-    if (!name || excludedMembers.has(name)) continue;
+    if (!name || excludedMembers.has(name) || skipMembers.has(name)) continue;
 
-    // Skip readonly property signatures (sub-API accessors) — they're not methods
-    if (ts.isPropertySignature(member)) {
-      const isReadonly = member.modifiers?.some((m) => m.kind === ts.SyntaxKind.ReadonlyKeyword);
-      if (isReadonly) continue;
-    }
+    if (!ts.isMethodSignature(member) && !ts.isPropertySignature(member)) continue;
 
     if (!byName.has(name)) byName.set(name, []);
     byName.get(name)!.push(member);
   }
 
-  for (const [name, members] of byName) {
-    const chosen = pickOverload(members, sourceFile);
-    const signature = getSignatureText(chosen, sourceFile);
-    const doc = getJSDocText(chosen);
+  for (const [name, overloads] of byName) {
+    const chosen = pickOverload(overloads, sourceFile);
+    const entry = createMemberEntry({
+      interfaceName: node.name.text,
+      memberName: name,
+      member: chosen,
+      sourceFile,
+      canonicalPath: `${options.pathPrefix}.${name}`,
+      root: options.root,
+      ...(options.parentRoot ? { parentRoot: options.parentRoot } : {}),
+      kind: getMemberKind(chosen),
+      ...(getPropertyTargetInterface(chosen, sourceFile)
+        ? { targetInterface: getPropertyTargetInterface(chosen, sourceFile) }
+        : {}),
+    });
 
-    const usedTypes = collectTypeRefs(signature);
-
-    functions[name] = { signature, docstring: doc, usedTypes };
+    members[name] = entry;
+    functions[name] = entry;
   }
 
-  return { docstring, functions };
+  return {
+    docstring,
+    source: getSourceLocation(sourceFile, node),
+    ownership: { package: ownerPackage },
+    ownerPackage,
+    members: sortRecord(members),
+    functions: sortRecord(functions),
+  };
 }
 
 function extractSubApiInterface(
   node: ts.InterfaceDeclaration,
   sourceFile: ts.SourceFile,
+  pathPrefix: string,
+  parentRoot: 'workbook' | 'worksheet',
 ): InterfaceEntry {
-  return extractInterface(node, sourceFile, new Set());
+  return extractInterface(node, sourceFile, new Set(), {
+    root: 'subApi',
+    pathPrefix,
+    parentRoot,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -461,8 +895,8 @@ function collectDirectories(root: string): string[] {
 
 function findInterfaceFile(interfaceName: string): string | null {
   const searchDirs = [
-    ...collectDirectories(CONTRACTS_API_DIR),
     ...collectDirectories(TYPES_API_DIR),
+    ...collectDirectories(CONTRACTS_API_DIR),
   ];
 
   for (const dir of searchDirs) {
@@ -523,6 +957,7 @@ function findTypeDefinitions(
         remaining.delete(name);
 
         const docstring = getJSDocText(node);
+        const ownerPackage = getOwnerPackage(sourceFile.fileName);
         const values: Record<string, string> = {};
         for (const member of node.members) {
           const memberName = member.name.getText(sourceFile);
@@ -530,7 +965,15 @@ function findTypeDefinitions(
             member.initializer?.getText(sourceFile) ?? String(Object.keys(values).length);
           values[memberName] = value;
         }
-        result[name] = { name, isEnum: true, values, docstring };
+        result[name] = {
+          name,
+          isEnum: true,
+          values: sortRecord(values),
+          docstring,
+          source: getSourceLocation(sourceFile, node),
+          ownership: { package: ownerPackage },
+          ownerPackage,
+        };
       }
 
       // --- Type alias declarations ---
@@ -541,7 +984,15 @@ function findTypeDefinitions(
 
         const docstring = getJSDocText(node);
         const definition = node.type.getText(sourceFile);
-        result[name] = { name, definition, docstring };
+        const ownerPackage = getOwnerPackage(sourceFile.fileName);
+        result[name] = {
+          name,
+          definition,
+          docstring,
+          source: getSourceLocation(sourceFile, node),
+          ownership: { package: ownerPackage },
+          ownerPackage,
+        };
       }
 
       // --- Interface declarations (data shape interfaces) ---
@@ -551,6 +1002,7 @@ function findTypeDefinitions(
         remaining.delete(name);
 
         const docstring = getJSDocText(node);
+        const ownerPackage = getOwnerPackage(sourceFile.fileName);
         // Serialize properties into a definition string
         const parts: string[] = [];
         for (const member of node.members) {
@@ -577,6 +1029,9 @@ function findTypeDefinitions(
           name,
           definition: parts.length > 0 ? `{\n${parts.join('\n')}\n}` : '{}',
           docstring,
+          source: getSourceLocation(sourceFile, node),
+          ownership: { package: ownerPackage },
+          ownerPackage,
         };
       }
     });
@@ -591,8 +1046,8 @@ function findTypeDefinitions(
 
 function generate(): ApiSpec {
   // --- Parse root interfaces ---
-  const workbookFile = path.join(CONTRACTS_API_DIR, 'workbook.ts');
-  const worksheetFile = path.join(CONTRACTS_API_DIR, 'worksheet.ts');
+  const workbookFile = path.join(TYPES_API_DIR, 'workbook.ts');
+  const worksheetFile = path.join(TYPES_API_DIR, 'worksheet.ts');
 
   const wbParsed = parseInterfaceFromFile(workbookFile, 'Workbook');
   const wsParsed = parseInterfaceFromFile(worksheetFile, 'Worksheet');
@@ -615,40 +1070,97 @@ function generate(): ApiSpec {
   );
   const allSubApis = [...wbSubApis, ...wsSubApis];
 
-  const subApiMap: ApiSpec['subApis'] = { wb: {}, ws: {} };
+  const subApiMap: ApiSpec['subApis'] = { workbook: {}, worksheet: {} };
   for (const sa of allSubApis) {
-    subApiMap[sa.parent][sa.accessor] = sa.interfaceName;
+    const parentRoot = sa.parent === 'wb' ? 'workbook' : 'worksheet';
+    subApiMap[parentRoot][sa.accessor] = createMemberEntry({
+      interfaceName: sa.parent === 'wb' ? 'Workbook' : 'Worksheet',
+      memberName: sa.accessor,
+      member: sa.member,
+      sourceFile: sa.sourceFile,
+      canonicalPath: `${sa.parent}.${sa.accessor}`,
+      root: 'subApi',
+      parentRoot,
+      kind: 'subApiAccessor',
+      targetInterface: sa.interfaceName,
+    });
   }
+  subApiMap.workbook = sortRecord(subApiMap.workbook);
+  subApiMap.worksheet = sortRecord(subApiMap.worksheet);
 
   // --- Step 2: Extract root interface methods (excluding sub-API properties) ---
   const interfaces: Record<string, InterfaceEntry> = {};
+  const wbAccessorNames = new Set(wbSubApis.map((sa) => sa.accessor));
+  const wsAccessorNames = new Set(wsSubApis.map((sa) => sa.accessor));
 
   interfaces['Workbook'] = extractInterface(
     wbParsed.node,
     wbParsed.sourceFile,
     WORKBOOK_EXCLUDED_MEMBERS,
+    { root: 'workbook', pathPrefix: 'wb', skipMembers: wbAccessorNames },
   );
   interfaces['Worksheet'] = extractInterface(
     wsParsed.node,
     wsParsed.sourceFile,
     WORKSHEET_EXCLUDED_MEMBERS,
+    { root: 'worksheet', pathPrefix: 'ws', skipMembers: wsAccessorNames },
   );
 
-  // --- Step 3: Find and parse sub-API interfaces ---
-  for (const sa of allSubApis) {
-    const filePath = findInterfaceFile(sa.interfaceName);
+  for (const sa of wbSubApis) {
+    interfaces['Workbook'].members[sa.accessor] = subApiMap.workbook[sa.accessor];
+  }
+  interfaces['Workbook'].members = sortRecord(interfaces['Workbook'].members);
+  for (const sa of wsSubApis) {
+    interfaces['Worksheet'].members[sa.accessor] = subApiMap.worksheet[sa.accessor];
+  }
+  interfaces['Worksheet'].members = sortRecord(interfaces['Worksheet'].members);
+
+  // --- Step 3: Find and parse sub-API interfaces, including nested namespaces ---
+  const interfaceQueue: Array<{
+    interfaceName: string;
+    pathPrefix: string;
+    parentRoot: 'workbook' | 'worksheet';
+  }> = allSubApis.map((sa) => ({
+    interfaceName: sa.interfaceName,
+    pathPrefix: `${sa.parent}.${sa.accessor}`,
+    parentRoot: sa.parent === 'wb' ? 'workbook' : 'worksheet',
+  }));
+  const processedInterfaces = new Set<string>();
+
+  for (let index = 0; index < interfaceQueue.length; index++) {
+    const item = interfaceQueue[index];
+    const processKey = `${item.interfaceName}::${item.pathPrefix}`;
+    if (processedInterfaces.has(processKey)) continue;
+    processedInterfaces.add(processKey);
+
+    const filePath = findInterfaceFile(item.interfaceName);
     if (!filePath) {
-      console.warn(`[warn] Could not find file for interface: ${sa.interfaceName}`);
+      console.warn(`[warn] Could not find file for interface: ${item.interfaceName}`);
       continue;
     }
 
-    const parsed = parseInterfaceFromFile(filePath, sa.interfaceName);
+    const parsed = parseInterfaceFromFile(filePath, item.interfaceName);
     if (!parsed) {
-      console.warn(`[warn] Could not parse interface ${sa.interfaceName} from ${filePath}`);
+      console.warn(`[warn] Could not parse interface ${item.interfaceName} from ${filePath}`);
       continue;
     }
 
-    interfaces[sa.interfaceName] = extractSubApiInterface(parsed.node, parsed.sourceFile);
+    const extracted = extractSubApiInterface(
+      parsed.node,
+      parsed.sourceFile,
+      item.pathPrefix,
+      item.parentRoot,
+    );
+    interfaces[item.interfaceName] = extracted;
+
+    for (const member of Object.values(extracted.functions)) {
+      if (member.kind !== 'property' || !member.targetInterface) continue;
+      interfaceQueue.push({
+        interfaceName: member.targetInterface,
+        pathPrefix: member.canonicalPath,
+        parentRoot: item.parentRoot,
+      });
+    }
   }
 
   // --- Step 4: Collect all referenced PascalCase types ---
@@ -746,14 +1258,429 @@ function generate(): ApiSpec {
   for (const key of Object.keys(types).sort()) {
     sortedTypes[key] = types[key];
   }
+  const sortedInterfaces = sortRecord(interfaces);
 
   return {
+    schemaVersion: SCHEMA_VERSION,
     subApis: subApiMap,
-    interfaces,
+    interfaces: sortedInterfaces,
     types: sortedTypes,
     formatPresets: FORMAT_PRESETS as any,
     defaultFormats: DEFAULT_FORMAT_BY_TYPE,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Schema and self-validation
+// ---------------------------------------------------------------------------
+
+const API_SPEC_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://mog.dev/schemas/api-spec.schema.json',
+  title: 'Mog SDK API Spec',
+  type: 'object',
+  required: ['schemaVersion', 'interfaces', 'subApis', 'types'],
+  additionalProperties: true,
+  properties: {
+    schemaVersion: { const: SCHEMA_VERSION },
+    interfaces: {
+      type: 'object',
+      additionalProperties: { $ref: '#/$defs/interfaceEntry' },
+    },
+    subApis: {
+      type: 'object',
+      required: ['workbook', 'worksheet'],
+      additionalProperties: false,
+      properties: {
+        workbook: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/functionEntry' },
+        },
+        worksheet: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/functionEntry' },
+        },
+      },
+    },
+    types: {
+      type: 'object',
+      additionalProperties: { $ref: '#/$defs/typeEntry' },
+    },
+  },
+  $defs: {
+    sourceLocation: {
+      type: 'object',
+      required: ['file', 'line'],
+      additionalProperties: false,
+      properties: {
+        file: { type: 'string', minLength: 1 },
+        line: { type: 'integer', minimum: 1 },
+      },
+    },
+    ownership: {
+      type: 'object',
+      required: ['package'],
+      additionalProperties: false,
+      properties: {
+        package: { type: 'string', minLength: 1 },
+      },
+    },
+    alias: {
+      type: 'object',
+      required: ['aliasOf', 'aliases', 'replacement'],
+      additionalProperties: false,
+      properties: {
+        aliasOf: { type: ['string', 'null'] },
+        aliases: { type: 'array', items: { type: 'string' } },
+        replacement: { type: ['string', 'null'] },
+      },
+    },
+    deprecation: {
+      type: 'object',
+      required: ['deprecated', 'message', 'replacement', 'since'],
+      additionalProperties: false,
+      properties: {
+        deprecated: { type: 'boolean' },
+        message: { type: ['string', 'null'] },
+        replacement: { type: ['string', 'null'] },
+        since: { type: ['string', 'null'] },
+      },
+    },
+    parameter: {
+      type: 'object',
+      required: ['name', 'position', 'optional', 'rest', 'default', 'type', 'typeText'],
+      additionalProperties: false,
+      properties: {
+        name: { type: 'string', minLength: 1 },
+        position: { type: 'integer', minimum: 0 },
+        optional: { type: 'boolean' },
+        rest: { type: 'boolean' },
+        default: { type: ['string', 'null'] },
+        type: { $ref: '#/$defs/normalizedType' },
+        typeText: { type: 'string' },
+      },
+    },
+    returnEntry: {
+      type: 'object',
+      required: ['type', 'typeText'],
+      additionalProperties: false,
+      properties: {
+        type: { $ref: '#/$defs/normalizedType' },
+        typeText: { type: 'string' },
+      },
+    },
+    typeScriptText: {
+      type: 'object',
+      required: ['signature', 'parameters', 'returnTypeText'],
+      additionalProperties: false,
+      properties: {
+        signature: { type: 'string' },
+        parameters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['name', 'typeText'],
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              typeText: { type: 'string' },
+            },
+          },
+        },
+        returnTypeText: { type: 'string' },
+      },
+    },
+    functionEntry: {
+      type: 'object',
+      required: [
+        'signature',
+        'docstring',
+        'usedTypes',
+        'stableId',
+        'canonicalPath',
+        'root',
+        'interface',
+        'method',
+        'kind',
+        'visibility',
+        'asyncModel',
+        'parameters',
+        'returns',
+        'typeScript',
+        'ownership',
+        'ownerPackage',
+        'alias',
+        'deprecation',
+        'source',
+      ],
+      additionalProperties: true,
+      properties: {
+        signature: { type: 'string' },
+        docstring: { type: 'string' },
+        usedTypes: { type: 'array', items: { type: 'string' } },
+        stableId: { type: 'string', minLength: 1 },
+        canonicalPath: { type: 'string', pattern: '^(wb|ws)\\.' },
+        root: { enum: ['workbook', 'worksheet', 'subApi'] },
+        parentRoot: { enum: ['workbook', 'worksheet'] },
+        interface: { type: 'string', minLength: 1 },
+        method: { type: 'string', minLength: 1 },
+        kind: { enum: ['method', 'property', 'subApiAccessor'] },
+        visibility: { enum: ['public', 'internal', 'deprecated'] },
+        asyncModel: { enum: ['sync', 'promise'] },
+        parameters: { type: 'array', items: { $ref: '#/$defs/parameter' } },
+        returns: { $ref: '#/$defs/returnEntry' },
+        typeScript: { $ref: '#/$defs/typeScriptText' },
+        ownership: { $ref: '#/$defs/ownership' },
+        ownerPackage: { type: 'string', minLength: 1 },
+        alias: { $ref: '#/$defs/alias' },
+        deprecation: { $ref: '#/$defs/deprecation' },
+        source: { $ref: '#/$defs/sourceLocation' },
+        targetInterface: { type: 'string' },
+      },
+    },
+    interfaceEntry: {
+      type: 'object',
+      required: ['docstring', 'source', 'ownership', 'ownerPackage', 'members', 'functions'],
+      additionalProperties: false,
+      properties: {
+        docstring: { type: 'string' },
+        source: { $ref: '#/$defs/sourceLocation' },
+        ownership: { $ref: '#/$defs/ownership' },
+        ownerPackage: { type: 'string', minLength: 1 },
+        members: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/functionEntry' },
+        },
+        functions: {
+          type: 'object',
+          additionalProperties: { $ref: '#/$defs/functionEntry' },
+        },
+      },
+    },
+    typeEntry: {
+      type: 'object',
+      required: ['name', 'source', 'ownership', 'ownerPackage'],
+      additionalProperties: true,
+      properties: {
+        name: { type: 'string', minLength: 1 },
+        definition: { type: 'string' },
+        isEnum: { type: 'boolean' },
+        values: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+        },
+        docstring: { type: 'string' },
+        source: { $ref: '#/$defs/sourceLocation' },
+        ownership: { $ref: '#/$defs/ownership' },
+        ownerPackage: { type: 'string', minLength: 1 },
+      },
+    },
+    normalizedType: {
+      oneOf: [
+        {
+          type: 'object',
+          required: ['kind', 'name'],
+          additionalProperties: false,
+          properties: { kind: { const: 'primitive' }, name: { type: 'string', minLength: 1 } },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'value'],
+          additionalProperties: false,
+          properties: {
+            kind: { const: 'literal' },
+            value: { type: ['string', 'number', 'boolean', 'null'] },
+          },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'items'],
+          additionalProperties: false,
+          properties: { kind: { const: 'array' }, items: { $ref: '#/$defs/normalizedType' } },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'items'],
+          additionalProperties: false,
+          properties: {
+            kind: { const: 'tuple' },
+            items: { type: 'array', items: { $ref: '#/$defs/normalizedType' } },
+          },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'name'],
+          additionalProperties: false,
+          properties: { kind: { const: 'objectRef' }, name: { type: 'string', minLength: 1 } },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'params', 'returns'],
+          additionalProperties: false,
+          properties: {
+            kind: { const: 'function' },
+            params: { type: 'array', items: { $ref: '#/$defs/parameter' } },
+            returns: { $ref: '#/$defs/normalizedType' },
+          },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'inner'],
+          additionalProperties: false,
+          properties: { kind: { const: 'promise' }, inner: { $ref: '#/$defs/normalizedType' } },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'items'],
+          additionalProperties: false,
+          properties: {
+            kind: { enum: ['union', 'intersection'] },
+            items: { type: 'array', items: { $ref: '#/$defs/normalizedType' } },
+          },
+        },
+        {
+          type: 'object',
+          required: ['kind', 'key', 'value'],
+          additionalProperties: false,
+          properties: {
+            kind: { const: 'record' },
+            key: { $ref: '#/$defs/normalizedType' },
+            value: { $ref: '#/$defs/normalizedType' },
+          },
+        },
+        {
+          type: 'object',
+          required: ['kind'],
+          additionalProperties: false,
+          properties: { kind: { enum: ['unknown', 'void'] } },
+        },
+      ],
+    },
+  },
+} as const;
+
+function assertNormalizedType(type: NormalizedType, pathLabel: string): void {
+  switch (type.kind) {
+    case 'primitive':
+      if (!type.name) throw new Error(`${pathLabel}: primitive type missing name`);
+      return;
+    case 'literal':
+      if (!Object.prototype.hasOwnProperty.call(type, 'value')) {
+        throw new Error(`${pathLabel}: literal type missing value`);
+      }
+      return;
+    case 'array':
+      assertNormalizedType(type.items, `${pathLabel}.items`);
+      return;
+    case 'tuple':
+    case 'union':
+    case 'intersection':
+      type.items.forEach((item, index) =>
+        assertNormalizedType(item, `${pathLabel}.items[${index}]`),
+      );
+      return;
+    case 'objectRef':
+      if (!type.name) throw new Error(`${pathLabel}: objectRef type missing name`);
+      return;
+    case 'function':
+      type.params.forEach((param, index) => {
+        if (param.position !== index) {
+          throw new Error(`${pathLabel}.params[${index}]: parameter position mismatch`);
+        }
+        assertNormalizedType(param.type, `${pathLabel}.params[${index}].type`);
+      });
+      assertNormalizedType(type.returns, `${pathLabel}.returns`);
+      return;
+    case 'promise':
+      assertNormalizedType(type.inner, `${pathLabel}.inner`);
+      return;
+    case 'record':
+      assertNormalizedType(type.key, `${pathLabel}.key`);
+      assertNormalizedType(type.value, `${pathLabel}.value`);
+      return;
+    case 'unknown':
+    case 'void':
+      return;
+    default: {
+      const exhaustive: never = type;
+      throw new Error(`${pathLabel}: unsupported normalized type ${(exhaustive as any).kind}`);
+    }
+  }
+}
+
+function assertFunctionEntry(entry: FunctionEntry, pathLabel: string): void {
+  const requiredStringFields: Array<keyof FunctionEntry> = [
+    'signature',
+    'stableId',
+    'canonicalPath',
+    'interface',
+    'method',
+    'ownerPackage',
+  ];
+  for (const field of requiredStringFields) {
+    if (typeof entry[field] !== 'string' || !(entry[field] as string).length) {
+      throw new Error(`${pathLabel}: missing ${String(field)}`);
+    }
+  }
+  if (!['workbook', 'worksheet', 'subApi'].includes(entry.root)) {
+    throw new Error(`${pathLabel}: invalid root ${entry.root}`);
+  }
+  if (!['method', 'property', 'subApiAccessor'].includes(entry.kind)) {
+    throw new Error(`${pathLabel}: invalid kind ${entry.kind}`);
+  }
+  if (!['public', 'internal', 'deprecated'].includes(entry.visibility)) {
+    throw new Error(`${pathLabel}: invalid visibility ${entry.visibility}`);
+  }
+  if (!['sync', 'promise'].includes(entry.asyncModel)) {
+    throw new Error(`${pathLabel}: invalid asyncModel ${entry.asyncModel}`);
+  }
+  if (!entry.source.file || entry.source.line < 1) {
+    throw new Error(`${pathLabel}: invalid source`);
+  }
+  entry.parameters.forEach((param, index) => {
+    if (param.position !== index) {
+      throw new Error(`${pathLabel}.parameters[${index}]: parameter position mismatch`);
+    }
+    assertNormalizedType(param.type, `${pathLabel}.parameters[${index}].type`);
+  });
+  assertNormalizedType(entry.returns.type, `${pathLabel}.returns.type`);
+}
+
+function assertApiSpec(spec: ApiSpec): void {
+  if (spec.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`api spec schemaVersion must be ${SCHEMA_VERSION}`);
+  }
+  if (!spec.subApis.workbook || !spec.subApis.worksheet) {
+    throw new Error('api spec must contain subApis.workbook and subApis.worksheet');
+  }
+  for (const [interfaceName, entry] of Object.entries(spec.interfaces)) {
+    if (!entry.source.file || entry.source.line < 1) {
+      throw new Error(`${interfaceName}: invalid source`);
+    }
+    for (const [methodName, fn] of Object.entries(entry.functions)) {
+      assertFunctionEntry(fn, `interfaces.${interfaceName}.functions.${methodName}`);
+    }
+    for (const [memberName, member] of Object.entries(entry.members)) {
+      assertFunctionEntry(member, `interfaces.${interfaceName}.members.${memberName}`);
+    }
+  }
+  for (const [name, accessor] of Object.entries(spec.subApis.workbook)) {
+    assertFunctionEntry(accessor, `subApis.workbook.${name}`);
+  }
+  for (const [name, accessor] of Object.entries(spec.subApis.worksheet)) {
+    assertFunctionEntry(accessor, `subApis.worksheet.${name}`);
+  }
+}
+
+function writeGeneratedFile(filePath: string, value: unknown): void {
+  const newContent = JSON.stringify(value, null, 2) + '\n';
+  const existingContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
+  if (newContent === existingContent) {
+    console.log(`Unchanged: ${filePath}\n`);
+  } else {
+    fs.writeFileSync(filePath, newContent);
+    console.log(`Written: ${filePath}\n`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -763,19 +1690,14 @@ function generate(): ApiSpec {
 console.log('Generating SDK API spec from contracts/src/api/...\n');
 
 const spec = generate();
+assertApiSpec(spec);
 
 // Ensure output directory exists
 fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
 
 // Only write if content actually changed (avoids noisy diffs on publish)
-const newContent = JSON.stringify(spec, null, 2) + '\n';
-const existingContent = fs.existsSync(OUTPUT_FILE) ? fs.readFileSync(OUTPUT_FILE, 'utf-8') : '';
-if (newContent === existingContent) {
-  console.log(`Unchanged: ${OUTPUT_FILE}\n`);
-} else {
-  fs.writeFileSync(OUTPUT_FILE, newContent);
-  console.log(`Written: ${OUTPUT_FILE}\n`);
-}
+writeGeneratedFile(OUTPUT_SCHEMA_FILE, API_SPEC_SCHEMA);
+writeGeneratedFile(OUTPUT_FILE, spec);
 
 // Print summary
 const ifaceCount = Object.keys(spec.interfaces).length;
@@ -789,9 +1711,9 @@ const typeCount = Object.keys(spec.types).length;
 
 console.log(`\nSub-APIs discovered:`);
 console.log(
-  `  wb: ${Object.keys(spec.subApis.wb).length} (${Object.keys(spec.subApis.wb).join(', ')})`,
+  `  workbook: ${Object.keys(spec.subApis.workbook).length} (${Object.keys(spec.subApis.workbook).join(', ')})`,
 );
 console.log(
-  `  ws: ${Object.keys(spec.subApis.ws).length} (${Object.keys(spec.subApis.ws).join(', ')})`,
+  `  worksheet: ${Object.keys(spec.subApis.worksheet).length} (${Object.keys(spec.subApis.worksheet).join(', ')})`,
 );
 console.log(`\nTotal: ${ifaceCount} interfaces, ${methodCount} methods, ${typeCount} types`);

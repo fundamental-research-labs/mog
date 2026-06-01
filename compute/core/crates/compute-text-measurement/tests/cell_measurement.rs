@@ -19,7 +19,7 @@ fn cell_width_equals_raw_width_plus_padding() {
     let face = entry.face().unwrap();
 
     let font_size_pt = 11.0;
-    let font_size_px = font_size_pt * 4.0 / 3.0;
+    let font_size_px = font_size_pt;
     let raw_width = measure_text_width(&face, font_size_px, "Hello");
     let expected = raw_width + cell_measure::CELL_PADDING * 2.0 + cell_measure::AUTOFIT_PADDING;
 
@@ -83,7 +83,7 @@ fn cell_height_single_line_equals_line_height_plus_padding() {
     let face = entry.face().unwrap();
 
     let font_size_pt = 11.0;
-    let font_size_px = font_size_pt * 4.0 / 3.0;
+    let font_size_px = font_size_pt;
     let line_h = measure_line_height(&face, font_size_px);
     let expected = line_h + cell_measure::CELL_PADDING * 2.0;
 
@@ -109,7 +109,7 @@ fn cell_height_explicit_newlines_multiply_line_height() {
     let (_, entry) = db.resolve_styled("Carlito", false, false).unwrap();
     let face = entry.face().unwrap();
 
-    let font_size_px = 11.0 * 4.0 / 3.0;
+    let font_size_px = 11.0;
     let line_h = measure_line_height(&face, font_size_px);
     let padding = cell_measure::CELL_PADDING * 2.0;
 
@@ -175,7 +175,7 @@ fn cell_width_missing_font_returns_zero() {
 fn cell_height_missing_font_returns_fallback() {
     let db = FontDb::default();
     let font_size_pt = 11.0;
-    let font_size_px = font_size_pt * 4.0 / 3.0;
+    let font_size_px = font_size_pt;
     let expected = font_size_px * cell_measure::DEFAULT_LINE_HEIGHT_FACTOR;
 
     let h = measure_cell_height(
@@ -212,7 +212,7 @@ fn rotated_cell_90_degrees_swaps_dimensions() {
     let (_, entry) = db.resolve_styled("Carlito", false, false).unwrap();
     let face = entry.face().unwrap();
 
-    let font_size_px = 11.0 * 4.0 / 3.0;
+    let font_size_px = 11.0;
     let text_w = measure_text_width(&face, font_size_px, "Hello");
     let line_h = measure_line_height(&face, font_size_px);
     let pad2 = cell_measure::CELL_PADDING * 2.0;
@@ -252,7 +252,7 @@ fn rotated_cell_255_vertical_stacking() {
     let face = entry.face().unwrap();
 
     let text = "Hello";
-    let font_size_px = 11.0 * 4.0 / 3.0;
+    let font_size_px = 11.0;
     let line_h = measure_line_height(&face, font_size_px);
     let pad2 = cell_measure::CELL_PADDING * 2.0;
 

@@ -70,6 +70,10 @@ pub struct ChartLineData {
     pub dash_style: Option<ChartDashStyle>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transparency: Option<f64>,
+    /// Explicit `a:ln/a:noFill`. Absent line formatting is not the same as a
+    /// modeled transparent/no-line stroke.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub no_fill: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -131,6 +135,25 @@ pub enum ChartStrikeStyle {
     Double,
 }
 
+/// DrawingML text vertical mode (`a:bodyPr@vert`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ChartTextVerticalType {
+    #[serde(rename = "horz")]
+    Horizontal,
+    #[serde(rename = "vert")]
+    Vertical,
+    #[serde(rename = "vert270")]
+    Vertical270,
+    #[serde(rename = "wordArtVert")]
+    WordArtVert,
+    #[serde(rename = "eaVert")]
+    EastAsianVert,
+    #[serde(rename = "mongolianVert")]
+    MongolianVert,
+    #[serde(rename = "wordArtVertRtl")]
+    WordArtVertRtl,
+}
+
 /// A styled text run for rich text in chart titles and data labels.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -168,8 +191,12 @@ pub struct ChartFormatData {
     pub line: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font: Option<ChartFontData>,
+    /// Text rotation angle in degrees (`a:bodyPr@rot` divided by 60000).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_rotation: Option<f64>,
+    /// DrawingML vertical text mode (`a:bodyPr@vert`).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub text_vertical_type: Option<ChartTextVerticalType>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub shadow: Option<ChartShadowData>,
 }

@@ -292,6 +292,28 @@ export interface GridRenderer {
    */
   getRangePageBounds(range: CellRange): { x: number; y: number; width: number; height: number }[];
 
+  /**
+   * Get the rendered (drawn) size of a cell: its column width / row height
+   * scaled by the active zoom.
+   *
+   * This is independent of scroll position, of which viewport (main / frozen /
+   * split) the cell falls in, and of whether the cell is currently visible —
+   * only positioning and clipping depend on those (see `getCellPageBounds`).
+   * A cell scrolled fully or partially off-screen still reports its full drawn
+   * size here, whereas `getCellPageBounds` would clip to (or null out) the
+   * visible portion.
+   *
+   * Use this to measure intrinsic rendered dimensions (e.g. column width /
+   * row height readbacks). Use `getCellPageBounds` for click/overlay
+   * positioning where the clipped, visible rect is what you want.
+   *
+   * @param row - 0-indexed row
+   * @param col - 0-indexed column
+   * @returns Zoom-scaled drawn size, or null if the renderer is not ready
+   *          (no usable zoom)
+   */
+  getCellRenderedSize(row: number, col: number): { width: number; height: number } | null;
+
   // ===========================================================================
   // Hit Testing
   // ===========================================================================

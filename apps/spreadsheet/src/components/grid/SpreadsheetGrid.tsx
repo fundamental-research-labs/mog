@@ -103,6 +103,10 @@ import { ValidationDropdownOverlay } from './editors/ValidationDropdownOverlay';
 
 import { useRemoteCursors } from '../../hooks/collab/useRemoteCursors';
 
+function getOutlineSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
+  return summaryAfter ? end + 1 : start - 1;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -170,7 +174,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Get UI Store API for per-sheet scroll position restoration
   const uiStoreApi = useUIStoreApi();
 
-  // Get hyperlink handling for Ctrl+click
+  // Get hyperlink handling for click activation
   const hyperlinks = useHyperlinks();
 
   // Get sparkline manager (Sparklines)
@@ -223,17 +227,14 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
         const containing = resolvedGroups.filter(
           ({ range }) => row >= range.start && row <= range.end,
         );
+        const summaryGroups = resolvedGroups.filter(
+          ({ range }) => row === getOutlineSummaryIndex(range.start, range.end, summaryRowsBelow),
+        );
         const level =
           containing.length > 0 ? Math.max(...containing.map(({ group }) => group.level)) : 0;
-        const visible = !containing.some(({ group, range }) => {
-          if (!group.collapsed) return false;
-          const isSummaryRow = summaryRowsBelow ? row === range.end : row === range.start;
-          return !isSummaryRow;
-        });
-        const isSummary = containing.some(({ range }) =>
-          summaryRowsBelow ? row === range.end : row === range.start,
-        );
-        const groupIds = containing
+        const visible = !containing.some(({ group }) => group.collapsed);
+        const isSummary = summaryGroups.length > 0;
+        const groupIds = [...containing, ...summaryGroups]
           .sort((a, b) => b.group.level - a.group.level)
           .map(({ group }) => group.id);
         result.push({ index: row, level, visible, isSummary, groupIds });
@@ -256,17 +257,15 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
         const containing = resolvedGroups.filter(
           ({ range }) => col >= range.start && col <= range.end,
         );
+        const summaryGroups = resolvedGroups.filter(
+          ({ range }) =>
+            col === getOutlineSummaryIndex(range.start, range.end, summaryColumnsRight),
+        );
         const level =
           containing.length > 0 ? Math.max(...containing.map(({ group }) => group.level)) : 0;
-        const visible = !containing.some(({ group, range }) => {
-          if (!group.collapsed) return false;
-          const isSummaryCol = summaryColumnsRight ? col === range.end : col === range.start;
-          return !isSummaryCol;
-        });
-        const isSummary = containing.some(({ range }) =>
-          summaryColumnsRight ? col === range.end : col === range.start,
-        );
-        const groupIds = containing
+        const visible = !containing.some(({ group }) => group.collapsed);
+        const isSummary = summaryGroups.length > 0;
+        const groupIds = [...containing, ...summaryGroups]
           .sort((a, b) => b.group.level - a.group.level)
           .map(({ group }) => group.id);
         result.push({ index: col, level, visible, isSummary, groupIds });
@@ -356,7 +355,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     activeSheetId,
     containerRef,
     coordinator,
-    onHyperlinkClick: hyperlinks.handleCtrlClick,
+    onHyperlinkClick: hyperlinks.handleClick,
     onContextMenu: openContextMenu,
     groupingActions: {
       maxRowLevel: groupingState.maxRowLevel,

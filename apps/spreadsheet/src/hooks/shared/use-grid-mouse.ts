@@ -535,6 +535,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       return {
         isFormulaEditing: editorSelectors.isFormulaEditing(state),
         value: editorSelectors.value(state),
+        sheetId: state.context.sheetId,
       };
     },
     getActiveSheetName: () => wb.getSheetById(activeSheetId).name,
@@ -914,9 +915,10 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               break;
             }
 
-            // Ctrl+click on hyperlink opens the link
-            if ((e.ctrlKey || e.metaKey) && !e.shiftKey && onHyperlinkClick) {
+            // Excel opens hyperlinks on a plain click.
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey && onHyperlinkClick) {
               if (onHyperlinkClick(cell)) {
+                selection.onMouseDown(cell, false, false);
                 return;
               }
             }
@@ -1898,6 +1900,11 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     if (!container) return;
 
     const handlePointerDown = (e: PointerEvent) => {
+      // DOM overlays that own their own pointer behavior opt out of the grid
+      // native pointer path. React synthetic stopPropagation() cannot prevent
+      // this native listener from firing.
+      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+
       // Ensure keyboard focus is on the grid container for keyboard shortcuts.
       // Native pointer events (addEventListener) don't auto-focus like React synthetic events.
       // Without this, clicking on shapes/objects won't let Backspace/Delete work.
@@ -1913,12 +1920,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       } else {
         container.focus();
       }
-
-      // Skip events originating from editor overlays (autocomplete dropdowns, etc.).
-      // React synthetic stopPropagation() cannot prevent native handlers from firing
-      // (React 18 delegation timing), so DOM-overlay components that must not trigger
-      // cell-reference insertion use [data-no-grid-pointer] to opt out.
-      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
 
       // Skip events in scrollbar regions — ScrollContainer handles these.
       // Native pointerdown fires before React synthetic stopPropagation() can
@@ -1993,6 +1994,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     };
 
     const handlePointerMove = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+
       // Skip events in scrollbar regions to prevent selection extension
       // during scrollbar drag (same guard as handlePointerDown).
       const rect = container.getBoundingClientRect();
@@ -2004,6 +2007,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     };
 
     const handlePointerUp = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+
       // Reset page break dragging state
       isPageBreakDraggingRef.current = false;
 
@@ -2063,7 +2068,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       }
     };
 
-    const handlePointerCancel = (_e: PointerEvent) => {
+    const handlePointerCancel = (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+
       // Reset page break dragging state
       isPageBreakDraggingRef.current = false;
 

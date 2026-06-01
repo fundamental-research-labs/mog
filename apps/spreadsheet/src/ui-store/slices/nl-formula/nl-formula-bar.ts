@@ -107,15 +107,15 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlResponseLoading: () => {
-    set({ nlLoading: true });
+    set({ nlResult: null, nlError: null, nlLoading: true });
   },
 
   nlResponseSuccess: (result) => {
-    set({ nlResult: result, nlLoading: false });
+    set({ nlResult: result, nlError: null, nlLoading: false });
   },
 
   nlResponseError: (error) => {
-    set({ nlError: error, nlLoading: false });
+    set({ nlResult: null, nlError: error, nlLoading: false });
   },
 
   nlRetry: () => {
@@ -163,14 +163,14 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlExplainResponseLoading: () => {
-    set({ nlExplainLoading: true });
+    set({ nlExplainResult: null, nlExplainError: null, nlExplainLoading: true });
   },
 
   nlExplainResponseSuccess: (explanation) => {
-    set({ nlExplainResult: explanation, nlExplainLoading: false });
+    set({ nlExplainResult: explanation, nlExplainError: null, nlExplainLoading: false });
   },
 
   nlExplainResponseError: (error) => {
-    set({ nlExplainError: error, nlExplainLoading: false });
+    set({ nlExplainResult: null, nlExplainError: error, nlExplainLoading: false });
   },
 });

@@ -5,10 +5,16 @@ import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result, parse_a1
+from mog._unsupported import unsupported_python_path
+from mog.errors import NativeApiError
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
     from mog._bridge import Bridge
+
+
+_COMMENT_TYPE_NOTE = "note"
+_COMMENT_TYPE_THREADED = "threadedComment"
 
 
 def _extract_text(comment: Dict[str, Any]) -> str:
@@ -45,6 +51,65 @@ class CommentsAPI:
             c["text"] = _extract_text(c)
         return c
 
+    def _mutation_dict(self, raw: Any) -> Dict[str, Any]:
+        """Extract the MutationResult dict from a native mutation result."""
+        if isinstance(raw, tuple):
+            raw = raw[1] if len(raw) > 1 else raw[0]
+        return raw if isinstance(raw, dict) else {}
+
+    def _created_comment(self, raw: Any) -> Dict[str, Any]:
+        """Extract and normalize the comment payload from a mutation result."""
+        mutation_dict = self._mutation_dict(raw)
+        data = mutation_dict.get("data")
+        if isinstance(data, dict):
+            return self._normalize_comment(data)
+        return mutation_dict
+
+    def _add_by_position(
+        self,
+        row: int,
+        col: int,
+        text: str,
+        author: str,
+        author_id: Optional[str],
+        parent_id: Optional[str],
+        comment_type: str,
+    ) -> Any:
+        return self._bridge.call_json(
+            "compute_add_comment_by_position",
+            self._sheet_id_json,
+            row,
+            col,
+            text,
+            author,
+            json.dumps(author_id),
+            json.dumps(parent_id),
+            json.dumps(comment_type),
+        )
+
+    def _add_by_cell_id(
+        self,
+        cell_id: str,
+        text: str,
+        author: str,
+        author_id: Optional[str],
+        parent_id: Optional[str],
+        comment_type: str,
+    ) -> Any:
+        return self._bridge.call_json(
+            "compute_add_comment",
+            self._sheet_id_json,
+            cell_id,
+            text,
+            author,
+            json.dumps(author_id),
+            json.dumps(parent_id),
+            json.dumps(comment_type),
+        )
+
+    def _is_note(self, comment: Dict[str, Any]) -> bool:
+        return comment.get("commentType", comment.get("comment_type")) == _COMMENT_TYPE_NOTE
+
     # ------------------------------------------------------------------
     # Core operations
     # ------------------------------------------------------------------
@@ -80,31 +145,26 @@ class CommentsAPI:
         import re
         if re.match(r"^[A-Za-z]+\d+$", address_or_cell_id):
             row, col = parse_a1(address_or_cell_id)
-            raw = self._bridge.call_json(
-                "compute_add_comment_by_position",
-                self._sheet_id_json,
+            raw = self._add_by_position(
                 row,
                 col,
                 text,
                 author,
-                json.dumps(author_id),
-                json.dumps(parent_id),
+                author_id,
+                parent_id,
+                _COMMENT_TYPE_THREADED,
             )
         else:
-            raw = self._bridge.add_comment(
-                self._sheet_id_json, address_or_cell_id, text, author, author_id, parent_id
+            raw = self._add_by_cell_id(
+                address_or_cell_id,
+                text,
+                author,
+                author_id,
+                parent_id,
+                _COMMENT_TYPE_THREADED,
             )
 
-        # Raw is (bytes, dict) tuple from call_json; extract the data
-        if isinstance(raw, tuple):
-            mutation_dict = raw[1] if len(raw) > 1 else raw[0]
-        else:
-            mutation_dict = raw
-        if isinstance(mutation_dict, dict):
-            data = mutation_dict.get("data")
-            if isinstance(data, dict):
-                return self._normalize_comment(data)
-        return mutation_dict if isinstance(mutation_dict, dict) else {"raw": mutation_dict}
+        return self._created_comment(raw)
 
     def add_reply(
         self,
@@ -136,18 +196,15 @@ class CommentsAPI:
         cell_ref = parent.get("cellRef", "")
 
         # Use add_comment with parent_id to create a reply
-        raw = self._bridge.add_comment(
-            self._sheet_id_json, cell_ref, text, author, author_id, thread_id
+        raw = self._add_by_cell_id(
+            cell_ref,
+            text,
+            author,
+            author_id,
+            thread_id,
+            _COMMENT_TYPE_THREADED,
         )
-        if isinstance(raw, tuple):
-            mutation_dict = raw[1] if len(raw) > 1 else raw[0]
-        else:
-            mutation_dict = raw
-        if isinstance(mutation_dict, dict):
-            data = mutation_dict.get("data")
-            if isinstance(data, dict):
-                return self._normalize_comment(data)
-        return mutation_dict if isinstance(mutation_dict, dict) else {"raw": mutation_dict}
+        return self._created_comment(raw)
 
     def add_threaded(
         self,
@@ -237,7 +294,7 @@ class CommentsAPI:
             if isinstance(comments, list) and len(comments) > 0:
                 comment_id = comments[0]["id"]
             else:
-                return deserialize_mutation_result({})
+                raise ValueError(f"No comment found at {address_or_id!r}")
 
         raw = self._bridge.call_json(
             "compute_update_comment", self._sheet_id_json, comment_id, text
@@ -272,7 +329,13 @@ class CommentsAPI:
     # Notes (simplified comments -- single comment per cell, no threading)
     # ------------------------------------------------------------------
 
-    def add_note(self, address: str, text: str) -> MutationResult:
+    def add_note(
+        self,
+        address: str,
+        text: Any,
+        author: str = "User",
+        author_id: Optional[str] = None,
+    ) -> MutationResult:
         """Add a simple note to a cell.
 
         Notes are implemented as comments without threading.
@@ -282,10 +345,40 @@ class CommentsAPI:
         address:
             A1-style address.
         text:
-            Note text.
+            Note text, or an options dict with ``text`` and optional
+            ``author`` / ``authorId`` fields.
         """
-        result = self.add(address, text, author="Note")
-        return deserialize_mutation_result(result)
+        if isinstance(text, dict):
+            options = text
+            text = str(options.get("text", ""))
+            author = str(options.get("author", author))
+            author_id = options.get("authorId", options.get("author_id", author_id))
+
+        row, col = parse_a1(address)
+        raw = self._add_by_position(
+            row,
+            col,
+            str(text),
+            author,
+            author_id,
+            None,
+            _COMMENT_TYPE_NOTE,
+        )
+        return deserialize_mutation_result(self._mutation_dict(raw))
+
+    def set_note(
+        self,
+        address: str,
+        text: str,
+        author: str = "User",
+    ) -> MutationResult:
+        """Set or replace the note text for a cell."""
+        unsupported_python_path("ws.comments.set_note")
+        try:
+            self.remove_note(address)
+        except ValueError:
+            pass
+        return self.add_note(address, text, author=author)
 
     def get_note(self, address: str) -> Optional[str]:
         """Get the note text for a cell, or ``None`` if no note.
@@ -301,7 +394,9 @@ class CommentsAPI:
             self._sheet_id_json, row, col,
         )
         if isinstance(comments, list) and len(comments) > 0:
-            return _extract_text(comments[0])
+            for comment in comments:
+                if isinstance(comment, dict) and self._is_note(comment):
+                    return _extract_text(comment)
         return None
 
     def remove_note(self, address: str) -> MutationResult:
@@ -313,8 +408,25 @@ class CommentsAPI:
             A1-style address.
         """
         row, col = parse_a1(address)
-        raw = self._bridge.call_json(
-            "compute_delete_comments_for_cell_by_position",
-            self._sheet_id_json, row, col,
+        comments = self._bridge.call_json(
+            "compute_get_comments_for_cell_by_position",
+            self._sheet_id_json,
+            row,
+            col,
         )
-        return deserialize_mutation_result(raw)
+        if not isinstance(comments, list):
+            raise NativeApiError(
+                "compute_get_comments_for_cell_by_position returned a non-list response"
+            )
+
+        raw: Any = None
+        for comment in comments:
+            if isinstance(comment, dict) and self._is_note(comment):
+                raw = self._bridge.call_json(
+                    "compute_delete_comment",
+                    self._sheet_id_json,
+                    comment.get("id", ""),
+                )
+        if raw is None:
+            raise ValueError(f"No note found at {address!r}")
+        return deserialize_mutation_result(self._mutation_dict(raw))

@@ -4,6 +4,8 @@
 //! validations, sheet protection, sparklines, page breaks, auto filter,
 //! outline groups, floating objects, and conditional formats.
 
+use std::collections::{HashMap, HashSet};
+
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use compute_document::schema::*;
@@ -548,7 +550,8 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         Some(Out::YMap(m)) => m,
         _ => return (vec![], vec![], vec![], vec![], vec![]),
     };
-    let mut floating_objects = Vec::new();
+    let mut floating_objects_by_key: HashMap<String, FloatingObject> = HashMap::new();
+    let mut floating_object_keys_by_id: HashMap<String, String> = HashMap::new();
     let mut slicers = Vec::new();
     let mut slicer_anchors = Vec::new();
     let mut timelines = Vec::new();
@@ -574,11 +577,42 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
                 // `fobj-{ts}-{random}` (API-created) or the object's own ID
                 // such as `chart-import-{index}` (XLSX-imported).
                 if let Some(obj) = yrs_schema::floating_object::from_yrs_map(&map, &txn) {
-                    floating_objects.push(obj);
+                    floating_object_keys_by_id.insert(obj.common.id.clone(), key.clone());
+                    floating_objects_by_key.insert(key, obj);
                 }
             }
         }
     }
+
+    let mut floating_objects = Vec::with_capacity(floating_objects_by_key.len());
+    let mut seen_order_ids = HashSet::new();
+    if let Some(Out::YArray(order)) = sheet_map.get(&txn, KEY_FLOATING_OBJECT_ORDER) {
+        for value in order.iter(&txn) {
+            let Out::Any(Any::String(object_id)) = value else {
+                continue;
+            };
+            if !seen_order_ids.insert(object_id.to_string()) {
+                continue;
+            }
+            if let Some(obj) = take_floating_object_by_order_id(
+                &mut floating_objects_by_key,
+                &floating_object_keys_by_id,
+                &object_id,
+            ) {
+                floating_objects.push(obj);
+            }
+        }
+    }
+    let mut remaining_objects: Vec<(String, FloatingObject)> =
+        floating_objects_by_key.into_iter().collect();
+    remaining_objects.sort_by(|(a_key, a), (b_key, b)| {
+        a.common
+            .z_index
+            .cmp(&b.common.z_index)
+            .then_with(|| a.common.id.cmp(&b.common.id))
+            .then_with(|| a_key.cmp(b_key))
+    });
+    floating_objects.extend(remaining_objects.into_iter().map(|(_, obj)| obj));
 
     let workbook = stores.storage.workbook_map();
 
@@ -637,6 +671,18 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         timelines,
         timeline_anchors,
     )
+}
+
+fn take_floating_object_by_order_id(
+    objects_by_key: &mut HashMap<String, FloatingObject>,
+    keys_by_object_id: &HashMap<String, String>,
+    object_id: &str,
+) -> Option<FloatingObject> {
+    objects_by_key.remove(object_id).or_else(|| {
+        keys_by_object_id
+            .get(object_id)
+            .and_then(|key| objects_by_key.remove(key))
+    })
 }
 
 // -------------------------------------------------------------------

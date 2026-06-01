@@ -184,6 +184,9 @@ impl DrawingWriter {
             w.start_element("xdr:cNvPr")
                 .attr_num("id", cx_ref.id)
                 .attr("name", &cx_ref.name);
+            if cx_ref.hidden {
+                w.attr("hidden", "1");
+            }
             if let Some(ref ext_lst) = cx_ref.nv_ext_lst {
                 w.end_attrs();
                 self.write_raw_xml(w, ext_lst);
@@ -205,7 +208,17 @@ impl DrawingWriter {
 
         // Transform — preserve the typed graphic frame transform. For two-cell
         // anchors Excel also stores the position on the anchor itself.
-        w.start_element("xdr:xfrm").end_attrs();
+        w.start_element("xdr:xfrm");
+        if let Some(rot) = cx_ref.xfrm_rot {
+            w.attr_num("rot", rot);
+        }
+        if let Some(flip_h) = cx_ref.xfrm_flip_h {
+            w.attr("flipH", if flip_h { "1" } else { "0" });
+        }
+        if let Some(flip_v) = cx_ref.xfrm_flip_v {
+            w.attr("flipV", if flip_v { "1" } else { "0" });
+        }
+        w.end_attrs();
         {
             w.start_element("a:off")
                 .attr_num("x", cx_ref.xfrm_off_x)

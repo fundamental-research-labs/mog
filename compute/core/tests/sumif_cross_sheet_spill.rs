@@ -345,10 +345,10 @@ fn sumif_cross_sheet_quoted_name_with_spaces() {
         (3, 1, CellValue::number(4.0)),
     ];
 
-    let report_formulas = vec![(0, 0, "SUMIF('Week 2'!A:A,10,'Week 2'!B:B)", None)];
+    let report_formulas = vec![(0, 0, "SUMIF('Data Source'!A:A,10,'Data Source'!B:B)", None)];
 
     let snapshot = build_multi_sheet_snapshot(vec![
-        ("Week 2", 10, 3, data_cells, vec![]),
+        ("Data Source", 10, 3, data_cells, vec![]),
         ("Report", 10, 3, vec![], report_formulas),
     ]);
 
@@ -392,7 +392,7 @@ fn sumif_cross_sheet_let_spill_criteria() {
 
     let snapshot = build_multi_sheet_snapshot(vec![
         ("Raw Data", 10, 3, data_cells, vec![]),
-        ("Units By Store", 10, 12, vec![], report_formulas),
+        ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
     let mut mirror = CellMirror::new();
@@ -411,7 +411,7 @@ fn sumif_cross_sheet_let_spill_criteria() {
     assert_number(&l6, 0.0, "LET/UNIQUE spill + cross-sheet SUMIF (B6=empty)");
 }
 
-/// Exact reproduction of the real XLSX pattern that triggered the bug.
+/// Synthetic reproduction of the imported workbook pattern that triggered the bug.
 #[test]
 fn sumif_exact_reproduction_cross_sheet_let_spill_absolute_refs() {
     let mut data_cells = Vec::new();
@@ -423,15 +423,30 @@ fn sumif_exact_reproduction_cross_sheet_let_spill_absolute_refs() {
     }
 
     let report_formulas = vec![
-        (2, 1, "LET(a,UNIQUE('Week 2'!C1:C6),a)", Some("B3:B5")),
-        (3, 11, "SUMIF('Week 2'!$C:$C,$B4,'Week 2'!P:P)", None),
-        (4, 11, "SUMIF('Week 2'!$C:$C,$B5,'Week 2'!P:P)", None),
-        (5, 11, "SUMIF('Week 2'!$C:$C,$B6,'Week 2'!P:P)", None),
+        (2, 1, "LET(a,UNIQUE('Data Source'!C1:C6),a)", Some("B3:B5")),
+        (
+            3,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            4,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            5,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B6,'Data Source'!P:P)",
+            None,
+        ),
     ];
 
     let snapshot = build_multi_sheet_snapshot(vec![
-        ("Week 2", 10, 16, data_cells, vec![]),
-        ("Units By Store", 10, 12, vec![], report_formulas),
+        ("Data Source", 10, 16, data_cells, vec![]),
+        ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
     let mut mirror = CellMirror::new();
@@ -464,16 +479,26 @@ fn sumif_cross_sheet_let_sortby_spill_criteria() {
         (
             2,
             1,
-            "LET(a,UNIQUE('Week 2'!C1:C6),SORTBY(a,a))",
+            "LET(a,UNIQUE('Data Source'!C1:C6),SORTBY(a,a))",
             Some("B3:B5"),
         ),
-        (3, 11, "SUMIF('Week 2'!$C:$C,$B4,'Week 2'!P:P)", None),
-        (4, 11, "SUMIF('Week 2'!$C:$C,$B5,'Week 2'!P:P)", None),
+        (
+            3,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B4,'Data Source'!P:P)",
+            None,
+        ),
+        (
+            4,
+            11,
+            "SUMIF('Data Source'!$C:$C,$B5,'Data Source'!P:P)",
+            None,
+        ),
     ];
 
     let snapshot = build_multi_sheet_snapshot(vec![
-        ("Week 2", 10, 16, data_cells, vec![]),
-        ("Units By Store", 10, 12, vec![], report_formulas),
+        ("Data Source", 10, 16, data_cells, vec![]),
+        ("Summary", 10, 12, vec![], report_formulas),
     ]);
 
     let mut mirror = CellMirror::new();
@@ -595,7 +620,7 @@ fn sumif_agg_prepass_10_formulas_200_rows() {
     }
 }
 
-/// 10 SUMIF + 500 data rows — the scale that matches the real XLSX file.
+/// 10 SUMIF + 500 data rows to exercise the aggregate prepass path.
 #[test]
 fn sumif_agg_prepass_10_formulas_500_rows() {
     let mut data_cells = Vec::new();

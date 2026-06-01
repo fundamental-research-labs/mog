@@ -23,6 +23,7 @@ import type { FormControl } from '@mog-sdk/contracts/form-controls';
 import { ButtonOverlayControl } from './ButtonOverlayControl';
 import { CheckboxOverlayControl } from './CheckboxOverlayControl';
 import { ComboBoxOverlayControl } from './ComboBoxOverlayControl';
+import { ListBoxOverlayControl } from './ListBoxOverlayControl';
 
 // =============================================================================
 // Types
@@ -45,6 +46,8 @@ export interface ResolvedFormControl {
   width: number;
   /** Rendered height after resolving the anchor cell's current geometry */
   height: number;
+  /** Linked cell position, when the control stores its value in a cell. */
+  linkedCellPosition?: { row: number; col: number };
   /** Resolved items for comboBox controls (from static or dynamic source) */
   resolvedItems?: string[];
 }
@@ -71,7 +74,7 @@ interface ControlRendererProps {
  */
 const ControlRenderer = memo(
   function ControlRenderer({ resolved, onCellValueChange }: ControlRendererProps) {
-    const { control, x, y, cellValue, width, height, resolvedItems } = resolved;
+    const { control, x, y, cellValue, width, height, linkedCellPosition, resolvedItems } = resolved;
 
     let content: React.ReactNode;
 
@@ -93,6 +96,8 @@ const ControlRenderer = memo(
           <ButtonOverlayControl
             control={control}
             cellValue={cellValue}
+            width={width}
+            height={height}
             onCellValueChange={onCellValueChange}
           />
         );
@@ -101,6 +106,19 @@ const ControlRenderer = memo(
       case 'comboBox':
         content = (
           <ComboBoxOverlayControl
+            control={control}
+            cellValue={cellValue}
+            width={width}
+            height={height}
+            resolvedItems={resolvedItems ?? control.items ?? []}
+            onCellValueChange={onCellValueChange}
+          />
+        );
+        break;
+
+      case 'listBox':
+        content = (
+          <ListBoxOverlayControl
             control={control}
             cellValue={cellValue}
             width={width}
@@ -132,6 +150,8 @@ const ControlRenderer = memo(
         }}
         data-form-control-id={control.id}
         data-form-control-type={control.type}
+        data-form-control-linked-row={linkedCellPosition?.row}
+        data-form-control-linked-col={linkedCellPosition?.col}
       >
         {content}
       </div>

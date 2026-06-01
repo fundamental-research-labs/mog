@@ -24,6 +24,12 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
     if styles_writer.default_pivot_style.is_none() {
         styles_writer.default_pivot_style = remapped_output.default_pivot_style.clone();
     }
+    if styles_writer.colors.is_none() {
+        styles_writer.colors = remapped_output
+            .workbook_stylesheet
+            .as_ref()
+            .and_then(|stylesheet| stylesheet.normalized().indexed_colors);
+    }
 
     let mut shared_strings = sheet_parts::build_shared_strings(&remapped_output);
     shared_strings.set_root_ext_lst_xml(

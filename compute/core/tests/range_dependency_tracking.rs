@@ -7,10 +7,10 @@
 //! - Growth or shrinkage of the sheet's populated extent between the op
 //!   and the inverse.
 //!
-//! **Bug pin.** Directly targets the `Ib6CYMnT` hypothesis (full-column
-//! bbox cache growing on forward writes, not shrinking on revert). The
-//! named test `regression_ib6cymnt_fullcol_bbox_extent_miss` is expected
-//! to **fail today**.
+//! **Bug pin.** Directly targets the full-column dynamic-extent hypothesis
+//! (bbox cache growing on forward writes, not shrinking on revert). The
+//! named test `regression_fullcol_bbox_extent_miss` is expected to **fail
+//! today**.
 //!
 //! **Methodology.** White-box-ish — asserts via dependent formula value,
 //! never internal bbox-cache state. Tests survive refactors of the
@@ -50,8 +50,8 @@ mod indirect;
 mod named;
 #[path = "range_dependency_tracking/offset.rs"]
 mod offset;
-#[path = "range_dependency_tracking/regression_ib6cymnt.rs"]
-mod regression_ib6cymnt;
+#[path = "range_dependency_tracking/regression_fullcol_extent.rs"]
+mod regression_fullcol_extent;
 #[path = "range_dependency_tracking/summary.rs"]
 mod summary;
 #[path = "range_dependency_tracking/table_refs.rs"]
@@ -93,8 +93,8 @@ fn class_ii_table_refs_family_deferred() {
 }
 
 #[test]
-fn regression_ib6cymnt_fullcol_bbox_extent_miss() {
-    regression_ib6cymnt::regression_ib6cymnt_fullcol_bbox_extent_miss();
+fn regression_fullcol_bbox_extent_miss() {
+    regression_fullcol_extent::regression_fullcol_bbox_extent_miss();
 }
 
 #[cfg(feature = "audit-tests")]

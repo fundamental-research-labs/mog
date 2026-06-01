@@ -1,6 +1,6 @@
 # Drawing System
 
-7 standalone TypeScript packages for 2D drawing, shapes, inking, diagrams, text effects, and visual rendering. Pure computation — no DOM, Canvas, React, or Yjs dependencies (except rendering output paths). Part of the [Spreadsheet OS](../docs/README.md) hardware layer.
+7 standalone TypeScript packages for 2D drawing, shapes, inking, diagrams, text effects, and visual rendering. Pure computation — no DOM, Canvas, React, or Yjs dependencies (except rendering output paths). Part of the [Spreadsheet OS](../../docs/architecture/os/README.md) hardware layer.
 
 ## Architecture
 
@@ -38,7 +38,7 @@
 | [ink/](ink/) | `@mog/ink-engine` | 8 | 8 | Ink/stroke drawing: smoothing, pressure, eraser, spatial index |
 | [text-effects/](text-effects/) | `@mog/text-effects-engine` | 18 | 8 | Text-effects engine: 36+ OOXML text warp presets, 3D effects |
 | [diagram/](diagram/) | `@mog/diagram-engine` | 64 | 41 | Diagram engine: 10 layout algorithms, OOXML parser, styles |
-| [lab/](lab/) | `@mog/canvas-lab` | 31 | 0 | Private Vite app for visual testing (not published) |
+| `lab/` | `@mog/canvas-lab` | 31 | 0 | Private Vite app for visual testing (not published) |
 
 **Totals:** 177 source files, 106 test files
 
@@ -277,7 +277,7 @@ Every package exports a diagnostics API for headless debugging:
 - `compare*()` functions diff two objects
 - `generate*Report()` functions produce human-readable summaries
 
-See [docs/DIAGNOSTICS.md](../docs/DIAGNOSTICS.md) for the framework.
+Diagnostics are implemented in each package under its `src/diagnostics/` module.
 
 ### 4. OOXML Compatibility
 
@@ -298,7 +298,7 @@ Shape presets, warp presets, diagram layouts, and effects all follow OOXML (Offi
 
 | Document | Purpose |
 |----------|---------|
-| [docs/README.md](../docs/README.md) | OS architecture overview |
-| [docs/spreadsheet/ARCHITECTURE.md](../docs/spreadsheet/ARCHITECTURE.md) | Spreadsheet architecture (drawing is in hardware layer) |
-| [docs/DIAGNOSTICS.md](../docs/DIAGNOSTICS.md) | Headless diagnostics framework |
-| [docs/DEVELOPMENT-PHILOSOPHY.md](../docs/DEVELOPMENT-PHILOSOPHY.md) | AI-assisted parallel development |
+| [docs/README.md](../../docs/README.md) | Docs index |
+| [docs/architecture/os/README.md](../../docs/architecture/os/README.md) | OS architecture overview |
+| [docs/internals/spreadsheet/ARCHITECTURE.md](../../docs/internals/spreadsheet/ARCHITECTURE.md) | Spreadsheet architecture (drawing is in hardware layer) |
+| [engine/src/diagnostics/](engine/src/diagnostics/) | Headless diagnostics pattern |

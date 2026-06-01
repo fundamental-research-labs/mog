@@ -30,6 +30,8 @@ fn chart_group_basic() {
         d_lbls: None,
         ax_id: vec![1, 2],
         raw_chart_type_attr: None,
+        raw_chart_element_name: None,
+        raw_chart_group_xml: None,
     };
     assert_eq!(cg.chart_type, ChartType::Bar);
     assert_eq!(cg.ax_id, vec![1, 2]);

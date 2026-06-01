@@ -14,6 +14,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
+import { RAW_BUBBLE_SIZE_FIELD, SERIES_FIELD } from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   ExportOptions,
@@ -85,6 +86,8 @@ export function generateScatterChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -104,12 +107,13 @@ export function generateBubbleChartXML(
 ): OOXMLExportResult {
   const encoding = spec.encoding!;
   const sheetName = options?.sheetName ?? 'Sheet1';
+  const bubbleOptions = resolveBubbleChartOptions(spec);
 
   // Extract bubble series data
   const seriesData = extractBubbleSeriesData(data, encoding);
 
   // Generate bubble chart content
-  const chartContent = generateBubbleChartContent(seriesData, sheetName);
+  const chartContent = generateBubbleChartContent(seriesData, sheetName, bubbleOptions);
 
   // Generate axes (both value axes for bubble)
   const axes = [
@@ -132,6 +136,8 @@ export function generateBubbleChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -232,13 +238,27 @@ function generateScatterSeriesXML(
 /**
  * Generate the <c:bubbleChart> element content.
  */
-function generateBubbleChartContent(seriesData: ScatterSeriesData[], sheetName: string): string {
+interface BubbleChartOptions {
+  bubbleScale: number;
+  showNegBubbles: boolean;
+  sizeRepresents?: 'area' | 'w';
+  bubble3D: boolean;
+}
+
+function generateBubbleChartContent(
+  seriesData: ScatterSeriesData[],
+  sheetName: string,
+  options: BubbleChartOptions,
+): string {
+  const sizeRepresentsXml = options.sizeRepresents
+    ? `\n    <c:sizeRepresents val="${options.sizeRepresents}"/>`
+    : '';
   return `<c:bubbleChart>
     <c:varyColors val="0"/>
-    ${seriesData.map((series, idx) => generateBubbleSeriesXML(series, idx, sheetName)).join('\n    ')}
+    ${seriesData.map((series, idx) => generateBubbleSeriesXML(series, idx, sheetName, options)).join('\n    ')}
     ${generateDataLabelsXML()}
-    <c:bubbleScale val="100"/>
-    <c:showNegBubbles val="0"/>
+    <c:bubbleScale val="${options.bubbleScale}"/>
+    <c:showNegBubbles val="${options.showNegBubbles ? '1' : '0'}"/>${sizeRepresentsXml}
     <c:axId val="${AXIS_IDS.CATEGORY}"/>
     <c:axId val="${AXIS_IDS.VALUE}"/>
   </c:bubbleChart>`;
@@ -251,6 +271,7 @@ function generateBubbleSeriesXML(
   series: ScatterSeriesData,
   index: number,
   sheetName: string,
+  options: BubbleChartOptions,
 ): string {
   const ptCount = series.points.length;
 
@@ -310,8 +331,25 @@ function generateBubbleSeriesXML(
         </c:numCache>
       </c:numRef>
     </c:bubbleSize>
-    <c:bubble3D val="0"/>
+    <c:bubble3D val="${options.bubble3D ? '1' : '0'}"/>
   </c:ser>`;
+}
+
+function resolveBubbleChartOptions(spec: ChartSpec): BubbleChartOptions {
+  return {
+    bubbleScale: bubbleScaleValue(spec.config?.bubbleScale),
+    showNegBubbles: spec.config?.showNegBubbles === true,
+    sizeRepresents:
+      spec.config?.sizeRepresents === 'area' || spec.config?.sizeRepresents === 'w'
+        ? spec.config.sizeRepresents
+        : undefined,
+    bubble3D: spec.config?.bubble3DEffect === true,
+  };
+}
+
+function bubbleScaleValue(value: unknown): number {
+  const scale = typeof value === 'number' && Number.isFinite(value) ? value : 100;
+  return Math.round(Math.max(0, Math.min(300, scale)));
 }
 
 // =============================================================================
@@ -325,13 +363,14 @@ function extractScatterSeriesData(data: DataRow[], encoding: EncodingSpec): Scat
   const xField = encoding.x?.field;
   const yField = encoding.y?.field;
   const colorField = encoding.color?.field;
+  const seriesField = exportSeriesField(data, colorField);
 
   if (!xField || !yField) {
     throw new Error('Scatter chart requires both x and y fields');
   }
 
-  // If no color encoding, single series
-  if (!colorField) {
+  // If rows carry no series identity, export a single default series.
+  if (!seriesField) {
     const points: XYPoint[] = data.map((row) => ({
       x: Number(row[xField]) || 0,
       y: Number(row[yField]) || 0,
@@ -346,8 +385,8 @@ function extractScatterSeriesData(data: DataRow[], encoding: EncodingSpec): Scat
     ];
   }
 
-  // Group by color field using shared algebra module
-  const groups = groupBy(data, colorField);
+  // Group by color/series field using shared algebra module
+  const groups = groupBy(data, seriesField);
 
   // Convert to series array
   const series: ScatterSeriesData[] = [];
@@ -376,17 +415,18 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
   const yField = encoding.y?.field;
   const sizeField = encoding.size?.field;
   const colorField = encoding.color?.field;
+  const seriesField = exportSeriesField(data, colorField);
 
   if (!xField || !yField) {
     throw new Error('Bubble chart requires both x and y fields');
   }
 
-  // If no color encoding, single series
-  if (!colorField) {
+  // If rows carry no series identity, export a single default series.
+  if (!seriesField) {
     const points: XYPoint[] = data.map((row) => ({
       x: Number(row[xField]) || 0,
       y: Number(row[yField]) || 0,
-      size: sizeField ? Number(row[sizeField]) || 10 : 10,
+      size: bubbleExportSize(row, sizeField),
     }));
 
     return [
@@ -398,8 +438,8 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
     ];
   }
 
-  // Group by color field using shared algebra module
-  const groups = groupBy(data, colorField);
+  // Group by color/series field using shared algebra module
+  const groups = groupBy(data, seriesField);
 
   // Convert to series array
   const series: ScatterSeriesData[] = [];
@@ -411,7 +451,7 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
       points: rows.map((row) => ({
         x: Number(row[xField]) || 0,
         y: Number(row[yField]) || 0,
-        size: sizeField ? Number(row[sizeField]) || 10 : 10,
+        size: bubbleExportSize(row, sizeField),
       })),
       color: getDefaultColor(colorIndex),
     });
@@ -419,6 +459,18 @@ function extractBubbleSeriesData(data: DataRow[], encoding: EncodingSpec): Scatt
   }
 
   return series;
+}
+
+function bubbleExportSize(row: DataRow, sizeField: string | undefined): number {
+  const rawSize = Number(row[RAW_BUBBLE_SIZE_FIELD]);
+  if (Number.isFinite(rawSize)) return rawSize;
+  const encodedSize = sizeField ? Number(row[sizeField]) : NaN;
+  return Number.isFinite(encodedSize) ? encodedSize : 10;
+}
+
+function exportSeriesField(data: DataRow[], colorField: string | undefined): string | undefined {
+  if (colorField) return colorField;
+  return data.some((row) => row[SERIES_FIELD] !== undefined) ? SERIES_FIELD : undefined;
 }
 
 // =============================================================================

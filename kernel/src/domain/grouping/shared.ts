@@ -108,52 +108,48 @@ export function resolveGroupRange(group: GroupDefinition): { start: number; end:
 
 /**
  * Compute rows that would be affected by collapsing/expanding a group.
- * For row groups, returns rows that are hidden/shown (excludes summary row).
+ * For row groups, returns the detail rows that are hidden/shown. Summary rows
+ * are adjacent to the group and are not included in GroupDefinition.start/end.
  *
  * Pure computation on a GroupDefinition — no CRDT or ComputeBridge needed.
  *
  * @param group - Group definition
- * @param summaryRowsBelow - Whether summary row is below the detail rows
+ * @param _summaryRowsBelow - Retained for API compatibility
  * @returns Array of row indices that would be affected
  */
 export function computeAffectedRows(
   group: GroupDefinition,
-  summaryRowsBelow: boolean = true,
+  _summaryRowsBelow: boolean = true,
 ): number[] {
   if (group.axis !== 'row') return [];
 
   const rows: number[] = [];
   for (let row = group.start; row <= group.end; row++) {
-    const isSummaryRow = summaryRowsBelow ? row === group.end : row === group.start;
-    if (!isSummaryRow) {
-      rows.push(row);
-    }
+    rows.push(row);
   }
   return rows;
 }
 
 /**
  * Compute columns that would be affected by collapsing/expanding a group.
- * For column groups, returns columns that are hidden/shown (excludes summary column).
+ * For column groups, returns the detail columns that are hidden/shown. Summary
+ * columns are adjacent to the group and are not included in GroupDefinition.start/end.
  *
  * Pure computation on a GroupDefinition — no CRDT or ComputeBridge needed.
  *
  * @param group - Group definition
- * @param summaryColumnsRight - Whether summary column is to the right
+ * @param _summaryColumnsRight - Retained for API compatibility
  * @returns Array of column indices that would be affected
  */
 export function computeAffectedColumns(
   group: GroupDefinition,
-  summaryColumnsRight: boolean = true,
+  _summaryColumnsRight: boolean = true,
 ): number[] {
   if (group.axis !== 'column') return [];
 
   const cols: number[] = [];
   for (let col = group.start; col <= group.end; col++) {
-    const isSummaryCol = summaryColumnsRight ? col === group.end : col === group.start;
-    if (!isSummaryCol) {
-      cols.push(col);
-    }
+    cols.push(col);
   }
   return cols;
 }

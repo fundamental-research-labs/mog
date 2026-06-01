@@ -86,9 +86,9 @@ fn test_structured_ref_isnumber() {
     assert_cell_boolean(&result, 0, 3, 1, false);
 }
 
-/// The exact formula shape from the corpus that produced #VALUE! where Excel returns 0.
+/// Structured-reference conditional shape that should return zero, not #VALUE!.
 #[test]
-fn test_structured_ref_full_corpus_pattern() {
+fn test_structured_ref_this_row_conditionals() {
     let formula = concat!(
         "IF(OR(",
         "Deals8[[#This Row],[Exit CR]]=\"\",",

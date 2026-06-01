@@ -11,9 +11,10 @@ use domain_types::ParseOutput;
 /// Result of a successful CSV import.
 ///
 /// `output` carries the per-cell `style_id` references and the 4-entry
-/// style palette (`General`, `m/d/yyyy`, `h:mm:ss`, `@`). The `warnings`
-/// channel surfaces recoverable parser observations — the caller should
-/// NOT treat a non-empty warnings vec as failure.
+/// style palette (`General`, `m/d/yyyy`, `h:mm:ss`, `@`, plus CSV-specific
+/// display formats). The `warnings` channel surfaces recoverable parser
+/// observations — the caller should NOT treat a non-empty warnings vec as
+/// failure.
 #[derive(Debug, Clone)]
 pub struct CsvParseResult {
     /// Single-sheet `ParseOutput` ready for the existing XLSX hydration
@@ -39,9 +40,11 @@ pub enum CsvWarning {
     /// Input was 0 bytes or only a BOM. The parser still produced an
     /// empty single-sheet output.
     EmptyInput,
-    /// `chardetng` chose an encoding other than UTF-8 (or the user-supplied
-    /// label).
+    /// A non-UTF-8 decoder was used for lenient import.
     EncodingFallback { from: String, to: String },
+    /// BOM-less default UTF-8 decode found malformed byte sequences. The
+    /// parser replaced each invalid sequence with U+FFFD and continued.
+    MalformedUtf8,
     /// A row produced fewer or more columns than the header row. The parser
     /// keeps the row at its actual width; the UI may want to flag this.
     MismatchedRowWidth {
@@ -63,9 +66,7 @@ pub enum CsvWarning {
 /// effort over erroring. Reserved for genuinely undecodable input.
 #[derive(Debug, Error)]
 pub enum CsvParseError {
-    /// `chardetng` could not produce a decoder that yielded valid UTF-8
-    /// even with replacement, or the user-supplied `encoding` label was
-    /// unknown to `encoding_rs`.
+    /// The user-supplied `encoding` label was unknown to `encoding_rs`.
     #[error("Could not decode CSV bytes: {0}")]
     UnreadableEncoding(String),
 

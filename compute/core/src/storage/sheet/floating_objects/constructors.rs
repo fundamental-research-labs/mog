@@ -18,6 +18,7 @@ use super::keys::{
     KEY_END_ROW_OFFSET_EMU, KEY_EXTENT_CX_EMU, KEY_EXTENT_CY_EMU,
 };
 use super::objects::get_all_floating_objects;
+use super::order::append_object_id_if_missing;
 use super::sheet_map::get_sheet_submap;
 use super::units::{json_i64_alias, px_to_emu};
 
@@ -127,6 +128,7 @@ pub fn create_shape_from_config(
     };
 
     write_object_typed(&mut txn, &map, &object_id, &obj);
+    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &object_id);
     serde_json::to_value(&obj).map_err(|e| ComputeError::Eval {
         message: e.to_string(),
     })
@@ -285,6 +287,7 @@ pub fn create_chart_object(
     };
 
     write_object_typed(&mut txn, &map, &object_id, &obj);
+    append_object_id_if_missing(&mut txn, sheets, &sheet_hex, &object_id);
     serde_json::to_value(&obj).map_err(|e| ComputeError::Eval {
         message: e.to_string(),
     })

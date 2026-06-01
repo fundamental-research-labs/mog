@@ -145,6 +145,13 @@ fn test_add_sheet_creates_all_domain_maps() {
         matches!(sheet_map.get(&txn, "colOrder"), Some(Out::YArray(_))),
         "sheet should have 'colOrder' YArray"
     );
+    assert!(
+        matches!(
+            sheet_map.get(&txn, "floatingObjectOrder"),
+            Some(Out::YArray(_))
+        ),
+        "sheet should have 'floatingObjectOrder' YArray"
+    );
 }
 
 pub(super) fn assert_from_snapshot_creates_all_sheet_domain_maps(storage: &YrsStorage) {
@@ -184,5 +191,12 @@ pub(super) fn assert_from_snapshot_creates_all_sheet_domain_maps(storage: &YrsSt
     assert!(
         matches!(sheet_map.get(&txn, "colOrder"), Some(Out::YArray(_))),
         "sheet should have 'colOrder' YArray after from_snapshot"
+    );
+    assert!(
+        matches!(
+            sheet_map.get(&txn, "floatingObjectOrder"),
+            Some(Out::YArray(_))
+        ),
+        "sheet should have 'floatingObjectOrder' YArray after from_snapshot"
     );
 }

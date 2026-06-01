@@ -1,7 +1,7 @@
 use super::support::{assert_cell_text, build_snapshot, print_recalc_diagnostics, recalc_snapshot};
 use value_types::CellValue;
 
-/// The XLSX corpus uses `_xlfn.IFS(...)`. The parser strips `_xlfn.` prefix,
+/// Imported XLSX files can use `_xlfn.IFS(...)`. The parser strips `_xlfn.` prefix,
 /// so this should work identically to plain `IFS(...)`.
 #[test]
 fn test_xlfn_ifs_prefix_stripped() {

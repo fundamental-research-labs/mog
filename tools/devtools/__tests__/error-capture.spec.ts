@@ -14,8 +14,7 @@
  *
  * They map 1:1 to the three describe-blocks below.
  *
- * Pattern matches `dev/app-eval/__tests__/*.spec.ts` — bun:test, ESM,
- * no test runner config required.
+ * Uses bun:test and ESM directly so no test runner config is required.
  */
 
 import { describe, test, expect, beforeEach } from 'bun:test';

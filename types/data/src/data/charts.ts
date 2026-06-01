@@ -118,7 +118,7 @@ export type StockSubType = 'hlc' | 'ohlc' | 'volume-hlc' | 'volume-ohlc';
 /**
  * Radar chart sub-types
  */
-export type RadarSubType = 'basic' | 'filled';
+export type RadarSubType = 'basic' | 'markers' | 'filled';
 
 /**
  * Data series orientation
@@ -128,7 +128,17 @@ export type SeriesOrientation = 'rows' | 'columns';
 /**
  * Legend position options
  */
-export type LegendPosition = 'top' | 'bottom' | 'left' | 'right' | 'none' | 'corner' | 'custom';
+export type LegendPosition =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'topRight'
+  | 'top-right'
+  | 'tr'
+  | 'none'
+  | 'corner'
+  | 'custom';
 
 /**
  * Axis type
@@ -176,6 +186,8 @@ export interface ChartLineFormat {
   width?: number;
   dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
   transparency?: number;
+  /** Explicit OOXML a:ln/a:noFill. Absent line formatting is not an explicit no-line. */
+  noFill?: boolean;
 }
 
 /** Shared chart border configuration (matches ChartBorderData wire type) */
@@ -227,12 +239,141 @@ export interface ChartShadow {
   transparency?: number;
 }
 
+/** Theme color entry exposed by workbook theme data. */
+export interface ChartWorkbookThemeColor {
+  /** OOXML theme slot name, e.g. `dk1`, `lt1`, `accent1`, `hlink`. */
+  name: string;
+  /** Resolved RGB color, normally `#RRGGBB`. */
+  color: string;
+  /** Lossless source payload from import, when available. */
+  source?: unknown;
+}
+
+/**
+ * Workbook theme context passed to the chart style resolver.
+ *
+ * The public `colors` projection is stable and ergonomic. The optional scheme
+ * payloads are deliberately structural so the chart renderer can consume the
+ * generated OOXML bridge objects without making contracts depend on generated
+ * implementation modules.
+ */
+export interface ChartWorkbookThemeData {
+  colors: ChartWorkbookThemeColor[];
+  majorFont?: string | null;
+  minorFont?: string | null;
+  themePartPath?: string;
+  themeRelationshipIdHint?: string;
+  themeRelationshipType?: string;
+  name?: string;
+  colorScheme?: unknown;
+  fontScheme?: unknown;
+  formatScheme?: unknown;
+}
+
+export type ChartStyleDiagnosticDisposition =
+  | 'rendered'
+  | 'approximated'
+  | 'preservedForExportOnly'
+  | 'droppedUnsupported'
+  | 'droppedStale';
+
+export type ChartStyleDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+/** Style/import diagnostic emitted by the chart style resolver. */
+export interface ChartStyleDiagnostic {
+  category: string;
+  ownerKey: string;
+  ooxmlPath?: string;
+  severity: ChartStyleDiagnosticSeverity;
+  disposition: ChartStyleDiagnosticDisposition;
+  feature: string;
+  message?: string;
+}
+
+/**
+ * Chart-local color mapping override. Values are OOXML color-scheme slots such
+ * as `Dk1`, `Lt1`, `Accent1`, `Hlink`, and `FolHlink`.
+ */
+export interface ChartColorMapping {
+  bg1?: string;
+  tx1?: string;
+  bg2?: string;
+  tx2?: string;
+  accent1?: string;
+  accent2?: string;
+  accent3?: string;
+  accent4?: string;
+  accent5?: string;
+  accent6?: string;
+  hlink?: string;
+  folHlink?: string;
+}
+
+export type ChartColorMapOverride =
+  | { type: 'master' }
+  | { type: 'override'; mapping: ChartColorMapping };
+
+/**
+ * Unresolved imported chart style sidecar. Rust import will widen this with
+ * owner-level DrawingML payloads; TS render code already treats it as the style
+ * resolver input and keeps the ergonomic `ChartFormat` fields separate.
+ */
+export interface ChartStyleContext {
+  colorMapOverride?: ChartColorMapOverride;
+  diagnostics?: ChartStyleDiagnostic[];
+  owners?: ChartStyleOwner[];
+}
+
+export interface ChartStyleOwner {
+  ownerKey: string;
+  sourcePath?: string;
+  editOwnerId?: string;
+  format?: ChartFormat;
+  richText?: ChartFormatString[];
+  diagnostics?: ChartStyleDiagnostic[];
+  /** Lossless imported DrawingML payload for future resolver/export use. */
+  importedDrawingMl?: unknown;
+}
+
+/** OOXML chart manual layout target. */
+export type ManualLayoutTarget = 'inner' | 'outer';
+
+/** OOXML chart manual layout mode. */
+export type ManualLayoutMode = 'edge' | 'factor';
+
+/** Manual chart element layout imported from OOXML `c:manualLayout`. */
+export interface ManualLayout {
+  layoutTarget?: ManualLayoutTarget;
+  xMode?: ManualLayoutMode;
+  yMode?: ManualLayoutMode;
+  wMode?: ManualLayoutMode;
+  hMode?: ManualLayoutMode;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  extLst?: string;
+}
+
+/** OOXML DrawingML text vertical mode (`a:bodyPr@vert`). */
+export type ChartTextVerticalType =
+  | 'horz'
+  | 'vert'
+  | 'vert270'
+  | 'wordArtVert'
+  | 'eaVert'
+  | 'mongolianVert'
+  | 'wordArtVertRtl';
+
 /** Composite format for a chart element. */
 export interface ChartFormat {
   fill?: ChartFill;
   line?: ChartLineFormat;
   font?: ChartFont;
+  /** Text rotation angle in degrees (`a:bodyPr@rot`, OOXML angle / 60000). */
   textRotation?: number;
+  /** DrawingML vertical text mode. This is separate from textRotation. */
+  textVerticalType?: ChartTextVerticalType;
   shadow?: ChartShadow;
 }
 
@@ -257,6 +398,14 @@ export interface ErrorBarConfig {
   value?: number;
   noEndCap?: boolean;
   lineFormat?: ChartLineFormat;
+  plusSource?: ErrorBarSource;
+  minusSource?: ErrorBarSource;
+}
+
+/** Custom error-bar source formula plus sparse cached values. */
+export interface ErrorBarSource {
+  formula?: string;
+  cache?: ChartSeriesPointCache;
 }
 
 /** Rich title configuration */
@@ -267,10 +416,12 @@ export interface TitleConfig {
   font?: ChartFont;
   format?: ChartFormat;
   overlay?: boolean;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on format.textVerticalType. */
   textOrientation?: number;
   richText?: ChartFormatString[];
   formula?: string;
+  /** Manual title layout imported from OOXML when representable. */
+  layout?: ManualLayout;
   // Additional title properties
   /** Horizontal text alignment. */
   horizontalAlignment?: 'left' | 'center' | 'right';
@@ -293,6 +444,8 @@ export interface PlotAreaConfig {
   fill?: ChartFill;
   border?: ChartBorder;
   format?: ChartFormat;
+  /** Manual plot-area layout imported from OOXML when representable. */
+  layout?: ManualLayout;
 }
 
 /** Chart area configuration */
@@ -306,14 +459,41 @@ export interface ChartAreaConfig {
 export interface HistogramConfig {
   binCount?: number;
   binWidth?: number;
+  overflowBin?: boolean;
+  overflowBinValue?: number;
+  underflowBin?: boolean;
+  underflowBinValue?: number;
   cumulative?: boolean;
 }
 
 /** Box plot configuration */
 export interface BoxplotConfig {
   showOutliers?: boolean;
+  showOutlierPoints?: boolean;
   showMean?: boolean;
+  showMeanMarkers?: boolean;
+  showMeanLine?: boolean;
+  quartileMethod?: string;
   whiskerType?: 'tukey' | 'minMax' | 'percentile';
+}
+
+/** Imported hierarchy row for treemap/sunburst ChartEx projections. */
+export interface HierarchyChartRow {
+  id: string;
+  parentId?: string;
+  label: string;
+  level: number;
+  value?: number;
+  categoryFormula?: string;
+  valueFormula?: string;
+}
+
+/** Typed hierarchy projection for ChartEx treemap/sunburst imports. */
+export interface HierarchyChartConfig {
+  rows?: HierarchyChartRow[];
+  categoryFormulas?: string[];
+  valueFormula?: string;
+  parentLabelLayout?: string;
 }
 
 /** Heatmap configuration */
@@ -357,6 +537,10 @@ export interface SunburstConfig {
 
 /** Region map chart configuration */
 export interface RegionMapConfig {
+  /** Imported region category formula from ChartEx projection. */
+  regionFormula?: string;
+  /** Imported value formula from ChartEx projection. */
+  valueFormula?: string;
   /** Geographic region scope */
   region?: 'world' | 'us' | 'europe' | 'asia' | 'africa' | 'oceania' | 'southAmerica';
   /** Color scale for region fills */
@@ -375,8 +559,12 @@ export interface RegionMapConfig {
  * Waterfall chart configuration for special bars
  */
 export interface WaterfallConfig {
+  /** Indices that are subtotal bars in imported ChartEx waterfalls. */
+  subtotalIndices?: number[];
   /** Indices that are "total" bars (drawn from zero) */
   totalIndices?: number[];
+  /** Whether connector lines between bars are drawn. */
+  showConnectorLines?: boolean;
   /** Color for positive values */
   increaseColor?: string;
   /** Color for negative values */
@@ -400,6 +588,8 @@ export interface LegendConfig {
   customX?: number;
   /** Custom legend Y position (0-1, fraction of chart area) when position is 'custom' */
   customY?: number;
+  /** Manual legend layout imported from OOXML when representable. */
+  layout?: ManualLayout;
   shadow?: ChartShadow;
   // Additional legend properties
   /** Show drop shadow on legend box. */
@@ -445,6 +635,7 @@ export interface SingleAxisConfig {
   displayUnit?: string;
   format?: ChartFormat;
   titleFormat?: ChartFormat;
+  titleRichText?: ChartFormatString[];
   gridlineFormat?: ChartLineFormat;
   minorGridlineFormat?: ChartLineFormat;
   crossBetween?: string;
@@ -454,6 +645,8 @@ export interface SingleAxisConfig {
   minorTimeUnit?: string;
   customDisplayUnit?: number;
   displayUnitLabel?: string;
+  displayUnitLabelLayout?: ManualLayout;
+  displayUnitLabelFormat?: ChartFormat;
   labelAlignment?: string;
   labelOffset?: number;
   noMultiLevelLabels?: boolean;
@@ -476,7 +669,7 @@ export interface SingleAxisConfig {
   linkNumberFormat?: boolean;
   /** Whether tick marks are between categories (true) or on categories (false) */
   isBetweenCategories?: boolean;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on format.textVerticalType. */
   textOrientation?: number;
   /** Label alignment (alias for labelAlignment) */
   alignment?: string;
@@ -515,6 +708,8 @@ export interface AxisConfig {
  */
 export interface DataLabelConfig {
   show: boolean;
+  /** Explicit OOXML delete/suppression, distinct from an absent label config. */
+  delete?: boolean;
   position?:
     | 'center'
     | 'insideEnd'
@@ -544,7 +739,7 @@ export interface DataLabelConfig {
   text?: string;
   visualFormat?: ChartFormat;
   numberFormat?: string;
-  /** Text orientation angle in degrees (-90 to 90) */
+  /** Text orientation angle in degrees (-90 to 90). Vertical text mode lives on visualFormat.textVerticalType. */
   textOrientation?: number;
   richText?: ChartFormatString[];
   // Additional data label properties
@@ -570,6 +765,8 @@ export interface DataLabelConfig {
   readonly width?: number;
   /** Leader line formatting configuration. */
   leaderLinesFormat?: ChartLeaderLinesFormat;
+  /** Manual layout imported from OOXML when representable. */
+  layout?: ManualLayout;
 }
 
 /**
@@ -605,6 +802,7 @@ export interface TrendlineLabelConfig {
   text?: string;
   format?: ChartFormat;
   numberFormat?: string;
+  layout?: ManualLayout;
 }
 
 /**
@@ -619,16 +817,120 @@ export interface PieSliceConfig {
 }
 
 /**
+ * Imported point cache for a chart data dimension.
+ *
+ * OOXML chart caches are sparse by point index. An omitted index inside
+ * `pointCount` is a meaningful blank/missing point, while an explicit "0"
+ * point is a real zero value.
+ */
+export interface ChartSeriesPointCache {
+  /** Logical OOXML point count for the dimension, when supplied by the source. */
+  pointCount?: number;
+  /** Dimension-wide number format code; point entries may override it. */
+  formatCode?: string;
+  /** Sparse cached points keyed by OOXML `c:pt/@idx`. */
+  points: ChartSeriesPointCachePoint[];
+}
+
+export interface ChartSeriesPointCachePoint {
+  /** Source point index. Missing indices inside `pointCount` are blanks. */
+  idx: number;
+  /** Raw OOXML cached point value. Numeric values are preserved as strings. */
+  value: string;
+  /** Point-level number format override. */
+  formatCode?: string;
+}
+
+/** Imported multi-level category cache for hierarchical category labels. */
+export interface ChartSeriesCategoryLevelsCache {
+  /** Logical OOXML point count for the category domain, when supplied by the source. */
+  pointCount?: number;
+  /** Category label levels in source order. */
+  levels: ChartSeriesCategoryLevelCache[];
+}
+
+export interface ChartSeriesCategoryLevelCache {
+  /** Zero-based level index in source order. */
+  level: number;
+  /** Logical point count for this level, when supplied by the source. */
+  pointCount?: number;
+  /** Sparse cached labels keyed by OOXML `c:pt/@idx`. */
+  points: ChartSeriesPointCachePoint[];
+}
+
+/** Imported chart dimension source authority. */
+export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback';
+
+/** Imported x/category dimension role for a series. */
+export type ChartSeriesXRole = 'category' | 'quantitative';
+
+/** Imported stock chart source role for HLC/OHLC and volume stock charts. */
+export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
+
+/** Render authority used for projected or imported chart series data. */
+export type ChartSeriesProjectionAuthority =
+  | 'explicitSeries'
+  | 'liveRange'
+  | 'pivotCache'
+  | 'fallbackCache'
+  | 'literal'
+  | 'unavailable';
+
+export type ChartSeriesProjectionDiagnosticReason =
+  | 'unresolvedPivotSource'
+  | 'unsupportedPivotFeature'
+  | 'hiddenDataField'
+  | 'allItemsFiltered'
+  | 'noValueData'
+  | 'worksheetHiddenByPlotVisibleOnly'
+  | 'styleResolvedNoFillOrLine'
+  | 'staleMaterializedRange';
+
+/** Diagnostic explaining why a source series was altered, dropped, or not renderable. */
+export interface ChartSeriesProjectionDiagnostic {
+  reason: ChartSeriesProjectionDiagnosticReason;
+  severity?: ChartStyleDiagnosticSeverity;
+  sourceSeriesKey?: string;
+  sourceSeriesIndex?: number;
+  message?: string;
+}
+
+/** Workbook-level pivot chart projection summary used by render diagnostics. */
+export interface PivotChartProjectionData {
+  sourceRef?: string;
+  pivotTableName?: string;
+  pivotCacheId?: string | number;
+  authority?: ChartSeriesProjectionAuthority;
+  expectedImportedSeriesCount?: number;
+  projectedSeriesCount?: number;
+  renderedSeriesCount?: number;
+  diagnostics?: ChartSeriesProjectionDiagnostic[];
+}
+
+/**
  * Individual series configuration (matches ChartSeriesData wire type)
  */
 export interface SeriesConfig {
   name?: string;
+  /** Live series-name cell reference imported from OOXML c:tx/c:strRef/c:f. */
+  nameRef?: string;
   type?: string;
   color?: string;
+  stockRole?: ChartSeriesStockRole;
   values?: string;
+  valueCache?: ChartSeriesPointCache;
+  valueSourceKind?: ChartSeriesDimensionSourceKind;
   categories?: string;
+  xRole?: ChartSeriesXRole;
+  categoryCache?: ChartSeriesPointCache;
+  categoryLevels?: ChartSeriesCategoryLevelsCache;
+  categorySourceKind?: ChartSeriesDimensionSourceKind;
+  categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
+  bubbleSizeCache?: ChartSeriesPointCache;
+  bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
   smooth?: boolean;
+  showLines?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
   yAxisIndex?: number;
@@ -655,6 +957,20 @@ export interface SeriesConfig {
   markerForegroundColor?: ChartColor;
   /** Whether this series is hidden/filtered from the chart. */
   filtered?: boolean;
+  /** Original chart series index before filtering/projection. */
+  sourceSeriesIndex?: number;
+  /** Stable source key used to join extracted data back to this series. */
+  sourceSeriesKey?: string;
+  /** Visible/rendered series order after projection. */
+  visibleOrder?: number;
+  /** Stable key for projected pivot-chart series. */
+  pivotSeriesKey?: string;
+  /** Pivot data-field index when this series was projected from a data field. */
+  pivotDataFieldIndex?: number;
+  /** Data authority used to render this series. */
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  /** Projection/render diagnostics associated with this series. */
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
   /** Show drop shadow on series. */
   showShadow?: boolean;
   /** Show connector lines between pie slices (bar-of-pie, pie-of-pie). */
@@ -683,6 +999,22 @@ export interface SeriesConfig {
   trendline?: TrendlineConfig;
 }
 
+/**
+ * Category-axis label formatting captured from imported chart category caches.
+ * The base format applies to all category values; point overrides replace it by
+ * category index.
+ */
+export interface CategoryLabelFormat {
+  formatCode?: string;
+  points?: CategoryPointLabelFormat[];
+}
+
+/** Per-category label number-format override. */
+export interface CategoryPointLabelFormat {
+  idx: number;
+  formatCode?: string;
+}
+
 /** Marker style for scatter/line chart markers. */
 export type MarkerStyle =
   | 'circle'
@@ -703,8 +1035,13 @@ export type MarkerStyle =
  */
 export interface PointFormat {
   idx: number;
+  invertIfNegative?: boolean;
+  explosion?: number;
+  bubble3d?: boolean;
+  bubble3D?: boolean;
   fill?: string;
   border?: ChartBorder;
+  lineFormat?: ChartLineFormat;
   dataLabel?: DataLabelConfig;
   visualFormat?: ChartFormat;
   // Additional point properties
@@ -748,12 +1085,343 @@ export interface ImageExportOptions {
   fittingMode?: ImageFittingMode;
 }
 
+export interface ChartExportOptionsSnapshot {
+  format: 'png' | 'jpeg';
+  width: number;
+  height: number;
+  pixelRatio: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  backgroundColor: string;
+  quality?: number;
+}
+
+export interface ChartRangeReferenceSnapshot {
+  kind: string;
+  source: 'identity' | 'a1';
+  ref?: string;
+  range: {
+    sheetId?: string;
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+  };
+}
+
+export interface ChartRangeDiagnosticSnapshot {
+  kind: string;
+  code: string;
+  ref?: string;
+  sheetName?: string;
+  message: string;
+}
+
+export interface ResolvedChartAxisSnapshot {
+  present: boolean;
+  visible?: boolean;
+  title?: string;
+  axisType?: string;
+  scaleType?: string;
+  categoryType?: string;
+  min?: number;
+  max?: number;
+  majorUnit?: number;
+  minorUnit?: number;
+  logBase?: number;
+  displayUnit?: string;
+  customDisplayUnit?: number;
+  displayUnitLabel?: string;
+  displayUnitLabelLayout?: ManualLayout;
+  displayUnitLabelFormat?: ChartFormat;
+  numberFormat?: string;
+  linkNumberFormat?: boolean;
+  position?: string;
+  reverse?: boolean;
+  tickMarks?: string;
+  minorTickMarks?: string;
+  tickLabelPosition?: string;
+  tickLabelSpacing?: number;
+  tickMarkSpacing?: number;
+  crossBetween?: string;
+  crossesAt?: 'automatic' | 'max' | 'min' | 'custom';
+  crossesAtValue?: number;
+  isBetweenCategories?: boolean;
+  minorGridLines?: boolean;
+  minorGridlineFormat?: ChartLineFormat;
+  textOrientation?: number;
+}
+
+export interface ResolvedChartLegendSnapshot {
+  present: boolean;
+  visible?: boolean;
+  position?: string;
+  entries: string[];
+  visibleEntries: string[];
+}
+
+export interface ResolvedChartCategoryLevelSnapshot {
+  level: number;
+  labels: Array<string | null>;
+}
+
+export type ChartSeriesDimensionRenderAuthority =
+  | 'live'
+  | 'literal'
+  | 'fallbackCache'
+  | 'unavailable';
+
+export interface ResolvedChartSeriesSnapshot {
+  index: number;
+  order: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  visibleOrder?: number;
+  pivotSeriesKey?: string;
+  pivotDataFieldIndex?: number;
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
+  name: string;
+  type?: string;
+  axisGroup: 'primary' | 'secondary';
+  xRole?: ChartSeriesXRole;
+  stockRole?: ChartSeriesStockRole;
+  showLines?: boolean;
+  smooth?: boolean;
+  showMarkers?: boolean;
+  markerStyle?: string;
+  renderLayerCount?: number;
+  color?: string;
+  source: {
+    values?: string;
+    categories?: string;
+    bubbleSize?: string;
+    stockRole?: ChartSeriesStockRole;
+    valueSourceKind?: ChartSeriesDimensionSourceKind;
+    categorySourceKind?: ChartSeriesDimensionSourceKind;
+    bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
+  };
+  renderAuthority: {
+    values: ChartSeriesDimensionRenderAuthority;
+    categories: ChartSeriesDimensionRenderAuthority;
+    bubbleSize: ChartSeriesDimensionRenderAuthority;
+  };
+  xValues: Array<string | number | null>;
+  categories: Array<string | number | null>;
+  values: Array<number | null>;
+  bubbleSizes: Array<number | null>;
+  stockValues?: {
+    open: Array<number | null>;
+    high: Array<number | null>;
+    low: Array<number | null>;
+    close: Array<number | null>;
+    volume: Array<number | null>;
+  };
+  blankMask: boolean[];
+  pointCount: number;
+  renderedPointCount: number;
+  dataHash: string;
+}
+
+export interface ResolvedChartDroppedSeriesSnapshot {
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  name?: string;
+  reason: ChartSeriesProjectionDiagnosticReason;
+  message?: string;
+}
+
+export interface ResolvedChartSeriesProjectionSnapshot {
+  authority: ChartSeriesProjectionAuthority;
+  expectedImportedSeriesCount: number;
+  projectedSeriesCount: number;
+  renderedSeriesCount: number;
+  renderedPointCountBySourceSeriesKey: Record<string, number>;
+  droppedSeries: ResolvedChartDroppedSeriesSnapshot[];
+}
+
+/** Normalized top-level chart layout rectangle in chart-relative coordinates. */
+export interface ResolvedChartLayoutRectSnapshot {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Final top-level chart layout regions after chart grammar compilation. */
+export interface ResolvedChartLayoutSnapshot {
+  plotArea: ResolvedChartLayoutRectSnapshot;
+  legend?: ResolvedChartLayoutRectSnapshot;
+  title?: ResolvedChartLayoutRectSnapshot;
+  dataTable?: ResolvedChartLayoutRectSnapshot;
+  dataLabels?: ResolvedChartLayoutRectSnapshot;
+}
+
+/** Runtime sheet kind carried by chart diagnostics. */
+export type ChartSheetKindSnapshot =
+  | 'worksheet'
+  | 'chartSheet'
+  | 'dialogSheet'
+  | 'macroSheet'
+  | 'unsupported';
+
+/** Source of authority for chart layout and render dimensions. */
+export type ChartLayoutAuthority = 'embedded' | 'chartSheet';
+
+/** Page context that can influence chart-sheet print/export output. */
+export interface ChartPageContextSnapshot {
+  pageSetup?: unknown;
+  pageMargins?: unknown;
+  headerFooter?: unknown;
+}
+
+/** Render frame used for size-aware chart compilation. */
+export interface ChartRenderFrameSnapshot {
+  kind: ChartLayoutAuthority;
+  sheetId: string;
+  chartId: string;
+  width: number;
+  height: number;
+  windowViewId?: number;
+  zoomToFit?: boolean;
+  pageContext?: ChartPageContextSnapshot;
+}
+
+/** Absolute chart or plot area size in CSS pixels. */
+export interface ChartAreaSizeSnapshot {
+  width: number;
+  height: number;
+}
+
+export interface ResolvedChartBarGeometryOffsetSnapshot {
+  seriesIndex: number;
+  offset: number;
+}
+
+export interface ResolvedChartBarGeometrySnapshot {
+  orientation?: 'horizontal' | 'vertical';
+  grouping: 'standard' | 'clustered' | 'stacked' | 'percentStacked';
+  sourceGapWidth?: number;
+  sourceOverlap?: number;
+  gapWidth: number;
+  overlap: number;
+  gapWidthClamped?: boolean;
+  overlapClamped?: boolean;
+  seriesIndices: number[];
+  categoryPitch?: number;
+  barSize?: number;
+  offsets?: ResolvedChartBarGeometryOffsetSnapshot[];
+}
+
+/** Package identity/authority metadata for import/export diagnostics. */
+export interface ChartPackageAuthoritySnapshot {
+  source?: string;
+  fingerprint?: string;
+  status?: 'current' | 'stale' | 'unknown';
+  details?: unknown;
+}
+
+export interface ResolvedChartSpecSnapshot {
+  schemaVersion: 1;
+  chartId: string;
+  sheetId: string;
+  sheetKind?: ChartSheetKindSnapshot;
+  layoutAuthority?: ChartLayoutAuthority;
+  renderFrame?: ChartRenderFrameSnapshot;
+  chartArea?: ChartAreaSizeSnapshot;
+  plotArea?: ChartAreaSizeSnapshot;
+  pageContext?: ChartPageContextSnapshot;
+  packageAuthority?: ChartPackageAuthoritySnapshot;
+  chartObject: {
+    id: string;
+    name?: string;
+    anchorRow?: number;
+    anchorCol?: number;
+    width?: number;
+    height?: number;
+    widthPt?: number;
+    heightPt?: number;
+  };
+  export: ChartExportOptionsSnapshot;
+  implementation: {
+    renderAuthority: 'chartBridge';
+    renderStatus: 'renderable';
+    compilerPathId: 'ts-grammar' | 'wasm-transforms+ts-grammar';
+    compilerInputHash: string;
+    compilerVersion: 1;
+  };
+  resolved: {
+    chartType: string;
+    subType?: string;
+    grouping?: 'standard' | 'clustered' | 'stacked' | 'percentStacked';
+    title: {
+      present: boolean;
+      text?: string;
+    };
+    legend: ResolvedChartLegendSnapshot;
+    axes: {
+      category?: ResolvedChartAxisSnapshot;
+      value?: ResolvedChartAxisSnapshot;
+      secondaryCategory?: ResolvedChartAxisSnapshot;
+      secondaryValue?: ResolvedChartAxisSnapshot;
+      series?: ResolvedChartAxisSnapshot;
+    };
+    series: ResolvedChartSeriesSnapshot[];
+    seriesProjection: ResolvedChartSeriesProjectionSnapshot;
+    categories: Array<string | number | null>;
+    categoryLevels?: ResolvedChartCategoryLevelSnapshot[];
+    layout?: ResolvedChartLayoutSnapshot;
+    plot: {
+      displayBlanksAs?: 'gap' | 'zero' | 'span';
+      plotVisibleOnly?: boolean;
+      gapWidth?: number;
+      gapDepth?: number;
+      overlap?: number;
+      barGeometry?: ResolvedChartBarGeometrySnapshot[];
+    };
+    ranges: {
+      dataRange: ChartRangeReferenceSnapshot | null;
+      categoryRange: ChartRangeReferenceSnapshot | null;
+      seriesRange: ChartRangeReferenceSnapshot | null;
+      seriesReferences: Array<{
+        index: number;
+        name?: ChartRangeReferenceSnapshot | null;
+        values: ChartRangeReferenceSnapshot | null;
+        categories: ChartRangeReferenceSnapshot | null;
+        bubbleSize?: ChartRangeReferenceSnapshot | null;
+      }>;
+      diagnostics: ChartRangeDiagnosticSnapshot[];
+    };
+    dataHashes: {
+      categoriesHash: string;
+      seriesHash: string;
+    };
+  };
+  diagnostics: {
+    compiler: string[];
+    unsupportedFeatures: string[];
+  };
+}
+
 /** Dimension identifiers for series data access. */
 export type ChartSeriesDimension = 'categories' | 'values' | 'bubbleSizes';
 
 /** Leader line formatting for data labels. */
 export interface ChartLeaderLinesFormat {
   format: ChartLineFormat;
+}
+
+/** Chart-level line feature such as drop lines, high-low lines, or series lines. */
+export interface ChartLineSettings {
+  visible?: boolean;
+  format?: ChartLineFormat;
+}
+
+/** Up/down bar settings for line and stock charts. */
+export interface UpDownBarsConfig {
+  gapWidth?: number;
+  upFormat?: ChartFormat;
+  downFormat?: ChartFormat;
 }
 
 /** Pivot chart display options (field button visibility). */
@@ -781,6 +1449,16 @@ export interface DataTableConfig {
   visible?: boolean;
 }
 
+/** 3D view metadata preserved from OOXML. Rendered by the 2D backend as an approximation. */
+export interface ChartView3DConfig {
+  rotX?: number;
+  rotY?: number;
+  depthPercent?: number;
+  rAngAx?: boolean;
+  perspective?: number;
+  heightPercent?: number;
+}
+
 // =============================================================================
 // Public API Types
 // =============================================================================
@@ -806,6 +1484,8 @@ export interface ChartConfig {
   width: number;
   /** Chart height in cells */
   height: number;
+  /** Layout authority for render diagnostics; embedded charts keep width/height as cell counts. */
+  layoutAuthority?: ChartLayoutAuthority;
 
   // Data binding (A1 strings)
   /** Data range in A1 notation (e.g., "A1:D10"). Optional when series[].values are provided. */
@@ -829,6 +1509,10 @@ export interface ChartConfig {
 
   // Data labels
   dataLabels?: DataLabelConfig;
+  dropLines?: ChartLineSettings;
+  highLowLines?: ChartLineSettings;
+  seriesLines?: ChartLineSettings;
+  upDownBars?: UpDownBarsConfig;
 
   // Pie/Doughnut specific
   pieSlice?: PieSliceConfig;
@@ -856,6 +1540,8 @@ export interface ChartConfig {
   plotVisibleOnly?: boolean;
   /** Gap width between bars/columns as percentage (0-500). Applied to bar/column chart types. */
   gapWidth?: number;
+  /** Gap depth between 3D bar/column series as percentage (0-500). Preserved for import/export. */
+  gapDepth?: number;
   /** Overlap between bars/columns (-100 to 100). Applied to clustered bar/column types. */
   overlap?: number;
   /** Hole size for doughnut charts as percentage (10-90) */
@@ -864,6 +1550,10 @@ export interface ChartConfig {
   firstSliceAngle?: number;
   /** Bubble scale for bubble charts as percentage (0-300) */
   bubbleScale?: number;
+  /** Whether to render negative/zero bubble sizes. */
+  showNegBubbles?: boolean;
+  /** Whether bubble values represent area or width/diameter. */
+  sizeRepresents?: 'area' | 'w';
   /** Split type for of-pie charts (pie-of-pie, bar-of-pie) */
   splitType?: 'auto' | 'value' | 'percent' | 'position' | 'custom';
   /** Split value threshold for of-pie charts */
@@ -881,6 +1571,7 @@ export interface ChartConfig {
   // Hierarchical chart specific
   treemap?: TreemapConfig;
   sunburst?: SunburstConfig;
+  hierarchy?: HierarchyChartConfig;
 
   // Geographic chart specific
   regionMap?: RegionMapConfig;
@@ -903,6 +1594,10 @@ export interface ChartConfig {
   titleFormat?: ChartFormat;
   titleRichText?: ChartFormatString[];
   titleFormula?: string;
+  /** Manual plot-area layout imported from OOXML. */
+  plotLayout?: ManualLayout;
+  /** Manual title layout imported from OOXML. */
+  titleLayout?: ManualLayout;
   dataTable?: DataTableConfig;
 
   // Simple config properties
@@ -922,6 +1617,14 @@ export interface ChartConfig {
   // Pivot chart options
   /** Pivot chart display options. */
   pivotOptions?: PivotChartOptions;
+  /** Pivot/import projection metadata used by render and snapshot diagnostics. */
+  pivotProjection?: PivotChartProjectionData;
+
+  // 3D preserve-only metadata
+  view3d?: ChartView3DConfig;
+  floorFormat?: ChartFormat;
+  sideWallFormat?: ChartFormat;
+  backWallFormat?: ChartFormat;
 
   // Z-Order commands (used by chart z-order actions)
   /**
@@ -935,7 +1638,7 @@ export interface ChartConfig {
   zOrder?: 'front' | 'back' | 'forward' | 'backward';
 
   /** Mark shape for 3D bar/column charts (default: 'box'). Maps to OOXML c:shape. */
-  barShape?: 'box' | 'cylinder' | 'cone' | 'pyramid';
+  barShape?: 'box' | 'cylinder' | 'cone' | 'coneToMax' | 'pyramid' | 'pyramidToMax';
 
   /**
    * Extensible extra data for enriched chart configurations.
@@ -967,6 +1670,16 @@ export interface ChartConfig {
   // Color scheme (Group L)
   /** Chart color scheme index */
   colorScheme?: number;
+
+  /**
+   * Workbook theme context for chart rendering. Kernel attaches this before
+   * compilation so charts-core can resolve theme references after chart style
+   * and color-map precedence, instead of receiving pre-mutated CSS strings.
+   */
+  workbookTheme?: ChartWorkbookThemeData;
+
+  /** Unresolved imported style context consumed by the chart style resolver. */
+  chartStyleContext?: ChartStyleContext;
 }
 
 /**

@@ -582,7 +582,7 @@ pub(super) fn write_zip_package(
 
                 // Write chart auxiliary files (style XML, colors XML) only
                 // when the current chart still carries imported chart identity.
-                if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+                if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =
@@ -627,7 +627,7 @@ pub(super) fn write_zip_package(
                 // Write ChartEx auxiliary files only when the current chart
                 // still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-                if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+                if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {
                     let auxiliary_paths =

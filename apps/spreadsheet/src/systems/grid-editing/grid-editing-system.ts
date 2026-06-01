@@ -28,6 +28,7 @@ import type {
 } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import type { SlicerCache } from '@mog-sdk/contracts/slicers';
 import { sheetId as toSheetId, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
 
@@ -79,6 +80,7 @@ import { setupClipboardPasteIntegration } from './coordination/paste-integration
 import { setupValidationCirclesCoordination } from './features/validation';
 import { setupTableSelectionCoordination } from './features/table';
 import { setupPivotSelectionCoordination } from './features/pivot';
+import { setupStructureCoordination } from './features/structure';
 import {
   setupCommentHoverCoordination,
   setupCommentSelectionCoordination,
@@ -91,6 +93,10 @@ import type { DragTerminator } from '../shared/drag-terminator';
 import { buildCheckboxCoordination } from './features/checkbox/checkbox-coordination';
 import { createFillCoordinator, type FillCoordinator } from './features/fill/fill-coordination';
 import { createResizeCoordinator, type ResizeCoordinator } from './features/resize';
+import {
+  createDragDropCoordinator,
+  type DragDropCoordinator,
+} from './features/drag-drop/drag-drop-coordination';
 import type {
   CommentHoverCoordinator,
   DrawBorderCoordinator,
@@ -255,6 +261,9 @@ export class GridEditingSystem implements IGridEditingSystem {
   /** Edit-end callbacks */
   private readonly editEndCallbacks = new Set<() => void>();
 
+  /** Session-local rich text runs until the compute bridge has durable rich text storage. */
+  private readonly richTextRunCache = new Map<string, RichTextSegment[]>();
+
   /** State-change callbacks */
   private readonly stateChangeCallbacks = new Set<() => void>();
 
@@ -313,12 +322,27 @@ export class GridEditingSystem implements IGridEditingSystem {
               sheetId,
               isArrayFormula,
               datePickerCommit,
+              richTextSegments,
               editingCell: editorEditingCell,
               commitActiveCell,
               commitSelectionRanges,
             } = context;
             const editingCell = editorEditingCell ?? commitActiveCell;
             if (editingCell && sheetId && editorDeps?.setCellValue) {
+              if (richTextSegments && richTextSegments.length > 0) {
+                this.richTextRunCache.set(
+                  this.richTextCacheKey(toSheetId(sheetId), editingCell),
+                  richTextSegments.map((segment) => ({
+                    ...segment,
+                    format: segment.format ? { ...segment.format } : segment.format,
+                  })),
+                );
+              } else {
+                this.richTextRunCache.delete(
+                  this.richTextCacheKey(toSheetId(sheetId), editingCell),
+                );
+              }
+
               if (datePickerCommit && editorDeps.setDateValue) {
                 editorDeps.setPendingUndoDescription?.(
                   datePickerCommit.kind === 'datetime' ? 'Set date/time' : 'Set date',
@@ -417,7 +441,20 @@ export class GridEditingSystem implements IGridEditingSystem {
         return config.getGeometry?.()?.getMergeAnchor(cell.row, cell.col) ?? undefined;
       },
       getPreEditSelectionRanges: () => selectionSelectors.ranges(this.selectionActor.getSnapshot()),
+      getCachedRichTextSegments: (sheetId, cell) => {
+        const cached = this.richTextRunCache.get(this.richTextCacheKey(sheetId, cell));
+        return cached
+          ? cached.map((segment) => ({
+              ...segment,
+              format: segment.format ? { ...segment.format } : segment.format,
+            }))
+          : null;
+      },
     });
+  }
+
+  private richTextCacheKey(sheetId: SheetId, cell: CellCoord): string {
+    return `${sheetId}:${cell.row}:${cell.col}`;
   }
 
   // ===========================================================================
@@ -584,6 +621,7 @@ export class GridEditingSystem implements IGridEditingSystem {
 
   private resizeCoordinator: ResizeCoordinator | null = null;
   private fillCoordinator: FillCoordinator | null = null;
+  private dragDropCoordinator: DragDropCoordinator | null = null;
   private commentHoverCoordination: CommentHoverCoordinationResult | null = null;
 
   private checkboxCoordination:
@@ -682,6 +720,9 @@ export class GridEditingSystem implements IGridEditingSystem {
     // 2. Wire tightly-coupled trio coordination (selection <-> editor <-> clipboard)
     this.setupTrioCoordination();
 
+    // 2a. Wire structural row/column changes into selection/editor/clipboard.
+    this.setupStructureCoordination();
+
     // 2b. Wire clipboard paste integration (pasting state → executePaste)
     this.setupClipboardPasteIntegration();
 
@@ -741,6 +782,68 @@ export class GridEditingSystem implements IGridEditingSystem {
       this.cleanupFns.push(() => {
         this.fillCoordinator?.dispose();
         this.fillCoordinator = null;
+      });
+    }
+
+    // 7b. Wire cell drag-drop coordinator (executes move/copy after range-edge drag release)
+    if (this.config.workbook && !this.config.readOnly) {
+      const workbook = this.config.workbook;
+      this.dragDropCoordinator = createDragDropCoordinator();
+      this.dragDropCoordinator.setDependencies({
+        selectionActor: this.selectionActor,
+        workbook,
+        getActiveSheetId: () =>
+          toSheetId((this.config.getActiveSheetId ?? (() => this.config.initialSheetId))()),
+        onCellsChanged: (sheetId) => {
+          // Mutations update viewport state through the workbook bridge; this
+          // callback gives renderer hosts a synchronous invalidation hook when
+          // one is available.
+          this.config.onDimensionsChanged?.(sheetId);
+        },
+        executeMove: async (sheetId, sourceRange, targetCell) => {
+          const success = await guardBridgeMutation(async () => {
+            await workbook
+              .getSheetById(sheetId)
+              ._internal.relocateCells(sourceRange, targetCell.row, targetCell.col);
+          });
+          const movedCount = success
+            ? (sourceRange.endRow - sourceRange.startRow + 1) *
+              (sourceRange.endCol - sourceRange.startCol + 1)
+            : 0;
+          return {
+            success,
+            movedCount,
+            error: success ? undefined : 'relocateCells failed',
+          };
+        },
+        executeCopy: async (sheetId, sourceRange, targetCell) => {
+          const success = await guardBridgeMutation(async () => {
+            await workbook
+              .getSheetById(sheetId)
+              ._internal.copyRangeToSheet(
+                sourceRange,
+                sheetId,
+                targetCell.row,
+                targetCell.col,
+                'all',
+                false,
+                false,
+              );
+          });
+          const copiedCount = success
+            ? (sourceRange.endRow - sourceRange.startRow + 1) *
+              (sourceRange.endCol - sourceRange.startCol + 1)
+            : 0;
+          return {
+            success,
+            copiedCount,
+            error: success ? undefined : 'copyRangeToSheet failed',
+          };
+        },
+      });
+      this.cleanupFns.push(() => {
+        this.dragDropCoordinator?.dispose();
+        this.dragDropCoordinator = null;
       });
     }
 
@@ -1311,6 +1414,24 @@ export class GridEditingSystem implements IGridEditingSystem {
     this.cleanupFns.push(cleanupCrossCoordination);
   }
 
+  private setupStructureCoordination(): void {
+    const workbook = this.config.workbook;
+    if (!workbook) return;
+
+    const coordination = setupStructureCoordination({
+      workbook,
+      selectionActor: this.selectionActor,
+      editorActor: this.editorActor,
+      clipboardActor: this.clipboardActor,
+      getCurrentSheetId: () =>
+        (this.config.getActiveSheetId ?? (() => this.config.initialSheetId))(),
+      getEditingCell: () => this.getEditorSnapshot().editingCell,
+      getEditingSheetId: () => this.getEditorSnapshot().sheetId,
+    });
+
+    this.cleanupFns.push(coordination.cleanup);
+  }
+
   /**
    * Wire clipboard paste integration.
    *
@@ -1464,24 +1585,16 @@ export class GridEditingSystem implements IGridEditingSystem {
               },
             };
           });
-        const tableMoveByName = new Map(tableMoves.map((move) => [move.name, move]));
-
         await Promise.all(
-          tables
-            .filter((table) => {
-              const move = tableMoveByName.get(table.name);
-              return Boolean(move && rangesEqual(table.range, move.sourceRange));
-            })
-            .map((table) => {
-              const move = tableMoveByName.get(table.name)!;
-              return bridge.resizeTable(
-                table.name,
-                move.targetRange.startRow,
-                move.targetRange.startCol,
-                move.targetRange.endRow,
-                move.targetRange.endCol,
-              );
-            }),
+          tableMoves.map((move) =>
+            bridge.resizeTable(
+              move.name,
+              move.targetRange.startRow,
+              move.targetRange.startCol,
+              move.targetRange.endRow,
+              move.targetRange.endCol,
+            ),
+          ),
         );
       },
       copyRange: async (

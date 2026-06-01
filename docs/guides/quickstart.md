@@ -1,52 +1,95 @@
 # Quickstart
 
-> **Status: skeleton — content pending package stabilization**
-
-Get Mog running in under 5 minutes. By the end of this guide you will have a workbook in memory, written values to cells, and read them back.
+Get Mog running with the shipped public Node SDK. This guide creates a blank
+workbook, writes values, writes a formula, reads the computed result, and then
+closes the workbook.
 
 ## Prerequisites
 
-- Node.js 20+ or Bun 1.1+
-- npm, pnpm, or yarn
-- Basic familiarity with TypeScript/JavaScript
+- Node.js 18+
+- npm
+- A supported native platform package for `@mog-sdk/node`: macOS arm64/x64,
+  Linux x64/arm64 with glibc or musl, or Windows x64
 
-## Install
+## Create and Run a Script
 
-How to install `@mog-sdk/kernel` (browser/WASM) or `@mog-sdk/node` (server/N-API). Package names, version constraints, and peer dependencies.
+The example uses plain ESM JavaScript so it runs without a TypeScript build
+step.
 
-## Create a Workbook
+```bash
+mkdir mog-quickstart
+cd mog-quickstart
+npm init -y
+npm install @mog-sdk/node
 
-Instantiate a blank workbook, add a sheet, and inspect the default state.
+cat > quickstart.mjs <<'EOF'
+import { createWorkbook } from '@mog-sdk/node';
 
-```typescript
-// example: create workbook, add sheet
+const wb = await createWorkbook({ userTimezone: 'UTC' });
+
+try {
+  const ws = wb.activeSheet;
+
+  console.log(`sheet count: ${wb.sheetCount}`);
+  console.log(`active sheet: ${ws.name}`);
+
+  await ws.setCell('A1', 42);
+  await ws.setCell(1, 0, 58); // A2, using zero-based row/column indexes
+  await ws.setCell('A3', '=SUM(A1:A2)');
+
+  console.log(`A1: ${await ws.getValue('A1')}`);
+  console.log(`A2: ${await ws.getValue('A2')}`);
+  console.log(`A3: ${await ws.getValue('A3')}`);
+  console.log(`A3 formula: ${await ws.getFormula('A3')}`);
+} finally {
+  await wb.close('skipSave');
+}
+EOF
+
+node quickstart.mjs
 ```
 
-## Read and Write Cells
+Expected output:
 
-Write values (strings, numbers, booleans) to cells by address or CellId. Read them back. Cover the difference between display values and raw values.
-
-```typescript
-// example: set cell, get cell
+```text
+sheet count: 1
+active sheet: Sheet1
+A1: 42
+A2: 58
+A3: 100
+A3 formula: =SUM(A1:A2)
 ```
 
-## Write a Formula
+## What This Uses
 
-Set a formula on a cell, trigger recalc, and read the computed result.
+- `createWorkbook()` from `@mog-sdk/node` creates a headless workbook backed by
+  the native N-API engine.
+- `wb.activeSheet`, `wb.sheetCount`, and `ws.name` are synchronous cached
+  workbook/sheet properties.
+- `ws.setCell()` accepts A1 addresses and zero-based numeric row/column
+  coordinates.
+- Strings that start with `=` are stored as formulas. `ws.getValue()` returns
+  the computed value, and `ws.getFormula()` returns the authored formula text.
+- `await wb.close('skipSave')` releases the workbook without exporting a file.
 
-```typescript
-// example: set formula, read result
-```
+## Native Package Troubleshooting
+
+`@mog-sdk/node` loads the native N-API engine through optional `@mog-sdk/*`
+platform packages. The current Node runtime path does not fall back to WASM. If
+installation or startup fails because a package such as
+`@mog-sdk/darwin-arm64`, `@mog-sdk/linux-x64-gnu`, or
+`@mog-sdk/win32-x64-msvc` is missing, check that optional dependencies were not
+disabled and that the machine is one of the supported platforms above.
 
 ## Next Steps
 
+- [Node SDK deep dive](node-sdk.md) — server-side workbook manipulation
 - [Embed in a web page](embed-web-component.md) — render a sheet/view embed
 - [Full spreadsheet app embed](spreadsheet-app-embed.md) — mount the full app surface with `@mog-sdk/spreadsheet-app`
 - [Embed in React](embed-react.md) — use the React component
-- [Node SDK deep dive](node-sdk.md) — server-side workbook manipulation
 - [Architecture overview](architecture-overview.md) — understand the platform layers
 
 ## Related Docs
 
-- [Architecture](../ARCHITECTURE.md)
+- [Architecture](../architecture/README.md)
 - [API Reference](../reference/README.md)

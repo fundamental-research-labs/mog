@@ -3,84 +3,651 @@ name: Publish SDK
 on:
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: Run npm publish with --dry-run
-        required: true
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+      version:
+        description: 'Exact package version to publish; must match release/vX.Y.Z branch'
+        required: false
+        type: string
+        default: ''
+      dry-run:
+        description: 'Dry run (skip publish, tag, and release)'
+        required: false
+        type: boolean
+        default: false
+      source-run-id:
+        description: 'Reuse build artifacts from this workflow run ID (skips build jobs)'
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: publish-sdk
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  actions: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: '24.16.0'
+  PNPM_VERSION: '11.5.0'
+  NPM_VERSION: '11.16.0'
+  NAPI_RS_CLI_VERSION: '3.7.0'
+  CARGO_ZIGBUILD_VERSION: '0.22.3'
+  WASM_PACK_VERSION: '0.15.0'
+  MATURIN_VERSION: '1.13.3'
 
 jobs:
-  publish:
-    name: Publish ${{ matrix.package_dir }}
+  version:
+    name: Determine version
     runs-on: ubuntu-latest
-    environment: npm-production
-    concurrency:
-      group: npm-production
-      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      py-version: ${{ steps.py-version.outputs.py-version }}
+      tag: sdk-v${{ steps.version.outputs.version }}
+      py-tag: python-v${{ steps.py-version.outputs.py-version }}
+      ref: ${{ steps.ref.outputs.ref }}
+      dry-run: ${{ inputs.dry-run || false }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate release branch
+        id: release-branch
+        shell: bash
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            echo "::error::SDK publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            exit 1
+          fi
+          echo "release-version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine version
+        id: version
+        run: |
+          RELEASE_VERSION="${{ steps.release-branch.outputs.release-version }}"
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="$RELEASE_VERSION"
+          fi
+          if [ "$VERSION" != "$RELEASE_VERSION" ]; then
+            echo "::error::Input version ${VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+            exit 1
+          fi
+          if [ -n "${{ inputs.source-run-id }}" ]; then
+            echo "Reusing artifacts from run ${{ inputs.source-run-id }}, target version $VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          node -e "if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test('$VERSION')) { console.error('Invalid semver:', '$VERSION'); process.exit(1); }"
+
+      - name: Validate package versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          manifests=(
+            contracts/package.json
+            views/sheet-view/package.json
+            runtime/spreadsheet-app/package.json
+            runtime/embed/package.json
+            runtime/sdk/package.json
+            compute/napi/npm/darwin-arm64/package.json
+            compute/napi/npm/darwin-x64/package.json
+            compute/napi/npm/linux-x64-gnu/package.json
+            compute/napi/npm/linux-arm64-gnu/package.json
+            compute/napi/npm/linux-x64-musl/package.json
+            compute/napi/npm/linux-arm64-musl/package.json
+            compute/napi/npm/win32-x64-msvc/package.json
+            compute/wasm/npm/package.json
+          )
+          for manifest in "${manifests[@]}"; do
+            PACKAGE_VERSION=$(node -p "require('./${manifest}').version")
+            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+              echo "::error::${manifest} version ${PACKAGE_VERSION} does not match release ${VERSION}"
+              exit 1
+            fi
+          done
+
+      - name: Check not already published
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ALLOW_EXISTING_NPM=false
+          if [ -n "${{ inputs.source-run-id }}" ]; then
+            ALLOW_EXISTING_NPM=true
+            echo "Reusing artifacts from run ${{ inputs.source-run-id }}; already-published npm packages will be skipped in the publish job."
+          fi
+          packages=(
+            "@mog-sdk/darwin-arm64"
+            "@mog-sdk/darwin-x64"
+            "@mog-sdk/linux-x64-gnu"
+            "@mog-sdk/linux-arm64-gnu"
+            "@mog-sdk/linux-x64-musl"
+            "@mog-sdk/linux-arm64-musl"
+            "@mog-sdk/win32-x64-msvc"
+            "@mog-sdk/wasm"
+            "@mog-sdk/contracts"
+            "@mog-sdk/sheet-view"
+            "@mog-sdk/spreadsheet-app"
+            "@mog-sdk/embed"
+            "@mog-sdk/node"
+          )
+          for pkg in "${packages[@]}"; do
+            if npm view "$pkg@$VERSION" version 2>/dev/null; then
+              if [ "$ALLOW_EXISTING_NPM" = "true" ]; then
+                echo "$pkg@$VERSION already published; resume flow will skip it."
+                continue
+              fi
+              echo "::error::$pkg@$VERSION already published"
+              exit 1
+            fi
+          done
+
+      - name: Determine Python SDK version
+        id: py-version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PY_CURRENT=$(python3 -c "import tomllib; print(tomllib.load(open('compute/pyo3/pyproject.toml','rb'))['project']['version'])")
+          PY_CARGO=$(node -e "const fs=require('fs'); const m=fs.readFileSync('compute/pyo3/Cargo.toml','utf8').match(/^version = \"([^\"]+)\"/m); if (!m) process.exit(1); console.log(m[1]);")
+          if [ "$PY_CURRENT" != "$VERSION" ]; then
+            echo "::error::compute/pyo3/pyproject.toml version ${PY_CURRENT} does not match release ${VERSION}"
+            exit 1
+          fi
+          if [ "$PY_CARGO" != "$VERSION" ]; then
+            echo "::error::compute/pyo3/Cargo.toml version ${PY_CARGO} does not match release ${VERSION}"
+            exit 1
+          fi
+          echo "py-version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Python SDK version: $VERSION"
+
+      - name: Resolve checkout ref
+        id: ref
+        run: |
+          echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+  build-native:
+    name: Build native - ${{ matrix.artifact }}
+    needs: [version]
+    if: ${{ inputs.source-run-id == '' }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        package_dir:
-          - contracts
-          - runtime/sdk
-          - runtime/embed
-          - runtime/spreadsheet-app
-          - views/sheet-view
-          - compute/wasm/npm
-          - compute/napi/npm/darwin-arm64
-          - compute/napi/npm/darwin-x64
-          - compute/napi/npm/linux-arm64-gnu
-          - compute/napi/npm/linux-arm64-musl
-          - compute/napi/npm/linux-x64-gnu
-          - compute/napi/npm/linux-x64-musl
-          - compute/napi/npm/win32-x64-msvc
-
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: native-darwin-arm64
+            npm-dir: compute/napi/npm/darwin-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: native-darwin-x64
+            npm-dir: compute/napi/npm/darwin-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: native-linux-x64-gnu
+            npm-dir: compute/napi/npm/linux-x64-gnu
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            artifact: native-linux-arm64-gnu
+            npm-dir: compute/napi/npm/linux-arm64-gnu
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: native-linux-x64-musl
+            npm-dir: compute/napi/npm/linux-x64-musl
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            artifact: native-linux-arm64-musl
+            npm-dir: compute/napi/npm/linux-arm64-musl
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: native-win32-x64-msvc
+            npm-dir: compute/napi/npm/win32-x64-msvc
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
         with:
-          version: 10.18.3
+          ref: ${{ needs.version.outputs.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22.14.0
-          registry-url: https://registry.npmjs.org
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Zig toolchain
+        if: contains(matrix.target, 'linux-musl')
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+
+      - name: Install cargo-zigbuild
+        if: contains(matrix.target, 'linux-musl')
+        run: cargo install cargo-zigbuild --version "$CARGO_ZIGBUILD_VERSION" --locked
+
+      - name: Install napi-rs CLI
+        run: npm i -g "@napi-rs/cli@${{ env.NAPI_RS_CLI_VERSION }}"
+
+      - name: Build native addon
+        run: |
+          cd compute/napi
+          napi build --release --target ${{ matrix.target }} --manifest-path ../../Cargo.toml -p compute-core-napi ${{ contains(matrix.target, 'linux-musl') && '-x' || '' }}
+
+      - name: Copy binary to npm dir
+        run: cp compute/napi/compute-core-napi.node ${{ matrix.npm-dir }}/
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.npm-dir }}/
+          if-no-files-found: error
+          retention-days: 3
+
+  build-wasm:
+    name: Build WASM
+    needs: [version]
+    if: ${{ inputs.source-run-id == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+
+      - name: Install binaryen and brotli
+        run: sudo apt-get update && sudo apt-get install -y binaryen brotli
+
+      - name: Build WASM (release profile, includes wasm-opt + brotli)
+        run: bash compute/wasm/build.sh --profile release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wasm
+          path: compute/wasm/npm/
+          if-no-files-found: error
+          retention-days: 3
+
+  build-python:
+    name: Build Python - ${{ matrix.artifact }}
+    needs: [version]
+    if: ${{ inputs.source-run-id == '' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: python-macos-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: python-macos-x64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: python-linux-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            artifact: python-linux-arm64
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install maturin
+        run: python -m pip install "maturin==$MATURIN_VERSION"
+
+      - name: Build wheel
+        run: |
+          cd compute/pyo3
+          maturin build --release --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          # Workspace `.cargo/config.toml` redirects cargo's target dir to
+          # `target-native/`; maturin writes its wheels under that root.
+          path: target-native/wheels/*.whl
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    name: Publish packages
+    needs: [version, build-native, build-wasm, build-python]
+    if: |
+      always() &&
+      needs.version.outputs.dry-run != 'true' &&
+      needs.version.result == 'success' &&
+      (needs.build-native.result == 'success' || needs.build-native.result == 'skipped') &&
+      (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
+      (needs.build-python.result == 'success' || needs.build-python.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: npm-production
+    outputs:
+      python-published: ${{ steps.py-publish.outputs.published }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+          registry-url: https://registry.npmjs.org
 
-      - run: npm install -g npm@^11.5.1
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install trusted publishing npm
+        run: npm install -g "npm@$NPM_VERSION"
 
-      - run: pnpm build:public-artifacts
+      - name: Download all artifacts (current run)
+        if: ${{ inputs.source-run-id == '' }}
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
 
-      - name: Guard production publishes to release branch
-        if: ${{ inputs.dry_run == 'false' }}
-        working-directory: ${{ matrix.package_dir }}
+      - name: Download all artifacts (source run)
+        if: ${{ inputs.source-run-id != '' }}
+        run: gh run download ${{ inputs.source-run-id }} --dir artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move binaries into platform packages
         run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
-            echo "Production publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
-            exit 1
-          fi
-          RELEASE_VERSION="${BASH_REMATCH[1]}"
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
-            echo "${{ matrix.package_dir }} version ${PACKAGE_VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
-            exit 1
-          fi
+          for pkg in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu linux-x64-musl linux-arm64-musl win32-x64-msvc; do
+            cp artifacts/native-${pkg}/compute-core-napi.node \
+               compute/napi/npm/${pkg}/
+            echo "${pkg}: $(ls -lh compute/napi/npm/${pkg}/compute-core-napi.node | awk '{print $5}')"
+          done
+          cp artifacts/wasm/* compute/wasm/npm/
+          echo "wasm: $(ls -lh compute/wasm/npm/compute_core_wasm_bg.wasm | awk '{print $5}')"
 
-      - name: Publish package
-        working-directory: ${{ matrix.package_dir }}
+      - name: Resolve npm publish tag
+        id: npm-tag
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --access public --dry-run
+          VERSION="${{ needs.version.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%.*}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "Prerelease detected; npm packages will publish with --tag $TAG"
           else
-            npm publish --access public
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "Stable release; npm packages will publish with npm's default latest tag"
           fi
+
+      - name: 'Publish readiness: package inventory'
+        run: pnpm validate:packages
+
+      - name: 'Publish readiness: private leak scan'
+        run: pnpm check:private-leaks
+
+      - name: 'Publish readiness: build public artifacts'
+        run: |
+          # tsc -b emits dist/ for composite packages even on type errors
+          # (pre-existing TS drift in kernel/apps/* is tracked separately).
+          # We want the dist/ side effect, not a clean typecheck.
+          pnpm typecheck || true
+          pnpm run build:public-artifacts -- --skip-native-build --skip-wasm-build
+
+      - name: 'Publish readiness: boundary artifacts'
+        run: |
+          pnpm check:binary-wrapper-surfaces
+          pnpm check:contracts-declaration-identity
+          pnpm check:declaration-rollups
+          pnpm check:api-snapshots
+
+      - name: 'Publish readiness: assemble public package candidates'
+        run: pnpm assemble:public-packages
+
+      - name: 'Publish readiness: packed public fixtures'
+        run: |
+          pnpm check:public-package-manifests
+          pnpm check:external-fixtures -- --skip-build
+
+      - name: 'Publish readiness: npm tarball candidates'
+        run: |
+          rm -rf artifacts/npm-tarballs
+          mkdir -p artifacts/npm-tarballs
+          for dir in artifacts/public-packages/mog-sdk__*; do
+            echo "Packing $(node -p "require('./$dir/package.json').name")..."
+            npm pack "$dir" --pack-destination artifacts/npm-tarballs
+          done
+          shasum -a 256 artifacts/npm-tarballs/*.tgz > artifacts/npm-tarballs/SHA256SUMS
+
+      - name: Upload public package candidates
+        uses: actions/upload-artifact@v6
+        with:
+          name: npm-release-candidates-${{ needs.version.outputs.version }}
+          path: artifacts/npm-tarballs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish platform packages
+        run: |
+          NPM_TAG_ARGS=()
+          if [ -n "${{ steps.npm-tag.outputs.tag }}" ]; then
+            NPM_TAG_ARGS=(--tag "${{ steps.npm-tag.outputs.tag }}")
+          fi
+          VERSION="${{ needs.version.outputs.version }}"
+          for dir in artifacts/public-packages/mog-sdk__darwin-arm64 artifacts/public-packages/mog-sdk__darwin-x64 artifacts/public-packages/mog-sdk__linux-x64-gnu artifacts/public-packages/mog-sdk__linux-arm64-gnu artifacts/public-packages/mog-sdk__linux-x64-musl artifacts/public-packages/mog-sdk__linux-arm64-musl artifacts/public-packages/mog-sdk__win32-x64-msvc artifacts/public-packages/mog-sdk__wasm; do
+            PACKAGE_NAME=$(node -p "require('./$dir/package.json').name")
+            if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
+              echo "$PACKAGE_NAME@$VERSION already published; skipping."
+              continue
+            fi
+            echo "Publishing $PACKAGE_NAME..."
+            cd "$dir"
+            pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Publish public TypeScript packages
+        run: |
+          NPM_TAG_ARGS=()
+          if [ -n "${{ steps.npm-tag.outputs.tag }}" ]; then
+            NPM_TAG_ARGS=(--tag "${{ steps.npm-tag.outputs.tag }}")
+          fi
+          VERSION="${{ needs.version.outputs.version }}"
+          for dir in artifacts/public-packages/mog-sdk__contracts artifacts/public-packages/mog-sdk__sheet-view artifacts/public-packages/mog-sdk__spreadsheet-app artifacts/public-packages/mog-sdk__embed artifacts/public-packages/mog-sdk__node; do
+            PACKAGE_NAME=$(node -p "require('./$dir/package.json').name")
+            if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
+              echo "$PACKAGE_NAME@$VERSION already published; skipping."
+              continue
+            fi
+            echo "Publishing $PACKAGE_NAME..."
+            cd "$dir"
+            pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
+            cd "$GITHUB_WORKSPACE"
+          done
+
+      - name: Post-publish verification (npm)
+        run: |
+          # npm registry read-index propagates a few seconds after publish.
+          # Retry with backoff instead of failing on eventual-consistency race.
+          VERSION="${{ needs.version.outputs.version }}"
+          packages=(
+            "@mog-sdk/darwin-arm64"
+            "@mog-sdk/darwin-x64"
+            "@mog-sdk/linux-x64-gnu"
+            "@mog-sdk/linux-arm64-gnu"
+            "@mog-sdk/linux-x64-musl"
+            "@mog-sdk/linux-arm64-musl"
+            "@mog-sdk/win32-x64-msvc"
+            "@mog-sdk/wasm"
+            "@mog-sdk/contracts"
+            "@mog-sdk/sheet-view"
+            "@mog-sdk/spreadsheet-app"
+            "@mog-sdk/embed"
+            "@mog-sdk/node"
+          )
+          missing=("${packages[@]}")
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            next_missing=()
+            for pkg in "${missing[@]}"; do
+              if ! npm view "$pkg@$VERSION" version 2>/dev/null; then
+                next_missing+=("$pkg")
+              fi
+            done
+            if [ "${#next_missing[@]}" -eq 0 ]; then
+              exit 0
+            fi
+            missing=("${next_missing[@]}")
+            echo "attempt $attempt: not yet visible: ${missing[*]}; sleeping..."
+            sleep 15
+          done
+          echo "::error::Package(s) not visible after 180s: ${missing[*]}"
+          exit 1
+
+      - name: Publish Python wheels to PyPI
+        id: py-publish
+        run: |
+          if [ -z "${MATURIN_PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not configured; skipping Python publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python -m pip install "maturin==$MATURIN_VERSION"
+          PY_VERSION="${{ needs.version.outputs.py-version }}"
+          echo "Publishing mog-sdk==${PY_VERSION} to PyPI..."
+          for whl in artifacts/python-*/mog_sdk-*.whl; do
+            echo "  Uploading $(basename "$whl")..."
+          done
+          maturin upload --skip-existing artifacts/python-*/mog_sdk-*.whl
+          echo "published=true" >> "$GITHUB_OUTPUT"
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+      - name: Summary
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          PY_VERSION="${{ needs.version.outputs.py-version }}"
+          echo "## SDK Publish Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**TypeScript SDK:** \`@mog-sdk/node@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
+            echo "**Python SDK:** \`mog-sdk==${PY_VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "**Python SDK:** skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Published npm packages" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/darwin-arm64@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/darwin-x64@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/linux-x64-gnu@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/linux-arm64-gnu@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/linux-x64-musl@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/linux-arm64-musl@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/win32-x64-msvc@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/wasm@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/sheet-view@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/spreadsheet-app@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/embed@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/node@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
+            echo "### Published PyPI packages" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`mog-sdk==${PY_VERSION}\` (macOS arm64, macOS x64, Linux x64, Linux arm64)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  release:
+    name: Create GitHub Release
+    needs: [version, publish]
+    if: |
+      always() &&
+      needs.version.outputs.dry-run != 'true' &&
+      needs.version.result == 'success' &&
+      needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Ensure TypeScript SDK release tag exists
+        run: |
+          TAG="${{ needs.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create TypeScript SDK release
+        run: |
+          if gh release view "${{ needs.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "${{ needs.version.outputs.tag }} release already exists; skipping."
+            exit 0
+          fi
+          gh release create "${{ needs.version.outputs.tag }}" \
+            --title "@mog-sdk/node v${{ needs.version.outputs.version }}" \
+            --generate-notes \
+            --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure Python SDK release tag exists
+        if: ${{ needs.publish.outputs.python-published == 'true' }}
+        run: |
+          TAG="${{ needs.version.outputs.py-tag }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Create Python SDK release
+        if: ${{ needs.publish.outputs.python-published == 'true' }}
+        run: |
+          if gh release view "${{ needs.version.outputs.py-tag }}" >/dev/null 2>&1; then
+            echo "${{ needs.version.outputs.py-tag }} release already exists; skipping."
+            exit 0
+          fi
+          gh release create "${{ needs.version.outputs.py-tag }}" \
+            --title "mog-sdk (Python) v${{ needs.version.outputs.py-version }}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

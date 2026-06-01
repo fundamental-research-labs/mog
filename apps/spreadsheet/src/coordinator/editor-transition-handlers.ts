@@ -11,6 +11,7 @@ import type { StoreApi } from 'zustand';
 
 import { sheetId as toSheetId, type CellFormat } from '@mog-sdk/contracts/core';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 import type { FlashFillCoordinator } from '../systems/grid-editing/features/flash-fill';
 import type { UIState } from '../ui-store';
@@ -32,6 +33,56 @@ function wasEditingNowInactive(
     prevState.matches('editing') ||
     prevState.matches('committing');
   return wasEditing && currentState.matches('inactive');
+}
+
+function moveCell(cell: CellCoord, direction: string | null): CellCoord {
+  switch (direction) {
+    case 'right':
+      return { row: cell.row, col: cell.col + 1 };
+    case 'left':
+      return { row: cell.row, col: Math.max(0, cell.col - 1) };
+    case 'down':
+      return { row: cell.row + 1, col: cell.col };
+    case 'up':
+      return { row: Math.max(0, cell.row - 1), col: cell.col };
+    default:
+      return cell;
+  }
+}
+
+function saveOriginSelectionAfterCommit(
+  prevState: ReturnType<EditorActor['getSnapshot']>,
+  uiStoreApi: StoreApi<UIState>,
+  originSheetId: string,
+): void {
+  if (!prevState.matches('committing')) {
+    return;
+  }
+
+  const originCell = prevState.context.editingCell ?? prevState.context.commitActiveCell;
+  if (!originCell) {
+    return;
+  }
+
+  const targetCell = moveCell(originCell, prevState.context.commitDirection);
+  const targetRange = {
+    startRow: targetCell.row,
+    startCol: targetCell.col,
+    endRow: targetCell.row,
+    endCol: targetCell.col,
+  };
+  const sheet = toSheetId(originSheetId);
+  const existing = uiStoreApi.getState().getSheetViewState(sheet);
+
+  uiStoreApi.getState().saveSheetViewState(sheet, {
+    ranges: [targetRange],
+    activeCell: targetCell,
+    anchor: null,
+    anchorCol: null,
+    anchorRow: null,
+    scrollTop: existing?.scrollTop ?? 0,
+    scrollLeft: existing?.scrollLeft ?? 0,
+  });
 }
 
 // =============================================================================
@@ -79,6 +130,7 @@ export function wireReturnToOriginSheet(
         const originSheetId = prevState.context.sheetId;
         const activeSheetId = uiStoreApi.getState().activeSheetId;
         if (originSheetId && originSheetId !== activeSheetId) {
+          saveOriginSelectionAfterCommit(prevState, uiStoreApi, originSheetId);
           uiStoreApi.getState().setActiveSheet(toSheetId(originSheetId));
         }
       }

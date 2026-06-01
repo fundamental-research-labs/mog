@@ -24,6 +24,7 @@ import type {
   ConnectorObject,
   ChartObject,
   EquationObject,
+  FormControlObject,
   DiagramObject,
   OleObjectObject,
 } from '@mog-sdk/contracts/floating-objects';
@@ -45,6 +46,7 @@ import type {
   ConnectorData,
   ChartData,
   EquationData,
+  FormControlData,
   FloatingObjectAnchor,
   DiagramData,
   OleObjectData,
@@ -636,6 +638,7 @@ function buildBaseFields(data: WireFloatingObject) {
       'lockAspectRatio' in data ? (data.lockAspectRatio as boolean | undefined) : undefined,
     altTextTitle: 'altTextTitle' in data ? (data.altTextTitle as string | undefined) : undefined,
     displayName: 'displayName' in data ? (data.displayName as string | undefined) : undefined,
+    importStatus: 'importStatus' in data ? data.importStatus : undefined,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -651,6 +654,7 @@ type WireTextbox = FloatingObjectCommon & { type: 'textbox' } & TextboxData;
 type WireConnector = FloatingObjectCommon & { type: 'connector' } & ConnectorData;
 type WireChart = FloatingObjectCommon & { type: 'chart' } & ChartData;
 type WireEquation = FloatingObjectCommon & { type: 'equation' } & EquationData;
+type WireFormControl = FloatingObjectCommon & { type: 'formControl' } & FormControlData;
 type WireDiagram = FloatingObjectCommon & { type: 'diagram' } & DiagramData;
 type WireDrawing = FloatingObjectCommon & { type: 'drawing' } & DrawingData;
 type WireOleObject = FloatingObjectCommon & { type: 'oleObject' } & OleObjectData;
@@ -735,6 +739,18 @@ function toChartObject(d: WireChart): ChartObject {
     axis: chart.axis,
     colors: chart.colors,
     series: chart.series,
+    displayBlanksAs: chart.displayBlanksAs,
+    plotVisibleOnly: chart.plotVisibleOnly,
+    gapWidth: chart.gapWidth,
+    gapDepth: chart.gapDepth,
+    overlap: chart.overlap,
+    doughnutHoleSize: chart.doughnutHoleSize,
+    firstSliceAngle: chart.firstSliceAngle,
+    bubbleScale: chart.bubbleScale,
+    showNegBubbles: chart.showNegBubbles,
+    sizeRepresents: chart.sizeRepresents,
+    splitType: chart.splitType,
+    splitValue: chart.splitValue,
     dataLabels: chart.dataLabels,
     pieSlice: chart.pieSlice,
     trendline: chart.trendline,
@@ -743,6 +759,44 @@ function toChartObject(d: WireChart): ChartObject {
     radarFilled: chart.radarFilled,
     radarMarkers: chart.radarMarkers,
     waterfall: chart.waterfall,
+    histogram: chart.histogram,
+    boxplot: chart.boxplot,
+    hierarchy: chart.hierarchy,
+    regionMap: chart.regionMap,
+    categoryLabelLevel: chart.categoryLabelLevel,
+    seriesNameLevel: chart.seriesNameLevel,
+    showAllFieldButtons: chart.showAllFieldButtons,
+    secondPlotSize: chart.secondPlotSize,
+    varyByCategories: chart.varyByCategories,
+    titleHAlign: chart.titleHAlign,
+    titleVAlign: chart.titleVAlign,
+    titleShowShadow: chart.titleShowShadow,
+    pivotOptions: chart.pivotOptions,
+    bubble3dEffect: chart.bubble3dEffect,
+    wireframe: chart.wireframe,
+    surfaceTopView: chart.surfaceTopView,
+    colorScheme: chart.colorScheme,
+    style: chart.style,
+    roundedCorners: chart.roundedCorners,
+    autoTitleDeleted: chart.autoTitleDeleted,
+    showDataLabelsOverMax: chart.showDataLabelsOverMax,
+    chartFormat: chart.chartFormat,
+    plotFormat: chart.plotFormat,
+    titleFormat: chart.titleFormat,
+    titleRichText: chart.titleRichText,
+    titleFormula: chart.titleFormula,
+    plotLayout: chart.plotLayout,
+    titleLayout: chart.titleLayout,
+    dataTable: chart.dataTable,
+    dropLines: chart.dropLines,
+    highLowLines: chart.highLowLines,
+    seriesLines: chart.seriesLines,
+    upDownBars: chart.upDownBars,
+    barShape: chart.barShape,
+    view3d: chart.view3d,
+    floorFormat: chart.floorFormat,
+    sideWallFormat: chart.sideWallFormat,
+    backWallFormat: chart.backWallFormat,
     sourceTableId: chart.sourceTableId,
     tableDataColumns: chart.tableDataColumns,
     tableCategoryColumn: chart.tableCategoryColumn,
@@ -750,12 +804,17 @@ function toChartObject(d: WireChart): ChartObject {
     tableColumnNames: chart.tableColumnNames,
     ooxml: chart.ooxml,
   };
+  const hasImportStatus = chart.importStatus !== undefined;
+  const chartType =
+    chart.chartType && chart.chartType !== 'undefined'
+      ? chart.chartType
+      : hasImportStatus
+        ? ''
+        : 'column';
   return {
     ...buildBaseFields(d),
     type: 'chart' as const,
-    chartType: (chart.chartType && chart.chartType !== 'undefined'
-      ? chart.chartType
-      : 'column') as ChartObjectType,
+    chartType: chartType as ChartObjectType,
     anchorMode: (chart.anchor.anchorMode === 'twoCell'
       ? 'twoCell'
       : 'oneCell') as ChartObject['anchorMode'],
@@ -796,6 +855,14 @@ function toEquationObject(d: WireEquation): EquationObject {
     ...buildBaseFields(d),
     type: 'equation' as const,
     equation,
+  };
+}
+
+function toFormControlObject(d: WireFormControl): FormControlObject {
+  return {
+    ...buildBaseFields(d),
+    type: 'formControl' as const,
+    controlType: typeof d.controlType === 'string' ? d.controlType : undefined,
   };
 }
 
@@ -874,6 +941,8 @@ export function toFloatingObject(data: WireFloatingObject): FloatingObject {
       return toChartObject(data);
     case 'equation':
       return toEquationObject(data);
+    case 'formControl':
+      return toFormControlObject(data as WireFormControl);
     case 'diagram':
       return toDiagramObject(data);
     case 'oleObject':
@@ -882,7 +951,6 @@ export function toFloatingObject(data: WireFloatingObject): FloatingObject {
       return toDrawingObject(data);
     case 'slicer':
     case 'camera':
-    case 'formControl':
     default: {
       // Fallback: treat unknown/unsupported types as shapes.
       // Build a minimal shape from the common fields.

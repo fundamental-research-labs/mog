@@ -38,6 +38,11 @@
       "development": "./src/infra/context/embed-runtime-context.tsx",
       "import": "./dist/src/infra/context/embed-runtime-context.js"
     },
+    "./services": {
+      "development": "./src/infra/services/index.ts",
+      "types": "./src/infra/services/index.ts",
+      "import": "./dist/src/infra/services/index.js"
+    },
     "./chrome/collab": {
       "development": "./src/entries/chrome-collab.ts",
       "types": "./dist/src/entries/chrome-collab.d.ts",

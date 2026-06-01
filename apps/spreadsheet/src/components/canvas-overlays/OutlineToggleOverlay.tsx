@@ -45,7 +45,7 @@
  * client-side from the same constants and helpers the renderer uses
  * (`OUTLINE_LEVEL_WIDTH`, `OUTLINE_LEVEL_HEIGHT`, `OUTLINE_BUTTON_SIZE`,
  * `getEffectiveHeaderDimensions`) and from `coords.cellToViewport()` for
- * group-end row/col positions.
+ * adjacent summary row/col positions.
  *
  * ## Why a separate overlay container
  *
@@ -104,6 +104,10 @@ interface LevelButtonRect {
   x: number;
   y: number;
   size: number;
+}
+
+function getSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
+  return summaryAfter ? end + 1 : start - 1;
 }
 
 // =============================================================================
@@ -234,6 +238,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
             margin: 0,
           }}
           aria-label={`Outline ${btn.axis} level ${btn.level}`}
+          data-no-grid-pointer="true"
           data-testid={`outline-${btn.axis}-level-${btn.level}`}
           onClick={() => handleLevelClick(btn.axis, btn.level)}
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
@@ -259,6 +264,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
           }}
           aria-label={`Outline ${tgl.axis} group ${tgl.collapsed ? 'expand' : 'collapse'}`}
           aria-expanded={!tgl.collapsed}
+          data-no-grid-pointer="true"
           data-testid={`outline-${tgl.axis}-toggle-${tgl.index}`}
           onClick={() => handleToggleClick(tgl.groupId)}
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
@@ -343,7 +349,8 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
   // sits at row Y (center) and gutter X = (level-1)*W + W/2. Only groups
   // whose summary row is currently visible get a button.
   for (const group of rowGroups) {
-    const buttonRow = summaryRowsBelow ? group.end : group.start;
+    const buttonRow = getSummaryIndex(group.start, group.end, summaryRowsBelow);
+    if (buttonRow < 0) continue;
     const cellRect = geometry.getCellRect({ row: buttonRow, col: 0 });
     if (!cellRect) continue;
     const buttonX = (group.level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
@@ -361,7 +368,8 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
 
   // ── Column collapse buttons ─────────────────────────────────────────────
   for (const group of columnGroups) {
-    const buttonCol = summaryColumnsRight ? group.end : group.start;
+    const buttonCol = getSummaryIndex(group.start, group.end, summaryColumnsRight);
+    if (buttonCol < 0) continue;
     const cellRect = geometry.getCellRect({ row: 0, col: buttonCol });
     if (!cellRect) continue;
     const buttonX = cellRect.x + cellRect.width / 2;

@@ -292,7 +292,7 @@ export const RADAR_VARIANTS: ChartVariant[] = [
     label: 'Radar with Markers',
     description: 'Radar with data point markers',
     type: 'radar',
-    subType: 'basic',
+    subType: 'markers',
     config: { radarMarkers: true },
   },
 ];

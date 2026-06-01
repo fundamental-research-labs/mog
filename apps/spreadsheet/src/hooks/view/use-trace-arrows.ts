@@ -22,6 +22,7 @@ import type { TraceArrow } from '@mog-sdk/contracts/trace-arrows';
 import { parseA1 } from '@mog/spreadsheet-utils/a1';
 
 import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
+import { getTracePrecedentSources } from '../../utils/formula-auditing';
 // PERFORMANCE: Use useActiveCell instead of useSelection to avoid re-renders on
 // every selection change. This hook only needs activeCell, not the full selection state.
 import { useActiveCell } from '../selection/use-active-cell';
@@ -100,9 +101,8 @@ export function useTraceArrows(): UseTraceArrowsReturn {
       // Get the CellId for the target cell (async)
       const targetCellId = await getCellId(activeSheetId, row, col);
 
-      // Use Worksheet API to get precedent cells
       const ws = wb.getSheetById(activeSheetId);
-      const precedents = await ws.getPrecedents(row, col);
+      const precedents = await getTracePrecedentSources(ws, row, col);
 
       if (precedents.length === 0) {
         // No precedents - cell doesn't have a formula or formula has no cell refs
@@ -111,9 +111,8 @@ export function useTraceArrows(): UseTraceArrowsReturn {
 
       // Convert A1 strings to TraceArrow format (resolve all CellIds in parallel)
       const arrows: TraceArrow[] = await Promise.all(
-        precedents.map(async (precAddr, index) => {
-          // getPrecedents returns A1 strings (same-sheet only)
-          const { row: precRow, col: precCol } = parseA1(precAddr);
+        precedents.map(async (precedent, index) => {
+          const { row: precRow, col: precCol } = precedent;
           const fromCellId = await getCellId(activeSheetId, precRow, precCol);
 
           return {

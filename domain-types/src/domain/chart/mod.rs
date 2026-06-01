@@ -7,6 +7,7 @@ mod ooxml_mirror_types;
 mod position;
 mod series;
 mod spec;
+mod style_context;
 mod view_3d;
 
 #[cfg(test)]
@@ -21,6 +22,7 @@ pub use ooxml_mirror_types::*;
 pub use position::*;
 pub use series::*;
 pub use spec::*;
+pub use style_context::*;
 pub use view_3d::*;
 
 use serde::{Deserialize, Serialize};
@@ -125,13 +127,15 @@ impl Default for StandardChartAuthorityValidity {
 /// every OOXML read-side chart-type variant (including 3-D variants
 /// and `ofPie`) has a direct mapping here. It also covers the ChartEx
 /// (cx:chartSpace) chart types not yet handled by the parser's OOXML
-/// enum (waterfall, treemap, sunburst, funnel, regionMap).
+/// enum (waterfall, treemap, sunburst, funnel, regionMap, histogram,
+/// pareto, box/whisker).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ChartType {
     #[default]
     Bar,
     Bar3D,
     Column,
+    Column3D,
     Line,
     Line3D,
     Pie,
@@ -153,6 +157,10 @@ pub enum ChartType {
     /// Of-pie chart (pie of pie / bar of pie).
     OfPie,
     RegionMap,
+    Histogram,
+    Pareto,
+    /// ChartEx `boxWhisker`, serialized using the public TS/API spelling.
+    Boxplot,
     /// Fallback — preserves the original string for round-trip fidelity.
     ///
     /// Holds the OOXML element name token (e.g. `"histogramChart"`,
@@ -183,6 +191,7 @@ impl ChartType {
             ChartType::Bar => "bar",
             ChartType::Bar3D => "bar3D",
             ChartType::Column => "column",
+            ChartType::Column3D => "column3D",
             ChartType::Line => "line",
             ChartType::Line3D => "line3D",
             ChartType::Pie => "pie",
@@ -203,6 +212,9 @@ impl ChartType {
             ChartType::Surface3D => "surface3D",
             ChartType::OfPie => "ofPie",
             ChartType::RegionMap => "regionMap",
+            ChartType::Histogram => "histogram",
+            ChartType::Pareto => "pareto",
+            ChartType::Boxplot => "boxplot",
             ChartType::Unknown(s) => s.as_str(),
         }
     }
@@ -218,9 +230,7 @@ impl ChartType {
             "bar" => ChartType::Bar,
             "bar3D" | "bar3d" => ChartType::Bar3D,
             "column" => ChartType::Column,
-            // Legacy 3-D column string from the TS bridge maps to Bar3D
-            // (OOXML has no "column" chart type — it's `Bar` with `bar_dir=col`).
-            "column3d" | "column3D" => ChartType::Bar3D,
+            "column3d" | "column3D" => ChartType::Column3D,
             "line" => ChartType::Line,
             "line3D" | "line3d" => ChartType::Line3D,
             "pie" => ChartType::Pie,
@@ -241,6 +251,9 @@ impl ChartType {
             "surface3D" | "surface3d" => ChartType::Surface3D,
             "ofPie" => ChartType::OfPie,
             "regionMap" => ChartType::RegionMap,
+            "histogram" => ChartType::Histogram,
+            "pareto" | "paretoLine" => ChartType::Pareto,
+            "boxplot" | "boxWhisker" => ChartType::Boxplot,
             other => ChartType::Unknown(other.to_string()),
         }
     }
@@ -273,16 +286,28 @@ impl ChartType {
         }
     }
 
+    /// Convert a ChartEx OOXML layout id into a public runtime chart type.
+    ///
+    /// OOXML-only aliases such as `paretoLine` and `boxWhisker` are normalized
+    /// to the public tokens `pareto` and `boxplot`. Layout IDs that are not
+    /// supported as semantic ChartEx families return `None`.
+    pub fn from_chart_ex_layout_id(
+        layout_id: &ooxml_types::chart_ex::ChartExLayoutId,
+    ) -> Option<Self> {
+        layout_id.to_public_chart_type().map(ChartType::from_str)
+    }
+
     /// Convert to the OOXML chart-type enum. Variants that don't have a
     /// direct OOXML mapping (ChartEx-only types — waterfall/treemap/
-    /// sunburst/funnel/regionMap, plus `Column` which OOXML expresses via
-    /// `Bar` + `BarDirection`, and `Unknown` which carries its own token)
+    /// sunburst/funnel/regionMap/histogram/pareto/boxplot, plus `Column`
+    /// and `Column3D` which OOXML expresses via `Bar`/`Bar3D` plus
+    /// `BarDirection`, and `Unknown` which carries its own token)
     /// map to `OoxmlChartType::Unknown`.
     pub fn to_ooxml(&self) -> ooxml_types::charts::ChartType {
         use ooxml_types::charts::ChartType as Oct;
         match self {
             ChartType::Bar | ChartType::Column => Oct::Bar,
-            ChartType::Bar3D => Oct::Bar3D,
+            ChartType::Bar3D | ChartType::Column3D => Oct::Bar3D,
             ChartType::Line => Oct::Line,
             ChartType::Line3D => Oct::Line3D,
             ChartType::Pie => Oct::Pie,
@@ -303,6 +328,9 @@ impl ChartType {
             | ChartType::Sunburst
             | ChartType::Funnel
             | ChartType::RegionMap
+            | ChartType::Histogram
+            | ChartType::Pareto
+            | ChartType::Boxplot
             | ChartType::Unknown(_) => Oct::Unknown,
         }
     }
@@ -317,9 +345,14 @@ pub enum ChartSubType {
     PercentStacked,
     Smooth,
     SmoothMarkers,
+    Filled,
     Markers,
     MarkersStacked,
     MarkersPercentStacked,
+    Hlc,
+    Ohlc,
+    VolumeHlc,
+    VolumeOhlc,
     /// Fallback — preserves the original string for round-trip fidelity.
     Unknown(String),
 }
@@ -346,9 +379,14 @@ impl ChartSubType {
             ChartSubType::PercentStacked => "percentStacked",
             ChartSubType::Smooth => "smooth",
             ChartSubType::SmoothMarkers => "smoothMarkers",
+            ChartSubType::Filled => "filled",
             ChartSubType::Markers => "markers",
             ChartSubType::MarkersStacked => "markersStacked",
             ChartSubType::MarkersPercentStacked => "markersPercentStacked",
+            ChartSubType::Hlc => "hlc",
+            ChartSubType::Ohlc => "ohlc",
+            ChartSubType::VolumeHlc => "volume-hlc",
+            ChartSubType::VolumeOhlc => "volume-ohlc",
             ChartSubType::Unknown(s) => s.as_str(),
         }
     }
@@ -362,9 +400,14 @@ impl ChartSubType {
             "percentStacked" => ChartSubType::PercentStacked,
             "smooth" => ChartSubType::Smooth,
             "smoothMarkers" => ChartSubType::SmoothMarkers,
+            "filled" => ChartSubType::Filled,
             "markers" => ChartSubType::Markers,
             "markersStacked" => ChartSubType::MarkersStacked,
             "markersPercentStacked" => ChartSubType::MarkersPercentStacked,
+            "hlc" => ChartSubType::Hlc,
+            "ohlc" => ChartSubType::Ohlc,
+            "volume-hlc" => ChartSubType::VolumeHlc,
+            "volume-ohlc" => ChartSubType::VolumeOhlc,
             other => ChartSubType::Unknown(other.to_string()),
         }
     }

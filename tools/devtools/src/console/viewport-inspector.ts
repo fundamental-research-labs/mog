@@ -550,10 +550,9 @@ export async function readResolvedNumberFormats(
  *
  * Strategy:
  *  - One `getDisplayedRangeProperties` call over the bounding rectangle of
- *    all requested cells. Per-cell `getDisplayedCellProperties` is then
- *    used as a fallback for any cell the range read missed (the range
- *    flavor occasionally returns nulls for cells outside the viewport when
- *    the CF re-evaluation for that row hasn't been triggered yet).
+ *    all requested cells when that rectangle is inside the bridge limit.
+ *    Sparse scale-format checks can span hundreds of thousands of rows, so
+ *    larger rectangles go straight to per-cell `getDisplayedCellProperties`.
  */
 export async function readDisplayedFormatsViaBridge(
   cells: ReadonlyArray<{ row: number; col: number }>,
@@ -567,28 +566,35 @@ export async function readDisplayedFormatsViaBridge(
   const sheetId = getActiveSheetId();
   if (!sheetId) return out;
 
-  // Range pre-fetch (single bridge call)
+  const uniqueCells = Array.from(
+    new Map(cells.map((cell) => [`${cell.row},${cell.col}`, cell])).values(),
+  );
+
+  // Range pre-fetch (single bridge call) for dense batches only.
   if (typeof bridge.getDisplayedRangeProperties === 'function') {
     try {
-      const minRow = Math.min(...cells.map((c) => c.row));
-      const maxRow = Math.max(...cells.map((c) => c.row));
-      const minCol = Math.min(...cells.map((c) => c.col));
-      const maxCol = Math.max(...cells.map((c) => c.col));
-      const rangeFormats = await bridge.getDisplayedRangeProperties(
-        sheetId,
-        minRow,
-        minCol,
-        maxRow,
-        maxCol,
-      );
-      if (Array.isArray(rangeFormats)) {
-        for (let ri = 0; ri < rangeFormats.length; ri++) {
-          const rowFmts = rangeFormats[ri];
-          if (!Array.isArray(rowFmts)) continue;
-          for (let ci = 0; ci < rowFmts.length; ci++) {
-            const fmt = rowFmts[ci];
-            if (fmt) {
-              out[`${minRow + ri},${minCol + ci}`] = fmt;
+      const minRow = Math.min(...uniqueCells.map((c) => c.row));
+      const maxRow = Math.max(...uniqueCells.map((c) => c.row));
+      const minCol = Math.min(...uniqueCells.map((c) => c.col));
+      const maxCol = Math.max(...uniqueCells.map((c) => c.col));
+      const cellCount = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+      if (cellCount <= 10_000) {
+        const rangeFormats = await bridge.getDisplayedRangeProperties(
+          sheetId,
+          minRow,
+          minCol,
+          maxRow,
+          maxCol,
+        );
+        if (Array.isArray(rangeFormats)) {
+          for (let ri = 0; ri < rangeFormats.length; ri++) {
+            const rowFmts = rangeFormats[ri];
+            if (!Array.isArray(rowFmts)) continue;
+            for (let ci = 0; ci < rowFmts.length; ci++) {
+              const fmt = rowFmts[ci];
+              if (fmt) {
+                out[`${minRow + ri},${minCol + ci}`] = fmt;
+              }
             }
           }
         }
@@ -601,7 +607,7 @@ export async function readDisplayedFormatsViaBridge(
   // Per-cell fallback for any requested cell that the range read missed.
   if (typeof bridge.getDisplayedCellProperties === 'function') {
     await Promise.all(
-      cells.map(async ({ row, col }) => {
+      uniqueCells.map(async ({ row, col }) => {
         const key = `${row},${col}`;
         if (out[key]) return;
         try {
@@ -615,6 +621,23 @@ export async function readDisplayedFormatsViaBridge(
   }
 
   return out;
+}
+
+function hasLinkedUnlabeledCheckboxOverlay(row: number, col: number): boolean {
+  if (typeof document === 'undefined') return false;
+
+  const selector = [
+    '[data-form-control-type="checkbox"]',
+    `[data-form-control-linked-row="${row}"]`,
+    `[data-form-control-linked-col="${col}"]`,
+  ].join('');
+  const wrapper = document.querySelector<HTMLElement>(selector);
+  if (!wrapper) return false;
+
+  const overlay = wrapper.querySelector<HTMLElement>('[data-testid^="form-control-checkbox-"]');
+  if (!overlay) return false;
+
+  return (overlay.textContent ?? '').trim().length === 0;
 }
 
 /**
@@ -634,11 +657,14 @@ export function readCellValue(
     if (!accessor) return null;
     const exists = accessor.moveTo?.(row, col);
     if (!exists) return null;
+    const displayText = hasLinkedUnlabeledCheckboxOverlay(row, col)
+      ? ''
+      : (accessor.displayText ?? null);
     return {
       row,
       col,
       viewportId: vpId,
-      displayText: accessor.displayText ?? null,
+      displayText,
       valueType: accessor.valueType ?? 0,
       numberValue: accessor.numberValue,
       hasFormula: accessor.hasFormula,
@@ -650,7 +676,19 @@ export function readCellValue(
 
   const states: ReadonlyMap<string, any> | undefined = bridge.getPerViewportStates?.();
   if (!states) return null;
+  // Restrict the search to viewports belonging to the active sheet. Viewport
+  // IDs are sheet-scoped ("main:<sheetId>"), and a stale coordinator for a
+  // previously-viewed sheet can linger in this map after a sheet switch — its
+  // TS-side teardown is async (an awaited IPC round-trip) and races the next
+  // read. Without this filter the loop returns that stale sheet's cell: e.g.
+  // reading Sheet1 A1 right after switching from Sheet2 yields Sheet2's value,
+  // because the Sheet2 coordinator was inserted first. Mirrors the sheet-scoped
+  // resolution in kernel viewport-reader.ts (`binaryCellReader`). When the
+  // active sheet can't be resolved (no open document), fall back to the prior
+  // any-viewport behavior.
+  const activeSheetId = getActiveSheetId();
   for (const [vpId] of states) {
+    if (activeSheetId && !vpId.endsWith(':' + activeSheetId)) continue;
     const result = tryRead(vpId);
     if (result) return result;
   }

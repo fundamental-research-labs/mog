@@ -71,6 +71,7 @@ function createSelectionActor() {
 function createWorkbook(options?: {
   protected?: boolean;
   editable?: boolean;
+  projectionSource?: { row: number; col: number } | null;
   viewportCell?: { editText?: string; hasFormula?: boolean; displayText?: unknown };
   editSource?: string | Promise<string>;
   validationRule?: any;
@@ -79,8 +80,14 @@ function createWorkbook(options?: {
 }) {
   const canEditCell = jest.fn(async () => options?.editable ?? true);
   const getValueForEditing = jest.fn(async () => options?.editSource ?? '');
+  const getProjectionSource = jest.fn(async () =>
+    options && 'projectionSource' in options ? options.projectionSource : null,
+  );
   const workbook = {
     getSheetById: jest.fn(() => ({
+      bindings: {
+        getProjectionSource,
+      },
       protection: {
         canEditCellFast: jest.fn(() => (options?.protected ? 'unknown' : true)),
         canEditCell,
@@ -101,7 +108,7 @@ function createWorkbook(options?: {
       },
     })),
   } as any;
-  return { workbook, canEditCell, getValueForEditing };
+  return { workbook, canEditCell, getValueForEditing, getProjectionSource };
 }
 
 function createService(workbook: any, editorActor: any, selectionActor: any) {
@@ -159,6 +166,54 @@ describe('createEditEntryService', () => {
     expect(canEditCell).toHaveBeenCalledTimes(1);
     expect(getValueForEditing).not.toHaveBeenCalled();
     expect(editorEvents).toHaveLength(0);
+  });
+
+  it('blocks projected spill members before reading edit source', async () => {
+    const { actor: editorActor, sent: editorEvents } = createEditorActor();
+    const { actor: selectionActor, sent: selectionEvents } = createSelectionActor();
+    const { workbook, getValueForEditing, getProjectionSource } = createWorkbook({
+      projectionSource: { row: 0, col: 2 },
+      viewportCell: { hasFormula: true },
+      editSource: '=SORT(A1:A5)',
+    });
+    const service = createService(workbook, editorActor, selectionActor);
+
+    const result = await service.beginEditSession({
+      sheetId: SHEET_ID,
+      cell: { row: 2, col: 2 },
+      entryMode: 'typing',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe('You cannot change part of an array formula.');
+    expect(getProjectionSource).toHaveBeenCalledWith(2, 2);
+    expect(getValueForEditing).not.toHaveBeenCalled();
+    expect(selectionEvents).toHaveLength(0);
+    expect(editorEvents).toHaveLength(0);
+  });
+
+  it('treats undefined projection source as editable', async () => {
+    const { actor: editorActor, sent: editorEvents } = createEditorActor();
+    const { actor: selectionActor } = createSelectionActor();
+    const { workbook } = createWorkbook({
+      projectionSource: undefined,
+      viewportCell: { editText: '=A1+B1' },
+    });
+    const service = createService(workbook, editorActor, selectionActor);
+
+    const result = await service.beginEditSession({
+      sheetId: SHEET_ID,
+      cell: { row: 0, col: 2 },
+      entryMode: 'typing',
+    });
+
+    expect(result.success).toBe(true);
+    expect(editorEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'START_EDITING',
+        initialValue: '=A1+B1',
+      }),
+    );
   });
 
   it('drops stale edit-source completions after a newer edit request', async () => {

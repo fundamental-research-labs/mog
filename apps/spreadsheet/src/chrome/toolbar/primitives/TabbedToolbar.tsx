@@ -40,6 +40,7 @@ import { SparklineToolsRibbon } from '../contextual/SparklineToolsRibbon';
 import { KeyTipOverlay, KeyTipProvider } from '../keytips';
 import { DataRibbon } from '../tabs/DataRibbon';
 import { FormulasRibbon } from '../tabs/FormulasRibbon';
+import { HelpRibbon } from '../tabs/HelpRibbon';
 import { HomeRibbon } from '../tabs/HomeRibbon';
 import { InsertRibbon } from '../tabs/InsertRibbon';
 import { PageLayoutRibbon } from '../tabs/PageLayoutRibbon';
@@ -63,6 +64,7 @@ type TabId =
   | 'data'
   | 'review'
   | 'view'
+  | 'help'
   | 'table-design'
   | 'chart-design'
   | 'chart-format'
@@ -350,7 +352,13 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
   // Ribbon collapse coordinator - computes collapse level from container width
   // This is the SINGLE SOURCE OF TRUTH for collapse state
   const containerRef = useRef<HTMLDivElement>(null);
-  const collapseState = useRibbonCollapse(containerRef);
+  // Pass the content panel + active tab so collapse is content-aware: the width
+  // breakpoints are only an estimate of "does it fit", and the widest tab
+  // (Formulas) overflows in the dead zone between breakpoints unless we measure
+  // the panel's actual overflow and escalate. containerRef stays the stable
+  // viewport-width ancestor — observing the panel itself would re-introduce the
+  // ResizeObserver feedback loop (see ui/ribbon-tab-flicker.spec.ts).
+  const collapseState = useRibbonCollapse(containerRef, ribbonContentRef, activeTab);
 
   // visible-tabs ownership: visible tabs are owned by the slice. The slice
   // exposes `selectVisibleRibbonTabs(state) =
@@ -546,6 +554,12 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
                     pageBreakPreviewMode={pageBreakPreviewMode}
                     onTogglePageBreakPreview={onTogglePageBreakPreview}
                   />
+                </RibbonVisibilityTab>
+              )}
+
+              {activeTab === 'help' && (
+                <RibbonVisibilityTab tab="help">
+                  <HelpRibbon />
                 </RibbonVisibilityTab>
               )}
 

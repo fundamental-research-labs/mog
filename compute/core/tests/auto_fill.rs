@@ -728,7 +728,7 @@ fn single_cell_source_copies_constant() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 17b. Single cell zero — must NOT increment (regression for MOG_14_1)
+// 17b. Single cell zero — must NOT increment.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 #[test]

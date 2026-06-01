@@ -437,7 +437,9 @@ fn test_textbox_roundtrip() {
 #[test]
 fn test_chart_roundtrip() {
     use crate::domain::chart::{
-        ChartFormatStringData, ChartSubType, ChartType, PivotChartOptionsData, SeriesOrientation,
+        ChartColorMapOverrideData, ChartColorMappingData, ChartFormatStringData,
+        ChartStyleContextData, ChartStyleOwnerData, ChartSubType, ChartType, PivotChartOptionsData,
+        SeriesOrientation,
     };
     use crate::domain::conditional_format::CellIdRange;
 
@@ -469,12 +471,24 @@ fn test_chart_roundtrip() {
             colors: Some(vec!["#ff0000".to_string()]),
             series: Some(vec![crate::domain::chart::ChartSeriesData {
                 name: Some("Revenue".to_string()),
+                name_ref: None,
                 r#type: None,
                 color: None,
+                stock_role: None,
                 values: None,
+                value_cache: None,
+                value_source_kind: None,
                 categories: None,
+                x_role: None,
+                category_cache: None,
+                category_source_kind: None,
+                category_levels: None,
+                category_label_format: None,
                 bubble_size: None,
+                bubble_size_cache: None,
+                bubble_size_source_kind: None,
                 smooth: None,
+                show_lines: None,
                 explosion: None,
                 invert_if_negative: None,
                 y_axis_index: None,
@@ -496,6 +510,13 @@ fn test_chart_roundtrip() {
                 marker_background_color: None,
                 marker_foreground_color: None,
                 filtered: None,
+                source_series_index: None,
+                source_series_key: None,
+                visible_order: None,
+                pivot_series_key: None,
+                pivot_data_field_index: None,
+                projection_authority: None,
+                projection_diagnostics: Vec::new(),
                 show_shadow: None,
                 show_connector_lines: None,
                 leader_line_format: None,
@@ -509,13 +530,20 @@ fn test_chart_roundtrip() {
             radar_filled: None,
             radar_markers: None,
             waterfall: None,
+            histogram: None,
+            boxplot: None,
+            hierarchy: None,
+            region_map: None,
             display_blanks_as: None,
             plot_visible_only: None,
             gap_width: None,
+            gap_depth: None,
             overlap: None,
             doughnut_hole_size: None,
             first_slice_angle: None,
             bubble_scale: None,
+            show_neg_bubbles: None,
+            size_represents: None,
             split_type: None,
             split_value: None,
             category_label_level: None,
@@ -532,12 +560,26 @@ fn test_chart_roundtrip() {
                 show_report_filter_field_buttons: Some(true),
                 show_value_field_buttons: Some(false),
             }),
+            pivot_projection: None,
             bar_shape: None,
             // Bubble / Surface / Theming
             bubble_3d_effect: None,
             wireframe: None,
             surface_top_view: None,
             color_scheme: None,
+            chart_style_context: Some(ChartStyleContextData {
+                color_map_override: Some(ChartColorMapOverrideData::Override {
+                    mapping: ChartColorMappingData {
+                        tx1: Some("Accent2".to_string()),
+                        ..Default::default()
+                    },
+                }),
+                owners: vec![ChartStyleOwnerData {
+                    owner_key: "title".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
             // Position in points
             height_pt: None,
             width_pt: None,
@@ -555,7 +597,13 @@ fn test_chart_roundtrip() {
                 font: None,
             }]),
             title_formula: None,
+            plot_layout: None,
+            title_layout: None,
             data_table: None,
+            drop_lines: None,
+            high_low_lines: None,
+            series_lines: None,
+            up_down_bars: None,
             view_3d: None,
             floor_format: None,
             side_wall_format: None,
@@ -603,6 +651,12 @@ fn test_chart_roundtrip() {
                 .and_then(|opts| opts.show_axis_field_buttons),
             Some(true)
         );
+        assert!(matches!(
+            c.chart_style_context
+                .as_ref()
+                .and_then(|ctx| ctx.color_map_override.as_ref()),
+            Some(ChartColorMapOverrideData::Override { .. })
+        ));
         assert_eq!(
             c.title_rich_text
                 .as_ref()

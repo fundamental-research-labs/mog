@@ -85,6 +85,18 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.waterfall) {
         entries.push(("waterfall".into(), a));
     }
+    if let Some(a) = option_sub_object(&d.histogram) {
+        entries.push(("histogram".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.boxplot) {
+        entries.push(("boxplot".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.hierarchy) {
+        entries.push(("hierarchy".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.region_map) {
+        entries.push(("regionMap".into(), a));
+    }
     if let Some(ref v) = d.display_blanks_as {
         entries.push(("displayBlanksAs".into(), Any::String(Arc::from(v.as_str()))));
     }
@@ -93,6 +105,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     }
     if let Some(v) = d.gap_width {
         entries.push(("gapWidth".into(), Any::Number(v as f64)));
+    }
+    if let Some(v) = d.gap_depth {
+        entries.push(("gapDepth".into(), Any::Number(v as f64)));
     }
     if let Some(v) = d.overlap {
         entries.push(("overlap".into(), Any::Number(v as f64)));
@@ -105,6 +120,12 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     }
     if let Some(v) = d.bubble_scale {
         entries.push(("bubbleScale".into(), Any::Number(v as f64)));
+    }
+    if let Some(v) = d.show_neg_bubbles {
+        entries.push(("showNegBubbles".into(), Any::Bool(v)));
+    }
+    if let Some(ref v) = d.size_represents {
+        entries.push(("sizeRepresents".into(), Any::String(Arc::from(v.as_str()))));
     }
     if let Some(ref v) = d.split_type {
         entries.push(("splitType".into(), Any::String(Arc::from(v.as_str()))));
@@ -139,6 +160,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.pivot_options) {
         entries.push(("pivotOptions".into(), a));
     }
+    if let Some(a) = option_sub_object(&d.pivot_projection) {
+        entries.push(("pivotProjection".into(), a));
+    }
     if let Some(ref v) = d.bar_shape {
         entries.push(("barShape".into(), Any::String(Arc::from(v.as_str()))));
     }
@@ -153,6 +177,9 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     }
     if let Some(v) = d.color_scheme {
         entries.push(("colorScheme".into(), Any::Number(v as f64)));
+    }
+    if let Some(a) = option_sub_object(&d.chart_style_context) {
+        entries.push(("chartStyleContext".into(), a));
     }
     if let Some(v) = d.height_pt {
         entries.push(("heightPt".into(), Any::Number(v)));
@@ -193,8 +220,26 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(ref v) = d.title_formula {
         entries.push(("titleFormula".into(), Any::String(Arc::from(v.as_str()))));
     }
+    if let Some(a) = option_sub_object(&d.plot_layout) {
+        entries.push(("plotLayout".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.title_layout) {
+        entries.push(("titleLayout".into(), a));
+    }
     if let Some(a) = option_sub_object(&d.data_table) {
         entries.push(("dataTable".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.drop_lines) {
+        entries.push(("dropLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.high_low_lines) {
+        entries.push(("highLowLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.series_lines) {
+        entries.push(("seriesLines".into(), a));
+    }
+    if let Some(a) = option_sub_object(&d.up_down_bars) {
+        entries.push(("upDownBars".into(), a));
     }
     if let Some(a) = option_sub_object(&d.view_3d) {
         entries.push(("view3d".into(), a));
@@ -272,13 +317,20 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         radar_filled: read_bool(map, txn, "radarFilled"),
         radar_markers: read_bool(map, txn, "radarMarkers"),
         waterfall: read_sub_object(map, txn, "waterfall"),
+        histogram: read_sub_object(map, txn, "histogram"),
+        boxplot: read_sub_object(map, txn, "boxplot"),
+        hierarchy: read_sub_object(map, txn, "hierarchy"),
+        region_map: read_sub_object(map, txn, "regionMap"),
         display_blanks_as: read_string(map, txn, "displayBlanksAs"),
         plot_visible_only: read_bool(map, txn, "plotVisibleOnly"),
         gap_width: read_number(map, txn, "gapWidth").map(|n| n as u32),
+        gap_depth: read_number(map, txn, "gapDepth").map(|n| n as u32),
         overlap: read_number(map, txn, "overlap").map(|n| n as i32),
         doughnut_hole_size: read_number(map, txn, "doughnutHoleSize").map(|n| n as u32),
         first_slice_angle: read_number(map, txn, "firstSliceAngle").map(|n| n as u32),
         bubble_scale: read_number(map, txn, "bubbleScale").map(|n| n as u32),
+        show_neg_bubbles: read_bool(map, txn, "showNegBubbles"),
+        size_represents: read_string(map, txn, "sizeRepresents"),
         split_type: read_string(map, txn, "splitType"),
         split_value: read_number(map, txn, "splitValue"),
         category_label_level: read_number(map, txn, "categoryLabelLevel").map(|n| n as u32),
@@ -290,11 +342,13 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         title_v_align: read_string(map, txn, "titleVAlign"),
         title_show_shadow: read_bool(map, txn, "titleShowShadow"),
         pivot_options: read_sub_object(map, txn, "pivotOptions"),
+        pivot_projection: read_sub_object(map, txn, "pivotProjection"),
         bar_shape: read_string(map, txn, "barShape"),
         bubble_3d_effect: read_bool(map, txn, "bubble3dEffect"),
         wireframe: read_bool(map, txn, "wireframe"),
         surface_top_view: read_bool(map, txn, "surfaceTopView"),
         color_scheme: read_number(map, txn, "colorScheme").map(|n| n as u8),
+        chart_style_context: read_sub_object(map, txn, "chartStyleContext"),
         height_pt: read_number(map, txn, "heightPt"),
         width_pt: read_number(map, txn, "widthPt"),
         left_pt: read_number(map, txn, "leftPt"),
@@ -308,7 +362,13 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         title_format: read_sub_object(map, txn, "titleFormat"),
         title_rich_text: read_sub_object(map, txn, "titleRichText"),
         title_formula: read_string(map, txn, "titleFormula"),
+        plot_layout: read_sub_object(map, txn, "plotLayout"),
+        title_layout: read_sub_object(map, txn, "titleLayout"),
         data_table: read_sub_object(map, txn, "dataTable"),
+        drop_lines: read_sub_object(map, txn, "dropLines"),
+        high_low_lines: read_sub_object(map, txn, "highLowLines"),
+        series_lines: read_sub_object(map, txn, "seriesLines"),
+        up_down_bars: read_sub_object(map, txn, "upDownBars"),
         view_3d: read_sub_object(map, txn, "view3d"),
         floor_format: read_sub_object(map, txn, "floorFormat"),
         side_wall_format: read_sub_object(map, txn, "sideWallFormat"),

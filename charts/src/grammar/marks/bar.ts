@@ -3,16 +3,45 @@
  *
  * Generates rect marks for bar charts (vertical and horizontal),
  * with support for grouping, stacking, and percent-stacking.
- *
- * Extracted from compiler.ts - no logic changes.
  */
 
 import { resolveColor } from '../../algebra/color';
-import { uniqueValues } from '../../algebra/group-by';
+import {
+  SERIES_FILL_FIELD,
+  SERIES_STROKE_FIELD,
+  SERIES_STROKE_WIDTH_FIELD,
+} from '../../core/chart-ir/fields';
 import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
+import { barSlotForDatum, createBarSlotContext } from './bar-slot';
+import { definedStyle, renderableDataRows } from './helpers';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resolveOpacity(value: unknown, fallback: number): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? clamp(numeric, 0, 1) : fallback;
+}
+
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function finitePosition(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 /**
  * Generate bar marks.
@@ -32,11 +61,13 @@ export function generateBarMarks(
 
   if (!xScale || !yScale) return marks;
 
+  const renderData = renderableDataRows(data);
+  if (renderData.length === 0) return marks;
+
   // Determine orientation
   const isHorizontal = encoding?.x?.type === 'quantitative' && encoding?.y?.type !== 'quantitative';
 
   // Determine if this is grouped/clustered (color encoding without stacking)
-  const colorField = encoding?.color?.field;
   const isStacked =
     config?.stack === 'normalize' || config?.stack === 'zero' || config?.stack === 'center';
   const isPercentStacked = config?.stack === 'normalize';
@@ -45,66 +76,48 @@ export function generateBarMarks(
   const catField = isHorizontal ? encoding?.y?.field : encoding?.x?.field;
   const valField = isHorizontal ? encoding?.x?.field : encoding?.y?.field;
 
-  const isGrouped = !!colorField && !isStacked;
-
-  // For grouped bars, compute group info (unique groups and their order)
-  let uniqueGroups: string[] = [];
-  if (isGrouped && colorField) {
-    uniqueGroups = uniqueValues(data, colorField);
-  }
-
-  // Detect duplicate categories: when multiple data rows share the same category
-  // value, we may need to auto-group them to prevent overlap.
-  // This applies when:
-  // 1. No stacking AND no grouping: straightforward duplicate categories
-  // 2. Grouped by color but colorField === catField: color doesn't differentiate within category
-  let maxPerCategory = 1;
-  const catIndexTracker = new Map<string, number>(); // tracks how many bars placed per category
-  const colorMatchesCat = colorField === catField;
-  if (catField && !isStacked) {
-    if (!isGrouped || colorMatchesCat) {
-      const catCounts = new Map<string, number>();
-      for (const d of data) {
-        const cat = String(d[catField] ?? '');
-        catCounts.set(cat, (catCounts.get(cat) || 0) + 1);
-      }
-      maxPerCategory = Math.max(1, ...[...catCounts.values()]);
-    }
-  }
-  const hasDuplicateCategories = maxPerCategory > 1;
-  // numGroups determines the bandwidth subdivision:
-  // - For properly grouped bars: use color-based group count
-  // - For auto-grouped duplicate categories: use max per category
-  // - When color matches cat WITH duplicates: override color grouping with auto-group count
-  // - When color matches cat WITHOUT duplicates: keep color grouping (e.g. waterfall charts)
-  const useAutoGrouping = hasDuplicateCategories && (!isGrouped || colorMatchesCat);
-  const numGroups = useAutoGrouping
-    ? maxPerCategory
-    : isGrouped
-      ? Math.max(uniqueGroups.length, 1)
-      : 1;
-
   // For percent-stacked mode, normalize values per category group
-  let normalizedData = data;
+  let normalizedData = renderData;
+  let percentDomainMin = 0;
+  let percentDomainMax = 100;
   if (isPercentStacked) {
     if (catField && valField) {
-      const totals = new Map<string, number>();
-      for (const d of data) {
+      const totals = new Map<string, { positive: number; negativeMagnitude: number }>();
+      for (const d of renderData) {
         const cat = String(d[catField]);
-        const val = typeof d[valField] === 'number' ? Math.abs(d[valField] as number) : 0;
-        totals.set(cat, (totals.get(cat) || 0) + val);
-      }
-      normalizedData = data.map((d) => {
-        const cat = String(d[catField]);
-        const total = totals.get(cat) || 1;
         const val = typeof d[valField] === 'number' ? (d[valField] as number) : 0;
-        return { ...d, [valField]: (val / total) * 100 };
+        const total = totals.get(cat) ?? { positive: 0, negativeMagnitude: 0 };
+        if (val >= 0) total.positive += val;
+        else total.negativeMagnitude += Math.abs(val);
+        totals.set(cat, total);
+      }
+      let hasPositive = false;
+      let hasNegative = false;
+      normalizedData = renderData.map((d) => {
+        const cat = String(d[catField]);
+        const total = totals.get(cat) ?? { positive: 0, negativeMagnitude: 0 };
+        const val = typeof d[valField] === 'number' ? (d[valField] as number) : 0;
+        if (val > 0) {
+          hasPositive = true;
+          return { ...d, [valField]: total.positive > 0 ? (val / total.positive) * 100 : 0 };
+        }
+        if (val < 0) {
+          hasNegative = true;
+          return {
+            ...d,
+            [valField]: total.negativeMagnitude > 0 ? (val / total.negativeMagnitude) * 100 : 0,
+          };
+        }
+        return { ...d, [valField]: 0 };
       });
+      percentDomainMin = hasNegative ? -100 : 0;
+      percentDomainMax = hasPositive ? 100 : 0;
+      if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
     }
   }
 
-  // For percent-stacked mode, override the value axis scale to use [0, 100] domain
-  // so normalized values map correctly to the full plot area.
+  // For percent-stacked mode, override the value axis scale so separately normalized
+  // positive and negative stacks map to the final plot area.
   let effectiveXScale = xScale;
   let effectiveYScale = yScale;
   if (isPercentStacked) {
@@ -114,8 +127,7 @@ export function generateBarMarks(
     const percentScale: AnyScale = Object.assign((v: unknown): number => {
       const num = typeof v === 'number' ? v : parseFloat(String(v));
       if (isNaN(num)) return valRange[0];
-      // Linear mapping from [0, 100] to valRange
-      const t = num / 100;
+      const t = (num - percentDomainMin) / (percentDomainMax - percentDomainMin);
       return valRange[0] + t * (valRange[1] - valRange[0]);
     }, {});
     if (isHorizontal) {
@@ -130,57 +142,24 @@ export function generateBarMarks(
   // in the opposite direction from positive bars.
   const posStackAccumulators = new Map<string, number>();
   const negStackAccumulators = new Map<string, number>();
-  // Cumulative value tracker for percent-stacked mode
-  const cumulativeValues = new Map<string, number>();
+  const posPercentAccumulators = new Map<string, number>();
+  const negPercentAccumulators = new Map<string, number>();
 
   // Compute the zero position for the value axis (for proper baseline)
   const zeroPos = isHorizontal ? (effectiveXScale(0) as number) : (effectiveYScale(0) as number);
 
-  // When auto-grouping duplicate categories, sort data by category so
-  // bars for the same category are adjacent and visual order matches mark order.
-  // Build an index array for stable category-grouped ordering.
-  let processOrder: number[];
-  if (hasDuplicateCategories && catField) {
-    // Group indices by category, preserving category appearance order
-    const catGroups = new Map<string, number[]>();
-    const catOrder: string[] = [];
-    for (let i = 0; i < normalizedData.length; i++) {
-      const cat = String(normalizedData[i][catField] ?? '');
-      if (!catGroups.has(cat)) {
-        catGroups.set(cat, []);
-        catOrder.push(cat);
-      }
-      catGroups.get(cat)!.push(i);
-    }
-    processOrder = [];
-    for (const cat of catOrder) {
-      processOrder.push(...catGroups.get(cat)!);
-    }
-  } else {
-    processOrder = normalizedData.map((_, i) => i);
-  }
+  const slotContext = createBarSlotContext(normalizedData, encoding, config, scales);
+  const processOrder = slotContext?.processOrder ?? normalizedData.map((_, i) => i);
 
   for (const i of processOrder) {
     const normalizedDatum = normalizedData[i];
-    const datum = data[i]; // Keep original datum for mark.datum
+    const datum = renderData[i]; // Keep original datum for mark.datum
     const xValue = encodings.x?.accessor(normalizedDatum);
     const yValue = encodings.y?.accessor(normalizedDatum);
+    const x2Value = encodings.x2?.accessor(normalizedDatum);
+    const y2Value = encodings.y2?.accessor(normalizedDatum);
     const colorValue = encodings.color?.accessor(datum) ?? encodings.fill?.accessor(datum);
-
-    // Compute group index for grouped bars
-    let groupIndex = 0;
-    if (useAutoGrouping && catField) {
-      // Auto-grouping: assign sequential index within each category
-      // Handles ungrouped duplicates and colorField===catField with duplicates
-      const catKey = String(normalizedDatum[catField] ?? '');
-      groupIndex = catIndexTracker.get(catKey) || 0;
-      catIndexTracker.set(catKey, groupIndex + 1);
-    } else if (isGrouped && colorField) {
-      // Standard color-based grouping: bars in same category get different sub-positions
-      const groupVal = String(datum[colorField] ?? '');
-      groupIndex = uniqueGroups.indexOf(groupVal);
-      if (groupIndex === -1) groupIndex = 0;
-    }
+    const opacityValue = encodings.opacity?.accessor(datum);
 
     let x: number, y: number, width: number, height: number;
 
@@ -188,10 +167,16 @@ export function generateBarMarks(
       // Horizontal bar
       const barY = yScale(yValue) as number; // Category axis always uses original scale
       const fullBandHeight = typeof yScale.bandwidth === 'function' ? yScale.bandwidth() : 20;
-      const barHeight = fullBandHeight / numGroups;
-      const groupOffset = groupIndex * barHeight;
+      const slot = slotContext
+        ? barSlotForDatum(slotContext, yScale, fullBandHeight, normalizedDatum, i)
+        : { offset: 0, size: fullBandHeight };
+      const barHeight = slot.size;
+      const groupOffset = slot.offset;
 
       const scaledX = effectiveXScale(xValue) as number;
+      const rangeStartX = finitePosition(x2Value);
+      const scaledX2 =
+        rangeStartX !== undefined ? (effectiveXScale(rangeStartX) as number) : undefined;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.x;
 
       if (isNaN(barY) || isNaN(scaledX) || !isFinite(scaledX) || !isFinite(barY)) {
@@ -199,19 +184,25 @@ export function generateBarMarks(
         y = isNaN(barY) || !isFinite(barY) ? layout.plotArea.y : barY + groupOffset;
         width = 0;
         height = isNaN(barY) || !isFinite(barY) ? 0 : barHeight;
+      } else if (scaledX2 !== undefined && Number.isFinite(scaledX2)) {
+        x = Math.min(scaledX, scaledX2);
+        y = barY + groupOffset;
+        width = Math.abs(scaledX - scaledX2);
+        height = barHeight;
       } else if (isStacked) {
         // Stacked bars: accumulate positions so segments tile correctly
         const catKey = catField ? String(normalizedDatum[catField]) : String(i);
 
         if (isPercentStacked && valField) {
           // For percent-stacked: use cumulative percentages for precise positioning
-          const cumStart = cumulativeValues.get(catKey) || 0;
           const barVal =
             typeof normalizedDatum[valField] === 'number'
-              ? Math.abs(normalizedDatum[valField] as number)
+              ? (normalizedDatum[valField] as number)
               : 0;
+          const accumulator = barVal >= 0 ? posPercentAccumulators : negPercentAccumulators;
+          const cumStart = accumulator.get(catKey) || 0;
           const cumEnd = cumStart + barVal;
-          cumulativeValues.set(catKey, cumEnd);
+          accumulator.set(catKey, cumEnd);
 
           const startX = effectiveXScale(cumStart) as number;
           const endX = effectiveXScale(cumEnd) as number;
@@ -248,10 +239,16 @@ export function generateBarMarks(
       // Vertical bar
       const barX = xScale(xValue) as number; // Category axis always uses original scale
       const fullBandWidth = typeof xScale.bandwidth === 'function' ? xScale.bandwidth() : 20;
-      const barWidth = fullBandWidth / numGroups;
-      const groupOffset = groupIndex * barWidth;
+      const slot = slotContext
+        ? barSlotForDatum(slotContext, xScale, fullBandWidth, normalizedDatum, i)
+        : { offset: 0, size: fullBandWidth };
+      const barWidth = slot.size;
+      const groupOffset = slot.offset;
 
       const yPos = effectiveYScale(yValue) as number;
+      const rangeStartY = finitePosition(y2Value);
+      const y2Pos =
+        rangeStartY !== undefined ? (effectiveYScale(rangeStartY) as number) : undefined;
       const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.y + layout.plotArea.height;
 
       if (isNaN(barX) || isNaN(yPos) || !isFinite(yPos) || !isFinite(barX)) {
@@ -259,19 +256,25 @@ export function generateBarMarks(
         y = baseline;
         width = isNaN(barX) || !isFinite(barX) ? 0 : barWidth;
         height = 0;
+      } else if (y2Pos !== undefined && Number.isFinite(y2Pos)) {
+        x = barX + groupOffset;
+        y = Math.min(yPos, y2Pos);
+        width = barWidth;
+        height = Math.abs(y2Pos - yPos);
       } else if (isStacked) {
         // Stacked bars: accumulate positions so segments tile correctly
         const catKey = catField ? String(normalizedDatum[catField]) : String(i);
 
         if (isPercentStacked && valField) {
           // For percent-stacked: use cumulative percentages for precise positioning
-          const cumStart = cumulativeValues.get(catKey) || 0;
           const barVal =
             typeof normalizedDatum[valField] === 'number'
-              ? Math.abs(normalizedDatum[valField] as number)
+              ? (normalizedDatum[valField] as number)
               : 0;
+          const accumulator = barVal >= 0 ? posPercentAccumulators : negPercentAccumulators;
+          const cumStart = accumulator.get(catKey) || 0;
           const cumEnd = cumStart + barVal;
-          cumulativeValues.set(catKey, cumEnd);
+          accumulator.set(catKey, cumEnd);
 
           const startY = effectiveYScale(cumStart) as number;
           const endY = effectiveYScale(cumEnd) as number;
@@ -312,6 +315,10 @@ export function generateBarMarks(
     if (!isFinite(width)) width = 0;
     if (!isFinite(height)) height = 0;
 
+    const datumFill =
+      datumString(datum, markSpec.fillField) ?? datumString(datum, SERIES_FILL_FIELD);
+    const hasDatumFill = datumFill !== undefined;
+
     // Get color
     const color = resolveColor({
       colorScale: scales.color ?? scales.fill,
@@ -329,11 +336,23 @@ export function generateBarMarks(
       height: Math.max(0, height),
       datum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke,
-        strokeWidth: markSpec.strokeWidth,
-        opacity: markSpec.opacity ?? 1,
+        fill: datumFill ?? color,
+        stroke:
+          datumString(datum, markSpec.strokeField) ??
+          datumString(datum, SERIES_STROKE_FIELD) ??
+          markSpec.stroke,
+        strokeWidth:
+          datumNumber(datum, markSpec.strokeWidthField) ??
+          datumNumber(datum, SERIES_STROKE_WIDTH_FIELD) ??
+          markSpec.strokeWidth,
+        opacity: resolveOpacity(opacityValue, markSpec.opacity ?? 1),
         cornerRadius: markSpec.cornerRadius,
+        ...definedStyle({
+          fillPaint: hasDatumFill ? undefined : markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }

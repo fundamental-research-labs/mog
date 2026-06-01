@@ -1,9 +1,10 @@
 """Undo/redo operations -- ``wb.history.undo()``, ``wb.history.redo()``."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 from mog._serde import deserialize_mutation_result, deserialize_undo_state
+from mog._unsupported import unsupported_python_path
 from mog.types import MutationResult, UndoState
 
 if TYPE_CHECKING:
@@ -52,20 +53,7 @@ class HistoryAPI:
         Each entry is a dict that may contain ``description``, ``timestamp``,
         and other metadata.  In headless mode the list may be empty.
         """
-        state = self._bridge.get_undo_state()
-        if isinstance(state, dict):
-            # Try to extract entries from the undo state
-            entries = state.get("entries") or state.get("history") or state.get("undoStack") or state.get("stack")
-            if isinstance(entries, list):
-                return entries
-            # Build a minimal list from the state
-            result = []
-            undo_count = state.get("undoCount", 0) or state.get("undoSize", 0)
-            if isinstance(undo_count, int):
-                for i in range(undo_count):
-                    result.append({"index": i})
-                return result
-        return []
+        unsupported_python_path("wb.history.list")
 
     def go_to_index(self, index: int) -> MutationResult:
         """Navigate to a specific point in the undo history.
@@ -78,10 +66,7 @@ class HistoryAPI:
         index:
             The target history index.
         """
-        state = self.get_state()
-        # For now, this is a convenience wrapper -- actual index-based
-        # navigation would require engine support.
-        return deserialize_mutation_result({})
+        unsupported_python_path("wb.history.go_to_index")
 
     def begin_group(self) -> MutationResult:
         """Begin an undo group -- all mutations until ``end_group`` are
@@ -93,3 +78,11 @@ class HistoryAPI:
         """End the current undo group."""
         raw = self._bridge.end_undo_group()
         return deserialize_mutation_result(raw)
+
+    def set_next_description(self, description: str) -> None:
+        """Set the description for the next undoable operation."""
+        unsupported_python_path("wb.history.set_next_description")
+
+    def subscribe(self, handler: Callable[[Dict[str, Any]], None]) -> Callable[[], None]:
+        """Subscribe to history changes."""
+        unsupported_python_path("wb.history.subscribe")

@@ -9,6 +9,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
+import { BLANK_VALUE_FIELD } from '../../grammar/internal-fields';
 import type { DataRow, EncodingSpec } from '../../grammar/spec';
 import type { SeriesData } from '../ooxml-types';
 import { getDefaultColor } from './style-xml';
@@ -55,7 +56,7 @@ export function extractSeriesData(
   // If no color encoding, single series
   if (!colorField) {
     const categories = data.map((row) => row[categoryField]);
-    const values = data.map((row) => Number(row[valueField]) || 0);
+    const values = data.map((row) => valueForExport(row, valueField));
 
     return [
       {
@@ -78,11 +79,17 @@ export function extractSeriesData(
     series.push({
       name,
       categories: rows.map((row) => row[categoryField]) as (string | number | Date)[],
-      values: rows.map((row) => Number(row[valueField]) || 0),
+      values: rows.map((row) => valueForExport(row, valueField)),
       color: getDefaultColor(colorIndex),
     });
     colorIndex++;
   }
 
   return series;
+}
+
+function valueForExport(row: DataRow, valueField: string): number | null {
+  if (row[BLANK_VALUE_FIELD] === true) return null;
+  const value = Number(row[valueField]);
+  return Number.isFinite(value) ? value : 0;
 }

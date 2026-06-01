@@ -45,6 +45,12 @@ pub struct Chart {
     /// Whether auto title is deleted.
     /// `None` means the element was absent in the original XML.
     pub auto_title_deleted: Option<bool>,
+    /// Pivot chart field button visibility flags.
+    pub show_all_field_buttons: Option<bool>,
+    pub show_axis_field_buttons: Option<bool>,
+    pub show_legend_field_buttons: Option<bool>,
+    pub show_value_field_buttons: Option<bool>,
+    pub show_report_filter_field_buttons: Option<bool>,
     /// Pivot chart formatting entries (c:pivotFmts).
     pub pivot_fmts: Vec<ooxml_types::charts::PivotFmt>,
 
@@ -64,6 +70,8 @@ pub struct Chart {
     pub style_alternate_content: Option<String>,
     /// Whether the `style_alternate_content` appeared after `</c:chart>` (non-standard).
     pub style_after_chart: bool,
+    /// Chart-local theme color mapping override (`c:clrMapOvr`).
+    pub clr_map_ovr: Option<ooxml_types::themes::ColorMappingOverride>,
     /// Non-standard `chartType` attribute on the chart type element (Google Sheets).
     pub raw_chart_type_attr: Option<String>,
     /// Chart protection settings

@@ -59,6 +59,31 @@ describe('Bar Chart Compilation', () => {
     expect(result.bounds.height).toBeGreaterThan(0);
   });
 
+  test('centers category axis labels within band slots', () => {
+    const spec: ChartSpec = {
+      data: { values: barChartData.slice(0, 2) },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative' },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const firstBar = result.marks.find(
+      (mark) => mark.type === 'rect' && (mark as any).datum?.category === 'A',
+    ) as any;
+    const firstLabel = result.axes.find(
+      (mark) => mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === 'A',
+    ) as any;
+
+    expect(firstBar).toBeDefined();
+    expect(firstLabel).toBeDefined();
+    expect(firstLabel.x).toBeCloseTo(firstBar.x + firstBar.width / 2, 6);
+  });
+
   test('compiles bar chart with color encoding', () => {
     const spec: ChartSpec = {
       data: { values: barChartData },
@@ -135,6 +160,29 @@ describe('Line Chart Compilation', () => {
     expect(pathMark?.style.stroke).toBeDefined();
   });
 
+  test('centers categorical line points on axis labels', () => {
+    const spec: ChartSpec = {
+      data: { values: lineChartData.slice(0, 2) },
+      mark: 'line',
+      encoding: {
+        x: { field: 'date', type: 'ordinal' },
+        y: { field: 'sales', type: 'quantitative' },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const firstLinePointX = firstPathPoint(result.marks.find((m) => m.type === 'path') as any).x;
+    const firstLabel = result.axes.find(
+      (mark) =>
+        mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === '2024-01',
+    ) as any;
+
+    expect(firstLabel).toBeDefined();
+    expect(firstLinePointX).toBeCloseTo(firstLabel.x, 6);
+  });
+
   test('compiles multi-series line chart with color', () => {
     const multiSeriesData = [
       { date: '2024-01', sales: 100, region: 'North' },
@@ -181,6 +229,29 @@ describe('Area Chart Compilation', () => {
     expect(result.marks.some((m) => m.type === 'path')).toBe(true);
     const pathMark = result.marks.find((m) => m.type === 'path');
     expect(pathMark?.style.fill).toBeDefined();
+  });
+
+  test('centers categorical area points on axis labels', () => {
+    const spec: ChartSpec = {
+      data: { values: lineChartData.slice(0, 2) },
+      mark: 'area',
+      encoding: {
+        x: { field: 'date', type: 'ordinal' },
+        y: { field: 'sales', type: 'quantitative' },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const firstAreaPointX = secondPathPoint(result.marks.find((m) => m.type === 'path') as any).x;
+    const firstLabel = result.axes.find(
+      (mark) =>
+        mark.type === 'text' && (mark as any).datum?.role === 'x-axis' && mark.text === '2024-01',
+    ) as any;
+
+    expect(firstLabel).toBeDefined();
+    expect(firstAreaPointX).toBeCloseTo(firstLabel.x, 6);
   });
 });
 
@@ -241,6 +312,23 @@ describe('Point Chart Compilation', () => {
     expect(new Set(colors).size).toBe(2);
   });
 });
+
+function pathPoints(mark: { path?: string }): Array<{ x: number; y: number }> {
+  const matches = [...(mark.path ?? '').matchAll(/[ML]([+-]?\d+(?:\.\d+)?),([+-]?\d+(?:\.\d+)?)/g)];
+  return matches.map((match) => ({ x: Number(match[1]), y: Number(match[2]) }));
+}
+
+function firstPathPoint(mark: { path?: string }): { x: number; y: number } {
+  const [first] = pathPoints(mark);
+  if (!first) throw new Error(`Expected path point in ${mark.path ?? '(missing path)'}`);
+  return first;
+}
+
+function secondPathPoint(mark: { path?: string }): { x: number; y: number } {
+  const [, second] = pathPoints(mark);
+  if (!second) throw new Error(`Expected second path point in ${mark.path ?? '(missing path)'}`);
+  return second;
+}
 
 // =============================================================================
 // Arc/Pie Chart Tests
@@ -352,6 +440,74 @@ describe('Axis Generation', () => {
     const gridLines = result.axes.filter((a) => a.type === 'path' && (a.style.opacity ?? 1) < 1);
     expect(gridLines.length).toBeGreaterThan(0);
   });
+
+  test('places imported automatic x-axis at the value zero crossing', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 100 },
+          { category: 'B', value: -20 },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: {
+          field: 'category',
+          type: 'nominal',
+          axis: { crossesAt: 'automatic' },
+        },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          scale: { domain: [-20, 100], nice: false },
+        },
+      },
+      width: 300,
+      height: 200,
+    };
+
+    const result = compile(spec);
+    const plotBottom = result.layout.plotArea.y + result.layout.plotArea.height;
+    const expectedY = result.scales.y!(0) as number;
+    const xAxisLine = result.axes.find(
+      (mark) =>
+        mark.type === 'path' &&
+        (mark as any).datum?.role === 'x-axis' &&
+        (mark as any).path.startsWith(`M${result.layout.plotArea.x},`) &&
+        (mark as any).path.includes(
+          ` L${result.layout.plotArea.x + result.layout.plotArea.width},`,
+        ),
+    ) as any;
+
+    expect(xAxisLine).toBeDefined();
+    expect(Number(xAxisLine.path.match(/^M[^,]+,([^ ]+)/)?.[1])).toBeCloseTo(expectedY, 6);
+    expect(expectedY).toBeLessThan(plotBottom);
+  });
+
+  test('applies imported grid line dash and opacity styles', () => {
+    const spec: ChartSpec = {
+      data: { values: barChartData },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: {
+          field: 'value',
+          type: 'quantitative',
+          axis: { grid: true, gridDash: [4, 2], gridOpacity: 0.75 },
+        },
+      },
+    };
+
+    const result = compile(spec);
+    const gridLine = result.axes.find(
+      (mark) =>
+        mark.type === 'path' &&
+        (mark as any).datum?.role === 'y-axis' &&
+        mark.style.strokeDash?.join(',') === '4,2',
+    );
+
+    expect(gridLine?.style.opacity).toBe(0.75);
+  });
 });
 
 // =============================================================================
@@ -389,6 +545,41 @@ describe('Legend Generation', () => {
     const result = compile(spec);
 
     expect(result.legends).toHaveLength(0);
+  });
+
+  test('right-aligns right legend content inside the reserved legend area', () => {
+    const spec: ChartSpec = {
+      data: {
+        values: [
+          { category: 'A', value: 10, series: 'Staffing' },
+          { category: 'A', value: 20, series: 'Adjustment' },
+        ],
+      },
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative' },
+        color: {
+          field: 'series',
+          type: 'nominal',
+          legend: { orient: 'right', title: null, labelFontSize: 12 },
+        },
+      },
+      width: 796,
+      height: 436,
+    };
+
+    const result = compile(spec);
+    const symbols = result.legends.filter((mark) => mark.type === 'rect') as Array<{
+      x: number;
+      width: number;
+    }>;
+
+    expect(symbols.length).toBeGreaterThan(0);
+    expect(symbols[0].x).toBeGreaterThan(result.layout.legend!.x);
+    expect(symbols[0].x + symbols[0].width).toBeLessThanOrEqual(
+      result.layout.legend!.x + result.layout.legend!.width,
+    );
   });
 });
 

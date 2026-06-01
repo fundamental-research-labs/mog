@@ -33,7 +33,7 @@ pub(crate) fn v2_new_value(v: V2ValueType) -> CellValue {
 /// Class II's fullcol target is column H (col=7). The edit positions map:
 /// - Inside: row 0 (inside A1Only / the initial seed).
 /// - OutsideNearby: row 100 (past seed but not extreme).
-/// - FarOutside: row 39_187 (Ib6CYMnT hypothesis).
+/// - FarOutside: row 39_187 (well beyond the initial populated extent).
 /// - Boundary: row 49_999 (the A50k seed's last populated row).
 /// - OtherSheet: handled by switching the target sheet to Dest (not SourceData).
 pub(crate) fn v2_target_for(pos: V2EditPos) -> (u32, u32) {

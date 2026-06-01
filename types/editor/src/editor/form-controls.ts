@@ -38,6 +38,7 @@ import type { CellAnchor } from '@mog/types-objects/objects/floating-objects';
  * - 'checkbox': Boolean toggle linked to cell (TRUE/FALSE)
  * - 'button': Click action with optional cell write
  * - 'comboBox': Dropdown selection with cell-stored index
+ * - 'listBox': Visible list selection linked to a cell
  *
  * Future types (not yet implemented):
  * - 'radioButton': Group of mutually exclusive options
@@ -48,6 +49,7 @@ export type FormControlType =
   | 'checkbox'
   | 'button'
   | 'comboBox'
+  | 'listBox'
   | 'radioButton'
   | 'slider'
   | 'spinner';
@@ -258,6 +260,32 @@ export interface ComboBoxControl extends FormControlBase {
 }
 
 // =============================================================================
+// ListBox Control
+// =============================================================================
+
+/**
+ * ListBox control - visible list selection linked to cell.
+ *
+ * Like ComboBoxControl, the selected value lives in the linked cell. The
+ * control renders its item list directly instead of behind a dropdown button.
+ */
+export interface ListBoxControl extends FormControlBase {
+  type: 'listBox';
+
+  /** Cell that holds the selected value. */
+  linkedCellId: CellId;
+
+  /** Static items list. */
+  items?: string[];
+
+  /** Dynamic items from a cell range. */
+  itemsSourceRef?: IdentityRangeRef;
+
+  /** Multiple-selection mode imported from legacy controls, when present. */
+  multiSelect?: string;
+}
+
+// =============================================================================
 // Radio Button Control (Future)
 // =============================================================================
 
@@ -354,10 +382,10 @@ export interface SpinnerControl extends FormControlBase {
 /**
  * Union of all implemented form control types.
  *
- * Currently: Checkbox, Button, ComboBox
+ * Currently: Checkbox, Button, ComboBox, ListBox
  * Future: RadioButton, Slider, Spinner
  */
-export type FormControl = CheckboxControl | ButtonControl | ComboBoxControl;
+export type FormControl = CheckboxControl | ButtonControl | ComboBoxControl | ListBoxControl;
 
 /**
  * Union of all form control types (including future).
@@ -366,6 +394,7 @@ export type FormControlAny =
   | CheckboxControl
   | ButtonControl
   | ComboBoxControl
+  | ListBoxControl
   | RadioButtonControl
   | SliderControl
   | SpinnerControl;

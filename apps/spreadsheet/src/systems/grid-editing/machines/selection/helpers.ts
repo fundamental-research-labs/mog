@@ -141,6 +141,7 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 export function buildExtendUpdate(
   anchor: CellCoord,
   newEnd: CellCoord,
+  activeCell: CellCoord = anchor,
 ): {
   pendingRange: CellRange;
   activeCell: CellCoord;
@@ -149,7 +150,7 @@ export function buildExtendUpdate(
 } {
   return {
     pendingRange: rangeFromAnchorAndCell(anchor, newEnd),
-    activeCell: anchor,
+    activeCell,
     anchor,
     direction: computeDirection(anchor, newEnd),
   };

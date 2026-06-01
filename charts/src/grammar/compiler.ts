@@ -16,10 +16,17 @@
  * Pure functions - no side effects.
  */
 
-import type { AnyMark } from '../primitives/types';
+import type { AnyMark, RectMark } from '../primitives/types';
 import { createScales, resolveEncodings } from './encoding-resolver';
 import { calculateLayout } from './layout';
-import { isLayerSpec, type ChartSpec, type DataRow, type MarkSpec, type MarkType } from './spec';
+import {
+  isLayerSpec,
+  type ChartFrameSpec,
+  type ChartSpec,
+  type DataRow,
+  type MarkSpec,
+  type MarkType,
+} from './spec';
 import { applyTransforms } from './transforms';
 
 // Import from extracted modules
@@ -107,6 +114,7 @@ export function compile(
     spec.encoding,
     spec.config,
   );
+  const clippedMarks = clipMarksToPlotArea(marks, layout.plotArea);
 
   // Generate axes
   const axes = options.skipAxes ? [] : generateAxes(spec.encoding, scales, layout, spec.config);
@@ -116,12 +124,32 @@ export function compile(
 
   // Generate title
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
+  const background = [
+    ...generateFrameMarks(
+      spec.config?.chartFrame ??
+        (spec.config?.background
+          ? { fill: { type: 'solid', color: spec.config.background } }
+          : undefined),
+      0,
+      0,
+      layout.width,
+      layout.height,
+    ),
+    ...generateFrameMarks(
+      spec.config?.plotFrame,
+      layout.plotArea.x,
+      layout.plotArea.y,
+      layout.plotArea.width,
+      layout.plotArea.height,
+    ),
+  ];
 
   // Dev-mode assertion: all data marks must carry their source datum
-  assertDataMarksHaveDatum(marks);
+  assertDataMarksHaveDatum(clippedMarks);
 
   return {
-    marks,
+    background: background.length > 0 ? background : undefined,
+    marks: clippedMarks,
     axes,
     legends,
     title,
@@ -134,6 +162,71 @@ export function compile(
     layout,
     scales,
   };
+}
+
+function generateFrameMarks(
+  frame: ChartFrameSpec | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): AnyMark[] {
+  if (!frame?.fill && !frame?.line && !frame?.shadow) return [];
+  return [
+    {
+      type: 'rect',
+      x,
+      y,
+      width,
+      height,
+      style: frameStyle(frame),
+    } as RectMark,
+  ];
+}
+
+function frameStyle(frame: ChartFrameSpec): RectMark['style'] {
+  return {
+    ...(frame.fill?.type === 'solid' && frame.fill.opacity === undefined
+      ? { fill: frame.fill.color }
+      : frame.fill
+        ? { fillPaint: frame.fill }
+        : {}),
+    ...(frame.line?.paint ? { strokePaint: frame.line.paint } : {}),
+    ...(frame.line?.width !== undefined ? { strokeWidth: frame.line.width } : {}),
+    ...(frame.line?.dash ? { strokeDash: frame.line.dash } : {}),
+    ...(frame.line ? { line: frame.line } : {}),
+    ...(frame.shadow ? { shadow: frame.shadow } : {}),
+    ...(frame.cornerRadius !== undefined ? { cornerRadius: frame.cornerRadius } : {}),
+  };
+}
+
+function isPlotClippableMark(mark: AnyMark): boolean {
+  return (
+    (mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol') &&
+    !isPlotClipDisabled(mark.datum)
+  );
+}
+
+function isPlotClipDisabled(datum: unknown): boolean {
+  return (
+    datum != null &&
+    typeof datum === 'object' &&
+    (datum as Record<string, unknown>).__mogClipToPlotArea === false
+  );
+}
+
+function clipMarksToPlotArea(
+  marks: AnyMark[],
+  plotArea: { x: number; y: number; width: number; height: number },
+): AnyMark[] {
+  return marks.map((mark) =>
+    isPlotClippableMark(mark)
+      ? {
+          ...mark,
+          clip: { ...plotArea },
+        }
+      : mark,
+  );
 }
 
 // =============================================================================

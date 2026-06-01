@@ -68,6 +68,7 @@ import {
 import { useCoordinator } from './hooks/shared/use-coordinator';
 import { createSpreadsheetEmbedAppBridge } from './infra/embed/create-spreadsheet-embed-app-bridge';
 import {
+  type ImportDurabilityGate,
   resolveInitialActiveSheetId,
   subscribeActiveSheetPersistence,
 } from './infra/document-active-sheet';
@@ -90,6 +91,7 @@ import { DialogLayer, OverlayLayer, PanelLayer } from './chrome/layers';
 // Read-only mode safety net for dispatcher
 import { setDispatcherReadOnly } from './actions/dispatcher';
 import { ensureMetricCompatibleFontsLoaded } from './infra/styles/fonts';
+import { installChartImageExporter } from './infra/services';
 import { installImportedPivotRuntime } from './pivot/imported-pivot-runtime';
 
 type DocumentRuntime = Pick<DocumentContextValue, 'workbook' | 'uiStore' | 'eventBus'>;
@@ -111,6 +113,8 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
 
   const runtimePromise = (async () => {
     const uiStore: UIStoreApi = createShellUIStore(handle.initialSheetId, handle.undoService);
+
+    installChartImageExporter(handle);
 
     performance.mark('spreadsheetApp:createWorkbook:start');
     const workbook = await handle.workbook({
@@ -205,13 +209,17 @@ function SpreadsheetEmbedRuntimeBridge(): null {
   return null;
 }
 
-function ActiveSheetPersistenceBridge(): null {
+function ActiveSheetPersistenceBridge({
+  importDurability,
+}: {
+  importDurability?: ImportDurabilityGate;
+}): null {
   const workbook = useWorkbook();
   const uiStore = useUIStoreApi();
 
   useEffect(() => {
-    return subscribeActiveSheetPersistence({ workbook, uiStore });
-  }, [workbook, uiStore]);
+    return subscribeActiveSheetPersistence({ workbook, uiStore, importDurability });
+  }, [importDurability, workbook, uiStore]);
 
   return null;
 }
@@ -463,7 +471,7 @@ export default function SpreadsheetApp({
           appearanceMode={appearanceMode as SpreadsheetAppAppearanceMode | undefined}
           onAppearanceModeChange={onAppearanceModeChange}
         />
-        <ActiveSheetPersistenceBridge />
+        <ActiveSheetPersistenceBridge importDurability={handle} />
         <SpreadsheetContent key={handle.documentId} />
       </FeatureGatesProvider>
     </DocumentContext.Provider>

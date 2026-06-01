@@ -12,19 +12,24 @@ interface MockSetup {
     groupColumns: jest.Mock;
     ungroupRows: jest.Mock;
     ungroupColumns: jest.Mock;
+    getState: jest.Mock;
   };
   workbook: {
     setPendingUndoDescription: jest.Mock;
   };
 }
 
-function createMockDeps(ranges: CellRange[]): MockSetup {
+function createMockDeps(
+  ranges: CellRange[],
+  outlineState = { rowGroups: [], columnGroups: [] },
+): MockSetup {
   const activeSheetId = sheetId('sheet1');
   const outline = {
     groupRows: jest.fn().mockResolvedValue(undefined),
     groupColumns: jest.fn().mockResolvedValue(undefined),
     ungroupRows: jest.fn().mockResolvedValue(undefined),
     ungroupColumns: jest.fn().mockResolvedValue(undefined),
+    getState: jest.fn().mockResolvedValue(outlineState),
   };
   const worksheet = { outline };
   const workbook = {
@@ -88,6 +93,23 @@ describe('Workbook GROUP/UNGROUP axis inference', () => {
     expect(outline.ungroupColumns).toHaveBeenCalledWith(5, 6);
     expect(outline.ungroupRows).not.toHaveBeenCalled();
     expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup columns 6-7');
+  });
+
+  it('ungroups the containing row group for a single-cell selection', async () => {
+    const range: CellRange = { startRow: 1, startCol: 0, endRow: 1, endCol: 0 };
+    const { deps, outline, workbook } = createMockDeps([range], {
+      rowGroups: [{ id: 'rows-2-4', start: 1, end: 3, level: 1, collapsed: false }],
+      columnGroups: [],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.getState).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledWith(1, 3);
+    expect(outline.ungroupColumns).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup rows 2-4');
   });
 
   it('routes full-row selections to row grouping', async () => {

@@ -13,6 +13,14 @@
  * Pure types only - no runtime code (except type guards).
  */
 
+import type {
+  EffectSpec,
+  LineStyleSpec,
+  PaintSpec,
+  ShadowSpec,
+  TextRunSpec,
+} from '../primitives/types';
+
 // =============================================================================
 // Data Types
 // =============================================================================
@@ -267,6 +275,16 @@ export interface ScaleSpec {
  * Axis orientation options.
  */
 export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
+export type AxisLabelPosition = 'nextTo' | 'low' | 'high' | 'none';
+export type AxisTickMark = 'none' | 'out' | 'in' | 'cross';
+export type AxisCategoryCrossing = 'between' | 'midCat';
+
+export type AxisTickIntervalUnit = 'day' | 'month' | 'year';
+
+export interface AxisTickInterval {
+  unit: AxisTickIntervalUnit;
+  step: number;
+}
 
 /**
  * Axis specification.
@@ -274,25 +292,57 @@ export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
 export interface AxisSpec {
   title?: string | null;
   titleFontSize?: number;
+  titleFontFamily?: string;
   titleColor?: string;
   titlePadding?: number;
   labels?: boolean;
   labelFontSize?: number;
+  labelFontFamily?: string;
   labelColor?: string;
   labelAngle?: number;
   labelPadding?: number;
   labelOverlap?: boolean | 'parity' | 'greedy';
+  labelPosition?: AxisLabelPosition;
+  tickLabelSkip?: number;
   ticks?: boolean;
+  tickMark?: AxisTickMark;
+  tickMarkSkip?: number;
   tickCount?: number;
   tickSize?: number;
   tickColor?: string;
   tickWidth?: number;
+  tickStep?: number;
+  tickInterval?: AxisTickInterval;
   grid?: boolean;
   gridColor?: string;
   gridWidth?: number;
   gridOpacity?: number;
   gridDash?: number[];
+  minorTicks?: boolean;
+  minorTickMark?: AxisTickMark;
+  minorTickSize?: number;
+  minorTickColor?: string;
+  minorTickWidth?: number;
+  minorTickStep?: number;
+  minorTickInterval?: AxisTickInterval;
+  minorGrid?: boolean;
+  minorGridColor?: string;
+  minorGridWidth?: number;
+  minorGridOpacity?: number;
+  minorGridDash?: number[];
+  crossesAt?: 'automatic' | 'min' | 'max' | 'custom';
+  crossesAtValue?: number;
+  categoryCrossing?: AxisCategoryCrossing;
   format?: string;
+  displayUnitFactor?: number;
+  displayUnitLabel?: string;
+  linkNumberFormat?: boolean;
+  /** Per-category format code keyed by the raw category value. */
+  labelFormatByValue?: Record<string, string>;
+  /** Per-category display text keyed by the raw category value. */
+  labelTextByValue?: Record<string, string>;
+  /** Per-category hierarchical display labels, ordered from parent to child. */
+  multiLevelLabelsByValue?: Record<string, string[]>;
   formatType?: 'number' | 'time';
   orient?: AxisOrient;
   offset?: number;
@@ -319,19 +369,54 @@ export type LegendOrient =
   | 'bottom-right'
   | 'none';
 
+export type LegendSymbolType =
+  | 'area'
+  | 'circle'
+  | 'square'
+  | 'line'
+  | 'cross'
+  | 'diamond'
+  | 'triangle-up'
+  | 'triangle-down';
+
+export interface LegendEntrySpec {
+  /** Backing color-scale value for this legend entry. */
+  value: string;
+  /** Display label, when it differs from the backing value. */
+  label?: string;
+  /** Entry-specific symbol shape, used by mixed-family combo charts. */
+  symbolType?: LegendSymbolType;
+  /** Rendered series index for provenance/debugging. */
+  seriesIndex?: number;
+  /** Source workbook series index, when known. */
+  sourceSeriesIndex?: number;
+  /** Stable source workbook series key, when known. */
+  sourceSeriesKey?: string;
+}
+
 /**
  * Legend specification.
  */
 export interface LegendSpec {
   title?: string | null;
   titleFontSize?: number;
+  titleFontFamily?: string;
   titleColor?: string;
   orient?: LegendOrient;
+  /** Whether the legend should be drawn over the plot area without reserving space. */
+  overlay?: boolean;
   direction?: 'horizontal' | 'vertical';
   labelFontSize?: number;
+  labelFontFamily?: string;
   labelColor?: string;
+  /** Explicit legend entries to render when they differ from the backing scale domain. */
+  values?: string[];
+  /** Ordered, styled legend entries to render. */
+  entries?: LegendEntrySpec[];
+  /** Reverse legend entry order, used by stacked charts to match stack top-to-bottom. */
+  reverse?: boolean;
   symbolSize?: number;
-  symbolType?: 'circle' | 'square' | 'cross' | 'diamond' | 'triangle-up' | 'triangle-down';
+  symbolType?: LegendSymbolType;
   offset?: number;
   padding?: number;
 }
@@ -395,6 +480,8 @@ export interface ChannelSpec {
   scale?: ScaleSpec | null;
   /** Axis specification (null to hide) */
   axis?: AxisSpec | null;
+  /** Secondary axis sharing this channel's scale. */
+  secondaryAxis?: AxisSpec | null;
   /** Legend specification (null to hide) */
   legend?: LegendSpec | null;
   /** Channel title */
@@ -415,6 +502,10 @@ export interface EncodingSpec {
   x?: ChannelSpec;
   /** Y position channel */
   y?: ChannelSpec;
+  /** Secondary X endpoint channel for ranged marks */
+  x2?: ChannelSpec;
+  /** Secondary Y endpoint channel for ranged marks */
+  y2?: ChannelSpec;
   /** X offset for grouped charts */
   xOffset?: ChannelSpec;
   /** Y offset for grouped charts */
@@ -460,12 +551,16 @@ export interface EncodingSpec {
  */
 export type MarkType =
   | 'bar'
+  | 'bar3d'
   | 'line'
+  | 'line3d'
   | 'area'
+  | 'area3d'
   | 'point'
   | 'circle'
   | 'square'
   | 'arc'
+  | 'arc3d'
   | 'rect'
   | 'rule'
   | 'text'
@@ -473,7 +568,40 @@ export type MarkType =
   | 'trail'
   | 'boxplot'
   | 'histogram'
-  | 'violin';
+  | 'violin'
+  | 'contour'
+  | 'radar'
+  | 'surface3d';
+
+/**
+ * One filled value band in a top-view surface/contour chart.
+ */
+export interface ContourBandSpec {
+  min: number;
+  max: number;
+  label: string;
+  color: string;
+}
+
+/**
+ * 3-D view metadata used by surface charts.
+ */
+export interface SurfaceView3DSpec {
+  rotX?: number;
+  rotY?: number;
+  depthPercent?: number;
+  rAngAx?: boolean;
+  perspective?: number;
+  heightPercent?: number;
+}
+
+export interface Plot3DSpec {
+  family?: 'bar' | 'line' | 'area' | 'pie';
+  orientation?: 'horizontal' | 'vertical';
+  barShape?: 'box' | 'cylinder' | 'cone' | 'coneToMax' | 'pyramid' | 'pyramidToMax';
+  gapDepth?: number;
+  view3d?: SurfaceView3DSpec;
+}
 
 /**
  * Line interpolation options.
@@ -501,12 +629,39 @@ export interface MarkSpec {
   color?: string;
   /** Fill color */
   fill?: string;
+  /** Fill paint */
+  fillPaint?: PaintSpec;
   /** Stroke color */
   stroke?: string;
+  /** Stroke paint */
+  strokePaint?: PaintSpec;
   /** Stroke width */
   strokeWidth?: number;
+  /** Full line style */
+  line?: LineStyleSpec;
   /** Stroke dash pattern */
   strokeDash?: number[];
+  /** Datum field for direct fill color */
+  fillField?: string;
+  /** Datum field for direct stroke color */
+  strokeField?: string;
+  /** Datum field for stroke width */
+  strokeWidthField?: string;
+  /** Datum field for direct x position */
+  xField?: string;
+  /** Datum field for direct y position */
+  yField?: string;
+  /** Datum field for direct secondary x position */
+  x2Field?: string;
+  /** Datum field for direct secondary y position */
+  y2Field?: string;
+  /** Coordinate system for direct mark fields. */
+  coordinateSystem?:
+    | 'plotFraction'
+    | 'plotRadiusFraction'
+    | 'chartFraction'
+    | 'dataTableFraction'
+    | 'pixel';
   /** Opacity (0-1) */
   opacity?: number;
   /** Fill opacity (0-1) */
@@ -529,24 +684,88 @@ export interface MarkSpec {
   shape?: string;
   /** Font size (for text marks) */
   fontSize?: number;
+  /** Font family (for text marks) */
+  fontFamily?: string;
+  /** Font weight (for text marks) */
+  fontWeight?: 'normal' | 'bold' | number;
+  /** Font style (for text marks) */
+  fontStyle?: 'normal' | 'italic';
+  /** Horizontal text alignment */
+  align?: 'left' | 'center' | 'right';
+  /** Vertical text baseline */
+  textBaseline?: 'top' | 'middle' | 'bottom' | 'alphabetic' | 'hanging';
+  /** Horizontal text pixel offset */
+  dx?: number;
+  /** Vertical text pixel offset */
+  dy?: number;
+  /** Text rotation angle in degrees */
+  angle?: number;
+  /** Datum field for horizontal text pixel offset */
+  dxField?: string;
+  /** Datum field for vertical text pixel offset */
+  dyField?: string;
+  /** Datum field for horizontal text alignment */
+  alignField?: string;
+  /** Datum field for vertical text baseline */
+  baselineField?: string;
+  /** Datum field for text fill color */
+  colorField?: string;
+  /** Datum field for font size */
+  fontSizeField?: string;
+  /** Datum field for text rotation angle */
+  angleField?: string;
+  /** Align text/rule category coordinates to the clustered bar slot for the datum's series. */
+  alignToBarSlot?: boolean;
   /** Line interpolation method */
   interpolate?: Interpolate;
   /** Line tension (for cardinal interpolation) */
   tension?: number;
   /** Line baseline for areas */
   baseline?: number;
+  /** Canvas-renderable effects */
+  effects?: EffectSpec;
   /** Show points on lines */
   point?: boolean | { color?: string; size?: number; filled?: boolean };
+  /** Skip point marks whose scaled x/y positions are not finite. */
+  skipInvalidPositions?: boolean;
+  /** Tick orientation when a tick mark has both x and y encodings. */
+  orient?: 'horizontal' | 'vertical';
   /** Inner radius for arc marks (0-1 ratio or pixels) */
   innerRadius?: number;
   /** Outer radius for arc marks */
   outerRadius?: number;
   /** Pad angle between arcs */
   padAngle?: number;
+  /** First arc slice angle in radians using the arc mark convention. */
+  startAngle?: number;
   /** Tooltip enabled */
   tooltip?: boolean | { content?: 'data' | 'encoding' };
   /** Show KDE density curve overlay (histogram mark only) */
   density?: boolean;
+  /** Filled value bands for top-view surface/contour marks. */
+  contourBands?: ContourBandSpec[];
+  /** Render top-view surface chart as contour isolines only. */
+  contourWireframe?: boolean;
+  /** Projected 3-D view settings for surface marks. */
+  surfaceView3d?: SurfaceView3DSpec;
+  /** Projected 3-D plot settings for non-surface chart families. */
+  chart3d?: Plot3DSpec;
+  /** Imported histogram bin count. */
+  binCount?: number;
+  /** Imported histogram bin width. */
+  binWidth?: number;
+  /** Imported histogram lower bound. */
+  underflowBinValue?: number;
+  /** Imported histogram upper bound. */
+  overflowBinValue?: number;
+  /** Show boxplot outlier points. */
+  showOutlierPoints?: boolean;
+  /** Show boxplot mean markers. */
+  showMeanMarkers?: boolean;
+  /** Show boxplot mean line. */
+  showMeanLine?: boolean;
+  /** Boxplot quartile calculation method. */
+  quartileMethod?: string;
   /** Exploded slice index for pie charts (consumed by OOXML exporter) */
   _explodedIndex?: number;
   /** Exploded slice indices for pie charts (consumed by OOXML exporter) */
@@ -562,11 +781,18 @@ export interface MarkSpec {
  */
 export interface TitleSpec {
   text: string;
+  richText?: TextRunSpec[];
   anchor?: 'start' | 'middle' | 'end';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   fontSize?: number;
+  fontFamily?: string;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
   color?: string;
+  fill?: PaintSpec;
+  shadow?: ShadowSpec;
+  underline?: boolean;
+  strikethrough?: boolean;
   offset?: number;
   orient?: 'top' | 'bottom';
   subtitle?: string;
@@ -583,14 +809,81 @@ export interface TitleSpec {
  */
 export type StackMode = 'zero' | 'normalize' | 'center' | false;
 
+export interface ChartFrameSpec {
+  fill?: PaintSpec;
+  line?: LineStyleSpec;
+  shadow?: ShadowSpec;
+  cornerRadius?: number;
+  diagnostics?: string[];
+}
+
+export type ManualLayoutTargetSpec = 'inner' | 'outer';
+
+export type ManualLayoutModeSpec = 'edge' | 'factor';
+
+export interface ManualLayoutSpec {
+  layoutTarget?: ManualLayoutTargetSpec;
+  xMode?: ManualLayoutModeSpec;
+  yMode?: ManualLayoutModeSpec;
+  wMode?: ManualLayoutModeSpec;
+  hMode?: ManualLayoutModeSpec;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+}
+
+export type BarGeometryGrouping = 'standard' | 'clustered' | 'stacked' | 'percentStacked';
+
+export type BarGeometryOrientation = 'horizontal' | 'vertical';
+
+export type BarSeriesSlotOrder = 'source' | 'reverse';
+
+export interface BarGeometrySpec {
+  /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
+  orientation?: BarGeometryOrientation;
+  /** Excel/OOXML bar grouping mode used for category slot layout. */
+  grouping: BarGeometryGrouping;
+  /** Source gap width when explicitly supplied by the chart config. */
+  sourceGapWidth?: number;
+  /** Source overlap when explicitly supplied by the chart config. */
+  sourceOverlap?: number;
+  /** Render-effective Excel gap width, clamped to 0..500. */
+  gapWidth: number;
+  /** Render-effective Excel overlap, clamped to -100..100. */
+  overlap: number;
+  /** Whether the source gap width was outside Excel's render range. */
+  gapWidthClamped?: boolean;
+  /** Whether the source overlap was outside Excel's render range. */
+  overlapClamped?: boolean;
+  /** Stable series indices owned by this geometry group when known. */
+  seriesIndices?: number[];
+  /** Render order for clustered series slots within one category. */
+  seriesSlotOrder?: BarSeriesSlotOrder;
+}
+
 /**
  * Chart configuration options.
  */
 export interface ConfigSpec {
   /** Stack mode for bar/area charts */
   stack?: StackMode;
+  /** Excel blank-cell plotting mode. */
+  displayBlanksAs?: 'gap' | 'zero' | 'span';
+  /** Whether hidden rows/columns are excluded from chart plots. */
+  plotVisibleOnly?: boolean;
+  /** Excel/OOXML bar-category gap width as a percentage of one bar width */
+  gapWidth?: number;
+  /** Excel/OOXML intra-category series overlap percentage (-100 to 100) */
+  overlap?: number;
+  /** Render-normalized Excel bar/column category slot geometry. */
+  barGeometry?: BarGeometrySpec;
   /** Background color */
   background?: string;
+  /** Paint-aware chart frame rendered behind all chart content. */
+  chartFrame?: ChartFrameSpec;
+  /** Paint-aware plot-area frame rendered behind data/grid content. */
+  plotFrame?: ChartFrameSpec;
   /** Padding around the chart */
   padding?: number | { top?: number; right?: number; bottom?: number; left?: number };
   /** Default mark styles */
@@ -603,6 +896,33 @@ export interface ConfigSpec {
   scheme?: string;
   /** Custom color range */
   range?: { category?: string[]; ordinal?: string[]; ramp?: string[] };
+  /** Bubble scale percentage for OOXML bubble charts. */
+  bubbleScale?: number;
+  /** Whether OOXML bubble charts should preserve negative/zero bubbles. */
+  showNegBubbles?: boolean;
+  /** Whether OOXML bubble values represent symbol area or width/diameter. */
+  sizeRepresents?: 'area' | 'w';
+  /** Whether OOXML bubble series should use the 3D bubble flag. */
+  bubble3DEffect?: boolean;
+  /** Layout hints computed from imported workbook chart semantics. */
+  layoutHints?: {
+    leftYAxisLabelWidth?: number;
+    rightYAxisLabelWidth?: number;
+    /** @deprecated Use side-specific y-axis label widths. */
+    yAxisLabelWidth?: number;
+    bottomMargin?: number;
+    /** Category tick labels are drawn next to an in-plot value-axis crossing. */
+    xAxisLabelsInsidePlot?: boolean;
+    /** Category tick labels are drawn next to an in-plot value-axis crossing. */
+    yAxisLabelsInsidePlot?: boolean;
+    manualPlotArea?: ManualLayoutSpec;
+    manualTitle?: ManualLayoutSpec;
+    manualLegend?: ManualLayoutSpec;
+    dataTable?: {
+      rowCount: number;
+      height: number;
+    };
+  };
 }
 
 // =============================================================================
@@ -783,6 +1103,13 @@ export interface Layout {
   };
   /** Legend area (if present) */
   legend?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  /** Data table area (if present) */
+  dataTable?: {
     x: number;
     y: number;
     width: number;

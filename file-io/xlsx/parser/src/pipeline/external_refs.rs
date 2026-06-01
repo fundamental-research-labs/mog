@@ -780,17 +780,16 @@ mod tests {
     }
 
     #[test]
-    fn ccm_gaap_real_world() {
-        // From the privateco_turn6 benchmark.
-        let locals = make_local_sheets(&["CCM-GAAP", "Public Comps"]);
-        let el = ExtLinks::new(&[("1", &["CCM-GAAP"]), ("2", &["Public Comps"])]);
+    fn quoted_business_sheet_names() {
+        let locals = make_local_sheets(&["Source-GAAP", "Peer Analysis"]);
+        let el = ExtLinks::new(&[("1", &["Source-GAAP"]), ("2", &["Peer Analysis"])]);
         let ext = el.as_map();
 
-        let r1 = rewrite_formula_external_refs("'[1]CCM-GAAP'!$B$3", &locals, &ext);
-        assert_eq!(r1, "'CCM-GAAP'!$B$3");
+        let r1 = rewrite_formula_external_refs("'[1]Source-GAAP'!$B$3", &locals, &ext);
+        assert_eq!(r1, "'Source-GAAP'!$B$3");
 
-        let r2 = rewrite_formula_external_refs("'[2]Public Comps'!B8", &locals, &ext);
-        assert_eq!(r2, "'Public Comps'!B8");
+        let r2 = rewrite_formula_external_refs("'[2]Peer Analysis'!B8", &locals, &ext);
+        assert_eq!(r2, "'Peer Analysis'!B8");
     }
 
     #[test]
@@ -858,30 +857,30 @@ mod tests {
 
     #[test]
     fn bug_external_ref_same_sheet_name_different_workbook() {
-        // BUG: External link #1 points to a DIFFERENT workbook ("2025.12.001 Stock Report.xlsx")
-        // that happens to have a sheet named "Coversheet". The resolver incorrectly assumes
+        // BUG: External link #1 points to a different workbook that happens to
+        // have a sheet named "Summary". The resolver incorrectly assumes
         // matching sheet names means self-reference and strips the [1] prefix.
         // The external ref should be KEPT because [1] is a different workbook.
-        let locals = make_local_sheets(&["Coversheet"]);
-        let el = ExtLinks::new_external(&[("1", &["Coversheet"])]);
-        let result = rewrite_formula_external_refs("[1]Coversheet!$J$10", &locals, &el.as_map());
+        let locals = make_local_sheets(&["Summary"]);
+        let el = ExtLinks::new_external(&[("1", &["Summary"])]);
+        let result = rewrite_formula_external_refs("[1]Summary!$J$10", &locals, &el.as_map());
         assert_eq!(
-            result, "[1]Coversheet!$J$10",
+            result, "[1]Summary!$J$10",
             "External ref to different workbook should NOT be resolved to local sheet"
         );
     }
 
     #[test]
     fn bug_external_ref_resolves_to_shorter_local_sheet() {
-        // BUG: External link #14 points to a different workbook whose RentRoll sheet
-        // has ~200 rows. Local RentRoll only has ~71 rows. The resolver strips [14],
-        // causing $E$198 to reference a non-existent row locally -> returns 0 -> #DIV/0!.
+        // BUG: External link #2 points to a different workbook whose sheet has
+        // rows outside the local sheet's modeled range. The resolver strips [2],
+        // causing the reference to resolve against a non-existent local row.
         // The external ref should be KEPT to use the cached external value.
-        let locals = make_local_sheets(&["RentRoll"]);
-        let el = ExtLinks::new_external(&[("14", &["RentRoll"])]);
-        let result = rewrite_formula_external_refs("[14]RentRoll!$E$198", &locals, &el.as_map());
+        let locals = make_local_sheets(&["ExternalData"]);
+        let el = ExtLinks::new_external(&[("2", &["ExternalData"])]);
+        let result = rewrite_formula_external_refs("[2]ExternalData!$E$198", &locals, &el.as_map());
         assert_eq!(
-            result, "[14]RentRoll!$E$198",
+            result, "[2]ExternalData!$E$198",
             "External ref to different workbook should NOT be resolved to local sheet"
         );
     }
@@ -889,14 +888,14 @@ mod tests {
     #[test]
     fn bug_external_ref_quoted_same_sheet_name() {
         // Same bug as above but with quoted syntax (sheet name contains space).
-        // External workbook has "General Assumptions" sheet, and so does the local workbook.
+        // External workbook has "Shared Sheet", and so does the local workbook.
         // The external ref should be KEPT because [3] is a different workbook.
-        let locals = make_local_sheets(&["General Assumptions"]);
-        let el = ExtLinks::new_external(&[("3", &["General Assumptions"])]);
+        let locals = make_local_sheets(&["Shared Sheet"]);
+        let el = ExtLinks::new_external(&[("3", &["Shared Sheet"])]);
         let result =
-            rewrite_formula_external_refs("'[3]General Assumptions'!$F$10", &locals, &el.as_map());
+            rewrite_formula_external_refs("'[3]Shared Sheet'!$F$10", &locals, &el.as_map());
         assert_eq!(
-            result, "'[3]General Assumptions'!$F$10",
+            result, "'[3]Shared Sheet'!$F$10",
             "External ref to different workbook should NOT be resolved to local sheet"
         );
     }

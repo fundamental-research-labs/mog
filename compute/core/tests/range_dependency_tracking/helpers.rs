@@ -90,7 +90,7 @@ pub(crate) fn read_value(engine: &YrsComputeEngine, cell: &CellId) -> CellValue 
 ///
 /// Forward uses `set_cell` (production input path). Inverse uses
 /// `import_values` with the *captured* raw [`CellValue`] so the parser
-/// can't clobber the round-trip (Class IV / FINDINGS.md Class-A concern).
+/// can't clobber the round-trip.
 /// Returns `Err` if either the forward or the inverse failed — those
 /// are always real failures, distinct from "dependent drifted."
 pub(crate) fn op_then_inverse(

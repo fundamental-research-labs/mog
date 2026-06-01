@@ -262,6 +262,7 @@ export interface FilterDropdownData {
   readonly blankCount: number;
   readonly blankSelected: boolean;
   readonly totalRowCount: number;
+  readonly columnType?: 'number' | 'text' | 'date' | 'mixed';
 }
 
 export interface FilterDropdownItem {

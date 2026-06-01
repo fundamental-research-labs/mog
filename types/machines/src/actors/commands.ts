@@ -24,6 +24,7 @@ import type { FindReplaceCommands } from './find-replace';
 import type { OperationObjectState, OperationResizeHandle } from './object-interaction';
 import type { PaneFocusCommands } from './pane-focus';
 import type { RendererCommands } from './renderer';
+import type { ComposeCommentType } from './comment';
 
 // =============================================================================
 // SELECTION COMMANDS
@@ -522,6 +523,11 @@ export interface EditorCommands {
    * @param position - Cursor position within value
    */
   setCursor(position: number): void;
+
+  /**
+   * Mirror a non-collapsed DOM text selection into the editor machine.
+   */
+  setTextSelection(cursorPosition: number, selectionAnchor: number): void;
 
   /**
    * Commit the edit.
@@ -1657,7 +1663,7 @@ export interface CommentCommands {
   /**
    * Start composing a new comment.
    */
-  startCompose(): void;
+  startCompose(commentType?: ComposeCommentType): void;
 
   /**
    * Start editing an existing comment.

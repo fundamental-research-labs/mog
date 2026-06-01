@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import { WorksheetChartsImpl } from '../worksheet/charts';
+import { WorksheetImpl } from '../worksheet/worksheet-impl';
 
 const SHEET_ID = sheetId('sheet-1');
 
@@ -47,6 +48,46 @@ function createChartsApi(charts: ChartFloatingObject[]): WorksheetChartsImpl {
   };
   return new WorksheetChartsImpl(ctx as any, SHEET_ID);
 }
+
+function chartOoxmlWithAnchorIndex(anchorIndex: number): ChartFloatingObject['ooxml'] {
+  return {
+    drawingFrame: {
+      anchorIndex,
+    },
+  } as unknown as ChartFloatingObject['ooxml'];
+}
+
+describe('WorksheetChartsImpl chart list ordering', () => {
+  it('orders imported charts by drawing frame anchorIndex before serialization', async () => {
+    const anchor7 = makeChart({
+      id: 'anchor-7',
+      name: 'Chart anchor 7',
+      ooxml: chartOoxmlWithAnchorIndex(7),
+    });
+    const anchor3 = makeChart({
+      id: 'anchor-3',
+      name: 'Chart anchor 3',
+      ooxml: chartOoxmlWithAnchorIndex(3),
+    });
+    const charts = createChartsApi([anchor7, anchor3]);
+
+    await expect(charts.list()).resolves.toEqual([
+      expect.objectContaining({ id: 'anchor-3', name: 'Chart anchor 3' }),
+      expect.objectContaining({ id: 'anchor-7', name: 'Chart anchor 7' }),
+    ]);
+  });
+
+  it('preserves computeBridge order for charts without imported anchor metadata', async () => {
+    const first = makeChart({ id: 'first-chart', name: 'First chart' });
+    const second = makeChart({ id: 'second-chart', name: 'Second chart' });
+    const charts = createChartsApi([first, second]);
+
+    await expect(charts.list()).resolves.toEqual([
+      expect.objectContaining({ id: 'first-chart', name: 'First chart' }),
+      expect.objectContaining({ id: 'second-chart', name: 'Second chart' }),
+    ]);
+  });
+});
 
 describe('WorksheetChartsImpl chart ref read normalization', () => {
   it('normalizes imported absolute A1 refs from get and list without changing malformed refs', async () => {
@@ -117,5 +158,376 @@ describe('WorksheetChartsImpl chart ref read normalization', () => {
         ],
       }),
     ]);
+  });
+});
+
+describe('WorksheetChartsImpl rich chart format boundary', () => {
+  it('normalizes wire chart format colors on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartFormat: { fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.2 } } },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tint_shade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tint_shade: 0.3 } } },
+        },
+        chartStyleContext: {
+          colorMapOverride: { type: 'master' },
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              format: { line: { color: { theme: 'accent4', tint_shade: -0.3 } } },
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tint_shade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        chartFormat: {
+          fill: { type: 'solid', color: { theme: 'accent1', tintShade: 0.2 } },
+        },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tintShade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tintShade: 0.3 } } },
+        },
+        chartStyleContext: {
+          colorMapOverride: { type: 'master' },
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              format: { line: { color: { theme: 'accent4', tintShade: -0.3 } } },
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tintShade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('writes public chart format colors to the wire shape on update', async () => {
+    const chart = makeChart();
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      chartFormat: { fill: { type: 'solid', color: { theme: 'accent1', tintShade: 0.2 } } },
+      titleRichText: [{ text: 'Revenue', font: { color: { theme: 'accent2', tintShade: -0.2 } } }],
+      dataTable: {
+        visible: true,
+        format: { shadow: { color: { theme: 'accent3', tintShade: 0.3 } } },
+      },
+      trendlines: [
+        {
+          label: {
+            format: { font: { color: { theme: 'accent4', tintShade: -0.3 } } },
+          },
+        },
+      ],
+      chartStyleContext: {
+        owners: [
+          {
+            ownerKey: 'plot-area',
+            richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tintShade: 0.4 } } }],
+          },
+        ],
+      },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        chartFormat: {
+          fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.2 } },
+        },
+        titleRichText: [
+          { text: 'Revenue', font: { color: { theme: 'accent2', tint_shade: -0.2 } } },
+        ],
+        dataTable: {
+          visible: true,
+          format: { shadow: { color: { theme: 'accent3', tint_shade: 0.3 } } },
+        },
+        trendline: [
+          expect.objectContaining({
+            label: {
+              format: { font: { color: { theme: 'accent4', tint_shade: -0.3 } } },
+            },
+          }),
+        ],
+        chartStyleContext: {
+          owners: [
+            {
+              ownerKey: 'plot-area',
+              richText: [{ text: 'Owner', font: { color: { theme: 'accent5', tint_shade: 0.4 } } }],
+            },
+          ],
+        },
+      }),
+    );
+  });
+});
+
+describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
+  it('preserves imported ChartEx family options on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartType: 'waterfall',
+        waterfall: {
+          subtotalIndices: [1, 3],
+          showConnectorLines: false,
+        },
+        histogram: {
+          binCount: 8,
+          underflowBin: true,
+          underflowBinValue: 1,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          showMeanLine: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        waterfall: {
+          subtotalIndices: [1, 3],
+          totalIndices: [1, 3],
+          showConnectorLines: false,
+        },
+        histogram: {
+          binCount: 8,
+          binWidth: undefined,
+          overflowBin: undefined,
+          overflowBinValue: undefined,
+          underflowBin: true,
+          underflowBinValue: 1,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showOutliers: false,
+          showMeanMarkers: true,
+          showMean: true,
+          showMeanLine: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      }),
+    );
+  });
+
+  it('writes ChartEx family options through the generated compute bridge shape', async () => {
+    const chart = makeChart({ chartType: 'waterfall' });
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      waterfall: {
+        subtotalIndices: [2],
+        totalIndices: [9],
+        showConnectorLines: true,
+      },
+      histogram: {
+        binWidth: 2.5,
+        overflowBin: true,
+        overflowBinValue: 10,
+      },
+      boxplot: {
+        showOutliers: false,
+        showMean: true,
+        quartileMethod: 'inclusive',
+      },
+      hierarchy: {
+        categoryFormulas: ['Sheet1!A1:A3'],
+        valueFormula: 'Sheet1!B1:B3',
+        parentLabelLayout: 'overlapping',
+      },
+      regionMap: {
+        regionFormula: 'Sheet1!A1:A3',
+        valueFormula: 'Sheet1!B1:B3',
+      },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        waterfall: {
+          subtotalIndices: [2],
+          showConnectorLines: true,
+        },
+        histogram: {
+          binCount: undefined,
+          binWidth: 2.5,
+          overflowBin: true,
+          overflowBinValue: 10,
+          underflowBin: undefined,
+          underflowBinValue: undefined,
+        },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          showMeanLine: undefined,
+          quartileMethod: 'inclusive',
+        },
+        hierarchy: {
+          rows: undefined,
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          parentLabelLayout: 'overlapping',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      }),
+    );
+  });
+});
+
+describe('WorksheetChartsImpl surface chart config mapping', () => {
+  it('preserves imported surface rendering options on read', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        chartType: 'surface3D',
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20, depthPercent: 125 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.1 } } },
+      }),
+    ]);
+
+    await expect(charts.get('chart-1')).resolves.toEqual(
+      expect.objectContaining({
+        type: 'surface3D',
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20, depthPercent: 125 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tintShade: -0.1 } } },
+      }),
+    );
+  });
+
+  it('writes surface rendering options through the generated compute bridge shape', async () => {
+    const chart = makeChart({ chartType: 'surface3D' });
+    const updateChart = jest.fn(async () => undefined);
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+
+    await charts.update('chart-1', {
+      wireframe: true,
+      surfaceTopView: false,
+      view3d: { rotX: 15, rotY: 20 },
+      floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tintShade: -0.1 } } },
+    });
+
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        wireframe: true,
+        surfaceTopView: false,
+        view3d: { rotX: 15, rotY: 20 },
+        floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.1 } } },
+      }),
+    );
+  });
+});
+
+describe('Worksheet chart image export', () => {
+  it('delegates worksheet.charts.exportImage through the context chart image exporter', async () => {
+    const chart = makeChart();
+    const options = {
+      format: 'png' as const,
+      width: 640,
+      height: 360,
+      pixelRatio: 2,
+      backgroundColor: '#ffffff',
+    };
+    const dataUrl = 'data:image/png;base64,ZmFrZS1wbmc=';
+    const exporter = {
+      exportImage: jest.fn(async () => dataUrl),
+    };
+    const ctx = {
+      chartImageExporter: exporter,
+      computeBridge: {
+        getChart: jest.fn(async () => chart),
+      },
+    };
+
+    const worksheet = new WorksheetImpl(SHEET_ID, ctx as any);
+
+    await expect(worksheet.charts.exportImage(chart.id, options)).resolves.toBe(dataUrl);
+    expect(exporter.exportImage).toHaveBeenCalledWith(SHEET_ID, chart.id, options);
+  });
+
+  it('uses a chart image exporter registered after the worksheet charts API is cached', async () => {
+    const chart = makeChart();
+    const dataUrl = 'data:image/png;base64,cmVnaXN0ZXJlZC1sYXRl';
+    const ctx: any = {
+      chartImageExporter: null,
+      computeBridge: {
+        getChart: jest.fn(async () => chart),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx, SHEET_ID);
+    const exporter = {
+      exportImage: jest.fn(async () => dataUrl),
+    };
+
+    ctx.chartImageExporter = exporter;
+
+    await expect(charts.exportImage(chart.id)).resolves.toBe(dataUrl);
+    expect(exporter.exportImage).toHaveBeenCalledWith(SHEET_ID, chart.id, undefined);
   });
 });

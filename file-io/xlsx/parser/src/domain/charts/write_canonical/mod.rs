@@ -227,6 +227,20 @@ fn emit_chart(w: &mut XmlWriter, chart: &Chart) {
             .self_close();
     }
 
+    emit_bool_chart_child(w, "c:showAllFieldButtons", chart.show_all_field_buttons);
+    emit_bool_chart_child(w, "c:showAxisFieldButtons", chart.show_axis_field_buttons);
+    emit_bool_chart_child(
+        w,
+        "c:showLegendFieldButtons",
+        chart.show_legend_field_buttons,
+    );
+    emit_bool_chart_child(w, "c:showValueFieldButtons", chart.show_value_field_buttons);
+    emit_bool_chart_child(
+        w,
+        "c:showReportFilterFieldButtons",
+        chart.show_report_filter_field_buttons,
+    );
+
     // extLst
     if !chart.extensions.is_empty() {
         w.start_element("c:extLst").end_attrs();
@@ -239,4 +253,12 @@ fn emit_chart(w: &mut XmlWriter, chart: &Chart) {
     }
 
     w.end_element("c:chart");
+}
+
+fn emit_bool_chart_child(w: &mut XmlWriter, name: &str, value: Option<bool>) {
+    if let Some(value) = value {
+        w.start_element(name)
+            .attr("val", if value { "1" } else { "0" })
+            .self_close();
+    }
 }

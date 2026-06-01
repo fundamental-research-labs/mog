@@ -136,7 +136,7 @@ fn test_benign_self_ref_with_dependent() {
 }
 
 /// Multiple cells with IF(X="Yes",1,0) pattern, all in the same column.
-/// Mirrors the real-world corpus pattern from the XLSX file.
+/// Exercises repeated benign self references from imported workbook formulas.
 #[test]
 fn test_multiple_benign_self_refs() {
     let mut cells = Vec::new();

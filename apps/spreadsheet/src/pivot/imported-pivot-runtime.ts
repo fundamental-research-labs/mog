@@ -1,6 +1,12 @@
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { PivotTableConfig, PivotTableWithResult } from '@mog-sdk/contracts/pivot';
+import type {
+  AggregateFunction,
+  PivotFieldArea,
+  PivotFieldPlacementFlat,
+  PivotTableConfig,
+  PivotTableWithResult,
+} from '@mog-sdk/contracts/pivot';
 import type { ImportedPivotMetadataSet, ImportedPivotTableMetadata } from '@mog/shell';
 
 export interface ImportedPivotRuntime {
@@ -32,6 +38,21 @@ function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableCo
     dataType: 'string' as const,
   }));
 
+  // Reconstruct the layout wells from the imported definition so the field
+  // panel reflects the active pivot (Rows/Columns/Values) instead of showing
+  // every field as unplaced.
+  const placements: PivotFieldPlacementFlat[] = pivot.placements.map((placement) => ({
+    placementId:
+      `${pivot.id}:${placement.area}:${placement.fieldId}:${placement.position}` as PivotFieldPlacementFlat['placementId'],
+    fieldId: placement.fieldId,
+    area: placement.area as PivotFieldArea,
+    position: placement.position,
+    ...(placement.aggregateFunction
+      ? { aggregateFunction: placement.aggregateFunction as AggregateFunction }
+      : {}),
+    ...(placement.displayName ? { displayName: placement.displayName } : {}),
+  }));
+
   return {
     schemaVersion: 1,
     id: pivot.id,
@@ -46,7 +67,7 @@ function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableCo
     outputSheetName: pivot.sheetName,
     outputLocation: { row: pivot.range.startRow, col: pivot.range.startCol },
     fields,
-    placements: [],
+    placements,
     filters: [],
     refRange: pivot.range.ref,
     cacheId: pivot.cacheId,

@@ -206,8 +206,12 @@ const SHEET_EVENT_TO_INTERNAL: Record<string, string[]> = {
     'structure:changed',
     'row:inserted',
     'row:deleted',
+    'rows:inserted',
+    'rows:deleted',
     'column:inserted',
     'column:deleted',
+    'columns:inserted',
+    'columns:deleted',
   ],
   mergeChanged: ['merge:changed', 'merge:created', 'merge:removed'],
   tableChanged: ['table:changed', 'table:created', 'table:updated', 'table:deleted'],
@@ -1145,7 +1149,7 @@ export class WorksheetImpl implements Worksheet {
     const linkedCells: Array<{
       row: number;
       col: number;
-      controlType: 'checkbox' | 'comboBox' | 'button';
+      controlType: 'checkbox' | 'comboBox' | 'listBox' | 'button';
     }> = [];
 
     const controls = this.formControls.list();
@@ -1186,7 +1190,7 @@ export class WorksheetImpl implements Worksheet {
     for (const { row, col, controlType } of linkedCells) {
       if (controlType === 'checkbox') {
         await CellOps.setCell(this.ctx, this.sheetId, row, col, false);
-      } else if (controlType === 'comboBox') {
+      } else if (controlType === 'comboBox' || controlType === 'listBox') {
         await CellOps.setCell(this.ctx, this.sheetId, row, col, '');
       }
       // Buttons have no value to reset
@@ -2515,7 +2519,11 @@ export class WorksheetImpl implements Worksheet {
 
   private _charts?: WorksheetChartsImpl;
   get charts(): WorksheetCharts {
-    return (this._charts ??= new WorksheetChartsImpl(this.ctx, this.sheetId));
+    return (this._charts ??= new WorksheetChartsImpl(
+      this.ctx,
+      this.sheetId,
+      this.ctx.chartImageExporter,
+    ));
   }
 
   private _objects?: WorksheetObjectsImpl;

@@ -13,15 +13,15 @@
 
 /**
  * External URLs for help resources.
- * These are placeholder URLs that should be updated to point to actual documentation.
+ * First-party help targets used by the Help command surfaces.
  */
 export const HELP_URLS = {
   /** Main help documentation */
-  help: 'https://docs.example.com/spreadsheet',
+  help: 'https://docs.mog.com/spreadsheet',
   /** Support contact page or email */
-  support: 'mailto:support@example.com',
+  support: 'mailto:support@mog.com',
   /** Changelog / release notes */
-  whatsNew: 'https://docs.example.com/changelog',
+  whatsNew: 'https://docs.mog.com/changelog',
 } as const;
 
 // =============================================================================

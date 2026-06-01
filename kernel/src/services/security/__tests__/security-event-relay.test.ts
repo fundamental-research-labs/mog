@@ -161,12 +161,11 @@ describe('security-event-relay', () => {
   });
 
   test('drainOnce skips silently when source.isInitialized === false', async () => {
-    // Regression: app-eval real-files — the
-    // DocumentLifecycleSystem starts the relay during `executeWireContext`
+    // Regression: DocumentLifecycleSystem starts the relay during `executeWireContext`
     // (CONTEXT_SET phase), but `wbSecurityDrainEvents` requires STARTED
     // and throws `BRIDGE_PHASE_INSUFFICIENT` if called any earlier. Without
     // this guard, every premature drain logs a warning AND pollutes
-    // `recentErrors` (mis-routing app-eval failure classification).
+    // `recentErrors` (mis-routing failure classification).
     const { bus, events } = createRecordingBus();
     let drainCalls = 0;
     let isInit = false;

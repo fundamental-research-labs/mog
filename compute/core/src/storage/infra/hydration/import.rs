@@ -129,6 +129,11 @@ impl YrsStorage {
         // cell properties (`{"s": N}`) can resolve their format at read time.
         hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
         hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
+        let theme = output.theme.as_ref();
+        let indexed_colors = output
+            .workbook_stylesheet
+            .as_ref()
+            .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
 
         for sheet_data in &output.sheets {
             let (
@@ -145,6 +150,8 @@ impl YrsStorage {
                 sheet_data,
                 &output.style_palette,
                 &output.persons,
+                theme,
+                indexed_colors,
                 allocator,
             )?;
             id_map.sheet_ids.push(sheet_id);
@@ -299,6 +306,11 @@ impl YrsStorage {
         tracing::info!(target: "deferred_hydration", "hydrate: style palette");
         hydrate_style_palette(&mut txn, &self.workbook, &output.style_palette);
         hydrate_workbook_stylesheet(&mut txn, &self.workbook, &output.workbook_stylesheet);
+        let theme = output.theme.as_ref();
+        let indexed_colors = output
+            .workbook_stylesheet
+            .as_ref()
+            .and_then(|stylesheet| stylesheet.indexed_colors.as_ref());
         tracing::info!(target: "deferred_hydration", "hydrate: sheets start, count={}", output.sheets.len());
 
         for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
@@ -318,6 +330,8 @@ impl YrsStorage {
                 sheet_data,
                 &output.style_palette,
                 &output.persons,
+                theme,
+                indexed_colors,
                 alloc,
                 ranged,
                 range_style_positions_for_sheet,

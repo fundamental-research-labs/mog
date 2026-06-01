@@ -383,7 +383,7 @@ export function CFRulesManager() {
           />
         </div>
         <span className="text-body-sm text-ss-text-secondary">
-          {rulesWithFormats.length} rule{rulesWithFormats.length !== 1 ? 's' : ''}
+          {rulesWithFormats.length} rule{rulesWithFormats.length !== 1 ? 's' : ''}{' '}
         </span>
       </DialogToolbar>
 

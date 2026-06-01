@@ -42,6 +42,8 @@ import type {
 
 import type { RendererActor } from '../machines/grid-renderer-machine';
 
+const INTERNAL_GRID_RENDERER_KEY = '__mogInternalGridRenderer';
+
 // =============================================================================
 // CONFIGURATION INTERFACE
 // =============================================================================
@@ -131,6 +133,10 @@ export interface RendererExecutionResult {
   // ---- Lifecycle ----------------------------------------------------------
   cleanup(): void;
 }
+
+type SheetViewHandleWithInternalRenderer = SheetViewHandle & {
+  readonly [INTERNAL_GRID_RENDERER_KEY]?: GridRenderer;
+};
 
 // =============================================================================
 // SETUP FUNCTION
@@ -257,6 +263,8 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
           // after attach(workbook) — resolves from the attached workbook's
           // per-sheet viewport automatically on each event.
         });
+        underlyingRenderer =
+          (sheetView as SheetViewHandleWithInternalRenderer)[INTERNAL_GRID_RENDERER_KEY] ?? null;
 
         // -------------------------------------------------------------------
         // 3. Configure freeze/split BEFORE attach() so the first computed

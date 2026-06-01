@@ -50,6 +50,13 @@ fn parse_case(args: &[CellValue], index: usize, name: &str) -> Result<CaseMode, 
     if let Some(e) = check_error(&args[index]) {
         return Err(e);
     }
+    if let CellValue::Text(value) = &args[index] {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "c" | "s" | "case-sensitive" | "sensitive" => return Ok(CaseMode::Sensitive),
+            "i" | "case-insensitive" | "insensitive" => return Ok(CaseMode::Insensitive),
+            _ => {}
+        }
+    }
     let n = args[index]
         .coerce_to_number()
         .map_err(|e| CellValue::Error(e, None))?;
@@ -59,7 +66,7 @@ fn parse_case(args: &[CellValue], index: usize, name: &str) -> Result<CaseMode, 
         Ok(CaseMode::Insensitive)
     } else {
         Err(regex_value(format!(
-            "{name}: case_sensitivity must be 0 or 1, got {n}"
+            "{name}: case_sensitivity must be 0, 1, \"c\", or \"i\", got {n}"
         )))
     }
 }
@@ -525,6 +532,14 @@ mod tests {
         assert_eq!(
             FnRegexTest.call(&[text("Alpha"), text("alpha"), num(1.0)]),
             bool_val(true)
+        );
+        assert_eq!(
+            FnRegexTest.call(&[text("Alpha"), text("alpha"), text("i")]),
+            bool_val(true)
+        );
+        assert_eq!(
+            FnRegexTest.call(&[text("Alpha"), text("alpha"), text("c")]),
+            bool_val(false)
         );
     }
 

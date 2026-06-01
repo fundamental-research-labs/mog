@@ -133,6 +133,61 @@ describe('Clipboard Paste Integration', () => {
     clipboardActor.stop();
   });
 
+  it('clears browser clipboard text after a successful cut relocate', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 'CutMe' },
+      },
+      textSignature: 'CutMe',
+    };
+
+    const writeText = jest.fn<() => Promise<void>>(async () => {});
+    const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis.navigator,
+      'clipboard',
+    );
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn(),
+      relocateCells: jest.fn(async () => ({ success: true, movedCount: 1 })),
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+    });
+
+    try {
+      clipboardActor.send({ type: 'CUT', ranges: [sourceRange], data: clipboardData });
+      clipboardActor.send({ type: 'PASTE', targetCell: { row: 0, col: 2 } });
+      await waitForPendingClipboardPaste();
+
+      expect(writeText).toHaveBeenCalledWith('');
+      expect(clipboardActor.getSnapshot().matches('empty')).toBe(true);
+    } finally {
+      cleanup();
+      clipboardActor.stop();
+      if (originalClipboardDescriptor) {
+        Object.defineProperty(globalThis.navigator, 'clipboard', originalClipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis.navigator, 'clipboard');
+      }
+    }
+  });
+
   it('publishes an awaitable promise for the actual paste side effect', async () => {
     const sheetId = 'sheet-1' as SheetId;
     const clipboardData: ClipboardData = {

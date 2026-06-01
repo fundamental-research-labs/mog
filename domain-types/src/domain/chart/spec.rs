@@ -2,18 +2,44 @@ use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::ImportObjectStatus;
+use crate::domain::drawings::ManualLayout;
 
-use super::ChartSeriesData;
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
-    ChartFormatData, ChartFormatStringData, ChartRelationshipData, ChartSubType, ChartType,
-    ChartView3DData, DataLabelData, LegendData, ObjectSize, StandardChartExportAuthority,
-    StandardChartProvenance,
+    ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData,
+    ChartStyleContextData, ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData,
+    ObjectSize, StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
 };
+use super::{
+    BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
+    PivotChartProjectionData, RegionMapConfigData,
+};
+
+/// Chart-level line feature such as drop lines, high-low lines, or series lines.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartLineSettingsData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub visible: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub format: Option<ChartLineData>,
+}
+
+/// Up/down bar settings for line and stock charts.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpDownBarsData {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub gap_width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_format: Option<ChartFormatData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub down_format: Option<ChartFormatData>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +48,8 @@ pub struct ChartExReplayData {
     pub original_path: String,
     pub original_xml: Vec<u8>,
     pub original_position: AnchorPosition,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub projection_fingerprint: Option<String>,
     pub rels_path: Option<String>,
     pub rels_xml: Option<Vec<u8>>,
     pub relationships: Vec<ChartRelationshipData>,
@@ -73,7 +101,31 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plot_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub drop_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub high_low_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_down_bars: Option<UpDownBarsData>,
+
+    // -- ChartEx family-specific config/data projections --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub waterfall: Option<WaterfallOptions>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub histogram: Option<HistogramConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub boxplot: Option<BoxplotConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hierarchy: Option<HierarchyChartConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub region_map: Option<RegionMapConfigData>,
 
     // -- Chart-level properties --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -83,6 +135,8 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub gap_width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub gap_depth: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub overlap: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub doughnut_hole_size: Option<u32>,
@@ -91,12 +145,17 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bubble_scale: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_neg_bubbles: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub size_represents: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub split_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub split_value: Option<f64>,
 
     // -- Bar shape (3D decorative charts) --
-    /// Mark shape for 3D bar/column charts: "box", "cylinder", "cone", "pyramid".
+    /// Mark shape for 3D bar/column charts:
+    /// "box", "cylinder", "cone", "coneToMax", "pyramid", "pyramidToMax".
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bar_shape: Option<String>,
 
@@ -117,6 +176,9 @@ pub struct ChartSpec {
     /// Chart color scheme index (1-based).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub color_scheme: Option<u8>,
+    /// Imported chart style sidecar used by theme/style/text resolution.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chart_style_context: Option<ChartStyleContextData>,
 
     // -- Simple config properties --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -143,6 +205,8 @@ pub struct ChartSpec {
     // -- Pivot chart options --
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pivot_options: Option<PivotChartOptionsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_projection: Option<PivotChartProjectionData>,
 
     // -- 3D --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -257,6 +321,142 @@ pub struct PivotChartOptionsData {
 }
 
 impl ChartSpec {
+    fn rotation_units_from_degrees(rotation: f64) -> Option<i32> {
+        if !rotation.is_finite() {
+            return None;
+        }
+        let units = (rotation * 60_000.0).round();
+        Some(units.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
+    }
+
+    fn frame_locked_state(
+        frame: &ChartDrawingFrameOoxmlProps,
+        legacy_locks_with_sheet: Option<bool>,
+    ) -> bool {
+        let nv = &frame.graphic_frame.nv_graphic_frame_pr;
+        let locks = &nv.c_nv_graphic_frame_pr;
+        frame
+            .client_data_locks_with_sheet
+            .or(legacy_locks_with_sheet)
+            .unwrap_or(true)
+            || locks.no_grp
+            || locks.no_select
+            || locks.no_move
+            || locks.no_resize
+            || nv.no_drilldown
+    }
+
+    fn sync_drawing_frame_with_common(
+        frame: &mut ChartDrawingFrameOoxmlProps,
+        common: &FloatingObjectCommon,
+    ) {
+        let Some(common_rotation_units) = Self::rotation_units_from_degrees(common.rotation) else {
+            return;
+        };
+
+        let frame_rotation_units = frame
+            .graphic_frame
+            .xfrm
+            .rotation
+            .map(|rot| rot.value())
+            .unwrap_or(0);
+        let frame_flip_h = frame.graphic_frame.xfrm.flip_h.unwrap_or(false);
+        let frame_flip_v = frame.graphic_frame.xfrm.flip_v.unwrap_or(false);
+        let frame_visible = !frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden;
+        let frame_printable = frame.client_data_prints_with_sheet.unwrap_or(true);
+        let frame_locked = Self::frame_locked_state(frame, None);
+
+        let frame_changed = frame_rotation_units != common_rotation_units
+            || frame_flip_h != common.flip_h
+            || frame_flip_v != common.flip_v
+            || frame_visible != common.visible
+            || frame_printable != common.printable
+            || frame_locked != common.locked;
+        if frame_changed {
+            frame.raw_alternate_content = None;
+        }
+
+        if frame_rotation_units != common_rotation_units {
+            frame.graphic_frame.xfrm.rotation = (common_rotation_units != 0
+                || frame.graphic_frame.xfrm.rotation.is_some())
+            .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
+        }
+        if frame_flip_h != common.flip_h {
+            frame.graphic_frame.xfrm.flip_h = (common.flip_h
+                || frame.graphic_frame.xfrm.flip_h.is_some())
+            .then_some(common.flip_h);
+        }
+        if frame_flip_v != common.flip_v {
+            frame.graphic_frame.xfrm.flip_v = (common.flip_v
+                || frame.graphic_frame.xfrm.flip_v.is_some())
+            .then_some(common.flip_v);
+        }
+
+        frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden = !common.visible;
+        if frame_printable != common.printable {
+            frame.client_data_prints_with_sheet = (!common.printable).then_some(false);
+        }
+
+        if frame_locked != common.locked {
+            if common.locked {
+                frame.client_data_locks_with_sheet = None;
+            } else {
+                frame.client_data_locks_with_sheet = Some(false);
+                let nv = &mut frame.graphic_frame.nv_graphic_frame_pr;
+                nv.c_nv_graphic_frame_pr.no_grp = false;
+                nv.c_nv_graphic_frame_pr.no_select = false;
+                nv.c_nv_graphic_frame_pr.no_move = false;
+                nv.c_nv_graphic_frame_pr.no_resize = false;
+                nv.no_drilldown = false;
+            }
+        }
+    }
+
+    fn drawing_frame_common_state(
+        frame: Option<&ChartDrawingFrameOoxmlProps>,
+        legacy_hidden: bool,
+        legacy_prints_with_sheet: Option<bool>,
+    ) -> (f64, bool, bool, bool, bool, bool, String) {
+        let Some(frame) = frame else {
+            return (
+                0.0,
+                false,
+                false,
+                true,
+                !legacy_hidden,
+                legacy_prints_with_sheet.unwrap_or(true),
+                String::new(),
+            );
+        };
+
+        let gf = &frame.graphic_frame;
+        let nv = &gf.nv_graphic_frame_pr;
+        let cnv = &nv.c_nv_pr;
+        let locks = &nv.c_nv_graphic_frame_pr;
+        let rotation = gf
+            .xfrm
+            .rotation
+            .map(|rot| rot.value() as f64 / 60_000.0)
+            .unwrap_or(0.0);
+        let flip_h = gf.xfrm.flip_h.unwrap_or(false);
+        let flip_v = gf.xfrm.flip_v.unwrap_or(false);
+        let locked = frame.client_data_locks_with_sheet.unwrap_or(true)
+            || locks.no_grp
+            || locks.no_select
+            || locks.no_move
+            || locks.no_resize
+            || nv.no_drilldown;
+        let visible = !cnv.hidden;
+        let printable = frame.client_data_prints_with_sheet.unwrap_or(true);
+        let name = if cnv.name.is_empty() {
+            String::new()
+        } else {
+            cnv.name.clone()
+        };
+
+        (rotation, flip_h, flip_v, locked, visible, printable, name)
+    }
+
     /// Convert a `FloatingObject` back into a `ChartSpec` for XLSX export.
     ///
     /// Returns `None` if the object is not a chart.
@@ -297,7 +497,10 @@ impl ChartSpec {
 
         // Unpack typed OOXML preservation data.
         let ooxml = chart_data.ooxml.as_ref();
-        let chart_frame = ooxml.and_then(|o| o.drawing_frame.clone());
+        let mut chart_frame = ooxml.and_then(|o| o.drawing_frame.clone());
+        if let Some(ref mut frame) = chart_frame {
+            Self::sync_drawing_frame_with_common(frame, common);
+        }
         let chart_relationships = ooxml
             .map(|o| o.chart_relationships.clone())
             .unwrap_or_default();
@@ -403,15 +606,29 @@ impl ChartSpec {
             title_format: chart_data.title_format.clone(),
             title_rich_text: chart_data.title_rich_text.clone(),
             title_formula: chart_data.title_formula.clone(),
+            plot_layout: chart_data.plot_layout.clone(),
+            title_layout: chart_data.title_layout.clone(),
             data_table: chart_data.data_table.clone(),
+            drop_lines: chart_data.drop_lines.clone(),
+            high_low_lines: chart_data.high_low_lines.clone(),
+            series_lines: chart_data.series_lines.clone(),
+            up_down_bars: chart_data.up_down_bars.clone(),
+            waterfall: chart_data.waterfall.clone(),
+            histogram: chart_data.histogram.clone(),
+            boxplot: chart_data.boxplot.clone(),
+            hierarchy: chart_data.hierarchy.clone(),
+            region_map: chart_data.region_map.clone(),
             // Chart-level properties
             display_blanks_as: chart_data.display_blanks_as.clone(),
             plot_visible_only: chart_data.plot_visible_only,
             gap_width: chart_data.gap_width,
+            gap_depth: chart_data.gap_depth,
             overlap: chart_data.overlap,
             doughnut_hole_size: chart_data.doughnut_hole_size,
             first_slice_angle: chart_data.first_slice_angle,
             bubble_scale: chart_data.bubble_scale,
+            show_neg_bubbles: chart_data.show_neg_bubbles,
+            size_represents: chart_data.size_represents.clone(),
             split_type: chart_data.split_type.clone(),
             split_value: chart_data.split_value,
             // Simple config properties
@@ -427,6 +644,7 @@ impl ChartSpec {
             title_show_shadow: chart_data.title_show_shadow,
             // Pivot chart options
             pivot_options: chart_data.pivot_options.clone(),
+            pivot_projection: chart_data.pivot_projection.clone(),
             // Bar shape
             bar_shape: chart_data.bar_shape.clone(),
             // Bubble / Surface / Theming
@@ -434,6 +652,7 @@ impl ChartSpec {
             wireframe: chart_data.wireframe,
             surface_top_view: chart_data.surface_top_view,
             color_scheme: chart_data.color_scheme,
+            chart_style_context: chart_data.chart_style_context.clone(),
             // 3D
             view_3d: chart_data.view_3d.clone(),
             floor_format: chart_data.floor_format.clone(),
@@ -556,7 +775,7 @@ impl ChartSpec {
         } else {
             Some(ChartOoxmlProps {
                 definition,
-                drawing_frame,
+                drawing_frame: drawing_frame.clone(),
                 chart_relationships: self.chart_relationships.clone(),
                 chart_auxiliary_files: self.chart_auxiliary_files.clone(),
                 chart_auxiliary_parts: self.chart_auxiliary_parts.clone(),
@@ -576,6 +795,12 @@ impl ChartSpec {
             } else {
                 AnchorMode::OneCell
             };
+        let (rotation, flip_h, flip_v, locked, visible, printable, frame_name) =
+            Self::drawing_frame_common_state(
+                drawing_frame.as_ref(),
+                self.cnv_pr_hidden,
+                self.client_data_prints_with_sheet,
+            );
 
         let common = FloatingObjectCommon {
             id: format!("chart-import-{}", index),
@@ -598,20 +823,15 @@ impl ChartSpec {
             width: self.size.width,
             height: self.size.height,
             z_index: self.z_index,
-            rotation: 0.0,
-            flip_h: false,
-            flip_v: false,
-            locked: true,
-            visible: true,
-            printable: true,
+            rotation,
+            flip_h,
+            flip_v,
+            locked,
+            visible,
+            printable,
             opacity: 1.0,
-            name: self
-                .chart_frame
-                .as_ref()
-                .and_then(|frame| {
-                    let name = &frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.name;
-                    (!name.is_empty()).then(|| name.clone())
-                })
+            name: (!frame_name.is_empty())
+                .then_some(frame_name)
                 .or_else(|| self.cnv_pr_name.clone())
                 .unwrap_or_default(),
             created_at: 0,
@@ -624,6 +844,8 @@ impl ChartSpec {
             display_name: None,
             import_status: self.import_status.clone(),
         };
+        let (radar_filled, radar_markers) =
+            radar_flags_from_sub_type(&self.chart_type, self.sub_type.as_ref());
 
         let chart_data = ChartData {
             chart_type: self.chart_type.clone(),
@@ -650,16 +872,23 @@ impl ChartSpec {
             trendline: None,
             show_lines: None,
             smooth_lines: None,
-            radar_filled: None,
-            radar_markers: None,
-            waterfall: None,
+            radar_filled,
+            radar_markers,
+            waterfall: self.waterfall.clone(),
+            histogram: self.histogram.clone(),
+            boxplot: self.boxplot.clone(),
+            hierarchy: self.hierarchy.clone(),
+            region_map: self.region_map.clone(),
             display_blanks_as: self.display_blanks_as.clone(),
             plot_visible_only: self.plot_visible_only,
             gap_width: self.gap_width,
+            gap_depth: self.gap_depth,
             overlap: self.overlap,
             doughnut_hole_size: self.doughnut_hole_size,
             first_slice_angle: self.first_slice_angle,
             bubble_scale: self.bubble_scale,
+            show_neg_bubbles: self.show_neg_bubbles,
+            size_represents: self.size_represents.clone(),
             split_type: self.split_type.clone(),
             split_value: self.split_value,
             // Simple config properties
@@ -675,11 +904,13 @@ impl ChartSpec {
             title_show_shadow: self.title_show_shadow,
             // Pivot chart options
             pivot_options: self.pivot_options.clone(),
+            pivot_projection: self.pivot_projection.clone(),
             // Bubble / Surface / Theming
             bubble_3d_effect: self.bubble_3d_effect,
             wireframe: self.wireframe,
             surface_top_view: self.surface_top_view,
             color_scheme: self.color_scheme,
+            chart_style_context: self.chart_style_context.clone(),
             // Position in points
             height_pt: self.size.height_pt,
             width_pt: self.size.width_pt,
@@ -695,7 +926,13 @@ impl ChartSpec {
             title_format: self.title_format.clone(),
             title_rich_text: self.title_rich_text.clone(),
             title_formula: self.title_formula.clone(),
+            plot_layout: self.plot_layout.clone(),
+            title_layout: self.title_layout.clone(),
             data_table: self.data_table.clone(),
+            drop_lines: self.drop_lines.clone(),
+            high_low_lines: self.high_low_lines.clone(),
+            series_lines: self.series_lines.clone(),
+            up_down_bars: self.up_down_bars.clone(),
             // Bar shape
             bar_shape: self.bar_shape.clone(),
             // 3D
@@ -717,5 +954,20 @@ impl ChartSpec {
             common,
             data: FloatingObjectData::Chart(chart_data),
         }
+    }
+}
+
+fn radar_flags_from_sub_type(
+    chart_type: &ChartType,
+    sub_type: Option<&ChartSubType>,
+) -> (Option<bool>, Option<bool>) {
+    if !matches!(chart_type, ChartType::Radar) {
+        return (None, None);
+    }
+
+    match sub_type {
+        Some(ChartSubType::Filled) => (Some(true), None),
+        Some(ChartSubType::Markers) => (None, Some(true)),
+        _ => (None, None),
     }
 }

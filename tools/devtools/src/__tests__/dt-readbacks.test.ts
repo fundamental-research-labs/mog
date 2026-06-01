@@ -45,7 +45,11 @@ function makeSceneGraph(objects: FakeSceneObject[]) {
   };
 }
 
-function makeRenderer(rowHeights: Record<number, number>, colWidths: Record<number, number>) {
+function makeRenderer(
+  rowHeights: Record<number, number>,
+  colWidths: Record<number, number>,
+  opts: { coordinateDocumentPixelToCell?: boolean } = {},
+) {
   const visibleRows = Object.keys(rowHeights)
     .map(Number)
     .sort((a, b) => a - b);
@@ -88,10 +92,14 @@ function makeRenderer(rowHeights: Record<number, number>, colWidths: Record<numb
         getVisibleRange() {
           return visibleRange;
         },
-        documentPixelToCell(x: number, y: number) {
-          // 100px-wide columns, 24px tall rows for the test fixture.
-          return { row: Math.floor(y / 24), col: Math.floor(x / 100) };
-        },
+        ...(opts.coordinateDocumentPixelToCell === false
+          ? {}
+          : {
+              documentPixelToCell(x: number, y: number) {
+                // 100px-wide columns, 24px tall rows for the test fixture.
+                return { row: Math.floor(y / 24), col: Math.floor(x / 100) };
+              },
+            }),
       };
     },
   };
@@ -107,6 +115,7 @@ function setupRuntime(opts: {
   rowHeights: Record<number, number>;
   colWidths: Record<number, number>;
   bridgeColPositions?: Record<number, number>;
+  coordinateDocumentPixelToCell?: boolean;
 }): RuntimeBundle {
   const g = globalThis as { window?: Record<string, unknown>; document?: unknown };
 
@@ -134,7 +143,11 @@ function setupRuntime(opts: {
     },
   };
 
-  const renderer = makeRenderer(opts.rowHeights, opts.colWidths);
+  const renderer = makeRenderer(opts.rowHeights, opts.colWidths, {
+    coordinateDocumentPixelToCell: opts.coordinateDocumentPixelToCell,
+  });
+  const rowCount = Math.max(0, ...Object.keys(opts.rowHeights).map(Number)) + 1;
+  const colCount = Math.max(0, ...Object.keys(opts.colWidths).map(Number)) + 1;
   const fakeCoordinator = {
     renderer: {
       ...renderer,
@@ -156,6 +169,28 @@ function setupRuntime(opts: {
           getVisibleRange() {
             return renderer.getCoordinateSystem().getVisibleRange();
           },
+          getPositionDimensions() {
+            return {
+              totalRows: rowCount,
+              totalCols: colCount,
+              getRowTop(row: number) {
+                let top = 0;
+                for (let i = 0; i < row; i++) top += opts.rowHeights[i] ?? 24;
+                return top;
+              },
+              getRowHeight(row: number) {
+                return opts.rowHeights[row] ?? 24;
+              },
+              getColLeft(col: number) {
+                let left = 0;
+                for (let i = 0; i < col; i++) left += opts.colWidths[i] ?? 100;
+                return left;
+              },
+              getColWidth(col: number) {
+                return opts.colWidths[col] ?? 100;
+              },
+            };
+          },
         };
       },
       getViewport() {
@@ -168,6 +203,7 @@ function setupRuntime(opts: {
     },
     workbook: {
       activeSheet: {
+        sheetId: 'sheet-1',
         getSheetId: () => 'sheet-1',
         layout: {
           // No documentPixelToCell here — force fallback to coordinator's
@@ -234,12 +270,35 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     const d = drawings[0];
     expect(d.id).toBe('pic-1');
     expect(d.kind).toBe('image');
-    expect(d.boundsPx).toEqual({ x: 100, y: 24, w: 200, h: 96 });
+    expect(d.boundsPx).toEqual({ x: 150, y: 48, w: 200, h: 96 });
     expect(d.visible).toBe(true);
     expect(d.src).toBe('mog://image/abc.png');
     // anchor.from snaps (100, 24) → row 1, col 1; anchor.to snaps (300, 120) → row 5, col 3.
     expect(d.anchor.from).toEqual({ row: 1, col: 1 });
     expect(d.anchor.to).toEqual({ row: 5, col: 3 });
+  });
+
+  test('getRenderedDrawings snaps anchors through SheetView geometry dimensions', async () => {
+    runtime = setupRuntime({
+      drawings: [
+        {
+          id: 'pic-geometry',
+          type: 'picture',
+          bounds: { x: 192, y: 0, width: 200, height: 150 },
+          zIndex: 1,
+          visible: true,
+          groupId: null,
+          data: { src: 'mog://image/geometry.png' } as any,
+        },
+      ],
+      rowHeights: { 0: 24, 1: 24, 2: 24, 3: 24, 4: 24, 5: 24, 6: 24 },
+      colWidths: { 0: 64, 1: 64, 2: 64, 3: 64, 4: 64, 5: 64, 6: 64 },
+      coordinateDocumentPixelToCell: false,
+    });
+
+    const drawings = await runtime.api.getRenderedDrawings();
+    expect(drawings).toHaveLength(1);
+    expect(drawings[0].anchor.from).toEqual({ row: 0, col: 3 });
   });
 
   test('getRenderedDrawings returns [] when no scene graph is reachable', async () => {
@@ -354,7 +413,7 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(drawings[0]).toMatchObject({
       id: 'fc-checkbox-1',
       kind: 'formControl',
-      anchor: { from: { row: 2, col: 2 } },
+      anchor: { from: { row: 1, col: 1 } },
       boundsPx: { x: 200, y: 48, w: 18, h: 18 },
       visible: true,
     });
@@ -370,6 +429,12 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     });
     const h = await runtime.api.getRenderedRowHeight(null, 3);
     expect(h).toBe(60);
+    expect(runtime.api.viewport.getCellBounds(3, 0)).toEqual({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 60,
+    });
   });
 
   test('getRenderedRowHeight returns null when the renderer cannot resolve bounds', async () => {
@@ -466,5 +531,71 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     } finally {
       delete (globalThis as any).document;
     }
+  });
+
+  test('getDisplayedFormatsForCells uses range prefetch for dense in-limit cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            return [[{ bold: true }, { italic: true }]];
+          },
+          getDisplayedCellProperties: async () => {
+            calls.cell++;
+            return null;
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(1);
+    expect(calls.cell).toBe(0);
+    expect(formats['0,0']).toEqual({ bold: true });
+    expect(formats['0,1']).toEqual({ italic: true });
+  });
+
+  test('getDisplayedFormatsForCells skips range prefetch for sparse oversized cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100, 1: 100 },
+    });
+    const calls = { range: 0, cell: 0 };
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => {
+            calls.range++;
+            throw new Error('range should not be called');
+          },
+          getDisplayedCellProperties: async (_sheetId: string, row: number, col: number) => {
+            calls.cell++;
+            return { row, col };
+          },
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([
+      { row: 0, col: 0 },
+      { row: 99999, col: 1 },
+    ]);
+
+    expect(calls.range).toBe(0);
+    expect(calls.cell).toBe(2);
+    expect(formats['0,0']).toEqual({ row: 0, col: 0 });
+    expect(formats['99999,1']).toEqual({ row: 99999, col: 1 });
   });
 });

@@ -89,6 +89,7 @@ export const ComboBoxOverlayControl = memo(function ComboBoxOverlayControl({
         height,
         pointerEvents: 'auto',
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-combobox-${control.id}`}
       onBlur={handleBlur}
     >
@@ -103,10 +104,13 @@ export const ComboBoxOverlayControl = memo(function ComboBoxOverlayControl({
           backgroundColor: !control.enabled ? '#f0f0f0' : '#fff',
           border: '1px solid #ababab',
           borderRadius: 2,
+          boxSizing: 'border-box',
+          display: 'block',
           fontSize: 11,
           fontFamily: 'Calibri, Arial, sans-serif',
           color: !control.enabled ? '#999' : '#333',
           cursor: !control.enabled ? 'default' : 'pointer',
+          minWidth: 0,
           padding: '1px 20px 1px 4px',
           textAlign: 'left',
           overflow: 'hidden',

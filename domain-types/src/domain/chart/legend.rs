@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::drawings::ManualLayout;
+
 use super::{ChartFormatData, ChartShadowData, LegendEntryData};
 
 /// Chart legend configuration.
@@ -24,6 +26,10 @@ pub struct LegendData {
     /// Custom Y position (0.0 to 1.0, fraction of chart height).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub custom_y: Option<f64>,
+    /// OOXML manual legend layout. When present this is the authoritative
+    /// source; custom_x/custom_y remain compatibility projections.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub layout: Option<ManualLayout>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub shadow: Option<ChartShadowData>,
     // -- Additional legend properties --

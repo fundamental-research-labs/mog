@@ -1,5 +1,4 @@
-//! Synthetic fixture builders for Class V (pinned-corpus full-recalc
-//! regression guard).
+//! Synthetic fixture builders for Class V full-recalc regression guards.
 //!
 //! — Class V.
 //!
@@ -12,7 +11,7 @@
 //! Scope discipline (Class V):
 //! - Deterministic seeds, no randomness.
 //! - No real XLSX committed. Drift reproducers are synthesized from
-//!   FINDINGS.md signatures, not from binary files.
+//!   generic bug classes, not from binary files.
 //! - Builders use `snapshot_types` directly; we do NOT share scaffolding
 //!   with `tests/support/` because Classes I–IV use a different style
 //!   (per-case matrix) and this keeps Class V coordination-free with
@@ -34,8 +33,7 @@ pub struct OracleEntry {
     pub row: u32,
     pub col: u32,
     pub expected: CellValue,
-    /// Optional label — useful for drift-repro fixtures that tie a cell
-    /// back to the FINDINGS.md signature (e.g. "Ib6CYMnT").
+    /// Optional label for grouping drift-repro fixture cells.
     pub label: Option<&'static str>,
 }
 
@@ -709,7 +707,7 @@ pub fn dynarray() -> Fixture {
 // Drift reproducers
 // ---------------------------------------------------------------------------
 
-/// Drift-repro 1: the `Ib6CYMnT` pattern from FINDINGS.md §"Class B".
+/// Drift-repro 1: full-column range with sparse high-row writes.
 ///
 /// Pattern: SUMIFS over a **full-column** range on one sheet, with a
 /// dependent formula on a second sheet. The `SourceData` sheet has a
@@ -731,7 +729,7 @@ pub fn dynarray() -> Fixture {
 /// Expected total: rows 1..20 odd-indexed (A: row 0,2,4,...,18 = values
 /// 1,3,5,...,19 → 10 values summing to 100) plus the sentinel (value 1)
 /// = 101.
-pub fn drift_repro_1_ib6cymnt() -> Fixture {
+pub fn drift_repro_1_fullcol_extent() -> Fixture {
     let mut source_cells = Vec::new();
 
     // Rows 1..20: alternating category A/B, value = row index+1
@@ -754,7 +752,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "SUMIFS(SourceData!B:B, SourceData!A:A, \"A\")",
             num(1.0 + 3.0 + 5.0 + 7.0 + 9.0 + 11.0 + 13.0 + 15.0 + 17.0 + 19.0 + 1.0),
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // Same sum via bounded range up to row 50000 (should catch the
         // sentinel at row 39188 too).
@@ -763,7 +761,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "SUMIFS(SourceData!B1:B50000, SourceData!A1:A50000, \"A\")",
             num(101.0),
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // COUNTIFS over full column — checks the count side of the bug.
         (
@@ -771,7 +769,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "COUNTIFS(SourceData!A:A, \"A\")",
             num(11.0), // 10 in rows 1..20 + 1 sentinel
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // Bounded COUNTIFS inside the populated extent — should NOT see
         // the sentinel; oracle is 10. Useful to differentiate bbox-cache
@@ -781,7 +779,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "COUNTIFS(SourceData!A1:A100, \"A\")",
             num(10.0),
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // SUMIF on a different criterion (B rows) to ensure the dep
         // infrastructure isn't stuck on category A.
@@ -790,7 +788,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "SUMIF(SourceData!A:A, \"B\", SourceData!B:B)",
             num(2.0 + 4.0 + 6.0 + 8.0 + 10.0 + 12.0 + 14.0 + 16.0 + 18.0 + 20.0), // 110
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // AVERAGEIFS with full-column — avg of A values = 101 / 11
         (
@@ -798,14 +796,14 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
             0,
             "AVERAGEIFS(SourceData!B:B, SourceData!A:A, \"A\")",
             num(101.0 / 11.0),
-            "Ib6CYMnT",
+            "fullcol-extent",
         ),
         // Chain: another cell referencing the formula above (tests
         // two-hop dependency through a full-column range).
-        (6, 0, "A1+A3", num(101.0 + 11.0), "Ib6CYMnT"),
+        (6, 0, "A1+A3", num(101.0 + 11.0), "fullcol-extent"),
         // Scalar reference to the sentinel itself — checks the cell is
         // actually materialized at the reported high row.
-        (7, 0, "SourceData!B39188", num(1.0), "Ib6CYMnT"),
+        (7, 0, "SourceData!B39188", num(1.0), "fullcol-extent"),
     ];
 
     let mut report_cells = Vec::new();
@@ -833,8 +831,7 @@ pub fn drift_repro_1_ib6cymnt() -> Fixture {
     }
 }
 
-/// Drift-repro 2: the `qKjqZiEx` float-cascade pattern from FINDINGS.md
-/// §"Class B".
+/// Drift-repro 2: float-cascade arithmetic on precision-fragile seeds.
 ///
 /// Pattern: a chain of formulas where precision-fragile seeds (0.1, 0.2,
 /// 0.3, 0.4) cascade through arithmetic. Excel's cached value for these
@@ -885,17 +882,15 @@ pub fn drift_repro_2_float_cascade() -> Fixture {
         (5, 2, "A6*3", num(e_div_third), "float-cascade"),
         // Chain that depends on the float-cascade cell.
         (6, 2, "C1+0", num(e_a1_plus_a2), "float-cascade"),
-        // The qKjqZiEx signature (0.4 → 0.7000000000000001):
-        // The exact Excel formula from FINDINGS.md isn't given — the
-        // signature is that setting a dependency to 0.4 and reading
-        // back a dependent formula produces 0.7000000000000001. We
-        // reproduce with `A4 + A2 + A1`. Hand-compute with f64.
+        // Drift signature: setting a dependency to 0.4 and reading back a
+        // dependent formula can produce 0.7000000000000001. Reproduce with
+        // `A4 + A2 + A1` and hand-compute with f64.
         (
             7,
             2,
             "A4+A2+A1",
             num(0.4_f64 + 0.2_f64 + 0.1_f64),
-            "qKjqZiEx",
+            "float-cascade",
         ),
         // And the alternative association that Excel canonicalizes left-to-right:
         (
@@ -903,7 +898,7 @@ pub fn drift_repro_2_float_cascade() -> Fixture {
             2,
             "A1+A2+A4",
             num(0.1_f64 + 0.2_f64 + 0.4_f64),
-            "qKjqZiEx",
+            "float-cascade",
         ),
         // Subtract-to-zero: the classic catastrophic-cancellation probe.
         (
@@ -949,7 +944,7 @@ pub fn all_fixtures() -> Vec<Fixture> {
         sumifs_heavy(),
         xlookup_heavy(),
         dynarray(),
-        drift_repro_1_ib6cymnt(),
+        drift_repro_1_fullcol_extent(),
         drift_repro_2_float_cascade(),
     ]
 }

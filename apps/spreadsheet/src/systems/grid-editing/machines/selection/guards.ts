@@ -282,6 +282,20 @@ function isShiftAndCtrlClick(args: GuardArgs): boolean {
   return effectiveShiftClick(args) && effectiveCtrlClick(args);
 }
 
+/**
+ * Raw Shift+click while Shift+F8 additive mode is active. This is handled
+ * before generic effective Ctrl+Shift composition so it adds the clicked cell
+ * as a disjoint single-cell range instead of extending from the old anchor.
+ */
+function isAdditiveShiftOnlyClick({ context, event }: GuardArgs): boolean {
+  return (
+    event.type === 'MOUSE_DOWN' &&
+    context.modes.additive &&
+    event.shiftKey === true &&
+    event.ctrlKey === false
+  );
+}
+
 /** Row 2 / 5: effective shift, NOT effective ctrl. */
 function isShiftOnlyClick(args: GuardArgs): boolean {
   return effectiveShiftClick(args) && !effectiveCtrlClick(args);
@@ -339,6 +353,7 @@ export const selectionGuards = {
   additiveModeWithoutShift,
   extendIntent,
   // MOUSE_DOWN priority matrix
+  isAdditiveShiftOnlyClick,
   isShiftAndCtrlClick,
   isShiftOnlyClick,
   isCtrlOnlyClick,

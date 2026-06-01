@@ -17,6 +17,8 @@
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
+import { clampCell } from '../types';
+
 // =============================================================================
 // STRUCTURE CHANGE TYPE
 // =============================================================================
@@ -426,13 +428,16 @@ export function changeAffectsSheet(change: StructureChange, sheetId: string): bo
 /**
  * Get the fallback position when a cell is deleted.
  *
- * When a row is deleted, the fallback moves to the row before the deleted region
- * (or row 0 if deletion started at row 0), while preserving the column.
- * When a column is deleted, the fallback moves to the column before the deleted region
- * (or col 0 if deletion started at col 0), while preserving the row.
+ * When a row is deleted, the fallback stays at the deletion index — the row that
+ * shifts up into the vacated slot becomes active — while preserving the column.
+ * When a column is deleted, the fallback stays at the deletion index — the column
+ * that shifts left into the vacated slot becomes active — while preserving the row.
  *
- * This UX behavior puts the selection at the row/column that was just above/left of
- * the deleted region, which feels natural after a deletion.
+ * This matches Excel: deleting the selected row/column keeps the cursor at that
+ * same index rather than jumping to the row/column just above/left of it. Because
+ * the grid is a fixed Excel-sized matrix (blank rows/cols backfill at the far
+ * edge), the deletion index is always a valid coordinate; `clampCell` enforces
+ * grid bounds defensively as the single source of truth.
  *
  * @param change - The structure change that caused the deletion
  * @param originalCell - The original cell position (used to preserve the non-affected coordinate)
@@ -443,17 +448,17 @@ export function getDeletedCellFallback(
 ): CellCoord {
   switch (change.type) {
     case 'rows:deleted':
-      // Move to the row before deletion started, preserving the column
-      return {
-        row: Math.max(0, change.startRow - 1),
+      // Stay at the deletion index (row shifted up into the slot), preserving the column
+      return clampCell({
+        row: change.startRow,
         col: originalCell?.col ?? 0,
-      };
+      });
     case 'columns:deleted':
-      // Move to the column before deletion started, preserving the row
-      return {
+      // Stay at the deletion index (column shifted left into the slot), preserving the row
+      return clampCell({
         row: originalCell?.row ?? 0,
-        col: Math.max(0, change.startCol - 1),
-      };
+        col: change.startCol,
+      });
     default:
       // For inserts, this shouldn't be called, but return origin as fallback
       return { row: 0, col: 0 };

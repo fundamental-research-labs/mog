@@ -57,6 +57,7 @@ export const ValidationDropdownOverlay = memo(function ValidationDropdownOverlay
           }}
           aria-label={`Dropdown at row ${metadata.row + 1}, column ${metadata.col + 1}`}
           aria-haspopup="listbox"
+          data-no-grid-pointer="true"
           className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
         />
       </PopoverTrigger>

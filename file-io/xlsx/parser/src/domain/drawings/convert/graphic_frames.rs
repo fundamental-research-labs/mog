@@ -25,6 +25,9 @@ pub fn extract_chart_ref_from_graphic_frame(
         .xfrm
         .extent
         .map_or((0i64, 0i64), |e| (e.0 as i64, e.1 as i64));
+    let xfrm_rot = gf.xfrm.rotation.map(|rot| rot.value());
+    let xfrm_flip_h = gf.xfrm.flip_h;
+    let xfrm_flip_v = gf.xfrm.flip_v;
 
     Some(write::ChartRef {
         original_id: Some(gf.nv_graphic_frame_pr.c_nv_pr.id.value()),
@@ -46,6 +49,9 @@ pub fn extract_chart_ref_from_graphic_frame(
         xfrm_off_y: off_y,
         xfrm_ext_cx: ext_cx,
         xfrm_ext_cy: ext_cy,
+        xfrm_rot,
+        xfrm_flip_h,
+        xfrm_flip_v,
     })
 }
 

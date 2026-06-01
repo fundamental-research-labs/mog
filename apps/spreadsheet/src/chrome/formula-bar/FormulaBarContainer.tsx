@@ -55,6 +55,10 @@ import { FormulaBarContextMenu } from './FormulaBarContextMenu';
 // Component
 // =============================================================================
 
+function isStructuredReferenceFormula(formula: string): boolean {
+  return /\[[^\]]+\]/.test(formula);
+}
+
 /**
  * Container that connects the FormulaBar to the editor state machine.
  *
@@ -92,6 +96,7 @@ function FormulaBarContainerImpl() {
   const { row: activeCellRow, col: activeCellCol, activeCell } = useActiveCell();
   const wb = useWorkbook();
   const coordinator = useCoordinator();
+  const paneFocusCommands = coordinator.input.access.commands.paneFocus;
   const activeSheetId = useActiveSheetId();
   const focus = useFocus();
   const deps = useActionDependencies();
@@ -292,7 +297,11 @@ function FormulaBarContainerImpl() {
         wb,
       );
       if (cancelled) return;
-      const formulaText = calculatedColumnContext?.calculatedFormula ?? rawData.formula;
+      const calculatedFormula = calculatedColumnContext?.calculatedFormula;
+      const formulaText =
+        calculatedFormula && isStructuredReferenceFormula(calculatedFormula)
+          ? calculatedFormula
+          : rawData.formula;
       const formula = formulaText ? ensureFormulaA1(formulaText) : undefined;
       if (cell.value === null && !formula) {
         setCellData(undefined);
@@ -449,13 +458,25 @@ function FormulaBarContainerImpl() {
     [editorActions],
   );
 
+  const handleSelectionChange = useCallback(
+    (selectionStart: number, selectionEnd: number) => {
+      if (selectionStart === selectionEnd) {
+        editorActions.setCursor(selectionEnd);
+      } else {
+        editorActions.setTextSelection(selectionEnd, selectionStart);
+      }
+    },
+    [editorActions],
+  );
+
   const handleCommit = useCallback(() => {
     dispatch('COMMIT_IN_PLACE', deps);
+    paneFocusCommands?.resetToGrid();
     // Pop the formula bar focus layer when committing
     if (focus.isFormulaBar) {
       focus.popLayer();
     }
-  }, [deps, focus]);
+  }, [deps, focus, paneFocusCommands]);
 
   const handleCancel = useCallback(() => {
     // / O-A: tag any thrown error from this fire-and-forget chain
@@ -464,11 +485,12 @@ function FormulaBarContainerImpl() {
     if (result && typeof (result as Promise<unknown>).then === 'function') {
       void withHandlerErrors('CANCEL_EDIT', () => result as Promise<unknown>);
     }
+    paneFocusCommands?.resetToGrid();
     // Pop the formula bar focus layer when cancelling
     if (focus.isFormulaBar) {
       focus.popLayer();
     }
-  }, [deps, focus]);
+  }, [deps, focus, paneFocusCommands]);
 
   /**
    * A.1: Handle focus with optional cursor position from click.
@@ -481,6 +503,7 @@ function FormulaBarContainerImpl() {
       if (!focus.isFormulaBar) {
         focus.pushLayer('formulaBar', 'formula-bar');
       }
+      paneFocusCommands?.focusPane('formulaBar');
       // Then start editing if not already editing
       if (!isEditing) {
         // Check if edit was blocked by protection
@@ -501,7 +524,15 @@ function FormulaBarContainerImpl() {
         }
       }
     },
-    [isEditing, editorActions, activeCell, activeSheetId, focus, showProtectionAlert],
+    [
+      isEditing,
+      editorActions,
+      activeCell,
+      activeSheetId,
+      focus,
+      paneFocusCommands,
+      showProtectionAlert,
+    ],
   );
 
   const handleFxClick = useCallback(() => {
@@ -620,6 +651,7 @@ function FormulaBarContainerImpl() {
         isEditing={isEditing}
         readOnly={readOnly}
         onChange={handleChange}
+        onSelectionChange={handleSelectionChange}
         onCommit={handleCommit}
         onCancel={handleCancel}
         onFocus={handleFocus}

@@ -27,16 +27,21 @@ import { getUIStore, handled, notHandled } from './handler-utils';
 // Comment Handlers
 // =============================================================================
 
+type InsertCommentPayload = {
+  commentType?: 'note' | 'threadedComment';
+};
+
 /**
  * Insert a new comment on the active cell.
  * Opens the comment popover in compose mode.
  *
  * Excel shortcut: Shift+F2 (when cell has no comment)
  */
-export const INSERT_COMMENT: AsyncActionHandler = async (deps) => {
+export const INSERT_COMMENT: AsyncActionHandler = async (deps, payload?: InsertCommentPayload) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const commentCommands = deps.commands.comment;
+  const commentType = payload?.commentType === 'note' ? 'note' : 'threadedComment';
 
   if (!commentCommands) {
     return notHandled('not_implemented');
@@ -55,7 +60,7 @@ export const INSERT_COMMENT: AsyncActionHandler = async (deps) => {
   });
 
   // Transition to compose mode
-  commentCommands.startCompose();
+  commentCommands.startCompose(commentType);
 
   return handled();
 };

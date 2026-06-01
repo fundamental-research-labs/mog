@@ -52,8 +52,10 @@ describe('RadioGroup', () => {
     render(<Controlled />);
     const radios = screen.getAllByRole('radio');
     expect(radios).toHaveLength(OPTIONS.length);
-    radios.forEach((r) => {
+    radios.forEach((r, index) => {
       expect(r.getAttribute('data-state')).toMatch(/^(checked|unchecked)$/);
+      expect(r).toHaveTextContent(OPTIONS[index].label);
+      expect(r).toHaveAttribute('aria-label', OPTIONS[index].label);
     });
   });
 

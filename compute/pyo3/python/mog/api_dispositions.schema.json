@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mog Python SDK API dispositions",
+  "type": "object",
+  "required": ["schemaVersion", "dispositions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "apiPath",
+          "stableId",
+          "interface",
+          "pythonPath",
+          "pythonName",
+          "targetPath",
+          "aliasOf",
+          "status",
+          "reason",
+          "ownerPackage",
+          "ownerModule",
+          "aliases",
+          "nameTransform",
+          "syncModel",
+          "unsupportedUntil",
+          "notes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "apiPath": { "type": "string", "minLength": 1 },
+          "stableId": { "type": "string", "minLength": 1 },
+          "interface": { "type": "string", "minLength": 1 },
+          "pythonPath": { "type": ["string", "null"] },
+          "pythonName": { "type": ["string", "null"] },
+          "targetPath": { "type": ["string", "null"] },
+          "aliasOf": { "type": ["string", "null"] },
+          "status": {
+            "enum": [
+              "implemented",
+              "renamed",
+              "unsupported",
+              "omitted",
+              "out_of_scope",
+              "python_only"
+            ]
+          },
+          "reason": {
+            "enum": [
+              null,
+              "native_missing",
+              "host_capability_missing",
+              "browser_only",
+              "typescript_only",
+              "deprecated_ts_api",
+              "unsafe_without_design",
+              "release_deferred"
+            ]
+          },
+          "ownerPackage": { "const": "compute/pyo3" },
+          "ownerModule": { "type": "string", "minLength": 1 },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "nameTransform": {
+            "enum": ["snake_case", "camelCaseAlias", "manual", "none"]
+          },
+          "syncModel": { "type": "string", "minLength": 1 },
+          "unsupportedUntil": { "type": ["string", "null"] },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

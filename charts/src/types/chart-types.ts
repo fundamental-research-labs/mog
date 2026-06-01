@@ -22,22 +22,62 @@ export type {
   BarSubType,
   Chart,
   ChartAnchorMode,
+  ChartColor,
+  ChartColorMapOverride,
+  ChartColorMapping,
   ChartConfig,
+  ChartFill,
+  ChartFormat,
+  ChartLeaderLinesFormat,
+  ChartLineFormat,
+  ChartLineSettings,
+  ChartSeriesCategoryLevelCache,
+  ChartSeriesCategoryLevelsCache,
+  ChartSeriesDimensionSourceKind,
+  ChartSeriesXRole,
+  ChartSeriesStockRole,
+  ChartSeriesPointCache,
+  ChartSeriesPointCachePoint,
+  ChartSeriesProjectionAuthority,
+  ChartSeriesProjectionDiagnostic,
+  ChartSeriesProjectionDiagnosticReason,
+  ChartShadow,
+  ChartStyleContext,
+  ChartStyleDiagnostic,
+  ChartStyleOwner,
+  ChartWorkbookThemeColor,
+  ChartWorkbookThemeData,
   ChartType,
   DataLabelConfig,
+  ErrorBarConfig,
+  ErrorBarSource,
+  BoxplotConfig,
+  HeatmapConfig,
+  HierarchyChartConfig,
+  HierarchyChartRow,
+  HistogramConfig,
   ImageExportFormat,
   ImageExportOptions,
   LegendConfig,
   LegendPosition,
   LineSubType,
+  MarkerStyle,
   PieSliceConfig,
+  PivotChartProjectionData,
+  PointFormat,
   RadarSubType,
   SeriesConfig,
   SeriesOrientation,
   SingleAxisConfig,
+  SunburstConfig,
   StockSubType,
+  TreemapConfig,
   TrendlineConfig,
+  TrendlineLabelConfig,
   TrendlineType,
+  UpDownBarsConfig,
+  RegionMapConfig,
+  ViolinConfig,
   WaterfallConfig,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -47,7 +87,11 @@ import type {
   BarSubType,
   ChartAnchorMode,
   ChartConfig,
+  ChartSeriesProjectionAuthority,
+  ChartSeriesProjectionDiagnostic,
+  ChartSeriesProjectionDiagnosticReason,
   ChartType,
+  PivotChartProjectionData,
   LineSubType,
   RadarSubType,
   StockSubType,
@@ -84,12 +128,20 @@ export type SubTypeFor<T extends ChartType> = T extends 'bar' | 'column' | 'bar3
  *   showLines, smoothLines         -> scatter, bubble
  *   radarFilled, radarMarkers      -> radar
  *   waterfall                      -> waterfall
+ *   histogram                      -> histogram
+ *   boxplot                        -> boxplot
+ *   hierarchy                      -> treemap, sunburst
+ *   regionMap                      -> regionMap
  */
 type PieFields = 'pieSlice';
 type TrendlineFields = 'trendline';
 type ScatterOnlyFields = 'showLines' | 'smoothLines';
 type RadarFields = 'radarFilled' | 'radarMarkers';
 type WaterfallFields = 'waterfall';
+type HistogramFields = 'histogram';
+type BoxplotFields = 'boxplot';
+type HierarchyFields = 'hierarchy' | 'treemap' | 'sunburst';
+type RegionMapFields = 'regionMap';
 
 /**
  * All chart-type-specific field names.
@@ -99,7 +151,11 @@ type AllChartSpecificFields =
   | TrendlineFields
   | ScatterOnlyFields
   | RadarFields
-  | WaterfallFields;
+  | WaterfallFields
+  | HistogramFields
+  | BoxplotFields
+  | HierarchyFields
+  | RegionMapFields;
 
 /**
  * Fields to omit for chart type T (fields that don't apply to that type).
@@ -111,24 +167,32 @@ type AllChartSpecificFields =
 type OmitFieldsFor<T extends ChartType> =
   // Pie/doughnut (including 3D and ofPie): only pieSlice
   T extends 'pie' | 'doughnut' | 'pie3d' | 'ofPie'
-    ? TrendlineFields | ScatterOnlyFields | RadarFields | WaterfallFields
+    ? Exclude<AllChartSpecificFields, PieFields>
     : // Scatter/bubble: trendline + scatter-only fields (showLines, smoothLines)
       T extends 'scatter' | 'bubble'
-      ? PieFields | RadarFields | WaterfallFields
+      ? Exclude<AllChartSpecificFields, TrendlineFields | ScatterOnlyFields>
       : // Line/area (including 3D): trendline only (no scatter-only fields like showLines)
         T extends 'line' | 'area' | 'line3d' | 'area3d'
-        ? PieFields | ScatterOnlyFields | RadarFields | WaterfallFields
+        ? Exclude<AllChartSpecificFields, TrendlineFields>
         : // Radar: radar fields only
           T extends 'radar'
-          ? PieFields | TrendlineFields | ScatterOnlyFields | WaterfallFields
+          ? Exclude<AllChartSpecificFields, RadarFields>
           : // Waterfall: waterfall fields only
             T extends 'waterfall'
-            ? PieFields | TrendlineFields | ScatterOnlyFields | RadarFields
-            : // Stock: no type-specific fields (uses subType and series config)
-              T extends 'stock'
-              ? AllChartSpecificFields
-              : // All other chart types (bar, column, combo, funnel, 3D bar/column, surface): no specific fields
-                AllChartSpecificFields;
+            ? Exclude<AllChartSpecificFields, WaterfallFields>
+            : T extends 'histogram'
+              ? Exclude<AllChartSpecificFields, HistogramFields>
+              : T extends 'boxplot'
+                ? Exclude<AllChartSpecificFields, BoxplotFields>
+                : T extends 'treemap' | 'sunburst'
+                  ? Exclude<AllChartSpecificFields, HierarchyFields>
+                  : T extends 'regionMap'
+                    ? Exclude<AllChartSpecificFields, RegionMapFields>
+                    : // Stock: no type-specific fields (uses subType and series config)
+                      T extends 'stock'
+                      ? AllChartSpecificFields
+                      : // All other chart types (bar, column, combo, funnel, 3D bar/column, surface): no specific fields
+                        AllChartSpecificFields;
 
 /**
  * Type-safe chart config where subType and chart-specific fields are
@@ -293,17 +357,38 @@ export type CreateChartInput = Omit<StoredChartConfig, 'id'> & { id?: string };
 // =============================================================================
 
 /**
+ * Provenance for a chart point's numeric value before render fallback normalization.
+ *
+ * Chart rendering keeps `y` as a finite number for compatibility. When source
+ * data cannot produce a real finite value, extracted chart data preserves why
+ * the point was rendered with a fallback value.
+ */
+export type ChartDataPointValueState = 'value' | 'blank' | 'nonFinite' | 'nonNumeric' | 'hidden';
+
+/**
  * Chart data point
  */
 export interface ChartDataPoint {
   x: string | number;
+  /**
+   * Finite numeric value used by renderers. Blank, non-finite, or non-numeric
+   * source values may be represented as `0` here for existing chart behavior.
+   */
   y: number;
+  /**
+   * Source value state for points whose rendered `y` may not match the source.
+   * Undefined means the point has no explicit provenance, which legacy callers
+   * can treat as a normal value.
+   */
+  valueState?: ChartDataPointValueState;
   name?: string;
   value?: number; // For pie charts
+  size?: number; // For bubble charts
   open?: number; // OHLC fields for stock charts
   high?: number;
   low?: number;
   close?: number;
+  volume?: number;
 }
 
 /**
@@ -315,6 +400,21 @@ export interface ChartDataSeries {
   type?: ChartType;
   color?: string;
   yAxisIndex?: 0 | 1;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  visibleOrder?: number;
+  pivotSeriesKey?: string;
+  pivotDataFieldIndex?: number;
+  projectionAuthority?: ChartSeriesProjectionAuthority;
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
+}
+
+/**
+ * One rendered category label level, aligned to ChartData.categories by index.
+ */
+export interface ChartCategoryLevelData {
+  level: number;
+  labels: Array<string | null>;
 }
 
 /**
@@ -322,6 +422,10 @@ export interface ChartDataSeries {
  */
 export interface ChartData {
   categories: (string | number)[];
+  /** Optional multi-level category labels preserved from imported chart caches. */
+  categoryLevels?: ChartCategoryLevelData[];
+  /** Optional per-category number format codes for axis label rendering. */
+  categoryFormatCodes?: Array<string | null | undefined>;
   series: ChartDataSeries[];
 }
 

@@ -78,6 +78,8 @@ export function generateAreaChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -167,7 +169,7 @@ function detectRadarStyle(spec: ChartSpec): 'standard' | 'marker' | 'filled' {
     // Marker radar
     if (mark.point) return 'marker';
   }
-  return 'marker'; // default to marker for radar charts
+  return 'standard';
 }
 
 /**
@@ -213,6 +215,8 @@ export function generateRadarChartXML(
     title,
     axes,
     legend: showLegend ? { position: 'r' } : undefined,
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

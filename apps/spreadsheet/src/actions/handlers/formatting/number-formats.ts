@@ -14,6 +14,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
+import { displayStringOrNull } from '@mog-sdk/contracts/core';
 
 import {
   callUIStoreAction,
@@ -85,7 +86,7 @@ export const FORMAT_GENERAL: AsyncActionHandler = async (deps) =>
 export const FORMAT_NUMBER: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '#,##0.00');
 export const FORMAT_TIME: AsyncActionHandler = async (deps) =>
-  applyNumberFormat(deps, 'h:mm:ss AM/PM');
+  applyNumberFormat(deps, 'h:mm AM/PM');
 export const FORMAT_DATE: AsyncActionHandler = async (deps) => applyNumberFormat(deps, 'd-mmm-yy');
 export const FORMAT_CURRENCY: AsyncActionHandler = async (deps) =>
   applyNumberFormat(deps, '$#,##0.00');
@@ -139,6 +140,35 @@ function getDecimalCount(formatCode: string): number {
 }
 
 /**
+ * Count the decimal places actually shown in a cell's displayed text.
+ *
+ * Used for General/unformatted cells, whose format code carries no decimal
+ * count. We measure the fractional digits of what the user currently sees so
+ * that Increase/Decrease Decimal step one place at a time from the real
+ * precision, matching Excel.
+ */
+function countDisplayedDecimals(displayText: string | null | undefined): number {
+  if (!displayText) return 0;
+  // Match the first run of digits after a decimal point, ignoring thousands
+  // separators and any trailing symbols (%, currency, etc.).
+  const match = displayText.match(/\.(\d+)/);
+  return match ? match[1].length : 0;
+}
+
+/**
+ * Decimal-place count to step from when adjusting Increase/Decrease Decimal.
+ *
+ * Explicit numeric formats carry the count in their code. General/unformatted
+ * cells don't, so we fall back to the decimals shown in the cell — otherwise a
+ * General "1.23456" would collapse straight to one decimal instead of stepping
+ * 1.2346 → 1.235 → …
+ */
+function getBaseDecimals(currentFormat: string, displayText: string | null | undefined): number {
+  const isGeneralFormat = currentFormat === '' || currentFormat === 'General';
+  return isGeneralFormat ? countDisplayedDecimals(displayText) : getDecimalCount(currentFormat);
+}
+
+/**
  * Modify a number format to have a specific number of decimal places.
  */
 function formatWithDecimals(baseFormat: string, decimals: number): string {
@@ -182,12 +212,14 @@ export const INCREASE_DECIMALS: AsyncActionHandler = async (deps) => {
   const { activeCell, ranges } = getSelectionContext(deps);
 
   // Get current format from active cell via viewport buffer (always up-to-date)
-  const activeCellFormat = ws.viewport.getCellData(activeCell.row, activeCell.col)?.format as
-    | Record<string, unknown>
-    | undefined;
+  const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
+  const activeCellFormat = activeCellData?.format as Record<string, unknown> | undefined;
   const currentFormat = (activeCellFormat?.numberFormat as string) ?? 'General';
-  const currentDecimals = getDecimalCount(currentFormat);
-  const newDecimals = Math.min(currentDecimals + 1, 10);
+  const baseDecimals = getBaseDecimals(
+    currentFormat,
+    displayStringOrNull(activeCellData?.displayText ?? null),
+  );
+  const newDecimals = Math.min(baseDecimals + 1, 10);
   const newFormat = formatWithDecimals(currentFormat, newDecimals);
 
   // Apply to all selected ranges on ALL selected sheets
@@ -215,14 +247,17 @@ export const DECREASE_DECIMALS: AsyncActionHandler = async (deps) => {
   const { activeCell, ranges } = getSelectionContext(deps);
 
   // Get current format from active cell via viewport buffer (always up-to-date)
-  const activeCellFormat = ws.viewport.getCellData(activeCell.row, activeCell.col)?.format as
-    | Record<string, unknown>
-    | undefined;
+  const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
+  const activeCellFormat = activeCellData?.format as Record<string, unknown> | undefined;
   const currentFormat = (activeCellFormat?.numberFormat as string) ?? 'General';
-  const currentDecimals = getDecimalCount(currentFormat);
-  // Default to 2 decimals if current format has none (e.g., 'General')
-  const effectiveDecimals = currentDecimals || 2;
-  const newDecimals = Math.max(effectiveDecimals - 1, 0);
+  // Step down from the decimals actually shown. For General cells that means
+  // the digits displayed (so "1.23456" walks 1.2346 → 1.235 → …); explicit
+  // formats use their own code, so "0" correctly clamps at zero.
+  const baseDecimals = getBaseDecimals(
+    currentFormat,
+    displayStringOrNull(activeCellData?.displayText ?? null),
+  );
+  const newDecimals = Math.max(baseDecimals - 1, 0);
   const newFormat = formatWithDecimals(currentFormat, newDecimals);
 
   // Apply to all selected ranges on ALL selected sheets

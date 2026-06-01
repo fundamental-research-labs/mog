@@ -233,8 +233,8 @@ fn null_values_in_sort() {
 /// Test that sort_by_value with multiple value fields sorts by the correct field,
 /// and that the non-sort value fields have correct values at each row position.
 ///
-/// This catches the bug where wrong sort order causes InvValue to appear at wrong
-/// cell positions (e.g., Boxborough's InvValue=0 appearing at Perrysburg's row).
+/// This catches the bug where wrong sort order causes one value field to appear
+/// at the row position for a different item.
 #[test]
 fn sort_by_value_values_at_correct_positions() {
     let data: Vec<Vec<CellValue>> = vec![

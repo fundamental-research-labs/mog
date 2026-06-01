@@ -723,6 +723,20 @@ fn test_areas_counts_reference_union_members() {
         eval(&func("AREAS", vec![ASTNode::Paren(Box::new(union))]), &ctx),
         CellValue::number(2.0)
     );
+    assert_eq!(
+        eval(
+            &func(
+                "AREAS",
+                vec![ASTNode::Paren(Box::new(ASTNode::BinaryOp {
+                    op: compute_parser::BinOp::Intersect,
+                    left: Box::new(range(s, 0, 0, 1, 1)),
+                    right: Box::new(cellref(s, 0, 0)),
+                }))],
+            ),
+            &ctx,
+        ),
+        CellValue::number(1.0)
+    );
 
     let nested_paren_union = ASTNode::Paren(Box::new(ASTNode::Paren(Box::new(ASTNode::Union {
         ranges: vec![cellref(s, 0, 0), cellref(s, 0, 1)],
@@ -730,6 +744,10 @@ fn test_areas_counts_reference_union_members() {
     assert_eq!(
         eval(&func("AREAS", vec![nested_paren_union]), &ctx),
         CellValue::number(2.0)
+    );
+    assert_eq!(
+        eval(&func("AREAS", vec![ASTNode::Number(1.0)]), &ctx),
+        CellValue::Error(CellError::Value, None)
     );
 }
 

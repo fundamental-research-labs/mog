@@ -1,12 +1,18 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`golden-master: area chart golden-master: area chart axes count 1`] = `42`;
+exports[`golden-master: area chart golden-master: area chart axes count 1`] = `40`;
 
 exports[`golden-master: area chart golden-master: area chart legends count 1`] = `5`;
 
 exports[`golden-master: area chart golden-master: area chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -24,7 +30,7 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
         "value": 30,
       },
     ],
-    "path": "M101.003861003861,320 L101.003861003861,220 L211.04247104247105,120 L321.0810810810811,20 L321.0810810810811,320 Z",
+    "path": "M169.73336361571654,342 L169.73336361571654,234.66666666666669 L264.7140585964116,127.33333333333334 L359.69475357710655,20 L359.69475357710655,342 Z",
     "style": {
       "fill": "#1f77b4",
       "opacity": 0.7,
@@ -36,6 +42,12 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
     "y": 0,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -53,7 +65,7 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
         "value": 5,
       },
     ],
-    "path": "M101.003861003861,320 L101.003861003861,170 L211.04247104247105,70 L321.0810810810811,270 L321.0810810810811,320 Z",
+    "path": "M169.73336361571654,342 L169.73336361571654,181 L264.7140585964116,73.66666666666669 L359.69475357710655,288.3333333333333 L359.69475357710655,342 Z",
     "style": {
       "fill": "#ff7f0e",
       "opacity": 0.7,
@@ -69,19 +81,25 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
 
 exports[`golden-master: area chart golden-master: area chart marks count 1`] = `2`;
 
-exports[`golden-master: bar chart golden-master: bar chart axes count 1`] = `42`;
+exports[`golden-master: bar chart golden-master: bar chart axes count 1`] = `40`;
 
 exports[`golden-master: bar chart golden-master: bar chart legends count 1`] = `5`;
 
 exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S1",
       "value": 10,
     },
-    "height": 100,
+    "height": 107.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -90,17 +108,23 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 101.003861003861,
-    "y": 220,
+    "width": 48.23529411764705,
+    "x": 121.4980694980695,
+    "y": 234.66666666666669,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S1",
       "value": 20,
     },
-    "height": 200,
+    "height": 214.66666666666666,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -109,17 +133,23 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 211.04247104247105,
-    "y": 120,
+    "width": 48.23529411764705,
+    "x": 216.4787644787645,
+    "y": 127.33333333333334,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S1",
       "value": 30,
     },
-    "height": 300,
+    "height": 322,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -128,17 +158,23 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 321.0810810810811,
+    "width": 48.23529411764705,
+    "x": 311.4594594594595,
     "y": 20,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S2",
       "value": 15,
     },
-    "height": 150,
+    "height": 161,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -147,17 +183,23 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 156.88621394503747,
-    "y": 170,
+    "width": 48.23529411764705,
+    "x": 169.73336361571654,
+    "y": 181,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S2",
       "value": 25,
     },
-    "height": 250,
+    "height": 268.3333333333333,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -166,17 +208,23 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 266.9248239836475,
-    "y": 70,
+    "width": 48.23529411764705,
+    "x": 264.7140585964116,
+    "y": 73.66666666666669,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S2",
       "value": 5,
     },
-    "height": 50,
+    "height": 53.666666666666686,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -185,22 +233,28 @@ exports[`golden-master: bar chart golden-master: bar chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 55.88235294117647,
-    "x": 376.96343402225756,
-    "y": 270,
+    "width": 48.23529411764705,
+    "x": 359.69475357710655,
+    "y": 288.3333333333333,
   },
 ]
 `;
 
 exports[`golden-master: bar chart golden-master: bar chart marks count 1`] = `6`;
 
-exports[`golden-master: bubble chart golden-master: bubble chart axes count 1`] = `44`;
+exports[`golden-master: bubble chart golden-master: bubble chart axes count 1`] = `42`;
 
 exports[`golden-master: bubble chart golden-master: bubble chart legends count 1`] = `5`;
 
 exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 5,
@@ -216,10 +270,16 @@ exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 90,
-    "y": 320,
+    "x": 112,
+    "y": 342,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 10,
@@ -235,10 +295,16 @@ exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 185,
-    "y": 170,
+    "x": 194,
+    "y": 181,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G2",
       "size": 8,
@@ -254,10 +320,16 @@ exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 280,
-    "y": 245,
+    "x": 276,
+    "y": 261.5,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G2",
       "size": 12,
@@ -273,10 +345,16 @@ exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 375,
-    "y": 95,
+    "x": 358,
+    "y": 100.49999999999994,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 6,
@@ -292,27 +370,33 @@ exports[`golden-master: bubble chart golden-master: bubble chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 470,
-    "y": 20,
+    "x": 440,
+    "y": 19.999999999999943,
   },
 ]
 `;
 
 exports[`golden-master: bubble chart golden-master: bubble chart marks count 1`] = `5`;
 
-exports[`golden-master: column chart (horizontal bar) golden-master: column chart axes count 1`] = `42`;
+exports[`golden-master: column chart (horizontal bar) golden-master: column chart axes count 1`] = `40`;
 
 exports[`golden-master: column chart (horizontal bar) golden-master: column chart legends count 1`] = `5`;
 
 exports[`golden-master: column chart (horizontal bar) golden-master: column chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S1",
       "value": 10,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -321,17 +405,23 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 126.66666666666666,
-    "x": 90,
-    "y": 28.68725868725869,
+    "width": 109.33333333333334,
+    "x": 112,
+    "y": 29.324324324324323,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S1",
       "value": 20,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -340,17 +430,23 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 253.33333333333331,
-    "x": 90,
-    "y": 115.55984555984557,
+    "width": 218.66666666666669,
+    "x": 112,
+    "y": 122.56756756756756,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S1",
       "value": 30,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -359,17 +455,23 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 380,
-    "x": 90,
-    "y": 202.43243243243245,
+    "width": 328,
+    "x": 112,
+    "y": 215.8108108108108,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S2",
       "value": 15,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -378,17 +480,23 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 190,
-    "x": 90,
-    "y": 72.80490574608223,
+    "width": 164,
+    "x": 112,
+    "y": 76.6772655007949,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S2",
       "value": 25,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -397,17 +505,23 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 316.66666666666663,
-    "x": 90,
-    "y": 159.6774926186691,
+    "width": 273.3333333333333,
+    "x": 112,
+    "y": 169.92050874403816,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S2",
       "value": 5,
     },
-    "height": 44.11764705882353,
+    "height": 47.35294117647059,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -416,28 +530,34 @@ exports[`golden-master: column chart (horizontal bar) golden-master: column char
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 63.333333333333314,
-    "x": 90,
-    "y": 246.55007949125599,
+    "width": 54.666666666666686,
+    "x": 112,
+    "y": 263.1637519872814,
   },
 ]
 `;
 
 exports[`golden-master: column chart (horizontal bar) golden-master: column chart marks count 1`] = `6`;
 
-exports[`golden-master: combo chart golden-master: combo chart axes count 1`] = `42`;
+exports[`golden-master: combo chart golden-master: combo chart axes count 1`] = `40`;
 
 exports[`golden-master: combo chart golden-master: combo chart legends count 1`] = `0`;
 
 exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S1",
       "value": 10,
     },
-    "height": 113.33333333333334,
+    "height": 101.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -446,17 +566,23 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 65.34749034749035,
-    "y": 246.66666666666666,
+    "width": 68.82352941176471,
+    "x": 125.55212355212356,
+    "y": 222.66666666666669,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S2",
       "value": 15,
     },
-    "height": 170,
+    "height": 152,
     "style": {
       "cornerRadius": undefined,
       "fill": "#d62728",
@@ -465,17 +591,23 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 143.28866681807858,
-    "y": 190,
+    "width": 68.82352941176471,
+    "x": 194.37565296388829,
+    "y": 172,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S1",
       "value": 20,
     },
-    "height": 226.66666666666669,
+    "height": 202.66666666666666,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -484,17 +616,23 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 218.82239382239382,
-    "y": 133.33333333333331,
+    "width": 68.82352941176471,
+    "x": 261.0733590733591,
+    "y": 121.33333333333334,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S2",
       "value": 25,
     },
-    "height": 283.33333333333337,
+    "height": 253.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#9467bd",
@@ -503,17 +641,23 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 296.7635702929821,
-    "y": 76.66666666666663,
+    "width": 68.82352941176471,
+    "x": 329.8968884851238,
+    "y": 70.66666666666669,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S1",
       "value": 30,
     },
-    "height": 340,
+    "height": 304,
     "style": {
       "cornerRadius": undefined,
       "fill": "#2ca02c",
@@ -522,17 +666,23 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 372.2972972972973,
+    "width": 68.82352941176471,
+    "x": 396.5945945945946,
     "y": 20,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S2",
       "value": 5,
     },
-    "height": 56.666666666666686,
+    "height": 50.666666666666686,
     "style": {
       "cornerRadius": undefined,
       "fill": "#8c564b",
@@ -541,11 +691,17 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 77.94117647058823,
-    "x": 450.2384737678855,
-    "y": 303.3333333333333,
+    "width": 68.82352941176471,
+    "x": 465.4181240063593,
+    "y": 273.3333333333333,
   },
   {
+    "clip": {
+      "height": 304,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -578,7 +734,7 @@ exports[`golden-master: combo chart golden-master: combo chart marks 1`] = `
         "value": 5,
       },
     ],
-    "path": "M65.34749034749035,246.66666666666666 L65.34749034749035,190 L218.82239382239382,133.33333333333331 L218.82239382239382,76.66666666666663 L372.2972972972973,20 L372.2972972972973,303.3333333333333",
+    "path": "M194.37565296388829,222.66666666666669 L194.37565296388829,172 L329.8968884851238,121.33333333333334 L329.8968884851238,70.66666666666669 L465.4181240063593,20 L465.4181240063593,273.3333333333333",
     "style": {
       "fill": undefined,
       "opacity": 1,
@@ -606,10 +762,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S1",
       "value": 10,
     },
-    "endAngle": -0.9773977261111265,
+    "endAngle": 0.59339860068377,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": -1.5657963267948967,
+    "startAngle": 0.005,
     "style": {
       "fill": "#1f77b4",
       "opacity": 1,
@@ -617,7 +773,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -626,10 +782,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S1",
       "value": 20,
     },
-    "endAngle": 0.21939947525641357,
+    "endAngle": 1.7901958020513102,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": -0.9673977261111265,
+    "startAngle": 0.60339860068377,
     "style": {
       "fill": "#ff7f0e",
       "opacity": 1,
@@ -637,7 +793,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -646,10 +802,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S1",
       "value": 30,
     },
-    "endAngle": 2.0145952773077243,
+    "endAngle": 3.585391604102621,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": 0.22939947525641358,
+    "startAngle": 1.80019580205131,
     "style": {
       "fill": "#2ca02c",
       "opacity": 1,
@@ -657,7 +813,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -666,10 +822,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S2",
       "value": 15,
     },
-    "endAngle": 2.9121931783333794,
+    "endAngle": 4.482989505128276,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": 2.024595277307724,
+    "startAngle": 3.5953916041026206,
     "style": {
       "fill": "#1f77b4",
       "opacity": 1,
@@ -677,7 +833,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -686,10 +842,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S2",
       "value": 25,
     },
-    "endAngle": 4.408189680042804,
+    "endAngle": 5.978986006837701,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": 2.922193178333379,
+    "startAngle": 4.492989505128276,
     "style": {
       "fill": "#ff7f0e",
       "opacity": 1,
@@ -697,7 +853,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -706,10 +862,10 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "series": "S2",
       "value": 5,
     },
-    "endAngle": 4.70738898038469,
+    "endAngle": 6.278185307179586,
     "innerRadius": 80,
     "outerRadius": 160,
-    "startAngle": 4.418189680042804,
+    "startAngle": 5.988986006837701,
     "style": {
       "fill": "#2ca02c",
       "opacity": 1,
@@ -717,7 +873,7 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
 ]
@@ -725,18 +881,24 @@ exports[`golden-master: doughnut chart golden-master: doughnut chart marks 1`] =
 
 exports[`golden-master: doughnut chart golden-master: doughnut chart marks count 1`] = `6`;
 
-exports[`golden-master: funnel chart golden-master: funnel chart axes count 1`] = `34`;
+exports[`golden-master: funnel chart golden-master: funnel chart axes count 1`] = `32`;
 
 exports[`golden-master: funnel chart golden-master: funnel chart legends count 1`] = `0`;
 
 exports[`golden-master: funnel chart golden-master: funnel chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "count": 1000,
       "stage": "Visitors",
     },
-    "height": 66.66666666666666,
+    "height": 71.55555555555556,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -745,16 +907,22 @@ exports[`golden-master: funnel chart golden-master: funnel chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 490,
-    "x": 90,
-    "y": 26.575342465753426,
+    "width": 468,
+    "x": 112,
+    "y": 27.057534246575344,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "count": 600,
       "stage": "Signups",
     },
-    "height": 66.66666666666666,
+    "height": 71.55555555555556,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -763,16 +931,22 @@ exports[`golden-master: funnel chart golden-master: funnel chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 294,
-    "x": 90,
-    "y": 92.32876712328768,
+    "width": 280.8,
+    "x": 112,
+    "y": 97.63287671232877,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "count": 300,
       "stage": "Trial",
     },
-    "height": 66.66666666666666,
+    "height": 71.55555555555556,
     "style": {
       "cornerRadius": undefined,
       "fill": "#2ca02c",
@@ -781,16 +955,22 @@ exports[`golden-master: funnel chart golden-master: funnel chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 147,
-    "x": 90,
-    "y": 158.08219178082194,
+    "width": 140.4,
+    "x": 112,
+    "y": 168.20821917808217,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "count": 100,
       "stage": "Paid",
     },
-    "height": 66.66666666666666,
+    "height": 71.55555555555556,
     "style": {
       "cornerRadius": undefined,
       "fill": "#d62728",
@@ -799,22 +979,28 @@ exports[`golden-master: funnel chart golden-master: funnel chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 49,
-    "x": 90,
-    "y": 223.8356164383562,
+    "width": 46.80000000000001,
+    "x": 112,
+    "y": 238.78356164383564,
   },
 ]
 `;
 
 exports[`golden-master: funnel chart golden-master: funnel chart marks count 1`] = `4`;
 
-exports[`golden-master: line chart golden-master: line chart axes count 1`] = `38`;
+exports[`golden-master: line chart golden-master: line chart axes count 1`] = `36`;
 
 exports[`golden-master: line chart golden-master: line chart legends count 1`] = `5`;
 
 exports[`golden-master: line chart golden-master: line chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -832,7 +1018,7 @@ exports[`golden-master: line chart golden-master: line chart marks 1`] = `
         "value": 30,
       },
     ],
-    "path": "M101.003861003861,250.76923076923075 L211.04247104247105,135.38461538461536 L321.0810810810811,20",
+    "path": "M169.73336361571654,267.6923076923077 L264.7140585964116,143.84615384615384 L359.69475357710655,20",
     "style": {
       "fill": undefined,
       "opacity": 1,
@@ -844,6 +1030,12 @@ exports[`golden-master: line chart golden-master: line chart marks 1`] = `
     "y": 0,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -861,7 +1053,7 @@ exports[`golden-master: line chart golden-master: line chart marks 1`] = `
         "value": 5,
       },
     ],
-    "path": "M101.003861003861,193.07692307692307 L211.04247104247105,77.69230769230768 L321.0810810810811,308.46153846153845",
+    "path": "M169.73336361571654,205.76923076923077 L264.7140585964116,81.9230769230769 L359.69475357710655,329.61538461538464",
     "style": {
       "fill": undefined,
       "opacity": 1,
@@ -877,19 +1069,25 @@ exports[`golden-master: line chart golden-master: line chart marks 1`] = `
 
 exports[`golden-master: line chart golden-master: line chart marks count 1`] = `2`;
 
-exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked bar chart axes count 1`] = `42`;
+exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked bar chart axes count 1`] = `40`;
 
 exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked bar chart legends count 1`] = `5`;
 
 exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked bar chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S1",
       "value": 10,
     },
-    "height": 120,
+    "height": 128.8,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -898,17 +1096,23 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 101.003861003861,
-    "y": 200,
+    "width": 96.4705882352941,
+    "x": 121.4980694980695,
+    "y": 213.2,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S1",
       "value": 20,
     },
-    "height": 133.33333333333331,
+    "height": 143.11111111111111,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -917,17 +1121,23 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 211.04247104247105,
-    "y": 186.66666666666669,
+    "width": 96.4705882352941,
+    "x": 216.4787644787645,
+    "y": 198.88888888888889,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S1",
       "value": 30,
     },
-    "height": 257.1428571428571,
+    "height": 276,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -936,17 +1146,23 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 321.0810810810811,
-    "y": 62.85714285714289,
+    "width": 96.4705882352941,
+    "x": 311.4594594594595,
+    "y": 66,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S2",
       "value": 15,
     },
-    "height": 180,
+    "height": 193.2,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -955,17 +1171,23 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 101.003861003861,
+    "width": 96.4705882352941,
+    "x": 121.4980694980695,
     "y": 20,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S2",
       "value": 25,
     },
-    "height": 166.66666666666669,
+    "height": 178.88888888888889,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -974,17 +1196,23 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 211.04247104247105,
+    "width": 96.4705882352941,
+    "x": 216.4787644787645,
     "y": 20,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S2",
       "value": 5,
     },
-    "height": 42.85714285714289,
+    "height": 46,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -993,8 +1221,8 @@ exports[`golden-master: percent-stacked bar chart golden-master: percent-stacked
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 321.0810810810811,
+    "width": 96.4705882352941,
+    "x": 311.4594594594595,
     "y": 20,
   },
 ]
@@ -1014,10 +1242,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S1",
       "value": 10,
     },
-    "endAngle": -0.9773977261111265,
+    "endAngle": 0.59339860068377,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": -1.5657963267948967,
+    "startAngle": 0.005,
     "style": {
       "fill": "#1f77b4",
       "opacity": 1,
@@ -1025,7 +1253,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -1034,10 +1262,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S1",
       "value": 20,
     },
-    "endAngle": 0.21939947525641357,
+    "endAngle": 1.7901958020513102,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": -0.9673977261111265,
+    "startAngle": 0.60339860068377,
     "style": {
       "fill": "#ff7f0e",
       "opacity": 1,
@@ -1045,7 +1273,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -1054,10 +1282,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S1",
       "value": 30,
     },
-    "endAngle": 2.0145952773077243,
+    "endAngle": 3.585391604102621,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": 0.22939947525641358,
+    "startAngle": 1.80019580205131,
     "style": {
       "fill": "#2ca02c",
       "opacity": 1,
@@ -1065,7 +1293,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -1074,10 +1302,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S2",
       "value": 15,
     },
-    "endAngle": 2.9121931783333794,
+    "endAngle": 4.482989505128276,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": 2.024595277307724,
+    "startAngle": 3.5953916041026206,
     "style": {
       "fill": "#1f77b4",
       "opacity": 1,
@@ -1085,7 +1313,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -1094,10 +1322,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S2",
       "value": 25,
     },
-    "endAngle": 4.408189680042804,
+    "endAngle": 5.978986006837701,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": 2.922193178333379,
+    "startAngle": 4.492989505128276,
     "style": {
       "fill": "#ff7f0e",
       "opacity": 1,
@@ -1105,7 +1333,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
   {
@@ -1114,10 +1342,10 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "series": "S2",
       "value": 5,
     },
-    "endAngle": 4.70738898038469,
+    "endAngle": 6.278185307179586,
     "innerRadius": 0,
     "outerRadius": 160,
-    "startAngle": 4.418189680042804,
+    "startAngle": 5.988986006837701,
     "style": {
       "fill": "#2ca02c",
       "opacity": 1,
@@ -1125,7 +1353,7 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "arc",
-    "x": 260,
+    "x": 245,
     "y": 190,
   },
 ]
@@ -1133,13 +1361,19 @@ exports[`golden-master: pie chart golden-master: pie chart marks 1`] = `
 
 exports[`golden-master: pie chart golden-master: pie chart marks count 1`] = `6`;
 
-exports[`golden-master: radar chart golden-master: radar chart axes count 1`] = `38`;
+exports[`golden-master: radar chart golden-master: radar chart axes count 1`] = `36`;
 
 exports[`golden-master: radar chart golden-master: radar chart legends count 1`] = `5`;
 
 exports[`golden-master: radar chart golden-master: radar chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -1157,7 +1391,7 @@ exports[`golden-master: radar chart golden-master: radar chart marks 1`] = `
         "value": 30,
       },
     ],
-    "path": "M101.003861003861,250.76923076923075 L211.04247104247105,135.38461538461536 L321.0810810810811,20",
+    "path": "M169.73336361571654,267.6923076923077 L264.7140585964116,143.84615384615384 L359.69475357710655,20",
     "style": {
       "fill": undefined,
       "opacity": 1,
@@ -1169,6 +1403,12 @@ exports[`golden-master: radar chart golden-master: radar chart marks 1`] = `
     "y": 0,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -1186,7 +1426,7 @@ exports[`golden-master: radar chart golden-master: radar chart marks 1`] = `
         "value": 5,
       },
     ],
-    "path": "M101.003861003861,193.07692307692307 L211.04247104247105,77.69230769230768 L321.0810810810811,308.46153846153845",
+    "path": "M169.73336361571654,205.76923076923077 L264.7140585964116,81.9230769230769 L359.69475357710655,329.61538461538464",
     "style": {
       "fill": undefined,
       "opacity": 1,
@@ -1202,13 +1442,19 @@ exports[`golden-master: radar chart golden-master: radar chart marks 1`] = `
 
 exports[`golden-master: radar chart golden-master: radar chart marks count 1`] = `2`;
 
-exports[`golden-master: scatter chart golden-master: scatter chart axes count 1`] = `44`;
+exports[`golden-master: scatter chart golden-master: scatter chart axes count 1`] = `42`;
 
 exports[`golden-master: scatter chart golden-master: scatter chart legends count 1`] = `0`;
 
 exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 5,
@@ -1224,10 +1470,16 @@ exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 90,
-    "y": 320,
+    "x": 112,
+    "y": 342,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 10,
@@ -1243,10 +1495,16 @@ exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 212.5,
-    "y": 170,
+    "x": 229,
+    "y": 181,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G2",
       "size": 8,
@@ -1262,10 +1520,16 @@ exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 335,
-    "y": 245,
+    "x": 346,
+    "y": 261.5,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G2",
       "size": 12,
@@ -1281,10 +1545,16 @@ exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
       "strokeWidth": 1,
     },
     "type": "symbol",
-    "x": 457.5,
-    "y": 95,
+    "x": 463,
+    "y": 100.49999999999994,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "group": "G1",
       "size": 6,
@@ -1301,20 +1571,26 @@ exports[`golden-master: scatter chart golden-master: scatter chart marks 1`] = `
     },
     "type": "symbol",
     "x": 580,
-    "y": 20,
+    "y": 19.999999999999943,
   },
 ]
 `;
 
 exports[`golden-master: scatter chart golden-master: scatter chart marks count 1`] = `5`;
 
-exports[`golden-master: stacked area chart golden-master: stacked area chart axes count 1`] = `42`;
+exports[`golden-master: stacked area chart golden-master: stacked area chart axes count 1`] = `40`;
 
 exports[`golden-master: stacked area chart golden-master: stacked area chart legends count 1`] = `5`;
 
 exports[`golden-master: stacked area chart golden-master: stacked area chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -1332,7 +1608,7 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
         "value": 30,
       },
     ],
-    "path": "M101.003861003861,253.33333333333334 L211.04247104247105,186.66666666666669 L321.0810810810811,120 L321.0810810810811,320 L211.04247104247105,320 L101.003861003861,320 Z",
+    "path": "M169.73336361571654,270.44444444444446 L264.7140585964116,198.88888888888889 L359.69475357710655,127.33333333333334 L359.69475357710655,342 L264.7140585964116,342 L169.73336361571654,342 Z",
     "style": {
       "fill": "#1f77b4",
       "opacity": 0.7,
@@ -1344,6 +1620,12 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
     "y": 0,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": [
       {
         "category": "A",
@@ -1361,7 +1643,7 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
         "value": 5,
       },
     ],
-    "path": "M101.003861003861,153.33333333333331 L211.04247104247105,20 L321.0810810810811,86.66666666666666 L321.0810810810811,120 L211.04247104247105,186.66666666666669 L101.003861003861,253.33333333333334 Z",
+    "path": "M169.73336361571654,163.11111111111111 L264.7140585964116,20 L359.69475357710655,91.55555555555554 L359.69475357710655,127.33333333333334 L264.7140585964116,198.88888888888889 L169.73336361571654,270.44444444444446 Z",
     "style": {
       "fill": "#ff7f0e",
       "opacity": 0.7,
@@ -1377,19 +1659,25 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
 
 exports[`golden-master: stacked area chart golden-master: stacked area chart marks count 1`] = `2`;
 
-exports[`golden-master: stacked bar chart golden-master: stacked bar chart axes count 1`] = `42`;
+exports[`golden-master: stacked bar chart golden-master: stacked bar chart axes count 1`] = `40`;
 
 exports[`golden-master: stacked bar chart golden-master: stacked bar chart legends count 1`] = `5`;
 
 exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S1",
       "value": 10,
     },
-    "height": 100,
+    "height": 107.33333333333331,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -1398,17 +1686,23 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 101.003861003861,
-    "y": 220,
+    "width": 96.4705882352941,
+    "x": 121.4980694980695,
+    "y": 234.66666666666669,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S1",
       "value": 20,
     },
-    "height": 200,
+    "height": 214.66666666666666,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -1417,17 +1711,23 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 211.04247104247105,
-    "y": 120,
+    "width": 96.4705882352941,
+    "x": 216.4787644787645,
+    "y": 127.33333333333334,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S1",
       "value": 30,
     },
-    "height": 300,
+    "height": 322,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -1436,17 +1736,23 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 321.0810810810811,
+    "width": 96.4705882352941,
+    "x": 311.4594594594595,
     "y": 20,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "A",
       "series": "S2",
       "value": 15,
     },
-    "height": 150,
+    "height": 161,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -1455,17 +1761,23 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 101.003861003861,
-    "y": 70,
+    "width": 96.4705882352941,
+    "x": 121.4980694980695,
+    "y": 73.66666666666669,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "B",
       "series": "S2",
       "value": 25,
     },
-    "height": 250,
+    "height": 268.3333333333333,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -1474,17 +1786,23 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 211.04247104247105,
-    "y": -130,
+    "width": 96.4705882352941,
+    "x": 216.4787644787645,
+    "y": -140.99999999999997,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "category": "C",
       "series": "S2",
       "value": 5,
     },
-    "height": 50,
+    "height": 53.666666666666686,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -1493,22 +1811,28 @@ exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 111.76470588235294,
-    "x": 321.0810810810811,
-    "y": -30,
+    "width": 96.4705882352941,
+    "x": 311.4594594594595,
+    "y": -33.666666666666686,
   },
 ]
 `;
 
 exports[`golden-master: stacked bar chart golden-master: stacked bar chart marks count 1`] = `6`;
 
-exports[`golden-master: stock chart golden-master: stock chart axes count 1`] = `40`;
+exports[`golden-master: stock chart golden-master: stock chart axes count 1`] = `38`;
 
 exports[`golden-master: stock chart golden-master: stock chart legends count 1`] = `0`;
 
 exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "close": 105,
       "date": "Mon",
@@ -1516,7 +1840,7 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "low": 95,
       "open": 100,
     },
-    "height": 262.5,
+    "height": 281.75,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -1525,11 +1849,17 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 87.49999999999999,
-    "x": 98.63892806770099,
-    "y": 57.5,
+    "width": 83.57142857142857,
+    "x": 120.25105782792666,
+    "y": 60.25,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "close": 108,
       "date": "Tue",
@@ -1537,7 +1867,7 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "low": 100,
       "open": 105,
     },
-    "height": 270,
+    "height": 289.79999999999995,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -1546,11 +1876,17 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 87.49999999999999,
-    "x": 185.02820874471087,
-    "y": 50,
+    "width": 83.57142857142857,
+    "x": 202.76163610719323,
+    "y": 52.200000000000045,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "close": 112,
       "date": "Wed",
@@ -1558,7 +1894,7 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "low": 102,
       "open": 108,
     },
-    "height": 280,
+    "height": 300.5333333333333,
     "style": {
       "cornerRadius": undefined,
       "fill": "#2ca02c",
@@ -1567,11 +1903,17 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 87.49999999999999,
-    "x": 271.4174894217207,
-    "y": 40,
+    "width": 83.57142857142857,
+    "x": 285.2722143864598,
+    "y": 41.4666666666667,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "close": 107,
       "date": "Thu",
@@ -1579,7 +1921,7 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "low": 105,
       "open": 112,
     },
-    "height": 267.5,
+    "height": 287.1166666666666,
     "style": {
       "cornerRadius": undefined,
       "fill": "#d62728",
@@ -1588,11 +1930,17 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 87.49999999999999,
-    "x": 357.80677009873057,
-    "y": 52.5,
+    "width": 83.57142857142857,
+    "x": 367.7827926657264,
+    "y": 54.88333333333338,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 468,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "close": 120,
       "date": "Fri",
@@ -1600,7 +1948,7 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "low": 103,
       "open": 107,
     },
-    "height": 300,
+    "height": 322,
     "style": {
       "cornerRadius": undefined,
       "fill": "#9467bd",
@@ -1609,8 +1957,8 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 87.49999999999999,
-    "x": 444.19605077574045,
+    "width": 83.57142857142857,
+    "x": 450.29337094499294,
     "y": 20,
   },
 ]
@@ -1618,18 +1966,24 @@ exports[`golden-master: stock chart golden-master: stock chart marks 1`] = `
 
 exports[`golden-master: stock chart golden-master: stock chart marks count 1`] = `5`;
 
-exports[`golden-master: waterfall chart golden-master: waterfall chart axes count 1`] = `44`;
+exports[`golden-master: waterfall chart golden-master: waterfall chart axes count 1`] = `42`;
 
 exports[`golden-master: waterfall chart golden-master: waterfall chart legends count 1`] = `11`;
 
 exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`] = `
 [
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "label": "Revenue",
       "value": 100,
     },
-    "height": 214.28571428571428,
+    "height": 229.99999999999997,
     "style": {
       "cornerRadius": undefined,
       "fill": "#1f77b4",
@@ -1638,16 +1992,22 @@ exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`]
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 67.85714285714286,
-    "x": 96.69957686882934,
-    "y": 20,
+    "width": 58.57142857142857,
+    "x": 117.78279266572638,
+    "y": 20.00000000000003,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "label": "COGS",
       "value": -40,
     },
-    "height": 85.71428571428572,
+    "height": 92,
     "style": {
       "cornerRadius": undefined,
       "fill": "#ff7f0e",
@@ -1656,16 +2016,22 @@ exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`]
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 67.85714285714286,
-    "x": 163.69534555712272,
-    "y": 234.28571428571428,
+    "width": 58.57142857142857,
+    "x": 175.61071932299012,
+    "y": 250,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "label": "OpEx",
       "value": -30,
     },
-    "height": 64.28571428571428,
+    "height": 69,
     "style": {
       "cornerRadius": undefined,
       "fill": "#2ca02c",
@@ -1674,16 +2040,22 @@ exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`]
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 67.85714285714286,
-    "x": 230.6911142454161,
-    "y": 234.28571428571428,
+    "width": 58.57142857142857,
+    "x": 233.43864598025385,
+    "y": 250,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "label": "Tax",
       "value": -10,
     },
-    "height": 21.428571428571416,
+    "height": 23,
     "style": {
       "cornerRadius": undefined,
       "fill": "#d62728",
@@ -1692,16 +2064,22 @@ exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`]
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 67.85714285714286,
-    "x": 297.68688293370946,
-    "y": 234.28571428571428,
+    "width": 58.57142857142857,
+    "x": 291.26657263751764,
+    "y": 250,
   },
   {
+    "clip": {
+      "height": 322,
+      "width": 328,
+      "x": 112,
+      "y": 20,
+    },
     "datum": {
       "label": "Net",
       "value": 20,
     },
-    "height": 42.85714285714286,
+    "height": 46,
     "style": {
       "cornerRadius": undefined,
       "fill": "#9467bd",
@@ -1710,9 +2088,9 @@ exports[`golden-master: waterfall chart golden-master: waterfall chart marks 1`]
       "strokeWidth": undefined,
     },
     "type": "rect",
-    "width": 67.85714285714286,
-    "x": 364.6826516220028,
-    "y": 191.42857142857142,
+    "width": 58.57142857142857,
+    "x": 349.0944992947814,
+    "y": 204,
   },
 ]
 `;

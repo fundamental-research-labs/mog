@@ -14,11 +14,30 @@ fn chart_type_known_roundtrip() {
 
 #[test]
 fn chart_type_unknown_roundtrip() {
-    let json = r#""histogram""#;
+    let json = r#""unknownModernChart""#;
     let ct: ChartType = serde_json::from_str(json).unwrap();
-    assert_eq!(ct, ChartType::Unknown("histogram".to_string()));
+    assert_eq!(ct, ChartType::Unknown("unknownModernChart".to_string()));
     let back = serde_json::to_string(&ct).unwrap();
     assert_eq!(back, json);
+}
+
+#[test]
+fn chart_type_modern_statistical_roundtrip() {
+    for (input, variant, canonical) in [
+        ("histogram", ChartType::Histogram, "histogram"),
+        ("pareto", ChartType::Pareto, "pareto"),
+        ("paretoLine", ChartType::Pareto, "pareto"),
+        ("boxplot", ChartType::Boxplot, "boxplot"),
+        ("boxWhisker", ChartType::Boxplot, "boxplot"),
+    ] {
+        let ct = ChartType::from_str(input);
+        assert_eq!(ct, variant);
+        assert_eq!(ct.as_str(), canonical);
+        let json = serde_json::to_string(&ct).unwrap();
+        assert_eq!(json, format!(r#""{canonical}""#));
+        let back: ChartType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, variant);
+    }
 }
 
 #[test]
@@ -89,11 +108,32 @@ fn chart_type_unknown_fold_round_trips() {
 
 #[test]
 fn chart_sub_type_known_roundtrip() {
-    let st = ChartSubType::PercentStacked;
-    let json = serde_json::to_string(&st).unwrap();
-    assert_eq!(json, r#""percentStacked""#);
-    let back: ChartSubType = serde_json::from_str(&json).unwrap();
-    assert_eq!(back, ChartSubType::PercentStacked);
+    for (st, wire) in [
+        (ChartSubType::PercentStacked, "percentStacked"),
+        (ChartSubType::Filled, "filled"),
+        (ChartSubType::Markers, "markers"),
+    ] {
+        let json = serde_json::to_string(&st).unwrap();
+        assert_eq!(json, format!(r#""{wire}""#));
+        let back: ChartSubType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, st);
+    }
+}
+
+#[test]
+fn stock_chart_sub_types_roundtrip() {
+    for (sub_type, wire) in [
+        (ChartSubType::Hlc, "hlc"),
+        (ChartSubType::Ohlc, "ohlc"),
+        (ChartSubType::VolumeHlc, "volume-hlc"),
+        (ChartSubType::VolumeOhlc, "volume-ohlc"),
+    ] {
+        assert_eq!(sub_type.as_str(), wire);
+        let json = serde_json::to_string(&sub_type).unwrap();
+        assert_eq!(json, format!(r#""{wire}""#));
+        let back: ChartSubType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, sub_type);
+    }
 }
 
 #[test]
@@ -112,6 +152,26 @@ fn series_orientation_roundtrip() {
     assert_eq!(json, r#""columns""#);
     let back: SeriesOrientation = serde_json::from_str(&json).unwrap();
     assert_eq!(back, SeriesOrientation::Columns);
+}
+
+fn sample_chart_style_context() -> ChartStyleContextData {
+    ChartStyleContextData {
+        color_map_override: Some(ChartColorMapOverrideData::Override {
+            mapping: ChartColorMappingData {
+                tx1: Some("Accent2".to_string()),
+                ..Default::default()
+            },
+        }),
+        owners: vec![ChartStyleOwnerData {
+            owner_key: "title".to_string(),
+            rich_text: Some(vec![ChartFormatStringData {
+                text: "Revenue".to_string(),
+                font: None,
+            }]),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
 }
 
 #[test]
@@ -162,14 +222,28 @@ fn chart_spec_to_floating_object_preserves_fields() {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -181,11 +255,13 @@ fn chart_spec_to_floating_object_preserves_fields() {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -227,8 +303,9 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(fo.common.height, 400.0);
     assert_eq!(fo.common.z_index, 3);
     assert_eq!(fo.common.name, "Chart 1");
-    assert!(fo.common.locked);
-    assert!(fo.common.visible);
+    assert!(!fo.common.locked);
+    assert!(!fo.common.visible);
+    assert!(fo.common.printable);
 
     // Anchor
     assert_eq!(fo.common.anchor.anchor_row, 5);
@@ -245,6 +322,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
     if let FloatingObjectData::Chart(ref cd) = fo.data {
         assert_eq!(cd.chart_type, ChartType::Line);
         assert_eq!(cd.title.as_deref(), Some("Revenue"));
+        assert_eq!(cd.chart_style_context, spec.chart_style_context);
         let ooxml = cd.ooxml.as_ref().expect("ooxml should be Some");
         assert!(matches!(
             ooxml.definition,
@@ -293,6 +371,88 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(roundtripped.macro_name.as_deref(), Some("MyMacro"));
     assert_eq!(roundtripped.client_data_locks_with_sheet, Some(false));
     assert_eq!(roundtripped.client_data_prints_with_sheet, Some(true));
+
+    let mut edited = spec.to_floating_object("sheet-abc", 8);
+    edited.common.rotation = 12.5;
+    edited.common.flip_h = true;
+    edited.common.flip_v = true;
+    edited.common.locked = true;
+    edited.common.visible = true;
+    edited.common.printable = false;
+    if let FloatingObjectData::Chart(ref mut cd) = edited.data {
+        cd.ooxml
+            .as_mut()
+            .and_then(|ooxml| ooxml.drawing_frame.as_mut())
+            .expect("drawing frame should be preserved")
+            .raw_alternate_content = Some("<mc:AlternateContent/>".to_string());
+    }
+
+    let edited_roundtrip =
+        ChartSpec::from_floating_object(&edited).expect("chart spec from edited object");
+    let edited_frame = edited_roundtrip
+        .chart_frame
+        .as_ref()
+        .expect("edited drawing frame should be preserved");
+    assert_eq!(
+        edited_frame
+            .graphic_frame
+            .xfrm
+            .rotation
+            .map(|rot| rot.value()),
+        Some(750_000)
+    );
+    assert_eq!(edited_frame.graphic_frame.xfrm.flip_h, Some(true));
+    assert_eq!(edited_frame.graphic_frame.xfrm.flip_v, Some(true));
+    assert!(
+        !edited_frame
+            .graphic_frame
+            .nv_graphic_frame_pr
+            .c_nv_pr
+            .hidden
+    );
+    assert_eq!(edited_frame.client_data_locks_with_sheet, None);
+    assert_eq!(edited_frame.client_data_prints_with_sheet, Some(false));
+    assert_eq!(edited_frame.raw_alternate_content, None);
+
+    let mut unlocked = spec.to_floating_object("sheet-abc", 9);
+    unlocked.common.locked = false;
+    if let FloatingObjectData::Chart(ref mut cd) = unlocked.data {
+        let frame = cd
+            .ooxml
+            .as_mut()
+            .and_then(|ooxml| ooxml.drawing_frame.as_mut())
+            .expect("drawing frame should be preserved");
+        frame.raw_alternate_content = Some("<mc:AlternateContent/>".to_string());
+        let nv = &mut frame.graphic_frame.nv_graphic_frame_pr;
+        nv.c_nv_graphic_frame_pr.no_select = true;
+        nv.c_nv_graphic_frame_pr.no_move = true;
+        nv.no_drilldown = true;
+        nv.no_change_aspect_explicit = Some(true);
+        nv.c_nv_graphic_frame_pr.no_change_aspect = true;
+        nv.has_graphic_frame_locks = true;
+        nv.c_nv_graphic_frame_pr_ext_lst =
+            Some(r#"<a:extLst><a:ext uri="{frame-locks}"/></a:extLst>"#.to_string());
+    }
+
+    let unlocked_roundtrip =
+        ChartSpec::from_floating_object(&unlocked).expect("chart spec from unlocked object");
+    let unlocked_frame = unlocked_roundtrip
+        .chart_frame
+        .as_ref()
+        .expect("unlocked drawing frame should be preserved");
+    let unlocked_nv = &unlocked_frame.graphic_frame.nv_graphic_frame_pr;
+    assert_eq!(unlocked_frame.client_data_locks_with_sheet, Some(false));
+    assert!(!unlocked_nv.c_nv_graphic_frame_pr.no_select);
+    assert!(!unlocked_nv.c_nv_graphic_frame_pr.no_move);
+    assert!(!unlocked_nv.no_drilldown);
+    assert_eq!(unlocked_nv.no_change_aspect_explicit, Some(true));
+    assert!(unlocked_nv.c_nv_graphic_frame_pr.no_change_aspect);
+    assert!(unlocked_nv.has_graphic_frame_locks);
+    assert_eq!(
+        unlocked_nv.c_nv_graphic_frame_pr_ext_lst.as_deref(),
+        Some(r#"<a:extLst><a:ext uri="{frame-locks}"/></a:extLst>"#)
+    );
+    assert_eq!(unlocked_frame.raw_alternate_content, None);
 }
 
 #[test]
@@ -343,14 +503,28 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -362,11 +536,13 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -460,14 +636,28 @@ fn chart_spec_roundtrip_via_floating_object() {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -479,11 +669,13 @@ fn chart_spec_roundtrip_via_floating_object() {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -531,6 +723,7 @@ fn chart_spec_roundtrip_via_floating_object() {
     assert_eq!(recovered.axes, original.axes);
     assert_eq!(recovered.data_labels, original.data_labels);
     assert_eq!(recovered.data_range, original.data_range);
+    assert_eq!(recovered.chart_style_context, original.chart_style_context);
     assert_eq!(recovered.is_chart_ex, original.is_chart_ex);
     assert_eq!(recovered.cnv_pr_name, original.cnv_pr_name);
     assert_eq!(recovered.cnv_pr_id, original.cnv_pr_id);
@@ -590,14 +783,28 @@ fn chart_spec_roundtrip_minimal() {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
+        waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -609,11 +816,13 @@ fn chart_spec_roundtrip_minimal() {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -748,6 +957,7 @@ fn chart_data_serde_roundtrip() {
             custom_y: None,
             shadow: None,
             show_shadow: None,
+            layout: None,
         }),
         axis: Some(AxisData {
             category_axis: Some(SingleAxisData {
@@ -763,12 +973,24 @@ fn chart_data_serde_roundtrip() {
         colors: Some(vec!["#ff0000".to_string(), "#00ff00".to_string()]),
         series: Some(vec![ChartSeriesData {
             name: Some("Revenue".to_string()),
+            name_ref: None,
             r#type: None,
             color: None,
+            stock_role: None,
             values: None,
+            value_cache: None,
+            value_source_kind: None,
             categories: None,
+            x_role: None,
+            category_cache: None,
+            category_source_kind: None,
+            category_levels: None,
+            category_label_format: None,
             bubble_size: None,
+            bubble_size_cache: None,
+            bubble_size_source_kind: None,
             smooth: None,
+            show_lines: None,
             explosion: None,
             invert_if_negative: None,
             y_axis_index: None,
@@ -790,6 +1012,13 @@ fn chart_data_serde_roundtrip() {
             marker_background_color: None,
             marker_foreground_color: None,
             filtered: None,
+            source_series_index: None,
+            source_series_key: None,
+            visible_order: None,
+            pivot_series_key: None,
+            pivot_data_field_index: None,
+            projection_authority: None,
+            projection_diagnostics: Vec::new(),
             show_shadow: None,
             show_connector_lines: None,
             leader_line_format: None,
@@ -797,6 +1026,7 @@ fn chart_data_serde_roundtrip() {
         }]),
         data_labels: Some(DataLabelData {
             show: true,
+            delete: None,
             position: None,
             format: None,
             show_value: None,
@@ -819,6 +1049,7 @@ fn chart_data_serde_roundtrip() {
             geometric_shape_type: None,
             formula: None,
             leader_lines_format: None,
+            layout: None,
         }),
         pie_slice: None,
         trendline: None,
@@ -827,13 +1058,20 @@ fn chart_data_serde_roundtrip() {
         radar_filled: None,
         radar_markers: None,
         waterfall: None,
+        histogram: None,
+        boxplot: None,
+        hierarchy: None,
+        region_map: None,
         display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
+        gap_depth: None,
         overlap: None,
         doughnut_hole_size: None,
         first_slice_angle: None,
         bubble_scale: None,
+        show_neg_bubbles: None,
+        size_represents: None,
         split_type: None,
         split_value: None,
         category_label_level: None,
@@ -845,11 +1083,13 @@ fn chart_data_serde_roundtrip() {
         title_v_align: None,
         title_show_shadow: None,
         pivot_options: None,
+        pivot_projection: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
         surface_top_view: None,
         color_scheme: None,
+        chart_style_context: Some(sample_chart_style_context()),
         height_pt: None,
         width_pt: None,
         left_pt: None,
@@ -863,7 +1103,13 @@ fn chart_data_serde_roundtrip() {
         title_format: None,
         title_rich_text: None,
         title_formula: None,
+        plot_layout: None,
+        title_layout: None,
         data_table: None,
+        drop_lines: None,
+        high_low_lines: None,
+        series_lines: None,
+        up_down_bars: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -894,6 +1140,10 @@ fn chart_data_serde_roundtrip() {
         serde_json::json!("id-d10")
     );
     assert_eq!(json_val["sourceTableId"], serde_json::json!("table-42"));
+    assert_eq!(
+        json_val["chartStyleContext"]["colorMapOverride"]["type"],
+        serde_json::json!("override")
+    );
 
     // Verify typed fields serialize correctly
     assert_eq!(json_val["legend"]["position"], serde_json::json!("bottom"));
@@ -928,6 +1178,7 @@ fn chart_data_serde_roundtrip() {
     assert_eq!(recovered.colors, original.colors);
     assert_eq!(recovered.show_lines, original.show_lines);
     assert_eq!(recovered.smooth_lines, original.smooth_lines);
+    assert_eq!(recovered.chart_style_context, original.chart_style_context);
     assert_eq!(recovered.source_table_id, original.source_table_id);
     assert_eq!(recovered.table_data_columns, original.table_data_columns);
     assert_eq!(recovered.width_cells, original.width_cells);

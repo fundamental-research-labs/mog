@@ -64,14 +64,19 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.title_format.is_some()
         || chart_spec.title_rich_text.is_some()
         || chart_spec.title_formula.is_some()
+        || chart_spec.plot_layout.is_some()
+        || chart_spec.title_layout.is_some()
         || chart_spec.display_blanks_as.is_some()
         || chart_spec.plot_visible_only.is_some()
         || chart_spec.sub_type.is_some()
         || chart_spec.gap_width.is_some()
+        || chart_spec.gap_depth.is_some()
         || chart_spec.overlap.is_some()
         || chart_spec.doughnut_hole_size.is_some()
         || chart_spec.first_slice_angle.is_some()
         || chart_spec.bubble_scale.is_some()
+        || chart_spec.show_neg_bubbles.is_some()
+        || chart_spec.size_represents.is_some()
         || chart_spec.split_type.is_some()
         || chart_spec.split_value.is_some()
         || chart_spec.bar_shape.is_some()
@@ -79,6 +84,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.wireframe.is_some()
         || chart_spec.surface_top_view.is_some()
         || chart_spec.color_scheme.is_some()
+        || chart_spec.chart_style_context.is_some()
         || chart_spec.category_label_level.is_some()
         || chart_spec.series_name_level.is_some()
         || chart_spec.show_all_field_buttons.is_some()
@@ -94,9 +100,11 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.back_wall_format.is_some()
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 1;
+pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 4;
 
-fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -> String {
+pub(super) fn standard_chart_projection_fingerprint(
+    chart_spec: &domain_types::ChartSpec,
+) -> String {
     let mut fingerprint = Fnv1a64::default();
     fingerprint.write_str(chart_spec.chart_type.as_str());
     fingerprint.write_json(&chart_spec.title);
@@ -115,14 +123,28 @@ fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -
     fingerprint.write_json(&chart_spec.title_format);
     fingerprint.write_json(&chart_spec.title_rich_text);
     fingerprint.write_json(&chart_spec.title_formula);
+    fingerprint.write_json(&chart_spec.plot_layout);
+    fingerprint.write_json(&chart_spec.title_layout);
     fingerprint.write_json(&chart_spec.data_table);
+    fingerprint.write_json(&chart_spec.drop_lines);
+    fingerprint.write_json(&chart_spec.high_low_lines);
+    fingerprint.write_json(&chart_spec.series_lines);
+    fingerprint.write_json(&chart_spec.up_down_bars);
+    fingerprint.write_json(&chart_spec.waterfall);
+    fingerprint.write_json(&chart_spec.histogram);
+    fingerprint.write_json(&chart_spec.boxplot);
+    fingerprint.write_json(&chart_spec.hierarchy);
+    fingerprint.write_json(&chart_spec.region_map);
     fingerprint.write_json(&chart_spec.display_blanks_as);
     fingerprint.write_json(&chart_spec.plot_visible_only);
     fingerprint.write_json(&chart_spec.gap_width);
+    fingerprint.write_json(&chart_spec.gap_depth);
     fingerprint.write_json(&chart_spec.overlap);
     fingerprint.write_json(&chart_spec.doughnut_hole_size);
     fingerprint.write_json(&chart_spec.first_slice_angle);
     fingerprint.write_json(&chart_spec.bubble_scale);
+    fingerprint.write_json(&chart_spec.show_neg_bubbles);
+    fingerprint.write_json(&chart_spec.size_represents);
     fingerprint.write_json(&chart_spec.split_type);
     fingerprint.write_json(&chart_spec.split_value);
     fingerprint.write_json(&chart_spec.category_label_level);
@@ -139,6 +161,7 @@ fn standard_chart_projection_fingerprint(chart_spec: &domain_types::ChartSpec) -
     fingerprint.write_json(&chart_spec.wireframe);
     fingerprint.write_json(&chart_spec.surface_top_view);
     fingerprint.write_json(&chart_spec.color_scheme);
+    fingerprint.write_json(&chart_spec.chart_style_context);
     fingerprint.write_json(&chart_spec.view_3d);
     fingerprint.write_json(&chart_spec.floor_format);
     fingerprint.write_json(&chart_spec.side_wall_format);
@@ -181,8 +204,42 @@ impl Fnv1a64 {
     }
 }
 
-pub(super) fn chart_allows_auxiliary_replay(chart_spec: &domain_types::ChartSpec) -> bool {
+pub(super) fn chart_allows_current_auxiliary_replay(
+    chart_spec: &domain_types::ChartSpec,
+    chart_path: &str,
+) -> bool {
     chart_auxiliary::chart_auxiliary_data(chart_spec).is_some()
+        && chart_auxiliary::chart_frame_identity_matches_path(chart_spec, chart_path)
+        && if chart_spec.is_chart_ex {
+            chart_ex_allows_opaque_replay(chart_spec, chart_path)
+        } else {
+            can_serialize_current_imported_chart_space(chart_spec)
+        }
+}
+
+pub(super) fn standard_chart_original_number_with_current_auxiliary_replay(
+    chart_spec: &domain_types::ChartSpec,
+) -> Option<usize> {
+    let aux = chart_auxiliary::chart_auxiliary_data(chart_spec)?;
+    let original_number = chart_auxiliary::standard_chart_number(&aux)?;
+    let chart_path = format!("xl/charts/chart{original_number}.xml");
+    chart_allows_current_auxiliary_replay(chart_spec, &chart_path).then_some(original_number)
+}
+
+pub(super) fn chart_ex_original_number_with_current_replay(
+    chart_spec: &domain_types::ChartSpec,
+) -> Option<usize> {
+    let original_number = chart_ex_original_number(chart_spec).or_else(|| {
+        let aux = chart_auxiliary::chart_auxiliary_data(chart_spec)?;
+        chart_auxiliary::chart_ex_number(&aux)
+    })?;
+    let chart_path = format!("xl/charts/chartEx{original_number}.xml");
+    let current = if chart_spec.chart_ex_replay.is_some() {
+        chart_ex_allows_opaque_replay(chart_spec, &chart_path)
+    } else {
+        chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+    };
+    current.then_some(original_number)
 }
 
 pub(super) fn chart_ex_allows_opaque_replay(
@@ -213,6 +270,9 @@ pub(super) fn chart_ex_allows_opaque_replay(
     }
     if !chart_ex_relationships_are_policy_allowed(chart_spec, chart_path) {
         return false;
+    }
+    if let Some(imported_fingerprint) = replay.projection_fingerprint.as_deref() {
+        return imported_fingerprint == standard_chart_projection_fingerprint(chart_spec);
     }
     !has_modeled_chart_space_state_except_imported_title(chart_spec)
 }
@@ -264,8 +324,47 @@ fn chart_frame_props_match_spec(
         && chart_spec.cnv_pr_hidden == cnv.hidden
         && chart_spec.anchor_edit_as.as_ref() == frame.edit_as.as_ref()
         && chart_spec.macro_name.as_ref() == gf.macro_name.as_ref()
+        && chart_spec.no_change_aspect
+            == nv
+                .no_change_aspect_explicit
+                .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true))
+        && chart_spec.has_graphic_frame_locks == nv.has_graphic_frame_locks
+        && chart_spec.xfrm_off_x == gf.xfrm.off_x()
+        && chart_spec.xfrm_off_y == gf.xfrm.off_y()
+        && chart_spec.xfrm_ext_cx == gf.xfrm.ext_cx() as i64
+        && chart_spec.xfrm_ext_cy == gf.xfrm.ext_cy() as i64
         && chart_spec.client_data_locks_with_sheet == frame.client_data_locks_with_sheet
         && chart_spec.client_data_prints_with_sheet == frame.client_data_prints_with_sheet
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.relationship_id.as_deref())
+            == frame.relationship_id.as_deref()
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.relationship_target.as_deref())
+            == frame.relationship_target.as_deref()
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.rotation)
+            == Some(frame.graphic_frame.xfrm.rotation)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.flip_h)
+            == Some(frame.graphic_frame.xfrm.flip_h)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .map(|current| current.graphic_frame.xfrm.flip_v)
+            == Some(frame.graphic_frame.xfrm.flip_v)
+        && chart_spec
+            .chart_frame
+            .as_ref()
+            .and_then(|current| current.raw_alternate_content.as_deref())
+            == frame.raw_alternate_content.as_deref()
 }
 
 fn has_modeled_chart_space_state_except_imported_title(
@@ -343,7 +442,7 @@ pub(super) fn register_chart_owned_external_relationships(
     chart_spec: &domain_types::ChartSpec,
 ) -> Result<(), WriteError> {
     if let Some((_, rel)) = chart_auxiliary::chart_external_data_relationship(chart_spec) {
-        if crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+        if chart_auxiliary::chart_external_data_relationship_is_supported(rel)
             && let (Some(rel_type), Some(target)) =
                 (rel.relationship_type.as_deref(), rel.target.as_deref())
         {

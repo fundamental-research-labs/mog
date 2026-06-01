@@ -78,6 +78,7 @@
     "@microsoft/api-extractor": "^7.58.7",
     "@mog-sdk/types-document": "workspace:*",
     "@mog-sdk/types-host": "workspace:*",
+    "@mog/bridge-ts": "workspace:*",
     "@mog/canvas-engine": "workspace:*",
     "@mog/charts": "workspace:*",
     "@mog/culture": "workspace:*",

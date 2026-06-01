@@ -82,7 +82,12 @@ export function generateCategoryValueSeriesXML(
         <c:numCache>
           <c:formatCode>General</c:formatCode>
           <c:ptCount val="${valCount}"/>
-          ${series.values.map((val, i) => `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(val)}</c:v></c:pt>`).join('\n          ')}
+          ${series.values
+            .map((val, i) =>
+              val === null ? '' : `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(val)}</c:v></c:pt>`,
+            )
+            .filter(Boolean)
+            .join('\n          ')}
         </c:numCache>
       </c:numRef>
     </c:val>${options.afterValXML ? '\n    ' + options.afterValXML : ''}

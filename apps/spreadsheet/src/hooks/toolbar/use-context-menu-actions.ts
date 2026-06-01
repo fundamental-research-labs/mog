@@ -970,7 +970,7 @@ export function useContextMenuActions(
 
   const insertComment = useCallback(() => {
     selectResolvedContextCell();
-    dispatch('INSERT_COMMENT', actionDeps);
+    dispatch('INSERT_COMMENT', actionDeps, { commentType: 'threadedComment' });
     closeContextMenu();
   }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
@@ -1401,7 +1401,7 @@ export function useContextMenuActions(
       copy,
       paste,
       pasteSpecial,
-      canPaste: !clipboard.isPasting, // Can paste when not currently pasting
+      canPaste: clipboard.hasClipboard && !clipboard.isPasting,
 
       // Paste Options Submenu
       pasteValues,
@@ -1566,6 +1566,7 @@ export function useContextMenuActions(
       copy,
       paste,
       pasteSpecial,
+      clipboard.hasClipboard,
       clipboard.isPasting,
       pasteValues,
       pasteFormulas,

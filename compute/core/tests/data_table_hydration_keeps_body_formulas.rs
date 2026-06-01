@@ -49,7 +49,7 @@ fn make_cell(
 
 /// Build a 2-variable Data Table at B2:C3 with master at B2.
 ///
-/// Layout (mirrors `dev/app-eval/scenarios/array-formulas/fixtures/data-table-minimal.xlsx`):
+/// Layout:
 ///
 /// |   | A    | B          | C          |
 /// |---|------|------------|------------|

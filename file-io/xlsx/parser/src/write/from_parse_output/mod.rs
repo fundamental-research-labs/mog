@@ -167,7 +167,7 @@ impl DrawingPathAllocator {
         chart_spec: &domain_types::ChartSpec,
         chart_path: &str,
     ) {
-        if !chart_replay::chart_allows_auxiliary_replay(chart_spec) {
+        if !chart_replay::chart_allows_current_auxiliary_replay(chart_spec, chart_path) {
             return;
         }
         let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec) else {
@@ -782,10 +782,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     let default_cx_target = format!("../charts/chartEx{}.xml", cx_entry.global_idx);
                     let cx_path = format!("xl/charts/chartEx{}.xml", cx_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                            && chart_auxiliary::chart_frame_identity_matches_path(
-                                chart_spec, &cx_path,
-                            );
+                        chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &cx_path);
                     let cx_target = if use_imported_relationship_identity {
                         chart_frame
                             .and_then(|frame| frame.relationship_target.clone())
@@ -837,6 +834,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .and_then(|cnv| (cnv.id.value() != 0).then_some(cnv.id.value()))
                             .or(chart_spec.cnv_pr_id)
                             .unwrap_or((cx_local_idx + 100) as u32),
+                        hidden: frame_cnv
+                            .map(|cnv| cnv.hidden)
+                            .unwrap_or(chart_spec.cnv_pr_hidden),
                         xfrm_off_x: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.off_x())
                             .unwrap_or(chart_spec.position.anchor_col_offset),
@@ -849,6 +849,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or((chart_spec.size.height as i64) * 9525),
+                        xfrm_rot: chart_frame
+                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
+                            .map(|rot| rot.value()),
+                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
+                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
                         macro_name: chart_frame
                             .and_then(|frame| frame.graphic_frame.macro_name.clone())
                             .or_else(|| chart_spec.macro_name.clone()),
@@ -923,11 +928,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         format!("../charts/chart{}.xml", chart_entry.global_idx);
                     let chart_path = format!("xl/charts/chart{}.xml", chart_entry.global_idx);
                     let use_imported_relationship_identity =
-                        chart_replay::chart_allows_auxiliary_replay(chart_spec)
-                            && chart_auxiliary::chart_frame_identity_matches_path(
-                                chart_spec,
-                                &chart_path,
-                            );
+                        chart_replay::chart_allows_current_auxiliary_replay(
+                            chart_spec,
+                            &chart_path,
+                        );
                     let chart_target = if use_imported_relationship_identity {
                         chart_frame
                             .and_then(|frame| frame.relationship_target.clone())
@@ -1016,6 +1020,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
                             .unwrap_or(chart_spec.xfrm_ext_cy),
+                        xfrm_rot: chart_frame
+                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
+                            .map(|rot| rot.value()),
+                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
+                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
                     };
                     if let (Some(x), Some(y)) = (
                         chart_spec.position.absolute_x,
@@ -1375,7 +1384,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =
@@ -1433,7 +1442,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 entry.global_idx,
             )?;
             let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
-            if chart_replay::chart_allows_auxiliary_replay(chart_spec)
+            if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                 && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
             {
                 let auxiliary_paths =

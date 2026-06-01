@@ -97,7 +97,7 @@ describe('Full pipeline export: bar chart', () => {
     expect(result.chartXml).toBeDefined();
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
-    expect(result.chartXml).toContain('<c:barDir val="col"/>');
+    expect(result.chartXml).toContain('<c:barDir val="bar"/>');
   });
 
   it('stacked bar chart produces well-formed XML', () => {
@@ -136,22 +136,21 @@ describe('Full pipeline export: bar chart', () => {
 });
 
 // =============================================================================
-// Full Pipeline Export: Column (Horizontal Bar) Chart
+// Full Pipeline Export: Column Chart
 // =============================================================================
 
 describe('Full pipeline export: column chart', () => {
-  it('column chart produces horizontal bar XML', () => {
+  it('column chart produces vertical column XML', () => {
     const config = makeConfig({ type: 'column' });
     const data = makeData(1);
     const spec = configToSpec(config, data);
     const rows = chartDataToRows(data);
 
-    // Column chart uses bar mark with x=quantitative, y=nominal
-    // This should produce a horizontal bar in OOXML
+    // Column chart uses bar mark with x=nominal, y=quantitative.
     const result = toOOXML(spec, rows);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
-    expect(result.chartXml).toContain('<c:barDir val="bar"/>');
+    expect(result.chartXml).toContain('<c:barDir val="col"/>');
   });
 });
 
@@ -285,7 +284,8 @@ describe('Full pipeline export: support matrix', () => {
    * bar, column, line, area, pie, doughnut, scatter, bubble
    *
    * Chart types that are layered and may NOT be directly exportable:
-   * combo, stock, waterfall (these produce LayerSpec which canExportToOOXML returns false)
+   * combo, waterfall, and non-native custom layers.
+   * Native stock LayerSpecs are exported as OOXML stock charts.
    */
 
   const supportedSimpleTypes: Array<{
@@ -315,7 +315,7 @@ describe('Full pipeline export: support matrix', () => {
     },
   );
 
-  it('column chart exports as horizontal barChart', () => {
+  it('column chart exports as barChart with vertical column direction', () => {
     const config = makeConfig({ type: 'column' });
     const data = makeData(1);
     const spec = configToSpec(config, data);
@@ -325,28 +325,58 @@ describe('Full pipeline export: support matrix', () => {
     const result = toOOXML(spec, rows);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:barChart>');
+    expect(result.chartXml).toContain('<c:barDir val="col"/>');
   });
 
-  it('bubble chart (point + size encoding) can be exported when spec has size', () => {
-    // Bubble charts need manual spec construction with size encoding
-    const spec: ChartSpec = {
-      mark: 'point',
-      encoding: {
-        x: { field: 'x', type: 'quantitative' },
-        y: { field: 'y', type: 'quantitative' },
-        size: { field: 'size', type: 'quantitative' },
-      },
+  it('bubble chart can be exported from configToSpec with size encoding', () => {
+    const config = makeConfig({ type: 'bubble' });
+    const chartData: ChartData = {
+      categories: [1, 2, 3],
+      series: [
+        {
+          name: 'Bubbles',
+          data: [
+            { x: 1, y: 2, size: 10 },
+            { x: 2, y: 4, size: 20 },
+            { x: 3, y: 3, size: 15 },
+          ],
+        },
+      ],
     };
-    const data: DataRow[] = [
-      { x: 1, y: 2, size: 10 },
-      { x: 2, y: 4, size: 20 },
-      { x: 3, y: 3, size: 15 },
-    ];
+    const spec = configToSpec(config, chartData);
+    const data = chartDataToRows(chartData, config);
 
     expect(canExportToOOXML(spec)).toBe(true);
     const result = toOOXML(spec, data);
     assertXmlWellFormed(result.chartXml);
     expect(result.chartXml).toContain('<c:bubbleChart>');
+  });
+
+  it('volume stock chart exports natively from the production LayerSpec path', () => {
+    const config = makeConfig({ type: 'stock', subType: 'volume-ohlc' as any });
+    const chartData: ChartData = {
+      categories: ['Jan', 'Feb'],
+      series: [
+        {
+          name: 'Stock',
+          data: [
+            { x: 'Jan', y: 105, volume: 1000, open: 95, high: 110, low: 90, close: 105 },
+            { x: 'Feb', y: 115, volume: 1500, open: 105, high: 120, low: 95, close: 115 },
+          ],
+        },
+      ],
+    };
+    const spec = configToSpec(config, chartData);
+    const data = chartDataToRows(chartData, config);
+
+    expect(canExportToOOXML(spec)).toBe(true);
+    const result = toOOXML(spec, data);
+    assertXmlWellFormed(result.chartXml);
+    expect(result.chartXml).toContain('<c:barChart>');
+    expect(result.chartXml).toContain('<c:stockChart>');
+    expect(result.chartXml).toContain('<c:v>Volume</c:v>');
+    expect(result.chartXml).toContain('<c:v>Open</c:v>');
+    expect(result.chartXml).toContain('<c:v>Close</c:v>');
   });
 
   // Layered chart types with <= 2 layers pass canExportToOOXML

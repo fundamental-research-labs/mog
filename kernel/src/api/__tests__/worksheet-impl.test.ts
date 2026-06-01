@@ -159,7 +159,7 @@ jest.unstable_mockModule('../../domain/cells/cell-iteration', () => ({
   getCurrentRegion: jest.fn(),
   getDataBoundsForRange: jest.fn(),
 }));
-jest.unstable_mockModule('../../domain/charts', () => ({ getAll: jest.fn() }));
+jest.unstable_mockModule('../../domain/charts/chart-store', () => ({ getAll: jest.fn() }));
 jest.unstable_mockModule('../../domain/formulas/named-ranges', () => ({
   getVisible: jest.fn(async (ctx: any) => ctx?.__apiTestNamedRanges ?? []),
   getRefersToA1: jest.fn(async (ctx: any, name: unknown) => {
@@ -204,7 +204,7 @@ jest.unstable_mockModule('../internal/format-utils', () => ({
 
 // Import mocked modules for assertions after ESM mocks are registered.
 const { WorksheetImpl } = await import('../worksheet/worksheet-impl');
-const Charts = await import('../../domain/charts');
+const Charts = await import('../../domain/charts/chart-store');
 const { getMeta } = await import('../../domain/sheets/sheet-meta');
 const { analyzeFormulas, generateFormulaDocumentation, getStyleHints } =
   await import('../internal/format-utils');

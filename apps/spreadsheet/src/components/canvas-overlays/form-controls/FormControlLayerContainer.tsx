@@ -95,7 +95,7 @@ export function FormControlLayerContainer() {
       if (!control) return;
 
       const linkedCellId =
-        control.type === 'checkbox' || control.type === 'comboBox'
+        control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox'
           ? control.linkedCellId
           : control.type === 'button'
             ? control.linkedCellId
@@ -164,10 +164,12 @@ export function FormControlLayerContainer() {
 
 interface GeometryLike {
   toViewportPoint: (cell: { row: number; col: number }) => { x: number; y: number } | null;
-  getCellRect?: (cell: {
-    row: number;
-    col: number;
-  }) => { x: number; y: number; width: number; height: number } | null;
+  getCellRect?: (cell: { row: number; col: number }) => {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null;
 }
 
 interface ViewportLike {
@@ -213,23 +215,25 @@ async function resolveControlPositions(
       col: anchorPosition.col,
     });
 
-    const x = viewportPoint.x + scrollPosition.x + (control.anchor.xOffset ?? 0);
-    const y = viewportPoint.y + scrollPosition.y + (control.anchor.yOffset ?? 0);
-    const width = anchorRect?.width ?? control.width;
-    const height = anchorRect?.height ?? control.height;
+    let x = viewportPoint.x + scrollPosition.x + (control.anchor.xOffset ?? 0);
+    let y = viewportPoint.y + scrollPosition.y + (control.anchor.yOffset ?? 0);
+    let width = anchorRect?.width ?? control.width;
+    let height = anchorRect?.height ?? control.height;
 
     let cellValue: unknown;
+    let linkedCellPosition: { row: number; col: number } | undefined;
     let resolvedItems: string[] | undefined;
 
-    if (control.type === 'checkbox' || control.type === 'comboBox') {
+    if (control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox') {
       const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
       if (linkedPosition) {
+        linkedCellPosition = linkedPosition;
         const cell = await ws.getCell(linkedPosition.row, linkedPosition.col);
         cellValue = cell.value;
       }
 
-      if (control.type === 'comboBox') {
-        resolvedItems = await resolveComboBoxItems(control, ws);
+      if (control.type === 'comboBox' || control.type === 'listBox') {
+        resolvedItems = await resolveListItems(control, ws);
       }
     } else if (control.type === 'button' && control.linkedCellId) {
       const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
@@ -239,14 +243,32 @@ async function resolveControlPositions(
       }
     }
 
-    resolved.push({ control, x, y, width, height, cellValue, resolvedItems });
+    if (control.type === 'checkbox' && !control.label) {
+      if (anchorRect) {
+        x = anchorRect.x + scrollPosition.x;
+        y = anchorRect.y + scrollPosition.y;
+        width = anchorRect.width;
+        height = anchorRect.height;
+      }
+    }
+
+    resolved.push({
+      control,
+      x,
+      y,
+      width,
+      height,
+      cellValue,
+      linkedCellPosition,
+      resolvedItems,
+    });
   }
 
   return resolved;
 }
 
-async function resolveComboBoxItems(
-  control: Extract<FormControl, { type: 'comboBox' }>,
+async function resolveListItems(
+  control: Extract<FormControl, { type: 'comboBox' | 'listBox' }>,
   ws: WorksheetLike,
 ): Promise<string[]> {
   if (!control.itemsSourceRef) {

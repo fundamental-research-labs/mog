@@ -10,6 +10,7 @@ use crate::snapshot::{
     SheetChangeField, SheetSettingsChange, SortingChange, SparklineChange, TableChange,
     VisibilityChange, WorkbookSettingsChange,
 };
+use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{
@@ -337,6 +338,17 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
             data: None,
             bounds: None,
         });
+    }
+
+    if !changes.structural_changes.is_empty() {
+        let mut seen_structural_sheets = HashSet::new();
+        for sheet_id in &changes.structural_changes {
+            if seen_structural_sheets.insert(*sheet_id) {
+                result
+                    .floating_object_changes
+                    .extend(recompute_floating_object_bounds(stores, sheet_id));
+            }
+        }
     }
 
     // --- Pivot table changes ---

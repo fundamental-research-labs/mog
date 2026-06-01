@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use cell_types::SheetId;
+use cell_types::{IdAllocator, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_PROPERTIES;
 use formula_types::StructureChange;
@@ -76,6 +76,7 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
         target_col + width,
     );
 
+    let id_alloc = stores.id_alloc.clone();
     let doc = stores.storage.doc();
     let sheets = doc.get_or_insert_map("sheets");
 
@@ -189,8 +190,105 @@ pub(in crate::storage::engine) fn relocate_validation_ranges(
             .get(&sheet_id)
             .map(Vec::as_slice)
             .unwrap_or(&[]);
-        apply_validation_schema_delta(doc, &sheets, &sheet_id, original, updated);
+        apply_validation_schema_delta(doc, &sheets, &sheet_id, original, updated, &id_alloc);
     }
+}
+
+/// Relocate pivot tables whose rendered output is fully contained within a
+/// cut/moved source range, called from `mutation_relocate_cells` alongside
+/// `relocate_whole_tables` (cells) and `relocate_validation_ranges`.
+///
+/// When the user cuts a range that covers an entire pivot's output and pastes
+/// it elsewhere, the pivot's authoritative `output_location` must move with the
+/// cells. We only shift the anchor here; the subsequent `materialize_all_pivots`
+/// pass clears the pivot's old rendered region and re-renders at the new anchor,
+/// which is exactly the "clear original, write at destination" move semantics.
+/// The caller marks the compute store dirty when this returns `true` so that
+/// pass actually runs.
+///
+/// Same-sheet only: cross-sheet relocation would require re-homing the config
+/// across per-sheet `pivotTables` maps plus a cross-sheet old-region clear. The
+/// cells-side structure relocation is itself same-sheet (`relocate_whole_tables`
+/// keys tables by sheet, and the app cut-paste path moves structures only
+/// within a sheet), so we match that scope here.
+///
+/// Returns the IDs of the pivots whose anchor moved. The caller re-materializes
+/// and rebuilds the sheet viewport when this is non-empty (pivot output cells
+/// live in the mirror's `col_data`, written only by `materialize_all_pivots`;
+/// the cell-relocation patches do not cover them).
+#[allow(clippy::too_many_arguments)]
+pub(in crate::storage::engine) fn relocate_pivot_ranges(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    source_sheet_id: &SheetId,
+    src_start_row: u32,
+    src_start_col: u32,
+    src_end_row: u32,
+    src_end_col: u32,
+    target_sheet_id: &SheetId,
+    target_row: u32,
+    target_col: u32,
+) -> Vec<String> {
+    if source_sheet_id != target_sheet_id {
+        return Vec::new();
+    }
+
+    let sheet_uuid = source_sheet_id.to_uuid_string();
+    let sheet_name = mirror
+        .get_sheet(source_sheet_id)
+        .map(|s| s.name.clone())
+        .unwrap_or_default();
+
+    // Collect the pivots to move (and their new anchors) before taking the
+    // doc borrow for the writes.
+    let moves: Vec<_> = {
+        let doc = stores.storage.doc();
+        let sheets = doc.get_or_insert_map("sheets");
+        pivots::get_all_pivots(doc, &sheets, source_sheet_id)
+            .into_iter()
+            .filter_map(|pivot| {
+                // Only pivots whose output renders on this sheet are eligible.
+                if pivot.output_sheet_name != sheet_name {
+                    return None;
+                }
+                // Require the whole rendered region to be inside the moved
+                // range — Excel only moves a pivot when its full output is
+                // selected. The rendered region comes from the mirror def
+                // (the authoritative config stores just the top-left anchor).
+                let def = mirror.find_pivot_table_def(&pivot.id, &pivot.name, &sheet_uuid)?;
+                if def.is_empty_rendered_region()
+                    || def.start_row < src_start_row
+                    || def.start_col < src_start_col
+                    || def.end_row > src_end_row
+                    || def.end_col > src_end_col
+                {
+                    return None;
+                }
+                let new_row = target_row + (pivot.output_location.row - src_start_row);
+                let new_col = target_col + (pivot.output_location.col - src_start_col);
+                Some((pivot, new_row, new_col))
+            })
+            .collect()
+    };
+
+    if moves.is_empty() {
+        return Vec::new();
+    }
+
+    let doc = stores.storage.doc();
+    let sheets = doc.get_or_insert_map("sheets");
+    let mut moved_ids = Vec::with_capacity(moves.len());
+    for (mut pivot, new_row, new_col) in moves {
+        let pivot_id = pivot.id.clone();
+        pivot.output_location = compute_pivot::OutputLocation {
+            row: new_row,
+            col: new_col,
+        };
+        if pivots::update_pivot(doc, &sheets, source_sheet_id, &pivot_id, pivot).is_some() {
+            moved_ids.push(pivot_id);
+        }
+    }
+    moved_ids
 }
 
 // =========================================================================
@@ -411,6 +509,7 @@ fn shift_validation_ranges(
     sheet_id: &SheetId,
     change: &StructureChange,
 ) {
+    let id_alloc = stores.id_alloc.clone();
     let doc = stores.storage.doc();
     let sheets = doc.get_or_insert_map("sheets");
     let range_schemas = schemas::get_range_schemas_for_sheet(doc, &sheets, sheet_id);
@@ -467,7 +566,9 @@ fn shift_validation_ranges(
             } else {
                 let mut updated = schema.clone();
                 updated.ranges = new_ranges;
-                let _ = schemas::set_range_schema(doc, &sheets, sheet_id, &updated);
+                let _ = schemas::set_range_schema_with_alloc(
+                    doc, &sheets, sheet_id, &updated, &id_alloc,
+                );
             }
         }
     }
@@ -581,6 +682,7 @@ fn apply_validation_schema_delta(
     sheet_id: &SheetId,
     original: &[schemas::RangeSchema],
     updated: &[schemas::RangeSchema],
+    id_alloc: &IdAllocator,
 ) {
     let updated_ids: HashSet<&str> = updated
         .iter()
@@ -596,7 +698,7 @@ fn apply_validation_schema_delta(
 
     for schema in updated {
         if !schema.ranges.is_empty() {
-            let _ = schemas::set_range_schema(doc, sheets, sheet_id, schema);
+            let _ = schemas::set_range_schema_with_alloc(doc, sheets, sheet_id, schema, id_alloc);
         }
     }
 }

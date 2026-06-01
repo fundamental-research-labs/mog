@@ -16,7 +16,7 @@
  */
 
 import { useCallback } from 'react';
-import { useUIStore } from '../../internal-api';
+import { dispatch, useActionDependencies, useUIStore } from '../../internal-api';
 
 import {
   Button,
@@ -27,6 +27,8 @@ import {
   DialogTable,
   DialogTableRow,
 } from '@mog/shell';
+import type { CellValue, ErrorVariant } from '@mog-sdk/contracts/core';
+import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
 import type { WatchEntry } from '../../ui-store/slices/formulas/watch-window';
 
 // =============================================================================
@@ -41,6 +43,8 @@ const COLUMN_WIDTHS = '80px 100px 80px 60px 120px 1fr';
 // =============================================================================
 
 export function WatchWindow() {
+  const deps = useActionDependencies();
+
   // Get state from UIStore
   const isOpen = useUIStore((s) => s.watchWindow.isOpen);
   const watches = useUIStore((s) => s.watchWindow.watches);
@@ -55,14 +59,9 @@ export function WatchWindow() {
   const deselectAllWatches = useUIStore((s) => s.deselectAllWatches);
   const clearAllWatches = useUIStore((s) => s.clearAllWatches);
 
-  // Handle adding a watch from the current selection
-  // Note: The actual ADD_WATCH action will be triggered by a toolbar button
-  // with proper selection context. This is a placeholder for the UI.
   const handleAddWatch = useCallback(() => {
-    // TODO: This should dispatch ADD_WATCH with current selection context
-    // For now, the button exists but needs integration with selection state
-    console.log('Add Watch clicked - requires integration with selection');
-  }, []);
+    void dispatch('ADD_WATCH', deps);
+  }, [deps]);
 
   // Handle deleting selected watches
   const handleDeleteWatch = useCallback(() => {
@@ -271,6 +270,9 @@ function formatDisplayValue(value: unknown): string {
   }
   if (typeof value === 'boolean') {
     return value ? 'TRUE' : 'FALSE';
+  }
+  if (isCellError(value as CellValue)) {
+    return errorDisplayString((value as { value: ErrorVariant }).value);
   }
   if (typeof value === 'string') {
     return value;

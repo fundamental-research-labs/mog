@@ -74,6 +74,8 @@ export function generatePieChartXML(
   const chartXml = wrapChartXMLNoAxes(chartContent, {
     title,
     legend: { position: 'r' },
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -111,6 +113,8 @@ export function generateDoughnutChartXML(
   const chartXml = wrapChartXMLNoAxes(chartContent, {
     title,
     legend: { position: 'r' },
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };
@@ -359,6 +363,8 @@ export function generateExplodedPieChartXML(
   const chartXml = wrapChartXMLNoAxes(chartContent, {
     title,
     legend: { position: 'r' },
+    displayBlanksAs: spec.config?.displayBlanksAs,
+    plotVisibleOnly: spec.config?.plotVisibleOnly,
   });
 
   return { chartXml };

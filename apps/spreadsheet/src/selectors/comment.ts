@@ -21,6 +21,10 @@ export const commentSelectors = {
   /** Get the draft content while editing/composing */
   draftContent: (state: CommentState) => state.context.draftContent,
 
+  /** Get the type to create when saving a fresh composed comment */
+  composeCommentType: (state: CommentState) =>
+    state.context.composeCommentType ?? 'threadedComment',
+
   /** Get the comment ID pending deletion */
   deletingCommentId: (state: CommentState) => state.context.deletingCommentId,
 

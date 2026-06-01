@@ -1,3 +1,4 @@
+use cell_types::IdAllocator;
 use cell_types::SheetId;
 use compute_document::schema::KEY_VALIDATION_RULES;
 use compute_document::undo::ORIGIN_USER_EDIT;
@@ -47,7 +48,23 @@ pub fn set_range_schema(
     sheet_id: &SheetId,
     schema: &RangeSchema,
 ) -> Result<(), ComputeError> {
-    upsert_range_schema_by_id(doc, sheets, sheet_id, &schema.id, schema)
+    set_range_schema_with_alloc(
+        doc,
+        sheets,
+        sheet_id,
+        schema,
+        &crate::storage::RUNTIME_METADATA_ID_ALLOC,
+    )
+}
+
+pub fn set_range_schema_with_alloc(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    schema: &RangeSchema,
+    id_alloc: &IdAllocator,
+) -> Result<(), ComputeError> {
+    upsert_range_schema_by_id(doc, sheets, sheet_id, &schema.id, schema, id_alloc)
 }
 
 pub fn update_range_schema(
@@ -57,7 +74,25 @@ pub fn update_range_schema(
     schema_id: &str,
     updates: &RangeSchema,
 ) -> Result<(), ComputeError> {
-    upsert_range_schema_by_id(doc, sheets, sheet_id, schema_id, updates)
+    update_range_schema_with_alloc(
+        doc,
+        sheets,
+        sheet_id,
+        schema_id,
+        updates,
+        &crate::storage::RUNTIME_METADATA_ID_ALLOC,
+    )
+}
+
+pub fn update_range_schema_with_alloc(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    schema_id: &str,
+    updates: &RangeSchema,
+    id_alloc: &IdAllocator,
+) -> Result<(), ComputeError> {
+    upsert_range_schema_by_id(doc, sheets, sheet_id, schema_id, updates, id_alloc)
 }
 
 fn upsert_range_schema_by_id(
@@ -66,6 +101,7 @@ fn upsert_range_schema_by_id(
     sheet_id: &SheetId,
     schema_id: &str,
     schema: &RangeSchema,
+    id_alloc: &IdAllocator,
 ) -> Result<(), ComputeError> {
     let new_spec = match schema.to_validation_spec() {
         Some(s) => s,
@@ -91,7 +127,7 @@ fn upsert_range_schema_by_id(
 
     range_store::delete_validation_ranges_for_rule(&mut txn, sheets, sheet_id, schema_id);
     range_store::create_validation_ranges(
-        &mut txn, sheets, sheet_id, schema_id, &new_spec, priority,
+        &mut txn, sheets, sheet_id, schema_id, &new_spec, priority, id_alloc,
     );
 
     Ok(())

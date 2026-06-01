@@ -440,6 +440,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    validateFormulaCircularReference: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     getFormula: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -1249,6 +1253,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
   },
   WorkbookDiagnostics: {
     getFormulaReferences: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getResolvedChartSpec: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2485,6 +2493,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     remove: {
       decision: 'allow',
       capability: 'workbook:write',
+    },
+    convertToRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     clear: {
       decision: 'allow',

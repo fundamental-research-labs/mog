@@ -395,24 +395,21 @@ export const CONVERT_TO_RANGE: AsyncActionHandler = async (
  * Payload:
  * - tableId: string - The table to toggle
  */
-export const TOGGLE_FILTER_BUTTONS: ActionHandler = (
-  _deps: ActionDependencies,
-  payload?: { tableId: string },
-): ActionResult => {
-  if (!payload?.tableId) {
-    return {
-      handled: false,
-      error: 'TOGGLE_FILTER_BUTTONS requires payload with tableId',
-    };
+export const TOGGLE_FILTER_BUTTONS: AsyncActionHandler = async (
+  deps: ActionDependencies,
+  payload?: { tableId?: string },
+): Promise<ActionResult> => {
+  const tableId = await resolveTableId(deps, payload);
+  if (!tableId) {
+    return { handled: false, error: 'no-table' };
   }
 
-  // No ws equivalent — toggleFilterButtons is a table-metadata operation not on the Worksheet interface.
-  // This is a no-op pending future API addition.
-  console.warn(
-    '[table handlers] TOGGLE_FILTER_BUTTONS: no unified API equivalent for tableId:',
-    payload.tableId,
-  );
+  const found = await findTableInWorkbook(deps.workbook, tableId);
+  if (!found) {
+    return { handled: false, error: `Table not found: ${tableId}` };
+  }
 
+  await found.ws.tables.setShowFilterButton(found.table.name, !found.table.showFilterButtons);
   return { handled: true };
 };
 

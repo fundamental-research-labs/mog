@@ -1,4 +1,4 @@
-import type { LinkId, SheetId } from '../types';
+import type { ImageExportOptions, LinkId, ResolvedChartSpecSnapshot, SheetId } from '../types';
 
 export type CellId = string;
 
@@ -6,6 +6,21 @@ export interface WorkbookDiagnostics {
   getFormulaReferences(
     options?: FormulaReferenceDiagnosticsOptions,
   ): Promise<FormulaReferenceDiagnosticsPage>;
+
+  /**
+   * Resolve the chart spec and data that the production chart renderer uses at
+   * a given export size. This is a diagnostics surface; image export remains
+   * `worksheet.charts.exportImage()`.
+   */
+  getResolvedChartSpec(
+    options: ResolvedChartSpecDiagnosticsOptions,
+  ): Promise<ResolvedChartSpecSnapshot>;
+}
+
+export interface ResolvedChartSpecDiagnosticsOptions {
+  readonly sheetId: SheetId;
+  readonly chartId: string;
+  readonly exportOptions?: ImageExportOptions;
 }
 
 export interface FormulaReferenceDiagnosticsOptions {

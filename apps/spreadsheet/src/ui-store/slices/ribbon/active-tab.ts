@@ -56,6 +56,7 @@ export const RIBBON_BASE_TABS: ReadonlyArray<{
   { id: 'data', label: 'Data', gateKey: 'data', visibilityKey: 'data' },
   { id: 'review', label: 'Review', gateKey: 'review', visibilityKey: 'review' },
   { id: 'view', label: 'View', gateKey: 'view', visibilityKey: 'view' },
+  { id: 'help', label: 'Help', gateKey: 'help', visibilityKey: 'help' },
 ];
 
 /**

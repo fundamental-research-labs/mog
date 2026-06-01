@@ -68,6 +68,7 @@ const radioClasses = [
   'focus:outline-none focus:ring-2 focus:ring-ss-primary focus:ring-offset-1',
   'cursor-pointer',
   'shrink-0',
+  'overflow-hidden text-[0px] leading-none',
 ].join(' ');
 
 // Empirical workaround: Tailwind v4 in this workspace does NOT compile
@@ -203,7 +204,9 @@ export function RadioGroup({
               value={opt.value}
               disabled={itemDisabled}
               className={radioItemClasses}
+              aria-label={opt.label}
             >
+              {opt.label}
               <RadixRadioGroup.Indicator className={indicatorClasses}>
                 <span className="block w-2 h-2 rounded-full bg-ss-primary" />
               </RadixRadioGroup.Indicator>

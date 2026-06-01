@@ -12,7 +12,7 @@
  * @module components/canvas-overlays/form-controls
  */
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, type SyntheticEvent } from 'react';
 
 import type { CheckboxControl } from '@mog-sdk/contracts/form-controls';
 
@@ -67,6 +67,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
   onCellValueChange,
 }: CheckboxOverlayControlProps) {
   const checked = isChecked(cellValue);
+  const hasLabel = Boolean(control.label);
 
   const handleChange = useCallback(() => {
     if (!control.enabled) return;
@@ -83,22 +84,33 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
     onCellValueChange,
   ]);
 
+  const stopGridEventPropagation = useCallback((event: SyntheticEvent) => {
+    event.stopPropagation();
+  }, []);
+
   return (
     <div
-      className="flex items-center gap-1"
+      className={hasLabel ? 'flex items-center gap-1' : 'flex items-center justify-center'}
       style={{
         width,
         height,
         pointerEvents: 'auto',
-        justifyContent: control.label ? 'flex-start' : 'center',
         overflow: 'hidden',
+        backgroundColor: hasLabel ? undefined : 'var(--color-ss-bg, #fff)',
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-checkbox-${control.id}`}
     >
       <input
         type="checkbox"
         checked={checked}
         onChange={handleChange}
+        onPointerDown={stopGridEventPropagation}
+        onMouseDown={stopGridEventPropagation}
+        onMouseUp={stopGridEventPropagation}
+        onClick={stopGridEventPropagation}
+        onDoubleClick={stopGridEventPropagation}
+        onKeyDown={stopGridEventPropagation}
         disabled={!control.enabled}
         style={{
           width: 14,
@@ -113,7 +125,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
             : `Checkbox${checked ? ' (checked)' : ' (unchecked)'}`
         }
       />
-      {control.label && (
+      {hasLabel && (
         <span
           className="text-xs select-none truncate"
           style={{

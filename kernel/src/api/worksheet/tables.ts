@@ -72,17 +72,25 @@ import {
 
 type PendingClipboardPasteGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+  __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
 };
 
 async function waitForPendingClipboardPaste(): Promise<void> {
   const deadline = Date.now() + 2000;
 
   while (Date.now() < deadline) {
-    const pending = (globalThis as PendingClipboardPasteGlobal).__MOG_PENDING_CLIPBOARD_PASTE__;
-    if (!pending || typeof pending.then !== 'function') return;
+    const global = globalThis as PendingClipboardPasteGlobal;
+    const pending = global.__MOG_PENDING_CLIPBOARD_PASTE__;
+    const active = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
+    if (
+      (!pending || typeof pending.then !== 'function') &&
+      (!active || typeof active.then !== 'function')
+    ) {
+      return;
+    }
 
     await Promise.race([
-      pending.catch(() => undefined),
+      Promise.all([pending?.catch(() => undefined), active?.catch(() => undefined)]),
       new Promise<void>((resolve) => setTimeout(resolve, 16)),
     ]);
   }
@@ -979,12 +987,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
       var: 110,
       varp: 111,
     };
-    const funcNum = funcNumMap[func.toLowerCase()] ?? 109;
+    const funcNum = funcNumMap[func.toLowerCase()];
 
     // Use table-qualified structured reference: =SUBTOTAL(109,TableName[ColumnName]).
     // The WASM evaluator resolves Table1[Amount] correctly; bare [Amount] gives #NAME?.
     // tableGetTotalsFormula returns the unqualified form, so we build it ourselves.
-    const formula = `=SUBTOTAL(${funcNum},${tableName}[${columnName}])`;
+    const formula =
+      funcNum === undefined ? '' : `=SUBTOTAL(${funcNum},${tableName}[${columnName}])`;
 
     // Write into the totals row cell.
     const totalsCol = parsed.startCol + colIdx;
@@ -997,6 +1006,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       [{ row: totalsRow, col: totalsCol }],
       'editing this totals cell',
     );
+
+    const computeTable = await this.ctx.computeBridge.getTableByName(tableName);
+    const computeColumn = computeTable?.columns[colIdx];
+    if (computeColumn) {
+      await this.ctx.computeBridge.setTableTotalsFunction(tableName, computeColumn.id, func);
+    }
 
     // WASM normalises ANY formula written to a freshly-created totals cell to the
     // unqualified structured-reference form ([Amount]), stripping the table qualifier

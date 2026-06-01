@@ -125,6 +125,10 @@ function HighlightedText({ text, matchedIndices }: HighlightedTextProps) {
   );
 }
 
+function nameSuggestionTypeLabel(ns: NameSuggestion): string {
+  return ns.type === 'definedName' ? 'Name' : ns.type === 'table' ? 'Table' : ns.type;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -239,6 +243,8 @@ export function FunctionSuggestions({
           <li
             key={item.fn.name}
             role="option"
+            data-suggestion={item.fn.name}
+            aria-label={`${item.fn.name} ${item.fn.description} ${item.fn.category}`}
             aria-selected={index === clampedIndex}
             className={`
  px-3 py-2 cursor-pointer flex items-start gap-3
@@ -253,9 +259,11 @@ export function FunctionSuggestions({
               <div className="font-ss-mono font-medium text-body">
                 <HighlightedText text={item.fn.name} matchedIndices={item.matchedIndices} />
               </div>
+              <span className="sr-only"> </span>
               <div className="text-caption text-text-muted truncate mt-0.5">
                 {item.fn.description}
               </div>
+              <span className="sr-only"> </span>
             </div>
             <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
               {item.fn.category}
@@ -268,6 +276,8 @@ export function FunctionSuggestions({
             <li
               key={`name:${ns.name}`}
               role="option"
+              data-suggestion={ns.name}
+              aria-label={`${ns.name} ${ns.refersTo} ${nameSuggestionTypeLabel(ns)}`}
               aria-selected={globalIndex === clampedIndex}
               className={`
  px-3 py-2 cursor-pointer flex items-start gap-3
@@ -277,10 +287,12 @@ export function FunctionSuggestions({
             >
               <div className="flex-1 min-w-0">
                 <div className="font-ss-mono font-medium text-body">{ns.name}</div>
+                <span className="sr-only"> </span>
                 <div className="text-caption text-text-muted truncate mt-0.5">{ns.refersTo}</div>
+                <span className="sr-only"> </span>
               </div>
               <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
-                {ns.type === 'definedName' ? 'Name' : ns.type === 'table' ? 'Table' : ns.type}
+                {nameSuggestionTypeLabel(ns)}
               </div>
             </li>
           );

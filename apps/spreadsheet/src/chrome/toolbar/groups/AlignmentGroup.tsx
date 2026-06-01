@@ -239,7 +239,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
     keyTipRegistry.register({ key: 'AB', tabId: 'home', elementId: 'align-bottom' });
     keyTipRegistry.register({ key: 'W', tabId: 'home', elementId: 'word-wrap' });
     keyTipRegistry.register({ key: 'M', tabId: 'home', elementId: 'merge-center' });
-    keyTipRegistry.register({ key: 'O', tabId: 'home', elementId: 'orientation' });
+    keyTipRegistry.register({ key: 'FQ', tabId: 'home', elementId: 'orientation' });
     keyTipRegistry.register({ key: '5', tabId: 'home', elementId: 'decrease-indent' });
     keyTipRegistry.register({ key: '6', tabId: 'home', elementId: 'increase-indent' });
 
@@ -252,7 +252,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       keyTipRegistry.unregister('AB', 'home');
       keyTipRegistry.unregister('W', 'home');
       keyTipRegistry.unregister('M', 'home');
-      keyTipRegistry.unregister('O', 'home');
+      keyTipRegistry.unregister('FQ', 'home');
       keyTipRegistry.unregister('5', 'home');
       keyTipRegistry.unregister('6', 'home');
     };

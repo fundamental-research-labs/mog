@@ -31,6 +31,7 @@ import { moveCellSkipHidden } from '../../shared/types';
 
 import type { rendererMachine } from '../../renderer/machines/grid-renderer-machine';
 import type { clipboardMachine } from '../machines/clipboard-machine';
+import { isCursorAtReferencePosition } from '../machines/editor/formula-editing';
 import type { editorMachine } from '../machines/grid-editor-machine';
 import type { selectionMachine } from '../machines/grid-selection-machine';
 
@@ -115,6 +116,7 @@ export function setupEditorToSelectionCoordination(
     isRowHidden?: (row: number) => boolean;
     isColHidden?: (col: number) => boolean;
   },
+  getCurrentSheetId?: () => string,
 ): () => void {
   let previousState: EditorState | null = null;
 
@@ -133,6 +135,33 @@ export function setupEditorToSelectionCoordination(
     // Editor exited formula mode
     if (wasFormulaEditing && !isFormulaEditing) {
       selectionActor.send({ type: 'EXIT_FORMULA_RANGE_MODE' });
+
+      const exitedViaNormalCancel =
+        state.matches('inactive') &&
+        !state.context.wasRemotelyDeleted &&
+        !state.context.wasSheetDeleted &&
+        !state.context.wasStructurallyCancelled;
+      const previousContext = previousState?.context;
+      const editingCell = previousContext?.editingCell;
+
+      if (exitedViaNormalCancel && editingCell) {
+        const restoreRanges = previousContext.editStartSelectionRanges?.length
+          ? previousContext.editStartSelectionRanges.map((range) => ({ ...range }))
+          : [
+              {
+                startRow: editingCell.row,
+                startCol: editingCell.col,
+                endRow: editingCell.row,
+                endCol: editingCell.col,
+              },
+            ];
+
+        selectionActor.send({
+          type: 'SET_SELECTION',
+          ranges: restoreRanges,
+          activeCell: { ...editingCell },
+        });
+      }
     }
 
     // Editor is committing - move selection based on direction
@@ -142,8 +171,18 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const suppressEnterNavigation =
+        previousState.context.entryMode === 'doubleClick' &&
+        (commitKey === 'enter' || commitKey === 'shift-enter');
+      const editingSheetId = previousState.context.sheetId;
+      const currentSheetId = getCurrentSheetId?.();
 
-      if (direction !== 'none') {
+      if (editingSheetId && currentSheetId && editingSheetId !== currentSheetId) {
+        previousState = state;
+        return;
+      }
+
+      if (direction !== 'none' && !suppressEnterNavigation) {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
           // Route through KEY_TAB so selection machine tracks tabOriginCol
           selectionActor.send({ type: 'KEY_TAB', shiftKey: commitKey === 'shift-tab' });
@@ -228,15 +267,13 @@ export function setupSelectionToEditorCoordination(
       // Detect anchor change (plain arrow key via moveTo, or click)
       const anchorChanged = currAnchor && (!prevAnchor || !cellsEqual(prevAnchor, currAnchor));
 
-      // Detect range extension (Shift+Arrow): anchor stays the same but
-      // the last range's extent changes. extendSelection keeps activeCell
-      // at anchor, so we must compare ranges directly.
+      // Detect range changes (Shift+Arrow/Shift+click): the anchor may stay
+      // the same, or may be initialized from null on the first Shift action.
       const prevRanges = previousState ? selectionSelectors.ranges(previousState) : undefined;
       const currRanges = selectionSelectors.ranges(state);
       const prevLastRange = prevRanges?.[prevRanges.length - 1];
       const currLastRange = currRanges?.[currRanges.length - 1];
-      const rangeExtended =
-        !anchorChanged &&
+      const rangeChanged =
         currAnchor &&
         currLastRange &&
         prevLastRange &&
@@ -245,10 +282,10 @@ export function setupSelectionToEditorCoordination(
           currLastRange.endRow !== prevLastRange.endRow ||
           currLastRange.endCol !== prevLastRange.endCol);
 
-      if (anchorChanged || rangeExtended) {
+      if (anchorChanged || rangeChanged) {
         // For anchor change (plain arrow / click): range is the single anchor cell
-        // For range extension (Shift+Arrow): use the actual selection range
-        const range: CellRange = rangeExtended
+        // For range changes (Shift+Arrow/Shift+click): use the actual selection range
+        const range: CellRange = rangeChanged
           ? currLastRange!
           : {
               startRow: currAnchor!.row,
@@ -462,6 +499,15 @@ export interface EditingInputInterceptionResult {
   clearPendingSelection: () => void;
 }
 
+function canInsertFormulaReference(context: EditorState['context']): boolean {
+  const isReplacingActiveRef =
+    context.formulaRefInsertStart !== null &&
+    context.formulaRefInsertEnd !== null &&
+    context.cursorPosition === context.formulaRefInsertEnd;
+
+  return isReplacingActiveRef || isCursorAtReferencePosition(context.value, context.cursorPosition);
+}
+
 /**
  * Set up editing input interception.
  *
@@ -495,19 +541,10 @@ export interface EditingInputInterceptionResult {
 export function setupEditingInputInterception(
   config: EditingInputInterceptionConfig,
 ): EditingInputInterceptionResult {
-  const {
-    editorActor,
-    selectionActor: _selectionActor,
-    onCommitAndMove,
-    getCurrentSheetId,
-    getSheetName,
-  } = config;
+  const { editorActor, selectionActor, onCommitAndMove } = config;
 
   // Pending selection target after commit completes
   let pendingSelection: { cell: CellCoord; shiftKey: boolean; ctrlKey: boolean } | null = null;
-
-  // Anchor cell for formula range selection (shift+click extends from here)
-  let formulaRangeAnchor: CellCoord | null = null;
 
   // Track previous state to detect commit completion
   let previousState: EditorState | null = null;
@@ -521,7 +558,6 @@ export function setupEditingInputInterception(
     if (wasCommitting && isNowInactive && pendingSelection) {
       const { cell, shiftKey, ctrlKey } = pendingSelection;
       pendingSelection = null;
-      formulaRangeAnchor = null;
 
       // Now it's safe to change selection - editing is done
       onCommitAndMove(cell, shiftKey, ctrlKey);
@@ -535,7 +571,6 @@ export function setupEditingInputInterception(
     if (wasEditing && isNowInactive && !wasCommitting) {
       // Editing was cancelled, clear pending selection
       pendingSelection = null;
-      formulaRangeAnchor = null;
     }
 
     previousState = state;
@@ -561,39 +596,18 @@ export function setupEditingInputInterception(
       const isInEnterMode = !editorState.context.isEditMode;
 
       if (isFormulaEditing && isInEnterMode) {
-        const targetSheetId = getCurrentSheetId?.();
-        const targetSheetName = targetSheetId ? getSheetName?.(targetSheetId) : undefined;
-
-        let range: CellRange;
-
-        if (shiftKey && formulaRangeAnchor) {
-          // Shift+click: extend from anchor to clicked cell, forming a range reference
-          // This replaces the last inserted single-cell ref with e.g. A1:A5
-          range = {
-            startRow: formulaRangeAnchor.row,
-            startCol: formulaRangeAnchor.col,
-            endRow: cell.row,
-            endCol: cell.col,
-          };
-        } else {
-          // Normal click: insert single cell reference, set as new anchor
-          range = {
-            startRow: cell.row,
-            startCol: cell.col,
-            endRow: cell.row,
-            endCol: cell.col,
-          };
-          formulaRangeAnchor = cell;
+        if (!canInsertFormulaReference(editorState.context)) {
+          editorActor.send({ type: 'CANCEL' });
+          return false;
         }
 
-        editorActor.send({
-          type: 'FORMULA_RANGE_SELECTED',
-          range,
-          color: editorState.context.currentRangeColor ?? '#4285f4',
-          ...(targetSheetId ? { sheetId: targetSheetId } : {}),
-          ...(targetSheetName ? { sheetName: targetSheetName } : {}),
+        selectionActor.send({
+          type: 'MOUSE_DOWN',
+          cell,
+          shiftKey,
+          ctrlKey,
         });
-
+        selectionActor.send({ type: 'MOUSE_UP' });
         return true;
       }
 
@@ -650,6 +664,7 @@ export function setupCrossCoordination(config: CrossCoordinationConfig): () => v
       selectionActor,
       () => selectionActor.getSnapshot().context.activeCell,
       config.getVisibilityCallbacks,
+      getCurrentSheetId,
     ),
   );
 

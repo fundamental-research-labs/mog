@@ -89,11 +89,12 @@ pub(in crate::storage::engine) fn set_range_schema(
     sheet_id: &SheetId,
     schema: &RangeSchema,
 ) -> Result<MutationResult, ComputeError> {
-    schemas::set_range_schema(
+    schemas::set_range_schema_with_alloc(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         schema,
+        &stores.id_alloc,
     )?;
     Ok(MutationResult::empty())
 }
@@ -104,12 +105,13 @@ pub(in crate::storage::engine) fn update_range_schema(
     schema_id: &str,
     updates: &RangeSchema,
 ) -> Result<MutationResult, ComputeError> {
-    schemas::update_range_schema(
+    schemas::update_range_schema_with_alloc(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         schema_id,
         updates,
+        &stores.id_alloc,
     )?;
     Ok(MutationResult::empty())
 }

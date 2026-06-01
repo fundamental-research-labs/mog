@@ -789,7 +789,7 @@ export class KeyboardCoordinator {
    * - a single-key `Alt+letter` default in the post-leader buffer; this is
    * valid only before any chord has advanced;
    * - a completed chord prefix that was deferred because longer keytips were
-   * still possible, e.g. `Alt+H,O` while `Alt+H,O,I` is still live.
+   * still possible, e.g. `Alt+H,S` while `Alt+H,S,O` is still live.
    *
    * Caller-tag `_reason` is informational; future T-tasks may surface it
    * via the chord snapshot for the keytip overlay.

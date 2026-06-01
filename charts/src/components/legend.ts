@@ -11,6 +11,7 @@ import type { ChannelSpec, Layout, LegendOrient, LegendSpec } from '../grammar/s
 import type { ColorScale, OrdinalColorScale } from '../primitives/scales/types';
 import type {
   AnyMark as Mark,
+  PathMark,
   RectMark,
   SymbolMark,
   SymbolShape,
@@ -37,8 +38,8 @@ export interface LegendMarks {
  * A single legend entry (symbol + label).
  */
 export interface LegendEntry {
-  /** The symbol (colored rect or shape) */
-  symbol: SymbolMark | RectMark;
+  /** The symbol (colored rect, line, or shape) */
+  symbol: SymbolMark | RectMark | PathMark;
   /** The label text */
   label: TextMark;
   /** The data value this entry represents */
@@ -53,6 +54,13 @@ export interface LegendPosition {
   y: number;
   width: number;
   height: number;
+}
+
+interface LegendValueEntry {
+  value: unknown;
+  label: string;
+  color: string;
+  symbolType?: LegendSpec['symbolType'];
 }
 
 // =============================================================================
@@ -115,7 +123,7 @@ export function generateLegend(
   }
 
   // Get legend values from scale
-  const legendValues = getLegendValues(scale);
+  const legendValues = getLegendValues(scale, legendConfig);
   if (legendValues.length === 0) {
     return { entries: [] };
   }
@@ -162,12 +170,25 @@ export function generateLegend(
  */
 function getLegendValues(
   scale: ColorScale | OrdinalColorScale,
-): { value: unknown; color: string }[] {
-  if ('domain' in scale && typeof scale.domain === 'function') {
-    const domain = scale.domain();
+  legendSpec: LegendSpec,
+): LegendValueEntry[] {
+  if (legendSpec.entries) {
+    const entries = legendSpec.reverse ? [...legendSpec.entries].reverse() : legendSpec.entries;
+    return entries.map((entry) => ({
+      value: entry.value,
+      label: entry.label ?? entry.value,
+      color: scale(entry.value as string),
+      symbolType: entry.symbolType,
+    }));
+  }
 
-    return domain.map((value) => ({
+  if ('domain' in scale && typeof scale.domain === 'function') {
+    const domain = legendSpec.values ?? scale.domain();
+    const values = legendSpec.reverse ? [...domain].reverse() : domain;
+
+    return values.map((value) => ({
       value,
+      label: String(value),
       color: scale(value as string),
     }));
   }
@@ -279,7 +300,7 @@ function generateLegendTitle(
  * Generate legend entry marks.
  */
 function generateLegendEntries(
-  values: { value: unknown; color: string }[],
+  values: LegendValueEntry[],
   _scale: ColorScale | OrdinalColorScale,
   position: LegendPosition,
   config: typeof DEFAULT_LEGEND_CONFIG,
@@ -288,7 +309,7 @@ function generateLegendEntries(
   const isVertical = config.direction === 'vertical';
 
   for (let i = 0; i < values.length; i++) {
-    const { value, color } = values[i];
+    const { value, label: labelText, color, symbolType } = values[i];
 
     // Calculate position for this entry
     const entryX = isVertical
@@ -303,7 +324,7 @@ function generateLegendEntries(
       entryX,
       entryY + 8, // Center vertically with text
       color,
-      config.symbolType,
+      symbolType ?? config.symbolType,
       config.symbolSize,
     );
 
@@ -312,7 +333,7 @@ function generateLegendEntries(
       type: 'text',
       x: entryX + Math.sqrt(config.symbolSize / Math.PI) + SYMBOL_LABEL_GAP + 5,
       y: entryY + 8,
-      text: String(value),
+      text: labelText,
       fontSize: config.labelFontSize,
       fontFamily: 'sans-serif',
       textAlign: 'left',
@@ -338,14 +359,30 @@ function createLegendSymbol(
   color: string,
   symbolType: LegendSpec['symbolType'],
   size: number,
-): SymbolMark | RectMark {
-  if (symbolType === 'square') {
+): SymbolMark | RectMark | PathMark {
+  if (symbolType === 'line') {
     const side = Math.sqrt(size);
+    const length = side * 2.8;
+    return {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: `M${x - length / 2},${y} L${x + length / 2},${y}`,
+      style: {
+        stroke: color,
+        strokeWidth: 2,
+      },
+    };
+  }
+
+  if (symbolType === 'square' || symbolType === 'area') {
+    const side = Math.sqrt(size);
+    const width = symbolType === 'area' ? side * 2.8 : side;
     return {
       type: 'rect',
-      x: x - side / 2,
+      x: x - width / 2,
       y: y - side / 2,
-      width: side,
+      width,
       height: side,
       style: {
         fill: color,

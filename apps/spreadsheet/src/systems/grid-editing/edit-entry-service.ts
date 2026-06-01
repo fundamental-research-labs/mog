@@ -3,6 +3,7 @@ import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
+import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { protectionError, successResult } from '@mog/spreadsheet-utils/protection';
 
@@ -31,6 +32,7 @@ export interface EditEntryServiceOptions {
   isReadOnly: () => boolean;
   getMergedRegion?: (sheetId: SheetId, cell: CellCoord) => CellRange | undefined;
   getPreEditSelectionRanges?: () => CellRange[];
+  getCachedRichTextSegments?: (sheetId: SheetId, cell: CellCoord) => RichTextSegment[] | null;
 }
 
 export interface EditEntryService {
@@ -112,6 +114,17 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
 
       const preEditSelectionRanges = options.getPreEditSelectionRanges?.();
       const ws = wb.getSheetById(request.sheetId);
+
+      // No TS-side projection-membership pre-check here. CSE array-member
+      // partial-write rejection lives in Rust compute-core
+      // (`ComputeError::PartialArrayWrite`) and is surfaced at commit time;
+      // dynamic-array spill members must remain editable so a literal write
+      // creates a blocker and raises `#SPILL!` at the anchor. Blocking the
+      // edit session here suppressed both: the editor never opened, the
+      // keystroke was dropped, and the spill never tore down. See
+      // apps/spreadsheet/src/actions/handlers/editor.ts (EDIT_CELL) for the
+      // matching commit-time error path.
+
       const fastEditability = ws.protection.canEditCellFast(request.cell.row, request.cell.col);
       if (fastEditability === 'unknown') {
         const editable = await ws.protection.canEditCell(request.cell.row, request.cell.col);
@@ -154,6 +167,13 @@ export function createEditEntryService(options: EditEntryServiceOptions): EditEn
         openDropdown: request.openDropdown,
         preEditSelectionRanges,
       });
+      const cachedSegments = options.getCachedRichTextSegments?.(request.sheetId, request.cell);
+      if (cachedSegments) {
+        options.editorActor.send({
+          type: 'START_RICH_TEXT_EDITING',
+          segments: cachedSegments,
+        });
+      }
 
       const validationRequest = {
         sheetId: request.sheetId,

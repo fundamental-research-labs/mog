@@ -238,7 +238,7 @@ export function TextEffectGallery(): ReactElement | null {
   const selectedPreset = useUIStore((s) => s.gallerySelectedPreset);
 
   // Local state
-  const [text, setText] = useState('Your text here');
+  const [text, setText] = useState('');
   const [activeCategory, setActiveCategory] = useState<WarpCategory>('follow-path');
 
   // Action dependencies for dispatch
@@ -284,7 +284,7 @@ export function TextEffectGallery(): ReactElement | null {
     dispatch('CLOSE_TEXT_EFFECT_GALLERY', deps);
 
     // Reset text for next time
-    setText('Your text here');
+    setText('');
   }, [deps, selectedPreset, text]);
 
   // Handle cancel action
@@ -293,7 +293,7 @@ export function TextEffectGallery(): ReactElement | null {
     dispatch('CLOSE_TEXT_EFFECT_GALLERY', deps);
 
     // Reset text for next time
-    setText('Your text here');
+    setText('');
   }, [deps]);
 
   // Handle category change

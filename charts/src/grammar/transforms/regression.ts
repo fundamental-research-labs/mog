@@ -62,8 +62,8 @@ export interface RegressionResult {
  */
 export function applyRegression(data: DataRow[], spec: RegressionSpec): DataRow[] {
   const {
-    regression: xField,
-    on: yField,
+    regression: yField,
+    on: xField,
     method = 'linear',
     order = 2,
     as = [xField, yField],

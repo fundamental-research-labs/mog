@@ -2,11 +2,14 @@ use serde::{Deserialize, Serialize};
 
 use super::ChartOoxmlProps;
 use crate::domain::chart::{
-    AxisData, ChartDataTableData, ChartFormatData, ChartFormatStringData, ChartSeriesData,
-    ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData, PieSliceData,
-    PivotChartOptionsData, SeriesOrientation, TrendlineData, WaterfallOptions,
+    AxisData, BoxplotConfigData, ChartDataTableData, ChartFormatData, ChartFormatStringData,
+    ChartLineSettingsData, ChartSeriesData, ChartStyleContextData, ChartSubType, ChartType,
+    ChartView3DData, DataLabelData, HierarchyChartConfigData, HistogramConfigData, LegendData,
+    PieSliceData, PivotChartOptionsData, PivotChartProjectionData, RegionMapConfigData,
+    SeriesOrientation, TrendlineData, UpDownBarsData, WaterfallOptions,
 };
 use crate::domain::conditional_format::CellIdRange;
+use crate::domain::drawings::ManualLayout;
 
 /// Chart-specific data for the `FloatingObjectData::Chart` variant.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,6 +67,14 @@ pub struct ChartData {
     pub radar_markers: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waterfall: Option<WaterfallOptions>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub histogram: Option<HistogramConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub boxplot: Option<BoxplotConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hierarchy: Option<HierarchyChartConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub region_map: Option<RegionMapConfigData>,
 
     // -- Chart-level display properties (OOXML threading) --
     /// How blank cells are plotted: "gap", "zero", or "span"
@@ -75,6 +86,9 @@ pub struct ChartData {
     /// Gap width between bars/columns (0-500%)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gap_width: Option<u32>,
+    /// Gap depth between 3-D chart series (0-500%)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_depth: Option<u32>,
     /// Overlap between bars/columns (-100 to 100)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overlap: Option<i32>,
@@ -87,6 +101,12 @@ pub struct ChartData {
     /// Bubble scale percentage (0-300%)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bubble_scale: Option<u32>,
+    /// Whether negative or zero bubble sizes should render.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_neg_bubbles: Option<bool>,
+    /// Whether bubble values represent area or width/diameter ("area" or "w").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_represents: Option<String>,
     /// Split type for of-pie charts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub split_type: Option<String>,
@@ -119,6 +139,8 @@ pub struct ChartData {
     // ── Pivot chart options ──
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub pivot_options: Option<PivotChartOptionsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub pivot_projection: Option<PivotChartProjectionData>,
 
     // ── Bubble / Surface / Theming ──
     /// Whether 3D effect is applied to bubble charts.
@@ -133,6 +155,9 @@ pub struct ChartData {
     /// Chart color scheme index (1-based).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub color_scheme: Option<u8>,
+    /// Imported chart style sidecar used by theme/style/text resolution.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chart_style_context: Option<ChartStyleContextData>,
 
     // ── Position in points ──
     /// Height in points.
@@ -168,10 +193,23 @@ pub struct ChartData {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub title_formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plot_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub title_layout: Option<ManualLayout>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_table: Option<ChartDataTableData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub drop_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub high_low_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_lines: Option<ChartLineSettingsData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub up_down_bars: Option<UpDownBarsData>,
 
     // ── Bar shape (3D decorative charts) ──
-    /// Mark shape for 3D bar/column charts: "box", "cylinder", "cone", "pyramid".
+    /// Mark shape for 3D bar/column charts:
+    /// "box", "cylinder", "cone", "coneToMax", "pyramid", "pyramidToMax".
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bar_shape: Option<String>,
 

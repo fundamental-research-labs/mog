@@ -33,8 +33,8 @@ pub struct CsvImportOptions {
     #[serde(default)]
     pub delimiter: Option<String>,
 
-    /// Encoding name (`"utf-8"`, `"utf-16le"`, etc.). `None` → auto-detect via
-    /// BOM sniff and `chardetng` fallback.
+    /// Encoding name (`"utf-8"`, `"utf-16le"`, etc.). `None` → BOM sniff,
+    /// then UTF-8 with replacement for malformed byte sequences.
     #[serde(default)]
     pub encoding: Option<String>,
 

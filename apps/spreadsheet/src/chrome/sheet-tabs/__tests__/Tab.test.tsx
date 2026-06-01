@@ -91,3 +91,37 @@ describe('Tab inline rename', () => {
     expect(props.onEditingEnd).not.toHaveBeenCalled();
   });
 });
+
+describe('Tab indicators', () => {
+  it('does not report an active uncolored tab as having a tab color', () => {
+    renderTab({ isActive: true, tabColor: null });
+
+    const tab = screen.getByRole('tab');
+    const activeIndicator = tab.querySelector('[data-testid="active-tab-indicator"]');
+    const colorIndicator = tab.querySelector('[data-testid="tab-color-indicator"]');
+
+    expect(activeIndicator).toHaveStyle({
+      backgroundColor: 'var(--color-ss-primary)',
+      height: '3px',
+    });
+    expect((colorIndicator as HTMLElement).style.backgroundColor).toBe('transparent');
+    expect((colorIndicator as HTMLElement).style.height).toBe('0px');
+  });
+
+  it('keeps the tab color marker on active colored tabs', () => {
+    renderTab({ isActive: true, tabColor: '#ff0000' });
+
+    const tab = screen.getByRole('tab');
+    const activeIndicator = tab.querySelector('[data-testid="active-tab-indicator"]');
+    const colorIndicator = tab.querySelector('[data-testid="tab-color-indicator"]');
+
+    expect(activeIndicator).toHaveStyle({
+      backgroundColor: '#ff0000',
+      height: '3px',
+    });
+    expect(colorIndicator).toHaveStyle({
+      backgroundColor: '#ff0000',
+      height: '3px',
+    });
+  });
+});

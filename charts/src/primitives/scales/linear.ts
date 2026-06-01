@@ -163,8 +163,9 @@ export function generateTicks(start: number, stop: number, count: number = 10): 
   if (!isFinite(step) || step === 0) return [];
 
   // Generate evenly-spaced ticks at multiples of step
-  const tickStart = Math.ceil(lo / step) * step;
-  const tickStop = Math.floor(hi / step) * step;
+  const epsilon = Math.abs(step) * 1e-10;
+  const tickStart = Math.ceil((lo - epsilon) / step) * step;
+  const tickStop = Math.floor((hi + epsilon) / step) * step;
   const n = Math.round((tickStop - tickStart) / step) + 1;
   const ticks: number[] = new Array(n);
 

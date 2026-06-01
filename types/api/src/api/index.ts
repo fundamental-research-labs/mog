@@ -33,6 +33,7 @@ export type {
   FormulaReferenceEdgeDiagnosticRow,
   FormulaReferenceLocation,
   FormulaReferenceParseDiagnosticRow,
+  ResolvedChartSpecDiagnosticsOptions,
   WorkbookDiagnostics,
 } from './workbook/diagnostics';
 export type {
@@ -76,6 +77,7 @@ export type {
   AdvancedFilterOptions,
   AdvancedFilterResult,
   FilterByColorOptions,
+  FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
   WorksheetFormControls,

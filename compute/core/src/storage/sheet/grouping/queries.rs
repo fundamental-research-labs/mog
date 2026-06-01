@@ -74,17 +74,7 @@ pub fn get_affected_rows_by_group(
         Some(g) if g.axis == GroupAxis::Row => g,
         _ => return vec![],
     };
-    let config = get_sheet_grouping_config(doc, sheets, sheet_id);
-    (group.start..=group.end)
-        .filter(|&row| {
-            let is_summary = if config.summary_rows_below {
-                row == group.end
-            } else {
-                row == group.start
-            };
-            !is_summary
-        })
-        .collect()
+    (group.start..=group.end).collect()
 }
 
 pub fn get_affected_columns_by_group(
@@ -97,40 +87,22 @@ pub fn get_affected_columns_by_group(
         Some(g) if g.axis == GroupAxis::Column => g,
         _ => return vec![],
     };
-    let config = get_sheet_grouping_config(doc, sheets, sheet_id);
-    (group.start..=group.end)
-        .filter(|&col| {
-            let is_summary = if config.summary_columns_right {
-                col == group.end
-            } else {
-                col == group.start
-            };
-            !is_summary
-        })
-        .collect()
+    (group.start..=group.end).collect()
 }
 
 /// Rows whose effective rendered height is zero because at least one
-/// collapsed row outline group contains them as a non-summary member.
+/// collapsed row outline group contains them.
 pub fn get_rows_hidden_by_collapsed_groups(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
     let groups = get_groups(doc, sheets, sheet_id, GroupAxis::Row);
-    let config = get_sheet_grouping_config(doc, sheets, sheet_id);
     let mut hidden = BTreeSet::new();
 
     for group in groups.iter().filter(|g| g.collapsed) {
         for row in group.start..=group.end {
-            let is_summary = if config.summary_rows_below {
-                row == group.end
-            } else {
-                row == group.start
-            };
-            if !is_summary {
-                hidden.insert(row);
-            }
+            hidden.insert(row);
         }
     }
 
@@ -138,26 +110,18 @@ pub fn get_rows_hidden_by_collapsed_groups(
 }
 
 /// Columns whose effective rendered width is zero because at least one
-/// collapsed column outline group contains them as a non-summary member.
+/// collapsed column outline group contains them.
 pub fn get_columns_hidden_by_collapsed_groups(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
     let groups = get_groups(doc, sheets, sheet_id, GroupAxis::Column);
-    let config = get_sheet_grouping_config(doc, sheets, sheet_id);
     let mut hidden = BTreeSet::new();
 
     for group in groups.iter().filter(|g| g.collapsed) {
         for col in group.start..=group.end {
-            let is_summary = if config.summary_columns_right {
-                col == group.end
-            } else {
-                col == group.start
-            };
-            if !is_summary {
-                hidden.insert(col);
-            }
+            hidden.insert(col);
         }
     }
 

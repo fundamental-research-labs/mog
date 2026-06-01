@@ -36,6 +36,10 @@ export interface FloatingObjectUpdatedEvent extends BaseEvent {
   sheetId: string;
   /** Container scope (same as sheetId during transition) */
   containerId: string;
+  /** Previous sheet scope when an update moves the object between containers */
+  previousSheetId?: string;
+  /** Previous container scope (same as previousSheetId during transition) */
+  previousContainerId?: string;
   objectId: string;
   changes: Partial<FloatingObject>;
   source: StructureChangeSource;

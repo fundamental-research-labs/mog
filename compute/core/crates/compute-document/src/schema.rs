@@ -64,6 +64,7 @@ pub const KEY_BINDINGS: &str = "bindings";
 pub const KEY_GROUPING: &str = "grouping";
 pub const KEY_SORTING: &str = "sorting";
 pub const KEY_FLOATING_OBJECTS: &str = "floatingObjects";
+pub const KEY_FLOATING_OBJECT_ORDER: &str = "floatingObjectOrder";
 pub const KEY_FLOATING_OBJECT_GROUPS: &str = "floatingObjectGroups";
 
 /// Per-sheet range maps
@@ -393,6 +394,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     sheet_map.insert(&mut txn, KEY_GROUPING, empty());
     sheet_map.insert(&mut txn, KEY_SORTING, empty());
     sheet_map.insert(&mut txn, KEY_FLOATING_OBJECTS, empty());
+    sheet_map.insert(&mut txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
     sheet_map.insert(&mut txn, KEY_FLOATING_OBJECT_GROUPS, empty());
     sheet_map.insert(&mut txn, KEY_RANGES, empty());
     sheet_map.insert(&mut txn, KEY_RANGE_PAYLOADS, empty());
@@ -587,6 +589,11 @@ mod tests {
             other => panic!("expected YArray for colOrder, got {:?}", other),
         };
         assert_eq!(col_order.len(&txn), 26);
+
+        match sheet_map.get(&txn, KEY_FLOATING_OBJECT_ORDER) {
+            Some(Out::YArray(a)) => assert_eq!(a.len(&txn), 0),
+            other => panic!("expected YArray for floatingObjectOrder, got {:?}", other),
+        }
 
         // Meta has name only (no rows/cols — derived from YArray lengths)
         let meta = match sheet_map.get(&txn, KEY_PROPERTIES) {

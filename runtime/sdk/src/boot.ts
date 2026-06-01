@@ -36,8 +36,10 @@ import {
 } from '@mog/kernel-host-internal';
 import {
   createNodeHeadlessHost,
+  loadNodeSdkNapiAddon,
   type NodeHeadlessHostResult,
 } from './host-adapters/node-headless-host';
+import { createNodeChartImageExporterFactory } from './chart-export/node-chart-image-exporter';
 
 type KernelCreateWorkbook = (...args: readonly unknown[]) => Promise<Workbook>;
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
@@ -311,6 +313,18 @@ export async function createWorkbook(
   }
   const readyHandle = handle;
 
+  // Node SDK callers expect imported workbooks to be fully queryable when
+  // createWorkbook resolves. Browser hosts may defer this after first paint,
+  // but headless imports need charts, objects, and other projections before
+  // the caller starts enumerating workbook state.
+  if (xlsxBytes) {
+    await readyHandle.awaitImportDurability();
+  }
+
+  readyHandle.registerChartImageExporter(
+    createNodeChartImageExporterFactory(loadNodeSdkNapiAddon()),
+  );
+
   // Create a Workbook from the handle — uses the cached workbook() path
   // which wires context, event bus, and sheet metadata internally.
   const wb = await readyHandle.workbook();
@@ -373,6 +387,12 @@ export interface NapiAddonModule {
   ComputeEngine: (new (snapshotJson: string) => ComputeEngineInstance) & {
     /** Factory method: create engine from raw Yrs state bytes (collaboration). */
     initFromYrsState?: (state: Buffer) => ComputeEngineInstance;
+  };
+  render_chart_marks_image?: (requestJson: string) => {
+    readonly bytes: Uint8Array;
+    readonly format: 'png' | 'jpeg';
+    readonly width: number;
+    readonly height: number;
   };
   [key: string]: unknown;
 }
@@ -514,6 +534,7 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this.registerChartImageExporter();
   }
 
   /**
@@ -534,6 +555,14 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this.registerChartImageExporter();
+  }
+
+  private registerChartImageExporter(): void {
+    if (!this.handle) return;
+    this.handle.registerChartImageExporter(
+      createNodeChartImageExporterFactory(this.options.computeAddon),
+    );
   }
 
   /** @internal */

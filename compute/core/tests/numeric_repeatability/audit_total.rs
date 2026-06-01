@@ -202,7 +202,7 @@ fn class_iii_total() {
     assert_eq!(
         total_failed, 0,
         "Class III total: {} failures — see per-family stderr output above \
-         for the named bugs, and `qKjqZiEx` for the root-cause analysis.",
+         for the named bug classes and float-cascade root-cause analysis.",
         total_failed,
     );
 }

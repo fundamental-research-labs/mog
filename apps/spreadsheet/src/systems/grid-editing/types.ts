@@ -840,6 +840,7 @@ export interface EditorDependencies {
     errorMessage: string,
     onEdit: () => void,
     onAcceptAsText: () => void,
+    onCancel: () => void,
     /** G.2: Optional error position for cursor placement (0-based character index) */
     errorPosition?: number,
   ) => void;

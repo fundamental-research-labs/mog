@@ -40,6 +40,29 @@ fn test_parse_series_with_text() {
 }
 
 #[test]
+fn test_parse_series_with_text_str_ref_without_cache() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:tx>
+                <c:strRef>
+                    <c:f>'Data'!C2</c:f>
+                </c:strRef>
+            </c:tx>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(series.tx.is_some());
+    match series.tx.unwrap() {
+        SeriesTextSource::StrRef(str_ref) => {
+            assert_eq!(str_ref.f, "'Data'!C2");
+            assert!(str_ref.str_cache.is_none());
+        }
+        other => panic!("Expected SeriesTextSource::StrRef, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_series_all() {
     let xml = br#"<c:barChart>
             <c:ser>
@@ -285,6 +308,46 @@ fn test_parse_series_with_values() {
 }
 
 #[test]
+fn test_parse_series_with_multi_level_categories() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:cat>
+                <c:multiLvlStrRef>
+                    <c:f>Sheet1!$A$2:$B$4</c:f>
+                    <c:multiLvlStrCache>
+                        <c:ptCount val="3"/>
+                        <c:lvl>
+                            <c:pt idx="0"><c:v>North</c:v></c:pt>
+                            <c:pt idx="1"><c:v>North</c:v></c:pt>
+                            <c:pt idx="2"><c:v>South</c:v></c:pt>
+                        </c:lvl>
+                        <c:lvl>
+                            <c:pt idx="0"><c:v>Q1</c:v></c:pt>
+                            <c:pt idx="1"><c:v>Q2</c:v></c:pt>
+                            <c:pt idx="2"><c:v>Q1</c:v></c:pt>
+                        </c:lvl>
+                    </c:multiLvlStrCache>
+                </c:multiLvlStrRef>
+            </c:cat>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+
+    match series.cat.unwrap() {
+        CatDataSource::MultiLvlStrRef(multi_ref) => {
+            assert_eq!(multi_ref.f, "Sheet1!$A$2:$B$4");
+            let cache = multi_ref.multi_lvl_str_cache.expect("multi-level cache");
+            assert_eq!(cache.pt_count, Some(3));
+            assert_eq!(cache.levels.len(), 2);
+            assert_eq!(cache.levels[0].pts[0].v, "North");
+            assert_eq!(cache.levels[1].pts[1].v, "Q2");
+        }
+        other => panic!("Expected CatDataSource::MultiLvlStrRef, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_smooth_series() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>
@@ -450,6 +513,38 @@ fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
     assert!(labels.show_value);
     assert!(labels.sp_pr.is_some());
     assert!(labels.tx_pr.is_some());
+}
+
+#[test]
+fn test_parse_individual_data_label_with_rich_text() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:dLbl>
+                    <c:idx val="2"/>
+                    <c:tx>
+                        <c:rich>
+                            <a:bodyPr/>
+                            <a:p>
+                                <a:r><a:rPr b="1"/><a:t>Custom</a:t></a:r>
+                            </a:p>
+                        </c:rich>
+                    </c:tx>
+                    <c:showVal val="0"/>
+                </c:dLbl>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    let labels = series.d_lbls.as_ref().expect("data labels");
+    assert_eq!(labels.d_lbl.len(), 1);
+    let label = &labels.d_lbl[0];
+    assert_eq!(label.idx, 2);
+    assert!(matches!(
+        label.text,
+        Some(ooxml_types::charts::ChartText::Rich(_))
+    ));
 }
 
 #[test]

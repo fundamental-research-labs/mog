@@ -4,7 +4,7 @@
 //! value of every dependent formula is **bitwise equal** to the pre-op
 //! value. No epsilon. No "close enough."
 //!
-//! The target bug is `qKjqZiEx` (`0.4 -> 0.7000000000000001` on revert):
+//! The target bug class is float-cascade drift (`0.4 -> 0.7000000000000001` on revert):
 //! root-cause hypothesis is a stateful intermediate cache leaking the
 //! forward-op's precision into the inverse recompute. Only bit-equality
 //! catches that; any epsilon-based check would pass.
@@ -13,7 +13,7 @@
 //! not codepath. If the engine proves nothing changed and skips recompute,
 //! bit-equality still holds trivially. We care about output, not path.
 //!
-//! Default family tests and `qKjqZiEx` signature pins collect and report
+//! Default family tests and float-cascade signature pins collect and report
 //! outcomes under `-- --nocapture`; they intentionally do not add a panic
 //! gate. The `audit-tests` aggregate re-runs the suite and asserts the
 //! total failure count.

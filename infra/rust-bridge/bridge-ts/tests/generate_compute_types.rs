@@ -161,7 +161,6 @@ fn compute_config() -> TypeGenConfig {
         "ChartPivotSource",
         "ChartPivotFmt",
         "ChartPivotFormat",
-        "WaterfallOptions",
         "VmlShapeProps",
         "Shape3DSettings",
         "SceneSettings",
@@ -203,7 +202,6 @@ fn compute_config() -> TypeGenConfig {
         "DrawingAnchorMetadata",
         "ExtensionEntry",
         "ExternalData",
-        "ManualLayout",
         "OpcRelationship",
         "PivotFmt",
         "PivotSource",
@@ -452,6 +450,7 @@ fn all_snapshot_files_parse_without_error() {
             "{manifest_dir}/../../../compute/core/crates/compute-stats/src/regression_types.rs"
         ),
         format!("{manifest_dir}/../../../compute/core/crates/compute-charts/src/types.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/chart/style_context.rs"),
         format!("{manifest_dir}/../../../compute/core/crates/compute-cf/src/types/mod.rs"),
         format!("{manifest_dir}/../../../compute/core/crates/compute-table/src/types.rs"),
         // domain-types custom_table_style (canonical, moved from compute-table/src/custom_styles.rs)
@@ -607,7 +606,7 @@ fn build_import_config() -> ImportConfig {
                 ],
             },
             ImportGroup {
-                from: "../../../../infra/rust-bridge/bridge-ts/generated/ooxml-types".to_string(),
+                from: "@mog/bridge-ts/generated/ooxml-types".to_string(),
                 types: vec![
                     TypeImport {
                         local_name: "ColorScheme".into(),
@@ -744,6 +743,9 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/schema_types.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/validation/result.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/grouping.rs"),
+        // Shared chart/drawing manual layout DTO used by chart title, plot,
+        // legend, data-label, and floating chart object surfaces.
+        format!("{manifest_dir}/../../../domain-types/src/domain/drawings/manual_layout.rs"),
         // chart module — split from chart.rs into chart/ directory (pass 1 refactor)
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/mod.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/axis.rs"),
@@ -753,6 +755,10 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/legend.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/position.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/series.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/chart/style_context.rs"),
+        format!(
+            "{manifest_dir}/../../../domain-types/src/domain/chart/ooxml_mirror_types/waterfall.rs"
+        ),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/spec.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/view_3d.rs"),
         format!("{manifest_dir}/../../../domain-types/src/diagnostics.rs"),

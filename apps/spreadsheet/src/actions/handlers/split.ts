@@ -107,6 +107,23 @@ function getPrevViewportId(viewportIds: string[], currentId: string): string {
   return viewportIds[(currentIndex - 1 + viewportIds.length) % viewportIds.length];
 }
 
+function scrollToFreezeAnchor(
+  deps: ActionDependencies,
+  frozenRows: number,
+  frozenCols: number,
+  activeCell: { row: number; col: number } | null | undefined,
+): void {
+  const renderer = deps.commands.renderer;
+  if (!renderer) return;
+
+  const target = {
+    row: activeCell && activeCell.row >= frozenRows ? activeCell.row : frozenRows,
+    col: activeCell && activeCell.col >= frozenCols ? activeCell.col : frozenCols,
+  };
+
+  renderer.scrollToActiveCell(target);
+}
+
 // =============================================================================
 // Handlers
 // =============================================================================
@@ -354,6 +371,7 @@ export const FREEZE_PANES: AsyncActionHandler = async (
   // Set freeze panes at the active cell position via Worksheet API
   // Freeze rows above the active cell and columns to the left
   await ws.view.freezePanes(activeCell.row, activeCell.col);
+  scrollToFreezeAnchor(deps, activeCell.row, activeCell.col, activeCell);
 
   return handled();
 };
@@ -375,6 +393,7 @@ export const FREEZE_TOP_ROW: AsyncActionHandler = async (
   }
 
   await ws.view.freezePanes(1, 0);
+  scrollToFreezeAnchor(deps, 1, 0, deps.accessors.selection.getActiveCell());
 
   return handled();
 };
@@ -396,6 +415,7 @@ export const FREEZE_FIRST_COLUMN: AsyncActionHandler = async (
   }
 
   await ws.view.freezePanes(0, 1);
+  scrollToFreezeAnchor(deps, 0, 1, deps.accessors.selection.getActiveCell());
 
   return handled();
 };

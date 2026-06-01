@@ -29,6 +29,8 @@ import { PasteValidationSummaryDialog } from '../../dialogs/paste/PasteValidatio
 // =============================================================================
 import { InsertTableDialogWrapper } from '../../dialogs/insert/InsertTableDialog';
 import { InsertSlicerDialog } from '../../dialogs/insert/InsertSlicerDialog';
+import { ResizeTableDialog } from '../../dialogs/sheet/ResizeTableDialog';
+import { TotalRowDropdown } from '../../components/table/TotalRowDropdown';
 
 // =============================================================================
 // Sparkline Dialogs
@@ -131,6 +133,12 @@ export function OverlayLayer() {
 
       {/* Insert Table Dialog */}
       <InsertTableDialogWrapper />
+
+      {/* Resize Table Dialog */}
+      <ResizeTableDialog />
+
+      {/* Total Row Function Dropdown */}
+      <TotalRowDropdown />
 
       {/* Insert Slicer Dialog */}
       <InsertSlicerDialog />

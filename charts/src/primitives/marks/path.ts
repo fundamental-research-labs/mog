@@ -6,7 +6,7 @@
  */
 
 import type { PathMark } from '../types';
-import { applyStyle } from './rect';
+import { applyStyle, hasRenderableFill, hasRenderableStroke } from './rect';
 
 /**
  * SVG path command types.
@@ -412,10 +412,10 @@ export function renderPath(ctx: CanvasRenderingContext2D, mark: PathMark): void 
   const commands = parsePath(mark.path);
   applyPathCommands(ctx, commands, mark.x, mark.y);
 
-  if (mark.style.fill) {
+  if (hasRenderableFill(mark.style)) {
     ctx.fill();
   }
-  if (mark.style.stroke) {
+  if (hasRenderableStroke(mark.style)) {
     ctx.stroke();
   }
 

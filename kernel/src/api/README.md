@@ -68,7 +68,7 @@ using region = wb.viewport.createRegion(sheetId, bounds);
 
 All handles are tracked by the workbook. `wb.dispose()` disposes everything — no leaks possible.
 
-See [`docs/spreadsheet/API-DESIGN-PHILOSOPHY.md`](../../../docs/spreadsheet/API-DESIGN-PHILOSOPHY.md) for the full design philosophy.
+See [`docs/internals/spreadsheet/API-DESIGN-PHILOSOPHY.md`](../../../docs/internals/spreadsheet/API-DESIGN-PHILOSOPHY.md) for the full design philosophy.
 
 #### Sub-APIs
 

@@ -115,6 +115,8 @@ pub struct DataLabelOptions {
     pub leader_lines: Option<ChartLines>,
     /// Structured number format
     pub num_fmt_obj: Option<NumFmt>,
+    /// Manual layout for the data labels group.
+    pub layout: Option<ManualLayout>,
     /// Individual data label overrides (CT_DLbl children within CT_DLbls)
     pub d_lbl: Vec<DataLabel>,
     /// Extension list (extLst) for forward-compatible round-tripping

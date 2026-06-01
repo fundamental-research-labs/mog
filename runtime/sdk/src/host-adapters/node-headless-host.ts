@@ -251,7 +251,7 @@ function getPlatformPackageName(): string {
   );
 }
 
-function loadNodeSdkNapiAddon(): Record<string, (...args: unknown[]) => unknown> {
+export function loadNodeSdkNapiAddon(): Record<string, (...args: unknown[]) => unknown> {
   return requireFromHere(getPlatformPackageName()) as Record<
     string,
     (...args: unknown[]) => unknown

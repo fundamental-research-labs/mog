@@ -214,7 +214,7 @@ fn templates_register_unregister() {
 /// deserialize existing docs — exactly the migration cost R2.1 promised
 /// to avoid.
 #[test]
-fn round1_wire_fixture_deserialises_and_re_serialises_to_same_bytes() {
+fn legacy_wire_fixture_deserialises_and_re_serialises_to_same_bytes() {
     // Hex-form (no dashes) is what `SheetId::to_uuid_string` emits — TS
     // side uses the same simple form on the wire, so the raw JSON below
     // mirrors what legacy docs actually carry.
@@ -280,7 +280,7 @@ fn round1_wire_fixture_deserialises_and_re_serialises_to_same_bytes() {
 /// pin the full persist-then-read path. Legacy docs loading under
 /// Rust must surface the stored policy with the right fields.
 #[test]
-fn round1_wire_fixture_survives_yrs_store_roundtrip() {
+fn legacy_wire_fixture_survives_yrs_store_roundtrip() {
     use yrs::Map;
 
     let fixture = r#"{

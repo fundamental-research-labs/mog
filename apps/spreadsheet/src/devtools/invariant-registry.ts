@@ -3,11 +3,11 @@
  *
  * App-side debug code that wants to register an invariant (e.g. a
  * temporary check while chasing a bug) imports from here so it does NOT
- * take a build-time dependency on `dev/app-eval/**` (which lives outside
+ * take a build-time dependency on the eval harness (which lives outside
  * apps/spreadsheet's `rootDir`). This file therefore declares the type
  * surface locally — kept in lockstep with
- * `dev/app-eval/capture/invariants/registry.ts` — and provides a
- * `registerInvariant` shim that delegates to a global registrar
+ * the harness registry — and provides a `registerInvariant` shim that
+ * delegates to a global registrar
  * installed by the test-harness on page load.
  *
  * HARD RULE: this file holds NO behavior of its own. Registrations
@@ -17,7 +17,7 @@
  * evaluation, no ranking, no DOM reads here.
  */
 
-// ── Types (mirror of dev/app-eval/capture/invariants/registry.ts) ──
+// ── Types (mirror of the eval-harness registry) ──
 
 export type InvariantSeverity = 'error' | 'warn';
 

@@ -87,7 +87,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
   // Local State (dropdown visibility)
   //
   // lifted into the ribbonDropdowns slice so the keytip chords (Alt+H,I
-  // / Alt+H,D / Alt+H,O,I) can open these via OPEN_RIBBON_DROPDOWN.
+  // / Alt+H,D / Alt+H,O) can open these via OPEN_RIBBON_DROPDOWN.
   // ===========================================================================
 
   const insertDropdownOpen = useUIStore((s) => s.ribbonDropdowns['home.insert'] ?? false);
@@ -156,8 +156,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
               <Tooltip title="Insert" description="Insert cells, rows, columns, or sheets">
                 {/* TODO retire ribbon-insert-button after specs migrate to
  ribbon-dropdown-insert. Active consumers:
- dev/app-eval/scenarios/editing/insert-cells-default.spec.ts
- and the form-control-styling/radio/* docstrings. The
+ insert-cells and form-control-styling coverage. The
  contract-aligned testid `ribbon-dropdown-insert` lives
  on the arrow button below. */}
                 <div className="flex items-center" data-testid="ribbon-insert-button">

@@ -35,6 +35,7 @@ export function FormulaBar({
   value,
   isEditing,
   onChange,
+  onSelectionChange,
   onCommit,
   onCancel,
   onFocus,
@@ -99,10 +100,15 @@ export function FormulaBar({
   // Track cursor position for syntax highlighting
   const handleSelect = useCallback(() => {
     const input = internalInputRef.current;
-    if (input && typeof input.selectionStart === 'number') {
+    if (
+      input &&
+      typeof input.selectionStart === 'number' &&
+      typeof input.selectionEnd === 'number'
+    ) {
       setCursorPosition(input.selectionStart);
+      onSelectionChange?.(input.selectionStart, input.selectionEnd);
     }
-  }, []);
+  }, [onSelectionChange]);
 
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -191,9 +197,10 @@ export function FormulaBar({
       } else {
         // Already editing - just update cursor position for syntax highlighting
         setCursorPosition(clickPosition);
+        onSelectionChange?.(clickPosition, input.selectionEnd ?? clickPosition);
       }
     },
-    [isEditing, onFocus],
+    [isEditing, onFocus, onSelectionChange],
   );
 
   const isFormula = value.startsWith('=');

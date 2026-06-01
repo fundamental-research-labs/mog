@@ -13,7 +13,10 @@
  */
 
 import { FunctionCategory } from '@mog-sdk/contracts/utils/function-registry';
-import type { FunctionMetadata } from '@mog-sdk/contracts/utils/function-registry';
+import type {
+  FunctionArgument,
+  FunctionMetadata,
+} from '@mog-sdk/contracts/utils/function-registry';
 import { globalRegistry } from './function-registry';
 
 // =============================================================================
@@ -24,6 +27,24 @@ import { globalRegistry } from './function-registry';
 type FnDef = [string, FunctionCategory, string, number, number];
 
 const C = FunctionCategory;
+
+const FUNCTION_ARGUMENTS: Record<string, FunctionArgument[]> = {
+  SUM: [
+    {
+      name: 'number1',
+      description: 'The first number, cell reference, or range to add.',
+      type: 'number',
+      optional: false,
+    },
+    {
+      name: 'number2',
+      description: 'Additional numbers, cell references, or ranges to add.',
+      type: 'number',
+      optional: true,
+      repeating: true,
+    },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // Inline-dispatched functions (eval_primitives.rs)
@@ -834,6 +855,7 @@ export function ensureFunctionCatalog(): void {
       description,
       minArgs,
       maxArgs: maxArgs === -1 ? Infinity : maxArgs,
+      arguments: FUNCTION_ARGUMENTS[name],
     }),
   );
 

@@ -97,19 +97,11 @@ pub(super) fn sync_storage(src: &YrsStorage, dst: &YrsStorage) {
 }
 
 pub(super) fn clone_storage(src: &YrsStorage) -> YrsStorage {
-    use yrs::updates::decoder::Decode;
     let update = src
         .doc()
         .transact()
         .encode_diff_v1(&yrs::StateVector::default());
-    let decoded = yrs::Update::decode_v1(&update).expect("decode update");
-    let storage2 = YrsStorage::new();
-    storage2
-        .doc()
-        .transact_mut()
-        .apply_update(decoded)
-        .expect("apply update");
-    storage2
+    YrsStorage::from_yrs_state(&update).expect("clone from yrs state")
 }
 
 pub(super) fn view_ids(storage: &YrsStorage, sid: &SheetId) -> Vec<String> {

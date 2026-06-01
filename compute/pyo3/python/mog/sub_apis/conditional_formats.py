@@ -107,29 +107,15 @@ class ConditionalFormatsAPI:
     def list(self) -> List[Dict[str, Any]]:
         """List all conditional formats in this sheet.
 
-        Returns them in insertion order when possible.
+        Returns the native engine order, which reflects priority changes and
+        undo/redo state.
         """
         result = self._bridge.call_json(
             "compute_get_all_cf_rules", self._sheet_id_json
         )
         if not isinstance(result, list):
             return []
-        if not self._insertion_order:
-            return result
-        # Sort by insertion order
-        id_to_cf: Dict[str, Any] = {}
-        for cf in result:
-            if isinstance(cf, dict) and cf.get("id"):
-                id_to_cf[cf["id"]] = cf
-        ordered = []
-        for cf_id in self._insertion_order:
-            if cf_id in id_to_cf:
-                ordered.append(id_to_cf.pop(cf_id))
-        # Append any remaining CFs not in insertion order
-        for cf in result:
-            if isinstance(cf, dict) and cf.get("id") in id_to_cf:
-                ordered.append(id_to_cf.pop(cf["id"]))
-        return ordered
+        return result
 
     def get(self, format_id: str) -> Optional[Dict[str, Any]]:
         """Get a conditional format by its ID.

@@ -11,7 +11,19 @@ import type { SymbolMark, SymbolShape } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
-import { invokeScale } from './helpers';
+import { centeredScalePosition, definedStyle, invokeScale, isBlankValueDatum } from './helpers';
+
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 /**
  * Generate point/scatter marks.
@@ -37,13 +49,17 @@ export function generatePointMarks(
 
   for (let i = 0; i < data.length; i++) {
     const datum = data[i];
-    let x = xScale(encodings.x?.accessor(datum)) as number;
-    let y = yScale(encodings.y?.accessor(datum)) as number;
+    if (isBlankValueDatum(datum)) continue;
+    let x = centeredScalePosition(xScale, encodings.x?.accessor(datum));
+    let y = centeredScalePosition(yScale, encodings.y?.accessor(datum));
 
     // Check for non-finite positions (NaN or Infinity).
     // If only one is bad, place at the fallback position so the mark still exists.
     const xNaN = typeof x !== 'number' || !isFinite(x);
     const yNaN = typeof y !== 'number' || !isFinite(y);
+    if (markSpec.skipInvalidPositions && (xNaN || yNaN)) {
+      continue;
+    }
     if (xNaN && yNaN) {
       // Still emit a mark at fallback position to match data count
       x = xFallback;
@@ -63,6 +79,13 @@ export function generatePointMarks(
       markFill: markSpec.fill,
       index: 0,
     });
+    const fillValue = encodings.fill?.accessor(datum);
+    const fill =
+      datumString(datum, markSpec.fillField) ?? (typeof fillValue === 'string' ? fillValue : color);
+    const strokeValue = encodings.stroke?.accessor(datum);
+    const stroke =
+      datumString(datum, markSpec.strokeField) ??
+      (typeof strokeValue === 'string' ? strokeValue : markSpec.stroke);
 
     const sizeValue = encodings.size?.accessor(datum);
     const size =
@@ -73,9 +96,11 @@ export function generatePointMarks(
     const shapeValue = encodings.shape?.accessor(datum);
     // Shape values are always valid SymbolShape strings from DEFAULT_SHAPES
     const shape: SymbolShape = (
-      shapeValue
-        ? (invokeScale<string>(scales.shape, shapeValue) ?? 'circle')
-        : (markSpec.shape ?? 'circle')
+      typeof shapeValue === 'string' && isSymbolShape(shapeValue)
+        ? shapeValue
+        : shapeValue
+          ? (invokeScale<string>(scales.shape, shapeValue) ?? 'circle')
+          : (markSpec.shape ?? 'circle')
     ) as SymbolShape;
 
     marks.push({
@@ -86,13 +111,33 @@ export function generatePointMarks(
       shape,
       datum,
       style: {
-        fill: color,
-        stroke: markSpec.stroke,
-        strokeWidth: markSpec.strokeWidth ?? 1,
+        fill,
+        stroke,
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 1,
         opacity: markSpec.opacity ?? 1,
+        ...definedStyle({
+          fillPaint: markSpec.fillPaint,
+          strokePaint: markSpec.strokePaint,
+          line: markSpec.line,
+          effects: markSpec.effects,
+        }),
       },
     });
   }
 
   return marks;
+}
+
+function isSymbolShape(value: string): value is SymbolShape {
+  return [
+    'circle',
+    'square',
+    'diamond',
+    'cross',
+    'x',
+    'star',
+    'dash',
+    'triangle-up',
+    'triangle-down',
+  ].includes(value);
 }

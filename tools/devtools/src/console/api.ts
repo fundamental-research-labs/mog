@@ -293,10 +293,111 @@ export function createConsoleAPI(
           return { row: r.row, col: r.col };
         }
       }
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      const dims = geometry?.getPositionDimensions?.();
+      const snapped = snapCellFromPositionDimensions(dims, docX, docY);
+      if (snapped) return snapped;
+      if (typeof geometry?.getCellRect === 'function') {
+        const visible = geometry.getVisibleRange?.() ?? {
+          startRow: 0,
+          startCol: 0,
+          endRow: 200,
+          endCol: 50,
+        };
+        const startRow = Math.max(0, Number(visible.startRow ?? 0));
+        const startCol = Math.max(0, Number(visible.startCol ?? 0));
+        const endRow = Math.min(startRow + 500, Number(visible.endRow ?? startRow + 200));
+        const endCol = Math.min(startCol + 200, Number(visible.endCol ?? startCol + 50));
+        for (let row = startRow; row <= endRow; row++) {
+          for (let col = startCol; col <= endCol; col++) {
+            const rect = geometry.getCellRect({ row, col });
+            if (
+              rect &&
+              docX >= rect.x &&
+              docX <= rect.x + rect.width &&
+              docY >= rect.y &&
+              docY <= rect.y + rect.height
+            ) {
+              return { row, col };
+            }
+          }
+        }
+      }
     } catch {
       // fall through
     }
     return null;
+  }
+
+  type PositionDimensionsLike = {
+    totalRows?: unknown;
+    totalCols?: unknown;
+    getRowTop?: (row: number) => unknown;
+    getRowHeight?: (row: number) => unknown;
+    getColLeft?: (col: number) => unknown;
+    getColWidth?: (col: number) => unknown;
+  };
+
+  function finiteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function snapAxisFromPositionDimensions(
+    point: number,
+    total: unknown,
+    getStart: ((index: number) => unknown) | undefined,
+    getSize: ((index: number) => unknown) | undefined,
+  ): number | null {
+    const countValue = finiteNumber(total);
+    if (!countValue || countValue <= 0 || typeof getStart !== 'function') return null;
+
+    const count = Math.floor(countValue);
+    const firstStart = finiteNumber(getStart(0));
+    if (firstStart == null) return null;
+    if (point <= firstStart) return 0;
+
+    let lo = 0;
+    let hi = count - 1;
+    let best = 0;
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      const start = finiteNumber(getStart(mid));
+      if (start == null) return null;
+      if (start <= point) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    if (typeof getSize === 'function') {
+      const size = finiteNumber(getSize(best));
+      if (size != null && size <= 0) {
+        return Math.max(0, Math.min(best, count - 1));
+      }
+    }
+    return Math.max(0, Math.min(best, count - 1));
+  }
+
+  function snapCellFromPositionDimensions(
+    dims: PositionDimensionsLike | null | undefined,
+    docX: number,
+    docY: number,
+  ): { row: number; col: number } | null {
+    const row = snapAxisFromPositionDimensions(
+      docY,
+      dims?.totalRows,
+      dims?.getRowTop?.bind(dims),
+      dims?.getRowHeight?.bind(dims),
+    );
+    const col = snapAxisFromPositionDimensions(
+      docX,
+      dims?.totalCols,
+      dims?.getColLeft?.bind(dims),
+      dims?.getColWidth?.bind(dims),
+    );
+    return row == null || col == null ? null : { row, col };
   }
 
   /** Pull a "src"-like field from an arbitrary scene object's data. */
@@ -339,6 +440,13 @@ export function createConsoleAPI(
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function readIntegerAttribute(element: FormControlElementLike, name: string): number | null {
+    const value = element.getAttribute?.(name);
+    if (value == null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   function isRenderedFormControlElement(element: FormControlElementLike): boolean {
     const rect = element.getBoundingClientRect?.();
     if (!rect || rect.width <= 0 || rect.height <= 0) return false;
@@ -353,10 +461,57 @@ export function createConsoleAPI(
     return true;
   }
 
-  function getRenderedDomFormControls(
+  type DrawingAnchorDescriptor = import('../types').DrawingDescriptor['anchor'];
+
+  async function resolveModelCellAnchor(
     ws: any,
-    existingIds: Set<string>,
-  ): import('../types').DrawingDescriptor[] {
+    anchor: { cellId?: unknown } | null | undefined,
+  ): Promise<{ row: number; col: number } | null> {
+    const cellId = typeof anchor?.cellId === 'string' ? anchor.cellId : null;
+    if (!cellId || typeof ws?._internal?.getCellPosition !== 'function') return null;
+    try {
+      const position = await ws._internal.getCellPosition(cellId);
+      if (position && typeof position.row === 'number' && typeof position.col === 'number') {
+        return { row: position.row, col: position.col };
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }
+
+  async function getFloatingObjectModelReadback(
+    ws: any,
+    id: string,
+  ): Promise<
+    | {
+        anchor: DrawingAnchorDescriptor | null;
+      }
+    | null
+    | undefined
+  > {
+    if (typeof ws?.objects?.getFullObject !== 'function') return undefined;
+    try {
+      const object = await ws.objects.getFullObject(id);
+      if (!object) return null;
+      const position = object.position;
+      const from = await resolveModelCellAnchor(ws, position?.from);
+      if (!from) return { anchor: null };
+      const to = await resolveModelCellAnchor(ws, position?.to);
+      return {
+        anchor: {
+          from,
+          ...(to ? { to } : {}),
+        },
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function getRenderedDomFormControls(
+    ws: any,
+  ): Promise<import('../types').DrawingDescriptor[]> {
     const doc =
       typeof document !== 'undefined'
         ? document
@@ -374,18 +529,28 @@ export function createConsoleAPI(
       if (!isRenderedFormControlElement(element)) continue;
 
       const id = element.getAttribute?.('data-form-control-id');
-      if (!id || existingIds.has(id)) continue;
+      if (!id) continue;
+
+      const model = await getFloatingObjectModelReadback(ws, id);
+      if (model === null) continue;
 
       const rect = element.getBoundingClientRect!();
       const x = readCssPx(element.style?.left) ?? rect.x ?? rect.left ?? 0;
       const y = readCssPx(element.style?.top) ?? rect.y ?? rect.top ?? 0;
-      const fromCell = safeCellSnap(ws, x, y);
-      const toCell = safeCellSnap(ws, x + rect.width, y + rect.height);
+      const linkedRow = readIntegerAttribute(element, 'data-form-control-linked-row');
+      const linkedCol = readIntegerAttribute(element, 'data-form-control-linked-col');
+      const linkedCell =
+        linkedRow !== null && linkedCol !== null ? { row: linkedRow, col: linkedCol } : null;
+      const docX = x - DEFAULT_ROW_HEADER_WIDTH_PX;
+      const docY = y - DEFAULT_COL_HEADER_HEIGHT_PX;
+      const fromCell = linkedCell ?? safeCellSnap(ws, docX, docY);
+      const toCell = safeCellSnap(ws, docX + rect.width, docY + rect.height);
+      const modelAnchor = model?.anchor ?? null;
 
       out.push({
         id,
         kind: 'formControl',
-        anchor: {
+        anchor: modelAnchor ?? {
           from: fromCell ?? { row: 0, col: 0 },
           ...(toCell ? { to: toCell } : {}),
         },
@@ -400,6 +565,42 @@ export function createConsoleAPI(
     }
 
     return out;
+  }
+
+  const DEFAULT_ROW_HEADER_WIDTH_PX = 50;
+  const DEFAULT_COL_HEADER_HEIGHT_PX = 24;
+
+  type RenderedCellBounds = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
+  function getRenderedCellBounds(row: number, col: number): RenderedCellBounds | null {
+    try {
+      const coordinator = (window as any).__COORDINATOR__;
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      if (!geometry?.getCellPageRect) return null;
+      const bounds = geometry.getCellPageRect({ row, col });
+      if (
+        !bounds ||
+        !Number.isFinite(bounds.x) ||
+        !Number.isFinite(bounds.y) ||
+        !Number.isFinite(bounds.width) ||
+        !Number.isFinite(bounds.height)
+      ) {
+        return null;
+      }
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -488,6 +689,17 @@ export function createConsoleAPI(
     return null;
   }
 
+  const viewportCommand = Object.assign(
+    (viewportId?: string) => {
+      if (viewportId) {
+        printViewportDetail(viewportId);
+      } else {
+        printViewportSummary();
+      }
+    },
+    { getCellBounds: getRenderedCellBounds },
+  );
+
   const api: DevToolsConsoleAPI = {
     last(n = 10) {
       const entries = store.last(n);
@@ -566,13 +778,7 @@ export function createConsoleAPI(
       printBufferEvents(store.all(), filter);
     },
 
-    viewport(viewportId?: string) {
-      if (viewportId) {
-        printViewportDetail(viewportId);
-      } else {
-        printViewportSummary();
-      }
-    },
+    viewport: viewportCommand,
 
     cell(row: number, col: number, viewportId?: string) {
       printViewportCell(row, col, viewportId);
@@ -829,7 +1035,7 @@ export function createConsoleAPI(
           const states: ReadonlyMap<string, any> | undefined = bridge.getPerViewportStates?.();
           if (states) {
             for (const [vpId, vpState] of states) {
-              const buf = vpState?.buffer;
+              const buf = bridge.getViewportBuffer?.(vpId) ?? vpState?.buffer;
               if (buf?.hasBuffer?.()) {
                 const startRow = buf.getStartRow?.() ?? 0;
                 const startCol = buf.getStartCol?.() ?? 0;
@@ -1053,6 +1259,27 @@ export function createConsoleAPI(
       return fmt;
     },
 
+    hasComment(row: number, col: number, viewportId?: string): boolean {
+      const bridge = getActiveComputeBridge();
+      if (!bridge) return false;
+
+      const tryRead = (vpId: string): boolean | null => {
+        const accessor = bridge.getAccessorForViewport?.(vpId);
+        if (!accessor?.moveTo?.(row, col)) return null;
+        return accessor.hasComment === true;
+      };
+
+      if (viewportId) return tryRead(viewportId) === true;
+
+      const states: ReadonlyMap<string, unknown> | undefined = bridge.getPerViewportStates?.();
+      if (!states) return false;
+      for (const [vpId] of states) {
+        const value = tryRead(vpId);
+        if (value !== null) return value;
+      }
+      return false;
+    },
+
     getMachineStates() {
       const result: Record<string, import('../types').ProgrammaticMachineState> = {};
       for (const [id, m] of actorRecorder.machines) {
@@ -1244,10 +1471,15 @@ export function createConsoleAPI(
       }
 
       // Auto-fit affected row when font-size or wrap-text changes (Excel behavior).
-      // These format changes affect the required row height, so we trigger layout
-      // immediately so that readRowHeight() returns the updated value.
-      const affectsRowHeight = 'fontSize' in nonNullFormat || 'wrapText' in nonNullFormat;
-      if (affectsRowHeight) {
+      // Disabling wrap should clear the explicit wrapped row height instead of
+      // measuring and persisting a custom single-line height.
+      if (nonNullFormat['wrapText'] === false) {
+        try {
+          await ws.layout.resetRowHeight(row);
+        } catch {
+          // Non-fatal: row height reset is best-effort
+        }
+      } else if ('fontSize' in nonNullFormat || nonNullFormat['wrapText'] === true) {
         try {
           await ws.layout.autoFitRows([row]);
         } catch {
@@ -1521,11 +1753,10 @@ export function createConsoleAPI(
     // ── Invariants (Round 7 I-0) ──
 
     invariants(): InvariantsRunOutput {
-      // Delegates to the runner installed by
-      // `dev/app-eval/capture/invariants/registry.ts`. Until the
-      // registry module loads, the slot returns an empty passing
-      // result so callers (snapshot capture, tests) can rely on the
-      // shape unconditionally.
+      // Delegates to the runner installed by the eval-harness registry.
+      // Until that registry module loads, the slot returns an empty
+      // passing result so callers (snapshot capture, tests) can rely on
+      // the shape unconditionally.
       return runInstalledInvariants();
     },
 
@@ -1569,6 +1800,28 @@ export function createConsoleAPI(
         applied = false;
       }
       return { frozenRows: panes.rows, frozenCols: panes.cols, applied };
+    },
+
+    getFrozenPanes(): { rows: number; cols: number } | null {
+      const wb = getActiveWorkbook();
+      const sheetId = wb?.getActiveSheetId?.() ?? wb?.activeSheet?.id ?? wb?.activeSheet?.sheetId;
+      const mirrorPanes = sheetId ? wb?.mirror?.getFrozenPanes?.(sheetId) : null;
+      if (
+        mirrorPanes &&
+        typeof mirrorPanes.rows === 'number' &&
+        typeof mirrorPanes.cols === 'number'
+      ) {
+        return { rows: mirrorPanes.rows, cols: mirrorPanes.cols };
+      }
+      const rendererPanes = (window as any).__COORDINATOR__?.renderer?.getFrozenPanes?.();
+      if (
+        rendererPanes &&
+        typeof rendererPanes.rows === 'number' &&
+        typeof rendererPanes.cols === 'number'
+      ) {
+        return { rows: rendererPanes.rows, cols: rendererPanes.cols };
+      }
+      return null;
     },
 
     async freezeTopRow(): Promise<void> {
@@ -1780,6 +2033,8 @@ export function createConsoleAPI(
 
         const out: import('../types').DrawingDescriptor[] = [];
         for (const obj of sceneObjects) {
+          const model = await getFloatingObjectModelReadback(ws, obj.id);
+          if (model === null) continue;
           const kind = mapSceneTypeToDrawingKind(obj.type, obj);
           // Snap document-space top-left to the nearest cell. The renderer
           // already drew the drawing at obj.bounds, so the anchor is
@@ -1794,19 +2049,20 @@ export function createConsoleAPI(
             obj.bounds.x + obj.bounds.width,
             obj.bounds.y + obj.bounds.height,
           );
+          const canvasBounds = {
+            x: obj.bounds.x + DEFAULT_ROW_HEADER_WIDTH_PX,
+            y: obj.bounds.y + DEFAULT_COL_HEADER_HEIGHT_PX,
+            w: obj.bounds.width,
+            h: obj.bounds.height,
+          };
           out.push({
             id: obj.id,
             kind,
-            anchor: {
+            anchor: model?.anchor ?? {
               from: fromCell ?? { row: 0, col: 0 },
               ...(toCell ? { to: toCell } : {}),
             },
-            boundsPx: {
-              x: obj.bounds.x,
-              y: obj.bounds.y,
-              w: obj.bounds.width,
-              h: obj.bounds.height,
-            },
+            boundsPx: canvasBounds,
             visible: !!obj.visible,
             ...(extractSrc(obj) ? { src: extractSrc(obj)! } : {}),
           });
@@ -1815,8 +2071,16 @@ export function createConsoleAPI(
         const activeSheetId =
           typeof ws?.getSheetId === 'function' ? String(ws.getSheetId()) : undefined;
         if (!sheetId || !activeSheetId || sheetId === activeSheetId) {
-          const existingIds = new Set(out.map((drawing) => drawing.id));
-          out.push(...getRenderedDomFormControls(ws, existingIds));
+          const domFormControls = await getRenderedDomFormControls(ws);
+          if (domFormControls.length > 0) {
+            const domIds = new Set(domFormControls.map((drawing) => drawing.id));
+            for (let index = out.length - 1; index >= 0; index--) {
+              if (domIds.has(out[index].id)) {
+                out.splice(index, 1);
+              }
+            }
+            out.push(...domFormControls);
+          }
         }
         return out;
       } catch {
@@ -1866,29 +2130,11 @@ export function createConsoleAPI(
       // SheetView geometry `getCellPageRect`. This is the same source the
       // production click-to-cell hit-tester consults, so the value here
       // matches the canvas, not whatever the kernel layout-index says.
-      try {
-        const coordinator = (window as any).__COORDINATOR__;
-        const geometry = coordinator?.renderer?.getGeometry?.();
-        if (!geometry?.getCellPageRect) return null;
-        const bounds = geometry.getCellPageRect({ row, col: 0 });
-        if (!bounds) return null;
-        return bounds.height;
-      } catch {
-        return null;
-      }
+      return getRenderedCellBounds(row, 0)?.height ?? null;
     },
 
     async getRenderedColWidth(_sheet: string | null, col: number): Promise<number | null> {
-      try {
-        const coordinator = (window as any).__COORDINATOR__;
-        const geometry = coordinator?.renderer?.getGeometry?.();
-        if (!geometry?.getCellPageRect) return null;
-        const bounds = geometry.getCellPageRect({ row: 0, col });
-        if (!bounds) return null;
-        return bounds.width;
-      } catch {
-        return null;
-      }
+      return getRenderedCellBounds(0, col)?.width ?? null;
     },
 
     getRenderedViewportStartRow(scope: string = 'main'): number | null {
@@ -2073,8 +2319,8 @@ export function createConsoleAPI(
       // `OutlineToggleOverlay` only emits toggle <button>s for groups whose
       // anchor cell sits inside the *visible viewport* (see
       // `computeOutlineRects` in OutlineToggleOverlay.tsx — it bails on
-      // `coords.cellToViewport(...)` returning null). For the LBO Sample
-      // sheet's 15 row groups spanning rows 5..108, only the 1-2 groups whose
+      // `coords.cellToViewport(...)` returning null). For a large outline
+      // sheet with groups spanning beyond the first viewport, only groups whose
       // end-row lands in the initial viewport draw a toggle — the rest are
       // architecturally correct (off-screen) but invisible to a DOM
       // querySelector. Tests that verify *parser/import fidelity* want the
@@ -2111,6 +2357,28 @@ export function createConsoleAPI(
           .map((g) => ({ col: g.start, level: g.level, collapsed: g.collapsed }))
           .sort((a, b) => a.col - b.col);
         return { rows, cols };
+      } catch {
+        return null;
+      }
+    },
+
+    getActiveSheetName(): string | null {
+      try {
+        const doc =
+          (typeof document !== 'undefined' ? document : null) ??
+          (globalThis as { window?: { document?: Document } }).window?.document ??
+          null;
+        const activeTab = doc?.querySelector(
+          '[role="tablist"][aria-label="Sheet tabs"] [role="tab"][aria-selected="true"]',
+        ) as HTMLElement | null;
+        const tabText = activeTab?.textContent?.trim();
+        if (tabText) return tabText;
+
+        const wb = getActiveWorkbook();
+        const ws = wb?.activeSheet as { name?: unknown; getName?: () => unknown } | undefined;
+        if (typeof ws?.name === 'string' && ws.name) return ws.name;
+        const name = ws?.getName?.();
+        return typeof name === 'string' && name ? name : null;
       } catch {
         return null;
       }

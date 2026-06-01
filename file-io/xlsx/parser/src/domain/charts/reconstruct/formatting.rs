@@ -1,13 +1,13 @@
 use domain_types::chart::{
     ChartColorData, ChartDashStyle, ChartFillData, ChartFontData, ChartFormatData, ChartLineData,
-    ChartStrikeStyle, ChartUnderlineStyle,
+    ChartStrikeStyle, ChartTextVerticalType, ChartUnderlineStyle,
 };
 use ooxml_types::drawings::{
     ColorTransform, DashStyle, DrawingColor, DrawingFill, GradientFill, GradientPathType,
     GradientStop, LineDash, LineFill, Outline, Paragraph, ParagraphProperties, PatternFill,
     PresetPatternVal, RunProperties, SchemeColor, ShapeProperties, SolidFill, StAngle,
     StPositiveFixedPercentageDecimal, TextBody, TextBodyProperties, TextFont, TextStrikeType,
-    TextUnderlineType,
+    TextUnderlineType, TextVerticalType,
 };
 
 // =============================================================================
@@ -30,20 +30,26 @@ pub(super) fn build_shape_properties(fmt: &ChartFormatData) -> Option<ShapePrope
 }
 
 pub(super) fn build_text_body(fmt: &ChartFormatData) -> Option<TextBody> {
-    let font = fmt.font.as_ref()?;
-    let rpr = build_run_properties(font);
+    if fmt.font.is_none() && fmt.text_rotation.is_none() && fmt.text_vertical_type.is_none() {
+        return None;
+    }
 
     let rot = fmt
         .text_rotation
         .map(|deg| StAngle::new((deg * 60000.0) as i32));
+    let vert = fmt
+        .text_vertical_type
+        .as_ref()
+        .map(chart_text_vertical_type_to_ooxml);
     let body_props = TextBodyProperties {
         rot,
+        vert,
         ..Default::default()
     };
 
     let para = Paragraph {
         props: ParagraphProperties {
-            def_run_props: Some(Box::new(rpr)),
+            def_run_props: fmt.font.as_ref().map(build_run_properties).map(Box::new),
             ..Default::default()
         },
         runs: Vec::new(),
@@ -55,6 +61,18 @@ pub(super) fn build_text_body(fmt: &ChartFormatData) -> Option<TextBody> {
         list_style: None,
         paragraphs: vec![para],
     })
+}
+
+fn chart_text_vertical_type_to_ooxml(value: &ChartTextVerticalType) -> TextVerticalType {
+    match value {
+        ChartTextVerticalType::Horizontal => TextVerticalType::Horizontal,
+        ChartTextVerticalType::Vertical => TextVerticalType::Vertical,
+        ChartTextVerticalType::Vertical270 => TextVerticalType::Vertical270,
+        ChartTextVerticalType::WordArtVert => TextVerticalType::WordArtVert,
+        ChartTextVerticalType::EastAsianVert => TextVerticalType::EastAsianVert,
+        ChartTextVerticalType::MongolianVert => TextVerticalType::MongolianVert,
+        ChartTextVerticalType::WordArtVertRtl => TextVerticalType::WordArtVertRtl,
+    }
 }
 
 pub(super) fn build_drawing_fill(fill: &ChartFillData) -> DrawingFill {
@@ -129,10 +147,14 @@ pub(super) fn build_drawing_fill(fill: &ChartFillData) -> DrawingFill {
 pub(super) fn build_outline(line: &ChartLineData) -> Outline {
     let width = line.width.map(|pts| (pts * 12700.0) as i64); // points to EMUs
 
-    let fill = line.color.as_ref().map(|c| {
-        let dc = build_drawing_color(c);
-        LineFill::Solid(SolidFill { color: dc })
-    });
+    let fill = if line.no_fill == Some(true) {
+        Some(LineFill::NoFill)
+    } else {
+        line.color.as_ref().map(|c| {
+            let dc = build_drawing_color(c);
+            LineFill::Solid(SolidFill { color: dc })
+        })
+    };
 
     let dash = line.dash_style.as_ref().map(|ds| {
         let style = match ds {

@@ -222,9 +222,21 @@ impl DrawingWriter {
         self.registered_relationship_ids = resolved_ids.values().cloned().collect();
         for anchor in &mut self.anchors {
             let obj = match anchor {
-                DrawingAnchor::TwoCell(_, obj)
-                | DrawingAnchor::OneCell(_, obj)
-                | DrawingAnchor::Absolute(_, obj) => obj,
+                DrawingAnchor::TwoCell(two_cell, obj) => {
+                    if let Some(raw) = &mut two_cell.mc_alternate_content {
+                        raw.raw_xml =
+                            crate::infra::xml::remap_relationship_attrs(&raw.raw_xml, resolved_ids);
+                    }
+                    obj
+                }
+                DrawingAnchor::OneCell(one_cell, obj) => {
+                    if let Some(raw) = &mut one_cell.mc_alternate_content {
+                        raw.raw_xml =
+                            crate::infra::xml::remap_relationship_attrs(&raw.raw_xml, resolved_ids);
+                    }
+                    obj
+                }
+                DrawingAnchor::Absolute(_, obj) => obj,
             };
             Self::remap_object_relationship_ids(obj, resolved_ids);
         }

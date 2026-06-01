@@ -55,6 +55,9 @@ pub(in crate::storage::engine) fn from_yrs_state(
     let client_id = storage.doc().client_id();
     let collab_alloc =
         std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(client_id));
+    let metadata_alloc = std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
+        client_id,
+    ));
 
     let snapshot = build_workbook_snapshot_from_yrs(&storage)?;
 
@@ -77,7 +80,7 @@ pub(in crate::storage::engine) fn from_yrs_state(
         compute,
         &snapshot,
         collab_alloc.clone(),
-        collab_alloc,
+        metadata_alloc,
     )?;
 
     // `assemble_engine_with_alloc` normalizes any legacy/import-era raw-A1
@@ -131,7 +134,7 @@ pub(in crate::storage::engine) fn assemble_engine(
     // Share the same allocator with ComputeCore to prevent CellId collisions
     // between ghost cells (formula resolution) and real cells (mutation handlers).
     compute.set_id_alloc(std::sync::Arc::clone(&grid_id_alloc));
-    let id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(
+    let id_alloc = std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
         storage.doc().client_id(),
     ));
     assemble_engine_inner(storage, mirror, compute, snapshot, grid_id_alloc, id_alloc)
@@ -313,9 +316,10 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     let shared_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed));
     engine.stores.grid_id_alloc = std::sync::Arc::clone(&shared_alloc);
     engine.stores.compute.set_id_alloc(shared_alloc);
-    engine.stores.id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_client_partition(
-        engine.stores.storage.doc().client_id(),
-    ));
+    engine.stores.id_alloc =
+        std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
+            engine.stores.storage.doc().client_id(),
+        ));
 
     // Rebuild indexes
     engine.stores.grid_indexes = build_grid_indexes_from_yrs(

@@ -44,6 +44,7 @@ import {
 const thinBorder = { style: 'thin' as const, color: '#000000' };
 const thickBorder = { style: 'thick' as const, color: '#000000' };
 const doubleBorder = { style: 'double' as const, color: '#000000' };
+const noBorders: CellBorders = {};
 
 // =============================================================================
 // Border Handlers
@@ -111,7 +112,7 @@ export const REMOVE_BORDERS: AsyncActionHandler = async (deps) => {
   // Performance: Uses row/column format storage for full row/column selections
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, { borders: undefined });
+    await ws.formats.setRanges(ranges, { borders: noBorders });
   }
 
   return handled();
@@ -187,7 +188,7 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
     // 'none' preset: Remove all borders - position-independent
     for (const sheetId of targetSheetIds) {
       const ws = deps.workbook.getSheetById(sheetId);
-      await ws.formats.setRanges(ranges, { borders: undefined });
+      await ws.formats.setRanges(ranges, { borders: noBorders });
     }
     // Only clear UIStore if we used it (not in direct mode)
     if (!isDirectMode) {

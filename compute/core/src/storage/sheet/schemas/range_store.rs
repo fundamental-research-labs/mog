@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use cell_types::SheetId;
+use cell_types::{IdAllocator, SheetId};
 use compute_document::range::ValidationBinding;
 use compute_document::schema::{
     KEY_RANGE_BINDINGS, KEY_RANGE_PAYLOADS, KEY_RANGES, KEY_VALIDATION_RULES,
@@ -19,6 +19,7 @@ pub(super) fn create_validation_ranges(
     rule_id: &str,
     spec: &ValidationSpec,
     priority: u64,
+    id_alloc: &IdAllocator,
 ) {
     let Some(rules_map) = ensure_sheet_sub_map(txn, sheets_root, sheet_id, KEY_VALIDATION_RULES)
     else {
@@ -45,7 +46,7 @@ pub(super) fn create_validation_ranges(
     let binding_bytes = binding.to_bytes();
 
     for _range_str in &spec.ranges {
-        let range_id = crate::storage::STORAGE_ID_ALLOC.next_range_id();
+        let range_id = id_alloc.next_range_id();
         let metadata = compute_document::range::RangeMetadata {
             range_id,
             kind: cell_types::RangeKind::Validation,
@@ -84,7 +85,15 @@ pub(crate) fn write_imported_validation_specs(
         } else {
             base_id
         };
-        create_validation_ranges(txn, sheets_root, sheet_id, &rule_id, spec, idx as u64);
+        create_validation_ranges(
+            txn,
+            sheets_root,
+            sheet_id,
+            &rule_id,
+            spec,
+            idx as u64,
+            &crate::storage::STORAGE_ID_ALLOC,
+        );
     }
 }
 

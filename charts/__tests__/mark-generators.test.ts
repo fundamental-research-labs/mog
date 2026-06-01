@@ -90,6 +90,31 @@ describe('generateTextMarks', () => {
     expect((result.marks[0] as any).fontSize).toBe(24);
   });
 
+  it('plotRadiusFraction direct positions use the smaller plot dimension as diameter', () => {
+    const spec: ChartSpec = {
+      width: 500,
+      height: 300,
+      mark: {
+        type: 'text',
+        xField: 'labelX',
+        yField: 'labelY',
+        coordinateSystem: 'plotRadiusFraction',
+      },
+      data: { values: [{ labelX: 1, labelY: 0.5, label: 'right edge' }] },
+      encoding: {
+        text: { field: 'label' },
+      },
+    };
+    const result = compile(spec, undefined, { skipAxes: true, skipLegend: true, skipTitle: true });
+    const mark = result.marks[0] as any;
+    const diameter = Math.min(result.layout.plotArea.width, result.layout.plotArea.height);
+    const centerX = result.layout.plotArea.x + result.layout.plotArea.width / 2;
+    const centerY = result.layout.plotArea.y + result.layout.plotArea.height / 2;
+
+    expect(mark.x).toBeCloseTo(centerX + diameter / 2);
+    expect(mark.y).toBeCloseTo(centerY);
+  });
+
   it('missing text field produces empty string', () => {
     const spec: ChartSpec = {
       mark: 'text',

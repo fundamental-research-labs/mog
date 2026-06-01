@@ -35,6 +35,7 @@ import type {
   SheetHitResult,
   SheetPoint,
   SheetRect,
+  SheetSize,
   SheetFloatingObjectScenePatch,
   SheetRenderState,
   SheetSceneObjectSnapshot,
@@ -96,6 +97,19 @@ export interface ISheetViewGeometry {
    * Returns multiple rects when the range spans the frozen/non-frozen boundary.
    */
   getRangePageRects(range: RangeAddress): SheetRect[];
+
+  /**
+   * Get the full rendered (drawn) size of a cell: column width / row height
+   * scaled by the active zoom.
+   *
+   * Independent of scroll position and viewport — a cell scrolled off-screen
+   * still reports its full drawn width/height here, unlike `getCellPageRect`.
+   * Use this to measure intrinsic rendered dimensions (column width / row
+   * height readbacks); use `getCellPageRect` for click/overlay positioning.
+   *
+   * Returns null only if the renderer is not ready (no usable zoom).
+   */
+  getCellRenderedSize(cell: CellAddress): SheetSize | null;
 
   /**
    * Get dimension information for a row or column.

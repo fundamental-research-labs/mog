@@ -157,6 +157,47 @@ describe('Margin Calculation', () => {
     expect(layout.margin.bottom).toBeGreaterThanOrEqual(30);
     expect(layout.margin.left).toBeGreaterThanOrEqual(40);
   });
+
+  test('uses imported value-axis label width hints for the left gutter', () => {
+    const baseSpec: ChartSpec = {
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative', axis: {} },
+      },
+    };
+    const shortLabelSpec: ChartSpec = {
+      ...baseSpec,
+      config: { layoutHints: { yAxisLabelWidth: 43 } },
+    };
+    const longLabelSpec: ChartSpec = {
+      ...baseSpec,
+      config: { layoutHints: { yAxisLabelWidth: 72 } },
+    };
+
+    const shortLayout = calculateLayout(shortLabelSpec, { width: 796, height: 436 });
+    const longLayout = calculateLayout(longLabelSpec, { width: 796, height: 436 });
+
+    expect(shortLayout.plotArea.x).toBe(93);
+    expect(longLayout.plotArea.x).toBe(122);
+    expect(shortLayout.plotArea.width).toBeGreaterThan(longLayout.plotArea.width);
+  });
+
+  test('uses imported bottom margin hints as the final x-axis gutter', () => {
+    const spec: ChartSpec = {
+      mark: 'bar',
+      encoding: {
+        x: { field: 'category', type: 'nominal', axis: {} },
+        y: { field: 'value', type: 'quantitative', axis: {} },
+      },
+      config: { layoutHints: { bottomMargin: 29 } },
+    };
+
+    const layout = calculateLayout(spec, { width: 796, height: 436 });
+
+    expect(layout.margin.bottom).toBe(29);
+    expect(layout.plotArea.y + layout.plotArea.height).toBe(407);
+  });
 });
 
 // =============================================================================
@@ -265,6 +306,66 @@ describe('Legend Area', () => {
     const layout = calculateLayout(spec);
 
     expect(layout.legend).toBeUndefined();
+  });
+
+  test('centers left side legends in the reserved legend band', () => {
+    const spec: ChartSpec = {
+      mark: 'line',
+      width: 1526,
+      height: 706,
+      encoding: {
+        x: { field: 'category', type: 'nominal' },
+        y: { field: 'value', type: 'quantitative' },
+        color: {
+          field: 'series',
+          type: 'nominal',
+          scale: {
+            domain: ['Signal 1', 'Signal 2', 'Signal 3', 'Signal 4', 'Signal 5'],
+          },
+          legend: { orient: 'left', symbolType: 'line' },
+        },
+      },
+    };
+
+    const layout = calculateLayout(spec);
+
+    expect(layout.legend).toBeDefined();
+    expect(layout.legend!.x).toBeLessThan(layout.plotArea.x);
+    expect(layout.legend!.x).toBeLessThan(DEFAULT_LAYOUT.margin.left);
+    expect(layout.legend!.height).toBeLessThan(120);
+    expect(layout.legend!.y + layout.legend!.height / 2).toBeCloseTo(layout.height / 2, 0);
+  });
+
+  test('sizes side legend areas from the rendered entry count', () => {
+    const baseSpec: ChartSpec = {
+      mark: 'line',
+      width: 800,
+      height: 500,
+      encoding: {
+        color: {
+          field: 'series',
+          type: 'nominal',
+          scale: { domain: ['A', 'B', 'C', 'D', 'E'] },
+          legend: { orient: 'right', symbolType: 'line' },
+        },
+      },
+    };
+
+    const oneEntry = calculateLayout({
+      ...baseSpec,
+      encoding: {
+        color: {
+          field: 'series',
+          type: 'nominal',
+          scale: { domain: ['A'] },
+          legend: { orient: 'right', symbolType: 'line' },
+        },
+      },
+    });
+    const fiveEntries = calculateLayout(baseSpec);
+
+    expect(fiveEntries.legend!.height).toBeGreaterThan(oneEntry.legend!.height);
+    expect(fiveEntries.legend!.height).toBeLessThan(120);
   });
 });
 

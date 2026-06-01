@@ -198,6 +198,7 @@ impl YrsStorage {
                 let empty = MapPrelim::from([] as [(&str, Any); 0]);
                 sheet_map.insert(&mut txn, key, empty);
             }
+            sheet_map.insert(&mut txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
 
             // Populate Range data into the sub-maps we just created.
             if !sheet_snap.ranges.is_empty()

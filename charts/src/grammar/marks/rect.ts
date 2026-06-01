@@ -9,7 +9,20 @@
 import type { RectMark } from '../../primitives/types';
 import { DEFAULT_CATEGORY_COLORS, resolveEncodings, type ScaleMap } from '../encoding-resolver';
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import { directPosition } from './direct-position';
 import { invokeScale } from './helpers';
+
+function datumString(datum: DataRow, field: string | undefined): string | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function datumNumber(datum: DataRow, field: string | undefined): number | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 /**
  * Generate rect marks (heatmap, etc.).
@@ -19,15 +32,58 @@ export function generateRectMarks(
   data: DataRow[],
   scales: ScaleMap,
   encodings: ReturnType<typeof resolveEncodings>,
-  _layout: Layout,
+  layout: Layout,
 ): RectMark[] {
   const marks: RectMark[] = [];
   const xScale = scales.x;
   const yScale = scales.y;
 
-  if (!xScale || !yScale) return marks;
-
   for (const datum of data) {
+    const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
+    const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    const directX2 = directPosition(
+      datum,
+      markSpec.x2Field,
+      layout,
+      'x',
+      markSpec.coordinateSystem,
+    );
+    const directY2 = directPosition(
+      datum,
+      markSpec.y2Field,
+      layout,
+      'y',
+      markSpec.coordinateSystem,
+    );
+    if (
+      directX !== undefined &&
+      directY !== undefined &&
+      directX2 !== undefined &&
+      directY2 !== undefined
+    ) {
+      marks.push({
+        type: 'rect',
+        x: Math.min(directX, directX2),
+        y: Math.min(directY, directY2),
+        width: Math.abs(directX2 - directX),
+        height: Math.abs(directY2 - directY),
+        datum,
+        style: {
+          fill:
+            datumString(datum, markSpec.fillField) ??
+            markSpec.fill ??
+            markSpec.color ??
+            DEFAULT_CATEGORY_COLORS[0],
+          stroke: datumString(datum, markSpec.strokeField) ?? markSpec.stroke,
+          strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
+          opacity: markSpec.opacity ?? 1,
+        },
+      });
+      continue;
+    }
+
+    if (!xScale || !yScale) continue;
+
     const xValue = encodings.x?.accessor(datum);
     const yValue = encodings.y?.accessor(datum);
 
@@ -53,7 +109,7 @@ export function generateRectMarks(
       style: {
         fill: color,
         stroke: markSpec.stroke,
-        strokeWidth: markSpec.strokeWidth,
+        strokeWidth: datumNumber(datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth,
         opacity: markSpec.opacity ?? 1,
       },
     });

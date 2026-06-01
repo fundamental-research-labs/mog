@@ -7,6 +7,8 @@ import { APPLY_PAGE_SETUP } from '../dialog-handlers';
 function createMockDeps() {
   const closePageSetupDialog = jest.fn();
   const setSettings = jest.fn(async () => undefined);
+  const setArea = jest.fn(async () => undefined);
+  const clearArea = jest.fn(async () => undefined);
   const clearPrintTitles = jest.fn(async () => undefined);
   const setPrintTitleRows = jest.fn(async () => undefined);
   const setPrintTitleColumns = jest.fn(async () => undefined);
@@ -22,6 +24,8 @@ function createMockDeps() {
       getSheetById: jest.fn(() => ({
         print: {
           setSettings,
+          setArea,
+          clearArea,
           clearPrintTitles,
           setPrintTitleRows,
           setPrintTitleColumns,
@@ -34,6 +38,8 @@ function createMockDeps() {
     deps,
     closePageSetupDialog,
     setSettings,
+    setArea,
+    clearArea,
     clearPrintTitles,
     setPrintTitleRows,
     setPrintTitleColumns,
@@ -62,5 +68,34 @@ describe('APPLY_PAGE_SETUP', () => {
     expect(mocks.clearPrintTitles).toHaveBeenCalledTimes(1);
     expect(mocks.setPrintTitleRows).toHaveBeenCalledWith(0, 1);
     expect(mocks.setPrintTitleColumns).toHaveBeenCalledWith(0, 1);
+  });
+
+  it('persists print area separately from print settings', async () => {
+    const mocks = createMockDeps();
+
+    const result = await APPLY_PAGE_SETUP(mocks.deps, {
+      orientation: 'portrait',
+      printArea: 'A1:D10',
+    });
+
+    expect(result.handled).toBe(true);
+    expect(mocks.setSettings).toHaveBeenCalledWith({
+      orientation: 'portrait',
+    });
+    expect(mocks.setArea).toHaveBeenCalledWith('A1:D10');
+    expect(mocks.clearArea).not.toHaveBeenCalled();
+  });
+
+  it('clears print area when the page setup field is blank', async () => {
+    const mocks = createMockDeps();
+
+    const result = await APPLY_PAGE_SETUP(mocks.deps, {
+      printArea: null,
+    });
+
+    expect(result.handled).toBe(true);
+    expect(mocks.setSettings).toHaveBeenCalledWith({});
+    expect(mocks.clearArea).toHaveBeenCalledTimes(1);
+    expect(mocks.setArea).not.toHaveBeenCalled();
   });
 });

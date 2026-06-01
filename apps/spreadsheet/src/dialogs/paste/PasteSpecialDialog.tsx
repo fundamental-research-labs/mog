@@ -101,24 +101,22 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
 
   // Handle OK button click
   const handleOk = useCallback(() => {
+    const pasteAll =
+      pasteType === 'all' ||
+      pasteType === 'allUsingSourceTheme' ||
+      pasteType === 'allExceptBorders';
+
     // Build options based on paste type selection
     // Extended to handle all Excel paste types
     const options: PasteSpecialOptions = {
       // Basic paste type flags
-      values: pasteType === 'values' || pasteType === 'valuesAndNumberFormats',
-      formulas:
-        pasteType === 'formulas' ||
-        pasteType === 'formulasAndNumberFormats' ||
-        pasteType === 'all' ||
-        pasteType === 'allUsingSourceTheme' ||
-        pasteType === 'allExceptBorders',
+      values: !pasteAll && (pasteType === 'values' || pasteType === 'valuesAndNumberFormats'),
+      formulas: !pasteAll && (pasteType === 'formulas' || pasteType === 'formulasAndNumberFormats'),
       formats:
-        pasteType === 'formats' ||
-        pasteType === 'formulasAndNumberFormats' ||
-        pasteType === 'valuesAndNumberFormats' ||
-        pasteType === 'all' ||
-        pasteType === 'allUsingSourceTheme' ||
-        pasteType === 'allExceptBorders',
+        !pasteAll &&
+        (pasteType === 'formats' ||
+          pasteType === 'formulasAndNumberFormats' ||
+          pasteType === 'valuesAndNumberFormats'),
       // Data Validation - Paste validation rules
       validation:
         pasteType === 'validation' ||
@@ -251,6 +249,7 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
       onClose={handleCancel}
       dialogId="paste-special-dialog"
       width={400}
+      dataAttributes={{ 'data-testid': 'overlay-paste-special' }}
       onOpenAutoFocus={handleOpenAutoFocus}
       onEnterKeyDown={handleOk}
     >

@@ -1,6 +1,27 @@
 use super::support::*;
 use super::*;
 
+fn one_sheet_snapshot(sheet_id: &str) -> snapshot_types::WorkbookSnapshot {
+    snapshot_types::WorkbookSnapshot {
+        sheets: vec![snapshot_types::SheetSnapshot {
+            id: sheet_id.to_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    }
+}
+
 #[test]
 fn test_update_preserves_entries() {
     // Insert A then B; update A; both entries still present.
@@ -27,6 +48,31 @@ fn test_update_preserves_entries() {
     assert_eq!(fetched.enforcement, Some(EnforcementLevel::Warning));
     assert_eq!(validation_rule_count(&storage, &sid), 2);
 }
+
+#[test]
+fn test_engine_set_range_schema_uses_partitioned_range_ids() {
+    let sheet_uuid = "550e8400-e29b-41d4-a716-446655440000";
+    let sheet_id = SheetId::from_uuid_str(sheet_uuid).unwrap();
+    let (mut engine, _) =
+        crate::storage::engine::YrsComputeEngine::from_snapshot(one_sheet_snapshot(sheet_uuid))
+            .unwrap();
+
+    let schema = range_schema_at("rs-engine", "0:0", "0:0");
+    engine.set_range_schema(&sheet_id, &schema).unwrap();
+
+    let state = engine.sync_full_state();
+    let storage = YrsStorage::from_yrs_state(&state).unwrap();
+    let snapshot =
+        crate::storage::engine::construction::build_workbook_snapshot_from_yrs(&storage).unwrap();
+    let range_id = snapshot.sheets[0].ranges[0].range_id.as_u128();
+
+    assert_ne!(
+        range_id >> 64,
+        0,
+        "engine range-schema writes must not use the local-only range-id partition",
+    );
+}
+
 #[test]
 fn test_concurrent_insert_disjoint_ranges_merge() {
     // Two peers insert different specs simultaneously on disjoint cells.
@@ -34,16 +80,23 @@ fn test_concurrent_insert_disjoint_ranges_merge() {
     // entries with distinct keys, so concurrent inserts merge cleanly.
     let (storage1, sid, _gi) = storage_with_sheet();
     let storage2 = clone_storage(&storage1);
+    let server = clone_storage(&storage1);
+    let alloc1 = cell_types::IdAllocator::with_client_partition(storage1.doc().client_id());
+    let alloc2 = cell_types::IdAllocator::with_client_partition(storage2.doc().client_id());
 
     // Concurrently insert different specs on each storage.
     let a = range_schema_at("rs-A", "0:0", "0:0"); // A1
     let b = range_schema_at("rs-B", "0:1", "0:1"); // B1
-    set_range_schema(storage1.doc(), storage1.sheets(), &sid, &a).unwrap();
-    set_range_schema(storage2.doc(), storage2.sheets(), &sid, &b).unwrap();
+    set_range_schema_with_alloc(storage1.doc(), storage1.sheets(), &sid, &a, &alloc1).unwrap();
+    set_range_schema_with_alloc(storage2.doc(), storage2.sheets(), &sid, &b, &alloc2).unwrap();
 
-    // Cross-sync both directions.
-    sync_storage(&storage1, &storage2);
-    sync_storage(&storage2, &storage1);
+    // Fan both concurrent peer updates into an authoritative server document,
+    // then pull the merged state back to both peers. This mirrors the network
+    // collaboration path used by colab-eval.
+    sync_storage(&storage1, &server);
+    sync_storage(&storage2, &server);
+    sync_storage(&server, &storage1);
+    sync_storage(&server, &storage2);
 
     let mut ids1 = view_ids(&storage1, &sid);
     let mut ids2 = view_ids(&storage2, &sid);

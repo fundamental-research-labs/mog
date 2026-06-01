@@ -11,6 +11,7 @@ import type {
   CellRange,
   FilterByColorOptions,
   FilterDetailInfo,
+  FilterDropdownColumnType,
   FilterDropdownData,
   FilterKind,
   FilterSortState,
@@ -21,6 +22,7 @@ import type {
 import type { ColumnFilterCriteria, DynamicFilterRule } from '@mog-sdk/contracts/filter';
 import { sheetId as toSheetId, type CellValue } from '@mog-sdk/contracts/core';
 import type { FilterCriteria } from '@mog/table-engine';
+import { isDateFormat } from '@mog/spreadsheet-utils/number-formats';
 
 import type {
   ColumnFilter as ComputeColumnFilter,
@@ -162,6 +164,26 @@ function composeVisibility(bitmaps: Uint8Array[]): Uint8Array | null {
     }
   }
   return result;
+}
+
+function formatIsDateLike(format: unknown): boolean {
+  if (!format || typeof format !== 'object') return false;
+  const typed = format as { numberFormat?: unknown; numberFormatType?: unknown };
+  if (typed.numberFormatType === 'date' || typed.numberFormatType === 'time') return true;
+  return typeof typed.numberFormat === 'string' && isDateFormat(typed.numberFormat);
+}
+
+function classifyDropdownColumnType(counts: {
+  number: number;
+  text: number;
+  date: number;
+}): FilterDropdownColumnType {
+  const total = counts.number + counts.text + counts.date;
+  if (total === 0) return 'mixed';
+  if (counts.date / total > 0.5) return 'date';
+  if (counts.number / total > 0.5) return 'number';
+  if (counts.text / total > 0.5) return 'text';
+  return 'mixed';
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +504,11 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       col,
     );
 
-    const columnData = await this.readColumnData(dataStartRow, range.endRow, col);
+    const { values: columnData, columnType } = await this.readColumnDataWithType(
+      dataStartRow,
+      range.endRow,
+      col,
+    );
     const currentComputeFilter = currentHeaderCellId
       ? filter.columnFilters?.[currentHeaderCellId]
       : undefined;
@@ -504,11 +530,12 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       otherBitmaps.push(new Uint8Array(bitmap));
     }
 
-    return this.ctx.computeBridge.tableBuildFilterDropdown(
+    const dropdownData = await this.ctx.computeBridge.tableBuildFilterDropdown(
       columnData,
       currentFilter,
       composeVisibility(otherBitmaps),
     );
+    return { ...dropdownData, columnType };
   }
 
   /** @deprecated Use {@link setColumnFilter} instead. */
@@ -635,5 +662,35 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       values.push((await this.ctx.computeBridge.getCellValue(this.sheetId, row, col)) ?? null);
     }
     return values;
+  }
+
+  private async readColumnDataWithType(
+    startRow: number,
+    endRow: number,
+    col: number,
+  ): Promise<{ values: CellValue[]; columnType: FilterDropdownColumnType }> {
+    const values: CellValue[] = [];
+    const counts = { number: 0, text: 0, date: 0 };
+
+    for (let row = startRow; row <= endRow; row++) {
+      const value = (await this.ctx.computeBridge.getCellValue(this.sheetId, row, col)) ?? null;
+      values.push(value);
+
+      if (value === null || value === undefined || value === '') continue;
+
+      if (typeof value === 'number') {
+        const format = await this.ctx.computeBridge.getResolvedFormat(this.sheetId, row, col);
+        if (formatIsDateLike(format)) {
+          counts.date++;
+        } else {
+          counts.number++;
+        }
+        continue;
+      }
+
+      counts.text++;
+    }
+
+    return { values, columnType: classifyDropdownColumnType(counts) };
   }
 }

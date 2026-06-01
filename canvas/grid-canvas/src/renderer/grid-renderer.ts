@@ -82,6 +82,7 @@ import { DEFAULT_RESOLVED_SHEET_VIEW_SKIN } from '@mog-sdk/contracts/rendering/s
 import {
   CanvasTextMeasurer,
   createCanvasEngine,
+  docToCanvasXY,
   docSpaceRect,
   type CanvasEngineInstance,
   type DirtyHint,
@@ -1994,6 +1995,9 @@ export class GridRendererImpl implements GridRenderer {
     if (obj.type === 'shape' && (obj.shapeType as string) === 'group') {
       return null;
     }
+    if (obj.type === 'formControl') {
+      return null;
+    }
 
     const visibleValue = (obj as unknown as { visible?: unknown }).visible;
     const base = {
@@ -2426,6 +2430,45 @@ export class GridRendererImpl implements GridRenderer {
     const sheetId = this.currentSheetId;
     if (!sheetId) return null;
 
+    const layoutViewport = this.viewportLayout?.viewports.find((viewport) => {
+      const viewportSheetId = viewport.sheetId ?? sheetId;
+      const range = viewport.cellRange;
+      return (
+        viewportSheetId === sheetId &&
+        row >= range.startRow &&
+        row <= range.endRow &&
+        col >= range.startCol &&
+        col <= range.endCol
+      );
+    });
+
+    if (layoutViewport) {
+      const docX = this.positionIndex.getColLeft(col);
+      const docY = this.positionIndex.getRowTop(row);
+      const origin = docToCanvasXY(docX, docY, layoutViewport);
+      const width = this.positionIndex.getColWidth(col) * layoutViewport.zoom;
+      const height = this.positionIndex.getRowHeight(row) * layoutViewport.zoom;
+      const clippedX = Math.max(origin.x, layoutViewport.bounds.x);
+      const clippedY = Math.max(origin.y, layoutViewport.bounds.y);
+      const clippedRight = Math.min(
+        origin.x + width,
+        layoutViewport.bounds.x + layoutViewport.bounds.width,
+      );
+      const clippedBottom = Math.min(
+        origin.y + height,
+        layoutViewport.bounds.y + layoutViewport.bounds.height,
+      );
+      if (clippedRight < clippedX || clippedBottom < clippedY) return null;
+
+      const containerRect = this.container.getBoundingClientRect();
+      return {
+        x: containerRect.x + clippedX,
+        y: containerRect.y + clippedY,
+        width: clippedRight - clippedX,
+        height: clippedBottom - clippedY,
+      };
+    }
+
     const viewportRect = this.coords.cellToViewport(sheetId, { row, col });
     if (!viewportRect) return null;
 
@@ -2435,6 +2478,22 @@ export class GridRendererImpl implements GridRenderer {
       y: containerRect.y + viewportRect.y,
       width: viewportRect.width,
       height: viewportRect.height,
+    };
+  }
+
+  getCellRenderedSize(row: number, col: number): { width: number; height: number } | null {
+    // The drawn size of a cell is just its column width / row height scaled by
+    // the active zoom. It is independent of sheetId, of which viewport (main /
+    // frozen / split) contains the cell, and of whether the cell is currently
+    // scrolled into view — those only matter for *positioning* and clipping
+    // (see getCellPageBounds), not for size. Deliberately no viewport search:
+    // adding scroll-dependence here is exactly the clipping bug this method
+    // exists to avoid.
+    const zoom = this.coords.getZoom();
+    if (!Number.isFinite(zoom) || zoom <= 0) return null;
+    return {
+      width: this.positionIndex.getColWidth(col) * zoom,
+      height: this.positionIndex.getRowHeight(row) * zoom,
     };
   }
 

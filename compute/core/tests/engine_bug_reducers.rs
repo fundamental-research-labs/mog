@@ -46,14 +46,14 @@
 //! Reducers: `class1_sumifs_text_criterion_xlsx_reducer` and
 //! `class1_sumifs_text_criterion_xlsx_reducer_import_values_inverse`.
 //!
-//! ### Classes 2+ — Ib6CYMnT / nxnOekSc / qKjqZiEx specifics
+//! ### Classes 2+ — external reducer specifics
 //!
-//! Not explained by the SST-reorder root cause: real corpus files are
-//! Excel-produced, so their SSTs are internally consistent and take
+//! Not explained by the SST-reorder root cause: externally produced XLSX files
+//! can have internally consistent SSTs and take
 //! the round-trip (insertion-order) branch. Those bugs should be
 //! re-investigated separately from this fix.
 //!
-//! ## Expected state (per `feedback_no_ignored_tests.md`)
+//! ## Expected state
 //!
 //! Both class1 reducers must pass with bit-identity (`pre == post`) — not just
 //! "no drift within 1e-12".
@@ -335,19 +335,41 @@ fn control_class1_via_from_snapshot_passes() {
 }
 
 // ---------------------------------------------------------------------------
-// nxnOekSc reducer (corpus-derived, op+inverse on real file)
+// External XLSX reducer (op+inverse on an env-supplied workbook)
 // ---------------------------------------------------------------------------
 
 #[cfg(feature = "corpus-tests")]
 #[test]
-fn nxnoeksc_sumifs_inverse_leaves_stale_result() {
+fn external_sumifs_inverse_leaves_stale_result() {
     use compute_core::test_support::{DefaultIdAllocator, parse_output_to_workbook_snapshot};
     use xlsx_api::{ParseOptions, parse_with_options};
-    let corpus_dir = std::env::var_os("MOG_XLSX_CORPUS_DIR")
-        .expect("set MOG_XLSX_CORPUS_DIR to the XLSX corpus directory");
-    let path =
-        std::path::PathBuf::from(corpus_dir).join("nxnOekScUkRj7CWuBhws1Ta1nVdDSKZ1/latest.xlsx");
-    let bytes = std::fs::read(&path).expect("read nxnOekSc XLSX");
+
+    fn required_env(name: &str) -> String {
+        std::env::var(name).unwrap_or_else(|_| panic!("set {name} for the external XLSX reducer"))
+    }
+
+    fn required_env_u32(name: &str) -> u32 {
+        required_env(name)
+            .parse::<u32>()
+            .unwrap_or_else(|e| panic!("{name} must be a u32: {e}"))
+    }
+
+    fn required_env_f64(name: &str) -> f64 {
+        required_env(name)
+            .parse::<f64>()
+            .unwrap_or_else(|e| panic!("{name} must be an f64: {e}"))
+    }
+
+    let path = std::path::PathBuf::from(required_env("MOG_SUMIFS_INVERSE_REDUCER_XLSX"));
+    let edit_sheet_name = required_env("MOG_SUMIFS_INVERSE_EDIT_SHEET");
+    let dep_sheet_name = required_env("MOG_SUMIFS_INVERSE_DEP_SHEET");
+    let edit_row = required_env_u32("MOG_SUMIFS_INVERSE_EDIT_ROW");
+    let edit_col = required_env_u32("MOG_SUMIFS_INVERSE_EDIT_COL");
+    let dep_row = required_env_u32("MOG_SUMIFS_INVERSE_DEP_ROW");
+    let dep_col = required_env_u32("MOG_SUMIFS_INVERSE_DEP_COL");
+    let prior = required_env_f64("MOG_SUMIFS_INVERSE_PRIOR");
+    let new_value = required_env_f64("MOG_SUMIFS_INVERSE_NEW_VALUE");
+    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("read external XLSX reducer: {e}"));
 
     // Match the walk harness's init path exactly: parse → build snapshot →
     // from_snapshot. The walk uses this path (not from_xlsx_bytes) and the
@@ -357,65 +379,74 @@ fn nxnoeksc_sumifs_inverse_leaves_stale_result() {
     let snapshot = parse_output_to_workbook_snapshot(&wb.output, None, &mut allocator);
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
 
-    // Walk log: edit target is parsed sheet index 9 = "Latest Periods by Item",
-    // cell K40 (row 39, col 10), prior=28, new=80.
     let edit_sheet = engine
         .mirror()
-        .sheet_by_name("Latest Periods by Item")
-        .expect("Latest Periods by Item sheet");
+        .sheet_by_name(&edit_sheet_name)
+        .expect("edit sheet should exist");
     let dep_sheet = engine
         .mirror()
-        .sheet_by_name("Breakouts vs. PP")
-        .expect("Breakouts vs. PP sheet");
+        .sheet_by_name(&dep_sheet_name)
+        .expect("dependent sheet should exist");
 
     let edit_cid = engine
         .grid_index(&edit_sheet)
         .expect("grid")
-        .cell_id_at(39, 10)
-        .expect("K40 exists");
+        .cell_id_at(edit_row, edit_col)
+        .expect("edit cell should exist");
 
     let pre = engine
         .mirror()
-        .get_cell_value_at(&dep_sheet, SheetPos::new(18, 18))
+        .get_cell_value_at(&dep_sheet, SheetPos::new(dep_row, dep_col))
         .cloned()
         .unwrap_or(CellValue::Null);
-    eprintln!("pre S19 = {:?}", pre);
+    eprintln!("pre dependent = {:?}", pre);
     eprintln!(
-        "pre K40 = {:?}",
+        "pre edit = {:?}",
         engine
             .mirror()
-            .get_cell_value_at(&edit_sheet, SheetPos::new(39, 10))
+            .get_cell_value_at(&edit_sheet, SheetPos::new(edit_row, edit_col))
     );
 
     // Match walk's op pair exactly: forward via set_cell (input parser path),
     // inverse via import_values (Track 1a's lossless raw path).
     engine
-        .set_cell(&edit_sheet, edit_cid, 39, 10, "80".into())
+        .set_cell(
+            &edit_sheet,
+            edit_cid,
+            edit_row,
+            edit_col,
+            new_value.to_string(),
+        )
         .expect("forward via set_cell");
     engine
         .import_values(
             &edit_sheet,
-            vec![(39u32, 10u32, CellValue::Number(FiniteF64::must(28.0)), None)],
+            vec![(
+                edit_row,
+                edit_col,
+                CellValue::Number(FiniteF64::must(prior)),
+                None,
+            )],
         )
         .expect("inverse via import_values");
 
     let post = engine
         .mirror()
-        .get_cell_value_at(&dep_sheet, SheetPos::new(18, 18))
+        .get_cell_value_at(&dep_sheet, SheetPos::new(dep_row, dep_col))
         .cloned()
         .unwrap_or(CellValue::Null);
-    eprintln!("post S19 = {:?}", post);
+    eprintln!("post dependent = {:?}", post);
     eprintln!(
-        "post K40 = {:?}",
+        "post edit = {:?}",
         engine
             .mirror()
-            .get_cell_value_at(&edit_sheet, SheetPos::new(39, 10))
+            .get_cell_value_at(&edit_sheet, SheetPos::new(edit_row, edit_col))
     );
 
     assert_eq!(
         pre, post,
-        "[nxnoeksc] Breakouts vs. PP!S19 drifted across op+inverse: pre={:?} post={:?} (Δ=+52 expected = 80-28)",
-        pre, post,
+        "dependent cell drifted across op+inverse: pre={:?} post={:?}",
+        pre, post
     );
     let _ = edit_cid;
 }

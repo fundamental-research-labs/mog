@@ -164,6 +164,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
             className="relative flex items-center justify-center h-[var(--ribbon-label-height)] text-ribbon-group leading-none text-ss-text-tertiary whitespace-nowrap uppercase"
             style={{ letterSpacing: 'var(--ribbon-group-label-letter-spacing)' }}
           >
+            <span className="sr-only"> </span>
             {label}
             {/* Dialog Launcher - Excel-style small arrow in bottom-right corner */}
             {/* Only rendered when onDialogLaunch is provided */}

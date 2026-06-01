@@ -341,11 +341,10 @@ export function Tab({
   // Compute Styles
   // ===========================================================================
 
-  // Bottom border for active tab or tab color
-  const borderBottomColor = isActive
-    ? tabColor || 'var(--color-ss-primary)'
-    : tabColor || 'transparent';
-  const borderBottomWidth = isActive || tabColor ? '3px' : '0';
+  const activeIndicatorColor = isActive ? tabColor || 'var(--color-ss-primary)' : 'transparent';
+  const activeIndicatorHeight = isActive ? '3px' : '0px';
+  const tabColorIndicatorColor = tabColor || 'transparent';
+  const tabColorIndicatorHeight = tabColor ? '3px' : '0px';
 
   // Determine if this tab should show selected styling
   // A tab is visually selected if it's part of multi-selection OR it's the active tab
@@ -398,16 +397,22 @@ export function Tab({
             />
           )}
           <span>{name}</span>
-          {/* Tab color indicator —
- `data-testid="tab-color-indicator"` lets the harness observer
- `getTabColorDOM` read the rendered backgroundColor via
- `getComputedStyle` without reading kernel/UIStore state. */}
+          {/* Active underline is separate from the persisted tab color marker. */}
+          <div
+            className="absolute bottom-0 left-0 right-0 rounded-b-sm"
+            data-testid="active-tab-indicator"
+            style={{
+              backgroundColor: activeIndicatorColor,
+              height: activeIndicatorHeight,
+            }}
+          />
+          {/* `tab-color-indicator` reflects only the sheet tabColor. */}
           <div
             className="absolute bottom-0 left-0 right-0 rounded-b-sm"
             data-testid="tab-color-indicator"
             style={{
-              backgroundColor: borderBottomColor,
-              height: borderBottomWidth,
+              backgroundColor: tabColorIndicatorColor,
+              height: tabColorIndicatorHeight,
             }}
           />
         </>

@@ -44,7 +44,7 @@ jest.mock('../worksheet/operations/table-operations');
 jest.mock('../worksheet/operations/drawing-operations');
 jest.mock('../worksheet/operations/fill-operations');
 jest.mock('../../domain/cells/cell-iteration');
-jest.mock('../../domain/charts');
+jest.mock('../../domain/charts/chart-store');
 jest.mock('../../domain/formulas/named-ranges');
 jest.mock('../../domain/sheets/sheet-meta');
 jest.mock('../../domain/tables/core');

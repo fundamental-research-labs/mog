@@ -11,6 +11,7 @@
  *
  * Alt+J,T,KeyC → Confirm Convert to Range (OPEN_CONVERT_TO_RANGE_DIALOG)
  * Alt+J,T,KeyD → Delete table (DELETE_TABLE)
+ * Alt+J,T,KeyF → Toggle Filter Buttons (TOGGLE_FILTER_BUTTONS)
  * Alt+J,T,KeyS → Style gallery dropdown (OPEN_RIBBON_DROPDOWN: table-design.style-gallery)
  * Alt+J,T,KeyH → Toggle Header row (TOGGLE_TABLE_HEADER_ROW)
  * Alt+J,T,KeyT → Toggle Total row (TOGGLE_TABLE_TOTALS_ROW)
@@ -66,6 +67,20 @@ export const KEYTIPS_TABLE_DESIGN_SHORTCUTS: KeyboardShortcut[] = [
     muscleMemory: 'occasional',
     matchBy: 'code',
     notes: 'Excel 365: Table Design → S opens the Table Style gallery.',
+  },
+  {
+    id: 'keytips-table-design.filter-button',
+    bindings: altBinding('KeyJ'),
+    sequence: ['KeyT', 'KeyF'],
+    description: 'Toggle Filter Buttons (Alt+J,T,F)',
+    action: 'TOGGLE_FILTER_BUTTONS',
+    enabled: true,
+    priority: 'medium',
+    category: 'data',
+    contexts: TABLE_DESIGN_CONTEXTS,
+    muscleMemory: 'occasional',
+    matchBy: 'code',
+    notes: 'Excel 365: Table Design → F toggles the Filter Button checkbox.',
   },
   {
     id: 'keytips-table-design.header-row',

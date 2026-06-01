@@ -394,6 +394,8 @@ export interface ChartGroup {
   d_lbls: DataLabelOptions | null;
   ax_id: number[];
   raw_chart_type_attr?: string;
+  raw_chart_element_name?: string;
+  raw_chart_group_xml?: string;
 }
 
 export interface ChartLines {
@@ -818,6 +820,7 @@ export interface DataLabelOptions {
   show_leader_lines: boolean | null;
   leader_lines: ChartLines | null;
   num_fmt_obj: NumFmt | null;
+  layout: ManualLayout | null;
   d_lbl: DataLabel[];
   extensions: ExtensionEntry[];
 }

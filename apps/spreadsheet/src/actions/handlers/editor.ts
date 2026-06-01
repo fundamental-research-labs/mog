@@ -50,7 +50,13 @@ import { getRelativeCommandColumn, resolveDataCommandTarget } from '../data-comm
 import { guardBridgeMutation } from './bridge-error-guard';
 import { beginEditSessionFromAction } from './edit-entry';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
-import { getUIStore, handled, notHandled } from './handler-utils';
+import {
+  getUIStore,
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 import { hasMultiCellSelection } from './selection/helpers';
 
 /**
@@ -432,17 +438,25 @@ export const CLEAR_CONTENTS: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
-  await deps.workbook.undoGroup(async () => {
-    for (const sheetId of targetSheetIds) {
-      const ws = getWorksheet(deps, sheetId);
-      for (const range of ranges) {
-        const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
-        if (!ok) {
-          return;
+  try {
+    await deps.workbook.undoGroup(async () => {
+      for (const sheetId of targetSheetIds) {
+        const ws = getWorksheet(deps, sheetId);
+        for (const range of ranges) {
+          const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
+          if (!ok) {
+            return;
+          }
         }
       }
+    });
+  } catch (err) {
+    if (isProtectionRejection(err)) {
+      showProtectionFeedback(deps, (err as Error).message);
+      return notHandled('blocked');
     }
-  });
+    throw err;
+  }
 
   requestFormulaBarRefresh({ sheetIds: targetSheetIds, ranges });
 
@@ -1293,16 +1307,8 @@ export const PASTE_NAME_IN_FORMULA: ActionHandler = (deps) => {
 /**
  * Insert an aggregate function (AVERAGE/COUNT/MAX/MIN) at the active cell.
  *
- * Mirrors the viewport-scan behavior previously implemented in
- * `chrome/toolbar/hooks/use-editing-actions.ts:insertAutoFunction`. Scans
- * the column above the active cell for a contiguous numeric range and
- * writes `=<FN>(<range>)`; falls back to `=<FN>()` if no numeric data
- * is found.
- *
- * AUTO_SUM (separate action below) uses smarter range detection that
- * also looks left when no data is above. INSERT_AUTO_FUNCTION keeps the
- * simpler scan to preserve parity with the prior Editing-group hook.
- *
+ * Uses the surrounding used range to infer the source cells for the requested
+ * aggregate, then writes the formula directly into the active cell.
  */
 export const INSERT_AUTO_FUNCTION: AsyncActionHandler = async (
   deps,
@@ -1319,54 +1325,95 @@ export const INSERT_AUTO_FUNCTION: AsyncActionHandler = async (
   const col = activeCell.col;
 
   const cellRef = (r: number, c: number): string => deps.workbook.indexToAddress(r, c);
-
-  // Find contiguous numeric range above using the viewport buffer for
-  // sync reads. Mirrors the prior hook's behavior.
-  let endRow = row - 1;
-  while (endRow >= 0) {
-    const cell = ws.viewport.getCellData(endRow, col);
-    if (cell?.value != null && cell.value !== '') {
-      break;
+  const targetRange = {
+    startRow: row,
+    startCol: col,
+    endRow: row,
+    endCol: col,
+  };
+  const writeFormula = async (formula: string) => {
+    const ok = await guardBridgeMutation(() => ws.setCell(row, col, formula));
+    if (ok) {
+      requestFormulaBarRefresh({ sheetIds: [sheetId], ranges: [targetRange] });
     }
-    endRow--;
-  }
+    return ok;
+  };
 
-  if (endRow < 0) {
-    const ok = await guardBridgeMutation(() => ws.setCell(row, col, `=${fn}()`));
-    if (!ok) return handled();
+  const sourceRange = await inferAutoFunctionSourceRange(ws, row, col);
+  if (!sourceRange) {
+    await writeFormula(`=${fn}()`);
     return handled();
   }
 
-  // Check if numeric — mirrors the prior hook's `typeof === 'number'`
-  // check verbatim (use-editing-actions.ts lines 162-164 in the
-  // previous source). The viewport's CellData.value at this layer
-  // is the raw primitive, not a discriminated union, so the simple
-  // typeof check is the right fidelity.
-  const firstCell = ws.viewport.getCellData(endRow, col);
-  const isNumeric = typeof firstCell?.value === 'number';
+  const startRef = cellRef(sourceRange.startRow, sourceRange.startCol);
+  const endRef = cellRef(sourceRange.endRow, sourceRange.endCol);
+  const formula = startRef === endRef ? `=${fn}(${startRef})` : `=${fn}(${startRef}:${endRef})`;
 
-  if (!isNumeric) {
-    const ok = await guardBridgeMutation(() => ws.setCell(row, col, `=${fn}()`));
-    if (!ok) return handled();
-    return handled();
-  }
-
-  // Find start of contiguous numeric range
-  let startRow = endRow;
-  while (startRow > 0) {
-    const cell = ws.viewport.getCellData(startRow - 1, col);
-    if (typeof cell?.value !== 'number') break;
-    startRow--;
-  }
-
-  const startRef = cellRef(startRow, col);
-  const endRef = cellRef(endRow, col);
-  const formula = startRow === endRow ? `=${fn}(${startRef})` : `=${fn}(${startRef}:${endRef})`;
-
-  const ok = await guardBridgeMutation(() => ws.setCell(row, col, formula));
-  if (!ok) return handled();
+  await writeFormula(formula);
   return handled();
 };
+
+function cellHasData(cell: unknown): boolean {
+  const data = cell as { value?: unknown; formula?: unknown; displayText?: unknown } | null;
+  return (
+    data != null &&
+    ((data.value != null && data.value !== '') ||
+      (typeof data.formula === 'string' && data.formula.length > 0) ||
+      (typeof data.displayText === 'string' && data.displayText.length > 0))
+  );
+}
+
+async function inferAutoFunctionSourceRange(
+  ws: WorksheetWithInternals,
+  row: number,
+  col: number,
+): Promise<CellRange | null> {
+  const usedRange = await ws.getUsedRange().catch(() => null);
+  const minRow = Math.max(0, usedRange?.startRow ?? 0);
+  const minCol = Math.max(0, usedRange?.startCol ?? 0);
+  const maxRow = Math.max(minRow, usedRange?.endRow ?? row - 1);
+  const maxCol = Math.max(minCol, usedRange?.endCol ?? col - 1);
+
+  const columnSpan = (scanCol: number, scanStart: number, scanEnd: number) => {
+    if (scanCol < 0 || scanStart > scanEnd) return null;
+    let first = -1;
+    let last = -1;
+    for (let r = scanStart; r <= scanEnd; r++) {
+      if (!cellHasData(ws.viewport.getCellData(r, scanCol))) continue;
+      if (first === -1) first = r;
+      last = r;
+    }
+    return first === -1
+      ? null
+      : { startRow: first, startCol: scanCol, endRow: last, endCol: scanCol };
+  };
+
+  const rowSpan = (scanRow: number, scanStart: number, scanEnd: number) => {
+    if (scanRow < 0 || scanStart > scanEnd) return null;
+    let first = -1;
+    let last = -1;
+    for (let c = scanStart; c <= scanEnd; c++) {
+      if (!cellHasData(ws.viewport.getCellData(scanRow, c))) continue;
+      if (first === -1) first = c;
+      last = c;
+    }
+    return first === -1
+      ? null
+      : { startRow: scanRow, startCol: first, endRow: scanRow, endCol: last };
+  };
+
+  const leftColumn = columnSpan(col - 1, minRow, maxRow);
+  if (leftColumn && row >= leftColumn.startRow && row <= leftColumn.endRow) {
+    return leftColumn;
+  }
+
+  const aboveColumn = columnSpan(col, minRow, row - 1);
+  if (aboveColumn) {
+    return aboveColumn;
+  }
+
+  return rowSpan(row, minCol, col - 1);
+}
 
 /**
  * AutoSum - insert an aggregate formula for adjacent data (Alt+=).

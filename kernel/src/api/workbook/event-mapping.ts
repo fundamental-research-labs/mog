@@ -33,7 +33,17 @@ export const EVENT_TO_INTERNAL: Record<string, string[]> = {
   activeSheetChanged: ['sheet:activated'],
   selectionChanged: ['selection:changed'],
   formatChanged: ['format:changed'],
-  structureChanged: ['structure:changed'],
+  structureChanged: [
+    'structure:changed',
+    'row:inserted',
+    'row:deleted',
+    'rows:inserted',
+    'rows:deleted',
+    'column:inserted',
+    'column:deleted',
+    'columns:inserted',
+    'columns:deleted',
+  ],
   tableChanged: ['table:changed', 'table:created', 'table:updated', 'table:deleted'],
   chartChanged: ['chart:changed'],
   filterChanged: [

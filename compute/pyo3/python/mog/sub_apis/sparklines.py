@@ -6,6 +6,8 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mog._serde import deserialize_mutation_result
+from mog._unsupported import unsupported_python_path
+from mog.errors import NativeApiError
 from mog.types import MutationResult
 
 if TYPE_CHECKING:
@@ -100,7 +102,9 @@ class SparklinesAPI:
         )
         if isinstance(result, list):
             return result
-        return []
+        raise NativeApiError(
+            "compute_get_sparklines_in_sheet returned a non-list response"
+        )
 
     def update(self, row: int, col: int, updates: Dict[str, Any]) -> MutationResult:
         """Update a sparkline at the given cell position.
@@ -123,11 +127,11 @@ class SparklinesAPI:
                         break
 
         if sparkline is None:
-            return MutationResult()
+            raise ValueError(f"No sparkline found at row={row}, col={col}")
 
         sparkline_id = sparkline.get("id") if isinstance(sparkline, dict) else None
         if not sparkline_id:
-            return MutationResult()
+            raise ValueError(f"Sparkline at row={row}, col={col} has no id")
 
         raw = self._bridge.call_json(
             "compute_update_sparkline",
@@ -154,6 +158,7 @@ class SparklinesAPI:
 
         Uses compute_clear_sparklines_for_sheet(sheet_id).
         """
+        unsupported_python_path("ws.sparklines.clear_all")
         raw = self._bridge.call_json(
             "compute_clear_sparklines_for_sheet", self._sheet_id_json
         )
@@ -185,4 +190,6 @@ class SparklinesAPI:
         )
         if isinstance(result, list):
             return result
-        return []
+        raise NativeApiError(
+            "compute_get_sparkline_groups_in_sheet returned a non-list response"
+        )

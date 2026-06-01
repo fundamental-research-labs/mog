@@ -119,11 +119,7 @@ impl CellArray {
     /// Number of rows.
     #[must_use]
     pub fn rows(&self) -> usize {
-        if self.cols == 0 {
-            0
-        } else {
-            self.data.len() / self.cols
-        }
+        self.data.len().checked_div(self.cols).unwrap_or(0)
     }
 
     /// Number of rows (alias for [`rows()`](Self::rows)).

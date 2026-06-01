@@ -240,6 +240,50 @@ describe('DataRibbon CSV import', () => {
     expect(mockSetCells).not.toHaveBeenCalled();
   });
 
+  it('opens a focused From Web URL workflow by default', async () => {
+    render(<DataRibbon />);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'From Web' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'From Web' });
+    const urlInput = screen.getByRole('textbox', { name: 'Web URL' });
+
+    expect(dialog).toBeVisible();
+    await waitFor(() => expect(urlInput).toHaveFocus());
+    expect(screen.getByRole('button', { name: 'Import' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible();
+
+    fireEvent.change(urlInput, { target: { value: 'not-a-url' } });
+
+    expect(screen.getByText('Enter a valid URL')).toBeVisible();
+  });
+
+  it('delegates host-owned From Web import without opening the standalone workflow', () => {
+    mockHostCommands = {
+      getOwner: jest.fn(() => 'host'),
+      request: jest.fn(),
+    };
+    render(<DataRibbon />);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'From Web' }));
+
+    expect(mockHostCommands.request).toHaveBeenCalledWith({
+      command: 'import',
+      source: 'data-ribbon:web',
+    });
+    expect(screen.queryByRole('dialog', { name: 'From Web' })).not.toBeInTheDocument();
+  });
+
+  it('delegates caller-owned From Web import without opening the standalone workflow', () => {
+    const onImportFromWeb = jest.fn();
+    render(<DataRibbon onImportFromWeb={onImportFromWeb} />);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'From Web' }));
+
+    expect(onImportFromWeb).toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'From Web' })).not.toBeInTheDocument();
+  });
+
   it('exposes Forecast Sheet as a visible enabled command that opens the forecast action', () => {
     render(<DataRibbon />);
 

@@ -15,6 +15,8 @@ mod text;
 pub use chart_space::extract_chart_spec_from_chart_space;
 
 pub(super) use common::chart_import_status_for_renderability;
+pub(crate) use data_refs::{parse_chart_a1_ref, synthesize_rectangular_data_range};
+pub(crate) use formatting::{extract_chart_format, extract_chart_line, extract_chart_rich_text};
 pub(super) use labels::extract_data_label_data;
 pub(super) use legacy::{
     extract_axes, extract_chart_data_labels, extract_chart_series, extract_data_range,

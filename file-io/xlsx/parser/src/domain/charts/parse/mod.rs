@@ -101,6 +101,22 @@ impl Chart {
             }
         }
 
+        let chart_close = find_closing_tag(xml, b"chart", chart_start).unwrap_or(xml.len());
+        chart.show_all_field_buttons =
+            parse_chart_bool_child(xml, chart_start, chart_close, b"showAllFieldButtons");
+        chart.show_axis_field_buttons =
+            parse_chart_bool_child(xml, chart_start, chart_close, b"showAxisFieldButtons");
+        chart.show_legend_field_buttons =
+            parse_chart_bool_child(xml, chart_start, chart_close, b"showLegendFieldButtons");
+        chart.show_value_field_buttons =
+            parse_chart_bool_child(xml, chart_start, chart_close, b"showValueFieldButtons");
+        chart.show_report_filter_field_buttons = parse_chart_bool_child(
+            xml,
+            chart_start,
+            chart_close,
+            b"showReportFilterFieldButtons",
+        );
+
         // Parse view3D
         if let Some(v3d_start) = find_tag_simd(xml, b"view3D", chart_start) {
             let v3d_end = find_closing_tag(xml, b"view3D", v3d_start).unwrap_or(xml.len());
@@ -242,4 +258,18 @@ impl Chart {
     pub(crate) fn parse_layout(xml: &[u8]) -> ManualLayout {
         layout::parse_layout(xml)
     }
+}
+
+fn parse_chart_bool_child(xml: &[u8], start: usize, end: usize, tag: &[u8]) -> Option<bool> {
+    let tag_start = find_tag_simd(xml, tag, start)?;
+    if tag_start >= end {
+        return None;
+    }
+    let tag_end = find_gt_simd(xml, tag_start).filter(|gt| *gt < end)?;
+    let tag_xml = &xml[tag_start..=tag_end];
+    Some(
+        attrs::parse_string_attr(tag_xml, b"val=\"")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "True"))
+            .unwrap_or(true),
+    )
 }

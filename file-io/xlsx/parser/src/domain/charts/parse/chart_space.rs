@@ -21,6 +21,10 @@ pub(super) fn parse_chart_space_pre_chart_props(xml: &[u8], start: usize, chart:
     if let Some(s_start) = find_tag_simd(xml, b"style", start) {
         chart.style = attrs::parse_u32_attr(&xml[s_start..], b"val=\"");
     }
+    if let Some(cmo_start) = find_tag_simd(xml, b"clrMapOvr", start) {
+        let cmo_end = find_closing_tag(xml, b"clrMapOvr", cmo_start).unwrap_or(xml.len());
+        chart.clr_map_ovr = parse_color_mapping_override(&xml[cmo_start..cmo_end]);
+    }
 
     // Detect mc:AlternateContent wrapping the style element for round-trip.
     // Excel writes: <mc:AlternateContent><mc:Choice Requires="c14"><c14:style val="102"/>
@@ -90,6 +94,51 @@ pub(super) fn parse_chart_space_pre_chart_props(xml: &[u8], start: usize, chart:
         }
         chart.protection = Some(prot);
     }
+}
+
+fn parse_color_mapping_override(xml: &[u8]) -> Option<ooxml_types::themes::ColorMappingOverride> {
+    if find_tag_simd(xml, b"masterClrMapping", 0).is_some() {
+        return Some(ooxml_types::themes::ColorMappingOverride::MasterClrMapping);
+    }
+
+    let override_start = find_tag_simd(xml, b"overrideClrMapping", 0)?;
+    let override_xml = &xml[override_start..];
+    let identity = ooxml_types::themes::ColorMapping::identity();
+    Some(
+        ooxml_types::themes::ColorMappingOverride::OverrideClrMapping(
+            ooxml_types::themes::ColorMapping {
+                bg1: parse_color_scheme_index_attr(override_xml, b"bg1=\"").unwrap_or(identity.bg1),
+                tx1: parse_color_scheme_index_attr(override_xml, b"tx1=\"").unwrap_or(identity.tx1),
+                bg2: parse_color_scheme_index_attr(override_xml, b"bg2=\"").unwrap_or(identity.bg2),
+                tx2: parse_color_scheme_index_attr(override_xml, b"tx2=\"").unwrap_or(identity.tx2),
+                accent1: parse_color_scheme_index_attr(override_xml, b"accent1=\"")
+                    .unwrap_or(identity.accent1),
+                accent2: parse_color_scheme_index_attr(override_xml, b"accent2=\"")
+                    .unwrap_or(identity.accent2),
+                accent3: parse_color_scheme_index_attr(override_xml, b"accent3=\"")
+                    .unwrap_or(identity.accent3),
+                accent4: parse_color_scheme_index_attr(override_xml, b"accent4=\"")
+                    .unwrap_or(identity.accent4),
+                accent5: parse_color_scheme_index_attr(override_xml, b"accent5=\"")
+                    .unwrap_or(identity.accent5),
+                accent6: parse_color_scheme_index_attr(override_xml, b"accent6=\"")
+                    .unwrap_or(identity.accent6),
+                hlink: parse_color_scheme_index_attr(override_xml, b"hlink=\"")
+                    .unwrap_or(identity.hlink),
+                fol_hlink: parse_color_scheme_index_attr(override_xml, b"folHlink=\"")
+                    .unwrap_or(identity.fol_hlink),
+                ext_lst: None,
+            },
+        ),
+    )
+}
+
+fn parse_color_scheme_index_attr(
+    xml: &[u8],
+    attr: &[u8],
+) -> Option<ooxml_types::themes::ColorSchemeIndex> {
+    let value = attrs::parse_string_attr(xml, attr)?;
+    ooxml_types::themes::ColorSchemeIndex::from_ooxml(&value)
 }
 
 /// Parse ChartSpace-level properties that appear AFTER `</c:chart>`:
@@ -215,6 +264,10 @@ pub(super) fn parse_chart_space_post_chart_props(xml: &[u8], start: usize, chart
                 attrs::parse_u32_attr(psu_xml, b"verticalDpi=\"").map(|v| v as i32);
             setup.copies = attrs::parse_u32_attr(psu_xml, b"copies=\"");
             ps.page_setup = Some(setup);
+        }
+
+        if let Some(legacy_start) = find_tag_simd(ps_xml, b"legacyDrawingHF", 0) {
+            ps.legacy_drawing_hf = attrs::parse_string_attr(&ps_xml[legacy_start..], b"r:id=\"");
         }
 
         chart.print_settings = Some(ps);

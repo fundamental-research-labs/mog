@@ -11,6 +11,11 @@ use crate::import::phantom::{parse_cell_ref, parse_range_ref};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum IdentityAnchorReason {
     Comment,
+    /// A floating object (form control, shape, picture, chart, OLE, connector)
+    /// is anchored at this position. Covers both the start anchor and, for
+    /// two-cell anchors, the end anchor so the whole anchored span gets durable
+    /// identity even when it falls outside the populated cell extent.
+    FloatingObject,
 }
 
 /// Collect all (row, col) positions anchored by any feature on a sheet.
@@ -52,6 +57,7 @@ pub(crate) fn collect_identity_required_anchors(
 ) -> FxHashMap<(u32, u32), Vec<IdentityAnchorReason>> {
     let mut anchors = FxHashMap::default();
     identity_anchors_from_comments(sheet_data, &mut anchors);
+    identity_anchors_from_floating_objects(sheet_data, &mut anchors);
     anchors
 }
 
@@ -83,6 +89,27 @@ fn identity_anchors_from_comments(
             if !reasons.contains(&IdentityAnchorReason::Comment) {
                 reasons.push(IdentityAnchorReason::Comment);
             }
+        }
+    }
+}
+
+fn identity_anchors_from_floating_objects(
+    sheet_data: &SheetData,
+    out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>,
+) {
+    let push = |out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>, pos: (u32, u32)| {
+        let reasons = out.entry(pos).or_default();
+        if !reasons.contains(&IdentityAnchorReason::FloatingObject) {
+            reasons.push(IdentityAnchorReason::FloatingObject);
+        }
+    };
+    for obj in &sheet_data.floating_objects {
+        let anchor = &obj.common.anchor;
+        push(out, (anchor.anchor_row, anchor.anchor_col));
+        // Two-cell anchors also occupy an end cell; the renderer resolves the
+        // span via `to_anchor_cell_id`, so that position needs identity too.
+        if let (Some(end_row), Some(end_col)) = (anchor.end_row, anchor.end_col) {
+            push(out, (end_row, end_col));
         }
     }
 }
@@ -534,11 +561,16 @@ mod tests {
         assert_eq!(out.len(), 1, "formulas");
 
         let identity_anchors = collect_identity_required_anchors(&sheet_data);
-        assert_eq!(identity_anchors.len(), 1, "identity-required anchors");
+        // Comment at (1,1) + floating object at (7,7).
+        assert_eq!(identity_anchors.len(), 2, "identity-required anchors");
         let reasons = identity_anchors
             .get(&(1, 1))
             .expect("comment identity anchor");
         assert_eq!(reasons, &[IdentityAnchorReason::Comment]);
+        let fo_reasons = identity_anchors
+            .get(&(7, 7))
+            .expect("floating-object identity anchor");
+        assert_eq!(fo_reasons, &[IdentityAnchorReason::FloatingObject]);
 
         out.clear();
         anchors_from_hyperlinks(&sheet_data, &mut out);
@@ -590,5 +622,70 @@ mod tests {
 
         let per_type_sum = 1 + 1 + 1 + 1 + 1 + 2 + 4 + 4 + 1 + 1 + 3 + 3 + 1 + 1;
         assert_eq!(result.len(), per_type_sum, "total matches per-type sum");
+    }
+
+    fn make_floating_object(
+        anchor_row: u32,
+        anchor_col: u32,
+        end: Option<(u32, u32)>,
+    ) -> FloatingObject {
+        let (end_row, end_col) = match end {
+            Some((r, c)) => (Some(r), Some(c)),
+            None => (None, None),
+        };
+        FloatingObject {
+            common: FloatingObjectCommon {
+                anchor: FloatingObjectAnchor {
+                    anchor_row,
+                    anchor_col,
+                    end_row,
+                    end_col,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            data: FloatingObjectData::Shape(ShapeData::default()),
+        }
+    }
+
+    /// Regression: floating objects anchored outside the populated cell extent
+    /// (e.g. legacy VML form controls in column B of an otherwise column-A
+    /// sheet) must contribute identity-required anchors so their anchor cells
+    /// get durable identity and are mirrored into the grid index. Previously
+    /// `collect_identity_required_anchors` only included comments, so these
+    /// anchor cellIds were dangling and the controls never rendered.
+    #[test]
+    fn floating_object_anchors_are_identity_required() {
+        // One-cell anchored control in column B (col index 1) — the failing
+        // VML-form-control case. Plus a two-cell anchored shape whose end anchor
+        // is in a separate cell.
+        let sheet_data = SheetData {
+            floating_objects: vec![
+                make_floating_object(3, 1, None),
+                make_floating_object(5, 5, Some((9, 9))),
+            ],
+            ..Default::default()
+        };
+
+        let anchors = collect_identity_required_anchors(&sheet_data);
+
+        // Start anchor of the one-cell control.
+        assert_eq!(
+            anchors.get(&(3, 1)).map(Vec::as_slice),
+            Some([IdentityAnchorReason::FloatingObject].as_slice()),
+            "one-cell control anchor in column B must be identity-required"
+        );
+        // Start AND end anchor of the two-cell shape.
+        assert_eq!(
+            anchors.get(&(5, 5)).map(Vec::as_slice),
+            Some([IdentityAnchorReason::FloatingObject].as_slice()),
+            "two-cell shape start anchor must be identity-required"
+        );
+        assert_eq!(
+            anchors.get(&(9, 9)).map(Vec::as_slice),
+            Some([IdentityAnchorReason::FloatingObject].as_slice()),
+            "two-cell shape end anchor must be identity-required"
+        );
+        assert_eq!(anchors.len(), 3, "exactly the three anchor positions");
     }
 }

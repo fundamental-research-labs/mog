@@ -75,6 +75,10 @@ export interface ChartXMLOptions {
   axes?: string[];
   /** Legend configuration */
   legend?: LegendPosition;
+  /** Excel blank-cell plotting mode */
+  displayBlanksAs?: 'gap' | 'zero' | 'span';
+  /** Whether Excel should plot only visible source cells */
+  plotVisibleOnly?: boolean;
 }
 
 /**
@@ -100,7 +104,7 @@ export interface SeriesData {
   /** Category values (x-axis labels) */
   categories: (string | number | Date)[];
   /** Data values (y-axis values) */
-  values: number[];
+  values: Array<number | null>;
   /** Series color (hex without #) */
   color: string;
   /** Optional sizes for bubble charts */

@@ -14,6 +14,44 @@ use super::cse_clear::{
     collect_materialized_cells_in_range, cse_anchor_clear_targets_for_range,
     push_resolved_clear_target,
 };
+use super::position_resolution::mutation_set_cells_by_position;
+
+fn single_dynamic_projection_member(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Option<(u32, u32)> {
+    if start_row != end_row || start_col != end_col {
+        return None;
+    }
+
+    if stores
+        .grid_indexes
+        .get(&sheet_id)
+        .and_then(|grid| grid.cell_id_at(start_row, start_col))
+        .is_some()
+    {
+        return None;
+    }
+
+    let (source, _, _) = mirror
+        .projection_registry
+        .resolve(&sheet_id, start_row, start_col)?;
+    if mirror.is_cse_anchor(&source) {
+        return None;
+    }
+
+    let source_pos = mirror.resolve_position(&source)?;
+    if source_pos.row() == start_row && source_pos.col() == start_col {
+        return None;
+    }
+
+    Some((start_row, start_col))
+}
 
 pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     stores: &mut EngineStores,
@@ -27,6 +65,25 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
 ) -> Result<RecalcResult, ComputeError> {
     use crate::storage::infra::cell_iter;
     use compute_document::hex::id_to_hex;
+
+    if let Some((row, col)) = single_dynamic_projection_member(
+        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
+    ) {
+        return mutation_set_cells_by_position(
+            stores,
+            mirror,
+            mutation,
+            vec![(
+                sheet_id,
+                row,
+                col,
+                CellInput::Literal {
+                    text: String::new(),
+                },
+            )],
+            false,
+        );
+    }
 
     // 0. Resolve all (row, col, CellId) tuples via the authoritative
     //    sparse in-memory grid index. Empty positions have no CellId, so
@@ -192,6 +249,25 @@ pub(in crate::storage::engine) fn mutation_clear_range(
 ) -> Result<RecalcResult, ComputeError> {
     use crate::storage::infra::cell_iter;
     use compute_document::hex::id_to_hex;
+
+    if let Some((row, col)) = single_dynamic_projection_member(
+        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
+    ) {
+        return mutation_set_cells_by_position(
+            stores,
+            mirror,
+            mutation,
+            vec![(
+                sheet_id,
+                row,
+                col,
+                CellInput::Literal {
+                    text: String::new(),
+                },
+            )],
+            false,
+        );
+    }
 
     // 0. Resolve (row, col, CellId) tuples via the authoritative in-memory
     //    grid index. CSE arrays are atomic: a range clear may tear down the

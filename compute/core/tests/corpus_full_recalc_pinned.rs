@@ -1,30 +1,16 @@
-//! Class V — Pinned-corpus full-recalc regression guard.
+//! Class V — Pinned synthetic full-recalc regression guard.
 //!
 //! §"Class V".
 //!
-//! **Invariant.** On a pinned corpus subset, a fresh
-//! `YrsComputeEngine::from_snapshot` produces values equal to an oracle
-//! (hand-computed for synthetic fixtures; Excel cached values for real
-//! XLSX). This is a distinct lineage from Classes I–IV: it catches
-//! **full-recalc drift** rather than iterative-recalc identity issues.
+//! **Invariant.** On pinned synthetic fixtures, a fresh
+//! `YrsComputeEngine::from_snapshot` produces values equal to a
+//! hand-computed oracle. This catches **full-recalc drift** rather than
+//! iterative-recalc identity issues.
 //!
-//! FINDINGS.md §"Side-finding — Check B regressions (18 files)" records
-//! 18 files in the April-20 corpus slice whose engine full-recalc
-//! disagrees with Excel's cached values, even though the April-20 corpus
-//! report classified them zero-mismatch. The two drift-repro fixtures
-//! below (`drift_repro_1`, `drift_repro_2`) synthesize the two most
-//! distinct signatures surfaced so far:
+//! The two drift reproducers synthesize distinct bug classes:
 //!
-//! 1. `Ib6CYMnT` — SUMIFS with full-column range and a sparse high-row
-//!    write (FINDINGS.md §"Class B", "The Ib6CYMnT pattern in detail").
-//! 2. `qKjqZiEx` — float-cascade arithmetic on precision-fragile seeds
-//!    (FINDINGS.md §"Class B").
-//!
-//! Synthetic fixtures were preferred over real XLSX per the ground
-//! rules in `iterative-recalc-unit-tests.md` Class V §"Case matrix" and
-//! the Stage 5 agent brief: real XLSX are binary blobs and inflate the
-//! repo; a synthetic reproducer with a hand-computed oracle gives the
-//! same regression signal.
+//! 1. SUMIFS with a full-column range and a sparse high-row write.
+//! 2. Float-cascade arithmetic on precision-fragile seeds.
 //!
 //! **Failure budget.** `MAX_DRIFT` is set at-or-above the current
 //! observed count so CI is green today and a real regression (more
@@ -57,7 +43,7 @@ use corpus_pin::{Fixture, OracleEntry, all_fixtures};
 /// panic. Tighten this once the underlying engine bugs surface through
 /// the iterative-recalc fix work (structural-op of the random-walk plan).
 ///
-/// **Observed baseline (2026-04-22):** 2 drift, both in
+/// **Observed baseline:** 2 drift, both in
 /// `drift_repro_2_float_cascade` at `Sheet1!C3` and `Sheet1!C10`. Both
 /// cells evaluate to bitwise `0.0` when the naive IEEE 754 oracle
 /// predicts a tiny residue (~5.55e-17 and ~1.11e-16). This indicates
@@ -90,7 +76,7 @@ fn values_match(actual: &CellValue, expected: &CellValue) -> bool {
     match (actual, expected) {
         // Bitwise equal on f64::to_bits — this catches precision cascades
         // that `assert!((a - b).abs() < eps)` would paper over. This is
-        // the spec for the qKjqZiEx repro; `(0.1 + 0.2) == 0.3` is false,
+        // the spec for the float-cascade repro; `(0.1 + 0.2) == 0.3` is false,
         // and we expect it to be false.
         (CellValue::Number(a), CellValue::Number(b)) => a.get().to_bits() == b.get().to_bits(),
         (CellValue::Text(a), CellValue::Text(b)) => a == b,

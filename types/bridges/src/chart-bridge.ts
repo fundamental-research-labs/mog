@@ -14,6 +14,12 @@
  */
 
 import type { CellRange, SheetId } from '@mog/types-core';
+import type {
+  ChartExportOptionsSnapshot,
+  ChartLayoutAuthority,
+  ChartPageContextSnapshot,
+  ResolvedChartSpecSnapshot,
+} from '@mog/types-data/data/charts';
 
 // =============================================================================
 // Types
@@ -59,35 +65,201 @@ export type ChartDataResult =
   | { success: false; error: ChartError };
 
 /**
- * Mark primitives for chart rendering.
- * These are the low-level rendering instructions.
+ * Fill/stroke paint used by the production @mog/charts mark IR.
+ *
+ * Browser rendering supports the full paint union. Node image export projects
+ * this down to the native raster backend's CSS-color subset.
  */
-export interface ChartMark {
-  /** Mark type */
-  type: 'rect' | 'path' | 'arc' | 'text' | 'symbol' | 'line' | 'area';
-  /** X position */
-  x?: number;
-  /** Y position */
-  y?: number;
-  /** Width (for rect) */
+export type ChartPaintSpec =
+  | { type: 'none' }
+  | { type: 'solid'; color: string; opacity?: number }
+  | {
+      type: 'linearGradient';
+      angle?: number;
+      stops: Array<{ offset: number; color: string; opacity?: number }>;
+    }
+  | {
+      type: 'radialGradient';
+      centerX?: number;
+      centerY?: number;
+      radius?: number;
+      stops: Array<{ offset: number; color: string; opacity?: number }>;
+    }
+  | {
+      type: 'rectangularGradient';
+      stops: Array<{ offset: number; color: string; opacity?: number }>;
+    }
+  | {
+      type: 'pattern';
+      pattern: string;
+      foreground?: string;
+      background?: string;
+      opacity?: number;
+    }
+  | {
+      type: 'image';
+      imageId?: string;
+      src?: string;
+      opacity?: number;
+      status?: 'loaded' | 'pending' | 'external' | 'unsupported';
+    }
+  | { type: 'groupInherited'; fallback?: ChartPaintSpec };
+
+export interface ChartLineStyleSpec {
+  paint?: ChartPaintSpec;
   width?: number;
-  /** Height (for rect) */
-  height?: number;
-  /** Path data (for path) */
-  path?: string;
-  /** Text content (for text) */
-  text?: string;
-  /** Fill color */
-  fill?: string;
-  /** Stroke color */
-  stroke?: string;
-  /** Stroke width */
-  strokeWidth?: number;
-  /** Opacity (0-1) */
   opacity?: number;
-  /** Associated data */
-  data?: unknown;
+  dash?: number[];
+  cap?: CanvasLineCap;
+  join?: CanvasLineJoin;
+  miterLimit?: number;
+  compound?: string;
+  alignment?: string;
+  headEnd?: string;
+  tailEnd?: string;
 }
+
+export interface ChartShadowSpec {
+  color: string;
+  blur?: number;
+  offsetX?: number;
+  offsetY?: number;
+  opacity?: number;
+}
+
+export interface ChartEffectSpec {
+  outerShadow?: ChartShadowSpec;
+  preserved?: string[];
+}
+
+export interface ChartTextRunSpec {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'bold' | number;
+  fontStyle?: 'normal' | 'italic';
+  fill?: ChartPaintSpec;
+  stroke?: ChartPaintSpec;
+  underline?: boolean;
+  strikethrough?: boolean;
+  baseline?: number;
+  language?: string;
+  rtl?: boolean;
+  highlight?: string;
+}
+
+/**
+ * Shared visual style for production chart marks.
+ *
+ * `fillPaint`/`strokePaint` and `line` are the richer browser-rendered style
+ * fields. `fill`/`stroke`/`strokeWidth` remain the CSS-color projection used by
+ * simpler renderers and as a native export fallback.
+ */
+export interface ChartMarkStyle {
+  fill?: string;
+  fillPaint?: ChartPaintSpec;
+  stroke?: string;
+  strokePaint?: ChartPaintSpec;
+  strokeWidth?: number;
+  line?: ChartLineStyleSpec;
+  strokeDash?: number[];
+  opacity?: number;
+  cornerRadius?: number;
+  effects?: ChartEffectSpec;
+  shadow?: ChartShadowSpec;
+}
+
+/**
+ * Rectangular clipping region in chart-local canvas coordinates.
+ */
+export interface ChartMarkClip {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Base shape shared by every production chart mark.
+ */
+export interface ChartBaseMark {
+  type: 'rect' | 'path' | 'arc' | 'text' | 'symbol';
+  x: number;
+  y: number;
+  datum?: unknown;
+  style: ChartMarkStyle;
+  clip?: ChartMarkClip;
+  interactive?: boolean;
+}
+
+export interface ChartRectMark extends ChartBaseMark {
+  type: 'rect';
+  width: number;
+  height: number;
+}
+
+export interface ChartPathMark extends ChartBaseMark {
+  type: 'path';
+  path: string;
+}
+
+export interface ChartArcMark extends ChartBaseMark {
+  type: 'arc';
+  innerRadius: number;
+  outerRadius: number;
+  startAngle: number;
+  endAngle: number;
+}
+
+export type ChartTextAlign = 'left' | 'center' | 'right';
+export type ChartTextBaseline = 'top' | 'middle' | 'bottom';
+
+export interface ChartTextMark extends ChartBaseMark {
+  type: 'text';
+  text: string;
+  richText?: ChartTextRunSpec[];
+  fontSize: number;
+  fontFamily: string;
+  textAlign: ChartTextAlign;
+  textBaseline: ChartTextBaseline;
+  rotation?: number;
+  fontWeight?: 'normal' | 'bold' | number;
+  fontStyle?: 'normal' | 'italic';
+  underline?: boolean;
+  strikethrough?: boolean;
+}
+
+export type ChartSymbolShape =
+  | 'circle'
+  | 'square'
+  | 'diamond'
+  | 'cross'
+  | 'x'
+  | 'star'
+  | 'dash'
+  | 'triangle-up'
+  | 'triangle-down';
+
+export interface ChartSymbolMark extends ChartBaseMark {
+  type: 'symbol';
+  shape: ChartSymbolShape;
+  size: number;
+}
+
+/**
+ * Production chart rendering instruction emitted by @mog/charts collectMarks().
+ *
+ * This is intentionally the same IR consumed by browser canvas rendering. Node
+ * image export serializes this IR to the native raster backend's versioned JSON
+ * request, preserving the shared mark contract while making backend limitations
+ * explicit at the export boundary.
+ */
+export type ChartMark =
+  | ChartRectMark
+  | ChartPathMark
+  | ChartArcMark
+  | ChartTextMark
+  | ChartSymbolMark;
 
 /**
  * Bounding box for chart rendering.
@@ -97,6 +269,26 @@ export interface ChartBounds {
   y: number;
   width: number;
   height: number;
+}
+
+export interface ChartRenderSnapshot {
+  marks: ChartMark[];
+  resolvedChartSpec: ResolvedChartSpecSnapshot;
+}
+
+/**
+ * Runtime render frame for cache-backed chart compilation.
+ *
+ * Embedded charts use their worksheet floating-object bounds. Chart sheets use
+ * the chart-sheet surface bounds plus view/page context when available.
+ */
+export interface ChartRenderFrame {
+  kind: ChartLayoutAuthority;
+  width: number;
+  height: number;
+  windowViewId?: number;
+  zoomToFit?: boolean;
+  pageContext?: ChartPageContextSnapshot;
 }
 
 // =============================================================================
@@ -142,6 +334,7 @@ export interface ChartLayout {
   plotArea: PlotAreaLayout;
   legend?: LegendLayout;
   title?: TitleLayout;
+  dataTable?: ElementBounds;
   axes: AxisLayout[];
   dataLabels: DataLabelLayout[];
 }
@@ -173,6 +366,7 @@ export interface ChartLayoutSnapshot {
   plotArea: ChartLayoutRect;
   legend?: ChartLayoutRect;
   title?: ChartLayoutRect;
+  dataTable?: ChartLayoutRect;
   dataLabels?: ChartLayoutRect;
 }
 
@@ -255,6 +449,20 @@ export interface IChartBridge {
     height: number,
   ): Promise<ChartMark[] | ChartError>;
 
+  /**
+   * Compile marks and capture the resolved chart spec used by diagnostics.
+   * Image exporters should keep using getMarksAtSize when they need pixels
+   * only; workbook diagnostics call this sibling to persist the semantic
+   * snapshot from the same production compile path.
+   */
+  getRenderSnapshotAtSize(
+    sheetId: SheetId,
+    chartId: string,
+    width: number,
+    height: number,
+    exportOptions: ChartExportOptionsSnapshot,
+  ): Promise<ChartRenderSnapshot | ChartError>;
+
   // ===========================================================================
   // Rendering
   // ===========================================================================
@@ -280,12 +488,14 @@ export interface IChartBridge {
    * @param ctx - Canvas 2D rendering context
    * @param bounds - Bounding box for the chart
    * @param sheetId - Optional owner sheet ID for duplicate imported chart IDs
+   * @param renderFrame - Optional layout authority and frame metadata
    */
   renderCached(
     chartId: string,
     ctx: CanvasRenderingContext2D,
     bounds: ChartBounds,
     sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
   ): void;
 
   /**
@@ -314,8 +524,13 @@ export interface IChartBridge {
    *
    * @param chartId - Chart ID
    * @param sheetId - Optional owner sheet ID for duplicate imported chart IDs
+   * @param renderFrame - Optional layout authority and frame metadata
    */
-  ensureCompiled(chartId: string, sheetId?: SheetId): Promise<void>;
+  ensureCompiled(
+    chartId: string,
+    sheetId?: SheetId,
+    renderFrame?: Partial<ChartRenderFrame>,
+  ): Promise<void>;
 
   // ===========================================================================
   // Cache Invalidation

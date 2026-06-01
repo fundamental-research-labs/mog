@@ -332,6 +332,38 @@ export const cycleReference = assign(({ context }) => {
 });
 
 /**
+ * Complete a point-mode function formula immediately before commit.
+ *
+ * When a reference was inserted by clicking/dragging a range and the caret is
+ * still at the end of that inserted reference, Excel accepts Enter as the end
+ * of the function argument. Keep manually typed incomplete formulas on the
+ * validation path by requiring active point-mode tracking.
+ */
+export const completePointModeFormulaForCommit = assign(({ context }) => {
+  const isAtPointModeReferenceEnd =
+    context.formulaRefInsertStart !== null &&
+    context.formulaRefInsertEnd !== null &&
+    context.cursorPosition === context.formulaRefInsertEnd &&
+    context.cursorPosition === context.value.length;
+
+  const openFunctionCount = context.formulaContext?.functionStack.length ?? 0;
+
+  if (!isAtPointModeReferenceEnd || openFunctionCount === 0) {
+    return {};
+  }
+
+  const newValue = context.value + ')'.repeat(openFunctionCount);
+  const newCursorPosition = newValue.length;
+
+  return {
+    value: newValue,
+    cursorPosition: newCursorPosition,
+    formulaRefInsertEnd: newCursorPosition,
+    formulaContext: analyzeFormulaContext(newValue, newCursorPosition),
+  };
+});
+
+/**
  * Set array formula flag and store commit direction.
  * Called when user presses Ctrl+Shift+Enter to commit as array formula.
  */
@@ -473,6 +505,7 @@ export const formulaEditingActions = {
   advanceFormulaRangeColor,
   resetFormulaColors,
   cycleReference,
+  completePointModeFormulaForCommit,
   setArrayFormulaAndCommit,
   resetArrayFormulaFlag,
   insertFunctionArgs,

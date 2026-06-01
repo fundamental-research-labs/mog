@@ -11,7 +11,7 @@
  * @see STREAM-H-EDITOR-PROTECTION.md
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader } from '@mog/shell';
 
@@ -86,21 +86,24 @@ interface ProtectionAlertDialogProps {
  * Single "OK" button to dismiss.
  */
 export function ProtectionAlertDialog({ state, onDismiss }: ProtectionAlertDialogProps) {
+  const messageRef = useRef<HTMLParagraphElement>(null);
   const defaultMessage =
     'The cell or chart you are trying to change is on a protected sheet. ' +
     'To make a change, unprotect the sheet. You might be requested to enter a password.';
 
   return (
     <Dialog
-      onEnterKeyDown={onDismiss}
       open={state.open}
       onClose={onDismiss}
       dialogId="protection-alert-dialog"
+      initialFocusRef={messageRef}
       width="sm"
     >
       <DialogHeader>Protected Sheet</DialogHeader>
       <DialogBody>
-        <p className="text-body text-ss-text-secondary m-0">{state.message || defaultMessage}</p>
+        <p ref={messageRef} tabIndex={-1} className="text-body text-ss-text-secondary m-0">
+          {state.message || defaultMessage}
+        </p>
       </DialogBody>
       <DialogFooter>
         <Button variant="primary" onClick={onDismiss}>

@@ -25,6 +25,7 @@ import { ImageFallbackError, shouldUseImageFallback } from './ooxml/image-fallba
 import { generateLineChartXML, generateStockChartXML } from './ooxml/line-chart-xml';
 import { generateDoughnutChartXML, generatePieChartXML } from './ooxml/pie-chart-xml';
 import { generateBubbleChartXML, generateScatterChartXML } from './ooxml/scatter-chart-xml';
+import { isNativeStockLayerSpec } from './ooxml/stock-layer-detection';
 
 // =============================================================================
 // Main Export Function
@@ -75,6 +76,10 @@ export function toOOXML(
   data: DataRow[],
   options?: ExportOptions,
 ): OOXMLExportResult {
+  if (isNativeStockLayerSpec(spec)) {
+    return generateStockChartXML(spec, data, options);
+  }
+
   // Check if image fallback is required
   if (shouldUseImageFallback(spec)) {
     throw new ImageFallbackError(`Chart type requires image fallback for Excel export`, spec);
@@ -89,9 +94,10 @@ export function toOOXML(
 
   // Check for radar chart: line mark with linear-closed interpolation
   if (
-    markType === 'line' &&
-    typeof spec.mark === 'object' &&
-    spec.mark.interpolate === 'linear-closed'
+    markType === 'radar' ||
+    (markType === 'line' &&
+      typeof spec.mark === 'object' &&
+      spec.mark.interpolate === 'linear-closed')
   ) {
     return generateRadarChartXML(spec, data, options);
   }
@@ -180,6 +186,12 @@ export type {
 
 // Export OOXML generators
 export * from './ooxml';
+export {
+  ChartImageExportOptionsError,
+  normalizeImageExportOptions,
+  type NormalizedImageExportOptions,
+  type SupportedImageExportFormat,
+} from './image-options';
 
 // =============================================================================
 // Convenience Functions
@@ -202,13 +214,18 @@ export function canExportToOOXML(spec: ChartSpec): boolean {
  * @returns The OOXML element name (e.g., 'barChart', 'lineChart')
  */
 export function getOOXMLChartElement(spec: ChartSpec): string | null {
+  if (isNativeStockLayerSpec(spec)) {
+    return 'stockChart';
+  }
+
   const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;
 
   // Check for radar (linear-closed interpolation)
   if (
-    (markType === 'line' || markType === 'area') &&
-    typeof spec.mark === 'object' &&
-    spec.mark.interpolate === 'linear-closed'
+    markType === 'radar' ||
+    ((markType === 'line' || markType === 'area') &&
+      typeof spec.mark === 'object' &&
+      spec.mark.interpolate === 'linear-closed')
   ) {
     return 'radarChart';
   }

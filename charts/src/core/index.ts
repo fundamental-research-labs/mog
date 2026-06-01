@@ -20,7 +20,28 @@ export {
   type TrendlineCoefficients,
   type TrendlineResult,
 } from '../math/trendlines';
-export { collectMarks, configToSpec } from './chart-engine';
+export { collectMarks } from './chart-engine';
+export { chartDataToRows, configToSpec } from './config-to-spec';
+export {
+  DEFAULT_EXCEL_BAR_GAP_WIDTH,
+  DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP,
+  DEFAULT_EXCEL_STACKED_BAR_OVERLAP,
+  barGroupingForConfig,
+  barGroupingForConfigSpec,
+  barOrientationForChartType,
+  effectiveBarGeometry,
+  effectiveBarGeometryFromSpec,
+  effectiveGapWidth,
+  effectiveOverlap,
+  excelBarSlotGeometry,
+  hasExcelBarGeometryConfig,
+  hasExcelBarGeometrySpec,
+  isBarLikeChartType,
+  isStackedBarGrouping,
+  stackModeForChartType,
+  type BarSlotGeometry,
+} from './config-to-spec/bar-geometry';
+export * from './style-resolver';
 export {
   rustToTsChartType,
   tsToRustChartType,
@@ -30,11 +51,23 @@ export {
 } from './chart-type-bridge';
 export {
   ObjectCellAccessor,
+  HIDDEN_CHART_CELL,
   detectSeriesOrientation,
   extractChartData,
   extractChartDataFromRange,
+  isHiddenChartCellValue,
   parseRange,
   type CellDataAccessor,
   type CellRange,
   type ChartCellValue,
 } from './data-extractor';
+export {
+  chartDataSeriesIdentity,
+  seriesConfigForDataSeries,
+  seriesConfigSourceIndex,
+  seriesConfigSourceKey,
+  seriesOrderForDataSeries,
+  seriesSourceIndex,
+  seriesSourceKey,
+  withSeriesConfigIdentity,
+} from './series-identity';

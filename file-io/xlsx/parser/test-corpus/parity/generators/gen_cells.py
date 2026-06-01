@@ -458,7 +458,7 @@ def _wide_merge_empty_subcells(out_dir: Path) -> Path:
     wb = Workbook()
     ws = wb.active
 
-    ws["A1"] = "Liability Calculations"
+    ws["A1"] = "Wide Merge Header"
     ws.merge_cells("A1:P1")
 
     path = out_dir / "wide-merge-empty-subcells.xlsx"

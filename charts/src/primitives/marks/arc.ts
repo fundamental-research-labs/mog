@@ -5,7 +5,7 @@
  */
 
 import type { ArcMark } from '../types';
-import { applyStyle } from './rect';
+import { applyStyle, hasRenderableFill, hasRenderableStroke } from './rect';
 
 /**
  * Create an arc mark.
@@ -53,10 +53,10 @@ export function renderArc(ctx: CanvasRenderingContext2D, mark: ArcMark): void {
     ctx.closePath();
   }
 
-  if (mark.style.fill) {
+  if (hasRenderableFill(mark.style)) {
     ctx.fill();
   }
-  if (mark.style.stroke) {
+  if (hasRenderableStroke(mark.style)) {
     ctx.stroke();
   }
 

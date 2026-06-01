@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use yrs::{Any, Array, ArrayPrelim, ArrayRef, Map, MapPrelim, MapRef, Out};
 
-use domain_types::yrs_schema;
 use domain_types::{DocumentFormat, SheetData};
 
 use compute_document::hex::{SmallHex, id_to_hex};
@@ -24,10 +23,10 @@ pub(crate) use identity::SheetIdAllocation;
 
 use super::IdAllocator;
 use super::features::{
-    hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids, hydrate_comments,
-    hydrate_conditional_formats, hydrate_data_validations, hydrate_floating_objects,
-    hydrate_hyperlinks, hydrate_merges, hydrate_outline_groups, hydrate_sort_state,
-    hydrate_sparklines, hydrate_x14_data_validations,
+    FloatingObjectHydrationMaps, hydrate_auto_filter, hydrate_cells, hydrate_cells_with_ids,
+    hydrate_comments, hydrate_conditional_formats, hydrate_data_validations,
+    hydrate_floating_objects, hydrate_hyperlinks, hydrate_merges, hydrate_outline_groups,
+    hydrate_sort_state, hydrate_sparklines, hydrate_x14_data_validations,
 };
 use super::styles::{
     ImportedRangeStyle, hydrate_authored_style_runs, hydrate_cell_styles, hydrate_col_styles,
@@ -39,7 +38,7 @@ use grid_index::{collect_physical_phantom_cells, mirror_pos_map_into_grid_index}
 use identity::{
     allocate_missing_anchored_identities, insert_missing_anchored_identities, sheet_identity_extent,
 };
-use view_meta::{hydrate_sheet_view_metadata, sheet_color_to_hex};
+use view_meta::{hydrate_sheet_view_metadata, insert_sheet_properties_metadata};
 
 // ===========================================================================
 // Per-sheet hydration
@@ -54,6 +53,8 @@ pub(crate) fn hydrate_sheet(
     sheet: &SheetData,
     style_palette: &[DocumentFormat],
     persons: &[domain_types::domain::comment::PersonInfo],
+    theme: Option<&domain_types::ThemeData>,
+    indexed_colors: Option<&ooxml_types::styles::ColorsDef>,
     allocator: &mut impl IdAllocator,
 ) -> Result<
     (
@@ -118,10 +119,7 @@ pub(crate) fn hydrate_sheet(
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
     if let Some(properties) = &sheet.sheet_properties {
-        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
-        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
-            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
-        }
+        insert_sheet_properties_metadata(txn, &meta_map, properties, theme, indexed_colors);
     }
 
     // 4. Cells map
@@ -263,6 +261,8 @@ pub(crate) fn hydrate_sheet(
     let floating_objects_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let floating_objects_map: MapRef =
         sheet_map.insert(txn, KEY_FLOATING_OBJECTS, floating_objects_prelim);
+    let floating_object_order: ArrayRef =
+        sheet_map.insert(txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
 
     let floating_groups_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     sheet_map.insert(txn, KEY_FLOATING_OBJECT_GROUPS, floating_groups_prelim);
@@ -404,7 +404,18 @@ pub(crate) fn hydrate_sheet(
 
     let mut all_floating_objects = sheet.floating_objects.clone();
     all_floating_objects.extend(chart_fos);
-    hydrate_floating_objects(txn, &floating_objects_map, &sheet_id, &all_floating_objects);
+    hydrate_floating_objects(
+        txn,
+        FloatingObjectHydrationMaps {
+            floating_objects: &floating_objects_map,
+            floating_object_order: &floating_object_order,
+            cells: &cells_map,
+        },
+        &mut pos_map,
+        &sheet_id,
+        &all_floating_objects,
+        allocator,
+    );
 
     // --- Row/Col style overrides ---
     hydrate_row_styles(
@@ -440,7 +451,7 @@ pub(crate) fn hydrate_sheet(
     // Populate meta-level domain data
     // =====================================================================
 
-    hydrate_sheet_view_metadata(txn, &meta_map, sheet, true);
+    hydrate_sheet_view_metadata(txn, &meta_map, sheet, true, theme, indexed_colors);
 
     // Collect physical phantom cells — entries in pos_map that weren't in the
     // original data cell set and are not metadata-only identities.
@@ -500,6 +511,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     sheet: &SheetData,
     style_palette: &[DocumentFormat],
     persons: &[domain_types::domain::comment::PersonInfo],
+    theme: Option<&domain_types::ThemeData>,
+    indexed_colors: Option<&ooxml_types::styles::ColorsDef>,
     alloc: &SheetIdAllocation,
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
@@ -553,10 +566,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         meta_map.insert(txn, "sheetUid", Any::String(Arc::from(uid.as_str())));
     }
     if let Some(properties) = &sheet.sheet_properties {
-        yrs_schema::sheet_properties::insert(txn, &meta_map, properties);
-        if let Some(color) = properties.tab_color.as_ref().and_then(sheet_color_to_hex) {
-            meta_map.insert(txn, "tabColor", Any::String(Arc::from(color.as_str())));
-        }
+        insert_sheet_properties_metadata(txn, &meta_map, properties, theme, indexed_colors);
     }
 
     // Cells map
@@ -679,6 +689,8 @@ pub(crate) fn hydrate_sheet_with_allocation(
     let floating_objects_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let floating_objects_map: MapRef =
         sheet_map.insert(txn, KEY_FLOATING_OBJECTS, floating_objects_prelim);
+    let floating_object_order: ArrayRef =
+        sheet_map.insert(txn, KEY_FLOATING_OBJECT_ORDER, ArrayPrelim::default());
 
     let floating_groups_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     sheet_map.insert(txn, KEY_FLOATING_OBJECT_GROUPS, floating_groups_prelim);
@@ -791,9 +803,15 @@ pub(crate) fn hydrate_sheet_with_allocation(
     all_floating_objects.extend(chart_fos);
     hydrate_floating_objects(
         txn,
-        &floating_objects_map,
+        FloatingObjectHydrationMaps {
+            floating_objects: &floating_objects_map,
+            floating_object_order: &floating_object_order,
+            cells: &cells_map,
+        },
+        &mut pos_map,
         &alloc.sheet_id,
         &all_floating_objects,
+        allocator,
     );
     hydrate_row_styles(
         txn,
@@ -819,7 +837,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         range_style_positions,
     );
 
-    hydrate_sheet_view_metadata(txn, &meta_map, sheet, false);
+    hydrate_sheet_view_metadata(txn, &meta_map, sheet, false, theme, indexed_colors);
 
     // Physical phantom cells.
     let phantom_cells =

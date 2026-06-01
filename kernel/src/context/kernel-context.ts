@@ -48,6 +48,7 @@ import { createNotificationsService } from '../services/notifications';
 import { createQueryExecutor } from '../services/query-executor';
 import { createSecurityEventRelay } from '../services/security/security-event-relay';
 import { createUndoService } from '../services/undo';
+import { installExternalFormulaReadbacks } from '../services/external-formulas';
 import { createSpreadsheetObjectManager } from '../floating-objects/spreadsheet-object-manager';
 import { wrapBridgeForDevTools } from './bridge-devtools-wrapper';
 import { createEventBus } from './event-bus';
@@ -424,6 +425,7 @@ export function createDocumentContext(
   // Set the deferred reference so bridges (which captured ctxProxy) now see
   // the fully-initialized context.
   ctxRef.current = ctx;
+  installExternalFormulaReadbacks(ctx);
 
   // Wire floating object manager to the document context (needed for chart integration).
   floatingObjectManager.setDocumentContext(ctx);

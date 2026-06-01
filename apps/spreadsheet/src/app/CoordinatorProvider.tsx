@@ -168,6 +168,7 @@ function PaneNavigationSetup({ children }: { children: ReactNode }) {
 function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
   const coordinator = useCoordinator();
   const wb = useWorkbook();
+  const uiStoreApi = useUIStoreApi();
 
   useEffect(() => {
     // Set up undo-selection coordination
@@ -175,10 +176,25 @@ function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
     const cleanup = setupUndoSelectionCoordination({
       history: wb.history,
       selectionActor: coordinator.grid.access.actors.selection,
+      getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
+      setActiveSheet: (sheetId) => uiStoreApi.getState().setActiveSheet(sheetId),
+      primeSheetViewState: (sheetId, checkpoint) => {
+        const uiStore = uiStoreApi.getState();
+        const existing = uiStore.getSheetViewState(sheetId);
+        uiStore.saveSheetViewState(sheetId, {
+          ranges: checkpoint.ranges,
+          activeCell: checkpoint.activeCell,
+          anchor: checkpoint.anchor,
+          anchorCol: null,
+          anchorRow: null,
+          scrollTop: existing?.scrollTop ?? 0,
+          scrollLeft: existing?.scrollLeft ?? 0,
+        });
+      },
     });
 
     return cleanup;
-  }, [coordinator, wb.history]);
+  }, [coordinator, uiStoreApi, wb.history]);
 
   return <>{children}</>;
 }
@@ -286,6 +302,7 @@ function KeyboardCaptureSetup({
       const isEditing =
         editorSnapshot.matches('editing') ||
         editorSnapshot.matches('formulaEditing') ||
+        editorSnapshot.matches('richTextEditing') ||
         editorSnapshot.matches('imeComposing');
 
       if (!isEditing) {
@@ -369,6 +386,42 @@ function KeyboardCaptureSetup({
       const isSheetSwitch =
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
       if (!isNavigationKey && !isSheetSwitch) {
+        const isFormattingShortcut =
+          (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());
+        const editorContext = editorSnapshot.context as {
+          hasSelection?: boolean;
+          hasCharSelection?: boolean;
+        };
+        if (
+          isFormattingShortcut &&
+          (editorContext.hasSelection || editorContext.hasCharSelection)
+        ) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
+        }
+
+        const target = keyboardEventTargetElement(e);
+        const isPrintableFormulaInput =
+          editorSnapshot.matches({ formulaEditing: 'enterMode' }) &&
+          e.key.length === 1 &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey &&
+          !isEditableKeyboardTarget(target) &&
+          !isDialogKeyboardTarget(target);
+
+        if (isPrintableFormulaInput) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+
         // Not a navigation key - let it through for text input
         return;
       }
@@ -672,8 +725,8 @@ export function SpreadsheetCoordinatorProvider({
       onValidationInformation: (message, title, onProceed, onCancel) => {
         showValidationWarning(message, title, 'information', onProceed, onCancel);
       },
-      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, errorPosition) => {
-        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, errorPosition);
+      onFormulaError: (formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition) => {
+        showFormulaError(formula, errorMessage, onEdit, onAcceptAsText, onCancel, errorPosition);
       },
       onCircularReferenceWarning: (cellAddress, formula, onEnableIterative, onCancel) => {
         showCircularReferenceDialog(

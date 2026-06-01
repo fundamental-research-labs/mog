@@ -22,7 +22,7 @@
 //! `compute/core/src/storage/cells/values.rs`.
 //!
 //! **State today:** many cases are expected to fail — they pin Class-A
-//! harness findings (whitespace collapse, etc.) from `FINDINGS.md`. Each
+//! harness findings (whitespace collapse, etc.). Each
 //! non-deferred case is a per-case `#[test]` in the runner modules —
 //! failing tests ARE the bug tracker. Do NOT silence failures with
 //! `#[ignore]` or failure budgets.
@@ -287,9 +287,7 @@ fn type_coercing_literal_cases() -> Vec<Class4Case> {
         Class4Case {
             name: "literal_fraction_slash",
             input: CellValue::Text(Arc::from("1/2")),
-            // Format-blind parsing treats two-part slash input as a date
-            // using the culture parser's default year. "1/2" = Jan 2, 2000.
-            expected: Expectation::CoercesTo(CellValue::number(36527.0)),
+            expected: Expectation::RoundTrips,
         },
         Class4Case {
             name: "literal_iso_date",

@@ -8,13 +8,21 @@
  */
 
 import { extendDataForLayerFields, sanitizeDataForScales } from '../algebra/data-sanitize';
-import type { AnyMark } from '../primitives/types';
-import { generateAxes } from './axis-generator';
-import { createScales, resolveEncodings } from './encoding-resolver';
+import type { AnyMark, RectMark } from '../primitives/types';
+import { generateAxes, generateYAxis } from './axis-generator';
+import { createScales, resolveEncodings, type ScaleMap } from './encoding-resolver';
 import { calculateLayout } from './layout';
 import { generateLegends } from './legend-generator';
 import { generateMarks } from './marks';
-import type { DataRow, EncodingSpec, LayerSpec, MarkSpec, MarkType } from './spec';
+import type {
+  AxisOrient,
+  ChartFrameSpec,
+  DataRow,
+  EncodingSpec,
+  LayerSpec,
+  MarkSpec,
+  MarkType,
+} from './spec';
 import { generateTitle } from './title-generator';
 import { applyTransforms } from './transforms';
 import type { CompileOptions, CompileResult } from './types';
@@ -33,6 +41,15 @@ function getMarkType(mark?: MarkType | MarkSpec): MarkType {
 function getMarkSpec(mark?: MarkType | MarkSpec): MarkSpec {
   if (!mark) return { type: 'bar' };
   return typeof mark === 'string' ? { type: mark } : mark;
+}
+
+function yAxisOrient(encoding: EncodingSpec | undefined): AxisOrient {
+  return encoding?.y?.axis?.orient === 'right' ? 'right' : 'left';
+}
+
+function withoutYEncoding(encoding: EncodingSpec): EncodingSpec {
+  const { y: _y, ...rest } = encoding;
+  return rest;
 }
 
 /**
@@ -61,8 +78,8 @@ export function compileLayered(
     height: options.height ?? (typeof spec.height === 'number' ? spec.height : 400),
   });
 
-  // Merge encodings from layers to create shared scales
-  const mergedEncoding = mergeEncodings(spec.layer.map((l) => l.encoding));
+  // Merge top-level shared encodings and layer encodings to create shared scales.
+  const mergedEncoding = mergeEncodings([spec.encoding, ...spec.layer.map((l) => l.encoding)]);
   const mergedData = spec.layer.flatMap((layer) => {
     if (layer.data && 'values' in layer.data) {
       return layer.data.values;
@@ -89,6 +106,11 @@ export function compileLayered(
 
   // Compile each layer
   const allMarks: AnyMark[] = [];
+  const independentYAxes: AnyMark[] = [];
+  const emittedIndependentYAxes = new Set<AxisOrient>();
+  const hasIndependentY = spec.resolve?.scale?.y === 'independent';
+  let sharedXAxisValueScale: ScaleMap['y'];
+  let sharedXAxisValueScaleOrient: AxisOrient | undefined;
 
   for (const layerItem of spec.layer) {
     const layerUnit = layerItem;
@@ -98,15 +120,59 @@ export function compileLayered(
       ? applyTransforms(layerUnit.transform, layerData)
       : layerData;
 
-    const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, scales);
     const markType = getMarkType(layerUnit.mark);
     const markSpec = getMarkSpec(layerUnit.mark);
+    let layerScales: ScaleMap = scales;
+
+    if (hasIndependentY && layerUnit.encoding?.y) {
+      const layerScaleData = extendDataForLayerFields(transformedLayerData, layerUnit.encoding, [
+        layerUnit,
+      ]);
+      const sanitizedLayerData = sanitizeDataForScales(layerScaleData, layerUnit.encoding);
+      const independentScales = createScales(
+        layerUnit.encoding,
+        sanitizedLayerData,
+        layout,
+        markType,
+      );
+      layerScales = { ...scales, y: independentScales.y ?? scales.y };
+      if (layerScales.y) {
+        const orient = yAxisOrient(layerUnit.encoding);
+        if (
+          !sharedXAxisValueScale ||
+          (orient === 'left' && sharedXAxisValueScaleOrient !== 'left')
+        ) {
+          sharedXAxisValueScale = layerScales.y;
+          sharedXAxisValueScaleOrient = orient;
+        }
+      }
+
+      if (spec.resolve?.axis?.y === 'independent' && layerUnit.encoding.y.axis !== null) {
+        const orient = yAxisOrient(layerUnit.encoding);
+        if (!emittedIndependentYAxes.has(orient) && layerScales.y) {
+          independentYAxes.push(
+            ...generateYAxis(
+              layerUnit.encoding.y,
+              layerScales.y,
+              layout,
+              spec.config?.axis,
+              scales.x,
+              undefined,
+              spec.config?.layoutHints,
+            ),
+          );
+          emittedIndependentYAxes.add(orient);
+        }
+      }
+    }
+
+    const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, layerScales);
 
     const layerMarks = generateMarks(
       markType,
       markSpec,
       transformedLayerData,
-      scales,
+      layerScales,
       layerEncodings,
       layout,
       layerUnit.encoding,
@@ -117,15 +183,49 @@ export function compileLayered(
   }
 
   // Generate shared axes and legends
-  const axes = options.skipAxes ? [] : generateAxes(mergedEncoding, scales, layout, spec.config);
+  const sharedAxisScales =
+    hasIndependentY && sharedXAxisValueScale ? { ...scales, y: sharedXAxisValueScale } : scales;
+  const axes = options.skipAxes
+    ? []
+    : [
+        ...generateAxes(
+          hasIndependentY ? withoutYEncoding(mergedEncoding) : mergedEncoding,
+          sharedAxisScales,
+          layout,
+          spec.config,
+        ),
+        ...independentYAxes,
+      ];
   const legends = options.skipLegend ? [] : generateLegends(mergedEncoding, scales, layout);
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
+  const background = [
+    ...generateFrameMarks(
+      spec.config?.chartFrame ??
+        (spec.config?.background
+          ? { fill: { type: 'solid', color: spec.config.background } }
+          : undefined),
+      0,
+      0,
+      layout.width,
+      layout.height,
+    ),
+    ...generateFrameMarks(
+      spec.config?.plotFrame,
+      layout.plotArea.x,
+      layout.plotArea.y,
+      layout.plotArea.width,
+      layout.plotArea.height,
+    ),
+  ];
 
   // Dev-mode assertion: all data marks must carry their source datum
-  assertDataMarksHaveDatum(allMarks);
+  const clippedMarks = clipMarksToPlotArea(allMarks, layout.plotArea);
+
+  assertDataMarksHaveDatum(clippedMarks);
 
   return {
-    marks: allMarks,
+    background: background.length > 0 ? background : undefined,
+    marks: clippedMarks,
     axes,
     legends,
     title,
@@ -138,6 +238,71 @@ export function compileLayered(
     layout,
     scales,
   };
+}
+
+function generateFrameMarks(
+  frame: ChartFrameSpec | undefined,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): AnyMark[] {
+  if (!frame?.fill && !frame?.line && !frame?.shadow) return [];
+  return [
+    {
+      type: 'rect',
+      x,
+      y,
+      width,
+      height,
+      style: frameStyle(frame),
+    } as RectMark,
+  ];
+}
+
+function frameStyle(frame: ChartFrameSpec): RectMark['style'] {
+  return {
+    ...(frame.fill?.type === 'solid' && frame.fill.opacity === undefined
+      ? { fill: frame.fill.color }
+      : frame.fill
+        ? { fillPaint: frame.fill }
+        : {}),
+    ...(frame.line?.paint ? { strokePaint: frame.line.paint } : {}),
+    ...(frame.line?.width !== undefined ? { strokeWidth: frame.line.width } : {}),
+    ...(frame.line?.dash ? { strokeDash: frame.line.dash } : {}),
+    ...(frame.line ? { line: frame.line } : {}),
+    ...(frame.shadow ? { shadow: frame.shadow } : {}),
+    ...(frame.cornerRadius !== undefined ? { cornerRadius: frame.cornerRadius } : {}),
+  };
+}
+
+function isPlotClippableMark(mark: AnyMark): boolean {
+  return (
+    (mark.type === 'rect' || mark.type === 'path' || mark.type === 'symbol') &&
+    !isPlotClipDisabled(mark.datum)
+  );
+}
+
+function isPlotClipDisabled(datum: unknown): boolean {
+  return (
+    datum != null &&
+    typeof datum === 'object' &&
+    (datum as Record<string, unknown>).__mogClipToPlotArea === false
+  );
+}
+
+function clipMarksToPlotArea(
+  marks: AnyMark[],
+  plotArea: { x: number; y: number; width: number; height: number },
+): AnyMark[] {
+  return marks.map((mark) =>
+    isPlotClippableMark(mark)
+      ? {
+          ...mark,
+          clip: { ...plotArea },
+        }
+      : mark,
+  );
 }
 
 /**

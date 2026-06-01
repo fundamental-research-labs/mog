@@ -22,9 +22,9 @@ import { useActiveCell, useActiveSheetId, useUIStore, useWorkbook } from '../../
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, Input } from '@mog/shell';
 import type { OriginalCellValue, Scenario } from '@mog-sdk/contracts/api';
-import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
+import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
-import { toA1 } from '@mog/spreadsheet-utils/a1';
+import { parseCellAddress, toA1 } from '@mog/spreadsheet-utils/a1';
 import type { EditingChangingCell, OriginalValueEntry } from '../../ui-store/slices';
 
 // =============================================================================
@@ -132,7 +132,7 @@ function ScenarioList({ scenarios, selectedId, activeId, onSelect }: ScenarioLis
 }
 
 interface ChangingCellsDisplayProps {
-  changingCells: CellId[];
+  changingCells: string[];
   values: CellValue[];
 }
 
@@ -149,9 +149,13 @@ function ChangingCellsDisplay({ changingCells, values }: ChangingCellsDisplayPro
     let cancelled = false;
     const ws = workbook.getSheetById(activeSheetId);
     void Promise.all(
-      changingCells.map(async (cellId) => {
-        const pos = await ws._internal.getCellPosition(cellId);
-        return [cellId, pos ? toA1(pos.row, pos.col) : '(deleted)'] as const;
+      changingCells.map(async (cellRef) => {
+        if (parseCellAddress(cellRef.trim())) {
+          return [cellRef, cellRef] as const;
+        }
+
+        const pos = await ws._internal.getCellPosition(cellRef);
+        return [cellRef, pos ? toA1(pos.row, pos.col) : '(deleted)'] as const;
       }),
     ).then((entries) => {
       if (!cancelled) {
@@ -396,7 +400,7 @@ export function ScenarioManagerDialog() {
         const scenarioId = await wb.scenarios.add({
           name: editingName.trim(),
           comment: editingComment,
-          changingCells: editingChangingCells.map((cell: EditingChangingCell) => cell.cellId),
+          changingCells: editingChangingCells.map((cell: EditingChangingCell) => cell.displayRef),
           values: editingChangingCells.map((cell: EditingChangingCell) => cell.value),
         });
         const next = await refreshScenarios();
@@ -492,7 +496,7 @@ export function ScenarioManagerDialog() {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-body-xs text-ss-text-secondary">Changing cells:</span>
                   <ChangingCellsDisplay
-                    changingCells={selectedScenario.changingCells.map(toCellId)}
+                    changingCells={selectedScenario.changingCells}
                     values={selectedScenario.values}
                   />
                 </div>

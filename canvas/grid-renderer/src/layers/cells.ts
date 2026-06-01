@@ -22,6 +22,7 @@ import type {
 import { canvasToDoc } from '@mog/canvas-engine';
 import type { CellFormat, FormattedText } from '@mog-sdk/contracts/core';
 import { displayString } from '@mog-sdk/contracts/core';
+import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import type {
   CellDataSource,
   DataBarData,
@@ -35,6 +36,7 @@ import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 
 import {
   renderCenterContinuousText,
+  renderAccountingText,
   renderDistributedHorizontalText,
   renderFillAlignmentText,
 } from '../cells/alignment';
@@ -720,8 +722,9 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
    * 5. CenterContinuous alignment -> renderCenterContinuousText
    * 6. Distributed horizontal alignment -> renderDistributedHorizontalText
    * 7. Wrap text -> renderWrappedText
-   * 8. Shrink to fit -> renderShrinkToFit
-   * 9. Normal text (with overflow handling) -> renderNormalText
+   * 8. Accounting format -> renderAccountingText
+   * 9. Shrink to fit -> renderShrinkToFit
+   * 10. Normal text (with overflow handling) -> renderNormalText
    */
   private renderCellText(
     ctx: CanvasRenderingContext2D,
@@ -852,7 +855,25 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       return;
     }
 
-    // 7. Shrink to fit
+    // 7. Accounting number formats split the currency symbol and amount.
+    if (format?.numberFormat && detectFormatType(format.numberFormat) === 'accounting') {
+      renderAccountingText(
+        ctx,
+        displayText,
+        x,
+        y,
+        width,
+        height,
+        format,
+        hasHyperlink,
+        theme,
+        fontColorOverride,
+        defaultFontColor,
+      );
+      return;
+    }
+
+    // 8. Shrink to fit
     if (format?.shrinkToFit) {
       renderShrinkToFit(ctx, cellInfo, format, {
         hasHyperlink,
@@ -865,7 +886,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       return;
     }
 
-    // 8. Normal text with overflow handling
+    // 9. Normal text with overflow handling
     const font = buildCellFont(format, theme, displayText);
     const textWidth = textMeasurer.measureText(displayText, font).width;
     const hAlign = mapHorizontalAlign(format?.horizontalAlign, value);

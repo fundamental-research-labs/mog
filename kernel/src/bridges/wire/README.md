@@ -89,7 +89,7 @@ vb.applyBinaryMutation(reader);
 
 ## Binary Protocol Spec
 
-See [`compute-wire/README.md`](../../../../compute-core/crates/compute-wire/README.md) for the full binary protocol specification including byte offsets, field sizes, flag bits, and section layouts.
+See [`compute-wire/README.md`](../../../../compute/core/crates/compute-wire/README.md) for the full binary protocol specification including byte offsets, field sizes, flag bits, and section layouts.
 
 Key facts:
 - All multi-byte values are **little-endian**
@@ -106,4 +106,4 @@ Key facts:
 cargo run -p compute-wire --bin generate-ts > kernel/src/bridges/wire/constants.gen.ts
 ```
 
-Source of truth: `compute-core/crates/compute-wire/src/{constants,flags}.rs`
+Source of truth: `compute/core/crates/compute-wire/src/{constants,flags}.rs`

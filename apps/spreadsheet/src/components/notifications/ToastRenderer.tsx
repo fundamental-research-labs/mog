@@ -86,15 +86,15 @@ const ToastItem = memo(function ToastItem({ notification, onDismiss }: ToastItem
 
   return (
     <div
-      role="alert"
-      aria-live="polite"
       className={`${styles.container} ${styles.text} px-4 py-3 rounded-ss-lg shadow-ss-md z-ss-toast flex items-start gap-3 max-w-sm animate-slide-up`}
     >
       {/* Icon */}
-      <span className={`${styles.text} text-body-lg flex-shrink-0 mt-0.5`}>{styles.icon}</span>
+      <span className={`${styles.text} text-body-lg flex-shrink-0 mt-0.5`} aria-hidden="true">
+        {styles.icon}
+      </span>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" role="alert" aria-live="polite">
         {title && <div className="font-semibold text-body-sm mb-0.5">{title}</div>}
         <div className="text-body-sm">{message}</div>
 

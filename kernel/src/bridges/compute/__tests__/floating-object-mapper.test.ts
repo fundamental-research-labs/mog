@@ -488,6 +488,117 @@ describe('toFloatingObject — ChartObject', () => {
       expect(obj.anchorMode).toBe('oneCell');
     }
   });
+
+  it('preserves imported chart spacing and hidden-data settings in chartConfig', () => {
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: 'column',
+        gapWidth: 150,
+        overlap: 100,
+        plotVisibleOnly: true,
+        plotLayout: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+        titleLayout: { x: 0.2, y: 0.05 },
+        dataTable: { visible: true, showKeys: true },
+        pivotOptions: { showAxisFieldButtons: false },
+        showAllFieldButtons: true,
+        view3d: { rotX: 30, rotY: 20 },
+        sideWallFormat: { fill: { type: 'solid', color: '#dddddd' } },
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.chartConfig).toEqual(
+        expect.objectContaining({
+          gapWidth: 150,
+          overlap: 100,
+          plotVisibleOnly: true,
+          plotLayout: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+          titleLayout: { x: 0.2, y: 0.05 },
+          dataTable: { visible: true, showKeys: true },
+          pivotOptions: { showAxisFieldButtons: false },
+          showAllFieldButtons: true,
+          view3d: { rotX: 30, rotY: 20 },
+          sideWallFormat: { fill: { type: 'solid', color: '#dddddd' } },
+        }),
+      );
+    }
+  });
+
+  it('preserves imported modern chart family configs in chartConfig', () => {
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: 'histogram',
+        waterfall: { subtotalIndices: [2], showConnectorLines: false },
+        histogram: { binCount: 8, overflowBin: true, overflowBinValue: 100 },
+        boxplot: {
+          showOutlierPoints: false,
+          showMeanMarkers: true,
+          quartileMethod: 'exclusive',
+        },
+        hierarchy: {
+          categoryFormulas: ['Sheet1!A1:A3'],
+          valueFormula: 'Sheet1!B1:B3',
+          rows: [{ id: 'A', label: 'A', level: 0, value: 3 }],
+          parentLabelLayout: 'banner',
+        },
+        regionMap: {
+          regionFormula: 'Sheet1!A1:A3',
+          valueFormula: 'Sheet1!B1:B3',
+        },
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.chartConfig).toEqual(
+        expect.objectContaining({
+          waterfall: { subtotalIndices: [2], showConnectorLines: false },
+          histogram: { binCount: 8, overflowBin: true, overflowBinValue: 100 },
+          boxplot: {
+            showOutlierPoints: false,
+            showMeanMarkers: true,
+            quartileMethod: 'exclusive',
+          },
+          hierarchy: expect.objectContaining({
+            categoryFormulas: ['Sheet1!A1:A3'],
+            valueFormula: 'Sheet1!B1:B3',
+            parentLabelLayout: 'banner',
+          }),
+          regionMap: {
+            regionFormula: 'Sheet1!A1:A3',
+            valueFormula: 'Sheet1!B1:B3',
+          },
+        }),
+      );
+    }
+  });
+
+  it('preserves imported chart status and does not default missing imported type to column', () => {
+    const importStatus = {
+      source: 'xlsx',
+      featureKind: 'chart',
+      recoverability: 'preservedNotRenderable',
+      renderability: 'notRenderable',
+      editability: 'partiallyEditable',
+      diagnostics: [],
+    } as const;
+    const obj = toFloatingObject(
+      wireObject({
+        type: 'chart',
+        chartType: '',
+        importStatus,
+      } as Partial<WireFloatingObject>),
+    );
+
+    expect(obj.type).toBe('chart');
+    if (obj.type === 'chart') {
+      expect(obj.importStatus).toBe(importStatus);
+      expect(obj.chartType).toBe('');
+    }
+  });
 });
 
 // =============================================================================

@@ -28,6 +28,10 @@ export interface ButtonOverlayControlProps {
   control: ButtonControl;
   /** Current value from the linked cell (if any) */
   cellValue: unknown;
+  /** Rendered width after resolving the anchor cell's current geometry */
+  width: number;
+  /** Rendered height after resolving the anchor cell's current geometry */
+  height: number;
   /** Callback to write a value to the linked cell */
   onCellValueChange: (controlId: string, value: unknown) => void;
 }
@@ -46,6 +50,8 @@ export interface ButtonOverlayControlProps {
 export const ButtonOverlayControl = memo(function ButtonOverlayControl({
   control,
   cellValue,
+  width,
+  height,
   onCellValueChange,
 }: ButtonOverlayControlProps) {
   // Button is actionable if it has a linked cell with a click action
@@ -92,8 +98,8 @@ export const ButtonOverlayControl = memo(function ButtonOverlayControl({
       onClick={handleClick}
       disabled={isDisabled}
       style={{
-        width: control.width,
-        height: control.height,
+        width,
+        height,
         pointerEvents: 'auto',
         // Excel-like button styling
         backgroundColor: isDisabled ? '#f0f0f0' : '#e1e1e1',
@@ -114,6 +120,7 @@ export const ButtonOverlayControl = memo(function ButtonOverlayControl({
         // Prevent focus from leaving the grid
         e.preventDefault();
       }}
+      data-no-grid-pointer="true"
       data-testid={`form-control-button-${control.id}`}
       aria-label={control.label}
     >

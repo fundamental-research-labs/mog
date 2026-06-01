@@ -18,24 +18,23 @@
 //! * CSV import gets the same treatment, even though most domains are
 //!   empty for a CSV (the contract is the same shape).
 //!
-//! These tests can use optional real-file fixtures from
-//! `MOG_USER_FEEDBACK_FIXTURE_DIR`. Some local checkouts omit those files, so
-//! XLSX-specific tests skip when the fixture directory or file is absent while
-//! still failing on non-NotFound read errors.
+//! These tests can use optional XLSX fixtures supplied by environment variable.
+//! Some local checkouts omit those files, so XLSX-specific tests skip when the
+//! fixture path is absent while still failing on non-NotFound read errors.
 
 use compute_core::storage::engine::YrsComputeEngine;
 use snapshot_types::{ChangeKind, FloatingObjectChangeKind};
 
-const GANTT_CHART_XLSX: &str = "gantt-chart.xlsx";
+const CHART_FIXTURE_ENV: &str = "MOG_IMPORT_MUTATION_CHART_XLSX";
 
-const GOLDEN_FPA_XLSX: &str = "golden_fpa_scenario_model.xlsx";
+const DOMAIN_FIXTURE_ENV: &str = "MOG_IMPORT_MUTATION_DOMAIN_XLSX";
 
-fn read_optional_fixture(file_name: &str, label: &str) -> Option<Vec<u8>> {
-    let Some(fixture_dir) = std::env::var_os("MOG_USER_FEEDBACK_FIXTURE_DIR") else {
-        eprintln!("skipping {label}: set MOG_USER_FEEDBACK_FIXTURE_DIR to run real-file fixture");
+fn read_optional_fixture(env_var: &str, label: &str) -> Option<Vec<u8>> {
+    let Some(fixture_path) = std::env::var_os(env_var) else {
+        eprintln!("skipping {label}: set {env_var} to run optional XLSX fixture");
         return None;
     };
-    let path = std::path::PathBuf::from(fixture_dir).join(file_name);
+    let path = std::path::PathBuf::from(fixture_path);
     match std::fs::read(&path) {
         Ok(bytes) => Some(bytes),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -62,7 +61,7 @@ fn import_from_xlsx_bytes_returns_mutation_result_with_floating_objects() {
     // mutation-pipeline import path. This is exactly the call the kernel TS
     // hydrator makes through `computeBridge.importFromXlsxBytes` after the
     // bridge has been started.
-    let Some(bytes) = read_optional_fixture(GANTT_CHART_XLSX, "gantt-chart") else {
+    let Some(bytes) = read_optional_fixture(CHART_FIXTURE_ENV, "chart workbook") else {
         return;
     };
 
@@ -91,10 +90,8 @@ fn import_from_xlsx_bytes_returns_mutation_result_with_floating_objects() {
     // ---- Floating objects: the critical assertion. ----
     assert!(
         !result.floating_object_changes.is_empty(),
-        "gantt-chart.xlsx contains chart floating objects; \
-         floating_object_changes must be populated post-hydration. \
-         This is the bug pass 5 of the floating-objects render-decoupling \
-         plan exists to fix."
+        "optional chart fixture must contain floating objects; \
+         floating_object_changes must be populated post-hydration"
     );
 
     for change in &result.floating_object_changes {
@@ -124,7 +121,7 @@ fn import_from_xlsx_bytes_returns_mutation_result_with_floating_objects() {
 
 #[test]
 fn import_from_xlsx_bytes_populates_table_and_filter_changes_when_present() {
-    let Some(bytes) = read_optional_fixture(GOLDEN_FPA_XLSX, "golden_fpa") else {
+    let Some(bytes) = read_optional_fixture(DOMAIN_FIXTURE_ENV, "domain workbook") else {
         return;
     };
 
@@ -136,14 +133,12 @@ fn import_from_xlsx_bytes_populates_table_and_filter_changes_when_present() {
         .import_from_xlsx_bytes(&bytes, true)
         .expect("import_from_xlsx_bytes should succeed");
 
-    // golden_fpa_scenario_model.xlsx contains many drawings (49 typed
-    // FloatingObjects per the plan's reference). It's also a feature-rich
-    // workbook with named ranges. Don't pin the exact counts — those drift
-    // as the parser improves — but assert the key families are populated.
+    // The optional fixture should exercise drawings plus at least one
+    // additional workbook domain. Don't pin exact counts because those drift
+    // as the parser improves; assert the key families are populated.
     assert!(
         !result.floating_object_changes.is_empty(),
-        "golden_fpa fixture has 49 floating objects; \
-         hydration must emit Created for each"
+        "optional domain fixture must emit Created changes for floating objects"
     );
 
     for change in &result.floating_object_changes {
@@ -168,7 +163,7 @@ fn import_from_xlsx_bytes_populates_table_and_filter_changes_when_present() {
 
 #[test]
 fn import_from_xlsx_bytes_floating_object_bounds_are_computed() {
-    let Some(bytes) = read_optional_fixture(GANTT_CHART_XLSX, "gantt-chart") else {
+    let Some(bytes) = read_optional_fixture(CHART_FIXTURE_ENV, "chart workbook") else {
         return;
     };
 
@@ -193,7 +188,7 @@ fn import_from_xlsx_bytes_floating_object_bounds_are_computed() {
 
     assert!(
         with_bounds > 0,
-        "at least one floating object in gantt-chart.xlsx must have \
+        "at least one floating object in the optional chart fixture must have \
          pre-computed pixel bounds; got 0/{}",
         result.floating_object_changes.len(),
     );
@@ -215,7 +210,7 @@ fn import_from_xlsx_bytes_floating_object_bounds_are_computed() {
     // empty Map that the renderer was previously seeing).
     assert!(
         positive_bounds > 0,
-        "at least one floating object in gantt-chart.xlsx must have \
+        "at least one floating object in the optional chart fixture must have \
          positive pixel bounds; got 0/{}",
         result.floating_object_changes.len(),
     );

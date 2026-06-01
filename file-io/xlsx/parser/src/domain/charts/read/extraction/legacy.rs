@@ -6,7 +6,10 @@ use super::data_refs::{
 use super::formatting::extract_fill_color;
 use super::labels::extract_data_label_data;
 use super::markers::extract_marker_config;
-use super::series::extract_single_series;
+use super::series::{
+    extract_cat_point_cache, extract_cat_source_kind, extract_num_point_cache,
+    extract_num_source_kind, extract_single_series,
+};
 
 pub(in crate::domain::charts::read) fn extract_chart_series(
     chart: &crate::domain::charts::Chart,
@@ -26,7 +29,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 };
                 g.series
                     .iter()
-                    .map(move |s| extract_single_series(s, series_type.clone()))
+                    .map(move |s| extract_single_series(s, series_type.clone(), None))
             })
             .collect();
     }
@@ -35,28 +38,49 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
         .series
         .iter()
         .map(|s| {
-            let name = s.tx.as_ref().and_then(|tx| match tx {
-                SeriesTextSource::Value(v) => Some(v.clone()),
-                SeriesTextSource::StrRef(sr) => sr
-                    .str_cache
-                    .as_ref()
-                    .and_then(|c| c.pts.first().map(|pt| pt.v.clone())),
-            });
+            let (name, name_ref) = match s.tx.as_ref() {
+                Some(SeriesTextSource::Value(v)) => (Some(v.clone()), None),
+                Some(SeriesTextSource::StrRef(sr)) => {
+                    let cached_name = sr
+                        .str_cache
+                        .as_ref()
+                        .and_then(|c| c.pts.first().map(|pt| pt.v.clone()));
+                    let name_ref = (!sr.f.trim().is_empty()).then(|| sr.f.clone());
+                    (cached_name, name_ref)
+                }
+                None => (None, None),
+            };
 
             let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
 
             // Values range: val (standard) or y_val (scatter/bubble)
             let values =
                 extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));
+            let value_cache =
+                extract_num_point_cache(&s.val).or_else(|| extract_num_point_cache(&s.y_val));
+            let value_source_kind =
+                extract_num_source_kind(&s.val).or_else(|| extract_num_source_kind(&s.y_val));
 
             // Categories range: cat (standard) or x_val (scatter/bubble)
             let categories =
                 extract_cat_ref_formula(&s.cat).or_else(|| extract_cat_ref_formula(&s.x_val));
+            let category_cache =
+                extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
+            let category_source_kind =
+                extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
 
             let bubble_size = extract_num_ref_formula(&s.bubble_size);
+            let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
+            let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
             // Markers
-            let (show_markers, marker_size, marker_style) = extract_marker_config(&s.marker);
+            let (
+                show_markers,
+                marker_size,
+                marker_style,
+                marker_background_color,
+                marker_foreground_color,
+            ) = extract_marker_config(&s.marker);
 
             // Per-point formatting
             let points = if s.d_pt.is_empty() {
@@ -69,8 +93,12 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                             let fill = pt.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
                             domain_types::chart::PointFormatData {
                                 idx: pt.idx,
+                                invert_if_negative: pt.invert_if_negative,
+                                explosion: pt.explosion,
+                                bubble_3d: pt.bubble_3d,
                                 fill,
                                 border: None,
+                                line_format: None,
                                 data_label: None,
                                 visual_format: None,
                                 marker_background_color: None,
@@ -115,15 +143,30 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
 
             // Series-level data labels
             let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
-
             domain_types::chart::ChartSeriesData {
                 name,
+                name_ref,
                 r#type: None, // follow-up: derive per-series type for combo charts
                 color,
+                stock_role: None,
                 values,
+                value_cache,
+                value_source_kind,
                 categories,
+                x_role: if s.x_val.is_some() {
+                    Some(domain_types::chart::ChartSeriesXRoleData::Quantitative)
+                } else {
+                    Some(domain_types::chart::ChartSeriesXRoleData::Category)
+                },
+                category_cache,
+                category_source_kind,
+                category_levels: None,
+                category_label_format: None,
                 bubble_size,
+                bubble_size_cache,
+                bubble_size_source_kind,
                 smooth: s.smooth,
+                show_lines: None,
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,
                 y_axis_index: None, // follow-up: derive from c:axId cross-reference
@@ -142,9 +185,16 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 format: None,
                 bar_shape: None,
                 invert_color: None,
-                marker_background_color: None,
-                marker_foreground_color: None,
+                marker_background_color,
+                marker_foreground_color,
                 filtered: None,
+                source_series_index: None,
+                source_series_key: None,
+                visible_order: None,
+                pivot_series_key: None,
+                pivot_data_field_index: None,
+                projection_authority: None,
+                projection_diagnostics: Vec::new(),
                 show_shadow: None,
                 show_connector_lines: None,
                 leader_line_format: None,
@@ -174,6 +224,8 @@ fn extract_error_bars_typed(
             value: eb.val,
             no_end_cap: None,
             line_format: None,
+            plus_source: None,
+            minus_source: None,
         };
         match eb.err_dir {
             Some(ooxml_types::charts::ErrorBarDirection::X) => x_bars = Some(data),
@@ -196,7 +248,7 @@ pub(in crate::domain::charts::read) fn extract_legend(
             LegendPosition::Top => "top",
             LegendPosition::Left => "left",
             LegendPosition::Right => "right",
-            LegendPosition::TopRight => "right",
+            LegendPosition::TopRight => "topRight",
         };
         domain_types::chart::LegendData {
             show: false,
@@ -207,6 +259,7 @@ pub(in crate::domain::charts::read) fn extract_legend(
             entries: None,
             custom_x: None,
             custom_y: None,
+            layout: l.layout.as_ref().map(Into::into),
             shadow: None,
             show_shadow: None,
         }
@@ -329,7 +382,7 @@ pub(in crate::domain::charts::read) fn map_chart_type_to_ts(
 pub(in crate::domain::charts::read) fn extract_sub_type(
     chart: &crate::domain::charts::Chart,
 ) -> Option<String> {
-    use ooxml_types::charts::ChartTypeConfig;
+    use ooxml_types::charts::{ChartTypeConfig, RadarStyle};
 
     match &chart.chart_type_config {
         Some(ChartTypeConfig::Bar(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
@@ -338,6 +391,11 @@ pub(in crate::domain::charts::read) fn extract_sub_type(
         Some(ChartTypeConfig::Line3D(c)) => grouping_to_sub_type(&c.grouping),
         Some(ChartTypeConfig::Area(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
         Some(ChartTypeConfig::Area3D(c)) => c.grouping.as_ref().and_then(grouping_to_sub_type),
+        Some(ChartTypeConfig::Radar(c)) => match c.radar_style {
+            RadarStyle::Filled => Some("filled".to_string()),
+            RadarStyle::Marker => Some("markers".to_string()),
+            RadarStyle::Standard => None,
+        },
         _ => None,
     }
 }

@@ -6,7 +6,29 @@
  * position-only floating object updates.
  */
 
-import { isPositionOnlyUpdate } from '../chart-bridge';
+import type { DocumentContext } from '../../../context/types';
+import type { ChartWasmExports } from '../chart-bridge';
+import {
+  ChartBridge,
+  createChartBridge,
+  initChartWasm,
+  isPositionOnlyUpdate,
+} from '../chart-bridge';
+
+function acceptsChartWasmExports(exports: ChartWasmExports): ChartWasmExports {
+  return exports;
+}
+
+describe('chart-bridge public compatibility exports', () => {
+  it('keeps the stable bridge facade exports available', () => {
+    const ctx = {} as DocumentContext;
+
+    expect(typeof initChartWasm).toBe('function');
+    expect(createChartBridge(ctx)).toBeInstanceOf(ChartBridge);
+    expect(acceptsChartWasmExports({})).toEqual({});
+    expect(typeof isPositionOnlyUpdate).toBe('function');
+  });
+});
 
 describe('isPositionOnlyUpdate', () => {
   it('returns true for drag fields (anchorRow, anchorCol)', () => {

@@ -79,3 +79,4 @@ export const RemoveArrowsIcon = createIcon(ProhibitedSvg);
 export const ErrorCheckingIcon = createIcon(WarningSvg);
 export const EvaluateFormulaIcon = createIcon(StepOverSvg);
 export const WatchWindowIcon = createIcon(DocumentSearchSvg);
+export const FormulaReferencesIcon = createIcon(DocumentSearchSvg);

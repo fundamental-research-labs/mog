@@ -2,12 +2,10 @@
  * — invariant runner slot.
  *
  * Devtools owns the `__dt.invariants()` slot but does NOT own the
- * registry implementation (which lives in
- * `dev/app-eval/capture/invariants/registry.ts`). To avoid a layering
- * inversion (devtools depending on app-eval), the runner is installed at
- * runtime: the registry module imports this slot module, calls
- * `setInvariantsRunner(...)` once it has loaded its registrations, and
- * `__dt.invariants()` delegates here.
+ * registry implementation. To avoid a layering inversion (devtools depending
+ * on the eval harness), the runner is installed at runtime: the registry
+ * module imports this slot module, calls `setInvariantsRunner(...)` once it
+ * has loaded its registrations, and `__dt.invariants()` delegates here.
  *
  * Until a runner is installed, `__dt.invariants()` returns an empty
  * passing result — Stage A behavior — so callers (snapshot capture,

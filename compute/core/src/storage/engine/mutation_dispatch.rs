@@ -149,6 +149,8 @@ impl YrsComputeEngine {
                 if !inferred_format_candidates.is_empty() {
                     self.apply_inferred_date_formats(&inferred_format_candidates)?;
                     self.apply_inferred_time_formats(&inferred_format_candidates)?;
+                    self.apply_inferred_currency_formats(&inferred_format_candidates)?;
+                    self.apply_inferred_percent_formats(&inferred_format_candidates)?;
                 }
 
                 let mut result = MutationResult::from_recalc(recalc);
@@ -747,7 +749,7 @@ impl YrsComputeEngine {
                 target_row,
                 target_col,
             } => {
-                let (mut recalc, relocate_result, table_changes) =
+                let (mut recalc, relocate_result, table_changes, pivot_changes) =
                     services::mutation_handlers::mutation_relocate_cells(
                         &mut self.stores,
                         &mut self.mirror,
@@ -764,6 +766,7 @@ impl YrsComputeEngine {
                 self.prepare_recalc_for_flush(&mut recalc);
                 let mut result = MutationResult::from_recalc(recalc).with_data(&relocate_result)?;
                 result.table_changes.extend(table_changes);
+                result.pivot_changes.extend(pivot_changes);
                 MutationOutput::Recalc(result)
             }
 
@@ -881,6 +884,12 @@ impl YrsComputeEngine {
                 let _ = self.engine.structure_change(sid, &change);
             }
             fn get_cell_raw_value(&self, sid: &SheetId, row: u32, col: u32) -> String {
+                if let Some(grid) = self.engine.grid_index(sid)
+                    && let Some(cell_id) = grid.cell_id_at(row, col)
+                    && let Some(formula) = self.engine.compute().get_formula(&cell_id)
+                {
+                    return formula.to_string();
+                }
                 self.engine
                     .mirror
                     .get_cell_value_at(sid, SheetPos::new(row, col))
@@ -902,15 +911,15 @@ impl YrsComputeEngine {
         self.mutation.observer.set_suppressed(false);
 
         // Sync all cells in the expanded range with compute.
-        let actual_end_row = end_row + subtotal_result.subtotal_rows_inserted;
+        let affected = subtotal_result.affected_range;
         let recalc = services::cell_editing::sync_range_with_compute(
             &mut self.stores,
             &mut self.mirror,
             sheet_id,
-            start_row,
-            start_col,
-            actual_end_row,
-            end_col,
+            affected.start_row(),
+            affected.start_col(),
+            affected.end_row(),
+            affected.end_col(),
         )?;
         Ok((recalc, subtotal_result))
     }

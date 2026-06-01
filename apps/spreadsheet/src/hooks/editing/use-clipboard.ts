@@ -60,6 +60,10 @@ import { withHandlerErrors } from '../../devtools/handler-error-boundary';
 import { useActiveSheetId, useReadOnly, useWorkbook } from '../../infra/context';
 import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
 import { waitForPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
+import {
+  trackPendingClipboardCapture,
+  waitForPendingClipboardCapture,
+} from '../../systems/grid-editing/coordination/pending-clipboard-capture';
 import { useCoordinator } from '../shared/use-coordinator';
 
 // =============================================================================
@@ -1051,12 +1055,13 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Store text signature for external clipboard detection
         data.textSignature = tsv;
 
-        // Write to system clipboard via modern async API
-        await writeToSystemClipboard({ tsv, html });
-
         // Update XState clipboard machine using commands
         commands.copy(mutableRanges, data);
         onCopy?.();
+
+        // Write to system clipboard after internal state is available so an
+        // immediate paste still uses rich in-app clipboard data.
+        await writeToSystemClipboard({ tsv, html });
       } catch (err) {
         // Push to devtools error buffer first so failure records have
         // a `recentErrors` entry, then fall through to the existing
@@ -1124,12 +1129,13 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Store text signature for external clipboard detection
         data.textSignature = tsv;
 
-        // Write to system clipboard via modern async API
-        await writeToSystemClipboard({ tsv, html });
-
         // Update XState clipboard machine using commands
         commands.cut(mutableRanges, data);
         onCut?.();
+
+        // Write to system clipboard after internal state is available so an
+        // immediate paste still uses rich in-app clipboard data.
+        await writeToSystemClipboard({ tsv, html });
       } catch (err) {
         (
           window as { __dt?: { captureError?: (s: string, e: unknown) => void } }
@@ -1162,6 +1168,8 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       event.preventDefault();
 
       try {
+        await waitForPendingClipboardCapture();
+
         // On-demand read: Get activeCell only when the paste event fires
         const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
 
@@ -1271,6 +1279,8 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
 
   const pasteFromSystemClipboard = useCallback(async (): Promise<number> => {
     if (readOnly) return 0; // Read-only mode: block paste
+    await waitForPendingClipboardCapture();
+
     // On-demand read: Get activeCell only when pasteFromSystemClipboard is called
     const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
 
@@ -1338,10 +1348,14 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
 
     // Wrappers for async handlers to satisfy EventListener type
     const copyHandler = (e: Event) => {
-      void handleCopy(e as ClipboardEvent);
+      const promise = handleCopy(e as ClipboardEvent);
+      trackPendingClipboardCapture(promise);
+      void promise;
     };
     const cutHandler = (e: Event) => {
-      void handleCut(e as ClipboardEvent);
+      const promise = handleCut(e as ClipboardEvent);
+      trackPendingClipboardCapture(promise);
+      void promise;
     };
     const pasteHandler = (e: Event) => {
       void handlePaste(e as ClipboardEvent);

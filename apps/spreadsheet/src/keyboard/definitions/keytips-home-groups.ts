@@ -20,9 +20,7 @@
  * Alt+H,KeyA,KeyB → Align Bottom (ALIGN_BOTTOM)
  * Alt+H,KeyW → Toggle Wrap Text (TOGGLE_WRAP_TEXT)
  * Alt+H,KeyM → Merge dropdown (OPEN_RIBBON_DROPDOWN: home.merge)
- * Alt+H,KeyO → Orientation dropdown (OPEN_RIBBON_DROPDOWN: home.orientation)
- * [also: Cells Format dropdown — see Cells group below; matcher
- * priority resolves on stable registration order]
+ * Alt+H,KeyF,KeyQ → Orientation dropdown (OPEN_RIBBON_DROPDOWN: home.orientation)
  * Alt+H,Digit5 → Decrease Indent (DECREASE_INDENT)
  * Alt+H,Digit6 → Increase Indent (INCREASE_INDENT)
  *
@@ -182,8 +180,8 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
   {
     id: 'keytips-home-groups.orientation-dropdown',
     bindings: altBinding('KeyH'),
-    sequence: ['KeyO'],
-    description: 'Open Orientation dropdown (Alt+H,O)',
+    sequence: ['KeyF', 'KeyQ'],
+    description: 'Open Orientation dropdown (Alt+H,F,Q)',
     action: 'OPEN_RIBBON_DROPDOWN',
     actionArg: { dropdownId: 'home.orientation' },
     enabled: true,
@@ -192,9 +190,8 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     contexts: HOME_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
-    dispatchOnChordPrefix: true,
     notes:
-      "Excel 365: Home → O opens Orientation dropdown. (Excel's Cells/Format dropdown has a non-trivial alternate chord; we expose it via Alt+H,KeyO,KeyF or Alt+H,KeyE,KeyT — see CellsGroup keytip notes.)",
+      'The Alignment-group Orientation button keytip is F,Q (Alt+H,F,Q). The bare Alt+H,O keytip belongs to the Cells-group Format dropdown (see cells-format below).',
   },
   {
     id: 'keytips-home-groups.decrease-indent',
@@ -315,8 +312,8 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
   {
     id: 'keytips-home-groups.cells-format',
     bindings: altBinding('KeyH'),
-    sequence: ['KeyO', 'KeyI'],
-    description: 'Cells Format dropdown (Alt+H,O,I)',
+    sequence: ['KeyO'],
+    description: 'Cells Format dropdown (Alt+H,O)',
     action: 'OPEN_RIBBON_DROPDOWN',
     actionArg: { dropdownId: 'home.format' },
     enabled: true,
@@ -326,7 +323,7 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     muscleMemory: 'occasional',
     matchBy: 'code',
     notes:
-      "Three-key chord because Alt+H,KeyO already opens the Alignment Orientation dropdown. Excel's actual Cells/Format chord is Alt+H,KeyO,KeyI (Format → I).",
+      'Alt+H,O opens the Cells-group Format dropdown. Sub-keys (O,E Format Cells; O,H row height; O,W column width; O,I AutoFit column width) live inside that dropdown.',
   },
 
   // ===========================================================================
@@ -436,7 +433,8 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     contexts: HOME_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
-    dispatchOnChordPrefix: true,
+    notes:
+      'Alt+H,S opens Cell Styles. It commits on the chord-disambiguation deadline rather than immediately, so the longer Alt+H,S,O (Sort & Filter) chord stays reachable.',
   },
 
   // ===========================================================================

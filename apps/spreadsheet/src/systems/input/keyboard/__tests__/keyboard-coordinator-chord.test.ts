@@ -509,15 +509,15 @@ describe('KeyboardCoordinator chord — prefix completions', () => {
     });
   });
 
-  it('Alt-tap → bare KeyH → bare KeyO defers Orientation while Cells Format remains possible', () => {
+  it('Alt-tap → bare KeyH → bare KeyS defers Cell Styles while Sort & Filter remains possible', () => {
     jest.useFakeTimers();
     try {
       const { coordinator, dispatchMock } = makeCoordinator([
-        chordSequence('orientation', 'KeyH', ['KeyO'], 'OPEN_RIBBON_DROPDOWN', {
-          dropdownId: 'home.orientation',
+        chordSequence('cell-styles', 'KeyH', ['KeyS'], 'OPEN_RIBBON_DROPDOWN', {
+          dropdownId: 'home.cell-styles',
         }),
-        chordSequence('cells-format', 'KeyH', ['KeyO', 'KeyI'], 'OPEN_RIBBON_DROPDOWN', {
-          dropdownId: 'home.format',
+        chordSequence('sort-filter', 'KeyH', ['KeyS', 'KeyO'], 'OPEN_RIBBON_DROPDOWN', {
+          dropdownId: 'home.sort-filter',
         }),
       ]);
 
@@ -525,18 +525,18 @@ describe('KeyboardCoordinator chord — prefix completions', () => {
       coordinator.handleKeyboardEvent(evt({ code: 'KeyH', key: 'h', altKey: false }));
 
       const prefixResult = coordinator.handleKeyboardEvent(
-        evt({ code: 'KeyO', key: 'o', altKey: false }),
+        evt({ code: 'KeyS', key: 's', altKey: false }),
       );
       expect(prefixResult.handled).toBe(true);
       expect(prefixResult.action).toBe('CHORD_PENDING');
       expect(coordinator.isChordPending()).toBe(true);
       expect(dispatchMock).not.toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
-        dropdownId: 'home.orientation',
+        dropdownId: 'home.cell-styles',
       });
 
       jest.advanceTimersByTime(CHORD_DISAMBIG_MS);
       expect(dispatchMock).toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
-        dropdownId: 'home.orientation',
+        dropdownId: 'home.cell-styles',
       });
       expect(coordinator.isChordPending()).toBe(false);
     } finally {
@@ -544,38 +544,38 @@ describe('KeyboardCoordinator chord — prefix completions', () => {
     }
   });
 
-  it('Alt-tap → bare KeyH → bare KeyO → bare KeyI opens Cells Format without firing Orientation', () => {
+  it('Alt-tap → bare KeyH → bare KeyS → bare KeyO opens Sort & Filter without firing Cell Styles', () => {
     jest.useFakeTimers();
     try {
       const { coordinator, dispatchMock } = makeCoordinator([
-        chordSequence('orientation', 'KeyH', ['KeyO'], 'OPEN_RIBBON_DROPDOWN', {
-          dropdownId: 'home.orientation',
+        chordSequence('cell-styles', 'KeyH', ['KeyS'], 'OPEN_RIBBON_DROPDOWN', {
+          dropdownId: 'home.cell-styles',
         }),
-        chordSequence('cells-format', 'KeyH', ['KeyO', 'KeyI'], 'OPEN_RIBBON_DROPDOWN', {
-          dropdownId: 'home.format',
+        chordSequence('sort-filter', 'KeyH', ['KeyS', 'KeyO'], 'OPEN_RIBBON_DROPDOWN', {
+          dropdownId: 'home.sort-filter',
         }),
       ]);
 
       altTap(coordinator);
       coordinator.handleKeyboardEvent(evt({ code: 'KeyH', key: 'h', altKey: false }));
-      coordinator.handleKeyboardEvent(evt({ code: 'KeyO', key: 'o', altKey: false }));
+      coordinator.handleKeyboardEvent(evt({ code: 'KeyS', key: 's', altKey: false }));
 
-      const formatResult = coordinator.handleKeyboardEvent(
-        evt({ code: 'KeyI', key: 'i', altKey: false }),
+      const sortFilterResult = coordinator.handleKeyboardEvent(
+        evt({ code: 'KeyO', key: 'o', altKey: false }),
       );
-      expect(formatResult.handled).toBe(true);
-      expect(formatResult.action).toBe('OPEN_RIBBON_DROPDOWN');
+      expect(sortFilterResult.handled).toBe(true);
+      expect(sortFilterResult.action).toBe('OPEN_RIBBON_DROPDOWN');
       expect(coordinator.isChordPending()).toBe(false);
       expect(dispatchMock).toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
-        dropdownId: 'home.format',
+        dropdownId: 'home.sort-filter',
       });
       expect(dispatchMock).not.toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
-        dropdownId: 'home.orientation',
+        dropdownId: 'home.cell-styles',
       });
 
       jest.advanceTimersByTime(CHORD_DISAMBIG_MS);
       expect(dispatchMock).not.toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
-        dropdownId: 'home.orientation',
+        dropdownId: 'home.cell-styles',
       });
     } finally {
       jest.useRealTimers();

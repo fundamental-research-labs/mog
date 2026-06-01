@@ -87,7 +87,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
   // Local State (dropdown visibility)
   //
   // lifted into the ribbonDropdowns slice so the keytip chords (Alt+H,I
-  // / Alt+H,D / Alt+H,O,I) can open these via OPEN_RIBBON_DROPDOWN.
+  // / Alt+H,D / Alt+H,O) can open these via OPEN_RIBBON_DROPDOWN.
   // ===========================================================================
 
   const insertDropdownOpen = useUIStore((s) => s.ribbonDropdowns['home.insert'] ?? false);

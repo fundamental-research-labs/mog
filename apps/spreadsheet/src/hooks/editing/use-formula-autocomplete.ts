@@ -33,10 +33,10 @@ import type { FunctionInfo } from '@mog-sdk/contracts/api';
 import type { FunctionArgument } from '@mog-sdk/contracts/utils';
 import {
   clampToViewport,
-  getArgumentHintPosition,
   getAutoCompletePosition,
   type CursorScreenPosition,
 } from '../../domain/editor/cursor-position';
+import type { ArgumentHintAnchor } from '../../components/editor/FormulaArgumentHint';
 import {
   detectTableRefContext,
   formatNameForInsertion,
@@ -88,8 +88,11 @@ export interface UseFormulaAutocompleteReturn {
   /** Screen position for suggestions popup */
   suggestionsPosition: CursorScreenPosition;
 
-  /** Screen position for argument hint tooltip */
-  argumentHintPosition: CursorScreenPosition;
+  /** Anchor rect (viewport coords) for the argument hint tooltip, or null. */
+  argumentHintAnchor: ArgumentHintAnchor | null;
+
+  /** Preferred placement of the argument hint relative to its anchor. */
+  argumentHintPlacement: 'above' | 'below';
 
   /** Combined suggestion count (functions + names) */
   totalSuggestionCount: number;
@@ -276,6 +279,15 @@ function metadataToFunctionInfo(meta: FunctionMetadata): FunctionInfo {
 export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
   const coordinator = useCoordinator();
   const editorActor = coordinator.grid.access.actors.editor;
+  const paneFocusActor = coordinator.input.access.actors.paneFocus;
+
+  // Whether the formula bar (rather than the in-cell editor) owns focus. Used to
+  // decide where the argument hint is anchored: below the formula bar when it has
+  // focus, above the editing cell otherwise.
+  const isFormulaBarFocused = useSelector(
+    paneFocusActor,
+    (state) => state.value === 'formulaBar',
+  );
 
   // Ref to input element for positioning
   const inputElementRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
@@ -452,28 +464,38 @@ export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
     return clampToViewport(rawPos, { width: 400, height: 300 });
   }, [geometry, editingCell, cursorPosition, coordinator]);
 
-  // Argument hint position (above input)
-  const argumentHintPosition = useMemo((): CursorScreenPosition => {
-    const coordLike = geometry
-      ? {
-          getCellRect: (cell: { row: number; col: number }) => {
-            return geometry.getCellRect(cell);
-          },
-          getContainerRect: () => {
-            const container = coordinator.renderer.getContainer();
-            return container?.getBoundingClientRect() ?? new DOMRect(0, 0, 800, 600);
-          },
-        }
-      : null;
+  // Argument hint anchor + placement.
+  //
+  // We hand the hint an anchor rect (viewport coords) and a preferred side; the
+  // FormulaArgumentHint component clamps to the viewport using its own measured
+  // size, so there are no guessed popup dimensions here.
+  //
+  // - Formula bar focused: anchor to the formula bar input, prefer BELOW it. The
+  //   bar sits at the top of the viewport, so an "above" hint would cover it.
+  // - In-cell editing: anchor to the editing cell, prefer ABOVE it.
+  const argumentHintPlacement: 'above' | 'below' = isFormulaBarFocused ? 'below' : 'above';
+  const argumentHintAnchor = useMemo((): ArgumentHintAnchor | null => {
+    const inputEl = inputElementRef.current;
+    if (isFormulaBarFocused && inputEl) {
+      const rect = inputEl.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, bottom: rect.bottom };
+    }
 
-    const rawPos = getArgumentHintPosition(
-      coordLike,
-      editingCell ?? { row: 0, col: 0 },
-      null,
-      150, // estimated hint height
-    );
-    return clampToViewport(rawPos, { width: 400, height: 150 });
-  }, [geometry, editingCell, coordinator]);
+    if (geometry) {
+      const cellRect = geometry.getCellRect(editingCell ?? { row: 0, col: 0 });
+      if (cellRect) {
+        const container = coordinator.renderer.getContainer();
+        const containerRect = container?.getBoundingClientRect() ?? new DOMRect(0, 0, 800, 600);
+        const top = containerRect.top + cellRect.y;
+        return { left: containerRect.left + cellRect.x, top, bottom: top + cellRect.height };
+      }
+    }
+
+    return null;
+    // cursorPosition is included so the anchor recomputes as the user types
+    // (picking up the input element ref once it is attached), matching
+    // suggestionsPosition above.
+  }, [geometry, editingCell, coordinator, isFormulaBarFocused, cursorPosition]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ACTIONS
@@ -535,7 +557,8 @@ export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
       nameSuggestions,
       currentFunctionInfo,
       suggestionsPosition,
-      argumentHintPosition,
+      argumentHintAnchor,
+      argumentHintPlacement,
       totalSuggestionCount,
 
       // Actions
@@ -554,7 +577,8 @@ export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
       nameSuggestions,
       currentFunctionInfo,
       suggestionsPosition,
-      argumentHintPosition,
+      argumentHintAnchor,
+      argumentHintPlacement,
       totalSuggestionCount,
       acceptCurrentSuggestion,
       acceptSuggestion,

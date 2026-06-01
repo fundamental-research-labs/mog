@@ -706,13 +706,16 @@ function FormulaBarContainerImpl() {
         )}
 
       {/* Argument Hint Tooltip */}
-      {autocomplete.isArgumentHintOpen && autocomplete.currentFunctionInfo && (
-        <FormulaArgumentHint
-          functionInfo={autocomplete.currentFunctionInfo}
-          currentArgIndex={autocomplete.formulaContext?.currentArgIndex ?? 0}
-          position={autocomplete.argumentHintPosition}
-        />
-      )}
+      {autocomplete.isArgumentHintOpen &&
+        autocomplete.currentFunctionInfo &&
+        autocomplete.argumentHintAnchor && (
+          <FormulaArgumentHint
+            functionInfo={autocomplete.currentFunctionInfo}
+            currentArgIndex={autocomplete.formulaContext?.currentArgIndex ?? 0}
+            anchor={autocomplete.argumentHintAnchor}
+            preferredPlacement={autocomplete.argumentHintPlacement}
+          />
+        )}
     </div>
   );
 }

@@ -678,9 +678,17 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
           width: '100%',
           height: '100%',
           color: 'transparent',
-          backgroundColor: cellFormat?.backgroundColor || '#ffffff',
+          // The parent formula-edit-overlay div paints the opaque cell fill, so
+          // the textarea itself MUST be transparent — otherwise its opaque
+          // background would cover the FormulaHighlighter glyphs beneath it.
+          backgroundColor: 'transparent',
           caretColor: style.color,
-          zIndex: 1,
+          // Sit ABOVE the highlighter overlay (zIndex:2). The native text caret
+          // is painted in this textarea's layer; any element stacked above it —
+          // even a transparent one — occludes the caret. Keeping the textarea
+          // on top makes the caret visible while the (transparent-text) value
+          // still lets the highlighter's colored glyphs show through.
+          zIndex: 3,
         }
       : baseEditorStyle,
   };

@@ -4,7 +4,7 @@
  * G.3: Shown when a formula creates a circular reference.
  * Offers options to:
  * - Enable iterative calculation (allow the circular reference to iterate)
- * - Dismiss the warning
+ * - Cancel the edit (revert to previous value)
  *
  * This follows Excel's behavior where circular references show a dialog
  * allowing the user to enable iterative calculation.
@@ -30,7 +30,7 @@ export interface CircularReferenceState {
 export interface CircularReferenceCallbacks {
   /** Enable iterative calculation and proceed with the formula */
   onEnableIterative: () => void;
-  /** Dismiss the warning */
+  /** Cancel the edit (revert to previous value) */
   onCancel: () => void;
 }
 
@@ -116,12 +116,12 @@ interface CircularReferenceDialogProps {
  * G.3: Shows when a formula creates a circular reference.
  * User can choose to:
  * - Enable iterative calculation (formula will iterate until convergence)
- * - Dismiss the warning
+ * - Cancel (revert to previous value)
  *
  * Excel-like behavior:
  * - Shows the cell address and formula causing the circular reference
  * - Explains what iterative calculation does
- * - Default action is to keep iterative calculation disabled
+ * - Default action is Cancel (safer)
  */
 export function CircularReferenceDialog({
   state,
@@ -197,7 +197,7 @@ export function CircularReferenceDialog({
       </DialogBody>
       <DialogFooter>
         <Button variant="secondary" onClick={onCancel}>
-          OK
+          Cancel
         </Button>
         <Button variant="primary" onClick={handleEnableIterative}>
           Enable Iterative Calculation

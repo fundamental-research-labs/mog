@@ -110,8 +110,15 @@ pub fn create_subtotals(
         boundaries
     };
     for b in &sorted {
+        // When summary is below the data (sb=true), boundaries are processed in
+        // reverse (last group first).  Rows inserted for later (lower) groups do
+        // not shift the current (higher) group, so we must NOT apply the running
+        // insertion offset `ri` to the current group's coordinates.
+        // When summary is above the data (sb=false), processing is top-to-bottom
+        // and each insertion shifts all subsequent group coordinates down by 1, so
+        // `ri` must be applied to both endpoints.
         let as_ = if sb { b.start_row } else { b.start_row + ri };
-        let ae = b.end_row + ri;
+        let ae = if sb { b.end_row } else { b.end_row + ri };
         let srp = if sb { ae + 1 } else { as_ };
         cell_accessor.insert_rows(sheet_id, srp, 1);
         ri += 1;
@@ -137,6 +144,39 @@ pub fn create_subtotals(
             gc += 1;
         }
     }
+    // Insert Grand Total row — matches Excel behaviour: one Grand Total at the
+    // bottom (when sb=true) or top (when sb=false) covering all data rows.
+    let grand_total_row = if sb {
+        range.end_row() + ri + 1
+    } else {
+        range.start_row()
+    };
+    cell_accessor.insert_rows(sheet_id, grand_total_row, 1);
+    ri += 1;
+    cell_accessor.set_cell_value(
+        sheet_id,
+        grand_total_row,
+        options.group_by_column,
+        "Grand Total",
+    );
+    // Grand Total formula covers all original data rows (excluding the header).
+    let gt_first = if options.has_headers {
+        range.start_row() + 1
+    } else {
+        range.start_row()
+    };
+    // Last data row before the grand total row: everything up to the row just
+    // before grand_total_row.
+    let gt_last = grand_total_row - 1;
+    for &col in &options.subtotal_columns {
+        cell_accessor.set_cell_value(
+            sheet_id,
+            grand_total_row,
+            col,
+            &build_subtotal_formula(options.function, col, gt_first, gt_last),
+        );
+    }
+
     let mn = options
         .subtotal_columns
         .iter()

@@ -431,4 +431,28 @@ export function useRenderContextConfig(options: UseRenderContextConfigOptions): 
       });
     }
   }, [coordinator, options.remoteCursors]);
+
+  // Push page break preview mode changes directly to the renderer.
+  // The main sendContextUpdate() only fires on actor state changes
+  // (selection/editor/clipboard), so UI-store-driven mode changes
+  // would never reach the canvas page-break adapter without this.
+  // Also refreshes page break data (follower lane) since the mode
+  // change means page breaks need to be re-fetched and rendered.
+  useEffect(() => {
+    coordinator.renderer.updateContext({
+      pageBreakPreviewMode: options.pageBreakPreviewMode,
+    });
+    // Refresh page break and auto page break data when mode changes
+    void Promise.all([
+      Promise.resolve(optionsRef.current.getPageBreaks()),
+      Promise.resolve(optionsRef.current.getAutoPageBreaks()),
+      Promise.resolve(optionsRef.current.getPrintArea()),
+    ]).then(([pageBreaks, autoPageBreaks, printArea]) => {
+      coordinator.renderer.updateContext({
+        pageBreaks,
+        autoPageBreaks,
+        printArea,
+      });
+    });
+  }, [coordinator, options.pageBreakPreviewMode]);
 }

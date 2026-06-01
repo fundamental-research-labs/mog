@@ -216,15 +216,22 @@ pub(super) fn remove_subtotals(
     end_row: u32,
     end_col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
-    let doc = engine.stores.storage.doc().clone();
-    let sheets_map = doc.get_or_insert_map("sheets");
-    let mut accessor = EngineSubtotalAccessor { engine: engine };
-    grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
-    Ok((
-        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    match engine.apply_mutation(EngineMutation::RemoveSubtotals {
+        sheet_id: *sheet_id,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+    })? {
+        MutationOutput::Recalc(result) => Ok((
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            result,
+        )),
+        _ => Ok((
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            MutationResult::empty(),
+        )),
+    }
 }
 
 pub(super) fn auto_outline(

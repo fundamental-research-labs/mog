@@ -713,6 +713,20 @@ impl YrsComputeEngine {
                 )
             }
 
+            EngineMutation::RemoveSubtotals {
+                sheet_id,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            } => {
+                let mut recalc = self.mutation_remove_subtotals(
+                    &sheet_id, start_row, start_col, end_row, end_col,
+                )?;
+                self.prepare_recalc_for_flush(&mut recalc);
+                MutationOutput::Recalc(MutationResult::from_recalc(recalc))
+            }
+
             EngineMutation::AutoFill { sheet_id, request } => {
                 let (mut recalc, summary) = services::mutation_handlers::mutation_auto_fill(
                     &mut self.stores,
@@ -913,5 +927,96 @@ impl YrsComputeEngine {
             end_col,
         )?;
         Ok((recalc, subtotal_result))
+    }
+
+    // -------------------------------------------------------------------
+    // RemoveSubtotals — delete subtotal rows + outline groups with recalc
+    // -------------------------------------------------------------------
+
+    /// Remove all subtotal rows and outline groups from a range.
+    ///
+    /// Mirrors the structure of `mutation_create_subtotals`: drives the domain
+    /// function with an Accessor struct that coordinates all five engine stores,
+    /// suppresses the mutation observer while making structural changes, then
+    /// syncs the affected range with compute to flush recalc.
+    fn mutation_remove_subtotals(
+        &mut self,
+        sheet_id: &SheetId,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> Result<RecalcResult, ComputeError> {
+        use crate::storage::sheet::grouping;
+
+        let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
+        let doc = self.stores.storage.doc().clone();
+        let sheets_map = doc.get_or_insert_map("sheets");
+
+        struct Accessor<'a> {
+            engine: &'a mut YrsComputeEngine,
+        }
+        impl<'a> grouping::SubtotalsCellAccessor for Accessor<'a> {
+            fn get_cell_value(&self, sid: &SheetId, row: u32, col: u32) -> String {
+                self.engine
+                    .mirror
+                    .get_cell_value_at(sid, SheetPos::new(row, col))
+                    .map(|v| format!("{}", v))
+                    .unwrap_or_default()
+            }
+            fn set_cell_value(&mut self, sid: &SheetId, row: u32, col: u32, value: &str) {
+                if let Some(grid) = self.engine.stores.grid_indexes.get_mut(sid) {
+                    let cell_id = grid.ensure_cell_id(row, col);
+                    let _ = self.engine.set_cell(sid, cell_id, row, col, value.into());
+                }
+            }
+            fn insert_rows(&mut self, sid: &SheetId, at_row: u32, count: u32) {
+                let change = formula_types::StructureChange::InsertRows {
+                    at: at_row,
+                    count,
+                    new_row_ids: Vec::new(),
+                };
+                let _ = self.engine.structure_change(sid, &change);
+            }
+            fn delete_rows(&mut self, sid: &SheetId, at_row: u32, count: u32) {
+                let change = formula_types::StructureChange::DeleteRows {
+                    at: at_row,
+                    count,
+                    deleted_cell_ids: Vec::new(),
+                };
+                let _ = self.engine.structure_change(sid, &change);
+            }
+            fn get_cell_raw_value(&self, sid: &SheetId, row: u32, col: u32) -> String {
+                // Try to get formula first (raw value for SUBTOTAL detection)
+                if let Some(grid) = self.engine.grid_index(sid)
+                    && let Some(cell_id) = grid.cell_id_at(row, col)
+                    && let Some(f) = self.engine.compute().get_formula(&cell_id)
+                {
+                    return f.to_string();
+                }
+                self.engine
+                    .mirror
+                    .get_cell_value_at(sid, SheetPos::new(row, col))
+                    .map(|v| format!("{}", v))
+                    .unwrap_or_default()
+            }
+        }
+
+        self.mutation.observer.set_suppressed(true);
+        let mut accessor = Accessor { engine: self };
+        grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
+        self.mutation.observer.set_suppressed(false);
+
+        // Sync the full original range with compute to flush deletions.
+        let recalc = services::cell_editing::sync_range_with_compute(
+            &mut self.stores,
+            &mut self.mirror,
+            sheet_id,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+        )?;
+        Ok(recalc)
     }
 }

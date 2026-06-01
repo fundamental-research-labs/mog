@@ -678,8 +678,8 @@ export function DataRibbon({
             width="narrow"
             icon={<ConsolidateIcon />}
             label="Consolidate"
-            disabled
-            title="Consolidate (coming soon)"
+            onClick={() => dispatch('OPEN_CONSOLIDATE_DIALOG')}
+            title="Consolidate"
             aria-label="Consolidate"
           />
         </div>

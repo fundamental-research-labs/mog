@@ -6,6 +6,7 @@
  */
 
 import type {
+  CellRange,
   GroupState,
   OutlineSettings,
   SheetId,
@@ -85,6 +86,11 @@ export class WorksheetOutlineImpl implements WorksheetOutline {
 
   async subtotal(config: SubtotalConfig): Promise<SubtotalResult> {
     return unwrapResult(await GroupingOps.subtotal(this.ctx, this.sheetId, config));
+  }
+
+  async removeSubtotals(range: CellRange): Promise<void> {
+    this._ensureWritable('outline.removeSubtotals');
+    unwrapResult(await GroupingOps.removeSubtotals(this.ctx, this.sheetId, range));
   }
 
   async getSettings(): Promise<OutlineSettings> {

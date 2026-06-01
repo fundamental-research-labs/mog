@@ -39,6 +39,46 @@ import { type CellInput, toCellInput } from './cell-input';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 
 // =============================================================================
+// Percentage Pre-Compensation
+// =============================================================================
+
+/**
+ * Check if a number format string represents a percentage format.
+ * Matches formats like "0%", "0.00%", "#,##0.0%", "(0.00%)", etc.
+ */
+function isPercentageFormat(numberFormat: string | undefined | null): boolean {
+  if (!numberFormat) return false;
+  return numberFormat.includes('%');
+}
+
+/**
+ * Pre-compensate a numeric value for percentage-formatted cells.
+ *
+ * When writing a number via the SDK API (e.g., `setCell("A1", 0.185)`),
+ * the value should be stored as-is (0.185) and displayed as 18.5%.
+ * However, the Rust parse pipeline applies G1 coercion (÷100) to bare
+ * numbers written to percentage-formatted cells — a behaviour designed
+ * for interactive user typing, not programmatic writes.
+ *
+ * This function multiplies the value by 100 so the G1 ÷100 round-trips
+ * back to the intended stored value.
+ */
+async function precompensatePercentage(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: CellValuePrimitive,
+): Promise<CellValuePrimitive> {
+  if (typeof value !== 'number') return value;
+  const format = await getFormatInternal(ctx, sheetId, row, col);
+  if (isPercentageFormat(format?.numberFormat)) {
+    return value * 100;
+  }
+  return value;
+}
+
+// =============================================================================
 // Cell Read Operations
 // =============================================================================
 
@@ -293,8 +333,12 @@ export async function setCell(
   ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits([{ sheetId, row, col }]);
   const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
 
+  // Pre-compensate numeric values for percentage-formatted cells so the
+  // Rust G1 ÷100 coercion round-trips to the intended stored value.
+  const compensatedValue = await precompensatePercentage(ctx, sheetId, row, col, preparedValue as CellValuePrimitive);
+
   // Convert value to a typed CellInput for Rust — no in-band sentinels.
-  const input = toCellInput(preparedValue as CellValuePrimitive);
+  const input = toCellInput(compensatedValue);
   // Single-element batch — Rust handles CellId resolution, recalc, AND
   // locale-aware date format inference (e.g. "3/15/2024" → number value +
   // M/d/yyyy format applied atomically inside the mutation pipeline).
@@ -464,7 +508,8 @@ export async function setCells(
 
     // Normalise value the same way setCell does.
     const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
-    const input = toCellInput(preparedValue as CellValuePrimitive);
+    const compensatedValue = await precompensatePercentage(ctx, sheetId, row, col, preparedValue as CellValuePrimitive);
+    const input = toCellInput(compensatedValue);
 
     // Last-write-wins: later entries overwrite earlier ones for the same position
     dateWrites.delete(key);

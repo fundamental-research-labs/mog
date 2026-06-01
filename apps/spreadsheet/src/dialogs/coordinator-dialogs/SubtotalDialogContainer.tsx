@@ -71,20 +71,12 @@ export function SubtotalDialogContainer() {
     [wb, activeSheetId, range, subtotalDialog.hasHeaders],
   );
 
-  // Worksheet API: remove subtotals via ws.outline.subtotal with empty config
+  // Worksheet API: remove subtotals via ws.outline.removeSubtotals
   const handleRemoveAll = useCallback(async () => {
     if (!range) return;
     const ws = wb.getSheetById(activeSheetId);
-    // Use subtotal with replace=true and empty columns to effectively remove subtotals
-    await ws.outline.subtotal({
-      range,
-      hasHeaders: subtotalDialog.hasHeaders,
-      groupByColumn: range.startCol,
-      subtotalColumns: [],
-      aggregation: 'sum',
-      replace: true,
-    });
-  }, [wb, activeSheetId, range, subtotalDialog.hasHeaders]);
+    await ws.outline.removeSubtotals(range);
+  }, [wb, activeSheetId, range]);
 
   return (
     <SubtotalDialog

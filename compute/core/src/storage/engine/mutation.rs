@@ -343,6 +343,17 @@ pub(crate) enum EngineMutation {
         options: crate::storage::sheet::grouping::SubtotalOptions,
     },
 
+    /// Remove subtotal rows and outline groups from a data range.
+    /// Deletes subtotal rows, clears SUBTOTAL formulas, removes outline groups,
+    /// and triggers recalc — matching Excel's "Remove All" behaviour.
+    RemoveSubtotals {
+        sheet_id: SheetId,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    },
+
     /// Autofill: compute fill updates from source range and apply to target range.
     AutoFill {
         sheet_id: SheetId,
@@ -418,6 +429,7 @@ impl EngineMutation {
             | EngineMutation::ClearRange { .. }
             | EngineMutation::ClearRangeAndReturnIds { .. }
             | EngineMutation::CreateSubtotals { .. }
+            | EngineMutation::RemoveSubtotals { .. }
             | EngineMutation::AutoFill { .. }
             | EngineMutation::FlashFill { .. }
             | EngineMutation::RemoveDuplicates { .. }

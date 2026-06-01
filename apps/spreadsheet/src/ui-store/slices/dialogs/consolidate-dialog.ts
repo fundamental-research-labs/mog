@@ -51,6 +51,8 @@ export interface ConsolidateDialogState {
   isOpen: boolean;
   /** Aggregation function to use */
   func: ConsolidateFunction;
+  /** Destination cell reference (e.g., "H1") */
+  destination: string;
   /** Current reference input (for adding new references) */
   currentReference: string;
   /** List of all source references */
@@ -100,6 +102,9 @@ export interface ConsolidateDialogSlice {
 
   /** Toggle create links option */
   toggleConsolidateCreateLinks: () => void;
+
+  /** Set the destination cell reference */
+  setConsolidateDestination: (destination: string) => void;
 }
 
 // =============================================================================
@@ -109,6 +114,7 @@ export interface ConsolidateDialogSlice {
 const initialConsolidateDialogState: ConsolidateDialogState = {
   isOpen: false,
   func: 'sum',
+  destination: '',
   currentReference: '',
   sourceReferences: [],
   useTopRowLabels: false,
@@ -221,6 +227,15 @@ export const createConsolidateDialogSlice: StateCreator<
       consolidateDialog: {
         ...state.consolidateDialog,
         createLinks: !state.consolidateDialog.createLinks,
+      },
+    }));
+  },
+
+  setConsolidateDestination: (destination) => {
+    set((state) => ({
+      consolidateDialog: {
+        ...state.consolidateDialog,
+        destination,
       },
     }));
   },

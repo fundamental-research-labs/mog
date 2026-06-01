@@ -634,6 +634,8 @@ export interface GoalSeekResult {
   found: boolean;
   /** The value found for the changing cell (if found) */
   value?: number;
+  /** The value the target (formula) cell achieves at the solution (if found) */
+  achievedValue?: number;
   /** Number of iterations performed */
   iterations?: number;
 }

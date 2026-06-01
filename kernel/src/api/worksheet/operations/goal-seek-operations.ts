@@ -76,15 +76,17 @@ export async function goalSeek(
     iterations: number;
   };
 
-  // If a solution was found, apply it to the changing cell
-  if (result.found && result.solutionValue != null) {
-    await CellOps.setCell(ctx, sheetId, changingPos.row, changingPos.col, result.solutionValue);
-  }
+  // NOTE: Do NOT write the solution here. Writing to the changing cell is the
+  // user's explicit choice (Apply button). The caller (APPLY_GOAL_SEEK_RESULT)
+  // is responsible for committing the value; Cancel must leave cells untouched.
 
-  // Map bridge result to contract GoalSeekResult
+  // Map bridge result to contract GoalSeekResult.
+  // achievedValue is the formula cell value at the solution point — useful for
+  // displaying in the dialog without needing to write the changing cell first.
   return {
     found: result.found,
     value: result.solutionValue,
+    achievedValue: result.achievedValue,
     iterations: result.iterations,
   };
 }

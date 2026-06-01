@@ -13,6 +13,7 @@
 // Paste Operation Dialogs
 // =============================================================================
 import {
+  ConsolidateDialogContainerWrapper,
   FunctionArgumentsDialogContainer,
   InsertFunctionDialogContainer,
   PasteSpecialDialogContainerWrapper,
@@ -124,6 +125,9 @@ export function OverlayLayer() {
 
       {/* Subtotals Dialog */}
       <SubtotalDialogContainerWrapper />
+
+      {/* Consolidate Dialog */}
+      <ConsolidateDialogContainerWrapper />
 
       {/* ================================================================== */}
       {/* Table & Sparkline Dialogs */}

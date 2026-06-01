@@ -4,7 +4,7 @@
  * Provides methods to group/ungroup rows and columns, manage collapse state,
  * apply subtotals, and configure outline settings.
  */
-import type { GroupState, OutlineSettings, SubtotalConfig, SubtotalResult } from '../types';
+import type { CellRange, GroupState, OutlineSettings, SubtotalConfig, SubtotalResult } from '../types';
 
 /** Sub-API for outline (row/column grouping) operations on a worksheet. */
 export interface WorksheetOutline {
@@ -87,6 +87,16 @@ export interface WorksheetOutline {
    * @param config - Subtotal configuration
    */
   subtotal(config: SubtotalConfig): Promise<SubtotalResult>;
+
+  /**
+   * Remove all subtotals from the given range.
+   *
+   * Deletes subtotal rows, clears SUBTOTAL formulas, and removes the associated
+   * outline groups — matching Excel's "Remove All" behaviour in the Subtotals dialog.
+   *
+   * @param range - The cell range from which subtotals should be removed
+   */
+  removeSubtotals(range: CellRange): Promise<void>;
 
   /**
    * Get the outline display settings.

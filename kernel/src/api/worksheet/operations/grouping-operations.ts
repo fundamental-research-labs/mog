@@ -428,6 +428,32 @@ function toCellRange(range: SheetRange): CellRange {
   };
 }
 
+/**
+ * Remove all subtotals from a range.
+ *
+ * Calls the compute bridge's dedicated removeSubtotals path, which deletes the
+ * inserted subtotal rows, clears SUBTOTAL formulas, and removes the associated
+ * outline groups — matching Excel's "Remove All" behaviour in the Subtotals dialog.
+ */
+export async function removeSubtotals(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  range: CellRange,
+): Promise<OperationResult<void>> {
+  try {
+    await ctx.computeBridge.removeSubtotals(
+      sheetId,
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+    );
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: operationFailed('removeSubtotals', String(e)) };
+  }
+}
+
 export async function subtotal(
   ctx: DocumentContext,
   sheetId: SheetId,

@@ -10,6 +10,7 @@
  *
  */
 
+export { ConsolidateDialogContainerWrapper } from './ConsolidateDialogContainer';
 export { ExtensionHostContainer } from './ExtensionHostContainer';
 export { FunctionArgumentsDialogContainer } from './FunctionArgumentsDialogContainer';
 export { InsertFunctionDialogContainer } from './InsertFunctionDialogContainer';

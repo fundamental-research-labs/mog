@@ -15,6 +15,7 @@ export type {
   MogSpreadsheetAppProps,
   MogSpreadsheetAttachmentEvents,
   MogSpreadsheetColorScheme,
+  MogSpreadsheetConsoleLogVisibility,
   MogSpreadsheetCommandBarPolicy,
   MogSpreadsheetChromePolicy,
   MogSpreadsheetCommandPolicy,

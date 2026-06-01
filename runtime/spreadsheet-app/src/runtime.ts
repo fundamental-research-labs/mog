@@ -10,6 +10,7 @@ import {
   type InternalSpreadsheetActorSession,
 } from './actor-session';
 import { cloneBytes, hashBytes, makeCleanState } from './bytes';
+import { applySpreadsheetConsolePolicy } from './console-policy';
 import { createRuntimeId, noopDisposable } from './deferred';
 import { InternalDecorationHandle } from './decorations';
 import { isWorkbookMutationEvent } from './dirty-events';
@@ -313,6 +314,7 @@ class SpreadsheetRuntimeController
   constructor(
     readonly shell: Awaited<ReturnType<typeof createShell>>,
     private readonly options: SpreadsheetRuntimeOptions,
+    private readonly releaseConsolePolicy: () => void,
   ) {
     this.capabilityRegistry = shell.capabilityRegistry;
     this.runtimeId = options.runtimeId ?? createRuntimeId('spreadsheet-runtime');
@@ -428,7 +430,9 @@ class SpreadsheetRuntimeController
       if (failures.length > 0) {
         throw new AggregateError(failures, '[SpreadsheetRuntime] dispose failed');
       }
-    })();
+    })().finally(() => {
+      this.releaseConsolePolicy();
+    });
     return this.disposePromise;
   }
 
@@ -1390,16 +1394,25 @@ class SpreadsheetRuntimeController
 export async function createSpreadsheetRuntime(
   options: SpreadsheetRuntimeOptions,
 ): Promise<SpreadsheetRuntime> {
+  const releaseConsolePolicy = applySpreadsheetConsolePolicy(options.host?.consoleLogs);
   const capabilityRegistry = createPermissiveShellCapabilityRegistry({ audit: false });
   let shell: Awaited<ReturnType<typeof createShell>>;
   try {
     shell = await createShell({ ...toShellConfig(options), capabilityRegistry });
   } catch (error) {
+    releaseConsolePolicy();
     capabilityRegistry.dispose();
     throw error;
   }
-  await shell.eventDispatcher.start();
-  const runtime = new SpreadsheetRuntimeController(shell, options);
+  try {
+    await shell.eventDispatcher.start();
+  } catch (error) {
+    capabilityRegistry.dispose();
+    await shell.dispose().catch(() => {});
+    releaseConsolePolicy();
+    throw error;
+  }
+  const runtime = new SpreadsheetRuntimeController(shell, options, releaseConsolePolicy);
   runtimeControllers.set(runtime, runtime);
   return runtime;
 }

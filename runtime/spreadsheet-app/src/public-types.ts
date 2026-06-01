@@ -25,6 +25,7 @@ export type OpenWorkbookId = WorkbookSessionId;
 export type SemanticWorkbookId = string;
 export type MogSpreadsheetColorScheme = 'light' | 'dark' | 'system';
 export type MogSpreadsheetResolvedColorScheme = 'light' | 'dark';
+export type MogSpreadsheetConsoleLogVisibility = 'visible' | 'hidden';
 
 export type SpreadsheetReadCapability = 'workbook:read' | 'workbook:export' | 'workbook:screenshot';
 export type SpreadsheetWriteCapability =
@@ -392,6 +393,17 @@ export interface SpreadsheetRuntimeHostPolicy {
   readonly principalRef?: string;
   readonly capabilityGrantRef?: string;
   readonly persistenceMode?: SpreadsheetPersistenceMode;
+  /**
+   * Controls whether console output emitted by the spreadsheet runtime is
+   * visible in the host page. Defaults to `visible`.
+   *
+   * Set to `hidden` for production host integrations that do not want Mog's
+   * direct `console.*` diagnostics surfaced to users or host log collectors.
+   * In same-page embeds, `hidden` mutes the page console while any hidden
+   * spreadsheet runtime is alive because legacy Mog diagnostics are direct
+   * `console.*` calls rather than contextual logger calls.
+   */
+  readonly consoleLogs?: MogSpreadsheetConsoleLogVisibility;
   /**
    * Whether to show the browser's "leave site?" prompt when there is
    * unflushed document data on `beforeunload`. Defaults to `true`.

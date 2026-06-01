@@ -62,6 +62,55 @@ pub(super) fn adjust_single_ref(
             }
         }
 
+        (
+            IdentityFormulaRef::RectRange(rect_ref),
+            RefPosition::Range {
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            },
+        ) => {
+            let start_row = shift_coord(
+                *start_row,
+                row_delta,
+                rect_ref.start_row_absolute,
+                MAX_ROWS,
+            );
+            let start_col = shift_coord(
+                *start_col,
+                col_delta,
+                rect_ref.start_col_absolute,
+                MAX_COLS,
+            );
+            let end_row = shift_coord(*end_row, row_delta, rect_ref.end_row_absolute, MAX_ROWS);
+            let end_col = shift_coord(*end_col, col_delta, rect_ref.end_col_absolute, MAX_COLS);
+            AdjustedRef {
+                ref_index,
+                target_row: start_row.value,
+                target_col: start_col.value,
+                target_end_row: Some(end_row.value),
+                target_end_col: Some(end_col.value),
+                out_of_bounds: start_row.out_of_bounds
+                    || start_col.out_of_bounds
+                    || end_row.out_of_bounds
+                    || end_col.out_of_bounds,
+            }
+        }
+
+        (IdentityFormulaRef::RectRange(rect_ref), RefPosition::Cell { row, col }) => {
+            let target_row = shift_coord(*row, row_delta, rect_ref.start_row_absolute, MAX_ROWS);
+            let target_col = shift_coord(*col, col_delta, rect_ref.start_col_absolute, MAX_COLS);
+            AdjustedRef {
+                ref_index,
+                target_row: target_row.value,
+                target_col: target_col.value,
+                target_end_row: None,
+                target_end_col: None,
+                out_of_bounds: target_row.out_of_bounds || target_col.out_of_bounds,
+            }
+        }
+
         (IdentityFormulaRef::FullRow(row_ref), RefPosition::FullRow { row }) => {
             let target_row = shift_coord(*row, row_delta, row_ref.absolute, MAX_ROWS);
             AdjustedRef {

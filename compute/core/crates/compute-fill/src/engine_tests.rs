@@ -733,8 +733,11 @@ mod tests {
         let input = default_input(req, cells);
         let result = compute_fill(&input);
 
+        // No formula updates emitted
         assert_eq!(count_formula_updates(&result), 0);
-        assert_eq!(result.filled_cell_count, 0);
+        // Values are still emitted for formula cells when include_values is true
+        assert_eq!(count_value_updates(&result), 2);
+        assert_eq!(result.filled_cell_count, 2);
     }
 
     // ── include_values=false skips value updates ─────────────────────
@@ -1305,5 +1308,318 @@ mod tests {
             !has_source_formula,
             "source cell B1 must not have a formula update"
         );
+    }
+
+    // ── Bug 2a: large range fill completes without quadratic blowup ──
+    //
+    // Regression: autoFill("C9:N17", "C21:N29") (9×12 formula block)
+    // timed out at 180 seconds. The root cause was O(source*target)
+    // linear scan in emit_target. Fixed with HashMap source-cell index.
+
+    #[test]
+    fn large_range_fill_completes_quickly() {
+        // 9 rows × 12 cols = 108 source cells, 108 target cells
+        let mut cells = Vec::new();
+        for row in 8..17 {
+            // C9:N17 = rows 8–16, cols 2–13
+            for col in 2..14 {
+                cells.push(make_value_cell(row, col, (row * 100 + col) as f64));
+            }
+        }
+        let req = default_request(
+            range(8, 2, 16, 13),  // C9:N17
+            range(20, 2, 28, 13), // C21:N29
+            FillDirection::Down,
+            FillMode::Copy,
+        );
+        let input = default_input(req, cells);
+
+        let start = std::time::Instant::now();
+        let result = compute_fill(&input);
+        let elapsed = start.elapsed();
+
+        assert_eq!(count_value_updates(&result), 108);
+        assert_eq!(result.filled_cell_count, 108);
+        // Must complete in well under a second (was timing out at 180s)
+        assert!(
+            elapsed.as_secs() < 5,
+            "fill took {:?}, expected < 5s",
+            elapsed
+        );
+    }
+
+    #[test]
+    fn large_range_formula_fill_completes_quickly() {
+        // Same as above but with formula cells
+        let mut cells = Vec::new();
+        for row in 8..17 {
+            for col in 2..14 {
+                cells.push(make_formula_cell(
+                    row,
+                    col,
+                    "{0}+1",
+                    vec![(row, col.saturating_sub(1))],
+                ));
+            }
+        }
+        let req = default_request(
+            range(8, 2, 16, 13),
+            range(20, 2, 28, 13),
+            FillDirection::Down,
+            FillMode::Auto,
+        );
+        let input = default_input(req, cells);
+
+        let start = std::time::Instant::now();
+        let result = compute_fill(&input);
+        let elapsed = start.elapsed();
+
+        assert_eq!(count_formula_updates(&result), 108);
+        assert!(
+            elapsed.as_secs() < 5,
+            "formula fill took {:?}, expected < 5s",
+            elapsed
+        );
+    }
+
+    // ── Bug 2b: RectRange (cross-sheet) refs respect absolute flags ──
+    //
+    // Regression: autoFill shifted FORECAST_ASSUMPTIONS!$C$6 → !M6
+    // because RectRange refs fell through to mismatch_adjusted_ref.
+
+    fn make_formula_cell_with_rect_range(
+        row: u32,
+        col: u32,
+        template: &str,
+        range_start: (u32, u32),
+        range_end: (u32, u32),
+        start_row_abs: bool,
+        start_col_abs: bool,
+        end_row_abs: bool,
+        end_col_abs: bool,
+    ) -> SourceCell {
+        SourceCell {
+            row,
+            col,
+            value: CellValue::Number(FiniteF64::new(0.0).unwrap()),
+            formula: Some(IdentityFormula {
+                template: template.into(),
+                refs: vec![formula_types::IdentityFormulaRef::RectRange(
+                    formula_types::IdentityRectRangeRef {
+                        sheet_id: cell_types::SheetId::from_raw(99),
+                        start_row_id: cell_types::RowId::from_raw(range_start.0 as u128),
+                        start_col_id: cell_types::ColId::from_raw(range_start.1 as u128),
+                        end_row_id: cell_types::RowId::from_raw(range_end.0 as u128),
+                        end_col_id: cell_types::ColId::from_raw(range_end.1 as u128),
+                        start_row_absolute: start_row_abs,
+                        start_col_absolute: start_col_abs,
+                        end_row_absolute: end_row_abs,
+                        end_col_absolute: end_col_abs,
+                    },
+                )],
+                is_dynamic_array: false,
+                is_volatile: false,
+                is_aggregate: false,
+            }),
+            format: None,
+            ref_positions: vec![RefPosition::Range {
+                start_row: range_start.0,
+                start_col: range_start.1,
+                end_row: range_end.0,
+                end_col: range_end.1,
+            }],
+        }
+    }
+
+    #[test]
+    fn rect_range_absolute_refs_not_shifted() {
+        // Formula at C8 (row=7, col=2) with RectRange ref to
+        // FORECAST_ASSUMPTIONS!$C$6:$C$6 (all absolute).
+        // Fill right to D8:F8.
+        let cells = vec![make_formula_cell_with_rect_range(
+            7, 2, "{0}", (5, 2), (5, 2), true, true, true, true,
+        )];
+        let req = default_request(
+            range(7, 2, 7, 2),
+            range(7, 3, 7, 5),
+            FillDirection::Right,
+            FillMode::Auto,
+        );
+        let input = default_input(req, cells);
+        let result = compute_fill(&input);
+
+        let formula_updates = get_formula_updates(&result);
+        assert_eq!(formula_updates.len(), 3);
+
+        // All refs should stay at (5, 2) — absolute
+        for (_, _, refs) in &formula_updates {
+            assert_eq!(refs.len(), 1);
+            assert_eq!(refs[0].target_row, 5, "absolute row must not shift");
+            assert_eq!(refs[0].target_col, 2, "absolute col must not shift");
+            assert!(!refs[0].out_of_bounds, "must not be out_of_bounds");
+        }
+    }
+
+    #[test]
+    fn rect_range_relative_refs_shifted() {
+        // Formula at C8 (row=7, col=2) with RectRange ref to
+        // FORECAST_ASSUMPTIONS!C6:C6 (all relative).
+        // Fill right to D8:F8.
+        let cells = vec![make_formula_cell_with_rect_range(
+            7, 2, "{0}", (5, 2), (5, 2), false, false, false, false,
+        )];
+        let req = default_request(
+            range(7, 2, 7, 2),
+            range(7, 3, 7, 5),
+            FillDirection::Right,
+            FillMode::Auto,
+        );
+        let input = default_input(req, cells);
+        let result = compute_fill(&input);
+
+        let formula_updates = get_formula_updates(&result);
+        assert_eq!(formula_updates.len(), 3);
+
+        // D8: col_delta=1, ref col should be 3
+        assert_eq!(formula_updates[0].2[0].target_col, 3);
+        // E8: col_delta=2, ref col should be 4
+        assert_eq!(formula_updates[1].2[0].target_col, 4);
+        // F8: col_delta=3, ref col should be 5
+        assert_eq!(formula_updates[2].2[0].target_col, 5);
+        // Row stays at 5 (no row delta for horizontal fill)
+        for (_, _, refs) in &formula_updates {
+            assert_eq!(refs[0].target_row, 5);
+            assert!(!refs[0].out_of_bounds);
+        }
+    }
+
+    #[test]
+    fn rect_range_mixed_absolute_relative() {
+        // Formula at C8 with RectRange ref: $C6 (col absolute, row relative).
+        // Fill right to D8:E8.
+        let cells = vec![make_formula_cell_with_rect_range(
+            7, 2, "{0}", (5, 2), (5, 2), false, true, false, true,
+        )];
+        let req = default_request(
+            range(7, 2, 7, 2),
+            range(7, 3, 7, 4),
+            FillDirection::Right,
+            FillMode::Auto,
+        );
+        let input = default_input(req, cells);
+        let result = compute_fill(&input);
+
+        let formula_updates = get_formula_updates(&result);
+        assert_eq!(formula_updates.len(), 2);
+
+        // Col is absolute → stays at 2
+        // Row is relative → stays at 5 (no row delta for horizontal fill)
+        for (_, _, refs) in &formula_updates {
+            assert_eq!(refs[0].target_col, 2, "absolute col must not shift");
+            assert_eq!(refs[0].target_row, 5);
+            assert!(!refs[0].out_of_bounds);
+        }
+    }
+
+    // ── Bug 2c: series mode with single formula cell ─────────────────
+    //
+    // Regression: autoFill("D5", "D5:M5", "series") with a single
+    // formula source cell filled target with zeros because emit_formula
+    // returned early (include_formulas=false in series context) and the
+    // value branch was guarded by `else if`.
+
+    #[test]
+    fn series_mode_formula_cell_emits_value_when_formulas_excluded() {
+        // Source: single formula cell at D5 (row=4, col=3) with value=100.
+        // Mode: series with include_formulas=false → should fall through
+        // to value branch and use source cell's value.
+        let cells = vec![SourceCell {
+            row: 4,
+            col: 3,
+            value: CellValue::Number(FiniteF64::new(100.0).unwrap()),
+            formula: Some(IdentityFormula {
+                template: "{0}+1".into(),
+                refs: vec![formula_types::IdentityFormulaRef::Cell(
+                    formula_types::IdentityCellRef {
+                        id: cell_types::CellId::from_raw(0),
+                        row_absolute: false,
+                        col_absolute: false,
+                    },
+                )],
+                is_dynamic_array: false,
+                is_volatile: false,
+                is_aggregate: false,
+            }),
+            format: None,
+            ref_positions: vec![RefPosition::Cell { row: 3, col: 3 }],
+        }];
+
+        // include_formulas=false but include_values=true
+        let req = FillRequest {
+            source_range: range(4, 3, 4, 3),
+            target_range: range(4, 4, 4, 12),
+            direction: FillDirection::Right,
+            mode: FillMode::Series,
+            include_formulas: false,
+            include_values: true,
+            include_formats: false,
+            step_value: 1.0,
+        };
+        let input = default_input(req, cells);
+        let result = compute_fill(&input);
+
+        // Should NOT produce zeros — should produce value updates
+        assert_eq!(
+            count_value_updates(&result),
+            9,
+            "should produce 9 value updates (E5:M5)"
+        );
+        assert_eq!(count_formula_updates(&result), 0, "formulas are excluded");
+
+        // Each value should be the source cell's value (100) since no
+        // series pattern can be detected from a single formula cell.
+        for col in 4..=12 {
+            let val = get_value_at(&result, 4, col);
+            assert!(
+                val.is_some(),
+                "cell at col {} should have a value, not be empty/zero",
+                col
+            );
+            assert_eq!(
+                val,
+                Some(&CellValue::Number(FiniteF64::new(100.0).unwrap())),
+                "cell at col {} should be 100 (source value), not zero",
+                col
+            );
+        }
+    }
+
+    #[test]
+    fn series_mode_formula_cell_propagates_formula_when_included() {
+        // When include_formulas=true, formula cells should still
+        // propagate their formulas (not their values).
+        let cells = vec![make_formula_cell(4, 3, "{0}+1", vec![(3, 3)])];
+        let req = FillRequest {
+            source_range: range(4, 3, 4, 3),
+            target_range: range(4, 4, 4, 6),
+            direction: FillDirection::Right,
+            mode: FillMode::Series,
+            include_formulas: true,
+            include_values: true,
+            include_formats: false,
+            step_value: 1.0,
+        };
+        let input = default_input(req, cells);
+        let result = compute_fill(&input);
+
+        // Should produce formula updates, not value updates
+        assert_eq!(count_formula_updates(&result), 3);
+        assert_eq!(count_value_updates(&result), 0);
+
+        let formula_updates = get_formula_updates(&result);
+        // E5 (col=4): ref shifted right by 1 → (3, 4)
+        assert_eq!(formula_updates[0].2[0].target_col, 4);
+        // F5 (col=5): ref shifted right by 2 → (3, 5)
+        assert_eq!(formula_updates[1].2[0].target_col, 5);
     }
 }

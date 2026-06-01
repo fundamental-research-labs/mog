@@ -4,7 +4,7 @@
 //! Pure function — no mutation, no storage access. The caller provides all
 //! needed data via [`FillInput`].
 
-use crate::engine_emitter::{EmissionState, emit_target};
+use crate::engine_emitter::{EmissionState, build_source_cell_index, emit_target};
 use crate::engine_lanes::build_lane_plans;
 use crate::engine_policy::{FillPolicy, copy_pattern};
 use crate::engine_targets::{target_cells, target_merge_warning};
@@ -30,9 +30,10 @@ pub fn compute_fill(input: &FillInput) -> FillResult {
         warnings.push(warning);
     }
     let mut state = EmissionState::new(warnings);
+    let source_index = build_source_cell_index(&input.source_cells);
 
     for target in target_cells(input) {
-        emit_target(input, &policy, &mut lanes, target, &mut state);
+        emit_target(input, &policy, &mut lanes, target, &mut state, &source_index);
     }
 
     state.sort_updates();

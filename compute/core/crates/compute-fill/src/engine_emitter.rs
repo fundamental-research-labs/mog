@@ -1,9 +1,22 @@
+use std::collections::HashMap;
+
 use crate::engine_lanes::LanePlans;
 use crate::engine_policy::FillPolicy;
 use crate::engine_targets::TargetCell;
 use crate::formula_adjust::calculate_adjusted_positions;
 use crate::helpers::map_target_to_source;
 use crate::types::*;
+
+/// Pre-built index for O(1) source-cell lookup by (row, col).
+pub(crate) type SourceCellIndex = HashMap<(u32, u32), usize>;
+
+pub(crate) fn build_source_cell_index(source_cells: &[SourceCell]) -> SourceCellIndex {
+    source_cells
+        .iter()
+        .enumerate()
+        .map(|(i, cell)| ((cell.row, cell.col), i))
+        .collect()
+}
 
 pub(crate) struct EmissionState {
     pub(crate) updates: Vec<FillUpdate>,
@@ -36,6 +49,7 @@ pub(crate) fn emit_target(
     lanes: &mut LanePlans,
     target: TargetCell,
     state: &mut EmissionState,
+    source_index: &SourceCellIndex,
 ) {
     let (src_row, src_col) = map_target_to_source(
         target.row,
@@ -44,17 +58,20 @@ pub(crate) fn emit_target(
         input.request.direction,
     );
 
-    let Some(source_cell) = input
-        .source_cells
-        .iter()
-        .find(|cell| cell.row == src_row && cell.col == src_col)
+    let Some(source_cell) = source_index
+        .get(&(src_row, src_col))
+        .map(|&idx| &input.source_cells[idx])
     else {
         return;
     };
 
-    if let Some(formula) = &source_cell.formula {
-        emit_formula(source_cell, formula, target, policy, state);
-    } else if policy.include_values {
+    let emitted_formula = if let Some(formula) = &source_cell.formula {
+        emit_formula(source_cell, formula, target, policy, state)
+    } else {
+        false
+    };
+
+    if !emitted_formula && policy.include_values {
         let lane = if lanes.is_vertical {
             target.col
         } else {
@@ -88,9 +105,9 @@ fn emit_formula(
     target: TargetCell,
     policy: &FillPolicy,
     state: &mut EmissionState,
-) {
+) -> bool {
     if !policy.include_formulas {
-        return;
+        return false;
     }
 
     let adjusted_refs = calculate_adjusted_positions(
@@ -119,4 +136,5 @@ fn emit_formula(
         adjusted_refs,
     });
     state.filled_cell_count += 1;
+    true
 }

@@ -597,6 +597,18 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     // by alt-mode "no-leak" scenarios that assert the keystream did not
     // bleed into the editor while a different mode owned the keys.
     'data-testid': 'inline-cell-editor',
+    // The textarea is a focusable overlay that owns its own pointer behavior:
+    // a click landing on it must position the text caret / drag a selection,
+    // NOT be reinterpreted by the grid's native pointerdown path. Without this
+    // opt-out, clicking inside the cell you are currently editing bubbles to
+    // the grid container listener (use-grid-mouse handlePointerDown), which —
+    // while editing — preventDefault()s the native caret placement and routes
+    // the click through interceptCellClick. In edit mode (e.g. after a
+    // double-click) that path sends COMMIT, so the click silently commits the
+    // formula and exits the editor instead of moving the caret. Clicks on OTHER
+    // cells land on the canvas (no data-no-grid-pointer) and still flow through
+    // the grid for commit-and-move / formula-reference insertion.
+    'data-no-grid-pointer': true,
     // Only auto-focus when not editing via formula bar
     // When formula bar has focus, show the editor but don't steal focus
     autoFocus: !isFormulaBarFocused,

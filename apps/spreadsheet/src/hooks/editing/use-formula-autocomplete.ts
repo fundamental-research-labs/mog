@@ -284,10 +284,7 @@ export function useFormulaAutocomplete(): UseFormulaAutocompleteReturn {
   // Whether the formula bar (rather than the in-cell editor) owns focus. Used to
   // decide where the argument hint is anchored: below the formula bar when it has
   // focus, above the editing cell otherwise.
-  const isFormulaBarFocused = useSelector(
-    paneFocusActor,
-    (state) => state.value === 'formulaBar',
-  );
+  const isFormulaBarFocused = useSelector(paneFocusActor, (state) => state.value === 'formulaBar');
 
   // Ref to input element for positioning
   const inputElementRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);

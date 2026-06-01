@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/contracts",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "license": "SEE LICENSE IN LICENSE",
   "repository": "https://github.com/fundamental-research-labs/mog",
   "private": false,

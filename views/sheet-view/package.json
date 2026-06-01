@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/sheet-view",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "license": "SEE LICENSE IN LICENSE",
   "files": [
     "dist/index.js",

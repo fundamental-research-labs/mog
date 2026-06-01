@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/node",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "description": "Headless spreadsheet engine for Node.js with formula compute and XLSX file I/O",
   "type": "module",
   "main": "dist/index.cjs",

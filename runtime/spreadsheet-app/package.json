@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/spreadsheet-app",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "license": "SEE LICENSE IN LICENSE",
   "description": "Policy-driven full Mog spreadsheet app embed for trusted same-origin hosts",
   "type": "module",

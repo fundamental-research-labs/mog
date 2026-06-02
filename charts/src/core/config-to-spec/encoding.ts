@@ -36,12 +36,14 @@ import {
   buildColorEncoding,
   buildLegendSpec,
   buildSeriesLegendDomain,
+  isLegendShown,
   legendSymbolType,
   visibleLegendDomain,
 } from './legend';
 import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
 import { isNoFillNoLineSeries, resolvedCategoryColors, variesColorsByCategory } from './style';
 import { resolveStackMode } from './subtypes';
+import { isPieLikeChartType } from './pie-like';
 
 /**
  * Build the main encoding spec for a chart.
@@ -58,12 +60,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   const hasMultipleSeries = data.series.length > 1;
 
   // --- Pie / Doughnut / Pie3D / OfPie: theta + color instead of x/y ---
-  if (
-    chartType === 'pie' ||
-    chartType === 'doughnut' ||
-    chartType === 'pie3d' ||
-    chartType === 'ofPie'
-  ) {
+  if (isPieLikeChartType(chartType)) {
     encoding.theta = {
       field: 'value',
       type: 'quantitative',
@@ -76,14 +73,15 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     if (categoryColors) {
       encoding.color.scale = { range: categoryColors };
     }
-    // Apply legend config to color channel.
-    if (config.legend) {
+    if (isLegendShown(config.legend)) {
       const legendDomain = buildCategoryLegendDomain(config, data);
       encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
         entries: legendDomain?.entries,
         values: legendDomain?.values,
       });
+    } else {
+      encoding.color.legend = null;
     }
     return encoding;
   }
@@ -323,7 +321,6 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
 
   return encoding;
 }
-
 
 function applyCartesianValueAxisDefaults(
   encoding: EncodingSpec,

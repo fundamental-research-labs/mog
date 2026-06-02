@@ -1,9 +1,18 @@
 import type { ChartConfig, ChartData, DataLabelConfig } from '../../types';
+import { seriesConfigForDataSeries } from '../series-identity';
+import {
+  doughnutInnerRadiusRatio,
+  doughnutRingBand,
+  firstSliceAngleRadians,
+  isPieLikeChartType,
+} from './pie-like';
+import { isNoFillNoLineSeries } from './style';
 
 export interface PieLabelGeometry {
   cos: number;
   sin: number;
   innerRadiusRatio: number;
+  outerRadiusRatio: number;
 }
 
 export function seriesTotal(values: Array<{ y: number } | undefined>): number {
@@ -22,12 +31,25 @@ export function buildPieLabelGeometries(
   data: ChartData,
   config?: ChartConfig,
 ): PieLabelGeometry[][] {
-  if (!config || !isPieLikeChart(config.type)) return [];
+  if (!config || !isPieLikeChartType(config.type)) return [];
 
-  return data.series.map((series) => {
+  const visibleRingIndices =
+    config.type === 'doughnut' || config.type === 'doughnutExploded'
+      ? visibleDoughnutSeriesIndices(config, data)
+      : [];
+  const ringCount = visibleRingIndices.length > 1 ? visibleRingIndices.length : 1;
+  const ringIndexBySeriesIndex = new Map(
+    visibleRingIndices.map((seriesIndex, ringIndex) => [seriesIndex, ringIndex]),
+  );
+
+  return data.series.map((series, seriesIndex) => {
     const total = seriesTotal(series.data);
     let startAngle = firstSliceAngleRadians(config);
-    const innerRadiusRatio = doughnutInnerRadiusRatio(config);
+    const ringIndex = ringIndexBySeriesIndex.get(seriesIndex);
+    const band =
+      ringIndex !== undefined && ringCount > 1
+        ? doughnutRingBand({ config, ringCount, ringIndex })
+        : { innerRadius: doughnutInnerRadiusRatio(config), outerRadius: 1 };
     return series.data.map((point) => {
       const value = total > 0 ? Math.abs(point?.y ?? 0) : 1;
       const angle =
@@ -35,7 +57,12 @@ export function buildPieLabelGeometries(
       const midAngle = startAngle + angle / 2;
       startAngle += angle;
       const unit = arcAngleUnitVector(midAngle);
-      return { cos: unit.x, sin: unit.y, innerRadiusRatio };
+      return {
+        cos: unit.x,
+        sin: unit.y,
+        innerRadiusRatio: band.innerRadius,
+        outerRadiusRatio: band.outerRadius,
+      };
     });
   });
 }
@@ -45,8 +72,12 @@ export function pieLabelCoordinates(
   position: DataLabelConfig['position'],
 ): { anchorX: number; anchorY: number; labelX: number; labelY: number } {
   const outside = position === 'outside' || position === 'outsideEnd' || position === 'callout';
-  const labelRadius = labelRadiusFraction(geometry.innerRadiusRatio, position);
-  const anchorRadius = outside ? 0.49 : labelRadius;
+  const labelRadius = labelRadiusFraction(
+    geometry.innerRadiusRatio,
+    geometry.outerRadiusRatio,
+    position,
+  );
+  const anchorRadius = outside ? Math.max(0, geometry.outerRadiusRatio * 0.49) : labelRadius;
   return {
     anchorX: 0.5 + geometry.cos * anchorRadius,
     anchorY: 0.5 + geometry.sin * anchorRadius,
@@ -55,54 +86,36 @@ export function pieLabelCoordinates(
   };
 }
 
-function isPieLikeChart(type?: ChartConfig['type']): boolean {
-  return type === 'pie' || type === 'doughnut' || type === 'pie3d' || type === 'ofPie';
-}
-
 function labelRadiusFraction(
   innerRadiusRatio: number,
+  outerRadiusRatio: number,
   position: DataLabelConfig['position'],
 ): number {
   if (position === 'outside' || position === 'outsideEnd' || position === 'callout') {
-    return 0.56;
+    return Math.min(0.6, Math.max(0, outerRadiusRatio / 2 + 0.06));
   }
   const inner = Math.max(0, Math.min(0.95, innerRadiusRatio));
+  const outer = Math.max(inner, Math.min(1, outerRadiusRatio));
   const radiusRatio =
     position === 'insideBase'
-      ? inner + (1 - inner) * 0.2
+      ? inner + (outer - inner) * 0.2
       : position === 'insideEnd' || position === 'top'
-        ? inner + (1 - inner) * 0.82
+        ? inner + (outer - inner) * 0.82
         : inner > 0
-          ? (inner + 1) / 2
-          : 2 / 3;
+          ? (inner + outer) / 2
+          : outer * (2 / 3);
   return radiusRatio / 2;
 }
 
-function firstSliceAngleRadians(config: ChartConfig | undefined): number {
-  const angle =
-    finiteDegrees(
-      config?.series?.find((series) => series.firstSliceAngle !== undefined)?.firstSliceAngle,
-    ) ?? finiteDegrees(config?.firstSliceAngle);
-  return angle !== undefined ? (angle * Math.PI) / 180 : 0;
-}
-
-function doughnutInnerRadiusRatio(config: ChartConfig | undefined): number {
-  if (!config || config.type !== 'doughnut') return 0;
-  const holeSize =
-    finitePercent(
-      config.series?.find((series) => series.doughnutHoleSize !== undefined)?.doughnutHoleSize,
-    ) ?? finitePercent(config.doughnutHoleSize);
-  return holeSize !== undefined ? holeSize / 100 : 0.5;
-}
-
-function finitePercent(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(0, Math.min(100, value))
-    : undefined;
-}
-
-function finiteDegrees(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+function visibleDoughnutSeriesIndices(config: ChartConfig, data: ChartData): number[] {
+  const seriesConfigs = config.series ?? [];
+  const indices: number[] = [];
+  for (let index = 0; index < data.series.length; index += 1) {
+    const seriesConfig = seriesConfigForDataSeries(data.series[index], seriesConfigs, index);
+    if (isNoFillNoLineSeries(seriesConfig)) continue;
+    indices.push(index);
+  }
+  return indices;
 }
 
 function arcAngleUnitVector(angle: number): { x: number; y: number } {

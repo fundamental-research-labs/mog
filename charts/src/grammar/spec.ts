@@ -770,6 +770,10 @@ export interface MarkSpec {
   _explodedIndex?: number;
   /** Exploded slice indices for pie charts (consumed by OOXML exporter) */
   _explodedIndices?: number[];
+  /** Radial pie/doughnut explosion offset for rendered slices and OOXML export. */
+  _explosionOffset?: number;
+  /** Apply the mark-level pie/doughnut explosion offset to every slice. */
+  _explodeAll?: boolean;
 }
 
 // =============================================================================

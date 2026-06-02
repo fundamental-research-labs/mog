@@ -24,6 +24,7 @@ import {
   resolverContextFromConfig,
 } from '../style-resolver';
 import { MARK_TYPE_MAP } from './constants';
+import { isPieLikeChartType } from './pie-like';
 import { linePointsToCanvasPx } from './units';
 
 const WORKBOOK_THEME_CATEGORY_COLOR_SLOTS = [
@@ -160,12 +161,7 @@ function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
 
 export function variesColorsByCategory(config: ChartConfig, _data?: ChartData): boolean {
   if (config.varyByCategories !== undefined) return config.varyByCategories;
-  return (
-    config.type === 'pie' ||
-    config.type === 'doughnut' ||
-    config.type === 'pie3d' ||
-    config.type === 'ofPie'
-  );
+  return isPieLikeChartType(config.type);
 }
 
 function workbookThemeCategoryColors(config: ChartConfig): string[] | undefined {

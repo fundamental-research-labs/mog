@@ -16,6 +16,7 @@ import { withExcelAreaBaseline } from './excel-cartesian-geometry';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildDataTableLayers } from './layers/data-table';
+import { buildDoughnutRingLayers, shouldBuildDoughnutRingLayers } from './layers/doughnut-rings';
 import { buildFunnelLayers } from './layers/funnel';
 import { buildParetoLayers } from './layers/pareto';
 import { buildPerSeriesLineLayers, shouldBuildPerSeriesLineLayers } from './layers/series-lines';
@@ -207,6 +208,21 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   const annotationLayers = buildAnnotationLayers(renderConfig, data, encoding, rows);
+  if (shouldBuildDoughnutRingLayers(renderConfig, data)) {
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers: [
+        ...buildDoughnutRingLayers({ config: renderConfig, data, mark, encoding }),
+        ...annotationLayers,
+      ],
+      encoding: sharedLayerEncodingForLegend(encoding, renderConfig.legend),
+      title,
+      config: configSpec,
+      transforms,
+    });
+  }
+
   if (shouldBuildPerSeriesLineLayers(renderConfig, data)) {
     const layers: ChartSpec[] = [
       ...buildPerSeriesLineLayers(renderConfig, data, encoding),

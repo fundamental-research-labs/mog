@@ -1,6 +1,7 @@
 import type { EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, DataLabelConfig } from '../../../types';
 import { isBarLikeChartType } from '../bar-geometry';
+import { isPieLikeChartType } from '../pie-like';
 import {
   CATEGORY_FIELD,
   DATA_LABEL_ALIGN_FIELD,
@@ -135,11 +136,9 @@ function automaticLabelCoordinateSystem(
   position: ReturnType<typeof dataLabelPositionEncoding>,
   config: ChartConfig | undefined,
 ): MarkSpec['coordinateSystem'] {
-  return !position && config && isPieLikeChart(config.type) ? 'plotRadiusFraction' : 'plotFraction';
-}
-
-function isPieLikeChart(type: ChartConfig['type']): boolean {
-  return type === 'pie' || type === 'doughnut' || type === 'pie3d' || type === 'ofPie';
+  return !position && config && isPieLikeChartType(config.type)
+    ? 'plotRadiusFraction'
+    : 'plotFraction';
 }
 
 function shouldAlignToBarSlot(

@@ -43,12 +43,15 @@ export function generateArcMarks(
   // Calculate center
   const cx = layout.plotArea.x + layout.plotArea.width / 2;
   const cy = layout.plotArea.y + layout.plotArea.height / 2;
-  const outerRadius = Math.min(layout.plotArea.width, layout.plotArea.height) / 2 - 10;
-  const innerRadius = markSpec.innerRadius
-    ? markSpec.innerRadius < 1
-      ? markSpec.innerRadius * outerRadius
-      : markSpec.innerRadius
-    : 0;
+  const maxOuterRadius = Math.max(
+    0,
+    Math.min(layout.plotArea.width, layout.plotArea.height) / 2 - 10,
+  );
+  const outerRadius = resolveArcRadius(markSpec.outerRadius, maxOuterRadius, maxOuterRadius);
+  const innerRadius = Math.min(
+    outerRadius,
+    resolveArcRadius(markSpec.innerRadius, maxOuterRadius, 0),
+  );
 
   // Determine which field is driving the arc angle (for datum overrides below)
   const thetaField = encodings.theta?.field ?? encodings.size?.field;
@@ -64,7 +67,7 @@ export function generateArcMarks(
     total += numValue;
   }
 
-  const padAngle = markSpec.padAngle ?? 0.01;
+  const padAngle = markSpec.padAngle ?? 0;
   const TWO_PI = Math.PI * 2;
 
   // Compute logical angles (pre-padding) for each arc.
@@ -145,7 +148,8 @@ export function generateArcMarks(
       }
     }
 
-    const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0;
+    const explosion =
+      (datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0) + markExplosionOffset(markSpec, i);
     const midAngle = (paddedStart + paddedEnd) / 2;
     const explosionOffset = explosion > 0 ? Math.min(outerRadius * 0.25, explosion) : 0;
     const explosionVector = arcAngleUnitVector(midAngle);
@@ -177,6 +181,25 @@ export function generateArcMarks(
   }
 
   return marks;
+}
+
+function resolveArcRadius(
+  value: number | undefined,
+  maxOuterRadius: number,
+  fallback: number,
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  if (value >= 0 && value <= 1) return value * maxOuterRadius;
+  return Math.max(0, value);
+}
+
+function markExplosionOffset(markSpec: MarkSpec, sliceIndex: number): number {
+  const offset = markSpec._explosionOffset;
+  if (typeof offset !== 'number' || !Number.isFinite(offset) || offset <= 0) return 0;
+  if (markSpec._explodeAll) return offset;
+  if (markSpec._explodedIndex === sliceIndex) return offset;
+  if (markSpec._explodedIndices?.includes(sliceIndex)) return offset;
+  return 0;
 }
 
 function arcAngleUnitVector(angle: number): { x: number; y: number } {

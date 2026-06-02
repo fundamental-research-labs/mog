@@ -25,6 +25,7 @@ import { ImageFallbackError, shouldUseImageFallback } from './ooxml/image-fallba
 import { generateLineChartXML, generateStockChartXML } from './ooxml/line-chart-xml';
 import { generateDoughnutChartXML, generatePieChartXML } from './ooxml/pie-chart-xml';
 import { generateBubbleChartXML, generateScatterChartXML } from './ooxml/scatter-chart-xml';
+import { isDoughnutRingLayerSpec } from './ooxml/pie-layer-detection';
 import { isNativeStockLayerSpec } from './ooxml/stock-layer-detection';
 
 // =============================================================================
@@ -78,6 +79,10 @@ export function toOOXML(
 ): OOXMLExportResult {
   if (isNativeStockLayerSpec(spec)) {
     return generateStockChartXML(spec, data, options);
+  }
+
+  if (isDoughnutRingLayerSpec(spec)) {
+    return generateDoughnutChartXML(spec, data, options);
   }
 
   // Check if image fallback is required
@@ -216,6 +221,10 @@ export function canExportToOOXML(spec: ChartSpec): boolean {
 export function getOOXMLChartElement(spec: ChartSpec): string | null {
   if (isNativeStockLayerSpec(spec)) {
     return 'stockChart';
+  }
+
+  if (isDoughnutRingLayerSpec(spec)) {
+    return 'doughnutChart';
   }
 
   const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;

@@ -11,6 +11,7 @@ export interface PieLabelGeometry {
   cos: number;
   sin: number;
   innerRadiusRatio: number;
+  outerRadiusRatio: number;
 }
 
 export function applyDataLabel(

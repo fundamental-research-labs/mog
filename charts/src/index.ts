@@ -124,6 +124,7 @@ export {
   radarRadiusForValue,
   radarValueDomainFromValues,
   expectedStockRolesForSubtype,
+  renderedPointValueForRows,
   resolveSeriesColorAuthority,
   resolveBarGeometryGroups,
   rustToTsChartType,

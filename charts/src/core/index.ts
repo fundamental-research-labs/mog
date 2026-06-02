@@ -96,6 +96,7 @@ export {
   seriesSourceKey,
   withSeriesConfigIdentity,
 } from './series-identity';
+export { renderedPointValueForRows } from './config-to-spec/data-point-values';
 export {
   asStockConfig,
   expectedStockRolesForSubtype,

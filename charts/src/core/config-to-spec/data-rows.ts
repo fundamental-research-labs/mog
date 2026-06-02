@@ -24,6 +24,7 @@ import {
   isQuantitativeXSeries,
   maxRenderableBubbleMagnitude,
   scatterXValue,
+  renderedPointValueForRows,
   shouldBreakScatterLineAtPoint,
   shouldEmitBlankRow,
   shouldIncludePointInRows,
@@ -112,8 +113,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         continue;
       }
       if (point && shouldIncludePointInRows(point, config, seriesConfig)) {
-        const rowValue =
-          point.valueState === 'blank' && config?.displayBlanksAs === 'zero' ? 0 : point.y;
+        const rowValue = renderedPointValueForRows(point, config, seriesConfig) ?? point.y;
         const row = buildBaseRow({
           rawCategory,
           rowCategory,

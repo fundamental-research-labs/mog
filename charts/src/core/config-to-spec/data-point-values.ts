@@ -71,6 +71,15 @@ export function shouldIncludePointInRows(
   return false;
 }
 
+export function renderedPointValueForRows(
+  point: ChartDataPoint | undefined,
+  config?: ChartConfig,
+  seriesConfig?: SeriesConfig,
+): number | null {
+  if (!point || !shouldIncludePointInRows(point, config, seriesConfig)) return null;
+  return point.valueState === 'blank' && config?.displayBlanksAs === 'zero' ? 0 : point.y;
+}
+
 export function shouldEmitBlankRow(
   point: ChartDataPoint | undefined,
   config?: ChartConfig,

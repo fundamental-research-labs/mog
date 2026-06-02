@@ -4,6 +4,7 @@ import {
   seriesConfigSourceKey,
   seriesSourceIndex,
   seriesSourceKey,
+  renderedPointValueForRows,
   shouldProjectStockSeries,
   resolveSeriesColorAuthority,
   stockRenderedPointProjection,
@@ -71,6 +72,7 @@ export function snapshotSeries(
   const sourceSeriesIndex = seriesSourceIndex(series, index);
   const sourceSeriesKey = seriesSourceKey(series, index);
   const values: Array<number | null> = [];
+  const renderedValues: Array<number | null> = [];
   const xValues: Array<string | number | null> = [];
   const bubbleSizes: Array<number | null> = [];
   const stockValues = {
@@ -93,6 +95,7 @@ export function snapshotSeries(
     const value = numericPointValue(point);
     xValues.push(snapshotScalar(point?.x));
     values.push(value);
+    renderedValues.push(numericRenderedPointValue(point, config, configured));
     bubbleSizes.push(numericPointField(point, 'size'));
     stockValues.open.push(numericPointField(point, 'open'));
     stockValues.high.push(numericPointField(point, 'high'));
@@ -157,8 +160,10 @@ export function snapshotSeries(
         stockSubTypeFromConfig(config, { categories: [], series: [series] }),
       )
     : undefined;
+  const includeRenderedValues = shouldSnapshotRenderedValues(config, effectiveType, configured);
   const renderedPointCount =
-    stockPointProjection?.renderedPointCount ?? values.filter((value) => value !== null).length;
+    stockPointProjection?.renderedPointCount ??
+    (includeRenderedValues ? renderedValues : values).filter((value) => value !== null).length;
 
   return {
     index,
@@ -197,6 +202,7 @@ export function snapshotSeries(
     xValues,
     categories: seriesCategories,
     values,
+    ...(includeRenderedValues ? { renderedValues } : {}),
     bubbleSizes,
     ...(includeStockValues ? { stockValues } : {}),
     blankMask,
@@ -219,6 +225,7 @@ export function snapshotSeries(
       categories: seriesCategories,
       categoryFormatCodes: configured?.categoryLabelFormat,
       values,
+      renderedValues: includeRenderedValues ? renderedValues : undefined,
       bubbleSizes,
       stockValues: includeStockValues ? stockValues : undefined,
       blankMask,
@@ -541,6 +548,15 @@ function numericPointValue(point: ChartDataPoint | undefined): number | null {
   return point.y;
 }
 
+function numericRenderedPointValue(
+  point: ChartDataPoint | undefined,
+  config: ChartConfig,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+): number | null {
+  const value = renderedPointValueForRows(point, config, configured);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function numericPointField(
   point: ChartDataPoint | undefined,
   field: 'size' | 'open' | 'high' | 'low' | 'close' | 'volume',
@@ -588,4 +604,14 @@ function shouldUseStockRenderedPointProjection(
     effectiveType === 'stock' ||
     Object.values(stockValues).some((values) => values.some((value) => value !== null))
   );
+}
+
+function shouldSnapshotRenderedValues(
+  config: ChartConfig,
+  effectiveType: string | undefined,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+): boolean {
+  if (config.type === 'radar' || effectiveType === 'radar') return false;
+  if (configured?.stockRole !== undefined) return false;
+  return config.type !== 'stock' && effectiveType !== 'stock';
 }

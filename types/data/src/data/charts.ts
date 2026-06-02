@@ -1344,6 +1344,8 @@ export interface ResolvedChartSeriesSnapshot {
   xValues: Array<string | number | null>;
   categories: Array<string | number | null>;
   values: Array<number | null>;
+  /** Values on the rendered layer after blank-cell display policy is applied. */
+  renderedValues?: Array<number | null>;
   bubbleSizes: Array<number | null>;
   stockValues?: {
     open: Array<number | null>;

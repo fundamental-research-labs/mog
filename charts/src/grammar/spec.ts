@@ -266,6 +266,9 @@ export interface ScaleSpec {
   base?: number;
   scheme?: string;
   categoryPositionPolicy?: BarCategoryPositionPolicy;
+  radarTickValues?: number[];
+  radarTickStep?: number;
+  radarValueDomainAuthority?: 'explicitAxis' | 'excelAuto' | 'fallback';
 }
 
 // =============================================================================
@@ -489,6 +492,8 @@ export interface ChannelSpec {
   scale?: ScaleSpec | null;
   /** Axis specification (null to hide) */
   axis?: AxisSpec | null;
+  /** Axis styling consumed by non-Cartesian mark generators without drawing a Cartesian axis. */
+  radarAxis?: AxisSpec | null;
   /** Secondary axis sharing this channel's scale. */
   secondaryAxis?: AxisSpec | null;
   /** Legend specification (null to hide) */

@@ -941,6 +941,10 @@ export type ChartFamilySupportReason =
   | 'threeDApproximation'
   | 'bubbleLegendSeriesDomain'
   | 'radarLayoutFidelity'
+  | 'radarAutoValueScaleFidelity'
+  | 'radarMarkerStyleFidelity'
+  | 'radarFillStyleFidelity'
+  | 'radarGridLabelStyleFidelity'
   | 'unsupportedImportStatus'
   | 'preservedPlaceholderImportStatus';
 
@@ -1468,6 +1472,8 @@ export interface ResolvedChartRadarPolarSeriesSnapshot {
   points: ResolvedChartRadarPolarPointSnapshot[];
 }
 
+export type ResolvedChartRadarValueDomainAuthority = 'explicitAxis' | 'excelAuto' | 'fallback';
+
 export interface ResolvedChartRadarProjectionSnapshot {
   projectionType: 'radarPolar';
   categoryOrder: Array<string | number | null>;
@@ -1475,6 +1481,11 @@ export interface ResolvedChartRadarProjectionSnapshot {
   startAngle: number;
   clockwise: boolean;
   valueDomain: [number, number];
+  valueTicks?: number[];
+  valueTickStep?: number;
+  valueDomainAuthority?: ResolvedChartRadarValueDomainAuthority;
+  explicitValueDomain?: boolean;
+  explicitValueTickStep?: boolean;
   center: {
     x: number;
     y: number;

@@ -55,15 +55,23 @@ export {
 export { resolveSeriesColorAuthority } from './config-to-spec/color-authority';
 export {
   RADAR_LABEL_GAP,
+  RADAR_DEFAULT_FILLED_OPACITY,
+  RADAR_DEFAULT_MARKER_SIZE,
+  RADAR_AUTO_VALUE_TICK_COUNT,
   RADAR_PLOT_INSET,
   RADAR_START_ANGLE,
+  radarAutomaticMarkerShape,
   radarGeometryForPlotArea,
   radarPointAt,
   radarRadiusForValue,
   radarValueDomainFromValues,
+  resolveRadarValueScale,
   type RadarGeometry,
   type RadarPolarPoint,
+  type ResolveRadarValueScaleInput,
   type RadarValueDomain,
+  type RadarValueScale,
+  type RadarValueScaleAuthority,
 } from './radar-semantics';
 export * from './style-resolver';
 export {

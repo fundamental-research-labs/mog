@@ -1,5 +1,6 @@
 import type { ChannelSpec, EncodingSpec, LegendSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartData, SingleAxisConfig } from '../../types';
+import type { ChartConfig, ChartData, ChartDataPoint, SingleAxisConfig } from '../../types';
+import { resolveRadarValueScale } from '../radar-semantics';
 import {
   applyAutoValueAxisTicks,
   buildAxisScaleSpec,
@@ -116,6 +117,12 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   if (chartType === 'radar') {
+    const categoryAxis = config.axis
+      ? resolveAxisConfigForChannel(config.axis, 'x', false)
+      : undefined;
+    const categoryAxisSpec = categoryAxis
+      ? mapAxisConfigToAxisSpec(categoryAxis, config, 'categoryAxis')
+      : undefined;
     const valueAxis = config.axis
       ? resolveAxisConfigForChannel(config.axis, 'y', false)
       : undefined;
@@ -123,18 +130,41 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       ? mapAxisConfigToAxisSpec(valueAxis, config, 'valueAxis')
       : undefined;
     const valueScaleSpec = valueAxis ? buildAxisScaleSpec(valueAxis, false) : undefined;
+    const radarValueScale = resolveRadarValueScale({
+      values: renderableRadarValues(data, config),
+      explicitMin: valueAxis?.min,
+      explicitMax: valueAxis?.max,
+      explicitMajorUnit: valueAxis?.majorUnit,
+      includeZero: true,
+    });
     encoding.x = {
       field: 'category',
       type: 'nominal',
       axis: null,
+      radarAxis: categoryAxisSpec,
       scale: data.categories.length > 0 ? { domain: data.categories } : undefined,
     };
     encoding.y = {
       field: VALUE_FIELD,
       type: 'quantitative',
       axis: null,
+      radarAxis: valueAxisSpec,
       format: valueAxisSpec?.format,
-      scale: { zero: true, nice: true, ...(valueScaleSpec ?? {}) },
+      scale: {
+        zero: true,
+        ...(valueScaleSpec ?? {}),
+        ...(radarValueScale
+          ? {
+              domain: [radarValueScale.domain.min, radarValueScale.domain.max],
+              nice: false,
+              radarTickValues: radarValueScale.ticks,
+              ...(radarValueScale.tickStep !== undefined
+                ? { radarTickStep: radarValueScale.tickStep }
+                : {}),
+              radarValueDomainAuthority: radarValueScale.authority,
+            }
+          : { nice: true }),
+      },
     };
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
     const colorChannel = buildColorEncoding({
@@ -362,6 +392,27 @@ function categoryLegendSymbolType(config: ChartConfig): LegendSpec['symbolType']
     return 'circle';
   }
   return undefined;
+}
+
+function renderableRadarValues(data: ChartData, config: ChartConfig): number[] {
+  const values: number[] = [];
+  for (const series of data.series) {
+    for (const point of series.data) {
+      const value = renderableRadarValue(point, config);
+      if (value !== undefined) values.push(value);
+    }
+  }
+  return values;
+}
+
+function renderableRadarValue(
+  point: ChartDataPoint | undefined,
+  config: ChartConfig,
+): number | undefined {
+  if (!point || point.valueState === 'hidden') return undefined;
+  if (point.valueState === 'blank') return config.displayBlanksAs === 'zero' ? 0 : undefined;
+  if (point.valueState && point.valueState !== 'value') return undefined;
+  return typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : undefined;
 }
 
 function applySecondaryCategoryAxis(

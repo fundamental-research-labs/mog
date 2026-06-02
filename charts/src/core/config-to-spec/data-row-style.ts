@@ -23,6 +23,7 @@ import {
   resolveChartOwnerFormat,
   resolverContextFromConfig,
 } from '../style-resolver';
+import { radarAutomaticMarkerShape } from '../radar-semantics';
 import { resolveChartColor, resolveFormatFillOpacity } from '../../utils/chart-colors';
 import { linePointsToCanvasPx } from './units';
 
@@ -69,6 +70,10 @@ export function applyMarker(
   const style = pointFormat?.markerStyle ?? seriesConfig?.markerStyle;
   const hasPointMarkerOverride =
     pointFormat?.markerStyle !== undefined || pointFormat?.markerSize !== undefined;
+  if (style === 'none' && isRadarMarkerDefault(config)) {
+    row[MARKER_VISIBLE_FIELD] = false;
+    return;
+  }
   if (seriesConfig?.showMarkers === false && !hasPointMarkerOverride) return;
   const showMarkers =
     style === 'none'
@@ -78,11 +83,11 @@ export function applyMarker(
         seriesConfig?.markerStyle !== undefined ||
         seriesConfig?.markerSize !== undefined ||
         seriesConfig?.showMarkers === true ||
-        isMarkerDefaultChart(config?.type, seriesConfig?.type);
+        isMarkerDefaultChart(config, seriesConfig?.type);
   if (!showMarkers) return;
 
   row[MARKER_VISIBLE_FIELD] = true;
-  row[MARKER_SHAPE_FIELD] = excelMarkerShape(style);
+  row[MARKER_SHAPE_FIELD] = excelMarkerShape(style, sourceSeriesIndex, config);
   row[MARKER_SIZE_FIELD] = markerPointSizeToArea(
     pointFormat?.markerSize ?? seriesConfig?.markerSize,
   );
@@ -208,18 +213,29 @@ function markerPointOwnerKey(sourceSeriesIndex: number, pointIndex: number): str
   return `markerPoint(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
 }
 
-function isMarkerDefaultChart(type?: ChartConfig['type'], seriesType?: string): boolean {
+function isMarkerDefaultChart(config?: ChartConfig, seriesType?: string): boolean {
   return (
-    type === 'lineMarkers' ||
-    type === 'lineMarkersStacked' ||
-    type === 'lineMarkersStacked100' ||
+    config?.type === 'lineMarkers' ||
+    config?.type === 'lineMarkersStacked' ||
+    config?.type === 'lineMarkersStacked100' ||
+    isRadarMarkerDefault(config) ||
     seriesType === 'lineMarkers' ||
     seriesType === 'lineMarkersStacked' ||
     seriesType === 'lineMarkersStacked100'
   );
 }
 
-function excelMarkerShape(style?: string): string {
+function isRadarMarkerDefault(config?: ChartConfig): boolean {
+  return Boolean(
+    config?.type === 'radar' && (config.radarMarkers === true || config.subType === 'markers'),
+  );
+}
+
+function excelMarkerShape(
+  style: string | undefined,
+  sourceSeriesIndex: number,
+  config: ChartConfig | undefined,
+): string {
   switch (style) {
     case 'square':
     case 'diamond':
@@ -234,9 +250,12 @@ function excelMarkerShape(style?: string): string {
       return 'x';
     case 'dot':
     case 'circle':
+      return 'circle';
     case 'auto':
     default:
-      return 'circle';
+      return isRadarMarkerDefault(config)
+        ? radarAutomaticMarkerShape(sourceSeriesIndex)
+        : 'circle';
   }
 }
 

@@ -86,21 +86,7 @@ export function buildChartFamilySupportSnapshot(input: {
   }
 
   if (config.type === 'radar') {
-    return {
-      schemaVersion: 1,
-      family,
-      sourceFamily,
-      supportLevel: 'approximate',
-      reason: 'radarLayoutFidelity',
-      diagnostics: [
-        'radar layout is rendered with Mog radial geometry and may differ from Excel occupancy',
-        [
-          'radar polar projection metadata is exposed for category-angle,',
-          'value-radius, fill, and marker review',
-        ].join(' '),
-      ],
-      renderedAs: 'radar',
-    };
+    return radarFamilySupport({ ...input, family, sourceFamily });
   }
 
   if (isThreeDChartConfig(config)) {
@@ -131,6 +117,47 @@ export function familySupportCompilerDiagnostics(
 ): string[] {
   if (support.supportLevel === 'exact' || support.supportLevel === 'approximate') return [];
   return support.diagnostics;
+}
+
+function radarFamilySupport(input: {
+  config: ChartConfig;
+  family: string;
+  sourceFamily?: string;
+}): ChartFamilySupportSnapshot {
+  const markers = input.config.radarMarkers === true || input.config.subType === 'markers';
+  const filled = input.config.radarFilled === true || input.config.subType === 'filled';
+  const reason: ChartFamilySupportSnapshot['reason'] = markers
+    ? 'radarMarkerStyleFidelity'
+    : filled
+      ? 'radarFillStyleFidelity'
+      : 'radarGridLabelStyleFidelity';
+  const diagnostics = [
+    'radar polar projection metadata exposes category-angle, value-radius, fill, and marker evidence',
+    'radar automatic radial value scale is resolved from the shared Excel-like scale contract',
+  ];
+  if (markers) {
+    diagnostics.push(
+      'radar marker shapes use Excel-like automatic defaults when imported marker style is absent',
+    );
+  }
+  if (filled) {
+    diagnostics.push(
+      'radar filled polygons use an Excel-like default opacity unless imported fill opacity is present',
+    );
+  }
+  diagnostics.push(
+    'radar grid and label styling remains approximate when source formatting is incomplete',
+  );
+
+  return {
+    schemaVersion: 1,
+    family: input.family,
+    sourceFamily: input.sourceFamily,
+    supportLevel: 'approximate',
+    reason,
+    diagnostics,
+    renderedAs: 'radar',
+  };
 }
 
 export function threeDApproximationDiagnostics(config: ChartConfig): string[] {

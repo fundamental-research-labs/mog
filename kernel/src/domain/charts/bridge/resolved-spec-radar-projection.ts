@@ -1,9 +1,11 @@
 import {
+  RADAR_DEFAULT_FILLED_OPACITY,
   RADAR_START_ANGLE,
+  radarAutomaticMarkerShape,
   radarGeometryForPlotArea,
   radarPointAt,
   radarRadiusForValue,
-  radarValueDomainFromValues,
+  resolveRadarValueScale,
   seriesSourceIndex,
   seriesSourceKey,
   type ChartConfig,
@@ -43,11 +45,16 @@ export function snapshotRadarProjection(input: {
     height: plotArea.height * chartHeight,
   };
   const geometry = radarGeometryForPlotArea(plotAreaPx);
-  const valueDomain = radarValueDomainFromValues(
-    renderableRadarValues(input.chartData, input.config),
-    explicitRadarValueDomain(input.config),
-  );
-  if (!valueDomain) return undefined;
+  const valueAxis = radarValueAxis(input.config);
+  const valueScale = resolveRadarValueScale({
+    values: renderableRadarValues(input.chartData, input.config),
+    explicitMin: valueAxis?.min,
+    explicitMax: valueAxis?.max,
+    explicitMajorUnit: valueAxis?.majorUnit,
+    includeZero: true,
+  });
+  if (!valueScale) return undefined;
+  const valueDomain = valueScale.domain;
 
   const filled = input.config.radarFilled ?? input.config.subType === 'filled';
   const markers = input.config.radarMarkers ?? input.config.subType === 'markers';
@@ -60,6 +67,11 @@ export function snapshotRadarProjection(input: {
     startAngle: RADAR_START_ANGLE,
     clockwise: true,
     valueDomain: [valueDomain.min, valueDomain.max],
+    valueTicks: valueScale.ticks,
+    ...(valueScale.tickStep !== undefined ? { valueTickStep: valueScale.tickStep } : {}),
+    valueDomainAuthority: valueScale.authority,
+    explicitValueDomain: valueScale.explicitDomain,
+    explicitValueTickStep: valueScale.explicitTickStep,
     center: {
       x: geometry.cx / chartWidth,
       y: geometry.cy / chartHeight,
@@ -71,7 +83,7 @@ export function snapshotRadarProjection(input: {
     },
     blankPolicy,
     filled,
-    ...(filled ? { fillOpacity: 0.22 } : {}),
+    ...(filled ? { fillOpacity: RADAR_DEFAULT_FILLED_OPACITY } : {}),
     markers,
     series: input.chartData.series.map((series, seriesIndex) => {
       const pointCount = Math.max(categoryOrder.length, series.data.length);
@@ -114,9 +126,11 @@ export function snapshotRadarProjection(input: {
         blankPointIndexes,
         closed: points.length >= 2,
         filled,
-        ...(filled ? { fillOpacity: 0.22 } : {}),
+        ...(filled ? { fillOpacity: RADAR_DEFAULT_FILLED_OPACITY } : {}),
         markers,
-        ...(configured?.markerStyle ? { markerShape: configured.markerStyle } : {}),
+        ...(markers
+          ? { markerShape: resolvedMarkerShape(configured?.markerStyle, seriesIndex) }
+          : {}),
         points,
       };
     }),
@@ -146,12 +160,15 @@ function renderableRadarValue(
   return typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : undefined;
 }
 
-function explicitRadarValueDomain(config: ChartConfig): { min?: number; max?: number } {
-  const axis = config.axis?.yAxis ?? config.axis?.valueAxis;
-  return {
-    ...(axis?.min !== undefined ? { min: axis.min } : {}),
-    ...(axis?.max !== undefined ? { max: axis.max } : {}),
-  };
+function radarValueAxis(
+  config: ChartConfig,
+): { min?: number; max?: number; majorUnit?: number } | undefined {
+  return config.axis?.yAxis ?? config.axis?.valueAxis;
+}
+
+function resolvedMarkerShape(style: string | undefined, seriesIndex: number): string {
+  if (style && style !== 'auto') return style;
+  return radarAutomaticMarkerShape(seriesIndex);
 }
 
 function snapshotPointCategory(point: ChartDataPoint | undefined): string | number | null {

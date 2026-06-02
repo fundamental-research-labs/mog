@@ -4,9 +4,13 @@ import {
   MARKER_SHAPE_FIELD,
   MARKER_SIZE_FIELD,
   MARKER_STROKE_FIELD,
+  MARKER_VISIBLE_FIELD,
+  SERIES_FILL_OPACITY_FIELD,
 } from '../../core/chart-ir/fields';
 import {
+  RADAR_DEFAULT_MARKER_SIZE,
   RADAR_LABEL_GAP,
+  radarAutomaticMarkerShape,
   radarGeometryForPlotArea,
   radarPointAt,
   radarRadiusForValue,
@@ -17,7 +21,7 @@ import type { PathMark, SymbolMark, SymbolShape, TextMark } from '../../primitiv
 import { formatTickValue } from '../axis-generator';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
-import type { DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
+import type { AxisSpec, DataRow, EncodingSpec, Layout, MarkSpec, ScaleSpec } from '../spec';
 import { definedStyle, groupDataByEncoding, isBlankValueDatum } from './helpers';
 
 type RadarPoint = {
@@ -54,9 +58,15 @@ export function generateRadarMarks(
 
   const marks: Array<PathMark | SymbolMark | TextMark> = [];
   marks.push(
-    ...generateGridMarks(categories, geometry, valueDomain, scales.y, encoding?.y?.format),
+    ...generateGridMarks(
+      categories,
+      geometry,
+      valueDomain,
+      scales.y,
+      encoding?.y,
+    ),
   );
-  marks.push(...generateCategoryLabelMarks(categories, geometry));
+  marks.push(...generateCategoryLabelMarks(categories, geometry, encoding?.x?.radarAxis));
 
   const categoryIndex = new Map(categories.map((category, index) => [String(category), index]));
   const groups = groupDataByEncoding(data, encodings.color ?? encodings.detail);
@@ -86,7 +96,7 @@ export function generateRadarMarks(
       marks.push(seriesPathMark(markSpec, points, color));
     }
     if (markSpec.point) {
-      marks.push(...seriesPointMarks(markSpec, points, color));
+      marks.push(...seriesPointMarks(markSpec, points, color, seriesIndex));
     }
     seriesIndex += 1;
   }
@@ -150,40 +160,58 @@ function generateGridMarks(
   geometry: RadarGeometry,
   valueDomain: RadarValueDomain,
   yScale: NonNullable<ScaleMap['y']>,
-  format: string | undefined,
+  yEncoding: EncodingSpec['y'] | undefined,
 ): Array<PathMark | TextMark> {
   const marks: Array<PathMark | TextMark> = [];
-  const ticks = radarTicks(yScale, valueDomain);
+  const ticks = radarTicks(yScale, valueDomain, yEncoding?.scale);
+  const axis = yEncoding?.radarAxis;
+  const gridColor = axis?.gridColor ?? GRID_COLOR;
+  const gridWidth = axis?.gridWidth ?? 1;
+  const gridOpacity = finiteNumber(axis?.gridOpacity);
+  const gridDash = axis?.gridDash;
+  const showGrid = axis?.grid !== false;
+  const valueLabelColor = axis?.labelColor ?? VALUE_LABEL_COLOR;
+  const valueLabelFontSize = axis?.labelFontSize ?? 10;
+  const valueLabelFontFamily = axis?.labelFontFamily ?? DEFAULT_FONT_FAMILY;
+  const showValueLabels = axis?.labels !== false;
+  const spokeColor = axis?.domainColor ?? axis?.tickColor ?? AXIS_COLOR;
+  const spokeWidth = axis?.domainWidth ?? axis?.tickWidth ?? 1;
 
   for (const tick of ticks) {
     const radius = radarRadiusForValue(tick, valueDomain, geometry.radius);
     if (radius <= 0 || radius > geometry.radius + 0.5) continue;
-    marks.push({
-      type: 'path',
-      x: 0,
-      y: 0,
-      path: polygonPath(
-        categories.map((_, index) => radarPointAt(index, categories.length, geometry, radius)),
-      ),
-      datum: { role: 'radar-grid', value: tick },
-      style: {
-        stroke: GRID_COLOR,
-        strokeWidth: 1,
-        fill: undefined,
-      },
-    });
-    marks.push({
-      type: 'text',
-      x: geometry.cx - 6,
-      y: geometry.cy - radius,
-      text: formatTick(tick, format),
-      fontSize: 10,
-      fontFamily: DEFAULT_FONT_FAMILY,
-      textAlign: 'right',
-      textBaseline: 'middle',
-      datum: { role: 'radar-value-label', value: tick },
-      style: { fill: VALUE_LABEL_COLOR },
-    });
+    if (showGrid) {
+      marks.push({
+        type: 'path',
+        x: 0,
+        y: 0,
+        path: polygonPath(
+          categories.map((_, index) => radarPointAt(index, categories.length, geometry, radius)),
+        ),
+        datum: { role: 'radar-grid', value: tick },
+        style: {
+          stroke: gridColor,
+          strokeWidth: gridWidth,
+          opacity: gridOpacity,
+          strokeDash: gridDash,
+          fill: undefined,
+        },
+      });
+    }
+    if (showValueLabels) {
+      marks.push({
+        type: 'text',
+        x: geometry.cx - 6,
+        y: geometry.cy - radius,
+        text: formatTick(tick, yEncoding?.format ?? axis?.format),
+        fontSize: valueLabelFontSize,
+        fontFamily: valueLabelFontFamily,
+        textAlign: 'right',
+        textBaseline: 'middle',
+        datum: { role: 'radar-value-label', value: tick },
+        style: { fill: valueLabelColor },
+      });
+    }
   }
 
   for (let index = 0; index < categories.length; index += 1) {
@@ -195,8 +223,8 @@ function generateGridMarks(
       path: `M${geometry.cx},${geometry.cy} L${outer.x},${outer.y}`,
       datum: { role: 'radar-spoke', category: categories[index] },
       style: {
-        stroke: AXIS_COLOR,
-        strokeWidth: 1,
+        stroke: spokeColor,
+        strokeWidth: spokeWidth,
       },
     });
   }
@@ -207,7 +235,9 @@ function generateGridMarks(
 function generateCategoryLabelMarks(
   categories: string[],
   geometry: RadarGeometry,
+  axis: AxisSpec | null | undefined,
 ): TextMark[] {
+  if (axis?.labels === false) return [];
   return categories.map((category, index) => {
     const point = radarPointAt(
       index,
@@ -222,12 +252,12 @@ function generateCategoryLabelMarks(
       x: point.x,
       y: point.y,
       text: category,
-      fontSize: 11,
-      fontFamily: DEFAULT_FONT_FAMILY,
+      fontSize: axis?.labelFontSize ?? 11,
+      fontFamily: axis?.labelFontFamily ?? DEFAULT_FONT_FAMILY,
       textAlign: Math.abs(cos) < 0.25 ? 'center' : cos > 0 ? 'left' : 'right',
       textBaseline: Math.abs(sin) < 0.25 ? 'middle' : sin > 0 ? 'top' : 'bottom',
       datum: { role: 'radar-category-label', category },
-      style: { fill: LABEL_COLOR },
+      style: { fill: axis?.labelColor ?? LABEL_COLOR },
     };
   });
 }
@@ -269,7 +299,8 @@ function seriesPathMark(markSpec: MarkSpec, points: RadarPoint[], color: string)
     datumString(points[0].datum, markSpec.fillField) ?? markSpec.fill ?? seriesStroke;
   const seriesStrokeWidth =
     datumNumber(points[0].datum, markSpec.strokeWidthField) ?? markSpec.strokeWidth ?? 2;
-  const fillOpacity = markSpec.fillOpacity ?? 0;
+  const fillOpacity =
+    datumNumber(points[0].datum, SERIES_FILL_OPACITY_FIELD) ?? markSpec.fillOpacity ?? 0;
   const fill = fillOpacity > 0 ? colorWithOpacity(seriesFill, fillOpacity) : undefined;
   return {
     type: 'path',
@@ -292,31 +323,60 @@ function seriesPathMark(markSpec: MarkSpec, points: RadarPoint[], color: string)
   };
 }
 
-function seriesPointMarks(markSpec: MarkSpec, points: RadarPoint[], color: string): SymbolMark[] {
+function seriesPointMarks(
+  markSpec: MarkSpec,
+  points: RadarPoint[],
+  color: string,
+  seriesIndex: number,
+): SymbolMark[] {
   const pointSpec = typeof markSpec.point === 'object' ? markSpec.point : {};
-  return points.map((point) => {
+  return points.flatMap((point) => {
+    if (datumBoolean(point.datum, MARKER_VISIBLE_FIELD) === false) return [];
     const fill = datumString(point.datum, MARKER_FILL_FIELD) ?? pointSpec.color ?? color;
-    return {
-      type: 'symbol',
-      x: point.x,
-      y: point.y,
-      size: datumNumber(point.datum, MARKER_SIZE_FIELD) ?? pointSpec.size ?? 49,
-      shape: markerShape(datumString(point.datum, MARKER_SHAPE_FIELD)),
-      datum: point.datum,
-      style: {
-        fill: pointSpec.filled === false ? '#ffffff' : fill,
-        stroke: datumString(point.datum, MARKER_STROKE_FIELD) ?? color,
-        strokeWidth: 1,
-        opacity: markSpec.opacity ?? 1,
+    return [
+      {
+        type: 'symbol',
+        x: point.x,
+        y: point.y,
+        size:
+          datumNumber(point.datum, MARKER_SIZE_FIELD) ??
+          pointSpec.size ??
+          RADAR_DEFAULT_MARKER_SIZE,
+        shape: markerShape(datumString(point.datum, MARKER_SHAPE_FIELD), seriesIndex),
+        datum: point.datum,
+        style: {
+          fill: pointSpec.filled === false ? '#ffffff' : fill,
+          stroke: datumString(point.datum, MARKER_STROKE_FIELD) ?? color,
+          strokeWidth: 1,
+          opacity: markSpec.opacity ?? 1,
+        },
       },
-    };
+    ];
   });
 }
 
 function radarTicks(
   yScale: NonNullable<ScaleMap['y']>,
   valueDomain: RadarValueDomain,
+  scaleSpec: ScaleSpec | null | undefined,
 ): number[] {
+  const metadataTicks = scaleSpec?.radarTickValues
+    ?.map(toFiniteNumber)
+    .filter((value): value is number => value !== undefined)
+    .filter((tick) => tick > valueDomain.min && tick <= valueDomain.max);
+  if (metadataTicks && metadataTicks.length > 0) return metadataTicks;
+
+  const metadataStep = finiteNumber(scaleSpec?.radarTickStep);
+  if (metadataStep !== undefined && metadataStep > 0) {
+    const steppedTicks: number[] = [];
+    const start = Math.ceil(valueDomain.min / metadataStep) * metadataStep;
+    for (let tick = start; tick <= valueDomain.max + metadataStep * 1e-10; tick += metadataStep) {
+      if (tick > valueDomain.min) steppedTicks.push(Number(tick.toPrecision(12)));
+      if (steppedTicks.length > 1000) break;
+    }
+    if (steppedTicks.length > 0) return steppedTicks;
+  }
+
   const rawTicks = yScale.ticks?.(5) ?? [];
   const ticks = rawTicks
     .map(toFiniteNumber)
@@ -347,6 +407,12 @@ function datumNumber(datum: DataRow, field: string | undefined): number | undefi
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function datumBoolean(datum: DataRow, field: string | undefined): boolean | undefined {
+  if (!field) return undefined;
+  const value = datum[field];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function toFiniteNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -356,11 +422,15 @@ function toFiniteNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function markerShape(value: string | undefined): SymbolShape {
+function markerShape(value: string | undefined, seriesIndex: number): SymbolShape {
   if (
     value === 'circle' ||
     value === 'square' ||
@@ -374,7 +444,7 @@ function markerShape(value: string | undefined): SymbolShape {
   ) {
     return value;
   }
-  return 'circle';
+  return radarAutomaticMarkerShape(seriesIndex);
 }
 
 function colorWithOpacity(color: string, opacity: number): string {

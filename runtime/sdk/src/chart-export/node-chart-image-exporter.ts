@@ -23,10 +23,19 @@ type ChartTextMark = Extract<ChartMark, { type: 'text' }>;
 type ChartSymbolMark = Extract<ChartMark, { type: 'symbol' }>;
 
 type SerializableMarkType = ChartMark['type'];
-type SerializableSymbolShape = Extract<
-  ChartSymbolMark['shape'],
-  'circle' | 'square' | 'diamond' | 'cross' | 'triangle-up' | 'triangle-down'
->;
+type SerializableSymbolShape = ChartSymbolMark['shape'];
+
+const SUPPORTED_SYMBOL_SHAPES = {
+  circle: true,
+  square: true,
+  diamond: true,
+  cross: true,
+  x: true,
+  star: true,
+  dash: true,
+  'triangle-up': true,
+  'triangle-down': true,
+} as const satisfies Record<ChartSymbolMark['shape'], true>;
 
 type SerializableStyle = {
   fill?: string;
@@ -369,17 +378,17 @@ function textBaselineField(value: unknown, index: number): 'top' | 'middle' | 'b
 }
 
 function symbolShapeField(value: unknown, index: number): SerializableSymbolShape {
-  if (
-    value === 'circle' ||
-    value === 'square' ||
-    value === 'diamond' ||
-    value === 'cross' ||
-    value === 'triangle-up' ||
-    value === 'triangle-down'
-  ) {
+  if (isSupportedSymbolShape(value)) {
     return value;
   }
   throw new Error(`Invalid chart mark at index ${index}: unsupported symbol shape "${value}"`);
+}
+
+function isSupportedSymbolShape(value: unknown): value is SerializableSymbolShape {
+  return (
+    typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(SUPPORTED_SYMBOL_SHAPES, value)
+  );
 }
 
 function fontWeightField(

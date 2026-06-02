@@ -313,7 +313,7 @@ impl RenderSurface {
         }
         let shape = mark.shape.as_deref().unwrap_or("circle");
         let path = symbol_path(shape, x, y, size, self.dpr)?;
-        let style = mark_style(mark)?;
+        let style = symbol_style(shape, mark_style(mark)?);
         let clip = mark_clip(mark, index)?;
         self.fill_and_stroke_path(&path, &style, clip.as_ref())
     }
@@ -564,6 +564,27 @@ fn mark_style(mark: &RawMark) -> Result<MarkStyle> {
     })
 }
 
+fn symbol_style(shape: &str, style: MarkStyle) -> MarkStyle {
+    if !is_open_line_symbol(shape) || style.stroke.is_some() {
+        return style;
+    }
+
+    let Some(fill) = style.fill.as_ref() else {
+        return style;
+    };
+    if fill.trim().is_empty() || fill.trim().eq_ignore_ascii_case("none") {
+        return style;
+    }
+
+    let mut style = style;
+    style.stroke = Some(fill.clone());
+    style
+}
+
+fn is_open_line_symbol(shape: &str) -> bool {
+    matches!(shape, "x" | "dash")
+}
+
 fn mark_clip(mark: &RawMark, index: usize) -> Result<Option<MarkClip>> {
     let Some(clip) = mark.clip.as_ref() else {
         return Ok(None);
@@ -692,6 +713,34 @@ fn symbol_path(shape: &str, x: f32, y: f32, size: f32, dpr: f32) -> Result<Path>
                 .push_rect(Rect::from_xywh(x - radius, y - arm / 2.0, radius * 2.0, arm).unwrap());
             builder
                 .push_rect(Rect::from_xywh(x - arm / 2.0, y - radius, arm, radius * 2.0).unwrap());
+        }
+        "x" => {
+            let radius = (size / PI).sqrt() * 1.2;
+            builder.move_to(x - radius, y - radius);
+            builder.line_to(x + radius, y + radius);
+            builder.move_to(x + radius, y - radius);
+            builder.line_to(x - radius, y + radius);
+        }
+        "star" => {
+            let outer = (size / PI).sqrt() * 1.35;
+            let inner = outer * 0.45;
+            for i in 0..10 {
+                let radius = if i % 2 == 0 { outer } else { inner };
+                let angle = -PI / 2.0 + (i as f32 * PI) / 5.0;
+                let px = x + angle.cos() * radius;
+                let py = y + angle.sin() * radius;
+                if i == 0 {
+                    builder.move_to(px, py);
+                } else {
+                    builder.line_to(px, py);
+                }
+            }
+            builder.close();
+        }
+        "dash" => {
+            let radius = (size / PI).sqrt() * 1.3;
+            builder.move_to(x - radius, y);
+            builder.line_to(x + radius, y);
         }
         "triangle-up" | "triangle-down" => {
             let side = (4.0 * size / 3.0_f32.sqrt()).sqrt();

@@ -4,6 +4,8 @@ import {
   seriesConfigSourceKey,
   seriesSourceIndex,
   seriesSourceKey,
+  shouldProjectStockSeries,
+  stockRolePlan,
   type ChartConfig,
   type ChartData,
   type ChartDataPoint,
@@ -12,6 +14,7 @@ import {
 import type {
   ChartSeriesProjectionAuthority,
   ChartSeriesProjectionDiagnosticReason,
+  ChartSeriesStockRole,
   ResolvedChartSpecSnapshot,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -31,6 +34,14 @@ import { hashJson, snapshotScalar } from './resolved-spec-primitives';
 export { renderAuthorityDiagnostics } from './resolved-spec-series-authority';
 
 type SeriesRangeReference = ResolvedChartRangeReferences['seriesReferences'][number];
+type ResolvedSeriesSnapshot = ResolvedChartSpecSnapshot['resolved']['series'][number];
+type SourceSeriesSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['sourceSeries']
+>[number];
+type ProjectedRoleMappingSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['projectedRoleMappings']
+>[number];
+type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
 
 export function hasRenderableChartExData(config: ChartConfig): boolean {
   return (
@@ -202,6 +213,7 @@ export function snapshotSeriesProjection(
   config: ChartConfig,
   data: ChartData,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
+  seriesReferencesByIndex?: ReadonlyMap<number, SeriesRangeReference>,
 ): ResolvedChartSpecSnapshot['resolved']['seriesProjection'] {
   const renderedPointCountBySourceSeriesKey: Record<string, number> = {};
   for (const item of series) {
@@ -209,19 +221,40 @@ export function snapshotSeriesProjection(
   }
 
   const projectedKeys = new Set(series.map((item) => item.sourceSeriesKey));
+  const stockProjection = stockProjectionContext(config, series);
+  const sourceSeries = snapshotSourceSeriesInventory(
+    config,
+    series,
+    stockProjection.stockRoleBySourceKey,
+    projectedKeys,
+    seriesReferencesByIndex,
+    stockProjection.renderedSeries,
+  );
   const droppedSeries =
     config.series
       ?.map((configured, index) => {
         const sourceSeriesIndex = seriesConfigSourceIndex(configured, index);
         const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
         if (projectedKeys.has(sourceSeriesKey)) return undefined;
+        const stockRole = stockProjection.stockRoleBySourceKey.get(sourceSeriesKey);
         const diagnostic = configured.projectionDiagnostics?.[0];
+        const stockProjectionReason =
+          stockRole !== undefined && stockProjection.renderedSeries !== undefined;
         return {
           sourceSeriesIndex,
           sourceSeriesKey,
           name: configured.name,
-          reason: diagnostic?.reason ?? droppedSeriesReason(configured),
+          reason: stockProjectionReason
+            ? 'projectedIntoStockGlyph'
+            : diagnostic?.reason ?? droppedSeriesReason(configured),
           message: diagnostic?.message,
+          ...(stockProjectionReason
+            ? {
+                projectedIntoSeriesIndex: stockProjection.renderedSeries.index,
+                projectedIntoSourceSeriesKey: stockProjection.renderedSeries.sourceSeriesKey,
+                projectedIntoRole: stockRole,
+              }
+            : {}),
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== undefined) ?? [];
@@ -242,7 +275,170 @@ export function snapshotSeriesProjection(
     renderedSeriesCount: config.pivotProjection?.renderedSeriesCount ?? renderedSeriesCount,
     renderedPointCountBySourceSeriesKey,
     droppedSeries,
+    sourceSeries,
+    sourceSeriesCount: sourceSeries.length,
+    sourceRoleSeriesCount: sourceSeries.filter((item) => item.stockRole !== undefined).length,
+    projectedRoleMappings: stockProjection.projectedRoleMappings,
   };
+}
+
+function snapshotSourceSeriesInventory(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  stockRoleBySourceKey: ReadonlyMap<string, ChartSeriesStockRole>,
+  projectedKeys: ReadonlySet<string>,
+  seriesReferencesByIndex: ReadonlyMap<number, SeriesRangeReference> | undefined,
+  renderedStockSeries: ResolvedSeriesSnapshot | undefined,
+): SourceSeriesSnapshot[] {
+  if (!config.series?.length) {
+    return series.map((item) => ({
+      index: item.index,
+      order: item.order,
+      sourceSeriesIndex: item.sourceSeriesIndex,
+      sourceSeriesKey: item.sourceSeriesKey,
+      name: item.name,
+      type: item.type,
+      axisGroup: item.axisGroup,
+      xRole: item.xRole,
+      stockRole: item.stockRole,
+      source: item.source,
+      renderAuthority: item.renderAuthority,
+      projectionDiagnostics: item.projectionDiagnostics,
+    }));
+  }
+
+  return config.series.map((configured, index) => {
+    const sourceSeriesIndex = seriesConfigSourceIndex(configured, index);
+    const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
+    const rangeReference = seriesReferencesByIndex?.get(sourceSeriesIndex);
+    const stockRole = configured.stockRole ?? stockRoleBySourceKey.get(sourceSeriesKey);
+    const projectionDiagnostics = [...(configured.projectionDiagnostics ?? [])];
+    if (
+      stockRole !== undefined &&
+      renderedStockSeries !== undefined &&
+      !projectedKeys.has(sourceSeriesKey) &&
+      !projectionDiagnostics.some((diagnostic) => diagnostic.reason === 'projectedIntoStockGlyph')
+    ) {
+      projectionDiagnostics.push({
+        reason: 'projectedIntoStockGlyph',
+        severity: 'info',
+        sourceSeriesIndex,
+        sourceSeriesKey,
+        message: 'source stock role is represented by the rendered stock glyph series',
+      });
+    }
+
+    return {
+      index,
+      order: configured.order ?? configured.idx ?? index,
+      sourceSeriesIndex,
+      sourceSeriesKey,
+      name: configured.name ?? defaultSourceSeriesName(configured, sourceSeriesIndex),
+      type: configured.type,
+      axisGroup: configured.yAxisIndex === 1 ? 'secondary' : 'primary',
+      xRole: effectiveSeriesXRole(config, configured, configured.type),
+      stockRole,
+      source: {
+        values: configured.values,
+        categories: configured.categories,
+        bubbleSize: configured.bubbleSize,
+        stockRole,
+        valueSourceKind: configured.valueSourceKind,
+        categorySourceKind: configured.categorySourceKind,
+        bubbleSizeSourceKind: configured.bubbleSizeSourceKind,
+      },
+      renderAuthority: {
+        values: dimensionRenderAuthority({
+          cache: configured.valueCache,
+          sourceKind: configured.valueSourceKind,
+          resolvedRange: rangeReference?.values,
+        }),
+        categories: dimensionRenderAuthority({
+          cache: configured.categoryCache,
+          cacheRenderable:
+            hasRenderableChartPointCache(configured.categoryCache) ||
+            hasRenderableCategoryLevelsCache(configured.categoryLevels),
+          sourceKind: configured.categorySourceKind,
+          resolvedRange: rangeReference?.categories,
+        }),
+        bubbleSize: dimensionRenderAuthority({
+          cache: configured.bubbleSizeCache,
+          sourceKind: configured.bubbleSizeSourceKind,
+          resolvedRange: rangeReference?.bubbleSizes ?? null,
+        }),
+      },
+      ...(projectionDiagnostics.length > 0 ? { projectionDiagnostics } : {}),
+    };
+  });
+}
+
+function stockProjectionContext(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+): {
+  stockRoleBySourceKey: Map<string, ChartSeriesStockRole>;
+  renderedSeries?: ResolvedSeriesSnapshot;
+  projectedRoleMappings?: ProjectedRoleMappingSnapshot[];
+} {
+  const stockRoleBySourceKey = new Map<string, ChartSeriesStockRole>();
+  const seriesConfigs = config.series ?? [];
+  const roles =
+    shouldProjectStockSeries(config) && seriesConfigs.length > 0
+      ? stockRolePlan(seriesConfigs)
+      : null;
+  if (!roles) return { stockRoleBySourceKey };
+
+  const renderedSeries = series.find(isRenderedStockSeries) ?? series[0];
+  const projectedRoleMappings: ProjectedRoleMappingSnapshot[] = [];
+  for (const role of stockRoleOrder()) {
+    const configIndex = roles[role];
+    if (configIndex === undefined) continue;
+    const configured = seriesConfigs[configIndex];
+    if (!configured) continue;
+    const sourceSeriesIndex = seriesConfigSourceIndex(configured, configIndex);
+    const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
+    stockRoleBySourceKey.set(sourceSeriesKey, role);
+    if (renderedSeries) {
+      projectedRoleMappings.push({
+        sourceSeriesIndex,
+        sourceSeriesKey,
+        stockRole: role,
+        projectedSeriesIndex: renderedSeries.index,
+        projectedSourceSeriesKey: renderedSeries.sourceSeriesKey,
+      });
+    }
+  }
+
+  return {
+    stockRoleBySourceKey,
+    renderedSeries,
+    ...(projectedRoleMappings.length > 0 ? { projectedRoleMappings } : {}),
+  };
+}
+
+function isRenderedStockSeries(series: ResolvedSeriesSnapshot): boolean {
+  return (
+    series.type === 'stock' ||
+    series.stockRole !== undefined ||
+    series.stockValues !== undefined ||
+    Object.values(series.stockValues ?? {}).some((values) => values.some((value) => value !== null))
+  );
+}
+
+function stockRoleOrder(): ChartSeriesStockRole[] {
+  return ['volume', 'open', 'high', 'low', 'close'];
+}
+
+function defaultSourceSeriesName(series: ChartSeriesConfig, sourceSeriesIndex: number): string {
+  if (typeof series.idx === 'number' && Number.isInteger(series.idx) && series.idx >= 0) {
+    return `Series ${series.idx + 1}`;
+  }
+
+  if (typeof series.order === 'number' && Number.isInteger(series.order) && series.order >= 0) {
+    return `Series ${series.order + 1}`;
+  }
+
+  return `Series ${sourceSeriesIndex + 1}`;
 }
 
 function droppedSeriesReason(

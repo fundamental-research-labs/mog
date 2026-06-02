@@ -2,7 +2,7 @@ import type { ChartConfig } from '@mog/charts';
 
 type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
 
-export type SeriesMarkFamily = 'bar' | 'line' | 'area' | 'point' | 'other';
+export type SeriesMarkFamily = 'bar' | 'line' | 'area' | 'point' | 'stock' | 'other';
 
 export function effectiveSeriesXRole(
   config: ChartConfig,
@@ -125,6 +125,8 @@ export function seriesMarkFamily(seriesType: string | undefined): SeriesMarkFami
     case 'bubble':
     case 'bubble3DEffect':
       return 'point';
+    case 'stock':
+      return 'stock';
     default:
       return 'other';
   }

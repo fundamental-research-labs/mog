@@ -1,5 +1,10 @@
 import type { ChartConfig, ChartData } from '@mog/charts';
-import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
+import type {
+  ChartLegendEntryIndexKind,
+  ChartLegendEntryVocabulary,
+  ChartSemanticLayer,
+  ResolvedChartSpecSnapshot,
+} from '@mog-sdk/contracts/data/charts';
 
 import type { ResolvedChartRangeReference } from '../chart-range-references';
 import { isNoFillNoLineSeriesConfig } from './chart-render-data-normalizer';
@@ -9,6 +14,15 @@ type RangeSnapshot = NonNullable<ResolvedChartSpecSnapshot['resolved']['ranges']
 type CategoryLevelSnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['categoryLevels']
 >[number];
+type LegendSnapshot = ResolvedChartSpecSnapshot['resolved']['legend'];
+type LegendEntrySnapshot = NonNullable<LegendSnapshot['entryItems']>[number];
+
+type LegendVocabularyDecision = {
+  vocabulary: ChartLegendEntryVocabulary;
+  layer: ChartSemanticLayer;
+  indexKind: ChartLegendEntryIndexKind;
+  useCategoryEntries: boolean;
+};
 
 export function snapshotCategoryLevels(data: ChartData): CategoryLevelSnapshot[] | undefined {
   if (!data.categoryLevels?.length) return undefined;
@@ -62,7 +76,7 @@ export function snapshotLegend(
   config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
   data?: ChartData,
-): ResolvedChartSpecSnapshot['resolved']['legend'] {
+): LegendSnapshot {
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
   const deletedEntries = new Set(
@@ -73,33 +87,110 @@ export function snapshotLegend(
       .map((entry) => entry.idx) ?? [],
   );
   const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
-  const categoryEntries = usesCategoryLegendEntries(config, data)
-    ? data.categories.map((category) => String(category))
-    : undefined;
-  const allEntries = categoryEntries ?? series.map((item) => item.name);
-  const visibleEntries = categoryEntries
-    ? categoryEntries.filter((_entry, index) => !deletedEntries.has(index))
-    : series
-        .filter(
-          (item, index) =>
-            !deletedEntries.has(index) &&
-            !deletedEntries.has(item.sourceSeriesIndex) &&
-            !isNoFillNoLineSeriesConfig(
-              config.series?.[item.sourceSeriesIndex] ?? config.series?.[index],
-            ),
-        )
-        .map((item) => item.name);
+  const decision = legendVocabularyFor(config, data);
+  const entryItems =
+    present && decision.useCategoryEntries && data
+      ? categoryLegendEntries(data, deletedEntries, visible, decision)
+      : present
+        ? seriesLegendEntries(config, series, deletedEntries, visible, decision)
+        : [];
+  const visibleEntryItems = entryItems.filter((entry) => entry.visible);
   return {
     present,
     visible,
     position: legend?.position,
-    entries: present ? allEntries : [],
-    visibleEntries: visible ? visibleEntries : [],
+    entries: entryItems.map((entry) => entry.text),
+    visibleEntries: visibleEntryItems.map((entry) => entry.text),
+    entryVocabulary: decision.vocabulary,
+    entryLayer: decision.layer,
+    entryIndexKind: decision.indexKind,
+    entryItems,
+    visibleEntryItems,
+  };
+}
+
+function categoryLegendEntries(
+  data: ChartData,
+  deletedEntries: ReadonlySet<number>,
+  visible: boolean,
+  decision: LegendVocabularyDecision,
+): LegendEntrySnapshot[] {
+  return data.categories.map((category, index) => {
+    const deleted = deletedEntries.has(index);
+    return {
+      index,
+      text: String(category),
+      visible: visible && !deleted,
+      ...(deleted ? { deleted: true } : {}),
+      vocabulary: decision.vocabulary,
+      indexKind: decision.indexKind,
+      pointIndex: index,
+    };
+  });
+}
+
+function seriesLegendEntries(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  deletedEntries: ReadonlySet<number>,
+  visible: boolean,
+  decision: LegendVocabularyDecision,
+): LegendEntrySnapshot[] {
+  return series.map((item, index) => {
+    const configured = config.series?.[item.sourceSeriesIndex] ?? config.series?.[index];
+    const deleted = deletedEntries.has(index) || deletedEntries.has(item.sourceSeriesIndex);
+    const styleHidden = isNoFillNoLineSeriesConfig(configured);
+    return {
+      index,
+      text: item.name,
+      visible: visible && !deleted && !styleHidden,
+      ...(deleted ? { deleted: true } : {}),
+      vocabulary: decision.vocabulary,
+      indexKind: decision.indexKind,
+      sourceSeriesIndex: item.sourceSeriesIndex,
+      sourceSeriesKey: item.sourceSeriesKey,
+      ...(item.stockRole ? { stockRole: item.stockRole } : {}),
+    };
+  });
+}
+
+function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocabularyDecision {
+  const surfaceLegendTypes = new Set([
+    'surface',
+    'surface3d',
+    'surfaceWireframe',
+    'surfaceTopView',
+    'surfaceTopViewWireframe',
+  ]);
+  if (surfaceLegendTypes.has(config.type)) {
+    return {
+      vocabulary: 'unknown',
+      layer: 'unknown',
+      indexKind: 'unknown',
+      useCategoryEntries: false,
+    };
+  }
+
+  if (usesCategoryLegendEntries(config, data)) {
+    return {
+      vocabulary: 'category',
+      layer: 'rendered',
+      indexKind: 'point',
+      useCategoryEntries: true,
+    };
+  }
+
+  return {
+    vocabulary: 'series',
+    layer: 'rendered',
+    indexKind: 'series',
+    useCategoryEntries: false,
   };
 }
 
 function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
   if (!data) return false;
+  if (isPointLegendChartType(config.type)) return true;
   if (config.varyByCategories !== undefined) return config.varyByCategories;
   const legend = config.legend;
   return (
@@ -109,6 +200,18 @@ function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data 
     legend.show === true &&
     legend.visible !== false &&
     legend.position !== 'none'
+  );
+}
+
+function isPointLegendChartType(type: ChartConfig['type']): boolean {
+  return (
+    type === 'pie' ||
+    type === 'pieExploded' ||
+    type === 'pie3d' ||
+    type === 'pie3dExploded' ||
+    type === 'doughnut' ||
+    type === 'doughnutExploded' ||
+    type === 'ofPie'
   );
 }
 

@@ -70,7 +70,12 @@ export function buildResolvedChartSpecSnapshot(input: {
     ),
   );
   const legend = snapshotLegend(input.config, series, input.chartData);
-  const seriesProjection = snapshotSeriesProjection(input.config, input.chartData, series);
+  const seriesProjection = snapshotSeriesProjection(
+    input.config,
+    input.chartData,
+    series,
+    seriesReferencesByIndex,
+  );
 
   return {
     schemaVersion: 1,

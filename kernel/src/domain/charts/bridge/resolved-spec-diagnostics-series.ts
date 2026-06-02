@@ -28,7 +28,7 @@ export function comboScatterSeriesDiagnostics(
   }
 
   for (const item of series) {
-    if (item.type && item.renderLayerCount === 0) {
+    if (item.type && item.renderLayerCount === 0 && !isSupportedStockSeries(config, item)) {
       diagnostics.push(
         `series ${item.sourceSeriesIndex} uses unsupported chart type "${item.type}" and is not rendered as a combo layer`,
       );
@@ -54,6 +54,18 @@ export function comboScatterSeriesDiagnostics(
   }
 
   return diagnostics;
+}
+
+function isSupportedStockSeries(
+  config: ChartConfig,
+  series: ResolvedSnapshotSeries[number],
+): boolean {
+  return (
+    config.type === 'stock' ||
+    series.type === 'stock' ||
+    series.stockRole !== undefined ||
+    series.stockValues !== undefined
+  );
 }
 
 export function hasSourceLinkedDataLabelFormatWithoutModeledFormat(config: ChartConfig): boolean {

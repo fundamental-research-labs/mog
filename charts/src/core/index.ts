@@ -38,8 +38,11 @@ export {
   hasExcelBarGeometrySpec,
   isBarLikeChartType,
   isStackedBarGrouping,
+  resolveBarGeometryGroups,
   stackModeForChartType,
+  type BarGeometryGroup,
   type BarSlotGeometry,
+  type ResolveBarGeometryGroupsOptions,
 } from './config-to-spec/bar-geometry';
 export * from './style-resolver';
 export {
@@ -61,6 +64,7 @@ export {
   type CellRange,
   type ChartCellValue,
 } from './data-extractor';
+export { stockRolePlan, type StockRole, type StockRolePlan } from './data-extractor-imported';
 export {
   chartDataSeriesIdentity,
   seriesConfigForDataSeries,
@@ -71,3 +75,10 @@ export {
   seriesSourceKey,
   withSeriesConfigIdentity,
 } from './series-identity';
+export {
+  asStockConfig,
+  hasStockRoleSeries,
+  hasStockSubtype,
+  shouldProjectStockSeries,
+  shouldRenderStockChart,
+} from './stock-semantics';

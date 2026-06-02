@@ -867,6 +867,27 @@ export type ChartSeriesXRole = 'category' | 'quantitative';
 /** Imported stock chart source role for HLC/OHLC and volume stock charts. */
 export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
 
+/** Semantic layer represented by a resolved chart snapshot field. */
+export type ChartSemanticLayer = 'source' | 'projected' | 'rendered' | 'unknown';
+
+/** Vocabulary used by visible legend entries. */
+export type ChartLegendEntryVocabulary =
+  | 'series'
+  | 'category'
+  | 'point'
+  | 'stockSourceRole'
+  | 'valueBand'
+  | 'unknown';
+
+/** Index space used by legend entry metadata. */
+export type ChartLegendEntryIndexKind =
+  | 'series'
+  | 'sourceSeries'
+  | 'point'
+  | 'stockRole'
+  | 'valueBand'
+  | 'unknown';
+
 /** Render authority used for projected or imported chart series data. */
 export type ChartSeriesProjectionAuthority =
   | 'explicitSeries'
@@ -876,6 +897,11 @@ export type ChartSeriesProjectionAuthority =
   | 'literal'
   | 'unavailable';
 
+/**
+ * Reason a source series was filtered, dropped, or intentionally projected into another series.
+ * `projectedIntoStockGlyph` means a source OHLC/volume role series is represented by one
+ * rendered stock glyph series.
+ */
 export type ChartSeriesProjectionDiagnosticReason =
   | 'unresolvedPivotSource'
   | 'unsupportedPivotFeature'
@@ -884,7 +910,8 @@ export type ChartSeriesProjectionDiagnosticReason =
   | 'noValueData'
   | 'worksheetHiddenByPlotVisibleOnly'
   | 'styleResolvedNoFillOrLine'
-  | 'staleMaterializedRange';
+  | 'staleMaterializedRange'
+  | 'projectedIntoStockGlyph';
 
 /** Diagnostic explaining why a source series was altered, dropped, or not renderable. */
 export interface ChartSeriesProjectionDiagnostic {
@@ -1158,6 +1185,24 @@ export interface ResolvedChartLegendSnapshot {
   position?: string;
   entries: string[];
   visibleEntries: string[];
+  entryVocabulary?: ChartLegendEntryVocabulary;
+  entryLayer?: ChartSemanticLayer;
+  entryIndexKind?: ChartLegendEntryIndexKind;
+  entryItems?: ResolvedChartLegendEntrySnapshot[];
+  visibleEntryItems?: ResolvedChartLegendEntrySnapshot[];
+}
+
+export interface ResolvedChartLegendEntrySnapshot {
+  index: number;
+  text: string;
+  visible: boolean;
+  deleted?: boolean;
+  vocabulary: ChartLegendEntryVocabulary;
+  indexKind: ChartLegendEntryIndexKind;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  pointIndex?: number;
+  stockRole?: ChartSeriesStockRole;
 }
 
 export interface ResolvedChartCategoryLevelSnapshot {
@@ -1223,12 +1268,50 @@ export interface ResolvedChartSeriesSnapshot {
   dataHash: string;
 }
 
+export interface ResolvedChartSourceSeriesSnapshot {
+  index: number;
+  order: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  name?: string;
+  type?: string;
+  axisGroup?: 'primary' | 'secondary';
+  xRole?: ChartSeriesXRole;
+  stockRole?: ChartSeriesStockRole;
+  source: {
+    values?: string;
+    categories?: string;
+    bubbleSize?: string;
+    stockRole?: ChartSeriesStockRole;
+    valueSourceKind?: ChartSeriesDimensionSourceKind;
+    categorySourceKind?: ChartSeriesDimensionSourceKind;
+    bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
+  };
+  renderAuthority?: {
+    values: ChartSeriesDimensionRenderAuthority;
+    categories: ChartSeriesDimensionRenderAuthority;
+    bubbleSize: ChartSeriesDimensionRenderAuthority;
+  };
+  projectionDiagnostics?: ChartSeriesProjectionDiagnostic[];
+}
+
 export interface ResolvedChartDroppedSeriesSnapshot {
   sourceSeriesIndex: number;
   sourceSeriesKey: string;
   name?: string;
   reason: ChartSeriesProjectionDiagnosticReason;
   message?: string;
+  projectedIntoSeriesIndex?: number;
+  projectedIntoSourceSeriesKey?: string;
+  projectedIntoRole?: ChartSeriesStockRole;
+}
+
+export interface ResolvedChartProjectedRoleMappingSnapshot {
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  stockRole: ChartSeriesStockRole;
+  projectedSeriesIndex: number;
+  projectedSourceSeriesKey: string;
 }
 
 export interface ResolvedChartSeriesProjectionSnapshot {
@@ -1238,6 +1321,10 @@ export interface ResolvedChartSeriesProjectionSnapshot {
   renderedSeriesCount: number;
   renderedPointCountBySourceSeriesKey: Record<string, number>;
   droppedSeries: ResolvedChartDroppedSeriesSnapshot[];
+  sourceSeries?: ResolvedChartSourceSeriesSnapshot[];
+  sourceSeriesCount?: number;
+  sourceRoleSeriesCount?: number;
+  projectedRoleMappings?: ResolvedChartProjectedRoleMappingSnapshot[];
 }
 
 /** Normalized top-level chart layout rectangle in chart-relative coordinates. */

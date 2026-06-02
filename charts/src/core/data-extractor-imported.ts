@@ -88,8 +88,8 @@ export function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boo
   );
 }
 
-type StockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
-type StockRolePlan = Partial<Record<StockRole, number>> & {
+export type StockRole = NonNullable<SeriesConfig['stockRole']>;
+export type StockRolePlan = Partial<Record<StockRole, number>> & {
   high: number;
   low: number;
   close: number;
@@ -139,7 +139,7 @@ function explicitStockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | n
   };
 }
 
-function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
+export function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
   const explicitPlan = explicitStockRolePlan(seriesConfigs);
   if (explicitPlan) return explicitPlan;
 

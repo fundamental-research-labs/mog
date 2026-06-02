@@ -205,7 +205,61 @@ describe('resolved spec structure snapshot helpers', () => {
         'Deleted by source index',
         'No fill no line',
       ],
+      entryItems: [
+        {
+          text: 'Visible',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+        {
+          text: 'Deleted by rendered index',
+          index: 1,
+          visible: false,
+          deleted: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 7,
+          sourceSeriesKey: 'series-7',
+        },
+        {
+          text: 'Deleted by source index',
+          index: 2,
+          visible: false,
+          deleted: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 4,
+          sourceSeriesKey: 'series-4',
+        },
+        {
+          text: 'No fill no line',
+          index: 3,
+          visible: false,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 3,
+          sourceSeriesKey: 'series-3',
+        },
+      ],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
       visibleEntries: ['Visible'],
+      visibleEntryItems: [
+        {
+          text: 'Visible',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+      ],
     });
     expect(
       snapshotLegend(chartConfig({ legend: { show: true, visible: true, position: 'none' } }), [
@@ -216,7 +270,12 @@ describe('resolved spec structure snapshot helpers', () => {
       visible: false,
       position: 'none',
       entries: [],
+      entryItems: [],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
       visibleEntries: [],
+      visibleEntryItems: [],
     });
   });
 
@@ -240,7 +299,55 @@ describe('resolved spec structure snapshot helpers', () => {
       visible: true,
       position: 'right',
       entries: ['Category A', 'Category B', 'Category C'],
+      entryItems: [
+        {
+          text: 'Category A',
+          index: 0,
+          visible: true,
+          vocabulary: 'category',
+          indexKind: 'point',
+          pointIndex: 0,
+        },
+        {
+          text: 'Category B',
+          index: 1,
+          visible: false,
+          deleted: true,
+          vocabulary: 'category',
+          indexKind: 'point',
+          pointIndex: 1,
+        },
+        {
+          text: 'Category C',
+          index: 2,
+          visible: true,
+          vocabulary: 'category',
+          indexKind: 'point',
+          pointIndex: 2,
+        },
+      ],
+      entryVocabulary: 'category',
+      entryIndexKind: 'point',
+      entryLayer: 'rendered',
       visibleEntries: ['Category A', 'Category C'],
+      visibleEntryItems: [
+        {
+          text: 'Category A',
+          index: 0,
+          visible: true,
+          vocabulary: 'category',
+          indexKind: 'point',
+          pointIndex: 0,
+        },
+        {
+          text: 'Category C',
+          index: 2,
+          visible: true,
+          vocabulary: 'category',
+          indexKind: 'point',
+          pointIndex: 2,
+        },
+      ],
     });
   });
 });

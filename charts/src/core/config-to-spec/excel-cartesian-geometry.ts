@@ -269,7 +269,9 @@ export function withExcelAreaBaseline<T extends MarkType | MarkSpec>(
 
   const baseline = resolveAreaBaselineValue(yChannel);
   if (baseline === undefined) return mark;
-  return typeof mark === 'string' ? { type: mark, baseline } : { ...mark, baseline };
+  if (typeof mark === 'string') return { type: mark, baseline };
+  const markSpec = mark as MarkSpec;
+  return { ...markSpec, baseline };
 }
 
 export function chartValueValues(data: ChartData, memberIndices?: readonly number[]): number[] {

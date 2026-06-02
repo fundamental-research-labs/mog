@@ -564,20 +564,19 @@ fn mark_style(mark: &RawMark) -> Result<MarkStyle> {
     })
 }
 
-fn symbol_style(shape: &str, style: MarkStyle) -> MarkStyle {
+fn symbol_style(shape: &str, mut style: MarkStyle) -> MarkStyle {
     if !is_open_line_symbol(shape) || style.stroke.is_some() {
         return style;
     }
 
-    let Some(fill) = style.fill.as_ref() else {
+    let Some(fill) = style.fill.clone() else {
         return style;
     };
     if fill.trim().is_empty() || fill.trim().eq_ignore_ascii_case("none") {
         return style;
     }
 
-    let mut style = style;
-    style.stroke = Some(fill.clone());
+    style.stroke = Some(fill);
     style
 }
 

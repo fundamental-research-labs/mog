@@ -61,6 +61,9 @@ export function applyPieSliceExplosion(mark: MarkSpec, config: ChartConfig): voi
   if (
     pieSlice?.explodeAll === true ||
     isExplodedPieLikeChartType(config.type) ||
+    (pieSlice?.explodeOffset !== undefined &&
+      explodedIndex === undefined &&
+      (!pieSlice.explodedIndices || pieSlice.explodedIndices.length === 0)) ||
     (pieSlice?.explosion !== undefined &&
       explodedIndex === undefined &&
       (!pieSlice.explodedIndices || pieSlice.explodedIndices.length === 0))

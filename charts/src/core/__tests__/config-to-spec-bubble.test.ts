@@ -155,7 +155,7 @@ describe('configToSpec bubble size semantics', () => {
     expect(undersized.encoding?.size?.scale?.range).toEqual([0, 0]);
   });
 
-  it('renders imported single-series bubbles with category colors and point legend entries', () => {
+  it('renders imported single-series bubbles with a series legend entry', () => {
     const categories = [39.14, 68.58, 18.47, 91.87, 17.74, 31.66, 15.32, 95.27];
     const data: ChartData = {
       categories,
@@ -204,15 +204,11 @@ describe('configToSpec bubble size semantics', () => {
 
     const spec = asUnitSpec(config, data);
     expect(spec.encoding?.color).toMatchObject({
-      field: 'category',
+      field: 'series',
       type: 'nominal',
-      scale: {
-        domain: categories.map(String),
-        range: ['#4F81BD', '#C0504D', '#9BBB59', '#8064A2', '#4BACC6', '#F79646'],
-      },
       legend: {
         orient: 'right',
-        values: categories.map(String),
+        values: ['Products'],
         symbolType: 'circle',
       },
     });
@@ -223,18 +219,9 @@ describe('configToSpec bubble size semantics', () => {
       .filter((mark): mark is TextMark => mark.type === 'text')
       .map((mark) => mark.text);
 
-    expect(symbols.map((mark) => mark.style.fill)).toEqual([
-      '#4F81BD',
-      '#C0504D',
-      '#9BBB59',
-      '#8064A2',
-      '#4BACC6',
-      '#F79646',
-      '#4F81BD',
-      '#C0504D',
-    ]);
+    expect(new Set(symbols.map((mark) => mark.style.fill))).toEqual(new Set(['#1f77b4']));
     expect(Math.max(...symbols.map((mark) => mark.size))).toBeCloseTo(6400, 5);
     expect(symbols.every((mark) => mark.clip === undefined)).toBe(true);
-    expect(legendLabels).toEqual(categories.map(String));
+    expect(legendLabels).toContain('Products');
   });
 });

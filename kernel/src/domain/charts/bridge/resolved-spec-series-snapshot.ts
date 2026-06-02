@@ -240,8 +240,8 @@ export function snapshotSeriesProjection(
         if (projectedKeys.has(sourceSeriesKey)) return undefined;
         const stockRole = stockProjection.stockRoleBySourceKey.get(sourceSeriesKey);
         const diagnostic = configured.projectionDiagnostics?.[0];
-        const stockProjectionReason =
-          stockRole !== undefined && stockProjection.renderedSeries !== undefined;
+        const projectedIntoSeries = stockProjection.renderedSeries;
+        const stockProjectionReason = stockRole !== undefined && projectedIntoSeries !== undefined;
         return {
           sourceSeriesIndex,
           sourceSeriesKey,
@@ -252,8 +252,8 @@ export function snapshotSeriesProjection(
           message: diagnostic?.message,
           ...(stockProjectionReason
             ? {
-                projectedIntoSeriesIndex: stockProjection.renderedSeries.index,
-                projectedIntoSourceSeriesKey: stockProjection.renderedSeries.sourceSeriesKey,
+                projectedIntoSeriesIndex: projectedIntoSeries.index,
+                projectedIntoSourceSeriesKey: projectedIntoSeries.sourceSeriesKey,
                 projectedIntoRole: stockRole,
               }
             : {}),
@@ -434,11 +434,11 @@ function stockProjectionContext(
 }
 
 function isRenderedStockSeries(series: ResolvedSeriesSnapshot): boolean {
+  const stockValues = series.stockValues;
   return (
     series.type === 'stock' ||
     series.stockRole !== undefined ||
-    series.stockValues !== undefined ||
-    Object.values(series.stockValues ?? {}).some((values) => values.some((value) => value !== null))
+    stockValues !== undefined
   );
 }
 

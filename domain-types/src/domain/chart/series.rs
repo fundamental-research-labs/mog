@@ -55,6 +55,7 @@ pub enum ChartSeriesProjectionDiagnosticReasonData {
     WorksheetHiddenByPlotVisibleOnly,
     StyleResolvedNoFillOrLine,
     StaleMaterializedRange,
+    ProjectedIntoStockGlyph,
 }
 
 /// Diagnostic explaining why a source series was altered, dropped, or not renderable.

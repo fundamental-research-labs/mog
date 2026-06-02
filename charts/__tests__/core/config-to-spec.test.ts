@@ -1430,17 +1430,18 @@ describe('formatTickValue - imported Excel number formats', () => {
 // =============================================================================
 
 describe('buildMark - pie/doughnut', () => {
-  it('should set padAngle from pieSlice.explodeOffset', () => {
+  it('should set radial explosion metadata from pieSlice.explodeOffset', () => {
     const config = makeConfig({
       type: 'pie',
       pieSlice: { explodeOffset: 0.1 },
     });
     const mark = buildMark(config) as MarkSpec;
     expect(mark.type).toBe('arc');
-    expect(mark.padAngle).toBe(0.1);
+    expect(mark._explosionOffset).toBe(0.1);
+    expect(mark._explodeAll).toBe(true);
   });
 
-  it('should set innerRadius and padAngle for doughnut with pieSlice', () => {
+  it('should set innerRadius and radial explosion metadata for doughnut with pieSlice', () => {
     const config = makeConfig({
       type: 'doughnut',
       pieSlice: { explodeOffset: 0.05 },
@@ -1448,7 +1449,8 @@ describe('buildMark - pie/doughnut', () => {
     const mark = buildMark(config) as MarkSpec;
     expect(mark.type).toBe('arc');
     expect(mark.innerRadius).toBe(0.5);
-    expect(mark.padAngle).toBe(0.05);
+    expect(mark._explosionOffset).toBe(0.05);
+    expect(mark._explodeAll).toBe(true);
   });
 });
 

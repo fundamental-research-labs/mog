@@ -33,6 +33,7 @@ describe('resolved spec plot snapshot helpers', () => {
 
     expect(snapshotBarGeometry(config, chartData, layout)).toEqual([
       {
+        groupKey: 'bar:0:vertical:clustered',
         orientation: 'vertical',
         grouping: 'clustered',
         sourceGapWidth: 100,
@@ -42,6 +43,10 @@ describe('resolved spec plot snapshot helpers', () => {
         gapWidthClamped: undefined,
         overlapClamped: undefined,
         seriesIndices: [0],
+        yAxisIndex: undefined,
+        seriesSlotOrder: undefined,
+        categoryAxisLength: 300,
+        visibleCategoryCount: 3,
         categoryPitch: 100,
         barSize: 50,
         offsets: [{ seriesIndex: 0, offset: 25 }],

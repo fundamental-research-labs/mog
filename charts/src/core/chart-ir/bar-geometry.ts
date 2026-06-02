@@ -262,7 +262,7 @@ export function resolveBarGeometryGroups(
     const series = chartData.series[index];
     const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
     const seriesType = comboSeriesTypeForBarGeometry(config, series, seriesConfig, index);
-    if (!isBarLikeChartType(seriesType)) continue;
+    if (seriesType === undefined || !isBarLikeChartType(seriesType)) continue;
     if (
       options.includeSeries &&
       !options.includeSeries({ series, seriesConfig, index, seriesType })

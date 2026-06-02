@@ -100,21 +100,37 @@ describe('Node chart image exporter mark serialization', () => {
     });
   });
 
-  it('rejects chart symbol shapes unsupported by the native raster backend', async () => {
-    const marks = [
-      {
-        type: 'symbol',
-        x: 5,
-        y: 6,
-        shape: 'star',
-        size: 36,
-        style: { fill: '#123456' },
-      },
-    ] satisfies ChartMark[];
+  it('serializes every chart symbol shape supported by the native raster backend', async () => {
+    let request: unknown;
+    const shapes = [
+      'circle',
+      'square',
+      'diamond',
+      'cross',
+      'x',
+      'star',
+      'dash',
+      'triangle-up',
+      'triangle-down',
+    ] as const;
+    const marks = shapes.map((shape, index) => ({
+      type: 'symbol',
+      x: 5 + index,
+      y: 6 + index,
+      shape,
+      size: 36,
+      style: { fill: '#123456' },
+    })) satisfies ChartMark[];
 
     const exporter = createNodeChartImageExporterFactory({
-      render_chart_marks_image: () => {
-        throw new Error('native backend should not be called');
+      render_chart_marks_image: (requestJson) => {
+        request = JSON.parse(requestJson);
+        return {
+          bytes: new Uint8Array([2]),
+          format: 'png',
+          width: 20,
+          height: 10,
+        };
       },
     })(chartBridgeReturning(marks));
 
@@ -126,7 +142,19 @@ describe('Node chart image exporter mark serialization', () => {
         pixelRatio: 1,
         backgroundColor: '#ffffff',
       }),
-    ).rejects.toThrow('unsupported symbol shape "star"');
+    ).resolves.toBe('data:image/png;base64,Ag==');
+
+    expect(request).toMatchObject({
+      version: 1,
+      marks: shapes.map((shape, index) => ({
+        type: 'symbol',
+        x: 5 + index,
+        y: 6 + index,
+        shape,
+        size: 36,
+        style: { fill: '#123456' },
+      })),
+    });
   });
 });
 

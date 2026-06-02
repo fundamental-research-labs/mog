@@ -1160,7 +1160,7 @@ export interface ChartSeriesProjectionDiagnosticData {
   message?: string;
 }
 
-export type ChartSeriesProjectionDiagnosticReasonData = "unresolvedPivotSource" | "unsupportedPivotFeature" | "hiddenDataField" | "allItemsFiltered" | "noValueData" | "worksheetHiddenByPlotVisibleOnly" | "styleResolvedNoFillOrLine" | "staleMaterializedRange";
+export type ChartSeriesProjectionDiagnosticReasonData = "unresolvedPivotSource" | "unsupportedPivotFeature" | "hiddenDataField" | "allItemsFiltered" | "noValueData" | "worksheetHiddenByPlotVisibleOnly" | "styleResolvedNoFillOrLine" | "staleMaterializedRange" | "projectedIntoStockGlyph";
 
 export type ChartSeriesStockRoleData = "volume" | "open" | "high" | "low" | "close";
 

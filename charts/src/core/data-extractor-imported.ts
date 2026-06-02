@@ -23,6 +23,10 @@ import {
   selectedCategoryLabelLevel,
 } from './data-extractor-cache';
 import {
+  requiredStockPriceRolesForSubtype,
+  stockSubTypeFromRolePresence,
+} from './stock-semantics';
+import {
   HIDDEN_CHART_CELL,
   type CellDataAccessor,
   type ChartCellValue,
@@ -417,11 +421,11 @@ function extractStockChartDataFromSeriesRefs(
         ? undefined
         : importedDimensionForSeries(accessor, seriesConfigs[roles.volume]),
   };
+  const stockSubType = stockSubTypeFromRolePresence(roles);
   if (
-    roleDimensions.high.values.length === 0 ||
-    roleDimensions.low.values.length === 0 ||
-    roleDimensions.close.values.length === 0 ||
-    (roles.open !== undefined && roleDimensions.open?.values.length === 0)
+    requiredStockPriceRolesForSubtype(stockSubType).some((role) =>
+      roleDimensionIsEmpty(roleDimensions, role),
+    )
   ) {
     return null;
   }
@@ -498,6 +502,14 @@ function extractStockChartDataFromSeriesRefs(
       },
     ],
   };
+}
+
+function roleDimensionIsEmpty(
+  roleDimensions: StockRoleDimensions,
+  role: StockRole,
+): boolean {
+  const dimension = roleDimensions[role];
+  return !dimension || dimension.values.length === 0;
 }
 
 export function extractChartDataFromSeriesRefs(

@@ -1,6 +1,10 @@
 import type { ChartConfig, ChartData, ChartDataPoint, SeriesConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { seriesConfigForDataSeries } from '../series-identity';
+import {
+  isRenderableStockPoint,
+  stockSubTypeFromConfig,
+} from '../stock-semantics';
 
 export function isQuantitativeXSeries(
   config: ChartConfig | undefined,
@@ -45,7 +49,12 @@ export function shouldIncludePointInRows(
   seriesConfig?: SeriesConfig,
 ): boolean {
   if (point.valueState === 'hidden') return false;
-  if (config?.type === 'stock' && !isRenderableStockPoint(point, config)) return false;
+  if (
+    config?.type === 'stock' &&
+    !isRenderableStockPoint(point, stockSubTypeFromConfig(config))
+  ) {
+    return false;
+  }
   const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
   if (isQuantitativeX && toFiniteNumber(point.x) === undefined) return false;
   if (isBubbleSeries(config, seriesConfig)) {
@@ -101,19 +110,4 @@ export function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConf
 
 function isScatterLikeChart(config?: ChartConfig): boolean {
   return config?.type === 'scatter' || config?.type === 'bubble';
-}
-
-function isRenderableStockPoint(point: ChartDataPoint, config: ChartConfig): boolean {
-  const hasHighLowClose =
-    toFiniteNumber(point.high) !== undefined &&
-    toFiniteNumber(point.low) !== undefined &&
-    toFiniteNumber(point.close) !== undefined;
-  if (hasHighLowClose) {
-    return (
-      (config.subType !== 'ohlc' && config.subType !== 'volume-ohlc') ||
-      toFiniteNumber(point.open) !== undefined
-    );
-  }
-
-  return toFiniteNumber(point.open) !== undefined && toFiniteNumber(point.close) !== undefined;
 }

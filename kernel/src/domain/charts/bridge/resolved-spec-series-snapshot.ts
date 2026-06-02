@@ -6,7 +6,12 @@ import {
   seriesSourceKey,
   shouldProjectStockSeries,
   resolveSeriesColorAuthority,
+  stockRenderedPointProjection,
+  stockRenderedPointProjectionFromRoleValues,
+  stockRoleOrder,
   stockRolePlan,
+  stockSubTypeFromConfig,
+  stockSubTypeFromRolePresence,
   type ChartConfig,
   type ChartData,
   type ChartDataPoint,
@@ -126,7 +131,6 @@ export function snapshotSeries(
     }),
   };
   const name = snapshotSeriesName(series, configured, sourceSeriesIndex);
-  const renderedPointCount = values.filter((value) => value !== null).length;
   const effectiveType = series.type ?? configured?.type;
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
   const colorAuthority = resolveSeriesColorAuthority({
@@ -142,6 +146,14 @@ export function snapshotSeries(
     configured,
     stockValues,
   );
+  const stockPointProjection = includeStockValues
+    ? stockRenderedPointProjection(
+        Array.from({ length }, (_, pointIndex) => series.data[pointIndex]),
+        stockSubTypeFromConfig(config, { categories: [], series: [series] }),
+      )
+    : undefined;
+  const renderedPointCount =
+    stockPointProjection?.renderedPointCount ?? values.filter((value) => value !== null).length;
 
   return {
     index,
@@ -402,6 +414,7 @@ function stockProjectionContext(
       ? stockRolePlan(seriesConfigs)
       : null;
   if (!roles) return { stockRoleBySourceKey };
+  const stockSubType = stockSubTypeFromRolePresence(roles);
 
   const renderedSeries = series.find(isRenderedStockSeries) ?? series[0];
   const projectedRoleMappings: ProjectedRoleMappingSnapshot[] = [];
@@ -431,6 +444,12 @@ function stockProjectionContext(
           renderedSeriesIndex: renderedSeries.index,
           renderedSourceSeriesKey: renderedSeries.sourceSeriesKey,
           roles: projectedRoleMappings,
+          ...stockRenderedPointProjectionFromRoleValues(
+            renderedSeries.stockValues ?? {},
+            stockSubType,
+            renderedSeries.pointCount,
+          ),
+          categorySourceSeriesKey: renderedSeries.sourceSeriesKey,
         }
       : undefined;
 
@@ -449,10 +468,6 @@ function isRenderedStockSeries(series: ResolvedSeriesSnapshot): boolean {
     series.stockRole !== undefined ||
     stockValues !== undefined
   );
-}
-
-function stockRoleOrder(): ChartSeriesStockRole[] {
-  return ['volume', 'open', 'high', 'low', 'close'];
 }
 
 function defaultSourceSeriesName(series: ChartSeriesConfig, sourceSeriesIndex: number): string {

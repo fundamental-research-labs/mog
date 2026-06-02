@@ -19,6 +19,7 @@ import {
 } from './chart-family-support';
 import { snapshotBarGeometry, snapshotCartesianGeometry } from './resolved-spec-plot-snapshot';
 import { hashJson, snapshotScalar } from './resolved-spec-primitives';
+import { snapshotRadarProjection } from './resolved-spec-radar-projection';
 import {
   chartGapDepth,
   snapshotPackageAuthority,
@@ -114,6 +115,13 @@ export function buildResolvedChartSpecSnapshot(input: {
       ),
     }),
   ]);
+  const radarProjection = snapshotRadarProjection({
+    config: input.config,
+    chartData: input.chartData,
+    layout: input.layout ?? null,
+    chartArea: input.chartArea,
+    renderFrame: input.renderFrame,
+  });
 
   return {
     schemaVersion: 1,
@@ -177,6 +185,7 @@ export function buildResolvedChartSpecSnapshot(input: {
         overlap: input.config.overlap,
         barGeometry: snapshotBarGeometry(input.config, input.chartData, input.layout ?? null),
         cartesianGeometry,
+        radarProjection,
       },
       ranges: {
         dataRange: snapshotRange(input.resolvedRanges.dataRange),

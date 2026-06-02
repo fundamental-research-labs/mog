@@ -1,5 +1,6 @@
 import type { DataRow, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
+import { stockSubTypeFromConfig } from '../../stock-semantics';
 import { CANDLESTICK_BAR_WIDTH } from '../constants';
 import {
   CATEGORY_FIELD,
@@ -23,11 +24,11 @@ import {
  */
 export function buildStockLayers(
   config: ChartConfig,
-  _data: ChartData,
+  data: ChartData,
   rows: DataRow[],
 ): UnitSpec[] {
   const layers: UnitSpec[] = [];
-  const subType = stockSubType(config, rows);
+  const subType = stockSubTypeFromConfig(config, data);
   const isHLC = subType === 'hlc' || subType === 'volume-hlc';
   const hasVolume = isVolumeStockSubType(subType);
   const priceScale = stockPriceScale(rows);

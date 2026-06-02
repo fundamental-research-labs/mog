@@ -1,4 +1,9 @@
-import type { ChartConfig, ChartData } from '@mog/charts';
+import {
+  expectedStockRolesForSubtype,
+  stockSubTypeFromRolePresence,
+  type ChartConfig,
+  type ChartData,
+} from '@mog/charts';
 import type {
   ChartFamilySupportSnapshot,
   ResolvedChartSpecSnapshot,
@@ -88,6 +93,10 @@ export function buildChartFamilySupportSnapshot(input: {
       reason: 'radarLayoutFidelity',
       diagnostics: [
         'radar layout is rendered with Mog radial geometry and may differ from Excel occupancy',
+        [
+          'radar polar projection metadata is exposed for category-angle,',
+          'value-radius, fill, and marker review',
+        ].join(' '),
       ],
       renderedAs: 'radar',
     };
@@ -169,12 +178,16 @@ function stockFamilySupport(input: {
   const missingLegendRoles = legendRequiresSourceRoles
     ? expectedRoles.filter((role) => !visibleLegendRoles.has(role))
     : [];
+  const renderedPointProjectionComplete = hasCompleteStockRenderedPointProjection(
+    input.seriesProjection.stockRenderProjection,
+  );
   const exact =
     expectedRoles.length > 0 &&
     missingSourceRoles.length === 0 &&
     missingProjectedRoles.length === 0 &&
     missingLegendRoles.length === 0 &&
-    input.seriesProjection.stockRenderProjection !== undefined;
+    input.seriesProjection.stockRenderProjection !== undefined &&
+    renderedPointProjectionComplete;
 
   return {
     schemaVersion: 1,
@@ -190,6 +203,7 @@ function stockFamilySupport(input: {
             missingProjectedRoles,
             missingLegendRoles,
             input.seriesProjection.stockRenderProjection === undefined,
+            !renderedPointProjectionComplete,
           ),
         ],
     renderedAs: 'stock',
@@ -235,13 +249,10 @@ function expectedStockRoles(
 ): ChartSeriesStockRole[] {
   switch (config.subType) {
     case 'volume-ohlc':
-      return ['volume', 'open', 'high', 'low', 'close'];
     case 'volume-hlc':
-      return ['volume', 'high', 'low', 'close'];
     case 'ohlc':
-      return ['open', 'high', 'low', 'close'];
     case 'hlc':
-      return ['high', 'low', 'close'];
+      return expectedStockRolesForSubtype(config.subType);
     default:
       break;
   }
@@ -251,13 +262,16 @@ function expectedStockRoles(
       .map((series) => series.stockRole)
       .filter((role): role is ChartSeriesStockRole => role !== undefined),
   );
-  const inferred: ChartSeriesStockRole[] = [];
-  if (roles.has('volume')) inferred.push('volume');
-  if (roles.has('open')) inferred.push('open');
-  if (roles.has('high')) inferred.push('high');
-  if (roles.has('low')) inferred.push('low');
-  if (roles.has('close')) inferred.push('close');
-  return inferred.length > 0 ? inferred : ['high', 'low', 'close'];
+  if (roles.size === 0) return expectedStockRolesForSubtype('hlc');
+  return expectedStockRolesForSubtype(
+    stockSubTypeFromRolePresence({
+      ...(roles.has('volume') ? { volume: true } : {}),
+      ...(roles.has('open') ? { open: true } : {}),
+      ...(roles.has('high') ? { high: true } : {}),
+      ...(roles.has('low') ? { low: true } : {}),
+      ...(roles.has('close') ? { close: true } : {}),
+    }),
+  );
 }
 
 function stockProjectionDiagnostic(
@@ -265,6 +279,7 @@ function stockProjectionDiagnostic(
   missingProjectedRoles: readonly ChartSeriesStockRole[],
   missingLegendRoles: readonly ChartSeriesStockRole[],
   missingRenderProjection: boolean,
+  missingRenderedPointProjection: boolean,
 ): string {
   const details: string[] = [];
   if (missingSourceRoles.length > 0) {
@@ -277,9 +292,64 @@ function stockProjectionDiagnostic(
     details.push(`missing source legend roles: ${missingLegendRoles.join(', ')}`);
   }
   if (missingRenderProjection) details.push('missing stock glyph render projection');
+  if (missingRenderedPointProjection) {
+    details.push('missing stock rendered-point projection');
+  }
   return details.length > 0
     ? `stock source projection is incomplete (${details.join('; ')})`
     : 'stock source projection is incomplete';
+}
+
+function hasCompleteStockRenderedPointProjection(
+  projection: SeriesProjectionSnapshot['stockRenderProjection'],
+): boolean {
+  if (!projection) return false;
+  const sourcePointCount = projection.sourcePointCount;
+  const renderedPointCount = projection.renderedPointCount;
+  const trailingBlankPointCount = projection.trailingBlankPointCount;
+  if (
+    typeof sourcePointCount !== 'number' ||
+    !Number.isInteger(sourcePointCount) ||
+    sourcePointCount < 0
+  ) {
+    return false;
+  }
+  if (
+    typeof renderedPointCount !== 'number' ||
+    !Number.isInteger(renderedPointCount) ||
+    renderedPointCount < 0
+  ) {
+    return false;
+  }
+  if (
+    typeof trailingBlankPointCount !== 'number' ||
+    !Number.isInteger(trailingBlankPointCount) ||
+    trailingBlankPointCount < 0 ||
+    trailingBlankPointCount > sourcePointCount
+  ) {
+    return false;
+  }
+  if (!Array.isArray(projection.renderedPointIndexes)) return false;
+  if (!Array.isArray(projection.droppedPointIndexes)) return false;
+  if (projection.renderedPointIndexes.length !== renderedPointCount) return false;
+  if (
+    projection.renderedPointIndexes.length + projection.droppedPointIndexes.length !==
+    sourcePointCount
+  ) {
+    return false;
+  }
+  return [...projection.renderedPointIndexes, ...projection.droppedPointIndexes].every(
+    (pointIndex) => isProjectionPointIndex(pointIndex, sourcePointCount),
+  );
+}
+
+function isProjectionPointIndex(pointIndex: unknown, sourcePointCount: number): boolean {
+  return (
+    Number.isInteger(pointIndex) &&
+    typeof pointIndex === 'number' &&
+    pointIndex >= 0 &&
+    pointIndex < sourcePointCount
+  );
 }
 
 function chartFamily(config: ChartConfig): string {

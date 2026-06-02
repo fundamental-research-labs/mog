@@ -1424,6 +1424,62 @@ export interface ResolvedChartStockRenderProjectionSnapshot {
   renderedSeriesIndex: number;
   renderedSourceSeriesKey: string;
   roles: ResolvedChartProjectedRoleMappingSnapshot[];
+  sourcePointCount?: number;
+  renderedPointCount?: number;
+  renderedPointIndexes?: number[];
+  droppedPointIndexes?: number[];
+  trailingBlankPointCount?: number;
+  categorySourceSeriesKey?: string;
+}
+
+export interface ResolvedChartRadarPolarPointSnapshot {
+  pointIndex: number;
+  category: string | number | null;
+  value: number;
+  angle: number;
+  radius: number;
+  radiusRatio: number;
+  x: number;
+  y: number;
+}
+
+export interface ResolvedChartRadarPolarSeriesSnapshot {
+  seriesIndex: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  name: string;
+  pointCount: number;
+  renderedPointCount: number;
+  blankPointIndexes: number[];
+  closed: boolean;
+  filled: boolean;
+  fillOpacity?: number;
+  markers: boolean;
+  markerShape?: string;
+  points: ResolvedChartRadarPolarPointSnapshot[];
+}
+
+export interface ResolvedChartRadarProjectionSnapshot {
+  projectionType: 'radarPolar';
+  categoryOrder: Array<string | number | null>;
+  categoryCount: number;
+  startAngle: number;
+  clockwise: boolean;
+  valueDomain: [number, number];
+  center: {
+    x: number;
+    y: number;
+  };
+  radius: {
+    pixels: number;
+    chartX: number;
+    chartY: number;
+  };
+  blankPolicy: 'skip' | 'zero';
+  filled: boolean;
+  fillOpacity?: number;
+  markers: boolean;
+  series: ResolvedChartRadarPolarSeriesSnapshot[];
 }
 
 export interface ResolvedChartSeriesProjectionSnapshot {
@@ -1764,6 +1820,7 @@ export interface ResolvedChartSpecSnapshot {
       overlap?: number;
       barGeometry?: ResolvedChartBarGeometrySnapshot[];
       cartesianGeometry?: ResolvedChartCartesianGeometrySnapshot;
+      radarProjection?: ResolvedChartRadarProjectionSnapshot;
     };
     ranges: {
       dataRange: ChartRangeReferenceSnapshot | null;

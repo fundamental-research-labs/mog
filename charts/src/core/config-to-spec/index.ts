@@ -66,7 +66,7 @@ export {
  * LOSSLESS: maps every ChartConfig field to the appropriate ChartSpec construct.
  */
 export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
-  const renderConfig = shouldRenderStockChart(config, data) ? asStockConfig(config) : config;
+  const renderConfig = shouldRenderStockChart(config, data) ? asStockConfig(config, data) : config;
 
   // 1. Convert data
   const rows = chartDataToRows(data, renderConfig);

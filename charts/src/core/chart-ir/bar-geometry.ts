@@ -118,7 +118,7 @@ export function isBarLikeChartType(type: ChartType | string | undefined): boolea
 
 export function barOrientationForChartType(
   type: ChartType | string | undefined,
-): BarGeometrySpec['orientation'] {
+): NonNullable<BarGeometrySpec['orientation']> {
   return HORIZONTAL_BAR_TYPES.has(String(type)) ? 'horizontal' : 'vertical';
 }
 

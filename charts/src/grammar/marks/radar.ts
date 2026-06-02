@@ -5,6 +5,14 @@ import {
   MARKER_SIZE_FIELD,
   MARKER_STROKE_FIELD,
 } from '../../core/chart-ir/fields';
+import {
+  RADAR_LABEL_GAP,
+  radarGeometryForPlotArea,
+  radarPointAt,
+  radarRadiusForValue,
+  type RadarGeometry,
+  type RadarValueDomain,
+} from '../../core/radar-semantics';
 import type { PathMark, SymbolMark, SymbolShape, TextMark } from '../../primitives/types';
 import { formatTickValue } from '../axis-generator';
 import type { ScaleMap } from '../encoding-resolver';
@@ -25,8 +33,6 @@ const AXIS_COLOR = '#bfbfbf';
 const LABEL_COLOR = '#444444';
 const VALUE_LABEL_COLOR = '#666666';
 const DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
-const RADAR_PLOT_INSET = 8;
-const RADAR_LABEL_GAP = 8;
 
 export function generateRadarMarks(
   markSpec: MarkSpec,
@@ -88,14 +94,8 @@ export function generateRadarMarks(
   return marks;
 }
 
-function radarGeometry(layout: Layout): { cx: number; cy: number; radius: number } {
-  const { plotArea } = layout;
-  const radius = Math.max(0, Math.min(plotArea.width, plotArea.height) / 2 - RADAR_PLOT_INSET);
-  return {
-    cx: plotArea.x + plotArea.width / 2,
-    cy: plotArea.y + plotArea.height / 2,
-    radius,
-  };
+function radarGeometry(layout: Layout): RadarGeometry {
+  return radarGeometryForPlotArea(layout.plotArea);
 }
 
 function categoryDomain(
@@ -124,7 +124,7 @@ function numericDomain(
   yScale: NonNullable<ScaleMap['y']>,
   data: DataRow[],
   field: string | undefined,
-): { min: number; max: number } | undefined {
+): RadarValueDomain | undefined {
   const rawDomain = yScale.domain?.();
   const domain = rawDomain?.filter((value): value is number => isFiniteNumber(value));
   let min = domain?.[0];
@@ -147,8 +147,8 @@ function numericDomain(
 
 function generateGridMarks(
   categories: string[],
-  geometry: { cx: number; cy: number; radius: number },
-  valueDomain: { min: number; max: number },
+  geometry: RadarGeometry,
+  valueDomain: RadarValueDomain,
   yScale: NonNullable<ScaleMap['y']>,
   format: string | undefined,
 ): Array<PathMark | TextMark> {
@@ -156,14 +156,14 @@ function generateGridMarks(
   const ticks = radarTicks(yScale, valueDomain);
 
   for (const tick of ticks) {
-    const radius = radiusForValue(tick, valueDomain, geometry.radius);
+    const radius = radarRadiusForValue(tick, valueDomain, geometry.radius);
     if (radius <= 0 || radius > geometry.radius + 0.5) continue;
     marks.push({
       type: 'path',
       x: 0,
       y: 0,
       path: polygonPath(
-        categories.map((_, index) => pointAt(index, categories.length, geometry, radius)),
+        categories.map((_, index) => radarPointAt(index, categories.length, geometry, radius)),
       ),
       datum: { role: 'radar-grid', value: tick },
       style: {
@@ -187,7 +187,7 @@ function generateGridMarks(
   }
 
   for (let index = 0; index < categories.length; index += 1) {
-    const outer = pointAt(index, categories.length, geometry, geometry.radius);
+    const outer = radarPointAt(index, categories.length, geometry, geometry.radius);
     marks.push({
       type: 'path',
       x: 0,
@@ -206,10 +206,15 @@ function generateGridMarks(
 
 function generateCategoryLabelMarks(
   categories: string[],
-  geometry: { cx: number; cy: number; radius: number },
+  geometry: RadarGeometry,
 ): TextMark[] {
   return categories.map((category, index) => {
-    const point = pointAt(index, categories.length, geometry, geometry.radius + RADAR_LABEL_GAP);
+    const point = radarPointAt(
+      index,
+      categories.length,
+      geometry,
+      geometry.radius + RADAR_LABEL_GAP,
+    );
     const cos = Math.cos(point.angle);
     const sin = Math.sin(point.angle);
     return {
@@ -231,8 +236,8 @@ function radarPointsForGroup(input: {
   groupData: DataRow[];
   categories: string[];
   categoryIndex: Map<string, number>;
-  geometry: { cx: number; cy: number; radius: number };
-  valueDomain: { min: number; max: number };
+  geometry: RadarGeometry;
+  valueDomain: RadarValueDomain;
   encodings: ReturnType<typeof resolveEncodings>;
 }): RadarPoint[] {
   const pointsByIndex = new Map<number, RadarPoint>();
@@ -246,8 +251,8 @@ function radarPointsForGroup(input: {
     const value = toFiniteNumber(input.encodings.y?.accessor(datum));
     if (value === undefined) continue;
 
-    const radius = radiusForValue(value, input.valueDomain, input.geometry.radius);
-    const point = pointAt(index, input.categories.length, input.geometry, radius);
+    const radius = radarRadiusForValue(value, input.valueDomain, input.geometry.radius);
+    const point = radarPointAt(index, input.categories.length, input.geometry, radius);
     pointsByIndex.set(index, {
       ...point,
       radius,
@@ -310,7 +315,7 @@ function seriesPointMarks(markSpec: MarkSpec, points: RadarPoint[], color: strin
 
 function radarTicks(
   yScale: NonNullable<ScaleMap['y']>,
-  valueDomain: { min: number; max: number },
+  valueDomain: RadarValueDomain,
 ): number[] {
   const rawTicks = yScale.ticks?.(5) ?? [];
   const ticks = rawTicks
@@ -322,31 +327,6 @@ function radarTicks(
 
   const step = (valueDomain.max - valueDomain.min) / 4;
   return [1, 2, 3, 4].map((index) => valueDomain.min + step * index);
-}
-
-function radiusForValue(
-  value: number,
-  domain: { min: number; max: number },
-  maxRadius: number,
-): number {
-  const span = domain.max - domain.min;
-  if (span <= 0) return 0;
-  const t = (value - domain.min) / span;
-  return Math.max(0, Math.min(maxRadius, t * maxRadius));
-}
-
-function pointAt(
-  index: number,
-  count: number,
-  geometry: { cx: number; cy: number },
-  radius: number,
-): { x: number; y: number; angle: number } {
-  const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
-  return {
-    x: geometry.cx + Math.cos(angle) * radius,
-    y: geometry.cy + Math.sin(angle) * radius,
-    angle,
-  };
 }
 
 function polygonPath(points: Array<{ x: number; y: number }>): string {

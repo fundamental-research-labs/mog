@@ -53,6 +53,18 @@ export {
   type ExcelCartesianGeometryPlan,
 } from './config-to-spec/excel-cartesian-geometry';
 export { resolveSeriesColorAuthority } from './config-to-spec/color-authority';
+export {
+  RADAR_LABEL_GAP,
+  RADAR_PLOT_INSET,
+  RADAR_START_ANGLE,
+  radarGeometryForPlotArea,
+  radarPointAt,
+  radarRadiusForValue,
+  radarValueDomainFromValues,
+  type RadarGeometry,
+  type RadarPolarPoint,
+  type RadarValueDomain,
+} from './radar-semantics';
 export * from './style-resolver';
 export {
   rustToTsChartType,
@@ -86,8 +98,18 @@ export {
 } from './series-identity';
 export {
   asStockConfig,
+  expectedStockRolesForSubtype,
   hasStockRoleSeries,
   hasStockSubtype,
+  isRenderableStockPoint,
+  requiredStockPriceRolesForSubtype,
   shouldProjectStockSeries,
   shouldRenderStockChart,
+  stockRenderedPointProjection,
+  stockRenderedPointProjectionFromRoleValues,
+  stockRoleOrder,
+  stockSubTypeFromConfig,
+  stockSubTypeFromRolePresence,
+  type StockRenderedPointProjection,
+  type StockPointValue,
 } from './stock-semantics';

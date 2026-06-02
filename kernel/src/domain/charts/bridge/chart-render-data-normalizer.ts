@@ -1,4 +1,4 @@
-import type { ChartData, ChartDataPoint } from '@mog/charts';
+import { seriesConfigForDataSeries, type ChartData, type ChartDataPoint } from '@mog/charts';
 import type { ChartConfig } from '@mog-sdk/contracts/data/charts';
 
 export {
@@ -47,6 +47,8 @@ type ImportedPointCachePoint = {
   value?: unknown;
 };
 
+type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
+
 function importedCategoryCache(
   series: NonNullable<ChartConfig['series']>[number] | undefined,
 ): ImportedPointCache | undefined {
@@ -85,21 +87,55 @@ function importedCategoryCacheValue(
   return Number.isFinite(numeric) && String(value).trim() !== '' ? numeric : String(value);
 }
 
+function isQuantitativeXChartType(type: string | undefined): boolean {
+  return type === 'scatter' || type === 'bubble' || type === 'bubble3DEffect';
+}
+
+function isQuantitativeXSeries(
+  config: ChartConfig,
+  series: ChartSeriesConfig | undefined,
+): boolean {
+  if (series?.xRole === 'quantitative') return true;
+  if (series?.xRole === 'category') return false;
+  return isQuantitativeXChartType(series?.type ?? config.type);
+}
+
+function isImportedCategoryCarrier(series: ChartSeriesConfig | undefined): boolean {
+  return Boolean(series?.categories || importedCategoryCache(series));
+}
+
+function categoricalCategorySeriesIndex(data: ChartData, config: ChartConfig): number {
+  const seriesConfigs = config.series ?? [];
+  return data.series.findIndex((series, index) => {
+    const seriesConfig = seriesConfigForDataSeries(series, seriesConfigs, index);
+    return isImportedCategoryCarrier(seriesConfig) && !isQuantitativeXSeries(config, seriesConfig);
+  });
+}
+
 export function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): ChartData {
-  const categorySeriesIndex =
-    config.series?.findIndex(
-      (series) => Boolean(series.categories) || importedCategoryCache(series),
-    ) ?? -1;
-  const seriesConfig = categorySeriesIndex >= 0 ? config.series?.[categorySeriesIndex] : undefined;
+  const seriesConfigs = config.series ?? [];
+  const categorySeriesIndex = categoricalCategorySeriesIndex(data, config);
+  const categoryDataSeries =
+    categorySeriesIndex >= 0 ? data.series[categorySeriesIndex] : undefined;
+  const seriesConfig =
+    categoryDataSeries && categorySeriesIndex >= 0
+      ? seriesConfigForDataSeries(categoryDataSeries, seriesConfigs, categorySeriesIndex)
+      : undefined;
   if (!seriesConfig) return data;
 
   const categoryCache = importedCategoryCache(seriesConfig);
   const categoryPointCount = importedCachePointCount(categoryCache);
   if (!categoryCache && !seriesConfig.categories) return data;
 
+  const categoricalSeriesIndexes = data.series.flatMap((series, index) => {
+    const itemConfig = seriesConfigForDataSeries(series, seriesConfigs, index);
+    return isQuantitativeXSeries(config, itemConfig) ? [] : [index];
+  });
+  const hasQuantitativeSeries = categoricalSeriesIndexes.length < data.series.length;
   const maxLength = Math.max(
-    data.categories.length,
-    ...data.series.map((series) => series.data.length),
+    hasQuantitativeSeries ? 0 : data.categories.length,
+    categoryPointCount ?? 0,
+    ...categoricalSeriesIndexes.map((index) => data.series[index].data.length),
   );
   if (maxLength <= 0) return data;
 
@@ -115,11 +151,15 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
     const isBeyondCachedDomain =
       categoryPointCount !== undefined &&
       pointIndex >= categoryPointCount &&
-      data.series.every((series) => isBlankChartPoint(series.data[pointIndex]));
+      categoricalSeriesIndexes.every((index) =>
+        isBlankChartPoint(data.series[index].data[pointIndex]),
+      );
     const configuredSeriesCategory = data.series[categorySeriesIndex]?.data[pointIndex]?.x;
     const fallbackCategory =
-      data.categories[pointIndex] ??
-      data.series.find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
+      (hasQuantitativeSeries ? undefined : data.categories[pointIndex]) ??
+      categoricalSeriesIndexes
+        .map((index) => data.series[index])
+        .find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
       '';
     const current = seriesConfig.categories
       ? (configuredSeriesCategory ?? fallbackCategory)
@@ -131,15 +171,20 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
     if (next !== data.categories[pointIndex]) changed = true;
   }
 
-  const series = data.series.map((item) => ({
-    ...item,
-    data: item.data.map((point, pointIndex) => {
-      const category = categories[pointIndex];
-      if (!point || point.x === category) return point;
-      changed = true;
-      return { ...point, x: category, name: String(category) };
-    }),
-  }));
+  const series = data.series.map((item, seriesIndex) => {
+    const itemConfig = seriesConfigForDataSeries(item, seriesConfigs, seriesIndex);
+    if (isQuantitativeXSeries(config, itemConfig)) return item;
+
+    return {
+      ...item,
+      data: item.data.map((point, pointIndex) => {
+        const category = categories[pointIndex];
+        if (!point || point.x === category) return point;
+        changed = true;
+        return { ...point, x: category, name: String(category) };
+      }),
+    };
+  });
 
   return changed ? { ...data, categories, series } : data;
 }

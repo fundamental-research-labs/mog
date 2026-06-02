@@ -15,6 +15,71 @@ use super::cse_clear::{
     push_resolved_clear_target,
 };
 
+fn data_table_body_intersects_range(
+    region: &snapshot_types::DataTableRegionDef,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> bool {
+    start_row <= region.end_row
+        && end_row >= region.start_row
+        && start_col <= region.end_col
+        && end_col >= region.start_col
+}
+
+fn data_table_anchor_rect_covered_by_range(
+    region: &snapshot_types::DataTableRegionDef,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> bool {
+    start_row <= region.start_row.saturating_sub(1)
+        && start_col <= region.start_col.saturating_sub(1)
+        && end_row >= region.end_row
+        && end_col >= region.end_col
+}
+
+fn remove_fully_covered_data_tables_for_clear(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Result<(), ComputeError> {
+    let sheet_uuid = sheet_id.to_uuid_string();
+    for region in mirror.all_data_table_regions() {
+        if region.sheet != sheet_uuid
+            || !data_table_body_intersects_range(region, start_row, start_col, end_row, end_col)
+        {
+            continue;
+        }
+        if !data_table_anchor_rect_covered_by_range(region, start_row, start_col, end_row, end_col)
+        {
+            return Err(ComputeError::PartialArrayWrite {
+                sheet_id: sheet_uuid,
+                row: start_row.max(region.start_row),
+                col: start_col.max(region.start_col),
+                anchor_row: region.start_row,
+                anchor_col: region.start_col,
+            });
+        }
+    }
+
+    let removed = mirror.remove_data_table_regions_covered_by_range(
+        sheet_id, start_row, start_col, end_row, end_col,
+    );
+    crate::storage::workbook::data_tables::remove_data_table_regions(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+        &removed,
+    );
+    Ok(())
+}
+
 pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
@@ -34,6 +99,9 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     //    number of materialized cells, not to the selected area.
     let mut resolved = cse_anchor_clear_targets_for_range(
         mirror, sheet_id, start_row, start_col, end_row, end_col,
+    )?;
+    remove_fully_covered_data_tables_for_clear(
+        stores, mirror, &sheet_id, start_row, start_col, end_row, end_col,
     )?;
     let mut seen_cell_ids: HashSet<CellId> = resolved.iter().map(|(_, _, id)| *id).collect();
     for (row, col, cell_id) in collect_materialized_cells_in_range(
@@ -214,6 +282,9 @@ pub(in crate::storage::engine) fn mutation_clear_range(
             cell_id,
         );
     }
+    remove_fully_covered_data_tables_for_clear(
+        stores, mirror, &sheet_id, start_row, start_col, end_row, end_col,
+    )?;
 
     for (row, col, cell_id) in collect_materialized_cells_in_range(
         stores, &sheet_id, start_row, start_col, end_row, end_col,

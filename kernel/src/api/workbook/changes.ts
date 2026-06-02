@@ -119,6 +119,7 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
       type: 'modified' as const,
       oldValue: record.oldValue,
       newValue: record.newValue,
+      ...(record.formula !== undefined ? { formula: record.formula } : {}),
     }));
 
     const result: WorkbookCollectResult = {
@@ -166,6 +167,7 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
       type: 'modified' as const,
       oldValue: record.oldValue,
       newValue: record.newValue,
+      ...(record.formula !== undefined ? { formula: record.formula } : {}),
     }));
 
     return { records, truncated, totalObserved };

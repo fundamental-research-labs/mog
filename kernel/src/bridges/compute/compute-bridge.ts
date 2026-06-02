@@ -148,6 +148,13 @@ import type {
   WorkbookSnapshotBin,
 } from './compute-types.gen';
 
+function directFormulaFromCellInput(input: CellInput): string | undefined {
+  if (input.kind !== 'parse') return undefined;
+  const trimmed = input.text.trim();
+  if (!trimmed.startsWith('=')) return undefined;
+  return asFormulaA1(trimmed);
+}
+
 /**
  * ChartFloatingObject — the chart variant of the wire FloatingObject union.
  * Previously exported directly from compute-types.gen; now defined as a type alias
@@ -1514,7 +1521,15 @@ export class ComputeBridge extends GeneratedBridgeBase {
           skipCycleCheck: true,
         },
       ),
-      edits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
+      edits.map((edit) => {
+        const formula = directFormulaFromCellInput(edit.input);
+        return {
+          sheetId,
+          row: edit.row,
+          col: edit.col,
+          ...(formula !== undefined ? { formula } : {}),
+        };
+      }),
     );
     return this.applyDateFormulaFormatCompatibility(sheetId, edits, result);
   }

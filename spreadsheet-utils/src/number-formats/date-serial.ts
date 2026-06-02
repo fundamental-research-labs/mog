@@ -36,6 +36,29 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 const LEAP_YEAR_BUG_CUTOFF = 60;
 
+export type ExcelDateSystem = 'excel1900';
+
+export interface ParsedExcelSerialDate {
+  isoDate: string;
+  year: number;
+  month: number;
+  day: number;
+}
+
+export interface SafeExcelDateSerialSemantics {
+  rawSerial: number;
+  displayValue: string;
+  parsedDate: ParsedExcelSerialDate | null;
+  dateSystem: ExcelDateSystem;
+  conversionHelper: {
+    kind: 'excelSerialDate';
+    dateSystem: ExcelDateSystem;
+    lotus1900LeapYearBug: true;
+    serial60IsFakeLeapDay: boolean;
+    unambiguous: boolean;
+  };
+}
+
 /**
  * Day names for date formatting (en-US defaults).
  * @deprecated Use CultureInfo.dayNames / CultureInfo.abbreviatedDayNames instead.
@@ -199,6 +222,54 @@ export function serialToDate(serial: number): Date {
   // Convert to milliseconds and add to epoch
   const ms = EXCEL_EPOCH_MS + adjustedSerial * MS_PER_DAY;
   return new Date(ms);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/**
+ * Build a readback-safe Excel date serial contract without coercing serial 60
+ * into a JavaScript Date. Excel's 1900 date system reserves serial 60 for the
+ * Lotus-compatible fake 1900-02-29, so callers must treat that serial as
+ * ambiguous instead of round-tripping it through JS Date math.
+ */
+export function safeExcelDateSerialSemantics(
+  serial: number,
+  displayValue: string,
+): SafeExcelDateSerialSemantics {
+  const dateSerial = Math.floor(serial);
+  const serial60IsFakeLeapDay = dateSerial === LEAP_YEAR_BUG_CUTOFF;
+  const unambiguous = Number.isFinite(serial) && !serial60IsFakeLeapDay;
+
+  let parsedDate: ParsedExcelSerialDate | null = null;
+  if (unambiguous) {
+    const adjustedSerial = dateSerial > LEAP_YEAR_BUG_CUTOFF ? dateSerial - 1 : dateSerial;
+    const date = new Date(EXCEL_EPOCH_MS + adjustedSerial * MS_PER_DAY);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
+    parsedDate = {
+      isoDate: `${year}-${pad2(month)}-${pad2(day)}`,
+      year,
+      month,
+      day,
+    };
+  }
+
+  return {
+    rawSerial: serial,
+    displayValue,
+    parsedDate,
+    dateSystem: 'excel1900',
+    conversionHelper: {
+      kind: 'excelSerialDate',
+      dateSystem: 'excel1900',
+      lotus1900LeapYearBug: true,
+      serial60IsFakeLeapDay,
+      unambiguous,
+    },
+  };
 }
 
 /**

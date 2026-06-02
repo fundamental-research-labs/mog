@@ -11,6 +11,40 @@ import type { AnyMark, PathMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
 import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, Layout } from './spec';
 
+function generateAxisTicks(scale: AnyScale, axisSpec: AxisSpec): unknown[] {
+  if (
+    axisSpec.tickStep !== undefined &&
+    axisSpec.tickStep > 0 &&
+    typeof scale.domain === 'function'
+  ) {
+    const domain = scale.domain();
+    const first = Number(domain[0]);
+    const last = Number(domain[domain.length - 1]);
+    if (Number.isFinite(first) && Number.isFinite(last)) {
+      const ascending = first <= last;
+      const step = axisSpec.tickStep;
+      const start = ascending ? Math.ceil(first / step) * step : Math.floor(first / step) * step;
+      const ticks: number[] = [];
+      if (ascending) {
+        for (let value = start; value <= last + step * 1e-9; value += step) {
+          ticks.push(Number(value.toPrecision(12)));
+        }
+      } else {
+        for (let value = start; value >= last - step * 1e-9; value -= step) {
+          ticks.push(Number(value.toPrecision(12)));
+        }
+      }
+      return ticks;
+    }
+  }
+
+  return typeof scale.ticks === 'function'
+    ? scale.ticks(axisSpec.tickCount ?? 10)
+    : typeof scale.domain === 'function'
+      ? scale.domain()
+      : [];
+}
+
 /**
  * Generate axis marks.
  */
@@ -69,12 +103,7 @@ export function generateXAxis(
   }
 
   // Get ticks
-  const ticks: unknown[] =
-    typeof scale.ticks === 'function'
-      ? scale.ticks(axisSpec.tickCount ?? 10)
-      : typeof scale.domain === 'function'
-        ? scale.domain()
-        : [];
+  const ticks = generateAxisTicks(scale, axisSpec);
 
   // Compute label skip interval to prevent overlap.
   // Estimate label widths and determine how many labels to skip so adjacent
@@ -230,12 +259,7 @@ export function generateYAxis(
   }
 
   // Get ticks
-  const ticks: unknown[] =
-    typeof scale.ticks === 'function'
-      ? scale.ticks(axisSpec.tickCount ?? 10)
-      : typeof scale.domain === 'function'
-        ? scale.domain()
-        : [];
+  const ticks = generateAxisTicks(scale, axisSpec);
 
   // Compute label skip interval to prevent vertical overlap on y-axis.
   const yFontSize = axisSpec.labelFontSize ?? 11;

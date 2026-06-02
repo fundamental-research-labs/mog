@@ -29,6 +29,8 @@ export interface ChangeRecord {
   oldValue?: unknown;
   /** Value after the change (undefined if cell was cleared). */
   newValue?: unknown;
+  /** Formula text with "=" prefix when the direct write stored a formula. */
+  formula?: string;
 }
 
 /** Origin of a change: direct write, formula recalculation, or remote collaborator. */

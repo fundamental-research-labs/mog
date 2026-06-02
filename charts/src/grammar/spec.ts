@@ -284,6 +284,7 @@ export interface AxisSpec {
   labelOverlap?: boolean | 'parity' | 'greedy';
   ticks?: boolean;
   tickCount?: number;
+  tickStep?: number;
   tickSize?: number;
   tickColor?: string;
   tickWidth?: number;

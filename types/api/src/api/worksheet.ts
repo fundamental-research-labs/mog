@@ -28,7 +28,12 @@
  * utility, and visibility.
  */
 import type { CallableDisposable } from '@mog/types-core/disposable';
-import type { CellControl, CellValue, CellValuePrimitive } from '@mog/types-core/core';
+import type {
+  CellControl,
+  CellValue,
+  CellValuePrimitive,
+  SafeExcelDateSerialSemantics,
+} from '@mog/types-core/core';
 import type {
   EventByType,
   SpreadsheetEventType as InternalEventType,
@@ -158,6 +163,8 @@ export interface CellRecord {
   readonly region: RegionMeta | null;
   /** Convenience: `region != null && !region.isAnchor`. Derived, not stored. */
   readonly isArrayMember: boolean;
+  /** Safe Excel date-serial readback metadata for date-formatted numeric cells. */
+  readonly date?: SafeExcelDateSerialSemantics;
 }
 
 /**

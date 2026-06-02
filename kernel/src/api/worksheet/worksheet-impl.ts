@@ -59,9 +59,11 @@ import type { CellType, CellValueType } from '@mog-sdk/contracts/api';
 import type { FormulaA1 } from '@mog-sdk/contracts/cells';
 import type {
   CellError,
+  CellFormat,
   CellValue,
   CellValuePrimitive,
   CopyFromOptions,
+  SafeExcelDateSerialSemantics,
 } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 import type { ApiSortCriterion } from '@mog-sdk/contracts/sorting';
@@ -76,6 +78,10 @@ import type { AutoFillMode, AutoFillResult, FillSeriesOptions } from '@mog-sdk/c
 import { maskExternalFormulaRefsForValidation } from '../../services/external-formulas';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
+import {
+  isDateFormat,
+  safeExcelDateSerialSemantics,
+} from '@mog/spreadsheet-utils/number-formats';
 import { KernelError, toMogSdkError } from '../../errors';
 
 import type { RangeCellData } from '../../bridges/compute/compute-types.gen';
@@ -862,7 +868,8 @@ export class WorksheetImpl implements Worksheet {
   async getCell(a: string | number, b?: number): Promise<CellData> {
     const { row, col } = resolveCell(a, b);
     const data = await CellOps.getCell(this.ctx, this.sheetId, row, col);
-    return data ?? { value: null };
+    if (!data) return { value: null };
+    return withDateSerialSemantics(data);
   }
 
   // ===========================================================================
@@ -892,7 +899,15 @@ export class WorksheetImpl implements Worksheet {
             return undefined;
           }
           const data = await CellReads.getData(this.ctx, this.sheetId, row, col);
-          return projectCellRecord(addr, row, col, data);
+          const record = projectCellRecord(addr, row, col, data);
+          const date = await readDateSerialSemantics(
+            this.ctx,
+            this.sheetId,
+            row,
+            col,
+            record.value,
+          );
+          return date ? { ...record, date } : record;
         },
       };
     }
@@ -2773,6 +2788,44 @@ function colLettersToNumber(letters: string): number {
  * `ErrorVariant` ships, the map is the single source of truth.
  */
 const ERROR_DISPLAY_STRINGS = new Set<string>(Object.values(ERROR_DISPLAY_MAP));
+
+function buildDateSerialSemantics(
+  value: CellValue | null,
+  format: CellFormat | undefined,
+  displayValue: string | undefined,
+): SafeExcelDateSerialSemantics | undefined {
+  if (typeof value !== 'number') return undefined;
+  const numberFormat = format?.numberFormat;
+  if (!numberFormat || !isDateFormat(numberFormat)) return undefined;
+  return safeExcelDateSerialSemantics(value, displayValue ?? String(value));
+}
+
+function withDateSerialSemantics(data: CellData): CellData {
+  const date = buildDateSerialSemantics(data.value, data.format, data.formatted);
+  return date ? { ...data, date } : data;
+}
+
+async function readDateSerialSemantics(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: CellValuePrimitive | null,
+): Promise<SafeExcelDateSerialSemantics | undefined> {
+  if (typeof value !== 'number') return undefined;
+  if (typeof ctx.computeBridge.queryRange !== 'function') return undefined;
+
+  const rangeData = await ctx.computeBridge.queryRange(sheetId, row, col, row, col);
+  const cell = rangeData.cells.find((candidate) => candidate.row === row && candidate.col === col);
+  const format = cell?.format as CellFormat | undefined;
+  if (!format?.numberFormat || !isDateFormat(format.numberFormat)) return undefined;
+
+  const displayValue =
+    typeof ctx.computeBridge.getDisplayValue === 'function'
+      ? await ctx.computeBridge.getDisplayValue(sheetId, row, col)
+      : String(value);
+  return safeExcelDateSerialSemantics(value, displayValue);
+}
 
 /**
  * Project a domain-layer {@link StoreCellData} (or `undefined`) to the

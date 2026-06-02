@@ -268,6 +268,31 @@ impl CellMirror {
         }
     }
 
+    /// Remove all data table regions whose anchor-inclusive rectangle is fully covered.
+    pub fn remove_data_table_regions_covered_by_range(
+        &mut self,
+        sheet: &SheetId,
+        start_row: u32,
+        start_col: u32,
+        end_row: u32,
+        end_col: u32,
+    ) -> Vec<DataTableRegionDef> {
+        let sheet_uuid = sheet.to_uuid_string();
+        let mut removed = Vec::new();
+        self.data_table_regions.retain(|region| {
+            let covered = region.sheet == sheet_uuid
+                && start_row <= region.start_row.saturating_sub(1)
+                && start_col <= region.start_col.saturating_sub(1)
+                && end_row >= region.end_row
+                && end_col >= region.end_col;
+            if covered {
+                removed.push(region.clone());
+            }
+            !covered
+        });
+        removed
+    }
+
     // -----------------------------------------------------------------------
     // Dense Column Cache
     // -----------------------------------------------------------------------

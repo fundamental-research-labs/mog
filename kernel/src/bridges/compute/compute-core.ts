@@ -813,7 +813,7 @@ export class ComputeCore {
    */
   async mutateCore(
     promise: Promise<[Uint8Array, MutationResult]>,
-    directEdits?: Array<{ sheetId: string; row: number; col: number }>,
+    directEdits?: Array<{ sheetId: string; row: number; col: number; formula?: string }>,
   ): Promise<MutationResult> {
     // Write gate check: if a gate is installed, verify the mutation is
     // allowed before executing. The gate throws WriteGateRejectionError
@@ -949,7 +949,7 @@ export class ComputeCore {
    */
   async mutate(
     promise: Promise<[Uint8Array, MutationResult]>,
-    directEdits?: Array<{ sheetId: string; row: number; col: number }>,
+    directEdits?: Array<{ sheetId: string; row: number; col: number; formula?: string }>,
   ): Promise<MutationResult> {
     const result = await this.mutateCore(promise, directEdits);
     await this.ctx.services?.undo.notifyForwardMutation();

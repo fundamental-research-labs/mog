@@ -47,6 +47,16 @@ export interface CellChangeInfo {
   value?: unknown;
   /** Previous value before the change (from Rust CellChange.oldValue). */
   oldValue?: unknown;
+  /** Formula text with "=" prefix when the changed cell is a direct formula write. */
+  formula?: string;
+}
+
+export interface DirectCellEditInfo {
+  sheetId: string;
+  row: number;
+  col: number;
+  /** Formula text with "=" prefix when the direct write stored a formula. */
+  formula?: string;
 }
 
 // =============================================================================
@@ -80,14 +90,14 @@ export class ChangeAccumulator {
    * Since JS is single-threaded, setDirectEdits() before the bridge call
    * guarantees these are consumed by the corresponding ingest().
    */
-  private pendingDirectEdits: Array<{ sheetId: string; row: number; col: number }> | null = null;
+  private pendingDirectEdits: DirectCellEditInfo[] | null = null;
 
   /**
    * Set the direct edit positions for the next mutation.
    * Called by cell-operations before triggering the bridge call.
    * Consumed (cleared) by the next ingest() call.
    */
-  setDirectEdits(edits: Array<{ sheetId: string; row: number; col: number }>): void {
+  setDirectEdits(edits: DirectCellEditInfo[]): void {
     this.pendingDirectEdits = edits;
   }
 
@@ -101,7 +111,7 @@ export class ChangeAccumulator {
    */
   ingest(
     changedCells: CellChangeInfo[],
-    directEdits: Array<{ sheetId: string; row: number; col: number }> | null,
+    directEdits: DirectCellEditInfo[] | null,
     source: MutationSource,
   ): void {
     const hasTrackers = this.trackers.size > 0 || this.workbookTrackers.size > 0;
@@ -120,9 +130,12 @@ export class ChangeAccumulator {
 
     // Build a set of direct-edit positions for O(1) lookup
     const directSet = new Set<string>();
+    const directMetadata = new Map<string, DirectCellEditInfo>();
     if (edits) {
       for (const e of edits) {
-        directSet.add(`${e.sheetId}:${e.row}:${e.col}`);
+        const key = `${e.sheetId}:${e.row}:${e.col}`;
+        directSet.add(key);
+        directMetadata.set(key, e);
       }
     }
 
@@ -133,6 +146,8 @@ export class ChangeAccumulator {
       const key = `${cell.sheetId}:${cell.row}:${cell.col}`;
       const origin: ChangeOrigin =
         source === 'remote' ? 'remote' : directSet.has(key) ? 'direct' : 'cascade';
+      const formula =
+        origin === 'direct' ? (cell.formula ?? directMetadata.get(key)?.formula) : undefined;
 
       const record: ChangeRecord = {
         address: toA1(cell.row, cell.col),
@@ -142,6 +157,7 @@ export class ChangeAccumulator {
         type: 'modified',
         oldValue: cell.oldValue,
         newValue: cell.value,
+        ...(formula !== undefined ? { formula } : {}),
       };
 
       let list = recordsBySheet.get(cell.sheetId);

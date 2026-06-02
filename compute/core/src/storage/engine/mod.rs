@@ -12,6 +12,7 @@
 pub mod construction;
 mod mutation_coordinator;
 mod mutation_dispatch;
+mod mutation_lifecycle;
 mod pivot_materialization;
 mod recalc;
 mod settings;
@@ -34,6 +35,7 @@ mod undo_bridge;
 mod workbook_theme;
 pub use cell_semantics::CellInfo;
 mod cf_cache;
+mod data_table_creation;
 mod data_table_formula;
 mod delegations;
 mod export;

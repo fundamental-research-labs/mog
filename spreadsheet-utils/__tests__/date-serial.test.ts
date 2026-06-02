@@ -18,6 +18,7 @@ import {
   isDateFormat,
   isLikelyDateSerial,
   isTimeOnlyFormat,
+  safeExcelDateSerialSemantics,
   serialToDate,
   serialToTime,
   timeToSerial,
@@ -519,6 +520,44 @@ describe('serialToDate', () => {
     expect(result.getUTCFullYear()).toBe(2016);
     expect(result.getUTCMonth()).toBe(2); // March (0-indexed)
     expect(result.getUTCDate()).toBe(31);
+  });
+});
+
+describe('safeExcelDateSerialSemantics', () => {
+  it.each([
+    [59, '2/28/1900', { isoDate: '1900-02-28', year: 1900, month: 2, day: 28 }],
+    [61, '3/1/1900', { isoDate: '1900-03-01', year: 1900, month: 3, day: 1 }],
+    [42170, '6/15/2015', { isoDate: '2015-06-15', year: 2015, month: 6, day: 15 }],
+  ])('returns parsed calendar parts for unambiguous serial %s', (serial, displayValue, parsedDate) => {
+    expect(safeExcelDateSerialSemantics(serial, displayValue)).toEqual({
+      rawSerial: serial,
+      displayValue,
+      parsedDate,
+      dateSystem: 'excel1900',
+      conversionHelper: {
+        kind: 'excelSerialDate',
+        dateSystem: 'excel1900',
+        lotus1900LeapYearBug: true,
+        serial60IsFakeLeapDay: false,
+        unambiguous: true,
+      },
+    });
+  });
+
+  it('marks Excel 1900 serial 60 as the fake ambiguous leap day', () => {
+    expect(safeExcelDateSerialSemantics(60, '2/29/1900')).toEqual({
+      rawSerial: 60,
+      displayValue: '2/29/1900',
+      parsedDate: null,
+      dateSystem: 'excel1900',
+      conversionHelper: {
+        kind: 'excelSerialDate',
+        dateSystem: 'excel1900',
+        lotus1900LeapYearBug: true,
+        serial60IsFakeLeapDay: true,
+        unambiguous: false,
+      },
+    });
   });
 });
 

@@ -47,6 +47,7 @@ import {
   type RangeMeta,
 } from './wire/range-metadata-cache';
 import { ChangeAccumulator } from '../api/worksheet/change-accumulator';
+import type { DirectCellEditInfo } from '../api/worksheet/change-accumulator';
 import { VIEW_OPTION_KEYS } from '../domain/workbook/core-defaults';
 import type { StateMirror } from '../document/state-mirror';
 import type {
@@ -186,11 +187,7 @@ export interface MutationError {
   cause?: unknown;
 }
 
-interface DirectCellEditPosition {
-  sheetId: string;
-  row: number;
-  col: number;
-}
+type DirectCellEditPosition = DirectCellEditInfo;
 
 // =============================================================================
 // Cell Position Resolver
@@ -545,6 +542,7 @@ export class MutationResultHandler {
             col: c.position.col,
             value: c.value,
             oldValue: c.oldValue,
+            formula: (c as CellChange & { formula?: string }).formula,
           };
         })
         .filter((c): c is NonNullable<typeof c> => c !== null);

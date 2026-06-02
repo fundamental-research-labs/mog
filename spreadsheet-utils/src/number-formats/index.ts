@@ -34,9 +34,13 @@ export {
   isDateFormat,
   isLikelyDateSerial,
   isTimeOnlyFormat,
+  safeExcelDateSerialSemantics,
   serialToDate,
   serialToTime,
   timeToSerial,
+  type ExcelDateSystem,
+  type ParsedExcelSerialDate,
+  type SafeExcelDateSerialSemantics,
 } from './date-serial';
 
 // Error utilities

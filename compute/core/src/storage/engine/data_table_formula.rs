@@ -6,6 +6,7 @@
 
 use cell_types::SheetId;
 use formula_types::CellRef;
+use snapshot_types::DataTableRegionDef;
 
 use crate::mirror::CellMirror;
 use crate::range_manager::{A1CellRef, stringify_cell};
@@ -21,6 +22,14 @@ pub(crate) fn formula_at(
     col: u32,
 ) -> Option<String> {
     let region = mirror.find_data_table_at(sheet_id, row, col)?;
+    formula_for_region(mirror, sheet_id, region)
+}
+
+pub(super) fn formula_for_region(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    region: &DataTableRegionDef,
+) -> Option<String> {
     if region.row_input_ref.is_none() && region.col_input_ref.is_none() {
         return None;
     }

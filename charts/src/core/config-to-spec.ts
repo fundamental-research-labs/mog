@@ -35,6 +35,7 @@ import type {
   DataLabelConfig,
   LegendConfig,
   SeriesConfig,
+  SingleAxisConfig,
   TrendlineConfig,
 } from '../types';
 
@@ -234,12 +235,19 @@ export function buildTitle(config: ChartConfig): TitleSpec | string | undefined 
 /**
  * Map AxisConfig.xAxis / yAxis type to a ChartSpec AxisSpec partial.
  */
-function mapAxisConfigToAxisSpec(
-  axisConf: NonNullable<AxisConfig['xAxis']> | NonNullable<AxisConfig['yAxis']>,
-): AxisSpec {
+function mapAxisConfigToAxisSpec(axisConf: SingleAxisConfig): AxisSpec | null {
+  if ((axisConf.show ?? axisConf.visible) === false) return null;
+
   const spec: AxisSpec = {};
-  if (axisConf.title !== undefined) spec.title = axisConf.title;
+  if (axisConf.titleVisible === false) {
+    spec.title = null;
+  } else if (axisConf.title !== undefined) {
+    spec.title = axisConf.title;
+  }
   if (axisConf.gridLines !== undefined) spec.grid = axisConf.gridLines;
+  if (axisConf.majorUnit !== undefined && axisConf.majorUnit > 0) {
+    spec.tickStep = axisConf.majorUnit;
+  }
   if (axisConf.minorGridLines !== undefined) {
     // Minor grid lines are represented by halving the tick count
     // (spec doesn't have a dedicated minor grid, so this is the closest mapping)
@@ -250,12 +258,33 @@ function mapAxisConfigToAxisSpec(
   return spec;
 }
 
+function normalizeSingleAxisForSpec(
+  axis: SingleAxisConfig | undefined,
+): SingleAxisConfig | undefined {
+  if (!axis) return undefined;
+  return {
+    ...axis,
+    type: (axis.type ?? axis.axisType) as SingleAxisConfig['type'],
+    show: axis.show ?? axis.visible,
+  };
+}
+
+function normalizeAxisConfigForSpec(axis: AxisConfig | undefined): AxisConfig | undefined {
+  if (!axis) return undefined;
+  return {
+    ...axis,
+    xAxis: normalizeSingleAxisForSpec(axis.categoryAxis ?? axis.xAxis),
+    yAxis: normalizeSingleAxisForSpec(axis.valueAxis ?? axis.yAxis),
+    secondaryYAxis: normalizeSingleAxisForSpec(axis.secondaryValueAxis ?? axis.secondaryYAxis),
+  };
+}
+
 /**
  * Map AxisType to ScaleType for encoding scale configuration.
  * Returns undefined for default types that don't need explicit scale setting.
  */
 function axisTypeToScaleType(
-  axisType: import('../types').AxisType | undefined,
+  axisType: import('../types').AxisType | string | undefined,
 ): import('../grammar/spec').ScaleType | undefined {
   if (!axisType) return undefined;
   if (axisType === 'log') return 'log';
@@ -269,12 +298,11 @@ function axisTypeToScaleType(
  */
 function buildAxisScaleDomain(
   axisConf: { min?: number; max?: number } | undefined,
-): { domain?: [number, number] } | undefined {
+): { domain?: unknown[] } | undefined {
   if (!axisConf) return undefined;
   if (axisConf.min !== undefined || axisConf.max !== undefined) {
     // Only set domain if at least one bound is given
-    const domain: [number, number] = [axisConf.min ?? 0, axisConf.max ?? Number.MAX_SAFE_INTEGER];
-    return { domain };
+    return { domain: [axisConf.min, axisConf.max] };
   }
   return undefined;
 }
@@ -378,11 +406,12 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   // Apply axis config
-  if (config.axis) {
-    if (config.axis.xAxis && encoding.x) {
-      encoding.x.axis = mapAxisConfigToAxisSpec(config.axis.xAxis);
-      const scaleDomain = buildAxisScaleDomain(config.axis.xAxis);
-      const scaleType = axisTypeToScaleType(config.axis.xAxis.type);
+  const axis = normalizeAxisConfigForSpec(config.axis);
+  if (axis) {
+    if (axis.xAxis && encoding.x) {
+      encoding.x.axis = mapAxisConfigToAxisSpec(axis.xAxis);
+      const scaleDomain = buildAxisScaleDomain(axis.xAxis);
+      const scaleType = axisTypeToScaleType(axis.xAxis.type);
       if (scaleDomain || scaleType) {
         encoding.x.scale = {
           ...(scaleDomain ?? {}),
@@ -390,10 +419,10 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
         };
       }
     }
-    if (config.axis.yAxis && encoding.y) {
-      encoding.y.axis = mapAxisConfigToAxisSpec(config.axis.yAxis);
-      const scaleDomain = buildAxisScaleDomain(config.axis.yAxis);
-      const scaleType = axisTypeToScaleType(config.axis.yAxis.type);
+    if (axis.yAxis && encoding.y) {
+      encoding.y.axis = mapAxisConfigToAxisSpec(axis.yAxis);
+      const scaleDomain = buildAxisScaleDomain(axis.yAxis);
+      const scaleType = axisTypeToScaleType(axis.yAxis.type);
       if (scaleDomain || scaleType) {
         encoding.y.scale = {
           ...(scaleDomain ?? {}),

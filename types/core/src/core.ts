@@ -717,6 +717,31 @@ export interface CellData {
   hyperlink?: string;
   /** Pre-formatted display string from Rust (e.g., "$1,234.50", "1/1/2024"). */
   formatted?: string;
+  /** Safe Excel date-serial readback metadata for date-formatted numeric cells. */
+  date?: SafeExcelDateSerialSemantics;
+}
+
+export type ExcelDateSystem = 'excel1900';
+
+export interface ParsedExcelSerialDate {
+  isoDate: string;
+  year: number;
+  month: number;
+  day: number;
+}
+
+export interface SafeExcelDateSerialSemantics {
+  rawSerial: number;
+  displayValue: string;
+  parsedDate: ParsedExcelSerialDate | null;
+  dateSystem: ExcelDateSystem;
+  conversionHelper: {
+    kind: 'excelSerialDate';
+    dateSystem: ExcelDateSystem;
+    lotus1900LeapYearBug: true;
+    serial60IsFakeLeapDay: boolean;
+    unambiguous: boolean;
+  };
 }
 
 // ============================================================================

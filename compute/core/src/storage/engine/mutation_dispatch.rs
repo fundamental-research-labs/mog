@@ -9,41 +9,9 @@ use crate::snapshot::{
 use super::format_inference::is_formula_parse_input;
 use super::mutation::{self, EngineMutation, MutationOutput};
 use super::mutation_coordinator::SheetLifecycleHistoryHint;
-use super::{YrsComputeEngine, services, validation};
+use super::{YrsComputeEngine, data_table_creation, services, validation};
 
 impl YrsComputeEngine {
-    pub(super) fn attach_sheet_lifecycle_runtime_hint(
-        result: &mut MutationResult,
-        hint: SheetLifecycleRuntimeHint,
-    ) {
-        result.sheet_lifecycle_runtime_hint = Some(hint);
-    }
-
-    pub(in crate::storage::engine) fn record_sheet_lifecycle_history_hint(
-        &mut self,
-        undo_depth_after: usize,
-        hint: SheetLifecycleHistoryHint,
-    ) {
-        self.mutation
-            .sheet_lifecycle_history
-            .record_forward(undo_depth_after, hint);
-    }
-
-    pub(super) fn with_undo_group_if<T>(
-        &mut self,
-        enabled: bool,
-        f: impl FnOnce(&mut Self) -> Result<T, ComputeError>,
-    ) -> Result<T, ComputeError> {
-        if enabled {
-            self.mutation.undo_manager.begin_undo_group();
-        }
-        let result = f(self);
-        if enabled {
-            self.mutation.undo_manager.end_undo_group();
-        }
-        result
-    }
-
     /// Central dispatch for all mutations. Keeps all five stores in sync.
     pub(crate) fn apply_mutation(
         &mut self,
@@ -180,15 +148,7 @@ impl YrsComputeEngine {
             }
 
             EngineMutation::CreateDataTable { input } => {
-                let (region, data) =
-                    crate::data_table::prepare_data_table_creation(&self.mirror, &input)?;
-                crate::storage::workbook::data_tables::upsert_data_table_region(
-                    self.stores.storage.doc(),
-                    self.stores.storage.workbook_map(),
-                    &region,
-                );
-                self.mirror.upsert_data_table_region(region);
-                MutationOutput::Plain(MutationResult::empty().with_data(&data)?)
+                data_table_creation::create_data_table(self, input)?
             }
 
             EngineMutation::ApplyScenario { scenario_id } => {

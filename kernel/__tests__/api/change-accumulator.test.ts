@@ -241,6 +241,48 @@ describe('ChangeAccumulator — workbook-level trackers', () => {
     expect(wbTracker.allRecords[1].newValue).toBe('hello');
   });
 
+  it('threads formula metadata from direct formula CellChangeInfo to ChangeRecord', () => {
+    const acc = new ChangeAccumulator();
+    const wbTracker = createMockWorkbookTracker();
+    acc.registerWorkbook(wbTracker);
+
+    acc.ingest(
+      [{ sheetId: 'sheet-1', row: 0, col: 0, value: 2, formula: '=1+1' }],
+      [{ sheetId: 'sheet-1', row: 0, col: 0, formula: '=1+1' }],
+      'user',
+    );
+
+    expect(wbTracker.allRecords[0]).toEqual(
+      expect.objectContaining({
+        address: 'A1',
+        origin: 'direct',
+        newValue: 2,
+        formula: '=1+1',
+      }),
+    );
+  });
+
+  it('does not add formula metadata for direct literal hardcodes', () => {
+    const acc = new ChangeAccumulator();
+    const wbTracker = createMockWorkbookTracker();
+    acc.registerWorkbook(wbTracker);
+
+    acc.ingest(
+      [{ sheetId: 'sheet-1', row: 0, col: 0, value: 2 }],
+      [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      'user',
+    );
+
+    expect(wbTracker.allRecords[0]).toEqual(
+      expect.objectContaining({
+        address: 'A1',
+        origin: 'direct',
+        newValue: 2,
+      }),
+    );
+    expect(wbTracker.allRecords[0].formula).toBeUndefined();
+  });
+
   it('generates correct A1 addresses', () => {
     const acc = new ChangeAccumulator();
     const wbTracker = createMockWorkbookTracker();

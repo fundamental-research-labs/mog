@@ -61,6 +61,15 @@ function makeData(seriesCount = 1): ChartData {
 const SINGLE_SERIES_DATA = makeData(1);
 const MULTI_SERIES_DATA = makeData(2);
 
+function textForRole(marks: unknown[], role: string): string[] {
+  return marks
+    .filter((mark): mark is { type: 'text'; text: unknown; datum?: { role?: string } } => {
+      const candidate = mark as { type?: unknown; datum?: { role?: string } };
+      return candidate.type === 'text' && candidate.datum?.role === role;
+    })
+    .map((mark) => String(mark.text));
+}
+
 // =============================================================================
 // chartDataToRows
 // =============================================================================
@@ -1727,6 +1736,64 @@ describe('chart-engine configToSpec wiring', () => {
 // =============================================================================
 
 describe('configToSpec dropped fields', () => {
+  describe('axis canonical field normalization', () => {
+    it('renders categoryAxis/valueAxis as x/y axes with configured bounds, units, and titles', () => {
+      const config = makeConfig({
+        axis: {
+          categoryAxis: {
+            visible: true,
+            title: 'Quarter',
+            titleVisible: true,
+            gridLines: false,
+          },
+          valueAxis: {
+            visible: true,
+            min: 0,
+            max: 100,
+            majorUnit: 25,
+            title: 'Revenue',
+            titleVisible: true,
+            gridLines: true,
+          },
+        },
+      });
+
+      const spec = configToSpec(config, SINGLE_SERIES_DATA);
+      const compiled = compile(spec, undefined, { width: 480, height: 300 });
+
+      expect(textForRole(compiled.axes, 'x-axis')).toEqual(expect.arrayContaining(['Quarter']));
+      expect(textForRole(compiled.axes, 'y-axis')).toEqual(
+        expect.arrayContaining(['0', '25', '50', '75', '100', 'Revenue']),
+      );
+    });
+
+    it('respects canonical axis visibility and title visibility', () => {
+      const config = makeConfig({
+        axis: {
+          categoryAxis: {
+            visible: true,
+            title: 'Hidden category title',
+            titleVisible: false,
+          },
+          valueAxis: {
+            visible: false,
+            min: 0,
+            max: 100,
+            majorUnit: 25,
+            title: 'Hidden value axis',
+            titleVisible: true,
+          },
+        },
+      });
+
+      const spec = configToSpec(config, SINGLE_SERIES_DATA);
+      const compiled = compile(spec, undefined, { width: 480, height: 300 });
+
+      expect(textForRole(compiled.axes, 'x-axis')).not.toContain('Hidden category title');
+      expect(textForRole(compiled.axes, 'y-axis')).toEqual([]);
+    });
+  });
+
   describe('axis type -> encoding scale type', () => {
     it('maps log axis type to log scale type on y-axis', () => {
       const config = makeConfig({

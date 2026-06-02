@@ -64,6 +64,20 @@ pub fn upsert_data_table_region(doc: &Doc, workbook: &MapRef, region: &DataTable
     regions_map.insert(&mut txn, &*key, prelim);
 }
 
+pub fn remove_data_table_regions(doc: &Doc, workbook: &MapRef, regions: &[DataTableRegionDef]) {
+    if regions.is_empty() {
+        return;
+    }
+    let mut txn = doc.transact_mut();
+    let Some(Out::YMap(regions_map)) = workbook.get(&txn, KEY_DATA_TABLE_REGIONS) else {
+        return;
+    };
+    for region in regions {
+        let key = data_table_region_id(region);
+        regions_map.remove(&mut txn, &key);
+    }
+}
+
 pub fn hydrate_data_table_regions(
     workbook: &MapRef,
     regions: &[DataTableRegionDef],

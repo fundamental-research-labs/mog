@@ -1,4 +1,5 @@
 import type {
+  ChannelSpec,
   ConfigSpec,
   DataRow,
   EncodingSpec,
@@ -14,6 +15,15 @@ import {
 } from '../encoding-adjustments';
 import { MARK_TYPE_MAP } from '../constants';
 import { buildEncoding } from '../encoding';
+import {
+  chartValueValues,
+  excelCategoryPointEncoding,
+  excelQuantitativeXEncoding,
+  excelSeriesValueAxisIncludesZero,
+  excelValueEncodingForAxis,
+  usesExcelCartesianGeometry,
+  withExcelAreaBaseline,
+} from '../excel-cartesian-geometry';
 import {
   MARKER_FILL_FIELD,
   MARKER_SHAPE_FIELD,
@@ -32,6 +42,7 @@ import { resolveStackMode } from '../subtypes';
 import { isNoFillNoLineSeries } from '../style';
 import { seriesConfigForDataSeries, seriesSourceIndex } from '../../series-identity';
 import { resolveBarGeometryGroups, type BarGeometryGroup } from '../bar-geometry';
+import { shouldUseDateSerialCategoryAxis, shouldUseStableCategoryKeys } from '../category-axis';
 import {
   effectiveShowLines,
   effectiveShowMarkers,
@@ -41,6 +52,13 @@ import {
   resolveComboSeriesType,
   shouldGroupAsBarSeries,
 } from './combo-series-options';
+
+type ExcelComboGeometry = {
+  enabled: true;
+  useDateSerialCategoryAxis: boolean;
+  useStableCategoryKeys: boolean;
+  yByAxis: Map<0 | 1, NonNullable<EncodingSpec['y']>>;
+};
 
 /**
  * Build layers for combo and dual-axis charts where each series can own its
@@ -59,6 +77,12 @@ export function buildComboLayers(
   const barGeometryGroups = resolveBarGeometryGroups(config, data);
   const emittedBarGroups = new Set<string>();
   const emittedAreaGroups = new Set<string>();
+  const excelGeometry = buildExcelComboGeometry({
+    config,
+    data,
+    seriesConfigs,
+    baseY: yEncoding,
+  });
 
   for (let i = 0; i < data.series.length; i += 1) {
     const series = data.series[i];
@@ -70,6 +94,7 @@ export function buildComboLayers(
     const markType = MARK_TYPE_MAP[rawSeriesType];
     const encoding = buildSeriesEncoding({
       config,
+      data,
       baseX: xEncoding,
       baseY: yEncoding,
       seriesConf,
@@ -78,6 +103,7 @@ export function buildComboLayers(
         .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)),
       seriesYAxisIndex: series.yAxisIndex,
       seriesType: rawSeriesType,
+      excelGeometry,
     });
     const filter = seriesFilter(i);
     const showLine = effectiveShowLines(seriesConf, rawSeriesType, config);
@@ -94,6 +120,7 @@ export function buildComboLayers(
           baseEncoding,
           encoding,
           group: barGroup,
+          useSharedValueScale: excelGeometry?.enabled === true,
         }),
       );
       continue;
@@ -123,6 +150,7 @@ export function buildComboLayers(
               baseEncoding,
               encoding,
               memberIndices,
+              useSharedValueScale: excelGeometry?.enabled === true,
             }),
           );
         }
@@ -196,22 +224,25 @@ export function buildComboLayers(
 
 function buildSeriesEncoding(input: {
   config: ChartConfig;
+  data: ChartData;
   baseX: NonNullable<EncodingSpec['x']>;
   baseY: NonNullable<EncodingSpec['y']>;
   seriesConf: SeriesConfig | undefined;
   values: number[];
   seriesYAxisIndex: 0 | 1 | undefined;
   seriesType: ChartType;
+  excelGeometry: ExcelComboGeometry | undefined;
 }): EncodingSpec {
   const yAxisIndex = normalizeYAxisIndex(input.seriesConf?.yAxisIndex ?? input.seriesYAxisIndex);
+  const plannedY = input.excelGeometry?.yByAxis.get(yAxisIndex ?? 0);
   const encoding: EncodingSpec = {
-    x: isQuantitativeXSeries(input.seriesConf, input.seriesType, input.config)
-      ? quantitativeXEncoding(input.baseX)
-      : { ...input.baseX },
-    y: { ...input.baseY, field: VALUE_FIELD, type: 'quantitative' },
+    x: seriesXEncoding(input),
+    y: plannedY
+      ? cloneChannel(plannedY)
+      : { ...input.baseY, field: VALUE_FIELD, type: 'quantitative' },
   };
 
-  if (yAxisIndex === 1) {
+  if (!plannedY && yAxisIndex === 1) {
     const secondaryAxis =
       input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis;
     const secondaryAxisSpec = secondaryAxis
@@ -233,6 +264,11 @@ function buildSeriesEncoding(input: {
     }
   }
 
+  if (plannedY) {
+    applyAutomaticCategoryAxisCrossing(encoding);
+    return encoding;
+  }
+
   if (encoding.x?.field === SCATTER_X_FIELD) {
     applyAutoValueAxisTicks(encoding.x);
   }
@@ -244,6 +280,38 @@ function buildSeriesEncoding(input: {
   }
 
   return encoding;
+}
+
+function seriesXEncoding(input: {
+  config: ChartConfig;
+  data: ChartData;
+  baseX: NonNullable<EncodingSpec['x']>;
+  seriesConf: SeriesConfig | undefined;
+  seriesType: ChartType;
+  excelGeometry: ExcelComboGeometry | undefined;
+}): NonNullable<EncodingSpec['x']> {
+  if (isQuantitativeXSeries(input.seriesConf, input.seriesType, input.config)) {
+    return input.excelGeometry
+      ? excelQuantitativeXEncoding({
+          config: input.config,
+          data: input.data,
+        })
+      : quantitativeXEncoding(input.baseX);
+  }
+
+  if (
+    input.excelGeometry &&
+    !input.excelGeometry.useDateSerialCategoryAxis &&
+    MARK_TYPE_MAP[input.seriesType] !== 'bar'
+  ) {
+    return excelCategoryPointEncoding(input.baseX, input.config, input.data, {
+      isHorizontal: false,
+      useStableCategoryKeys: input.excelGeometry.useStableCategoryKeys,
+      seriesType: input.seriesType,
+    }) as NonNullable<EncodingSpec['x']>;
+  }
+
+  return { ...input.baseX };
 }
 
 function quantitativeXEncoding(
@@ -271,8 +339,9 @@ function buildMainLayer(
   if (markType === 'line' && (seriesConf?.smooth ?? config.smoothLines)) {
     mark.interpolate = 'monotone';
   }
+  const finalMark = withExcelAreaBaseline(mark, config, encoding.y);
   return {
-    mark,
+    mark: finalMark,
     encoding,
     transform: [filter],
   };
@@ -288,7 +357,12 @@ function buildMarkerLayer(
 ): UnitSpec {
   const mark = buildSeriesMark('point', seriesConf, seriesIndex, seriesType, config);
   return {
-    mark: { ...mark, type: 'point', strokeWidth: mark.strokeWidth ?? 1 },
+    mark: {
+      ...mark,
+      type: 'point',
+      strokeWidth: mark.strokeWidth ?? 1,
+      ...(encoding.x?.field === SCATTER_X_FIELD ? { skipInvalidPositions: true } : {}),
+    },
     encoding: {
       x: encoding.x,
       y: encoding.y,
@@ -307,23 +381,31 @@ function buildAreaGroupLayer(input: {
   baseEncoding: EncodingSpec;
   encoding: EncodingSpec;
   memberIndices: number[];
+  useSharedValueScale?: boolean;
 }): UnitSpec {
   const encoding: EncodingSpec = {
     ...input.encoding,
-    y: withAreaGroupValueScale(input.encoding.y, input.config, input.data, input.memberIndices),
+    y: input.useSharedValueScale
+      ? input.encoding.y
+      : withAreaGroupValueScale(input.encoding.y, input.config, input.data, input.memberIndices),
     detail: { field: SERIES_INDEX_FIELD, type: 'nominal', legend: null },
     ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
     ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
   };
   applyAutomaticCategoryAxisCrossing(encoding);
-
-  return {
-    mark: {
+  const mark = withExcelAreaBaseline(
+    {
       type: 'area',
       fillField: SERIES_FILL_FIELD,
       strokeField: SERIES_STROKE_FIELD,
       strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
     },
+    input.config,
+    encoding.y,
+  );
+
+  return {
+    mark,
     encoding,
     transform: [
       { type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: input.memberIndices } },
@@ -336,17 +418,20 @@ function buildBarGroupLayer(input: {
   baseEncoding: EncodingSpec;
   encoding: EncodingSpec;
   group: BarGeometryGroup;
+  useSharedValueScale?: boolean;
 }): UnitSpec {
   const memberIndices = input.group.seriesIndices;
 
   const encoding: EncodingSpec = {
     ...input.encoding,
-    y: withBarGroupValueScale(
-      input.encoding.y,
-      input.data,
-      memberIndices,
-      input.group.geometry.grouping,
-    ),
+    y: input.useSharedValueScale
+      ? input.encoding.y
+      : withBarGroupValueScale(
+          input.encoding.y,
+          input.data,
+          memberIndices,
+          input.group.geometry.grouping,
+        ),
     ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
     ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
   };
@@ -523,6 +608,88 @@ function memberValues(data: ChartData, memberIndices: number[]): number[] {
     }
   });
   return values;
+}
+
+function buildExcelComboGeometry(input: {
+  config: ChartConfig;
+  data: ChartData;
+  seriesConfigs: SeriesConfig[];
+  baseY: NonNullable<EncodingSpec['y']>;
+}): ExcelComboGeometry | undefined {
+  if (!usesExcelCartesianGeometry(input.config)) return undefined;
+
+  const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(input.config, input.data, false);
+  const useStableCategoryKeys = shouldUseStableCategoryKeys(
+    input.config,
+    input.data,
+    useDateSerialCategoryAxis,
+  );
+  const membersByAxis = new Map<0 | 1, number[]>();
+  const includeZeroByAxis = new Map<0 | 1, boolean>();
+
+  input.data.series.forEach((series, index) => {
+    const seriesConf = seriesConfigForDataSeries(series, input.seriesConfigs, index);
+    const rawSeriesType = resolveComboSeriesType(input.config, series, seriesConf, index);
+    if (!isSupportedChartType(rawSeriesType)) return;
+    const markType = MARK_TYPE_MAP[rawSeriesType];
+    const showLine = effectiveShowLines(seriesConf, rawSeriesType, input.config);
+    const showMarkers = effectiveShowMarkers(seriesConf, rawSeriesType, input.config, !showLine);
+    if (!showLine && !showMarkers && markType !== 'bar') return;
+    if (isNoFillNoLineSeries(seriesConf)) return;
+
+    const axisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex) ?? 0;
+    const members = membersByAxis.get(axisIndex) ?? [];
+    members.push(index);
+    membersByAxis.set(axisIndex, members);
+    includeZeroByAxis.set(
+      axisIndex,
+      (includeZeroByAxis.get(axisIndex) ?? false) ||
+        excelSeriesValueAxisIncludesZero(input.config, rawSeriesType),
+    );
+  });
+
+  const yByAxis = new Map<0 | 1, NonNullable<EncodingSpec['y']>>();
+  for (const [axisIndex, memberIndices] of membersByAxis) {
+    yByAxis.set(
+      axisIndex,
+      excelValueEncodingForAxis({
+        config: input.config,
+        baseY: input.baseY,
+        axisIndex,
+        values: comboAxisValues(input.config, input.data, memberIndices),
+        includeZero: includeZeroByAxis.get(axisIndex) ?? false,
+      }) as NonNullable<EncodingSpec['y']>,
+    );
+  }
+
+  return {
+    enabled: true,
+    useDateSerialCategoryAxis,
+    useStableCategoryKeys,
+    yByAxis,
+  };
+}
+
+function comboAxisValues(
+  config: ChartConfig,
+  data: ChartData,
+  memberIndices: number[],
+): number[] {
+  const stackMode = resolveStackMode(config);
+  if (stackMode === 'normalize') return percentStackedMemberDomain(data, memberIndices);
+  if (stackMode === 'zero') {
+    return [...chartValueValues(data, memberIndices), ...stackedMemberValues(data, memberIndices)];
+  }
+  return chartValueValues(data, memberIndices);
+}
+
+function cloneChannel(channel: ChannelSpec): ChannelSpec {
+  return {
+    ...channel,
+    ...(channel.axis ? { axis: { ...channel.axis } } : {}),
+    ...(channel.secondaryAxis ? { secondaryAxis: { ...channel.secondaryAxis } } : {}),
+    ...(channel.scale ? { scale: { ...channel.scale } } : {}),
+  };
 }
 
 function seriesFilter(seriesIndex: number): Transform {

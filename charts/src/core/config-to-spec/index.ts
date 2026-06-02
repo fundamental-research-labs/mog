@@ -12,6 +12,7 @@ import { buildAnnotationLayers, composePrimaryAndAnnotationLayers } from './anno
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
+import { withExcelAreaBaseline } from './excel-cartesian-geometry';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildDataTableLayers } from './layers/data-table';
@@ -76,7 +77,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   const encoding = buildEncoding(renderConfig, data);
 
   // 4. Build mark
-  const mark = buildMark(renderConfig);
+  const mark = withExcelAreaBaseline(buildMark(renderConfig), renderConfig, encoding.y);
 
   // 5. Build config (stacking, colors)
   const configSpec = buildConfigSpec(renderConfig, encoding, data);

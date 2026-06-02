@@ -23,6 +23,13 @@ import {
   applyStackedValueDomain,
 } from './encoding-adjustments';
 import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
+import {
+  applyExcelCartesianValueScales,
+  applyExcelCategoryPointScale,
+  chartValueValues,
+  excelChartValueAxisIncludesZero,
+  usesExcelCartesianGeometry,
+} from './excel-cartesian-geometry';
 import { hasSecondaryYAxis } from './secondary-axis';
 import {
   buildCategoryLegendDomain,
@@ -150,6 +157,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);
   const isXYChart = chartType === 'scatter' || chartType === 'bubble';
+  const useExcelCartesian = usesExcelCartesianGeometry(config);
   const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
   const useStableCategoryKeys = shouldUseStableCategoryKeys(
     config,
@@ -227,6 +235,13 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   applySecondaryCategoryAxis(config, encoding, isHorizontal);
   applyBarCategorySpacingScale(config, encoding, isHorizontal);
   if (!isXYChart) {
+    if (chartType !== 'combo') {
+      applyExcelCategoryPointScale(isHorizontal ? encoding.y : encoding.x, config, data, {
+        isHorizontal,
+        useDateSerialCategoryAxis,
+        useStableCategoryKeys,
+      });
+    }
     applyCategoryAxisLabels(
       data,
       encoding,
@@ -292,25 +307,22 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
-  applyCartesianValueAxisDefaults(encoding, { includeZero: !isXYChart });
-  if (!isXYChart && !hasSecondaryYAxis(config, data)) {
+  applyCartesianValueAxisDefaults(encoding, {
+    includeZero: useExcelCartesian ? excelChartValueAxisIncludesZero(config) : !isXYChart,
+  });
+  if (useExcelCartesian) {
+    if (chartType !== 'combo') {
+      applyExcelCartesianValueScales(config, data, encoding, { isHorizontal, isXYChart });
+    }
+  } else if (!isXYChart && !hasSecondaryYAxis(config, data)) {
     const valueChannel = isHorizontal ? encoding.x : encoding.y;
-    applyMogAutoValueAxisScale(valueChannel, valueValues(data), { includeZero: true });
+    applyMogAutoValueAxisScale(valueChannel, chartValueValues(data), { includeZero: true });
   }
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
 }
 
-function valueValues(data: ChartData): number[] {
-  const values: number[] = [];
-  for (const series of data.series) {
-    for (const point of series.data) {
-      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
-    }
-  }
-  return values;
-}
 
 function applyCartesianValueAxisDefaults(
   encoding: EncodingSpec,

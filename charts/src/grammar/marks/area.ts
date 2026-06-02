@@ -129,7 +129,7 @@ export function generateAreaMarks(
   // domain only covers individual values, causing stacked coordinates to overflow.
   let effectiveYScale = yScale;
 
-  if (isStacked) {
+  if (isStacked && !Array.isArray(_encoding?.y?.scale?.domain)) {
     // Compute cumulative stacked totals per x-category across all series.
     // Separate positive and negative accumulations (same pattern as bar stacking).
     const xField = _encoding?.x?.field;
@@ -143,10 +143,25 @@ export function generateAreaMarks(
           number,
           number,
         ];
+        let hasPositive = false;
+        let hasNegative = false;
+        for (const [, groupData] of groups) {
+          for (const datum of groupData) {
+            const val =
+              typeof datum[yField] === 'number' && isFinite(datum[yField] as number)
+                ? (datum[yField] as number)
+                : 0;
+            if (val > 0) hasPositive = true;
+            if (val < 0) hasNegative = true;
+          }
+        }
+        const percentMin = hasNegative ? -100 : 0;
+        const percentMax = hasPositive ? 100 : 0;
+        const percentSpan = percentMax === percentMin ? 100 : percentMax - percentMin;
         effectiveYScale = Object.assign((v: unknown): number => {
           const num = typeof v === 'number' ? v : parseFloat(String(v));
           if (isNaN(num)) return valRange[0];
-          const t = num / 100;
+          const t = (num - percentMin) / percentSpan;
           return valRange[0] + t * (valRange[1] - valRange[0]);
         }, {});
       } else {
@@ -197,15 +212,30 @@ export function generateAreaMarks(
     }
   }
 
+  const baselineValue =
+    typeof markSpec.baseline === 'number' && Number.isFinite(markSpec.baseline)
+      ? markSpec.baseline
+      : isStacked
+        ? 0
+        : undefined;
+  const scaledBaseline =
+    baselineValue !== undefined ? centeredScalePosition(effectiveYScale, baselineValue) : NaN;
+  const areaBaseline = Number.isFinite(scaledBaseline)
+    ? clampYToPlot(scaledBaseline)
+    : chartBaseline;
+
   // For stacking, accumulate cumulative data values per x-category.
   // Separate positive and negative accumulators so negative values stack downward.
   const posStackValues = new Map<string, number>();
   const negStackValues = new Map<string, number>();
-  // For percent-stacked: track category totals for normalization
-  const categoryTotals = new Map<string, number>();
-  const categoryCumulative = new Map<string, number>();
-  // Pixel-level baseline tracker for stacked area rendering (maps x pixel -> y pixel)
-  const stackBaselineTracker = new Map<number, number>();
+  // For percent-stacked: track category totals for normalization by sign.
+  const positiveCategoryTotals = new Map<string, number>();
+  const negativeCategoryTotals = new Map<string, number>();
+  const positiveCategoryCumulative = new Map<string, number>();
+  const negativeCategoryCumulative = new Map<string, number>();
+  // Pixel-level baseline trackers for stacked area rendering (maps x pixel -> y pixel).
+  const positiveStackBaselineTracker = new Map<number, number>();
+  const negativeStackBaselineTracker = new Map<number, number>();
 
   if (isStacked && isPercentStacked) {
     const xField = _encoding?.x?.field;
@@ -216,9 +246,13 @@ export function generateAreaMarks(
           const cat = String(datum[xField] ?? '');
           const val =
             typeof datum[yField] === 'number' && isFinite(datum[yField] as number)
-              ? Math.abs(datum[yField] as number)
+              ? (datum[yField] as number)
               : 0;
-          categoryTotals.set(cat, (categoryTotals.get(cat) || 0) + val);
+          if (val >= 0) {
+            positiveCategoryTotals.set(cat, (positiveCategoryTotals.get(cat) || 0) + val);
+          } else {
+            negativeCategoryTotals.set(cat, (negativeCategoryTotals.get(cat) || 0) + Math.abs(val));
+          }
         }
       }
     }
@@ -226,7 +260,12 @@ export function generateAreaMarks(
 
   for (const [_groupKey, groupData] of groups) {
     for (const segmentData of splitDataByLineSegment(groupData)) {
-      const topPoints: Array<{ x: number; y: number; xKey: string }> = [];
+      const topPoints: Array<{
+        x: number;
+        y: number;
+        xKey: string;
+        stackSign?: 'positive' | 'negative';
+      }> = [];
       const plottedData: DataRow[] = [];
 
       const xField = _encoding?.x?.field;
@@ -247,20 +286,26 @@ export function generateAreaMarks(
               : 0;
 
           if (isPercentStacked) {
-            // Normalize to percentage
-            const total = categoryTotals.get(cat) || 1;
-            const pctVal = (Math.abs(rawVal) / total) * 100;
-            const cumStart = categoryCumulative.get(cat) || 0;
+            // Normalize to percentage, keeping positive and negative stacks independent.
+            const stackSign = rawVal < 0 ? 'negative' : 'positive';
+            const totals =
+              stackSign === 'negative' ? negativeCategoryTotals : positiveCategoryTotals;
+            const cumulative =
+              stackSign === 'negative' ? negativeCategoryCumulative : positiveCategoryCumulative;
+            const total = totals.get(cat) || 1;
+            const pctVal = total > 0 ? (rawVal / total) * 100 : 0;
+            const cumStart = cumulative.get(cat) || 0;
             const cumEnd = cumStart + pctVal;
-            categoryCumulative.set(cat, cumEnd);
+            cumulative.set(cat, cumEnd);
 
             const y = effectiveYScale(cumEnd) as number;
             if (isNaN(y)) continue;
-            topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
+            topPoints.push({ x, y: clampYToPlot(y), xKey: cat, stackSign });
             plottedData.push(datum);
           } else {
             // stack: 'zero' — accumulate raw values, separated by sign
             let cumVal: number;
+            const stackSign = rawVal < 0 ? 'negative' : 'positive';
             if (rawVal >= 0) {
               const prev = posStackValues.get(cat) || 0;
               cumVal = prev + rawVal;
@@ -272,7 +317,7 @@ export function generateAreaMarks(
             }
             const y = effectiveYScale(cumVal) as number;
             if (isNaN(y)) continue;
-            topPoints.push({ x, y: clampYToPlot(y), xKey: cat });
+            topPoints.push({ x, y: clampYToPlot(y), xKey: cat, stackSign });
             plottedData.push(datum);
           }
         } else {
@@ -293,7 +338,7 @@ export function generateAreaMarks(
       // For single-point areas, duplicate the point to form a thin sliver
       if (topPoints.length === 1) {
         const pt = topPoints[0];
-        topPoints.push({ x: pt.x + 1, y: pt.y, xKey: pt.xKey });
+        topPoints.push({ x: pt.x + 1, y: pt.y, xKey: pt.xKey, stackSign: pt.stackSign });
       }
 
       if (isStacked) {
@@ -308,11 +353,15 @@ export function generateAreaMarks(
         // reset to zero -- they carry forward the previous baseline.
         for (const pt of topPoints) {
           const xKey = Math.round(pt.x * 100) / 100;
-          const prevBaseline = stackBaselineTracker.get(xKey) ?? chartBaseline;
+          const tracker =
+            pt.stackSign === 'negative'
+              ? negativeStackBaselineTracker
+              : positiveStackBaselineTracker;
+          const prevBaseline = tracker.get(xKey) ?? areaBaseline;
           bottomLine.push({ x: pt.x, y: prevBaseline });
 
           // Update the baseline tracker for the next series
-          stackBaselineTracker.set(xKey, pt.y);
+          tracker.set(xKey, pt.y);
         }
 
         // Build area path: top line left-to-right, then bottom line right-to-left.
@@ -339,15 +388,15 @@ export function generateAreaMarks(
           style: areaStyleForDatum(markSpec, plottedData[0], scales, encodings, marks.length),
         });
       } else {
-        // Non-stacked area: baseline is the chart bottom
-        let path = `M${topPoints[0].x},${chartBaseline}`;
+        // Non-stacked area: baseline is resolved from the value-axis crossing.
+        let path = `M${topPoints[0].x},${areaBaseline}`;
         path += ` L${topPoints[0].x},${topPoints[0].y}`;
 
         for (let i = 1; i < topPoints.length; i++) {
           path += ` L${topPoints[i].x},${topPoints[i].y}`;
         }
 
-        path += ` L${topPoints[topPoints.length - 1].x},${chartBaseline}`;
+        path += ` L${topPoints[topPoints.length - 1].x},${areaBaseline}`;
         path += ' Z';
 
         marks.push({

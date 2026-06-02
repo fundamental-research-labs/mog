@@ -597,6 +597,7 @@ function createPointScale(
       if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
       if (index === -1) return NaN;
+      if (n === 1) return rangeStart + absExtent / 2;
       return rangeStart + padding * step + index * step;
     },
     {

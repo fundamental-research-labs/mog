@@ -1386,6 +1386,7 @@ export interface ResolvedChartBarGeometryOffsetSnapshot {
 }
 
 export interface ResolvedChartBarGeometrySnapshot {
+  groupKey?: string;
   orientation?: 'horizontal' | 'vertical';
   grouping: 'standard' | 'clustered' | 'stacked' | 'percentStacked';
   sourceGapWidth?: number;
@@ -1395,6 +1396,10 @@ export interface ResolvedChartBarGeometrySnapshot {
   gapWidthClamped?: boolean;
   overlapClamped?: boolean;
   seriesIndices: number[];
+  yAxisIndex?: 0 | 1;
+  seriesSlotOrder?: 'source' | 'reverse';
+  categoryAxisLength?: number;
+  visibleCategoryCount?: number;
   categoryPitch?: number;
   barSize?: number;
   offsets?: ResolvedChartBarGeometryOffsetSnapshot[];

@@ -17,6 +17,7 @@ import { generateMarks } from './marks';
 import type {
   AxisOrient,
   ChartFrameSpec,
+  ConfigSpec,
   DataRow,
   EncodingSpec,
   LayerSpec,
@@ -50,6 +51,27 @@ function yAxisOrient(encoding: EncodingSpec | undefined): AxisOrient {
 function withoutYEncoding(encoding: EncodingSpec): EncodingSpec {
   const { y: _y, ...rest } = encoding;
   return rest;
+}
+
+function markConfigForLayer(
+  chartConfig: ConfigSpec | undefined,
+  layerConfig: ConfigSpec | undefined,
+): ConfigSpec | undefined {
+  if (!layerConfig) return chartConfig;
+  if (!chartConfig) return layerConfig;
+
+  return {
+    ...chartConfig,
+    ...layerConfig,
+    axis: chartConfig.axis,
+    legend: chartConfig.legend,
+    layoutHints: chartConfig.layoutHints,
+    padding: chartConfig.padding,
+    background: chartConfig.background,
+    chartFrame: chartConfig.chartFrame,
+    plotFrame: chartConfig.plotFrame,
+    range: chartConfig.range,
+  };
 }
 
 /**
@@ -167,6 +189,7 @@ export function compileLayered(
     }
 
     const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, layerScales);
+    const layerMarkConfig = markConfigForLayer(spec.config, layerUnit.config);
 
     const layerMarks = generateMarks(
       markType,
@@ -176,7 +199,7 @@ export function compileLayered(
       layerEncodings,
       layout,
       layerUnit.encoding,
-      spec.config,
+      layerMarkConfig,
     );
 
     allMarks.push(...layerMarks);

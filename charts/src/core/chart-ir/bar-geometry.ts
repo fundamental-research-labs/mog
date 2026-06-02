@@ -4,7 +4,8 @@ import type {
   ConfigSpec,
   StackMode,
 } from '../../grammar/spec';
-import type { ChartConfig, ChartType } from '../../types';
+import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../types';
+import { seriesConfigForDataSeries } from '../series-identity';
 
 export const DEFAULT_EXCEL_BAR_GAP_WIDTH = 150;
 export const DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP = 0;
@@ -75,6 +76,22 @@ const STACKED_CHART_TYPES = new Set<string>([
 export interface BarSlotGeometry {
   offset: number;
   size: number;
+}
+
+export interface BarGeometryGroup {
+  key: string;
+  geometry: BarGeometrySpec;
+  seriesIndices: number[];
+  yAxisIndex?: 0 | 1;
+}
+
+export interface ResolveBarGeometryGroupsOptions {
+  includeSeries?: (input: {
+    series: ChartData['series'][number];
+    seriesConfig: SeriesConfig | undefined;
+    index: number;
+    seriesType: string | undefined;
+  }) => boolean;
 }
 
 type ChartImportSourceDialect = 'ooxml' | 'ooxml-chart-ex';
@@ -157,7 +174,7 @@ export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'se
 
   const series = config.series ?? [];
   if (series.length === 0) return true;
-  return series.some((item) => isBarLikeChartType(item.type));
+  return series.some((item, index) => isBarLikeChartType(item.type ?? defaultComboSeriesType(index)));
 }
 
 export function effectiveBarGeometry(
@@ -165,13 +182,22 @@ export function effectiveBarGeometry(
 ): BarGeometrySpec | undefined {
   if (!hasExcelBarGeometryConfig(config)) return undefined;
 
-  const sourceGapWidth = finiteNumber(config.gapWidth);
-  const sourceOverlap = finiteNumber(config.overlap);
   const firstBarSeriesType =
     config.type === 'combo'
-      ? config.series?.find((series) => isBarLikeChartType(series.type))?.type
+      ? config.series?.find((series, index) =>
+          isBarLikeChartType(series.type ?? defaultComboSeriesType(index)),
+        )?.type
       : undefined;
-  const geometryType = firstBarSeriesType ?? config.type;
+  const geometryType = firstBarSeriesType ?? (config.type === 'combo' ? 'column' : config.type);
+  return effectiveBarGeometryForType(config, geometryType);
+}
+
+function effectiveBarGeometryForType(
+  config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap'>,
+  geometryType: ChartType | string,
+): BarGeometrySpec {
+  const sourceGapWidth = finiteNumber(config.gapWidth);
+  const sourceOverlap = finiteNumber(config.overlap);
   const grouping = barGroupingForConfig({
     type: geometryType as ChartType,
     subType: config.subType,
@@ -191,6 +217,108 @@ export function effectiveBarGeometry(
       : {}),
     ...(sourceOverlap !== undefined && sourceOverlap !== overlap ? { overlapClamped: true } : {}),
   };
+}
+
+export function resolveBarGeometryGroups(
+  config: ChartConfig,
+  chartData: Pick<ChartData, 'series'>,
+  options: ResolveBarGeometryGroupsOptions = {},
+): BarGeometryGroup[] {
+  if (!hasExcelBarGeometryConfig(config)) return [];
+
+  if (config.type !== 'combo') {
+    const geometry = effectiveBarGeometry(config);
+    if (!geometry) return [];
+    const seriesIndices = chartData.series
+      .map((series, index) => ({
+        series,
+        seriesConfig: seriesConfigForDataSeries(series, config.series ?? [], index),
+        index,
+      }))
+      .filter(({ series, seriesConfig, index }) =>
+        options.includeSeries
+          ? options.includeSeries({
+              series,
+              seriesConfig,
+              index,
+              seriesType: seriesConfig?.type ?? series.type ?? config.type,
+            })
+          : true,
+      )
+      .map(({ index }) => index);
+    if (seriesIndices.length === 0) return [];
+
+    return [
+      {
+        key: `bar:0:${geometry.orientation ?? 'vertical'}:${geometry.grouping}`,
+        geometry: withImportedSeriesSlotOrder(config, { ...geometry, seriesIndices }),
+        seriesIndices,
+      },
+    ];
+  }
+
+  const groups = new Map<string, BarGeometryGroup>();
+  for (let index = 0; index < chartData.series.length; index += 1) {
+    const series = chartData.series[index];
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
+    const seriesType = comboSeriesTypeForBarGeometry(config, series, seriesConfig, index);
+    if (!isBarLikeChartType(seriesType)) continue;
+    if (
+      options.includeSeries &&
+      !options.includeSeries({ series, seriesConfig, index, seriesType })
+    ) {
+      continue;
+    }
+
+    const yAxisIndex = normalizeBarGeometryYAxisIndex(seriesConfig?.yAxisIndex ?? series.yAxisIndex);
+    const geometry = effectiveBarGeometryForType(config, seriesType);
+    const key = `bar:${yAxisIndex ?? 0}:${geometry.orientation ?? 'vertical'}:${geometry.grouping}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.seriesIndices.push(index);
+      existing.geometry = { ...existing.geometry, seriesIndices: existing.seriesIndices };
+      continue;
+    }
+
+    const seriesIndices = [index];
+    groups.set(key, {
+      key,
+      geometry: withImportedSeriesSlotOrder(config, { ...geometry, seriesIndices }),
+      seriesIndices,
+      ...(yAxisIndex !== undefined ? { yAxisIndex } : {}),
+    });
+  }
+
+  return [...groups.values()];
+}
+
+function comboSeriesTypeForBarGeometry(
+  config: Pick<ChartConfig, 'type'>,
+  series: ChartData['series'][number],
+  seriesConfig: SeriesConfig | undefined,
+  index: number,
+): string | undefined {
+  const fallbackComboType =
+    config.type === 'combo' ? defaultComboSeriesType(index) : config.type;
+  return seriesConfig?.type ?? series.type ?? fallbackComboType;
+}
+
+function defaultComboSeriesType(index: number): ChartType {
+  return index === 0 ? 'column' : 'line';
+}
+
+function normalizeBarGeometryYAxisIndex(value: number | undefined): 0 | 1 | undefined {
+  if (value === 0 || value === 1) return value;
+  return undefined;
+}
+
+function withImportedSeriesSlotOrder(
+  config: Pick<ChartConfig, 'extra'>,
+  geometry: BarGeometrySpec,
+): BarGeometrySpec {
+  return shouldReverseImportedHorizontalBarSeries(config, geometry)
+    ? { ...geometry, seriesSlotOrder: 'reverse' }
+    : geometry;
 }
 
 export function chartImportSourceDialect(

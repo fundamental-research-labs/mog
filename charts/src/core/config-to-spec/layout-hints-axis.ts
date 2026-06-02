@@ -1,11 +1,232 @@
-import type { AxisSpec, ChannelSpec, EncodingSpec, ScaleSpec } from '../../grammar/spec';
+import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, ScaleSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../../primitives/scales/linear';
 import { buildAxisScaleSpec, explicitDomainBound, mapAxisConfigToAxisSpec } from './axis';
+import { hasExcelBarGeometryConfig } from './bar-geometry';
+import { categoryDisplayLabel } from './category-axis';
 import { hasSecondaryYAxis } from './secondary-axis';
 
 const UNRESOLVED_AXIS_LABEL_FONT_SIZE = 11;
+const AXIS_TEXT_WIDTH_RATIO = 0.6;
+const AXIS_EDGE_PADDING = 8;
+const DEFAULT_AXIS_TITLE_PADDING = 10;
+
+type AxisReservations = NonNullable<ConfigSpec['layoutHints']>['axisReservations'];
+type LayoutSide = 'top' | 'right' | 'bottom' | 'left';
+
+export function estimateBarColumnAxisReservations(
+  config: ChartConfig,
+  encoding: EncodingSpec | undefined,
+  data: ChartData | undefined,
+): AxisReservations | undefined {
+  if (!encoding || !hasExcelBarGeometryConfig(config)) return undefined;
+
+  const reservations: Required<Pick<NonNullable<AxisReservations>, LayoutSide>> & {
+    source: 'excelBarColumn';
+  } = {
+    source: 'excelBarColumn',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  };
+
+  reserveAxis('x', encoding.x, encoding.x?.axis, encoding, data, reservations);
+  reserveAxis('x', encoding.x, encoding.x?.secondaryAxis, encoding, data, reservations);
+  reserveAxis('y', encoding.y, encoding.y?.axis, encoding, data, reservations);
+  reserveAxis('y', encoding.y, encoding.y?.secondaryAxis, encoding, data, reservations);
+
+  return reservations;
+}
+
+function reserveAxis(
+  channelName: 'x' | 'y',
+  channel: ChannelSpec | undefined,
+  axis: AxisSpec | null | undefined,
+  encoding: EncodingSpec,
+  data: ChartData | undefined,
+  reservations: Required<Pick<NonNullable<AxisReservations>, LayoutSide>>,
+): void {
+  if (!channel || axis === null) return;
+
+  const labelsInside = categoryAxisLabelsInsidePlot(channelName, encoding, data);
+  const labelSide = channelName === 'x' ? xAxisLabelSide(axis) : yAxisLabelSide(axis);
+  const titleSide = labelsInside ? defaultAxisSide(channelName, axis) : labelSide;
+
+  const labelReservation = labelsInside
+    ? 0
+    : channelName === 'x'
+      ? xAxisLabelReservation(channel, axis, data)
+      : yAxisLabelReservation(channel, axis, data);
+  const titleReservation = axisTitleReservation(channel, axis);
+
+  if (labelReservation > 0) {
+    reservations[labelSide] = Math.max(reservations[labelSide], labelReservation);
+  }
+  if (titleReservation > 0) {
+    reservations[titleSide] = Math.max(
+      reservations[titleSide],
+      titleSide === labelSide ? labelReservation + titleReservation : titleReservation,
+    );
+  }
+}
+
+function xAxisLabelReservation(
+  channel: ChannelSpec,
+  axis: AxisSpec | undefined,
+  data: ChartData | undefined,
+): number {
+  if (axis?.labels === false || axis?.labelPosition === 'none') return tickReservation(axis);
+
+  const fontSize = axis?.labelFontSize ?? UNRESOLVED_AXIS_LABEL_FONT_SIZE;
+  const labelAngle = axis?.labelAngle ?? 0;
+  const labelPadding = axis?.labelPadding ?? (labelAngle ? 2 : 3);
+  const multiLevelLabelCount = maxMultiLevelLabelCount(axis);
+  const labelExtent =
+    Math.abs(labelAngle) <= 1 && multiLevelLabelCount > 1
+      ? multiLevelLabelCount * (fontSize + 2)
+      : rotatedTextHeight(maxAxisLabelWidth(channel, axis, data, fontSize), fontSize, labelAngle);
+
+  return Math.ceil(tickReservation(axis) + labelPadding + labelExtent + AXIS_EDGE_PADDING);
+}
+
+function yAxisLabelReservation(
+  channel: ChannelSpec,
+  axis: AxisSpec | undefined,
+  data: ChartData | undefined,
+): number {
+  if (axis?.labels === false || axis?.labelPosition === 'none') return tickReservation(axis);
+
+  const fontSize = axis?.labelFontSize ?? UNRESOLVED_AXIS_LABEL_FONT_SIZE;
+  const labelAngle = axis?.labelAngle ?? 0;
+  const labelPadding = axis?.labelPadding ?? 3;
+  const multiLevelWidth = estimateMultiLevelYAxisLabelWidth(axis, fontSize);
+  const labelExtent =
+    multiLevelWidth ??
+    rotatedTextWidth(maxAxisLabelWidth(channel, axis, data, fontSize), fontSize, labelAngle);
+
+  return Math.ceil(tickReservation(axis) + labelPadding + labelExtent + AXIS_EDGE_PADDING);
+}
+
+function axisTitleReservation(channel: ChannelSpec, axis: AxisSpec | undefined): number {
+  if (axis?.title === null) return 0;
+  const title = axis?.title ?? channel.title;
+  if (!title) return 0;
+  const fontSize = axis?.titleFontSize ?? 12;
+  return Math.ceil((axis?.titlePadding ?? DEFAULT_AXIS_TITLE_PADDING) + fontSize);
+}
+
+function tickReservation(axis: AxisSpec | undefined): number {
+  return axis?.ticks === false ? 0 : (axis?.tickSize ?? 6);
+}
+
+function maxAxisLabelWidth(
+  channel: ChannelSpec,
+  axis: AxisSpec | undefined,
+  data: ChartData | undefined,
+  fontSize: number,
+): number {
+  const labels = visibleAxisLabels(axis, axisLabelCandidates(channel, axis, data));
+  const maxLabelLength = Math.max(1, ...labels.map((label) => label.length));
+  return Math.ceil(maxLabelLength * fontSize * AXIS_TEXT_WIDTH_RATIO);
+}
+
+function visibleAxisLabels(axis: AxisSpec | undefined, labels: string[]): string[] {
+  const skip = normalizedSkip(axis?.tickLabelSkip);
+  if (!skip || skip <= 1) return labels.length > 0 ? labels : [''];
+  const visible = labels.filter((_label, index) => index % skip === 0);
+  return visible.length > 0 ? visible : labels;
+}
+
+function axisLabelCandidates(
+  channel: ChannelSpec,
+  axis: AxisSpec | undefined,
+  data: ChartData | undefined,
+): string[] {
+  if (channel.type === 'quantitative') {
+    return quantitativeAxisLabels(axis, channel.scale, channel.format);
+  }
+
+  const labels: string[] = [];
+  if (axis?.labelTextByValue) labels.push(...Object.values(axis.labelTextByValue));
+  if (axis?.multiLevelLabelsByValue) {
+    labels.push(...Object.values(axis.multiLevelLabelsByValue).flat());
+  }
+  if (labels.length > 0) return labels.filter((label) => label !== '');
+
+  const scaleDomain = Array.isArray(channel.scale?.domain) ? channel.scale.domain : undefined;
+  if (scaleDomain && scaleDomain.length > 0) {
+    return scaleDomain.map((value) => axisLabelForValue(axis, value, channel.format));
+  }
+
+  return (data?.categories ?? []).map(categoryDisplayLabel);
+}
+
+function quantitativeAxisLabels(
+  axis: AxisSpec | undefined,
+  scale: ScaleSpec | null | undefined,
+  format: string | undefined,
+): string[] {
+  if (axis?.labels === false) return [];
+
+  const scaleDomain = Array.isArray(scale?.domain) ? scale.domain : undefined;
+  const min = explicitDomainBound(scaleDomain, 0);
+  const max = explicitDomainBound(scaleDomain, 1);
+  if (min === undefined || max === undefined) return [];
+
+  const tickCount = axis?.tickCount ?? 10;
+  const domain =
+    scale?.nice === false
+      ? ([min, max] as [number, number])
+      : niceLinear(min, max, typeof scale?.nice === 'number' ? scale.nice : tickCount);
+  const ticks = generateTicks(domain[0], domain[1], tickCount);
+  const values = ticks.length > 0 ? ticks : domain;
+  return values.map((value) => axisLabelForValue(axis, value, format));
+}
+
+function axisLabelForValue(
+  axis: AxisSpec | undefined,
+  value: unknown,
+  format: string | undefined,
+): string {
+  const mapped = axis?.labelTextByValue?.[String(value)];
+  if (mapped !== undefined) return mapped;
+  if (axis?.formatType === 'time') return formatExcelSerialDateTick(value, format);
+  return formatTickValue(value, format ?? axis?.format);
+}
+
+function xAxisLabelSide(axis: AxisSpec | undefined): Extract<LayoutSide, 'top' | 'bottom'> {
+  if (axis?.labelPosition === 'high') return 'top';
+  if (axis?.labelPosition === 'low') return 'bottom';
+  return axis?.orient === 'top' ? 'top' : 'bottom';
+}
+
+function yAxisLabelSide(axis: AxisSpec | undefined): Extract<LayoutSide, 'left' | 'right'> {
+  if (axis?.labelPosition === 'high') return 'right';
+  if (axis?.labelPosition === 'low') return 'left';
+  return axis?.orient === 'right' ? 'right' : 'left';
+}
+
+function defaultAxisSide(channelName: 'x' | 'y', axis: AxisSpec | undefined): LayoutSide {
+  if (channelName === 'x') return axis?.orient === 'top' ? 'top' : 'bottom';
+  return axis?.orient === 'right' ? 'right' : 'left';
+}
+
+function normalizedSkip(skip: number | undefined): number | undefined {
+  if (skip === undefined || !Number.isFinite(skip) || skip < 1) return undefined;
+  return Math.max(1, Math.floor(skip));
+}
+
+function rotatedTextWidth(width: number, height: number, angleDegrees: number): number {
+  const radians = (Math.abs(angleDegrees) * Math.PI) / 180;
+  return Math.cos(radians) * width + Math.sin(radians) * height;
+}
+
+function rotatedTextHeight(width: number, height: number, angleDegrees: number): number {
+  const radians = (Math.abs(angleDegrees) * Math.PI) / 180;
+  return Math.sin(radians) * width + Math.cos(radians) * height;
+}
 
 export function estimateNominalYAxisLabelWidth(
   encoding: EncodingSpec | undefined,

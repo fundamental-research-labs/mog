@@ -111,6 +111,7 @@ export {
   isHiddenChartCellValue,
   isBarLikeChartType,
   parseRange,
+  resolveBarGeometryGroups,
   rustToTsChartType,
   stackModeForChartType,
   seriesConfigForDataSeries,
@@ -125,6 +126,7 @@ export {
   withSeriesConfigIdentity,
   tsToRustChartType,
   asStockConfig,
+  type BarGeometryGroup,
   type BarSlotGeometry,
   type CellDataAccessor,
   type CellRange,
@@ -132,6 +134,7 @@ export {
   type RustBarDirection,
   type RustChartType,
   type RustChartTypeResult,
+  type ResolveBarGeometryGroupsOptions,
   type StockRole,
   type StockRolePlan,
 } from './core';

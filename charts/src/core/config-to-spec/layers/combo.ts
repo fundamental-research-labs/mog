@@ -1,4 +1,11 @@
-import type { DataRow, EncodingSpec, MarkType, Transform, UnitSpec } from '../../../grammar/spec';
+import type {
+  ConfigSpec,
+  DataRow,
+  EncodingSpec,
+  MarkType,
+  Transform,
+  UnitSpec,
+} from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../../types';
 import { applyAutoValueAxisTicks, buildAxisScaleSpec, mapAxisConfigToAxisSpec } from '../axis';
 import {
@@ -24,6 +31,7 @@ import { buildSeriesMark } from '../marks';
 import { resolveStackMode } from '../subtypes';
 import { isNoFillNoLineSeries } from '../style';
 import { seriesConfigForDataSeries, seriesSourceIndex } from '../../series-identity';
+import { resolveBarGeometryGroups, type BarGeometryGroup } from '../bar-geometry';
 import {
   effectiveShowLines,
   effectiveShowMarkers,
@@ -48,6 +56,7 @@ export function buildComboLayers(
   const baseEncoding = buildEncoding(config, data);
   const xEncoding = baseEncoding.x ?? { field: 'category', type: 'nominal' as const };
   const yEncoding = baseEncoding.y ?? { field: VALUE_FIELD, type: 'quantitative' as const };
+  const barGeometryGroups = resolveBarGeometryGroups(config, data);
   const emittedBarGroups = new Set<string>();
   const emittedAreaGroups = new Set<string>();
 
@@ -75,19 +84,16 @@ export function buildComboLayers(
     const showMarkers = effectiveShowMarkers(seriesConf, rawSeriesType, config, !showLine);
 
     if (markType === 'bar' && shouldGroupAsBarSeries(rawSeriesType)) {
-      const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
-      const groupKey = `bar:${yAxisIndex ?? 0}`;
-      if (emittedBarGroups.has(groupKey)) continue;
-      emittedBarGroups.add(groupKey);
+      const barGroup = barGeometryGroups.find((group) => group.seriesIndices.includes(i));
+      if (!barGroup || emittedBarGroups.has(barGroup.key)) continue;
+      emittedBarGroups.add(barGroup.key);
 
       layers.push(
         buildBarGroupLayer({
-          config,
           data,
-          seriesConfigs,
           baseEncoding,
           encoding,
-          yAxisIndex,
+          group: barGroup,
         }),
       );
       continue;
@@ -326,30 +332,21 @@ function buildAreaGroupLayer(input: {
 }
 
 function buildBarGroupLayer(input: {
-  config: ChartConfig;
   data: ChartData;
-  seriesConfigs: SeriesConfig[];
   baseEncoding: EncodingSpec;
   encoding: EncodingSpec;
-  yAxisIndex: 0 | 1 | undefined;
+  group: BarGeometryGroup;
 }): UnitSpec {
-  const memberIndices = input.data.series
-    .map((series, index) => {
-      const seriesConf = seriesConfigForDataSeries(series, input.seriesConfigs, index);
-      const rawSeriesType = resolveComboSeriesType(input.config, series, seriesConf, index);
-      const yAxisIndex = normalizeYAxisIndex(seriesConf?.yAxisIndex ?? series.yAxisIndex);
-      return { index, rawSeriesType, yAxisIndex };
-    })
-    .filter(
-      (item) =>
-        shouldGroupAsBarSeries(item.rawSeriesType) &&
-        (item.yAxisIndex ?? 0) === (input.yAxisIndex ?? 0),
-    )
-    .map((item) => item.index);
+  const memberIndices = input.group.seriesIndices;
 
   const encoding: EncodingSpec = {
     ...input.encoding,
-    y: withBarGroupValueScale(input.encoding.y, input.data, memberIndices),
+    y: withBarGroupValueScale(
+      input.encoding.y,
+      input.data,
+      memberIndices,
+      input.group.geometry.grouping,
+    ),
     ...(input.baseEncoding.color ? { color: { ...input.baseEncoding.color, legend: null } } : {}),
     ...(input.baseEncoding.opacity ? { opacity: { ...input.baseEncoding.opacity } } : {}),
   };
@@ -363,8 +360,25 @@ function buildBarGroupLayer(input: {
       strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
     },
     encoding,
+    config: barGroupLayerConfig(input.group),
     transform: [{ type: 'filter', filter: { field: SERIES_INDEX_FIELD, oneOf: memberIndices } }],
   };
+}
+
+function barGroupLayerConfig(group: BarGeometryGroup): ConfigSpec {
+  const stack = stackModeForBarGeometryGrouping(group.geometry.grouping);
+  return {
+    ...(stack ? { stack } : {}),
+    barGeometry: group.geometry,
+  };
+}
+
+function stackModeForBarGeometryGrouping(
+  grouping: BarGeometryGroup['geometry']['grouping'],
+): ConfigSpec['stack'] | undefined {
+  if (grouping === 'percentStacked') return 'normalize';
+  if (grouping === 'stacked') return 'zero';
+  return undefined;
 }
 
 function shouldGroupAsStackedAreaSeries(config: ChartConfig, seriesType: ChartType): boolean {
@@ -437,10 +451,26 @@ function withBarGroupValueScale(
   y: EncodingSpec['y'],
   data: ChartData,
   memberIndices: number[],
+  grouping: BarGeometryGroup['geometry']['grouping'],
 ): EncodingSpec['y'] {
   if (!y) return y;
   const adjusted = { ...y };
-  applyMogAutoValueAxisScale(adjusted, memberValues(data, memberIndices), { includeZero: true });
+  if (hasExplicitScaleDomain(adjusted)) return adjusted;
+
+  if (grouping === 'percentStacked') {
+    adjusted.scale = {
+      ...(adjusted.scale ?? {}),
+      domain: percentStackedMemberDomain(data, memberIndices),
+      nice: false,
+    };
+    return adjusted;
+  }
+
+  const values =
+    grouping === 'stacked'
+      ? stackedMemberValues(data, memberIndices)
+      : memberValues(data, memberIndices);
+  applyMogAutoValueAxisScale(adjusted, values, { includeZero: true });
   return adjusted;
 }
 

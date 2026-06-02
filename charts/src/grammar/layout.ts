@@ -304,6 +304,7 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   const margin: Layout['margin'] = { ...DEFAULT_LAYOUT.margin };
   const encodings = collectEncodings(spec);
   const layoutHints = spec.config?.layoutHints;
+  const paddingSides: Layout['margin'] = { top: 0, right: 0, bottom: 0, left: 0 };
   let bottomPadding = 0;
 
   // Handle padding from config
@@ -314,14 +315,31 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
       margin.right += padding;
       margin.bottom += padding;
       margin.left += padding;
+      paddingSides.top += padding;
+      paddingSides.right += padding;
+      paddingSides.bottom += padding;
+      paddingSides.left += padding;
       bottomPadding += padding;
     } else {
-      margin.top += padding.top ?? 0;
-      margin.right += padding.right ?? 0;
-      margin.bottom += padding.bottom ?? 0;
-      margin.left += padding.left ?? 0;
-      bottomPadding += padding.bottom ?? 0;
+      const top = padding.top ?? 0;
+      const right = padding.right ?? 0;
+      const bottom = padding.bottom ?? 0;
+      const left = padding.left ?? 0;
+      margin.top += top;
+      margin.right += right;
+      margin.bottom += bottom;
+      margin.left += left;
+      paddingSides.top += top;
+      paddingSides.right += right;
+      paddingSides.bottom += bottom;
+      paddingSides.left += left;
+      bottomPadding += bottom;
     }
+  }
+
+  if (layoutHints?.axisReservations) {
+    applyAxisReservations(margin, layoutHints.axisReservations, paddingSides);
+    return margin;
   }
 
   const xAxes = collectChannelAxes(encodings, 'x');
@@ -388,6 +406,29 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   }
 
   return margin;
+}
+
+function applyAxisReservations(
+  margin: Layout['margin'],
+  reservations: NonNullable<ConfigSpec['layoutHints']>['axisReservations'],
+  paddingSides: Layout['margin'],
+): void {
+  if (!reservations) return;
+
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const value = finiteReservation(reservations[side]);
+    if (value === undefined) continue;
+    margin[side] = Math.max(
+      DEFAULT_LAYOUT.margin[side] + paddingSides[side],
+      value + paddingSides[side],
+    );
+  }
+}
+
+function finiteReservation(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.ceil(value))
+    : undefined;
 }
 
 function collectChannelAxes(

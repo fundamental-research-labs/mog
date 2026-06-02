@@ -833,6 +833,14 @@ export interface ManualLayoutSpec {
   h?: number;
 }
 
+export interface AxisReservationSpec {
+  source?: 'excelBarColumn';
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 export type BarGeometryGrouping = 'standard' | 'clustered' | 'stacked' | 'percentStacked';
 
 export type BarGeometryOrientation = 'horizontal' | 'vertical';
@@ -911,6 +919,7 @@ export interface ConfigSpec {
     /** @deprecated Use side-specific y-axis label widths. */
     yAxisLabelWidth?: number;
     bottomMargin?: number;
+    axisReservations?: AxisReservationSpec;
     /** Category tick labels are drawn next to an in-plot value-axis crossing. */
     xAxisLabelsInsidePlot?: boolean;
     /** Category tick labels are drawn next to an in-plot value-axis crossing. */

@@ -1,9 +1,6 @@
 import {
-  effectiveBarGeometry,
   excelBarSlotGeometry,
-  hasExcelBarGeometryConfig,
-  isBarLikeChartType,
-  seriesConfigForDataSeries,
+  resolveBarGeometryGroups,
   type ChartConfig,
   type ChartData,
 } from '@mog/charts';
@@ -20,35 +17,39 @@ export function snapshotBarGeometry(
   chartData: ChartData,
   layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null,
 ): BarGeometrySnapshot[] | undefined {
-  if (!hasExcelBarGeometryConfig(config)) return undefined;
+  const groups = resolveBarGeometryGroups(config, chartData, {
+    includeSeries: ({ seriesConfig }) => !isNoFillNoLineSeriesConfig(seriesConfig),
+  });
+  if (groups.length === 0) return undefined;
 
-  const geometry = effectiveBarGeometry(config);
-  if (!geometry) return undefined;
+  const visibleCategoryCount = chartData.categories.length;
+  return groups.map((group) => {
+    const geometry = group.geometry;
+    const categoryAxisLength =
+      geometry.orientation === 'horizontal' ? layout?.plotArea.height : layout?.plotArea.width;
+    const categoryPitch =
+      categoryAxisLength !== undefined && visibleCategoryCount > 0
+        ? categoryAxisLength / visibleCategoryCount
+        : undefined;
+    const offsets =
+      categoryPitch !== undefined
+        ? group.seriesIndices.map((seriesIndex, slotIndex) => ({
+            seriesIndex,
+            offset: excelBarSlotGeometry(
+              categoryPitch,
+              group.seriesIndices.length,
+              slotIndex,
+              geometry,
+            ).offset,
+          }))
+        : undefined;
+    const barSize =
+      categoryPitch !== undefined
+        ? excelBarSlotGeometry(categoryPitch, group.seriesIndices.length, 0, geometry).size
+        : undefined;
 
-  const seriesIndices = barGeometrySeriesIndices(config, chartData);
-  if (seriesIndices.length === 0) return undefined;
-
-  const categoryLength =
-    geometry.orientation === 'horizontal' ? layout?.plotArea.height : layout?.plotArea.width;
-  const categoryPitch =
-    categoryLength && chartData.categories.length > 0
-      ? categoryLength / chartData.categories.length
-      : undefined;
-  const offsets =
-    categoryPitch !== undefined
-      ? seriesIndices.map((seriesIndex, slotIndex) => ({
-          seriesIndex,
-          offset: excelBarSlotGeometry(categoryPitch, seriesIndices.length, slotIndex, geometry)
-            .offset,
-        }))
-      : undefined;
-  const barSize =
-    categoryPitch !== undefined
-      ? excelBarSlotGeometry(categoryPitch, seriesIndices.length, 0, geometry).size
-      : undefined;
-
-  return [
-    {
+    return {
+      groupKey: group.key,
       orientation: geometry.orientation,
       grouping: geometry.grouping,
       sourceGapWidth: geometry.sourceGapWidth,
@@ -57,25 +58,14 @@ export function snapshotBarGeometry(
       overlap: geometry.overlap,
       gapWidthClamped: geometry.gapWidthClamped,
       overlapClamped: geometry.overlapClamped,
-      seriesIndices,
+      seriesIndices: group.seriesIndices,
+      yAxisIndex: group.yAxisIndex,
+      seriesSlotOrder: geometry.seriesSlotOrder,
+      categoryAxisLength,
+      visibleCategoryCount,
       categoryPitch,
       barSize,
       offsets,
-    },
-  ];
-}
-
-function barGeometrySeriesIndices(config: ChartConfig, chartData: ChartData): number[] {
-  return chartData.series
-    .map((dataSeries, index) => {
-      const seriesConfig = seriesConfigForDataSeries(dataSeries, config.series ?? [], index);
-      const seriesType = seriesConfig?.type ?? dataSeries.type ?? config.type;
-      return {
-        index,
-        seriesConfig,
-        isBarLike: config.type === 'combo' ? isBarLikeChartType(seriesType) : true,
-      };
-    })
-    .filter(({ isBarLike, seriesConfig }) => isBarLike && !isNoFillNoLineSeriesConfig(seriesConfig))
-    .map(({ index }) => index);
+    };
+  });
 }

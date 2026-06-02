@@ -116,6 +116,7 @@ export {
   barBaselinePixelForDomain,
   barBaselineValueForDomain,
   parseRange,
+  resolveSeriesColorAuthority,
   resolveBarGeometryGroups,
   rustToTsChartType,
   stackModeForChartType,

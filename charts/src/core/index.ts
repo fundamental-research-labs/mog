@@ -52,6 +52,7 @@ export {
   buildExcelCartesianGeometryPlan,
   type ExcelCartesianGeometryPlan,
 } from './config-to-spec/excel-cartesian-geometry';
+export { resolveSeriesColorAuthority } from './config-to-spec/color-authority';
 export * from './style-resolver';
 export {
   rustToTsChartType,

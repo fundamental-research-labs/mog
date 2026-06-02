@@ -5,6 +5,7 @@ import {
   seriesSourceIndex,
   seriesSourceKey,
   shouldProjectStockSeries,
+  resolveSeriesColorAuthority,
   stockRolePlan,
   type ChartConfig,
   type ChartData,
@@ -128,6 +129,13 @@ export function snapshotSeries(
   const renderedPointCount = values.filter((value) => value !== null).length;
   const effectiveType = series.type ?? configured?.type;
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
+  const colorAuthority = resolveSeriesColorAuthority({
+    config,
+    series: configured,
+    sourceSeriesIndex,
+    renderedSeriesIndex: index,
+    fallbackType: (effectiveType ?? config.type) as ChartConfig['type'],
+  });
   const includeStockValues = shouldSnapshotStockValues(
     config,
     effectiveType,
@@ -166,6 +174,7 @@ export function snapshotSeries(
       configured?.color ??
       config.colors?.[sourceSeriesIndex] ??
       config.colors?.[index],
+    ...(colorAuthority ? { colorAuthority } : {}),
     source,
     renderAuthority,
     xValues,

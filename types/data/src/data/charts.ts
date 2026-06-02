@@ -1256,6 +1256,54 @@ export type ChartSeriesDimensionRenderAuthority =
   | 'fallbackCache'
   | 'unavailable';
 
+export type ResolvedChartColorAuthoritySource =
+  | 'seriesColor'
+  | 'seriesFormatFill'
+  | 'seriesFormatLine'
+  | 'pointFill'
+  | 'pointVisualFormat'
+  | 'markerForeground'
+  | 'markerBackground'
+  | 'chartStyleOwner'
+  | 'workbookTheme'
+  | 'themeRepeat'
+  | 'configPalette'
+  | 'defaultPalette'
+  | 'unknown';
+
+export interface ResolvedChartPaintAuthoritySnapshot {
+  color?: string;
+  source: ResolvedChartColorAuthoritySource;
+  ownerKey?: string;
+  explicit: boolean;
+  fallback: boolean;
+  themeSlot?: string;
+}
+
+export interface ResolvedChartPointColorAuthoritySnapshot {
+  pointIndex: number;
+  fill?: ResolvedChartPaintAuthoritySnapshot;
+  stroke?: ResolvedChartPaintAuthoritySnapshot;
+  markerFill?: ResolvedChartPaintAuthoritySnapshot;
+  markerStroke?: ResolvedChartPaintAuthoritySnapshot;
+}
+
+export interface ResolvedChartColorAuthoritySnapshot {
+  ownerKey: string;
+  sourceSeriesIndex: number;
+  renderedSeriesIndex?: number;
+  color?: string;
+  source: ResolvedChartColorAuthoritySource;
+  explicit: boolean;
+  fallback: boolean;
+  themeSlot?: string;
+  fill?: ResolvedChartPaintAuthoritySnapshot;
+  stroke?: ResolvedChartPaintAuthoritySnapshot;
+  markerFill?: ResolvedChartPaintAuthoritySnapshot;
+  markerStroke?: ResolvedChartPaintAuthoritySnapshot;
+  points?: ResolvedChartPointColorAuthoritySnapshot[];
+}
+
 export interface ResolvedChartSeriesSnapshot {
   index: number;
   order: number;
@@ -1278,6 +1326,7 @@ export interface ResolvedChartSeriesSnapshot {
   renderLayerCount?: number;
   geometry?: ResolvedChartSeriesGeometrySnapshot;
   color?: string;
+  colorAuthority?: ResolvedChartColorAuthoritySnapshot;
   source: {
     values?: string;
     categories?: string;

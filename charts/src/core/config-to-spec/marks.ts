@@ -26,6 +26,7 @@ import { linePointsToCanvasPx } from './units';
 import { barOrientationForChartType } from './bar-geometry';
 import { RADAR_DEFAULT_FILLED_OPACITY } from '../radar-semantics';
 import {
+  defaultPieLikeExplosionPercent,
   doughnutInnerRadiusRatio,
   firstSliceAngleRadians,
   isDoughnutLikeChartType,
@@ -52,10 +53,10 @@ export function applyPieSliceExplosion(mark: MarkSpec, config: ChartConfig): voi
   if (pieSlice?.explodedIndices !== undefined && pieSlice.explodedIndices.length > 0) {
     mark._explodedIndices = pieSlice.explodedIndices;
   }
-  const explosionOffset =
-    finiteNumber(pieSlice?.explodeOffset) ??
-    finiteNumber(pieSlice?.explosion) ??
-    (isExplodedPieLikeChartType(config.type) ? 25 : undefined);
+  const explosionOffset = defaultPieLikeExplosionPercent(
+    config,
+    explodedIndex ?? pieSlice?.explodedIndices?.[0] ?? 0,
+  );
   if (explosionOffset !== undefined && explosionOffset > 0) {
     mark._explosionOffset = explosionOffset;
   }
@@ -296,10 +297,6 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Simple mark type string
   return baseType;
-}
-
-function finiteNumber(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function resolveBar3DShape(

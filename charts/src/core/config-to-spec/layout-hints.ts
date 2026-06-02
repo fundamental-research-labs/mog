@@ -10,6 +10,7 @@ import {
 } from './layout-hints-axis';
 import { dataTableLayoutHint } from './layout-hints-data-table';
 import { manualLayoutFromValue } from './layout-hints-manual';
+import { pieDoughnutLayoutHintsForConfig } from './pie-doughnut-geometry';
 
 type LayoutHints = NonNullable<ConfigSpec['layoutHints']>;
 
@@ -29,6 +30,7 @@ export function buildLayoutHints(
   const manualTitle = manualLayoutFromValue(config.titleLayout ?? config.chartTitle?.layout);
   const manualLegend = manualLayoutFromValue(config.legend?.layout);
   const dataTable = dataTableLayoutHint(config, data);
+  const pieDoughnut = pieDoughnutLayoutHintsForConfig(config, data);
 
   if (
     leftYAxisLabelWidth === undefined &&
@@ -40,7 +42,8 @@ export function buildLayoutHints(
     manualPlotArea === undefined &&
     manualTitle === undefined &&
     manualLegend === undefined &&
-    dataTable === undefined
+    dataTable === undefined &&
+    pieDoughnut === undefined
   ) {
     return undefined;
   }
@@ -58,5 +61,6 @@ export function buildLayoutHints(
     ...(manualTitle !== undefined ? { manualTitle } : {}),
     ...(manualLegend !== undefined ? { manualLegend } : {}),
     ...(dataTable !== undefined ? { dataTable } : {}),
+    ...(pieDoughnut !== undefined ? { pieDoughnut } : {}),
   };
 }

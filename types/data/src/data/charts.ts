@@ -933,6 +933,18 @@ export type ChartFamilySupportLevel =
 export type ChartFamilySupportReason =
   | 'exactRenderer'
   | 'standardRenderer'
+  | 'comboLayeredRenderer'
+  | 'funnelProportionalBarApproximation'
+  | 'funnelProjectionIncomplete'
+  | 'waterfallRenderer'
+  | 'waterfallProjectionIncomplete'
+  | 'histogramRenderer'
+  | 'histogramProjectionIncomplete'
+  | 'paretoRenderer'
+  | 'paretoProjectionIncomplete'
+  | 'boxplotRenderer'
+  | 'boxplotProjectionIncomplete'
+  | 'preservedOnlyChartExFamily'
   | 'stockSourceProjectionIncomplete'
   | 'surfaceApproximation'
   | 'contourApproximation'
@@ -1569,6 +1581,79 @@ export interface ChartAreaSizeSnapshot {
   height: number;
 }
 
+export type ResolvedChartPieDoughnutGeometryStatus = 'available' | 'unavailable';
+
+export type ResolvedChartPieDoughnutGeometryFamily =
+  | 'pie'
+  | 'doughnut'
+  | 'ofPie'
+  | 'pie3dApproximation';
+
+export interface ResolvedChartPieDoughnutSliceSnapshot {
+  seriesIndex: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  pointIndex: number;
+  category: string | number | null;
+  value: number;
+  sanitizedValue: number;
+  startAngle: number;
+  endAngle: number;
+  midAngle: number;
+  angle: number;
+  centerX: number;
+  centerY: number;
+  explosionPercent: number;
+  explosionOffset: number;
+  x: number;
+  y: number;
+  fill?: string;
+  visible: boolean;
+}
+
+export interface ResolvedChartPieDoughnutRingSnapshot {
+  seriesIndex: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  ringIndex: number;
+  innerRadius: number;
+  outerRadius: number;
+  innerRadiusRatio: number;
+  outerRadiusRatio: number;
+  slices: ResolvedChartPieDoughnutSliceSnapshot[];
+}
+
+export interface ResolvedChartPieDoughnutGeometrySnapshot {
+  geometryStatus: ResolvedChartPieDoughnutGeometryStatus;
+  geometryStatusReason?: string;
+  coordinateSystem: 'chartPixel';
+  chartWidth: number;
+  chartHeight: number;
+  plotArea: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  arcBox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  family: ResolvedChartPieDoughnutGeometryFamily;
+  startAngle: number;
+  clockwise: true;
+  holeSize?: number;
+  innerRadiusRatio: number;
+  ringCount: number;
+  centerX: number;
+  centerY: number;
+  radius: number;
+  padding: number;
+  rings: ResolvedChartPieDoughnutRingSnapshot[];
+}
+
 export interface ResolvedChartBarGeometryOffsetSnapshot {
   seriesIndex: number;
   offset: number;
@@ -1586,6 +1671,9 @@ export interface ResolvedChartBarGeometrySnapshot {
   overlapClamped?: boolean;
   seriesIndices: number[];
   yAxisIndex?: 0 | 1;
+  axisGroup?: 'primary' | 'secondary';
+  memberCount?: number;
+  layerRole?: 'bar';
   seriesSlotOrder?: 'source' | 'reverse';
   categoryAxisRole?: 'x' | 'y';
   valueAxisRole?: 'x' | 'y';
@@ -1897,6 +1985,7 @@ export interface ResolvedChartSpecSnapshot {
       overlap?: number;
       barGeometry?: ResolvedChartBarGeometrySnapshot[];
       cartesianGeometry?: ResolvedChartCartesianGeometrySnapshot;
+      pieDoughnutGeometry?: ResolvedChartPieDoughnutGeometrySnapshot;
       radarProjection?: ResolvedChartRadarProjectionSnapshot;
     };
     ranges: {

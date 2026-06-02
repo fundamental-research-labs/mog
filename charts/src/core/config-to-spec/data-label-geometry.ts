@@ -1,8 +1,10 @@
 import type { ChartConfig, ChartData, DataLabelConfig } from '../../types';
 import { seriesConfigForDataSeries } from '../series-identity';
 import {
+  defaultPieLikeExplosionPercent,
   doughnutInnerRadiusRatio,
   doughnutRingBand,
+  effectivePieLikeExplosionPercent,
   firstSliceAngleRadians,
   isPieLikeChartType,
   pieLikeSeriesTotal,
@@ -13,6 +15,8 @@ import { isNoFillNoLineSeries } from './style';
 export interface PieLabelGeometry {
   cos: number;
   sin: number;
+  centerX: number;
+  centerY: number;
   innerRadiusRatio: number;
   outerRadiusRatio: number;
 }
@@ -42,6 +46,7 @@ export function buildPieLabelGeometries(
   );
 
   return data.series.map((series, seriesIndex) => {
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], seriesIndex);
     const ringIndex = ringIndexBySeriesIndex.get(seriesIndex);
     const band =
       ringIndex !== undefined && ringCount > 1
@@ -52,6 +57,22 @@ export function buildPieLabelGeometries(
       startAngle: firstSliceAngleRadians(config),
       innerRadiusRatio: band.innerRadius,
       outerRadiusRatio: band.outerRadius,
+    }).map((geometry) => {
+      const pointIndex = geometry.index;
+      const pointExplosion = seriesConfig?.points?.find((point) => point.idx === pointIndex)
+        ?.explosion;
+      const explosionPercent =
+        effectivePieLikeExplosionPercent({
+          seriesExplosion: seriesConfig?.explosion,
+          pointExplosion,
+          defaultExplosion: defaultPieLikeExplosionPercent(config, pointIndex),
+        }) ?? 0;
+      const centerOffset = (geometry.outerRadiusRatio / 2) * (explosionPercent / 100);
+      return {
+        ...geometry,
+        centerX: 0.5 + geometry.cos * centerOffset,
+        centerY: 0.5 + geometry.sin * centerOffset,
+      };
     });
   });
 }
@@ -67,11 +88,13 @@ export function pieLabelCoordinates(
     position,
   );
   const anchorRadius = outside ? Math.max(0, geometry.outerRadiusRatio * 0.49) : labelRadius;
+  const centerX = Number.isFinite(geometry.centerX) ? geometry.centerX : 0.5;
+  const centerY = Number.isFinite(geometry.centerY) ? geometry.centerY : 0.5;
   return {
-    anchorX: 0.5 + geometry.cos * anchorRadius,
-    anchorY: 0.5 + geometry.sin * anchorRadius,
-    labelX: 0.5 + geometry.cos * labelRadius,
-    labelY: 0.5 + geometry.sin * labelRadius,
+    anchorX: centerX + geometry.cos * anchorRadius,
+    anchorY: centerY + geometry.sin * anchorRadius,
+    labelX: centerX + geometry.cos * labelRadius,
+    labelY: centerY + geometry.sin * labelRadius,
   };
 }
 

@@ -52,6 +52,27 @@ export {
   buildExcelCartesianGeometryPlan,
   type ExcelCartesianGeometryPlan,
 } from './config-to-spec/excel-cartesian-geometry';
+export {
+  buildPieDoughnutGeometry,
+  maxEffectivePieDoughnutExplosionPercent,
+  pieDoughnutLayoutHintsForConfig,
+  pieDoughnutRowsFromGeometry,
+  type PieDoughnutGeometry,
+  type PieDoughnutGeometryFamily,
+  type PieDoughnutGeometryInput,
+  type PieDoughnutGeometryRing,
+  type PieDoughnutGeometrySlice,
+} from './config-to-spec/pie-doughnut-geometry';
+export {
+  clampPieDoughnutExplosionPercent,
+  defaultPieLikeExplosionPercent,
+  effectivePieLikeExplosionPercent,
+  pieDoughnutArcFrame,
+  pieDoughnutExplosionOffset,
+  type PieDoughnutArcFrame,
+  type PieDoughnutLayoutHints,
+  type PieDoughnutPlotArea,
+} from './config-to-spec/pie-like';
 export { resolveSeriesColorAuthority } from './config-to-spec/color-authority';
 export {
   RADAR_LABEL_GAP,

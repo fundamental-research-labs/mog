@@ -60,6 +60,17 @@ export {
   shouldRenderSurfaceContour,
   shouldRenderSurface3D,
 };
+export {
+  buildPieDoughnutGeometry,
+  maxEffectivePieDoughnutExplosionPercent,
+  pieDoughnutLayoutHintsForConfig,
+  pieDoughnutRowsFromGeometry,
+  type PieDoughnutGeometry,
+  type PieDoughnutGeometryFamily,
+  type PieDoughnutGeometryInput,
+  type PieDoughnutGeometryRing,
+  type PieDoughnutGeometrySlice,
+} from './pie-doughnut-geometry';
 
 /**
  * Convert ChartConfig + ChartData to ChartSpec format.

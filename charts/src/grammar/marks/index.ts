@@ -88,7 +88,7 @@ export function generateMarks(
     case 'square':
       return generatePointMarks(markSpec, data, scales, encodings, layout);
     case 'arc':
-      return generateArcMarks(markSpec, data, scales, encodings, layout);
+      return generateArcMarks(markSpec, data, scales, encodings, layout, config);
     case 'arc3d': {
       const arcMarks = generateArcMarks(
         { ...markSpec, type: 'arc' },
@@ -96,6 +96,7 @@ export function generateMarks(
         scales,
         encodings,
         layout,
+        config,
       );
       return depthEnhanceArcMarks(arcMarks, depthOptionsFor3DPlot(markSpec, layout)).map((mark) =>
         with3DMetadata(mark, markSpec.chart3d, 'outer'),

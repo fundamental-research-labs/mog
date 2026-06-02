@@ -1,5 +1,32 @@
 import type { ChartConfig, ChartData } from '../../types';
 
+export interface PieDoughnutPlotArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PieDoughnutLayoutHints {
+  outsideLabelPadding?: number;
+  leaderLinePadding?: number;
+  explosionPaddingPx?: number;
+  explosionPaddingPercent?: number;
+  preferSquareArcPlot?: true;
+  chartFrameBleed?: number;
+  legendEntryCount?: number;
+}
+
+export interface PieDoughnutArcFrame {
+  plotArea: PieDoughnutPlotArea;
+  arcBox: PieDoughnutPlotArea;
+  centerX: number;
+  centerY: number;
+  rawRadius: number;
+  radius: number;
+  padding: number;
+}
+
 export interface PieLikeSliceGeometry {
   index: number;
   startAngle: number;
@@ -68,6 +95,85 @@ export function doughnutRingBand(input: {
   };
 }
 
+export function pieDoughnutArcFrame(
+  plotArea: PieDoughnutPlotArea,
+  hints?: PieDoughnutLayoutHints,
+): PieDoughnutArcFrame {
+  const diameter = Math.max(0, Math.min(plotArea.width, plotArea.height));
+  const arcBox = {
+    x: plotArea.x + Math.max(0, (plotArea.width - diameter) / 2),
+    y: plotArea.y + Math.max(0, (plotArea.height - diameter) / 2),
+    width: diameter,
+    height: diameter,
+  };
+  const rawRadius = diameter / 2;
+  const padding = Math.min(rawRadius, pieDoughnutRadiusPadding(rawRadius, hints));
+  return {
+    plotArea,
+    arcBox,
+    centerX: arcBox.x + arcBox.width / 2,
+    centerY: arcBox.y + arcBox.height / 2,
+    rawRadius,
+    radius: Math.max(0, rawRadius - padding),
+    padding,
+  };
+}
+
+export function pieDoughnutExplosionOffset(
+  outerRadius: number,
+  explosionPercent: number | undefined,
+): number {
+  const percent = clampPieDoughnutExplosionPercent(explosionPercent);
+  if (percent === undefined || !Number.isFinite(outerRadius) || outerRadius <= 0) return 0;
+  return outerRadius * (percent / 100);
+}
+
+export function clampPieDoughnutExplosionPercent(
+  value: number | undefined,
+): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(400, value))
+    : undefined;
+}
+
+export function effectivePieLikeExplosionPercent(input: {
+  seriesExplosion?: number;
+  pointExplosion?: number;
+  defaultExplosion?: number;
+}): number | undefined {
+  return (
+    clampPieDoughnutExplosionPercent(input.pointExplosion) ??
+    clampPieDoughnutExplosionPercent(input.seriesExplosion) ??
+    clampPieDoughnutExplosionPercent(input.defaultExplosion)
+  );
+}
+
+export function defaultPieLikeExplosionPercent(
+  config: ChartConfig | undefined,
+  pointIndex: number,
+): number | undefined {
+  if (!config) return undefined;
+  const pieSlice = config.pieSlice as
+    | (typeof config.pieSlice & { explodedIndex?: number })
+    | undefined;
+  const offset =
+    finiteNumber(pieSlice?.explodeOffset) ??
+    finiteNumber(pieSlice?.explosion) ??
+    (isExplodedPieLikeChartType(config.type) ? 25 : undefined);
+  if (offset === undefined || offset <= 0) return undefined;
+  if (pieSlice?.explodeAll === true || isExplodedPieLikeChartType(config.type)) return offset;
+  if (pieSlice?.explodedIndex === pointIndex) return offset;
+  if (pieSlice?.explodedIndices?.includes(pointIndex)) return offset;
+  if (
+    (pieSlice?.explodeOffset !== undefined || pieSlice?.explosion !== undefined) &&
+    pieSlice.explodedIndex === undefined &&
+    (!pieSlice.explodedIndices || pieSlice.explodedIndices.length === 0)
+  ) {
+    return offset;
+  }
+  return undefined;
+}
+
 export function pieLikeSliceGeometries(input: {
   values: readonly unknown[];
   startAngle?: number;
@@ -132,6 +238,22 @@ function clampRadiusRatio(value: number | undefined, fallback: number): number {
     : fallback;
 }
 
+function pieDoughnutRadiusPadding(
+  rawRadius: number,
+  hints: PieDoughnutLayoutHints | undefined,
+): number {
+  const basePadding = 10;
+  const labelPadding =
+    finiteNonNegative(hints?.outsideLabelPadding) ??
+    finiteNonNegative(hints?.leaderLinePadding) ??
+    0;
+  const explosionPadding =
+    finiteNonNegative(hints?.explosionPaddingPx) ??
+    (finiteNonNegative(hints?.explosionPaddingPercent) ?? 0) * rawRadius / 100;
+  const frameBleed = finiteNonNegative(hints?.chartFrameBleed) ?? 0;
+  return Math.max(basePadding, labelPadding + explosionPadding + frameBleed);
+}
+
 function finitePercent(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(100, value))
@@ -140,4 +262,12 @@ function finitePercent(value: number | undefined): number | undefined {
 
 function finiteDegrees(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function finiteNumber(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function finiteNonNegative(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : undefined;
 }

@@ -996,6 +996,15 @@ export interface ConfigSpec {
       rowCount: number;
       height: number;
     };
+    pieDoughnut?: {
+      outsideLabelPadding?: number;
+      leaderLinePadding?: number;
+      explosionPaddingPx?: number;
+      explosionPaddingPercent?: number;
+      preferSquareArcPlot?: true;
+      chartFrameBleed?: number;
+      legendEntryCount?: number;
+    };
   };
 }
 

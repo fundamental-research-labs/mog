@@ -26,6 +26,7 @@ import {
 import { radarAutomaticMarkerShape } from '../radar-semantics';
 import { resolveChartColor, resolveFormatFillOpacity } from '../../utils/chart-colors';
 import { linePointsToCanvasPx } from './units';
+import { effectivePieLikeExplosionPercent } from './pie-like';
 
 export function applyPointStyle(
   row: DataRow,
@@ -50,7 +51,10 @@ export function applyPointStyle(
   if (stroke) row[POINT_STROKE_FIELD] = stroke;
   const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
-  const explosion = composedExplosion(seriesConfig?.explosion, pointFormat?.explosion);
+  const explosion = effectivePieLikeExplosionPercent({
+    seriesExplosion: seriesConfig?.explosion,
+    pointExplosion: pointFormat?.explosion,
+  });
   if (explosion !== undefined) row[POINT_EXPLOSION_FIELD] = explosion;
   hasStyle =
     fill !== undefined ||
@@ -178,20 +182,6 @@ function colorToCss(
     return resolveChartColor(color as ChartColor, context);
   }
   return undefined;
-}
-
-function composedExplosion(
-  seriesExplosion: number | undefined,
-  pointExplosion: number | undefined,
-): number | undefined {
-  const series = finiteNonNegative(seriesExplosion);
-  const point = finiteNonNegative(pointExplosion);
-  if (series === undefined && point === undefined) return undefined;
-  return (series ?? 0) + (point ?? 0);
-}
-
-function finiteNonNegative(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : undefined;
 }
 
 function pointChartFormat(pointFormat: PointFormat | undefined): ChartFormat | undefined {

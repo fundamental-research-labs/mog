@@ -10,8 +10,12 @@ import { resolveColor } from '../../algebra/color';
 import type { ArcMark } from '../../primitives/types';
 import type { ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
-import type { DataRow, Layout, MarkSpec } from '../spec';
+import type { ConfigSpec, DataRow, Layout, MarkSpec } from '../spec';
 import { definedStyle, renderableDataRows } from './helpers';
+import {
+  pieDoughnutArcFrame,
+  pieDoughnutExplosionOffset,
+} from '../../core/config-to-spec/pie-like';
 
 const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
 
@@ -36,21 +40,16 @@ export function generateArcMarks(
   scales: ScaleMap,
   encodings: ReturnType<typeof resolveEncodings>,
   layout: Layout,
+  config?: ConfigSpec,
 ): ArcMark[] {
   const marks: ArcMark[] = [];
   const renderData = renderableDataRows(data);
 
-  // Calculate center
-  const cx = layout.plotArea.x + layout.plotArea.width / 2;
-  const cy = layout.plotArea.y + layout.plotArea.height / 2;
-  const maxOuterRadius = Math.max(
-    0,
-    Math.min(layout.plotArea.width, layout.plotArea.height) / 2 - 10,
-  );
-  const outerRadius = resolveArcRadius(markSpec.outerRadius, maxOuterRadius, maxOuterRadius);
+  const frame = pieDoughnutArcFrame(layout.plotArea, config?.layoutHints?.pieDoughnut);
+  const outerRadius = resolveArcRadius(markSpec.outerRadius, frame.radius, frame.radius);
   const innerRadius = Math.min(
     outerRadius,
-    resolveArcRadius(markSpec.innerRadius, maxOuterRadius, 0),
+    resolveArcRadius(markSpec.innerRadius, frame.radius, 0),
   );
 
   // Determine which field is driving the arc angle (for datum overrides below)
@@ -94,16 +93,15 @@ export function generateArcMarks(
       }
     }
 
-    const explosion =
-      (datumNumber(datum, POINT_EXPLOSION_FIELD) ?? 0) + markExplosionOffset(markSpec, i);
+    const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? markExplosionOffset(markSpec, i);
     const midAngle = (paddedStart + paddedEnd) / 2;
-    const explosionOffset = explosion > 0 ? Math.min(outerRadius * 0.25, explosion) : 0;
+    const explosionOffset = pieDoughnutExplosionOffset(outerRadius, explosion);
     const explosionVector = arcAngleUnitVector(midAngle);
 
     marks.push({
       type: 'arc',
-      x: cx + explosionVector.x * explosionOffset,
-      y: cy + explosionVector.y * explosionOffset,
+      x: frame.centerX + explosionVector.x * explosionOffset,
+      y: frame.centerY + explosionVector.y * explosionOffset,
       innerRadius,
       outerRadius,
       startAngle: paddedStart,

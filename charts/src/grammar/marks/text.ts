@@ -37,8 +37,22 @@ export function generateTextMarks(
     const datum = data[dataIndex];
     const dx = numberField(datum, markSpec.dxField) ?? markSpec.dx ?? 0;
     const dy = numberField(datum, markSpec.dyField) ?? markSpec.dy ?? 0;
-    const directX = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
-    const directY = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    const directX = directPosition(
+      datum,
+      markSpec.xField,
+      layout,
+      'x',
+      markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
+    );
+    const directY = directPosition(
+      datum,
+      markSpec.yField,
+      layout,
+      'y',
+      markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
+    );
     if (
       markSpec.coordinateSystem === 'dataTableFraction' &&
       (directX === undefined || directY === undefined)

@@ -17,7 +17,11 @@ import {
   buildChartFamilySupportSnapshot,
   familySupportCompilerDiagnostics,
 } from './chart-family-support';
-import { snapshotBarGeometry, snapshotCartesianGeometry } from './resolved-spec-plot-snapshot';
+import {
+  snapshotBarGeometry,
+  snapshotCartesianGeometry,
+  snapshotPieDoughnutGeometry,
+} from './resolved-spec-plot-snapshot';
 import { hashJson, snapshotScalar } from './resolved-spec-primitives';
 import { snapshotRadarProjection } from './resolved-spec-radar-projection';
 import {
@@ -122,6 +126,13 @@ export function buildResolvedChartSpecSnapshot(input: {
     chartArea: input.chartArea,
     renderFrame: input.renderFrame,
   });
+  const pieDoughnutGeometry = snapshotPieDoughnutGeometry({
+    config: input.config,
+    chartData: input.chartData,
+    layout: input.layout ?? null,
+    chartArea: input.chartArea,
+    renderFrame: input.renderFrame,
+  });
 
   return {
     schemaVersion: 1,
@@ -185,6 +196,7 @@ export function buildResolvedChartSpecSnapshot(input: {
         overlap: input.config.overlap,
         barGeometry: snapshotBarGeometry(input.config, input.chartData, input.layout ?? null),
         cartesianGeometry,
+        pieDoughnutGeometry,
         radarProjection,
       },
       ranges: {

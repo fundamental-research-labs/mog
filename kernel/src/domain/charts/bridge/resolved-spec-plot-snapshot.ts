@@ -1,7 +1,9 @@
 import {
   barBaselinePixelForDomain,
   buildExcelCartesianGeometryPlan,
+  buildPieDoughnutGeometry,
   excelBarSlotGeometry,
+  pieDoughnutLayoutHintsForConfig,
   resolveBarGeometryGroups,
   type CartesianGeometryLayerTrace,
   type CartesianGeometryPointTrace,
@@ -20,6 +22,9 @@ type BarGeometrySnapshot = NonNullable<
 >[number];
 type CartesianGeometrySnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['plot']['cartesianGeometry']
+>;
+type PieDoughnutGeometrySnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['plot']['pieDoughnutGeometry']
 >;
 type CartesianGeometryAxisRole = NonNullable<
   CartesianGeometrySnapshot['layers']
@@ -83,6 +88,9 @@ export function snapshotBarGeometry(
       ...(geometry.overlapClamped !== undefined ? { overlapClamped: geometry.overlapClamped } : {}),
       seriesIndices: group.seriesIndices,
       ...(group.yAxisIndex !== undefined ? { yAxisIndex: group.yAxisIndex } : {}),
+      axisGroup: (group.yAxisIndex ?? 0) === 1 ? 'secondary' : 'primary',
+      memberCount: group.seriesIndices.length,
+      layerRole: 'bar',
       ...(geometry.seriesSlotOrder !== undefined ? { seriesSlotOrder: geometry.seriesSlotOrder } : {}),
       categoryAxisRole: geometry.categoryAxisRole,
       valueAxisRole: geometry.valueAxisRole,
@@ -223,6 +231,34 @@ export function snapshotCartesianGeometry(
           : {}),
       };
     }),
+  };
+}
+
+export function snapshotPieDoughnutGeometry(input: {
+  config: ChartConfig;
+  chartData: ChartData;
+  layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null | undefined;
+  chartArea?: ResolvedChartSpecSnapshot['chartArea'];
+  renderFrame?: ResolvedChartSpecSnapshot['renderFrame'];
+}): PieDoughnutGeometrySnapshot | undefined {
+  const chartWidth = positiveSize(input.chartArea?.width ?? input.renderFrame?.width);
+  const chartHeight = positiveSize(input.chartArea?.height ?? input.renderFrame?.height);
+  const plotArea = plotAreaPixels(input.layout, chartWidth, chartHeight);
+  const geometry = buildPieDoughnutGeometry({
+    config: input.config,
+    data: input.chartData,
+    chartWidth,
+    chartHeight,
+    plotArea,
+    layoutHints: pieDoughnutLayoutHintsForConfig(input.config, input.chartData),
+    includeSeries: ({ seriesConfig }) => !isNoFillNoLineSeriesConfig(seriesConfig),
+  });
+  if (!geometry) return undefined;
+  const geometryStatus = input.layout?.plotArea ? 'available' : 'unavailable';
+  return {
+    geometryStatus,
+    ...(geometryStatus === 'unavailable' ? { geometryStatusReason: 'layoutUnavailable' } : {}),
+    ...geometry,
   };
 }
 
@@ -402,6 +438,27 @@ function uniqueNumbers(values: readonly number[]): number[] {
 function normalize(value: number, extent: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(extent) || extent === 0) return NaN;
   return roundSnapshotNumber(value / extent);
+}
+
+function plotAreaPixels(
+  layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null | undefined,
+  chartWidth: number,
+  chartHeight: number,
+): { x: number; y: number; width: number; height: number } {
+  const plotArea = layout?.plotArea;
+  if (!plotArea) {
+    return { x: 0, y: 0, width: chartWidth, height: chartHeight };
+  }
+  return {
+    x: plotArea.left * chartWidth,
+    y: plotArea.top * chartHeight,
+    width: plotArea.width * chartWidth,
+    height: plotArea.height * chartHeight,
+  };
+}
+
+function positiveSize(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 1;
 }
 
 function roundSnapshotNumber(value: number): number {

@@ -1,5 +1,8 @@
 import {
   expectedStockRolesForSubtype,
+  isBarLikeChartType,
+  resolveBarGeometryGroups,
+  seriesConfigForDataSeries,
   stockRoleOrder,
   stockSubTypeFromRolePresence,
   type ChartConfig,
@@ -35,7 +38,7 @@ export function buildChartFamilySupportSnapshot(input: {
 }): ChartFamilySupportSnapshot {
   const { chart, config } = input;
   const family = chartFamily(config);
-  const sourceFamily = sourceFamilyForChart(chart, family);
+  const sourceFamily = sourceFamilyForChart(chart, config, family);
   const terminalImportStatus = importStatusToTerminalRenderStatus(chart.importStatus);
   if (terminalImportStatus) {
     const supportLevel =
@@ -89,6 +92,14 @@ export function buildChartFamilySupportSnapshot(input: {
     return radarFamilySupport({ ...input, family, sourceFamily });
   }
 
+  if (config.type === 'combo') {
+    return comboFamilySupport({ ...input, family, sourceFamily });
+  }
+
+  if (isRectangularSpecialtyConfig(config)) {
+    return rectangularSpecialtyFamilySupport({ ...input, family, sourceFamily });
+  }
+
   if (isThreeDChartConfig(config)) {
     return {
       schemaVersion: 1,
@@ -117,6 +128,40 @@ export function familySupportCompilerDiagnostics(
 ): string[] {
   if (support.supportLevel === 'exact' || support.supportLevel === 'approximate') return [];
   return support.diagnostics;
+}
+
+function comboFamilySupport(input: {
+  config: ChartConfig;
+  chartData: ChartData;
+  family: string;
+  sourceFamily?: string;
+}): ChartFamilySupportSnapshot {
+  const barGroups = resolveBarGeometryGroups(input.config, input.chartData);
+  const nonBarSeriesCount = comboNonBarSeriesCount(input.config, input.chartData);
+  const diagnostics: string[] = [];
+  if (barGroups.length > 0) {
+    diagnostics.push(
+      `combo renderer resolved ${barGroups.length} bar geometry group(s) for layer-aware rendering`,
+    );
+  }
+  if (nonBarSeriesCount > 0) {
+    diagnostics.push(
+      `combo renderer keeps ${nonBarSeriesCount} non-bar series separate from bar slot geometry`,
+    );
+  }
+  if (barGroups.some((group) => group.yAxisIndex === 1)) {
+    diagnostics.push('combo renderer preserves secondary value-axis ownership for bar groups');
+  }
+
+  return {
+    schemaVersion: 1,
+    family: input.family,
+    sourceFamily: input.sourceFamily,
+    supportLevel: 'exact',
+    reason: 'comboLayeredRenderer',
+    diagnostics,
+    renderedAs: 'combo',
+  };
 }
 
 function radarFamilySupport(input: {
@@ -157,6 +202,107 @@ function radarFamilySupport(input: {
     reason,
     diagnostics,
     renderedAs: 'radar',
+  };
+}
+
+function rectangularSpecialtyFamilySupport(input: {
+  config: ChartConfig;
+  chartData: ChartData;
+  family: string;
+  sourceFamily?: string;
+}): ChartFamilySupportSnapshot {
+  switch (input.config.type) {
+    case 'funnel': {
+      const renderable = hasPositiveChartValues(input.chartData);
+      return {
+        schemaVersion: 1,
+        family: input.family,
+        sourceFamily: input.sourceFamily,
+        supportLevel: renderable ? 'approximate' : 'preservedPlaceholder',
+        reason: renderable
+          ? 'funnelProportionalBarApproximation'
+          : 'funnelProjectionIncomplete',
+        diagnostics: renderable
+          ? ['funnel chart renders as centered proportional bar layers']
+          : ['funnel chart needs at least one positive finite value for proportional geometry'],
+        renderedAs: 'funnel',
+      };
+    }
+    case 'waterfall':
+      return implementedRectangularSpecialtySupport(input, {
+        reason: 'waterfallRenderer',
+        incompleteReason: 'waterfallProjectionIncomplete',
+        renderedAs: 'waterfall',
+        incompleteDiagnostic: 'waterfall chart needs finite values for running-total projection',
+      });
+    case 'histogram':
+      return implementedRectangularSpecialtySupport(input, {
+        reason: 'histogramRenderer',
+        incompleteReason: 'histogramProjectionIncomplete',
+        renderedAs: 'histogram',
+        incompleteDiagnostic: 'histogram chart needs finite values for bin projection',
+      });
+    case 'pareto':
+      return implementedRectangularSpecialtySupport(input, {
+        reason: 'paretoRenderer',
+        incompleteReason: 'paretoProjectionIncomplete',
+        renderedAs: 'pareto',
+        incompleteDiagnostic: 'pareto chart needs finite values for sorted bars and cumulative line',
+      });
+    case 'boxplot':
+      return implementedRectangularSpecialtySupport(input, {
+        reason: 'boxplotRenderer',
+        incompleteReason: 'boxplotProjectionIncomplete',
+        renderedAs: 'boxplot',
+        incompleteDiagnostic: 'boxplot chart needs finite values for box-and-whisker projection',
+      });
+    case 'treemap':
+    case 'sunburst':
+    case 'regionMap':
+      return {
+        schemaVersion: 1,
+        family: input.family,
+        sourceFamily: input.sourceFamily,
+        supportLevel: 'preservedPlaceholder',
+        reason: 'preservedOnlyChartExFamily',
+        diagnostics: preservedOnlyRectangularDiagnostics(input.config),
+        renderedAs: input.config.type,
+      };
+    default:
+      return {
+        schemaVersion: 1,
+        family: input.family,
+        sourceFamily: input.sourceFamily,
+        supportLevel: 'unsupported',
+        reason: 'unsupportedImportStatus',
+        diagnostics: [`${input.config.type} chart family is not renderable`],
+      };
+  }
+}
+
+function implementedRectangularSpecialtySupport(
+  input: {
+    config: ChartConfig;
+    chartData: ChartData;
+    family: string;
+    sourceFamily?: string;
+  },
+  options: {
+    reason: ChartFamilySupportSnapshot['reason'];
+    incompleteReason: ChartFamilySupportSnapshot['reason'];
+    renderedAs: string;
+    incompleteDiagnostic: string;
+  },
+): ChartFamilySupportSnapshot {
+  const renderable = hasFiniteChartValues(input.chartData);
+  return {
+    schemaVersion: 1,
+    family: input.family,
+    sourceFamily: input.sourceFamily,
+    supportLevel: renderable ? 'exact' : 'preservedPlaceholder',
+    reason: renderable ? options.reason : options.incompleteReason,
+    diagnostics: renderable ? [] : [options.incompleteDiagnostic],
+    renderedAs: options.renderedAs,
   };
 }
 
@@ -364,7 +510,7 @@ function hasCompleteStockRenderedPointProjection(
   if (!projection.renderedRoleValues || typeof projection.renderedRoleValues !== 'object') {
     return false;
   }
-  const renderedRoleValues = projection.renderedRoleValues as Record<string, unknown>;
+  const renderedRoleValues = projection.renderedRoleValues;
   const rolesToValidate = new Set<ChartSeriesStockRole>([
     ...stockRoleOrder(),
     ...expectedRoles,
@@ -409,10 +555,61 @@ function chartFamily(config: ChartConfig): string {
   return config.type;
 }
 
-function sourceFamilyForChart(chart: ChartFloatingObject, fallback: string): string | undefined {
-  const raw = (chart as { chartType?: unknown }).chartType;
-  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+function sourceFamilyForChart(
+  chart: ChartFloatingObject,
+  config: ChartConfig,
+  fallback: string,
+): string | undefined {
+  const extra = recordValue(config.extra);
+  const extraFamily = stringValue(extra?.sourceFamily);
+  if (extraFamily) return extraFamily;
+  const raw = stringValue((chart as { chartType?: unknown }).chartType);
+  if (raw) return raw;
+  const groupTypes = chartGroupTypesForChart(chart);
+  if (groupTypes.length === 1) return groupTypes[0];
+  if (groupTypes.length > 1) return 'combo';
   return fallback;
+}
+
+function comboNonBarSeriesCount(config: ChartConfig, chartData: ChartData): number {
+  if (config.type !== 'combo') return 0;
+  let count = 0;
+  for (let index = 0; index < chartData.series.length; index += 1) {
+    const series = chartData.series[index];
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
+    const seriesType = seriesConfig?.type ?? series.type ?? (index === 0 ? 'column' : 'line');
+    if (!isBarLikeChartType(seriesType)) count += 1;
+  }
+  return count;
+}
+
+function isRectangularSpecialtyConfig(config: ChartConfig): boolean {
+  switch (config.type) {
+    case 'funnel':
+    case 'waterfall':
+    case 'histogram':
+    case 'pareto':
+    case 'boxplot':
+    case 'treemap':
+    case 'sunburst':
+    case 'regionMap':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function preservedOnlyRectangularDiagnostics(config: ChartConfig): string[] {
+  switch (config.type) {
+    case 'treemap':
+      return ['treemap rendering requires hierarchy layout semantics and is preserved as a placeholder'];
+    case 'sunburst':
+      return ['sunburst rendering requires hierarchy layout semantics and is preserved as a placeholder'];
+    case 'regionMap':
+      return ['region map rendering uses placeholder geometry'];
+    default:
+      return [`${config.type} chart family is preserved as a placeholder`];
+  }
 }
 
 function isThreeDChartConfig(config: ChartConfig): boolean {
@@ -457,12 +654,40 @@ function isThreeDBarShapeConfig(config: ChartConfig): boolean {
 }
 
 function hasFiniteSurfaceValues(data: ChartData): boolean {
+  return hasFiniteChartValues(data);
+}
+
+function hasFiniteChartValues(data: ChartData): boolean {
   return data.series.some((series) =>
     series.data.some(
       (point) =>
         point?.valueState !== 'hidden' &&
         typeof point?.y === 'number' &&
         Number.isFinite(point.y),
+    ),
+  );
+}
+
+function hasPositiveChartValues(data: ChartData): boolean {
+  return data.series.some((series) =>
+    series.data.some(
+      (point) =>
+        point?.valueState !== 'hidden' &&
+        typeof point?.y === 'number' &&
+        Number.isFinite(point.y) &&
+        point.y > 0,
+    ),
+  );
+}
+
+function chartGroupTypesForChart(chart: ChartFloatingObject): string[] {
+  const groups = (chart as { rt?: { chartGroupsMeta?: unknown } }).rt?.chartGroupsMeta;
+  if (!Array.isArray(groups)) return [];
+  return Array.from(
+    new Set(
+      groups
+        .map((group) => stringValue(recordValue(group)?.chartType))
+        .filter((value): value is string => value !== undefined),
     ),
   );
 }
@@ -491,4 +716,14 @@ function importStatusMessages(status: unknown, fallback: string): string[] {
   }
   messages.add(fallback);
   return Array.from(messages);
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

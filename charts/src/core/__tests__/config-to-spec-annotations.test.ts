@@ -33,6 +33,8 @@ import {
   POINT_STYLE_VISIBLE_FIELD,
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
+  STOCK_HIGH_FIELD,
+  STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
   TRENDLINE_LABEL_LAYOUT_X_FIELD,
   TRENDLINE_LABEL_LAYOUT_Y_FIELD,
@@ -1169,8 +1171,22 @@ describe('configToSpec annotation layers', () => {
         {
           name: 'Price',
           data: [
-            { x: 'A', y: 12, [STOCK_OPEN_FIELD]: 10, [STOCK_CLOSE_FIELD]: 12 },
-            { x: 'B', y: 9, [STOCK_OPEN_FIELD]: 11, [STOCK_CLOSE_FIELD]: 9 },
+            {
+              x: 'A',
+              y: 12,
+              [STOCK_OPEN_FIELD]: 10,
+              [STOCK_HIGH_FIELD]: 13,
+              [STOCK_LOW_FIELD]: 9,
+              [STOCK_CLOSE_FIELD]: 12,
+            },
+            {
+              x: 'B',
+              y: 9,
+              [STOCK_OPEN_FIELD]: 11,
+              [STOCK_HIGH_FIELD]: 12,
+              [STOCK_LOW_FIELD]: 8,
+              [STOCK_CLOSE_FIELD]: 9,
+            },
           ],
         },
       ],

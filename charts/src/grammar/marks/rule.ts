@@ -51,14 +51,29 @@ export function generateRuleMarks(
     const datum = data[dataIndex];
     let x1: number, y1: number, x2: number, y2: number;
 
-    const directX1 = directPosition(datum, markSpec.xField, layout, 'x', markSpec.coordinateSystem);
-    const directY1 = directPosition(datum, markSpec.yField, layout, 'y', markSpec.coordinateSystem);
+    const directX1 = directPosition(
+      datum,
+      markSpec.xField,
+      layout,
+      'x',
+      markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
+    );
+    const directY1 = directPosition(
+      datum,
+      markSpec.yField,
+      layout,
+      'y',
+      markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
+    );
     const directX2 = directPosition(
       datum,
       markSpec.x2Field,
       layout,
       'x',
       markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
     );
     const directY2 = directPosition(
       datum,
@@ -66,6 +81,7 @@ export function generateRuleMarks(
       layout,
       'y',
       markSpec.coordinateSystem,
+      config?.layoutHints?.pieDoughnut,
     );
 
     if (

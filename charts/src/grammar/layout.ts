@@ -137,12 +137,22 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
       height - adjustedMarginTopWithLegend - adjustedMarginBottom,
     ),
   };
+  const preferredAutoPlotArea =
+    layoutHints?.pieDoughnut?.preferSquareArcPlot === true && !layoutHints.manualPlotArea
+      ? squarePlotArea(autoPlotArea)
+      : autoPlotArea;
   const chartBounds = { x: 0, y: 0, width, height };
   const plotArea =
-    applyManualLayout(layoutHints?.manualPlotArea, autoPlotArea, chartBounds, autoPlotArea, {
-      minWidth: DEFAULT_LAYOUT.minPlotSize,
-      minHeight: DEFAULT_LAYOUT.minPlotSize,
-    }) ?? autoPlotArea;
+    applyManualLayout(
+      layoutHints?.manualPlotArea,
+      preferredAutoPlotArea,
+      chartBounds,
+      autoPlotArea,
+      {
+        minWidth: DEFAULT_LAYOUT.minPlotSize,
+        minHeight: DEFAULT_LAYOUT.minPlotSize,
+      },
+    ) ?? preferredAutoPlotArea;
   const titleArea = applyManualLayout(
     layoutHints?.manualTitle,
     autoTitleArea,
@@ -178,6 +188,16 @@ export function calculateLayout(spec: ChartSpec, dimensions?: LayoutDimensions):
     title: titleArea,
     legend: legendArea,
     dataTable: dataTableArea,
+  };
+}
+
+function squarePlotArea(rect: LayoutRect): LayoutRect {
+  const size = Math.max(DEFAULT_LAYOUT.minPlotSize, Math.min(rect.width, rect.height));
+  return {
+    x: rect.x + Math.max(0, (rect.width - size) / 2),
+    y: rect.y + Math.max(0, (rect.height - size) / 2),
+    width: size,
+    height: size,
   };
 }
 

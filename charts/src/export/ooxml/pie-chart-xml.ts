@@ -324,9 +324,9 @@ function pointExplosionForRows(
   const rowExplosion =
     rows
       .map((row) => row[POINT_EXPLOSION_FIELD])
-      .find((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? 0;
+      .find((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const markExplosion = markExplosionForPoint(mark, pointIndex);
-  const explosion = rowExplosion + markExplosion;
+  const explosion = rowExplosion ?? markExplosion;
   return explosion > 0 ? explosion : undefined;
 }
 

@@ -2,7 +2,8 @@ import type { EncodingSpec, MarkSpec, UnitSpec } from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
 import { seriesConfigForDataSeries } from '../../series-identity';
 import { SERIES_INDEX_FIELD } from '../fields';
-import { doughnutRingBand, hasMultipleDoughnutSeries } from '../pie-like';
+import { buildPieDoughnutGeometry } from '../pie-doughnut-geometry';
+import { hasMultipleDoughnutSeries } from '../pie-like';
 import { isNoFillNoLineSeries } from '../style';
 
 export function shouldBuildDoughnutRingLayers(config: ChartConfig, data: ChartData): boolean {
@@ -17,18 +18,22 @@ export function buildDoughnutRingLayers(input: {
 }): UnitSpec[] {
   const seriesIndices = visibleSeriesIndices(input.config, input.data);
   const baseMark = arcMarkSpec(input.mark);
+  const geometry = buildPieDoughnutGeometry({
+    config: input.config,
+    data: input.data,
+    chartWidth: 2,
+    chartHeight: 2,
+    plotArea: { x: 0, y: 0, width: 2, height: 2 },
+    includeSeries: ({ seriesConfig }) => !isNoFillNoLineSeries(seriesConfig),
+  });
 
   return seriesIndices.map((seriesIndex, ringIndex) => {
-    const band = doughnutRingBand({
-      config: input.config,
-      ringCount: seriesIndices.length,
-      ringIndex,
-    });
+    const band = geometry?.rings[ringIndex] ?? { innerRadiusRatio: 0, outerRadiusRatio: 1 };
     return {
       mark: {
         ...baseMark,
-        innerRadius: band.innerRadius,
-        outerRadius: band.outerRadius,
+        innerRadius: band.innerRadiusRatio,
+        outerRadius: band.outerRadiusRatio,
       },
       encoding: input.encoding,
       transform: [{ type: 'filter', filter: { field: SERIES_INDEX_FIELD, equal: seriesIndex } }],

@@ -23,6 +23,16 @@ export interface StockRenderedPointProjection {
   trailingBlankPointCount: number;
 }
 
+export type StockRoleValueArrays = Record<ChartSeriesStockRole, Array<number | null>>;
+export type StockSourceRoleValueArrays = Partial<
+  Record<ChartSeriesStockRole, readonly (number | null | undefined)[]>
+>;
+
+export interface StockRenderedRoleValueProjection extends StockRenderedPointProjection {
+  renderedRoleValues: StockRoleValueArrays;
+  renderedCategories: Array<string | number | null>;
+}
+
 export type StockPointValue =
   | Pick<ChartDataPoint, 'valueState' | 'open' | 'high' | 'low' | 'close' | 'volume'>
   | undefined;
@@ -135,7 +145,7 @@ export function stockRenderedPointProjection(
 }
 
 export function stockRenderedPointProjectionFromRoleValues(
-  values: Partial<Record<ChartSeriesStockRole, readonly (number | null | undefined)[]>>,
+  values: StockSourceRoleValueArrays,
   subType: StockSubType,
   sourcePointCount: number,
 ): StockRenderedPointProjection {
@@ -154,6 +164,32 @@ export function stockRenderedPointProjectionFromRoleValues(
     };
   });
   return stockRenderedPointProjection(points, subType);
+}
+
+export function stockRenderedRoleValueProjectionFromRoleValues(
+  values: StockSourceRoleValueArrays,
+  categories: readonly (string | number | null | undefined)[] | undefined,
+  subType: StockSubType,
+  sourcePointCount = stockSourcePointCount(values, categories),
+): StockRenderedRoleValueProjection {
+  const projection = stockRenderedPointProjectionFromRoleValues(
+    values,
+    subType,
+    sourcePointCount,
+  );
+  return {
+    ...projection,
+    renderedRoleValues: {
+      open: renderedStockRoleValues(values, projection, 'open'),
+      high: renderedStockRoleValues(values, projection, 'high'),
+      low: renderedStockRoleValues(values, projection, 'low'),
+      close: renderedStockRoleValues(values, projection, 'close'),
+      volume: renderedStockRoleValues(values, projection, 'volume'),
+    },
+    renderedCategories: projection.renderedPointIndexes.map((pointIndex) =>
+      stockCategoryOrNull(categories?.[pointIndex]),
+    ),
+  };
 }
 
 function hasStockData(data: ChartData): boolean {
@@ -181,4 +217,33 @@ function stockFiniteNumber(value: unknown): number | undefined {
 
 function stockNumberOrUndefined(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function stockNumberOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function renderedStockRoleValues(
+  values: StockSourceRoleValueArrays,
+  projection: StockRenderedPointProjection,
+  role: ChartSeriesStockRole,
+): Array<number | null> {
+  const sourceValues = values[role];
+  return projection.renderedPointIndexes.map((pointIndex) =>
+    stockNumberOrNull(sourceValues?.[pointIndex]),
+  );
+}
+
+function stockCategoryOrNull(value: string | number | null | undefined): string | number | null {
+  return typeof value === 'string' || typeof value === 'number' ? value : null;
+}
+
+function stockSourcePointCount(
+  values: StockSourceRoleValueArrays,
+  categories: readonly unknown[] | undefined,
+): number {
+  return Math.max(
+    categories?.length ?? 0,
+    ...STOCK_ROLE_ORDER.map((role) => values[role]?.length ?? 0),
+  );
 }

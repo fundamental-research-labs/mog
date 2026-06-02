@@ -138,6 +138,7 @@ export {
   shouldProjectStockSeries,
   shouldRenderStockChart,
   stockRenderedPointProjection,
+  stockRenderedRoleValueProjectionFromRoleValues,
   stockRenderedPointProjectionFromRoleValues,
   stockRoleOrder,
   stockRolePlan,
@@ -160,9 +161,12 @@ export {
   type RadarPolarPoint,
   type RadarValueDomain,
   type StockRenderedPointProjection,
+  type StockRenderedRoleValueProjection,
   type StockRole,
   type StockRolePlan,
   type StockPointValue,
+  type StockRoleValueArrays,
+  type StockSourceRoleValueArrays,
 } from './core';
 
 // DOM - chart engine and instance management (requires browser environment)

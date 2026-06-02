@@ -1,5 +1,6 @@
 import {
   expectedStockRolesForSubtype,
+  stockRoleOrder,
   stockSubTypeFromRolePresence,
   type ChartConfig,
   type ChartData,
@@ -180,6 +181,7 @@ function stockFamilySupport(input: {
     : [];
   const renderedPointProjectionComplete = hasCompleteStockRenderedPointProjection(
     input.seriesProjection.stockRenderProjection,
+    expectedRoles,
   );
   const exact =
     expectedRoles.length > 0 &&
@@ -302,6 +304,7 @@ function stockProjectionDiagnostic(
 
 function hasCompleteStockRenderedPointProjection(
   projection: SeriesProjectionSnapshot['stockRenderProjection'],
+  expectedRoles: readonly ChartSeriesStockRole[],
 ): boolean {
   if (!projection) return false;
   const sourcePointCount = projection.sourcePointCount;
@@ -331,6 +334,24 @@ function hasCompleteStockRenderedPointProjection(
   }
   if (!Array.isArray(projection.renderedPointIndexes)) return false;
   if (!Array.isArray(projection.droppedPointIndexes)) return false;
+  if (!projection.renderedRoleValues || typeof projection.renderedRoleValues !== 'object') {
+    return false;
+  }
+  const renderedRoleValues = projection.renderedRoleValues as Record<string, unknown>;
+  const rolesToValidate = new Set<ChartSeriesStockRole>([
+    ...stockRoleOrder(),
+    ...expectedRoles,
+  ]);
+  for (const role of rolesToValidate) {
+    const roleValues = renderedRoleValues[role];
+    if (!Array.isArray(roleValues) || roleValues.length !== renderedPointCount) return false;
+  }
+  if (
+    !Array.isArray(projection.renderedCategories) ||
+    projection.renderedCategories.length !== renderedPointCount
+  ) {
+    return false;
+  }
   if (projection.renderedPointIndexes.length !== renderedPointCount) return false;
   if (
     projection.renderedPointIndexes.length + projection.droppedPointIndexes.length !==

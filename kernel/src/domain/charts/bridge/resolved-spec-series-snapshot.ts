@@ -8,7 +8,7 @@ import {
   shouldProjectStockSeries,
   resolveSeriesColorAuthority,
   stockRenderedPointProjection,
-  stockRenderedPointProjectionFromRoleValues,
+  stockRenderedRoleValueProjectionFromRoleValues,
   stockRoleOrder,
   stockRolePlan,
   stockSubTypeFromConfig,
@@ -256,7 +256,7 @@ export function snapshotSeriesProjection(
   }
 
   const projectedKeys = new Set(series.map((item) => item.sourceSeriesKey));
-  const stockProjection = stockProjectionContext(config, series);
+  const stockProjection = stockProjectionContext(config, data, series);
   const sourceSeries = snapshotSourceSeriesInventory(
     config,
     series,
@@ -412,6 +412,7 @@ function snapshotSourceSeriesInventory(
 
 function stockProjectionContext(
   config: ChartConfig,
+  data: ChartData,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
 ): {
   stockRoleBySourceKey: Map<string, ChartSeriesStockRole>;
@@ -456,8 +457,11 @@ function stockProjectionContext(
           renderedSeriesIndex: renderedSeries.index,
           renderedSourceSeriesKey: renderedSeries.sourceSeriesKey,
           roles: projectedRoleMappings,
-          ...stockRenderedPointProjectionFromRoleValues(
+          ...stockRenderedRoleValueProjectionFromRoleValues(
             renderedSeries.stockValues ?? {},
+            renderedSeries.categories.length > 0
+              ? renderedSeries.categories
+              : data.categories.map(snapshotScalar),
             stockSubType,
             renderedSeries.pointCount,
           ),

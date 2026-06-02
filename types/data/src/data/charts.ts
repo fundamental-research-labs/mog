@@ -1347,13 +1347,8 @@ export interface ResolvedChartSeriesSnapshot {
   /** Values on the rendered layer after blank-cell display policy is applied. */
   renderedValues?: Array<number | null>;
   bubbleSizes: Array<number | null>;
-  stockValues?: {
-    open: Array<number | null>;
-    high: Array<number | null>;
-    low: Array<number | null>;
-    close: Array<number | null>;
-    volume: Array<number | null>;
-  };
+  /** Source-length stock role values aligned to original source point indexes. */
+  stockValues?: ResolvedChartStockRoleValuesSnapshot;
   blankMask: boolean[];
   pointCount: number;
   renderedPointCount: number;
@@ -1421,11 +1416,23 @@ export interface ResolvedChartProjectedRoleMappingSnapshot {
   projectedSourceSeriesKey: string;
 }
 
+export interface ResolvedChartStockRoleValuesSnapshot {
+  open: Array<number | null>;
+  high: Array<number | null>;
+  low: Array<number | null>;
+  close: Array<number | null>;
+  volume: Array<number | null>;
+}
+
 export interface ResolvedChartStockRenderProjectionSnapshot {
   projectionType: 'stockGlyph';
   renderedSeriesIndex: number;
   renderedSourceSeriesKey: string;
   roles: ResolvedChartProjectedRoleMappingSnapshot[];
+  /** Rendered-glyph-length role values filtered by renderedPointIndexes. */
+  renderedRoleValues?: ResolvedChartStockRoleValuesSnapshot;
+  /** Rendered-glyph-length categories filtered by renderedPointIndexes. */
+  renderedCategories?: Array<string | number | null>;
   sourcePointCount?: number;
   renderedPointCount?: number;
   renderedPointIndexes?: number[];

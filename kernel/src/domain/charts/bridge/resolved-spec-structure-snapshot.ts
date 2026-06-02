@@ -345,7 +345,8 @@ function formatBandValue(value: number, fractionDigits: number): string {
 
 function usesPointLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
   if (!data) return false;
-  return isPointLegendChartType(config.type);
+  if (isPointLegendChartType(config.type)) return true;
+  return isXYPointLegendConfig(config);
 }
 
 function isPointLegendChartType(type: ChartConfig['type']): boolean {
@@ -358,6 +359,11 @@ function isPointLegendChartType(type: ChartConfig['type']): boolean {
     type === 'doughnutExploded' ||
     type === 'ofPie'
   );
+}
+
+function isXYPointLegendConfig(config: ChartConfig): boolean {
+  if (config.varyByCategories !== true) return false;
+  return config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter';
 }
 
 export function snapshotRange(reference: ResolvedChartRangeReference | null): RangeSnapshot | null {

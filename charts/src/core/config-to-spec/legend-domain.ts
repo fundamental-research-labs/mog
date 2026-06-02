@@ -86,8 +86,11 @@ export function buildSeriesLegendDomain(
   };
 }
 
-export function usesPointLegendEntries(config: Pick<ChartConfig, 'type'>): boolean {
-  return isPieLikeChartType(config.type);
+export function usesPointLegendEntries(
+  config: Pick<ChartConfig, 'type' | 'varyByCategories'>,
+): boolean {
+  if (isPieLikeChartType(config.type)) return true;
+  return isXYPointLegendConfig(config);
 }
 
 export function buildCategoryLegendDomain(
@@ -147,6 +150,11 @@ export function legendSymbolType(
 
 function legendEntryForIndex(legend: LegendConfig, index: number): LegendEntryConfig | undefined {
   return legend.entries?.find((entry) => entry.idx === index);
+}
+
+function isXYPointLegendConfig(config: Pick<ChartConfig, 'type' | 'varyByCategories'>): boolean {
+  if (config.varyByCategories !== true) return false;
+  return config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter';
 }
 
 function legendSymbolTypeForSeries(

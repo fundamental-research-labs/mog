@@ -404,18 +404,36 @@ function bubbleFamilySupport(input: {
     };
   }
 
-  const seriesLegend = !input.legend.present || input.legend.entryVocabulary === 'series';
+  const legendMatchesSource = bubbleLegendMatchesSource(input.config, input.legend);
   return {
     schemaVersion: 1,
     family: input.family,
     sourceFamily: input.sourceFamily,
-    supportLevel: seriesLegend ? 'exact' : 'approximate',
-    reason: seriesLegend ? 'exactRenderer' : 'bubbleLegendSeriesDomain',
-    diagnostics: seriesLegend
-      ? []
-      : ['bubble legend uses a point/category domain instead of the source series domain'],
+    supportLevel: legendMatchesSource ? 'exact' : 'approximate',
+    reason: legendMatchesSource ? 'exactRenderer' : 'bubbleLegendSeriesDomain',
+    diagnostics: legendMatchesSource ? [] : [bubbleLegendDiagnostic(input.config, input.legend)],
     renderedAs: 'bubble',
   };
+}
+
+function bubbleLegendMatchesSource(config: ChartConfig, legend: LegendSnapshot): boolean {
+  if (!legend.present) return true;
+  if (bubbleUsesPointLegendVocabulary(config)) {
+    return legend.entryVocabulary === 'category' || legend.entryVocabulary === 'point';
+  }
+  return legend.entryVocabulary === 'series';
+}
+
+function bubbleLegendDiagnostic(config: ChartConfig, legend: LegendSnapshot): string {
+  const vocabulary = legend.entryVocabulary ?? 'unknown';
+  if (bubbleUsesPointLegendVocabulary(config)) {
+    return `bubble legend vocabulary is ${vocabulary}; expected point/category entries from vary-by-category source semantics`;
+  }
+  return `bubble legend vocabulary is ${vocabulary}; expected source series entries`;
+}
+
+function bubbleUsesPointLegendVocabulary(config: ChartConfig): boolean {
+  return config.varyByCategories === true;
 }
 
 function expectedStockRoles(

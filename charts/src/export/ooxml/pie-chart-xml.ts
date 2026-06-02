@@ -13,6 +13,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
+import { DATA_LABEL_VISIBLE_FIELD, POINT_EXPLOSION_FIELD } from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec, LegendSpec, UnitSpec } from '../../grammar/spec';
 import type { ExportOptions, LegendPosition, OOXMLExportResult } from '../ooxml-types';
 import { extractChartTitle, wrapChartXMLNoAxes } from './chart-xml';
@@ -34,6 +35,7 @@ interface PieDataPoint {
   value: number;
   color: string;
   exploded?: boolean;
+  explosion?: number;
 }
 
 interface PieSeriesData {
@@ -69,13 +71,15 @@ export function generatePieChartXML(
   }
 
   // Extract pie data
-  const pieData = extractPieData(data, encoding);
+  const pieData = extractPieData(data, encoding, mark);
+  const dataLabelsXML = generatePieDataLabelsXML(data);
 
   // Generate pie chart content
   const chartContent = generatePieChartContent(
     pieData,
     sheetName,
     firstSliceAngleDegrees(mark),
+    dataLabelsXML,
   );
 
   // Get title
@@ -113,6 +117,7 @@ export function generateDoughnutChartXML(
 
   // Extract doughnut ring data
   const seriesData = extractDoughnutSeriesData(spec, data, encoding);
+  const dataLabelsXML = generatePieDataLabelsXML(data);
 
   // Generate doughnut chart content
   const chartContent = generateDoughnutChartContent(
@@ -120,6 +125,7 @@ export function generateDoughnutChartXML(
     holeSize,
     firstSliceAngleDegrees(mark),
     sheetName,
+    dataLabelsXML,
   );
 
   // Get title
@@ -147,11 +153,12 @@ function generatePieChartContent(
   pieData: PieDataPoint[],
   sheetName: string,
   firstSliceAngle: number,
+  dataLabelsXML: string,
 ): string {
   return `<c:pieChart>
     <c:varyColors val="1"/>
     ${generatePieSeriesXML({ name: 'Series 1', points: pieData }, 0, sheetName)}
-    ${generatePieDataLabelsXML()}
+    ${dataLabelsXML}
     <c:firstSliceAng val="${firstSliceAngle}"/>
   </c:pieChart>`;
 }
@@ -164,13 +171,14 @@ function generateDoughnutChartContent(
   holeSize: number,
   firstSliceAngle: number,
   sheetName: string,
+  dataLabelsXML: string,
 ): string {
   return `<c:doughnutChart>
     <c:varyColors val="1"/>
     ${seriesData
       .map((series, index) => generatePieSeriesXML(series, index, sheetName))
       .join('\n    ')}
-    ${generatePieDataLabelsXML()}
+    ${dataLabelsXML}
     <c:firstSliceAng val="${firstSliceAngle}"/>
     <c:holeSize val="${holeSize}"/>
   </c:doughnutChart>`;
@@ -228,6 +236,7 @@ function generateDataPointColors(pieData: PieDataPoint[]): string {
       (pt, i) => `<c:dPt>
       <c:idx val="${i}"/>
       <c:bubble3D val="0"/>
+      ${generatePointExplosionXML(pt.explosion)}
       <c:spPr>
         <a:solidFill>
           <a:srgbClr val="${normalizeHexColor(pt.color)}"/>
@@ -241,10 +250,13 @@ function generateDataPointColors(pieData: PieDataPoint[]): string {
     .join('\n      ');
 }
 
-/**
- * Generate pie chart data labels (shows percentage by default).
- */
-function generatePieDataLabelsXML(): string {
+function generatePointExplosionXML(explosion: number | undefined): string {
+  if (typeof explosion !== 'number' || !Number.isFinite(explosion) || explosion <= 0) return '';
+  return `<c:explosion val="${Math.round(Math.min(400, Math.max(0, explosion)))}"/>`;
+}
+
+function generatePieDataLabelsXML(data: DataRow[]): string {
+  if (!data.some((row) => row[DATA_LABEL_VISIBLE_FIELD] === true)) return '';
   return `<c:dLbls>
     <c:showLegendKey val="0"/>
     <c:showVal val="0"/>
@@ -267,7 +279,11 @@ function normalizeHexColor(color: string): string {
 /**
  * Extract pie data from data rows and encoding.
  */
-function extractPieData(data: DataRow[], encoding: EncodingSpec): PieDataPoint[] {
+function extractPieData(
+  data: DataRow[],
+  encoding: EncodingSpec,
+  mark?: ChartSpec['mark'],
+): PieDataPoint[] {
   // For pie charts, we use theta for the value and color for the category
   // Or we can use x for category and y for value
   const categoryField = encoding.color?.field ?? encoding.x?.field;
@@ -286,15 +302,42 @@ function extractPieData(data: DataRow[], encoding: EncodingSpec): PieDataPoint[]
 
   for (const [label, rows] of groups) {
     const value = rows.reduce((sum, row) => sum + (Number(row[valueField]) || 0), 0);
+    const pointIndex = pieData.length;
+    const explosion = pointExplosionForRows(mark, pointIndex, rows);
     pieData.push({
       label,
       value,
       color: colors[colorIndex] ?? getDefaultColor(colorIndex),
+      ...(explosion !== undefined ? { explosion } : {}),
     });
     colorIndex++;
   }
 
   return pieData;
+}
+
+function pointExplosionForRows(
+  mark: ChartSpec['mark'] | undefined,
+  pointIndex: number,
+  rows: DataRow[],
+): number | undefined {
+  const rowExplosion =
+    rows
+      .map((row) => row[POINT_EXPLOSION_FIELD])
+      .find((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? 0;
+  const markExplosion = markExplosionForPoint(mark, pointIndex);
+  const explosion = rowExplosion + markExplosion;
+  return explosion > 0 ? explosion : undefined;
+}
+
+function markExplosionForPoint(mark: ChartSpec['mark'] | undefined, pointIndex: number): number {
+  if (!mark || typeof mark !== 'object') return 0;
+  const offset = mark._explosionOffset;
+  if (typeof offset !== 'number' || !Number.isFinite(offset) || offset <= 0) return 0;
+  if (mark._explodeAll) return offset;
+  if (mark._explodedIndex === pointIndex) return offset;
+  if (mark._explodedIndices?.includes(pointIndex)) return offset;
+  return 0;
 }
 
 function extractDoughnutSeriesData(
@@ -304,14 +347,19 @@ function extractDoughnutSeriesData(
 ): PieSeriesData[] {
   const ringLayers = doughnutRingLayers(spec);
   if (ringLayers.length <= 1) {
-    return [{ name: seriesNameForRows(data, 0), points: extractPieData(data, fallbackEncoding) }];
+    return [
+      {
+        name: seriesNameForRows(data, 0),
+        points: extractPieData(data, fallbackEncoding, pieMarkForSpec(spec)),
+      },
+    ];
   }
 
   return ringLayers.map((layer, index) => {
     const rows = rowsForLayer(layer, data);
     return {
       name: seriesNameForRows(rows, index),
-      points: extractPieData(rows, layer.encoding ?? fallbackEncoding),
+      points: extractPieData(rows, layer.encoding ?? fallbackEncoding, layer.mark),
     };
   });
 }
@@ -463,7 +511,8 @@ export function generateExplodedPieChartXML(
   const sheetName = options?.sheetName ?? 'Sheet1';
 
   // Extract pie data
-  const pieData = extractPieData(data, encoding);
+  const pieData = extractPieData(data, encoding, mark);
+  const dataLabelsXML = generatePieDataLabelsXML(data);
 
   // Generate exploded pie chart content
   const chartContent = generateExplodedPieChartContent(
@@ -471,6 +520,7 @@ export function generateExplodedPieChartXML(
     explodePercentage,
     firstSliceAngleDegrees(mark),
     sheetName,
+    dataLabelsXML,
   );
 
   // Get title
@@ -495,6 +545,7 @@ function generateExplodedPieChartContent(
   explosion: number,
   firstSliceAngle: number,
   sheetName: string,
+  dataLabelsXML: string,
 ): string {
   const catCount = pieData.length;
   const quotedSheet = quoteSheetName(sheetName);
@@ -509,7 +560,7 @@ function generateExplodedPieChartContent(
       (pt, i) => `<c:dPt>
       <c:idx val="${i}"/>
       <c:bubble3D val="0"/>
-      <c:explosion val="${explosion}"/>
+      ${generatePointExplosionXML(explosion)}
       <c:spPr>
         <a:solidFill>
           <a:srgbClr val="${normalizeHexColor(pt.color)}"/>
@@ -558,7 +609,7 @@ function generateExplodedPieChartContent(
         </c:numRef>
       </c:val>
     </c:ser>
-    ${generatePieDataLabelsXML()}
+    ${dataLabelsXML}
     <c:firstSliceAng val="${firstSliceAngle}"/>
   </c:pieChart>`;
 }

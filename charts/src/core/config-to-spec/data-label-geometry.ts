@@ -5,6 +5,8 @@ import {
   doughnutRingBand,
   firstSliceAngleRadians,
   isPieLikeChartType,
+  pieLikeSeriesTotal,
+  pieLikeSliceGeometries,
 } from './pie-like';
 import { isNoFillNoLineSeries } from './style';
 
@@ -16,10 +18,7 @@ export interface PieLabelGeometry {
 }
 
 export function seriesTotal(values: Array<{ y: number } | undefined>): number {
-  return values.reduce((sum, point) => {
-    const value = point?.y;
-    return typeof value === 'number' && Number.isFinite(value) ? sum + Math.abs(value) : sum;
-  }, 0);
+  return pieLikeSeriesTotal(values.map((point) => point?.y));
 }
 
 export function percentageForValue(value: number, total: number): number | undefined {
@@ -43,26 +42,16 @@ export function buildPieLabelGeometries(
   );
 
   return data.series.map((series, seriesIndex) => {
-    const total = seriesTotal(series.data);
-    let startAngle = firstSliceAngleRadians(config);
     const ringIndex = ringIndexBySeriesIndex.get(seriesIndex);
     const band =
       ringIndex !== undefined && ringCount > 1
         ? doughnutRingBand({ config, ringCount, ringIndex })
         : { innerRadius: doughnutInnerRadiusRatio(config), outerRadius: 1 };
-    return series.data.map((point) => {
-      const value = total > 0 ? Math.abs(point?.y ?? 0) : 1;
-      const angle =
-        total > 0 ? (value / total) * Math.PI * 2 : (Math.PI * 2) / Math.max(1, series.data.length);
-      const midAngle = startAngle + angle / 2;
-      startAngle += angle;
-      const unit = arcAngleUnitVector(midAngle);
-      return {
-        cos: unit.x,
-        sin: unit.y,
-        innerRadiusRatio: band.innerRadius,
-        outerRadiusRatio: band.outerRadius,
-      };
+    return pieLikeSliceGeometries({
+      values: series.data.map((point) => point?.y),
+      startAngle: firstSliceAngleRadians(config),
+      innerRadiusRatio: band.innerRadius,
+      outerRadiusRatio: band.outerRadius,
     });
   });
 }
@@ -116,9 +105,4 @@ function visibleDoughnutSeriesIndices(config: ChartConfig, data: ChartData): num
     indices.push(index);
   }
   return indices;
-}
-
-function arcAngleUnitVector(angle: number): { x: number; y: number } {
-  const canvasAngle = angle - Math.PI / 2;
-  return { x: Math.cos(canvasAngle), y: Math.sin(canvasAngle) };
 }

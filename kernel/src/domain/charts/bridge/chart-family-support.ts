@@ -115,6 +115,9 @@ export function familySupportCompilerDiagnostics(
 
 export function threeDApproximationDiagnostics(config: ChartConfig): string[] {
   const diagnostics = ['3-D chart rendering is approximate'];
+  if (config.type === 'pie3d' || config.type === 'pie3dExploded') {
+    diagnostics.push('pie3D projection uses an approximate arc-depth fallback');
+  }
   if (config.view3d) {
     diagnostics.push('view3D camera/depth is preserved but rendered approximately');
   }

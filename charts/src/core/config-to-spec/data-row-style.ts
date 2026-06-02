@@ -29,7 +29,7 @@ import { linePointsToCanvasPx } from './units';
 export function applyPointStyle(
   row: DataRow,
   config: ChartConfig | undefined,
-  _seriesConfig: SeriesConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
   sourceSeriesIndex: number,
   pointFormat: PointFormat | undefined,
 ): void {
@@ -49,12 +49,13 @@ export function applyPointStyle(
   if (stroke) row[POINT_STROKE_FIELD] = stroke;
   const strokeWidth = linePointsToCanvasPx(line?.width) ?? pointFormat?.border?.width;
   if (strokeWidth !== undefined) row[POINT_STROKE_WIDTH_FIELD] = strokeWidth;
-  if (pointFormat?.explosion !== undefined) row[POINT_EXPLOSION_FIELD] = pointFormat.explosion;
+  const explosion = composedExplosion(seriesConfig?.explosion, pointFormat?.explosion);
+  if (explosion !== undefined) row[POINT_EXPLOSION_FIELD] = explosion;
   hasStyle =
     fill !== undefined ||
     stroke !== undefined ||
     strokeWidth !== undefined ||
-    pointFormat?.explosion !== undefined;
+    explosion !== undefined;
   if (hasStyle) row[POINT_STYLE_VISIBLE_FIELD] = true;
 }
 
@@ -172,6 +173,20 @@ function colorToCss(
     return resolveChartColor(color as ChartColor, context);
   }
   return undefined;
+}
+
+function composedExplosion(
+  seriesExplosion: number | undefined,
+  pointExplosion: number | undefined,
+): number | undefined {
+  const series = finiteNonNegative(seriesExplosion);
+  const point = finiteNonNegative(pointExplosion);
+  if (series === undefined && point === undefined) return undefined;
+  return (series ?? 0) + (point ?? 0);
+}
+
+function finiteNonNegative(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : undefined;
 }
 
 function pointChartFormat(pointFormat: PointFormat | undefined): ChartFormat | undefined {

@@ -56,67 +56,13 @@ export function generateArcMarks(
   // Determine which field is driving the arc angle (for datum overrides below)
   const thetaField = encodings.theta?.field ?? encodings.size?.field;
 
-  // Calculate angles from theta encoding or sum of values
-  let total = 0;
-  const values: number[] = [];
-
-  for (const datum of renderData) {
+  const values = renderData.map((datum) => {
     const value = encodings.theta?.accessor(datum) ?? encodings.size?.accessor(datum);
-    const numValue = typeof value === 'number' && isFinite(value) ? Math.abs(value) : 0;
-    values.push(numValue);
-    total += numValue;
-  }
+    return sanitizeArcValue(value);
+  });
 
   const padAngle = markSpec.padAngle ?? 0;
-  const TWO_PI = Math.PI * 2;
-
-  // Compute logical angles (pre-padding) for each arc.
-  // Each arc must have logical angle >= padAngle so that after padding
-  // (subtracting padAngle), the visual angle is non-negative.
-  const angles: number[] = [];
-  if (total > 0) {
-    for (const v of values) {
-      angles.push((v / total) * TWO_PI);
-    }
-  } else if (renderData.length > 0) {
-    // Equal distribution when all values are zero/null/NaN
-    const equalAngle = TWO_PI / renderData.length;
-    for (let i = 0; i < renderData.length; i++) {
-      angles.push(equalAngle);
-    }
-  }
-
-  // Redistribute angles so that every arc has a logical angle >= padAngle.
-  // Without this, subtracting padAngle for visual padding would yield
-  // negative visual angles for tiny/zero-value arcs.
-  // Borrow angle proportionally from arcs that have surplus (> padAngle).
-  // This preserves sum(angles) = 2pi for the angle_sum invariant.
-  if (angles.length > 0 && padAngle > 0) {
-    let deficit = 0;
-    let surplusTotal = 0;
-    for (let i = 0; i < angles.length; i++) {
-      if (angles[i] < padAngle) {
-        deficit += padAngle - angles[i];
-      } else {
-        surplusTotal += angles[i];
-      }
-    }
-
-    if (deficit > 0 && surplusTotal > deficit) {
-      // Scale surplus arcs down proportionally to fund deficit arcs
-      const scaleFactor = (surplusTotal - deficit) / surplusTotal;
-      for (let i = 0; i < angles.length; i++) {
-        if (angles[i] < padAngle) {
-          angles[i] = padAngle;
-        } else {
-          angles[i] *= scaleFactor;
-        }
-      }
-    }
-    // When deficit > surplusTotal (n * padAngle > 2PI), redistribution is
-    // impossible. Leave angles as-is; some visual arcs will be negative.
-    // The angle_sum invariant still holds because it adds n * padAngle back.
-  }
+  const angles = pieLikeArcAngles(values, padAngle);
 
   let startAngle = markSpec.startAngle ?? 0;
 
@@ -200,6 +146,38 @@ function markExplosionOffset(markSpec: MarkSpec, sliceIndex: number): number {
   if (markSpec._explodedIndex === sliceIndex) return offset;
   if (markSpec._explodedIndices?.includes(sliceIndex)) return offset;
   return 0;
+}
+
+function pieLikeArcAngles(values: readonly number[], padAngle: number): number[] {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const TWO_PI = Math.PI * 2;
+  const angles =
+    total > 0
+      ? values.map((value) => (value / total) * TWO_PI)
+      : values.map(() => TWO_PI / Math.max(1, values.length));
+  if (angles.length === 0 || padAngle <= 0) return angles;
+
+  let deficit = 0;
+  let surplusTotal = 0;
+  for (let i = 0; i < angles.length; i++) {
+    if (angles[i] < padAngle) {
+      deficit += padAngle - angles[i];
+    } else {
+      surplusTotal += angles[i];
+    }
+  }
+
+  if (deficit > 0 && surplusTotal > deficit) {
+    const scaleFactor = (surplusTotal - deficit) / surplusTotal;
+    for (let i = 0; i < angles.length; i++) {
+      angles[i] = angles[i] < padAngle ? padAngle : angles[i] * scaleFactor;
+    }
+  }
+  return angles;
+}
+
+function sanitizeArcValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.abs(value) : 0;
 }
 
 function arcAngleUnitVector(angle: number): { x: number; y: number } {

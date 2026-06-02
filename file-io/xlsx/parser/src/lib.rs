@@ -315,6 +315,35 @@ mod tests {
         zip.finish().expect("minimal xlsx zip")
     }
 
+    fn minimal_strict_xlsx() -> Vec<u8> {
+        let mut zip = ZipWriter::new();
+        zip.add_file(
+            "[Content_Types].xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#.to_vec(),
+        );
+        zip.add_file(
+            "_rels/.rels",
+            br#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_vec(),
+        );
+        zip.add_file(
+            "xl/workbook.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main" xmlns:r="http://purl.oclc.org/ooxml/officeDocument/relationships" conformance="strict"><sheets><sheet name="Model" sheetId="1" r:id="rId1"/><sheet name="Assumptions" sheetId="2" r:id="rId2"/></sheets></workbook>"#.to_vec(),
+        );
+        zip.add_file(
+            "xl/_rels/workbook.xml.rels",
+            br#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>"#.to_vec(),
+        );
+        zip.add_file(
+            "xl/worksheets/sheet1.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Revenue</t></is></c><c r="B1"><v>123</v></c></row></sheetData></worksheet>"#.to_vec(),
+        );
+        zip.add_file(
+            "xl/worksheets/sheet2.xml",
+            br#"<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://purl.oclc.org/ooxml/spreadsheetml/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Discount rate</t></is></c><c r="B1"><v>0.12</v></c></row></sheetData></worksheet>"#.to_vec(),
+        );
+        zip.finish().expect("minimal strict xlsx zip")
+    }
+
     #[test]
     fn test_now_us_returns_positive() {
         let t = now_us();
@@ -339,6 +368,28 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("UTF-8"));
+    }
+
+    #[test]
+    fn public_parse_accepts_fully_strict_ooxml_sheet_relationships() {
+        let (output, _) = parse_xlsx_to_output(&minimal_strict_xlsx())
+            .expect("fully Strict OOXML workbook should parse");
+
+        let sheet_names: Vec<_> = output
+            .sheets
+            .iter()
+            .map(|sheet| sheet.name.as_str())
+            .collect();
+        assert_eq!(sheet_names, ["Model", "Assumptions"]);
+        assert_eq!(output.workbook_sheet_inventory.len(), 2);
+        assert_eq!(
+            output.workbook_sheet_inventory[0].editable_sheet_index,
+            Some(0)
+        );
+        assert_eq!(
+            output.workbook_sheet_inventory[1].editable_sheet_index,
+            Some(1)
+        );
     }
 
     /// Regression test: charts must survive export → re-import → re-export.

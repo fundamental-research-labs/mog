@@ -10,6 +10,14 @@ use crate::infra::scanner::{extract_quoted_value, find_attr_simd, find_gt_simd, 
 pub const REL_WORKSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
+/// Strict relationship type for worksheets.
+pub const REL_WORKSHEET_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/worksheet";
+
+pub fn is_worksheet_relationship_type(rel_type: &str) -> bool {
+    rel_type == REL_WORKSHEET || rel_type == REL_WORKSHEET_STRICT
+}
+
 /// Relationship type for styles.
 pub const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
@@ -362,7 +370,7 @@ impl OoxmlRelationshipType {
             REL_CORE_PROPERTIES => Self::CoreProperties,
             REL_EXTENDED_PROPERTIES => Self::ExtendedProperties,
             REL_CUSTOM_PROPERTIES => Self::CustomProperties,
-            REL_WORKSHEET => Self::Worksheet,
+            REL_WORKSHEET | REL_WORKSHEET_STRICT => Self::Worksheet,
             REL_STYLES => Self::Styles,
             REL_THEME | REL_THEME_STRICT => Self::Theme,
             REL_SHARED_STRINGS => Self::SharedStrings,
@@ -1152,6 +1160,16 @@ mod tests {
         for rel_type in known {
             assert_eq!(OoxmlRelationshipType::from_uri(rel_type.uri()), rel_type);
         }
+    }
+
+    #[test]
+    fn strict_worksheet_relationship_type_maps_to_worksheet() {
+        assert_eq!(
+            OoxmlRelationshipType::from_uri(REL_WORKSHEET_STRICT),
+            OoxmlRelationshipType::Worksheet
+        );
+        assert!(is_worksheet_relationship_type(REL_WORKSHEET));
+        assert!(is_worksheet_relationship_type(REL_WORKSHEET_STRICT));
     }
 
     #[test]

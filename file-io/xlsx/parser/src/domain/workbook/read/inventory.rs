@@ -3,14 +3,18 @@ use crate::domain::content_types::read::{
     CONTENT_TYPE_CHARTSHEET, CONTENT_TYPE_WORKSHEET, ContentTypes,
 };
 use crate::domain::workbook::types::SheetState;
-use crate::infra::opc::{REL_WORKSHEET, resolve_relationship_target};
+use crate::infra::opc::{is_worksheet_relationship_type, resolve_relationship_target};
 use crate::zip::XlsxArchive;
 use domain_types::{PackageDiagnosticRef, WorkbookSheetKind, WorkbookSheetPackageInfo};
 
 const REL_CHARTSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet";
+const REL_CHARTSHEET_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/chartsheet";
 const REL_DIALOGSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet";
+const REL_DIALOGSHEET_STRICT: &str =
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/dialogsheet";
 const REL_MACRO_SHEET: &str = "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet";
 const CONTENT_TYPE_DIALOGSHEET: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml";
@@ -217,28 +221,96 @@ fn classify_sheet_kind(
     content_type: Option<&str>,
 ) -> WorkbookSheetKind {
     match (relationship_type, content_type) {
-        (Some(REL_WORKSHEET), Some(CONTENT_TYPE_WORKSHEET) | None) => WorkbookSheetKind::Worksheet,
-        (Some(REL_CHARTSHEET), Some(CONTENT_TYPE_CHARTSHEET) | None) => {
+        (Some(rel), Some(CONTENT_TYPE_WORKSHEET) | None) if is_worksheet_relationship_type(rel) => {
+            WorkbookSheetKind::Worksheet
+        }
+        (Some(rel), Some(CONTENT_TYPE_CHARTSHEET) | None)
+            if is_chartsheet_relationship_type(rel) =>
+        {
             WorkbookSheetKind::Chartsheet
         }
-        (Some(REL_DIALOGSHEET), Some(CONTENT_TYPE_DIALOGSHEET) | None) => {
+        (Some(rel), Some(CONTENT_TYPE_DIALOGSHEET) | None)
+            if is_dialogsheet_relationship_type(rel) =>
+        {
             WorkbookSheetKind::Dialogsheet
         }
         (Some(REL_MACRO_SHEET), Some(CONTENT_TYPE_MACRO_SHEET) | None) => {
             WorkbookSheetKind::MacroSheet
         }
-        (Some(REL_WORKSHEET), Some(_)) => WorkbookSheetKind::Invalid,
-        (Some(REL_CHARTSHEET), Some(_))
-        | (Some(REL_DIALOGSHEET), Some(_))
-        | (Some(REL_MACRO_SHEET), Some(_)) => WorkbookSheetKind::Invalid,
+        (Some(rel), Some(_)) if is_worksheet_relationship_type(rel) => WorkbookSheetKind::Invalid,
+        (Some(rel), Some(_)) if is_chartsheet_relationship_type(rel) => WorkbookSheetKind::Invalid,
+        (Some(rel), Some(_)) if is_dialogsheet_relationship_type(rel) => WorkbookSheetKind::Invalid,
+        (Some(REL_MACRO_SHEET), Some(_)) => WorkbookSheetKind::Invalid,
         (Some(_), _) => WorkbookSheetKind::Unsupported,
         (None, _) => WorkbookSheetKind::Invalid,
     }
+}
+
+fn is_chartsheet_relationship_type(rel_type: &str) -> bool {
+    rel_type == REL_CHARTSHEET || rel_type == REL_CHARTSHEET_STRICT
+}
+
+fn is_dialogsheet_relationship_type(rel_type: &str) -> bool {
+    rel_type == REL_DIALOGSHEET || rel_type == REL_DIALOGSHEET_STRICT
 }
 
 fn package_diag(code: impl Into<String>, message: impl Into<String>) -> PackageDiagnosticRef {
     PackageDiagnosticRef {
         code: code.into(),
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::content_types::read::ContentTypes;
+    use crate::zip::XlsxArchive;
+
+    fn archive_with_sheet(path: &str) -> Vec<u8> {
+        let mut zip = crate::write::ZipWriter::new();
+        zip.add_file(
+            "[Content_Types].xml",
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/{path}" ContentType="{CONTENT_TYPE_WORKSHEET}"/></Types>"#
+            )
+            .into_bytes(),
+        );
+        zip.add_file(path, br#"<worksheet><sheetData/></worksheet>"#.to_vec());
+        zip.finish().expect("test zip")
+    }
+
+    #[test]
+    fn strict_worksheet_relationships_are_editable_worksheets() {
+        let bytes = archive_with_sheet("xl/worksheets/sheet1.xml");
+        let archive = XlsxArchive::new(&bytes).expect("archive");
+        let content_types = ContentTypes::parse(
+            br#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
+        )
+        .expect("content types");
+        let sheet_infos = [SheetInfo {
+            name: "Model".to_string(),
+            sheet_id: 1,
+            r_id: "rId1".to_string(),
+            state: SheetState::Visible,
+        }];
+        let relationships = [ooxml_types::shared::OpcRelationship {
+            id: "rId1".to_string(),
+            rel_type: crate::infra::opc::REL_WORKSHEET_STRICT.to_string(),
+            target: "worksheets/sheet1.xml".to_string(),
+            target_mode: None,
+        }];
+
+        let inventory = build_workbook_sheet_inventory(
+            &sheet_infos,
+            &relationships,
+            Some(&content_types),
+            &archive,
+        );
+
+        assert_eq!(inventory.len(), 1);
+        assert_eq!(inventory[0].kind, WorkbookSheetKind::Worksheet);
+        assert_eq!(inventory[0].editable_sheet_index, Some(0));
+        assert!(inventory[0].diagnostics.is_empty());
     }
 }

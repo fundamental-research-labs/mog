@@ -210,7 +210,16 @@ export {
 } from './grammar/spec';
 
 // Grammar compiler - converts spec + data to renderable marks
-export { compile, type CompileOptions, type CompileResult } from './grammar/compiler';
+export {
+  compile,
+  type CartesianGeometryCoordinateSystem,
+  type CartesianGeometryLayerTrace,
+  type CartesianGeometryPointTrace,
+  type CartesianGeometryScaleTrace,
+  type CartesianGeometryTrace,
+  type CompileOptions,
+  type CompileResult,
+} from './grammar/compiler';
 
 // Components - Fluent API chart builders
 export {

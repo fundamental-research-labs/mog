@@ -3,6 +3,10 @@ import {
   buildExcelCartesianGeometryPlan,
   excelBarSlotGeometry,
   resolveBarGeometryGroups,
+  type CartesianGeometryLayerTrace,
+  type CartesianGeometryPointTrace,
+  type CartesianGeometryScaleTrace,
+  type CartesianGeometryTrace,
   type ChartConfig,
   type ChartData,
   type BarGeometryGroup,
@@ -75,13 +79,21 @@ export function snapshotBarGeometry(
       categoryAxisRole: geometry.categoryAxisRole,
       valueAxisRole: geometry.valueAxisRole,
       categoryPositionPolicy: geometry.categoryPositionPolicy,
+      categoryTickLabelSkip: geometry.categoryTickLabelSkip,
+      categoryTickMarkSkip: geometry.categoryTickMarkSkip,
+      categoryTickSkipSource: geometry.categoryTickSkipSource,
       categoryCrossing: geometry.categoryCrossing,
       valueCrossing: geometry.valueCrossing,
       valueCrossingValue: geometry.valueCrossingValue,
       baselineValue: geometry.baselineValue,
       baselinePixel,
       valueAxisDomain: geometry.valueAxisDomain,
+      valueAxisTickStep: geometry.valueAxisTickStep,
+      valueAxisTickCount: geometry.valueAxisTickCount,
       percentDomain: geometry.percentDomain,
+      percentAxisLabelPolicy: geometry.percentAxisLabelPolicy,
+      axisLayoutStatus: geometry.axisLayoutStatus,
+      axisLayoutStatusReason: geometry.axisLayoutStatusReason,
       geometryStatus: geometry.geometryStatus,
       plotAreaSource: geometry.plotAreaSource,
       categoryAxisLength,
@@ -96,8 +108,234 @@ export function snapshotBarGeometry(
 export function snapshotCartesianGeometry(
   config: ChartConfig,
   chartData: ChartData,
+  layout: ResolvedChartSpecSnapshot['resolved']['layout'] | null = null,
+  trace?: CartesianGeometryTrace,
 ): CartesianGeometrySnapshot | undefined {
-  return buildExcelCartesianGeometryPlan(config, chartData);
+  const plan = buildExcelCartesianGeometryPlan(config, chartData);
+  if (!plan) return undefined;
+
+  const seriesGeometry = seriesPointGeometry(trace);
+  const layerSnapshots = trace?.layers.map((layer) => snapshotLayerGeometry(layer, trace));
+
+  return {
+    ...plan,
+    geometryStatus: trace && layout ? 'available' : 'unavailable',
+    ...(trace
+      ? {
+          coordinateSystem: trace.coordinateSystem,
+          chartWidth: trace.chartWidth,
+          chartHeight: trace.chartHeight,
+          plotArea: trace.plotArea,
+          layers: layerSnapshots,
+        }
+      : {}),
+    x: {
+      modes: plan.x.modes,
+      ...(plan.x.category
+        ? {
+            category: {
+              ...plan.x.category,
+              ...scaleRangeSnapshot(firstLayerScale(trace, 'x'), trace, 'x'),
+            },
+          }
+        : {}),
+      ...(plan.x.quantitative
+        ? {
+            quantitative: {
+              ...plan.x.quantitative,
+              ...quantitativeXScaleSnapshot(firstLayerScale(trace, 'x'), trace),
+            },
+          }
+        : {}),
+    },
+    valueAxes: plan.valueAxes.map((axis) => ({
+      ...axis,
+      ...valueAxisScaleSnapshot(plan, trace, axis.axisGroup),
+    })),
+    series: plan.series.map((series) => {
+      const points = seriesGeometry.get(series.seriesIndex) ?? [];
+      const layerIndices = uniqueNumbers(
+        points
+          .map((point) => point.layerIndex)
+          .filter((value): value is number => value !== undefined),
+      );
+      const areaPoints = points.filter((point) => point.topPixel !== undefined);
+      const bubblePoints = points.filter(
+        (point) => point.rawBubbleSize !== undefined || point.renderedArea !== undefined,
+      );
+
+      return {
+        ...series,
+        ...(layerIndices.length > 0 ? { layers: layerIndices } : {}),
+        ...(points.length > 0 ? { pointGeometry: points } : {}),
+        ...(areaPoints.length > 0
+          ? {
+              areaGeometry: {
+                baselinePixel: areaPoints.find((point) => point.baselinePixel !== undefined)
+                  ?.baselinePixel,
+                baselinePlotY: areaPoints.find((point) => point.baselinePlotY !== undefined)
+                  ?.baselinePlotY,
+                points: areaPoints,
+              },
+            }
+          : {}),
+        ...(bubblePoints.length > 0
+          ? {
+              bubbleGeometry: {
+                maxRenderedArea: plan.bubble?.maxRenderedArea,
+                points: bubblePoints,
+              },
+            }
+          : {}),
+      };
+    }),
+  };
+}
+
+function seriesPointGeometry(
+  trace: CartesianGeometryTrace | undefined,
+): Map<number, NonNullable<CartesianGeometrySnapshot['series'][number]['pointGeometry']>> {
+  const bySeries = new Map<
+    number,
+    NonNullable<CartesianGeometrySnapshot['series'][number]['pointGeometry']>
+  >();
+  if (!trace) return bySeries;
+
+  for (const layer of trace.layers) {
+    for (const point of layer.points) {
+      if (point.seriesIndex === undefined) continue;
+      const current = bySeries.get(point.seriesIndex) ?? [];
+      current.push(snapshotPointGeometry(point, layer));
+      bySeries.set(point.seriesIndex, current);
+    }
+  }
+  return bySeries;
+}
+
+function snapshotPointGeometry(
+  point: CartesianGeometryPointTrace,
+  layer: CartesianGeometryLayerTrace,
+): NonNullable<CartesianGeometrySnapshot['series'][number]['pointGeometry']>[number] {
+  return {
+    ...point,
+    layerIndex: layer.layerIndex,
+    markType: layer.markType,
+  };
+}
+
+function snapshotLayerGeometry(
+  layer: CartesianGeometryLayerTrace,
+  trace: CartesianGeometryTrace,
+): NonNullable<CartesianGeometrySnapshot['layers']>[number] {
+  return {
+    layerIndex: layer.layerIndex,
+    markType: layer.markType,
+    xField: layer.xField,
+    yField: layer.yField,
+    sizeField: layer.sizeField,
+    xScale: snapshotScaleGeometry(layer.xScale, trace, 'x'),
+    yScale: snapshotScaleGeometry(layer.yScale, trace, 'y'),
+    pointCount: layer.points.length,
+    seriesIndices: uniqueNumbers(
+      layer.points
+        .map((point) => point.seriesIndex)
+        .filter((value): value is number => value !== undefined),
+    ),
+    area: layer.area,
+  };
+}
+
+function snapshotScaleGeometry(
+  scale: CartesianGeometryScaleTrace | undefined,
+  trace: CartesianGeometryTrace,
+  axis: 'x' | 'y',
+): NonNullable<CartesianGeometrySnapshot['layers']>[number]['xScale'] | undefined {
+  if (!scale) return undefined;
+  return {
+    ...scale,
+    ...scaleRangeSnapshot(scale, trace, axis),
+  };
+}
+
+function quantitativeXScaleSnapshot(
+  scale: CartesianGeometryScaleTrace | undefined,
+  trace: CartesianGeometryTrace | undefined,
+): Pick<
+  NonNullable<CartesianGeometrySnapshot['x']['quantitative']>,
+  'tickValues' | 'range' | 'plotRange'
+> {
+  if (!scale || !trace) return {};
+  return {
+    tickValues: scale.tickValues,
+    ...scaleRangeSnapshot(scale, trace, 'x'),
+  };
+}
+
+function valueAxisScaleSnapshot(
+  plan: NonNullable<ReturnType<typeof buildExcelCartesianGeometryPlan>>,
+  trace: CartesianGeometryTrace | undefined,
+  axisGroup: 'primary' | 'secondary',
+): Pick<
+  NonNullable<CartesianGeometrySnapshot['valueAxes'][number]>,
+  'tickValues' | 'range' | 'plotRange'
+> {
+  if (!trace) return {};
+  const seriesIndices = new Set(
+    plan.series
+      .filter((series) => series.axisGroup === axisGroup)
+      .map((series) => series.seriesIndex),
+  );
+  const layer = trace.layers.find((item) =>
+    item.points.some(
+      (point) => point.seriesIndex !== undefined && seriesIndices.has(point.seriesIndex),
+    ),
+  );
+  if (!layer?.yScale) return {};
+  return {
+    tickValues: layer.yScale.tickValues,
+    ...scaleRangeSnapshot(layer.yScale, trace, 'y'),
+  };
+}
+
+function firstLayerScale(
+  trace: CartesianGeometryTrace | undefined,
+  axis: 'x' | 'y',
+): CartesianGeometryScaleTrace | undefined {
+  if (!trace) return undefined;
+  return axis === 'x'
+    ? trace.layers.find((layer) => layer.xScale)?.xScale
+    : trace.layers.find((layer) => layer.yScale)?.yScale;
+}
+
+function scaleRangeSnapshot(
+  scale: CartesianGeometryScaleTrace | undefined,
+  trace: CartesianGeometryTrace | undefined,
+  axis: 'x' | 'y',
+): { range?: [number, number]; plotRange?: [number, number] } {
+  if (!scale?.range || !trace) return {};
+  return {
+    range: scale.range,
+    plotRange: scale.range.map((value) =>
+      axis === 'x'
+        ? normalize(value - trace.plotArea.x, trace.plotArea.width)
+        : normalize(value - trace.plotArea.y, trace.plotArea.height),
+    ) as [number, number],
+  };
+}
+
+function uniqueNumbers(values: readonly number[]): number[] {
+  return Array.from(new Set(values)).sort((a, b) => a - b);
+}
+
+function normalize(value: number, extent: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(extent) || extent === 0) return NaN;
+  return roundSnapshotNumber(value / extent);
+}
+
+function roundSnapshotNumber(value: number): number {
+  if (!Number.isFinite(value)) return value;
+  if (Math.abs(value) < 1e-9) return 0;
+  return Number.parseFloat(value.toFixed(6));
 }
 
 function categoryPitchForPolicy(

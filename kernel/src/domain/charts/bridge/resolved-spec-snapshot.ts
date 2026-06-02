@@ -1,4 +1,9 @@
-import { seriesSourceIndex, type ChartConfig, type ChartData } from '@mog/charts';
+import {
+  seriesSourceIndex,
+  type CartesianGeometryTrace,
+  type ChartConfig,
+  type ChartData,
+} from '@mog/charts';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   ChartExportOptionsSnapshot,
@@ -51,6 +56,7 @@ export function buildResolvedChartSpecSnapshot(input: {
   renderFrame?: ResolvedChartSpecSnapshot['renderFrame'];
   chartArea?: ResolvedChartSpecSnapshot['chartArea'];
   plotArea?: ResolvedChartSpecSnapshot['plotArea'] | null;
+  cartesianGeometryTrace?: CartesianGeometryTrace;
   pageContext?: ResolvedChartSpecSnapshot['pageContext'];
   packageAuthority?: ResolvedChartSpecSnapshot['packageAuthority'];
 }): ResolvedChartSpecSnapshot {
@@ -63,7 +69,12 @@ export function buildResolvedChartSpecSnapshot(input: {
   const seriesReferencesByIndex = new Map(
     input.resolvedRanges.seriesReferences.map((reference) => [reference.index, reference]),
   );
-  const cartesianGeometry = snapshotCartesianGeometry(input.config, input.chartData);
+  const cartesianGeometry = snapshotCartesianGeometry(
+    input.config,
+    input.chartData,
+    input.layout ?? null,
+    input.cartesianGeometryTrace,
+  );
   const seriesWithoutGeometry = input.chartData.series.map((dataSeries, index) =>
     snapshotSeries(
       dataSeries,
@@ -146,6 +157,7 @@ export function buildResolvedChartSpecSnapshot(input: {
       axes: {
         category: snapshotAxis(input.config.axis?.categoryAxis ?? input.config.axis?.xAxis),
         value: snapshotAxis(input.config.axis?.valueAxis ?? input.config.axis?.yAxis),
+        ...snapshotXYValueAxes(input.config),
         secondaryCategory: snapshotAxis(input.config.axis?.secondaryCategoryAxis),
         secondaryValue: snapshotAxis(
           input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis,
@@ -202,6 +214,22 @@ export function buildResolvedChartSpecSnapshot(input: {
       unsupportedFeatures,
     },
   };
+}
+
+function snapshotXYValueAxes(
+  config: ChartConfig,
+): Pick<ResolvedChartSpecSnapshot['resolved']['axes'], 'xValue' | 'yValue'> {
+  if (!isXYChartType(config.type)) return {};
+  const xValue = snapshotAxis(config.axis?.xAxis);
+  const yValue = snapshotAxis(config.axis?.yAxis ?? config.axis?.valueAxis);
+  return {
+    ...(xValue ? { xValue } : {}),
+    ...(yValue ? { yValue } : {}),
+  };
+}
+
+function isXYChartType(type: ChartConfig['type']): boolean {
+  return type === 'scatter' || type === 'bubble' || type === 'bubble3DEffect';
 }
 
 function uniqueDiagnostics(diagnostics: readonly string[]): string[] {

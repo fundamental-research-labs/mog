@@ -32,11 +32,23 @@ import { applyTransforms } from './transforms';
 // Import from extracted modules
 import { sanitizeDataForScales } from '../algebra/data-sanitize';
 import { generateAxes } from './axis-generator';
+import {
+  buildCartesianGeometryTrace,
+  collectCartesianGeometryLayerTrace,
+} from './cartesian-geometry-trace';
 import { compileLayered } from './layer-compiler';
 import { generateLegends } from './legend-generator';
 import { generateMarks } from './marks';
 import { generateTitle } from './title-generator';
-import type { CompileOptions, CompileResult } from './types';
+import type {
+  CartesianGeometryCoordinateSystem,
+  CartesianGeometryLayerTrace,
+  CartesianGeometryPointTrace,
+  CartesianGeometryScaleTrace,
+  CartesianGeometryTrace,
+  CompileOptions,
+  CompileResult,
+} from './types';
 
 // =============================================================================
 // Types
@@ -45,7 +57,15 @@ import type { CompileOptions, CompileResult } from './types';
 // CompileOptions and CompileResult live in ./types to break the compiler.ts
 // ↔ layer-compiler.ts cycle. Re-exported below for backward compatibility
 // with callers that import them from '../grammar/compiler'.
-export type { CompileOptions, CompileResult };
+export type {
+  CartesianGeometryCoordinateSystem,
+  CartesianGeometryLayerTrace,
+  CartesianGeometryPointTrace,
+  CartesianGeometryScaleTrace,
+  CartesianGeometryTrace,
+  CompileOptions,
+  CompileResult,
+};
 
 // =============================================================================
 // Main Compile Function
@@ -114,6 +134,19 @@ export function compile(
     spec.encoding,
     spec.config,
   );
+  const cartesianGeometry = buildCartesianGeometryTrace(layout, [
+    collectCartesianGeometryLayerTrace({
+      layerIndex: 0,
+      markType,
+      markSpec,
+      data: transformedData,
+      scales,
+      encodings,
+      layout,
+      encoding: spec.encoding,
+      config: spec.config,
+    }),
+  ]);
   const clippedMarks = clipMarksToPlotArea(marks, layout.plotArea);
 
   // Generate axes
@@ -161,6 +194,7 @@ export function compile(
     },
     layout,
     scales,
+    cartesianGeometry,
   };
 }
 

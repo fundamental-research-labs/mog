@@ -10,6 +10,10 @@
 import { extendDataForLayerFields, sanitizeDataForScales } from '../algebra/data-sanitize';
 import type { AnyMark, RectMark } from '../primitives/types';
 import { generateAxes, generateYAxis } from './axis-generator';
+import {
+  buildCartesianGeometryTrace,
+  collectCartesianGeometryLayerTrace,
+} from './cartesian-geometry-trace';
 import { createScales, resolveEncodings, type ScaleMap } from './encoding-resolver';
 import { calculateLayout } from './layout';
 import { generateLegends } from './legend-generator';
@@ -26,7 +30,7 @@ import type {
 } from './spec';
 import { generateTitle } from './title-generator';
 import { applyTransforms } from './transforms';
-import type { CompileOptions, CompileResult } from './types';
+import type { CartesianGeometryLayerTrace, CompileOptions, CompileResult } from './types';
 
 /**
  * Get mark type from spec.
@@ -128,13 +132,15 @@ export function compileLayered(
 
   // Compile each layer
   const allMarks: AnyMark[] = [];
+  const cartesianLayerTraces: Array<CartesianGeometryLayerTrace | undefined> = [];
   const independentYAxes: AnyMark[] = [];
   const emittedIndependentYAxes = new Set<AxisOrient>();
   const hasIndependentY = spec.resolve?.scale?.y === 'independent';
   let sharedXAxisValueScale: ScaleMap['y'];
   let sharedXAxisValueScaleOrient: AxisOrient | undefined;
 
-  for (const layerItem of spec.layer) {
+  for (let layerIndex = 0; layerIndex < spec.layer.length; layerIndex += 1) {
+    const layerItem = spec.layer[layerIndex];
     const layerUnit = layerItem;
     const layerData = layerUnit.data && 'values' in layerUnit.data ? layerUnit.data.values : data;
 
@@ -203,6 +209,19 @@ export function compileLayered(
     );
 
     allMarks.push(...layerMarks);
+    cartesianLayerTraces.push(
+      collectCartesianGeometryLayerTrace({
+        layerIndex,
+        markType,
+        markSpec,
+        data: transformedLayerData,
+        scales: layerScales,
+        encodings: layerEncodings,
+        layout,
+        encoding: layerUnit.encoding,
+        config: layerMarkConfig,
+      }),
+    );
   }
 
   // Generate shared axes and legends
@@ -243,6 +262,7 @@ export function compileLayered(
 
   // Dev-mode assertion: all data marks must carry their source datum
   const clippedMarks = clipMarksToPlotArea(allMarks, layout.plotArea);
+  const cartesianGeometry = buildCartesianGeometryTrace(layout, cartesianLayerTraces);
 
   assertDataMarksHaveDatum(clippedMarks);
 
@@ -260,6 +280,7 @@ export function compileLayered(
     },
     layout,
     scales,
+    cartesianGeometry,
   };
 }
 

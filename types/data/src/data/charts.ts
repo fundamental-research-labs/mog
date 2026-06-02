@@ -1465,13 +1465,21 @@ export interface ResolvedChartBarGeometrySnapshot {
   categoryAxisRole?: 'x' | 'y';
   valueAxisRole?: 'x' | 'y';
   categoryPositionPolicy?: 'between' | 'onCategory' | 'centeredSingleton';
+  categoryTickLabelSkip?: number;
+  categoryTickMarkSkip?: number;
+  categoryTickSkipSource?: 'explicit' | 'importedAuto' | 'rendererAuto' | 'none';
   categoryCrossing?: 'between' | 'midCat';
   valueCrossing?: 'automatic' | 'min' | 'max' | 'custom';
   valueCrossingValue?: number;
   baselineValue?: number;
   baselinePixel?: number;
   valueAxisDomain?: [number, number];
+  valueAxisTickStep?: number;
+  valueAxisTickCount?: number;
   percentDomain?: [number, number];
+  percentAxisLabelPolicy?: 'percentFromHundred';
+  axisLayoutStatus?: 'exact' | 'verifiedDefault' | 'approximate';
+  axisLayoutStatusReason?: string;
   geometryStatus?: 'exact' | 'verifiedDefault' | 'approximate';
   plotAreaSource?: 'auto' | 'manual';
   categoryAxisLength?: number;
@@ -1487,6 +1495,70 @@ export interface ResolvedChartCartesianValueAxisGeometrySnapshot {
   includeZero: boolean;
   explicitDomain: boolean;
   tickStep?: number;
+  tickValues?: Array<string | number | null>;
+  range?: [number, number];
+  plotRange?: [number, number];
+}
+
+export type ResolvedChartCartesianGeometryStatus = 'available' | 'unavailable';
+
+export interface ResolvedChartCartesianScaleGeometrySnapshot {
+  field?: string;
+  type?: string;
+  axisOrient?: 'top' | 'bottom' | 'left' | 'right';
+  domain?: Array<string | number | null>;
+  range?: [number, number];
+  plotRange?: [number, number];
+  tickValues?: Array<string | number | null>;
+  tickStep?: number;
+}
+
+export interface ResolvedChartCartesianPointGeometrySnapshot {
+  seriesIndex?: number;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  pointIndex?: number;
+  category?: string | number | null;
+  xValue?: number;
+  yValue?: number;
+  normalizedSize?: number;
+  rawBubbleSize?: number;
+  xPixel: number;
+  yPixel: number;
+  plotX: number;
+  plotY: number;
+  chartX: number;
+  chartY: number;
+  renderedArea?: number;
+  renderedRadius?: number;
+  layerIndex?: number;
+  markType?: string;
+  segmentIndex?: number;
+  stackSign?: 'positive' | 'negative';
+  stackValue?: number;
+  percentValue?: number;
+  baselinePixel?: number;
+  topPixel?: number;
+  bottomPixel?: number;
+  baselinePlotY?: number;
+  topPlotY?: number;
+  bottomPlotY?: number;
+}
+
+export interface ResolvedChartCartesianLayerGeometrySnapshot {
+  layerIndex: number;
+  markType: string;
+  xField?: string;
+  yField?: string;
+  sizeField?: string;
+  xScale?: ResolvedChartCartesianScaleGeometrySnapshot;
+  yScale?: ResolvedChartCartesianScaleGeometrySnapshot;
+  pointCount: number;
+  seriesIndices: number[];
+  area?: {
+    baselinePixel?: number;
+    baselinePlotY?: number;
+  };
 }
 
 export interface ResolvedChartCartesianCategoryXGeometrySnapshot {
@@ -1495,12 +1567,17 @@ export interface ResolvedChartCartesianCategoryXGeometrySnapshot {
   pointCount: number;
   positionPolicy?: 'between' | 'onCategory' | 'centeredSingleton';
   stableKeys: boolean;
+  range?: [number, number];
+  plotRange?: [number, number];
 }
 
 export interface ResolvedChartCartesianQuantitativeXGeometrySnapshot {
   mode: 'quantitative';
   domain?: [number, number];
   field: string;
+  tickValues?: Array<string | number | null>;
+  range?: [number, number];
+  plotRange?: [number, number];
 }
 
 export interface ResolvedChartAreaGeometrySnapshot {
@@ -1525,12 +1602,23 @@ export interface ResolvedChartBubbleGeometrySnapshot {
 }
 
 export interface ResolvedChartCartesianGeometrySnapshot {
+  geometryStatus?: ResolvedChartCartesianGeometryStatus;
+  coordinateSystem?: 'chartPixel';
+  chartWidth?: number;
+  chartHeight?: number;
+  plotArea?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   x: {
     modes: ResolvedChartCartesianXGeometryMode[];
     category?: ResolvedChartCartesianCategoryXGeometrySnapshot;
     quantitative?: ResolvedChartCartesianQuantitativeXGeometrySnapshot;
   };
   valueAxes: ResolvedChartCartesianValueAxisGeometrySnapshot[];
+  layers?: ResolvedChartCartesianLayerGeometrySnapshot[];
   area?: ResolvedChartAreaGeometrySnapshot;
   bubble?: ResolvedChartBubbleGeometrySnapshot;
   series: Array<{
@@ -1544,6 +1632,17 @@ export interface ResolvedChartCartesianGeometrySnapshot {
     stackGroup?: string;
     markerLayer?: boolean;
     bubbleSizeAuthority?: 'series';
+    layers?: number[];
+    pointGeometry?: ResolvedChartCartesianPointGeometrySnapshot[];
+    areaGeometry?: {
+      baselinePixel?: number;
+      baselinePlotY?: number;
+      points: ResolvedChartCartesianPointGeometrySnapshot[];
+    };
+    bubbleGeometry?: {
+      maxRenderedArea?: number;
+      points: ResolvedChartCartesianPointGeometrySnapshot[];
+    };
   }>;
 }
 
@@ -1597,6 +1696,8 @@ export interface ResolvedChartSpecSnapshot {
     axes: {
       category?: ResolvedChartAxisSnapshot;
       value?: ResolvedChartAxisSnapshot;
+      xValue?: ResolvedChartAxisSnapshot;
+      yValue?: ResolvedChartAxisSnapshot;
       secondaryCategory?: ResolvedChartAxisSnapshot;
       secondaryValue?: ResolvedChartAxisSnapshot;
       series?: ResolvedChartAxisSnapshot;

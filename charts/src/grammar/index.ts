@@ -44,7 +44,16 @@ export {
 } from './encoding-resolver';
 
 // Compiler
-export { compile, type CompileOptions, type CompileResult } from './compiler';
+export {
+  compile,
+  type CartesianGeometryCoordinateSystem,
+  type CartesianGeometryLayerTrace,
+  type CartesianGeometryPointTrace,
+  type CartesianGeometryScaleTrace,
+  type CartesianGeometryTrace,
+  type CompileOptions,
+  type CompileResult,
+} from './compiler';
 
 // Layout snapshot (pixel -> point extraction)
 export { extractChartLayout } from './layout-snapshot';

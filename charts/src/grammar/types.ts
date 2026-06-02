@@ -11,7 +11,77 @@
 
 import type { AnyMark } from '../primitives/types';
 import type { ScaleMap } from './encoding-resolver';
-import type { Layout } from './spec';
+import type { AxisOrient, FieldType, Layout, MarkType } from './spec';
+
+export type CartesianGeometryCoordinateSystem = 'chartPixel';
+
+export interface CartesianGeometryScaleTrace {
+  field?: string;
+  type?: FieldType;
+  axisOrient?: AxisOrient;
+  domain?: Array<string | number | null>;
+  range?: [number, number];
+  tickValues?: Array<string | number | null>;
+  tickStep?: number;
+}
+
+export interface CartesianGeometryPointTrace {
+  seriesIndex?: number;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  pointIndex?: number;
+  category?: string | number | null;
+  xValue?: number;
+  yValue?: number;
+  normalizedSize?: number;
+  rawBubbleSize?: number;
+  xPixel: number;
+  yPixel: number;
+  plotX: number;
+  plotY: number;
+  chartX: number;
+  chartY: number;
+  renderedArea?: number;
+  renderedRadius?: number;
+  segmentIndex?: number;
+  stackSign?: 'positive' | 'negative';
+  stackValue?: number;
+  percentValue?: number;
+  baselinePixel?: number;
+  topPixel?: number;
+  bottomPixel?: number;
+  baselinePlotY?: number;
+  topPlotY?: number;
+  bottomPlotY?: number;
+}
+
+export interface CartesianGeometryLayerTrace {
+  layerIndex: number;
+  markType: MarkType;
+  xField?: string;
+  yField?: string;
+  sizeField?: string;
+  xScale?: CartesianGeometryScaleTrace;
+  yScale?: CartesianGeometryScaleTrace;
+  points: CartesianGeometryPointTrace[];
+  area?: {
+    baselinePixel?: number;
+    baselinePlotY?: number;
+  };
+}
+
+export interface CartesianGeometryTrace {
+  coordinateSystem: CartesianGeometryCoordinateSystem;
+  chartWidth: number;
+  chartHeight: number;
+  plotArea: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  layers: CartesianGeometryLayerTrace[];
+}
 
 /**
  * Compiled chart result.
@@ -38,6 +108,8 @@ export interface CompileResult {
   layout: Layout;
   /** Scales used */
   scales: ScaleMap;
+  /** Compiler-derived Cartesian point geometry, when applicable */
+  cartesianGeometry?: CartesianGeometryTrace;
 }
 
 /**

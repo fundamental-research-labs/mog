@@ -2,6 +2,7 @@ import {
   collectMarks,
   compile,
   configToSpec,
+  type CartesianGeometryTrace,
   type ChartConfig,
   type ChartData,
   type ChartSpec,
@@ -62,6 +63,7 @@ export interface CompileChartMarksResult {
   plotArea: { width: number; height: number } | null;
   compilerPathId: ChartCompilerPathId;
   compileInput: ChartSpec;
+  cartesianGeometryTrace?: CartesianGeometryTrace;
 }
 
 export interface CompileChartRenderSnapshotAtSizeInput {
@@ -198,6 +200,7 @@ function compileChartMarksOutcome(input: CompileChartMarksInput): CompileChartMa
           : null,
         compilerPathId: compileInput.compilerPathId,
         compileInput: compileInput.spec,
+        cartesianGeometryTrace: compileResult.cartesianGeometry,
       },
     };
   } catch (cause) {
@@ -275,6 +278,7 @@ export function compileChartRenderSnapshotAtSize(
       renderFrame,
       chartArea: compiled.chartArea,
       plotArea: compiled.plotArea,
+      cartesianGeometryTrace: compiled.cartesianGeometryTrace,
     }),
   };
 }

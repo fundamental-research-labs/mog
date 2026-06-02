@@ -32,7 +32,7 @@ export function buildPieDoughnutLabelLayoutTrace(input: {
 }): PieDoughnutLabelLayoutTrace | undefined {
   const hints = input.config?.layoutHints?.pieDoughnut;
   const family = hints?.family;
-  if (family !== 'pie' && family !== 'doughnut') return undefined;
+  if (!hints || (family !== 'pie' && family !== 'doughnut')) return undefined;
 
   const labels = input.marks
     .filter(isPieDoughnutDataLabelMark)

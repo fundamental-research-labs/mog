@@ -15,11 +15,17 @@ import type {
   ConfigSpec,
   EncodingSpec,
   Layout,
-  LegendEntrySpec,
   LegendSpec,
-  LegendSymbolType,
   ManualLayoutSpec,
 } from './spec';
+import {
+  buildLegendFlowLayout,
+  estimateLegendEntryWidth,
+  estimateVerticalLegendHeight,
+  isHorizontalLegendOrient,
+  legendTitleHeight,
+  resolveLegendEntriesForEncoding,
+} from './legend-layout';
 
 // =============================================================================
 // Types
@@ -38,11 +44,6 @@ type LayoutRect = {
   y: number;
   width: number;
   height: number;
-};
-
-type LegendLayoutEntry = {
-  label: string;
-  symbolType?: LegendSymbolType;
 };
 
 /**
@@ -68,18 +69,12 @@ export const DEFAULT_LAYOUT = {
   minPlotSize: 50,
 } as const;
 
-const BOTTOM_LEGEND_HEIGHT = 30;
+const MIN_HORIZONTAL_LEGEND_HEIGHT = 30;
+const HORIZONTAL_LEGEND_VERTICAL_PADDING = 12;
 const BOTTOM_LEGEND_BOTTOM_PADDING = 8;
-const BOTTOM_LEGEND_RESERVED_SPACE =
-  DEFAULT_LAYOUT.xAxisLabelSpace + BOTTOM_LEGEND_HEIGHT + BOTTOM_LEGEND_BOTTOM_PADDING;
-const TOP_LEGEND_HEIGHT = 30;
-const TOP_LEGEND_RESERVED_SPACE = TOP_LEGEND_HEIGHT + 8;
+const TOP_LEGEND_TOP_PADDING = 8;
 const SIDE_LEGEND_GAP = 10;
 const DEFAULT_SIDE_LEGEND_HEIGHT = 180;
-const LEGEND_ITEM_SPACING = 18;
-const DEFAULT_LEGEND_SYMBOL_SIZE = 10;
-const LINE_LEGEND_SYMBOL_SIZE = 28;
-const AREA_LEGEND_SYMBOL_SIZE = 28;
 const DATA_TABLE_TOP_PADDING = 6;
 
 // =============================================================================
@@ -533,8 +528,11 @@ function calculateLegendArea(
             : undefined;
 
   const orient = legendSpec?.orient ?? 'right';
-  const legendWidth = estimateLegendWidth(encoding, legendSpec);
-  const legendHeight = estimateLegendHeight(encoding, legendSpec);
+  const horizontalLegendWidth = Math.max(1, width - margin.left - margin.right);
+  const legendWidth = isHorizontalLegendOrient(orient)
+    ? horizontalLegendWidth
+    : estimateLegendWidth(encoding, legendSpec);
+  const legendHeight = estimateLegendHeight(encoding, legendSpec, legendWidth);
   const centeredLegendY = Math.max(margin.top + 10, height / 2 - legendHeight / 2);
 
   // Position based on orientation
@@ -557,15 +555,15 @@ function calculateLegendArea(
       return {
         x: margin.left,
         y: margin.top + 10,
-        width: width - margin.left - margin.right,
-        height: TOP_LEGEND_HEIGHT,
+        width: horizontalLegendWidth,
+        height: legendHeight,
       };
     case 'bottom':
       return {
         x: margin.left,
-        y: Math.max(margin.top, height - BOTTOM_LEGEND_HEIGHT - BOTTOM_LEGEND_BOTTOM_PADDING),
-        width: width - margin.left - margin.right,
-        height: BOTTOM_LEGEND_HEIGHT,
+        y: Math.max(margin.top, height - legendHeight - BOTTOM_LEGEND_BOTTOM_PADDING),
+        width: horizontalLegendWidth,
+        height: legendHeight,
       };
     case 'top-right':
       return {
@@ -622,10 +620,11 @@ function legendReservationForArea(
       reservation.right = area.width + SIDE_LEGEND_GAP;
       break;
     case 'top':
-      reservation.top = TOP_LEGEND_RESERVED_SPACE;
+      reservation.top = area.height + TOP_LEGEND_TOP_PADDING;
       break;
     case 'bottom':
-      reservation.bottom = BOTTOM_LEGEND_RESERVED_SPACE;
+      reservation.bottom =
+        DEFAULT_LAYOUT.xAxisLabelSpace + area.height + BOTTOM_LEGEND_BOTTOM_PADDING;
       break;
     case 'top-right':
       reservation.right = area.width + SIDE_LEGEND_GAP;
@@ -641,16 +640,11 @@ function estimateLegendWidth(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
 ): number {
-  const entries = legendLayoutEntries(encoding, legendSpec);
+  const entries = resolveLegendEntriesForEncoding(encoding, legendSpec);
   if (entries.length === 0) return DEFAULT_LAYOUT.legendWidth;
 
-  const labelFontSize = legendSpec?.labelFontSize ?? 11;
   const maxEntryWidth = entries.reduce(
-    (max, entry) =>
-      Math.max(
-        max,
-        estimateLegendSymbolWidth(legendSpec, entry) + 6 + entry.label.length * labelFontSize * 0.6,
-      ),
+    (max, entry) => Math.max(max, estimateLegendEntryWidth(entry, legendSpec)),
     0,
   );
   return Math.max(DEFAULT_LAYOUT.legendWidth, Math.ceil(maxEntryWidth + 20));
@@ -659,91 +653,23 @@ function estimateLegendWidth(
 function estimateLegendHeight(
   encoding: EncodingSpec | undefined,
   legendSpec: LegendSpec | undefined,
+  availableWidth: number = DEFAULT_LAYOUT.legendWidth,
 ): number {
   const orient = legendSpec?.orient ?? 'right';
-  if (orient === 'top') return TOP_LEGEND_HEIGHT;
-  if (orient === 'bottom') return BOTTOM_LEGEND_HEIGHT;
-
-  const entries = legendLayoutEntries(encoding, legendSpec);
+  const entries = resolveLegendEntriesForEncoding(encoding, legendSpec);
+  if (isHorizontalLegendOrient(orient)) {
+    const flow = buildLegendFlowLayout({ entries, legendSpec, availableWidth });
+    return Math.max(
+      MIN_HORIZONTAL_LEGEND_HEIGHT,
+      Math.ceil(
+        legendTitleHeight(legendSpec) +
+          flow.contentHeight +
+          HORIZONTAL_LEGEND_VERTICAL_PADDING,
+      ),
+    );
+  }
   if (entries.length === 0) return DEFAULT_SIDE_LEGEND_HEIGHT;
-
-  const labelFontSize = legendSpec?.labelFontSize ?? 11;
-  const maxSymbolHeight = entries.reduce(
-    (max, entry) => Math.max(max, estimateLegendSymbolHeight(legendSpec, entry)),
-    0,
-  );
-  const entryHeight = Math.max(maxSymbolHeight, labelFontSize);
-  const itemSpacing = Math.max(
-    LEGEND_ITEM_SPACING,
-    maxSymbolHeight + 8,
-    Math.ceil(labelFontSize + 7),
-  );
-  const titleHeight = legendSpec?.title ? 20 : 0;
-  return titleHeight + entryHeight + Math.max(0, entries.length - 1) * itemSpacing;
-}
-
-function legendLayoutEntries(
-  encoding: EncodingSpec | undefined,
-  legendSpec: LegendSpec | undefined,
-): LegendLayoutEntry[] {
-  if (legendSpec?.entries) {
-    return legendSpec.entries.map((entry) => legendLayoutEntryForSpec(entry));
-  }
-
-  const values =
-    legendSpec?.values ??
-    legendDomainLabels(encoding?.color ?? encoding?.fill ?? encoding?.shape ?? encoding?.size);
-  return values.map((value) => ({
-    label: value,
-    symbolType: legendSpec?.symbolType,
-  }));
-}
-
-function estimateLegendSymbolWidth(
-  legendSpec: LegendSpec | undefined,
-  entry: LegendLayoutEntry,
-): number {
-  return (
-    legendSpec?.symbolSize ?? defaultLegendSymbolWidth(legendSymbolTypeForEntry(legendSpec, entry))
-  );
-}
-
-function estimateLegendSymbolHeight(
-  legendSpec: LegendSpec | undefined,
-  entry: LegendLayoutEntry,
-): number {
-  const size = legendSpec?.symbolSize;
-  const symbolType = legendSymbolTypeForEntry(legendSpec, entry);
-  if (symbolType === 'line' || symbolType === 'area') {
-    const width = size ?? defaultLegendSymbolWidth(symbolType);
-    return Math.max(8, Math.min(12, Math.round(width * 0.4)));
-  }
-  return size ?? DEFAULT_LEGEND_SYMBOL_SIZE;
-}
-
-function legendLayoutEntryForSpec(entry: LegendEntrySpec): LegendLayoutEntry {
-  return {
-    label: entry.label ?? entry.value,
-    symbolType: entry.symbolType,
-  };
-}
-
-function legendSymbolTypeForEntry(
-  legendSpec: LegendSpec | undefined,
-  entry: LegendLayoutEntry,
-): LegendSymbolType {
-  return entry.symbolType ?? legendSpec?.symbolType ?? 'square';
-}
-
-function defaultLegendSymbolWidth(symbolType: LegendSymbolType): number {
-  if (symbolType === 'line') return LINE_LEGEND_SYMBOL_SIZE;
-  if (symbolType === 'area') return AREA_LEGEND_SYMBOL_SIZE;
-  return DEFAULT_LEGEND_SYMBOL_SIZE;
-}
-
-function legendDomainLabels(channel: ChannelSpec | undefined): string[] {
-  const domain = channel?.scale && Array.isArray(channel.scale.domain) ? channel.scale.domain : [];
-  return domain.map((value) => String(value));
+  return estimateVerticalLegendHeight(entries, legendSpec);
 }
 
 function collectEncodings(spec: ChartSpec): EncodingSpec[] {

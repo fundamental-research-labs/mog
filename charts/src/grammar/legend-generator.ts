@@ -3,31 +3,24 @@
  *
  * Generates legend marks (symbols and labels) for color encodings.
  *
- * Extracted from compiler.ts - no logic changes.
+ * Extracted from compiler.ts.
  */
 
 import type { AnyMark, PathMark, RectMark, SymbolMark, TextMark } from '../primitives/types';
 import type { AnyScale, ScaleMap } from './encoding-resolver';
+import {
+  buildLegendFlowLayout,
+  LEGEND_SYMBOL_LABEL_GAP,
+  legendSymbolMetrics,
+  legendTitleHeight,
+  resolveLegendEntries,
+} from './legend-layout';
 import type {
   ChannelSpec,
   EncodingSpec,
   Layout,
-  LegendEntrySpec,
   LegendSpec,
-  LegendSymbolType,
 } from './spec';
-
-interface LegendSymbolMetrics {
-  type: LegendSymbolType;
-  width: number;
-  height: number;
-}
-
-interface ResolvedLegendEntry {
-  value: unknown;
-  label: string;
-  symbolType: LegendSymbolType;
-}
 
 /**
  * Generate legend marks.
@@ -88,50 +81,51 @@ export function generateColorLegend(
   const domain: unknown[] = typeof scale.domain === 'function' ? scale.domain() : [];
   const defaultSymbolType = legendSpec.symbolType ?? 'square';
   const legendEntries = resolveLegendEntries(legendSpec, domain, defaultSymbolType);
-  const itemY = y + (title ? 20 : 0);
-  const symbolMetrics = legendEntries.map((entry) =>
-    legendSymbolMetrics(entry.symbolType, legendSpec.symbolSize),
-  );
-  const maxSymbolHeight = symbolMetrics.reduce((max, metrics) => Math.max(max, metrics.height), 0);
   const labelFontSize = legendSpec.labelFontSize ?? 11;
-  const itemSpacing = Math.max(18, maxSymbolHeight + 8, Math.ceil(labelFontSize + 7));
   const isHorizontalLegend = legendSpec.orient === 'bottom' || legendSpec.orient === 'top';
   const isRightLegend =
     legendSpec.orient === 'right' ||
     legendSpec.orient === 'top-right' ||
     legendSpec.orient === 'bottom-right';
-  const labelWidths = legendEntries.map((entry) =>
-    estimateLegendLabelWidth(entry.label, labelFontSize),
-  );
-  const entryGap = isHorizontalLegend ? 18 : 0;
-  const entryWidths = labelWidths.map(
-    (labelWidth, index) => (symbolMetrics[index]?.width ?? 10) + 5 + labelWidth + entryGap,
-  );
-  const contentWidth = isHorizontalLegend
-    ? entryWidths.reduce((total, width) => total + width, 0)
-    : entryWidths.reduce((max, width) => Math.max(max, width), 0);
+
+  if (isHorizontalLegend) {
+    appendHorizontalLegendMarks({
+      marks,
+      legendEntries,
+      legendSpec,
+      scale,
+      layout,
+      x,
+      y,
+      labelFontSize,
+    });
+    return marks;
+  }
+
+  const flow = buildLegendFlowLayout({
+    entries: legendEntries,
+    legendSpec,
+    availableWidth: 1,
+  });
+  const contentWidth = flow.contentWidth;
   const contentX = isRightLegend ? x + layout.legend.width - contentWidth : x;
-  let horizontalX = isHorizontalLegend
-    ? x + Math.max(0, (layout.legend.width - contentWidth) / 2)
-    : contentX;
+  const itemY = y + legendTitleHeight(legendSpec);
 
   for (let i = 0; i < legendEntries.length; i++) {
     const entry = legendEntries[i];
     const color = scale(entry.value) as string;
-    const metrics =
-      symbolMetrics[i] ?? legendSymbolMetrics(defaultSymbolType, legendSpec.symbolSize);
-    const entryX = isHorizontalLegend ? horizontalX : contentX;
-    const entryY = isHorizontalLegend
-      ? y + (layout.legend.height - metrics.height) / 2
-      : itemY + i * itemSpacing;
+    const metrics = legendSymbolMetrics(entry.symbolType, legendSpec.symbolSize);
+    const entryX = contentX;
+    const entryY = itemY + i * flow.rowGap;
+    const symbolY = entryY + (flow.rowHeight - metrics.height) / 2;
 
-    marks.push(createLegendSymbol(metrics, entryX, entryY, color, i));
+    marks.push(createLegendSymbol(metrics, entryX, symbolY, color, i));
 
     // Label
     marks.push({
       type: 'text',
-      x: entryX + metrics.width + 5,
-      y: entryY + metrics.height / 2,
+      x: entryX + metrics.width + LEGEND_SYMBOL_LABEL_GAP,
+      y: entryY + flow.rowHeight / 2,
       text: entry.label,
       datum: { entryIndex: i },
       fontSize: labelFontSize,
@@ -142,71 +136,13 @@ export function generateColorLegend(
         fill: legendSpec.labelColor ?? '#000',
       },
     } as TextMark);
-
-    if (isHorizontalLegend) {
-      horizontalX += entryWidths[i] ?? 0;
-    }
   }
 
   return marks;
 }
 
-function estimateLegendLabelWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * 0.7;
-}
-
-function resolveLegendEntries(
-  legendSpec: LegendSpec,
-  domain: unknown[],
-  defaultSymbolType: LegendSymbolType,
-): ResolvedLegendEntry[] {
-  if (legendSpec.entries) {
-    return orderLegendEntries(legendSpec.entries, legendSpec.reverse).map((entry) => ({
-      value: entry.value,
-      label: entry.label ?? entry.value,
-      symbolType: entry.symbolType ?? defaultSymbolType,
-    }));
-  }
-
-  return orderLegendValues(legendSpec.values ?? domain, legendSpec.reverse).map((value) => ({
-    value,
-    label: String(value),
-    symbolType: defaultSymbolType,
-  }));
-}
-
-function orderLegendEntries(
-  entries: LegendEntrySpec[],
-  reverse: boolean | undefined,
-): LegendEntrySpec[] {
-  return reverse ? [...entries].reverse() : entries;
-}
-
-function orderLegendValues(values: unknown[], reverse: boolean | undefined): unknown[] {
-  return reverse ? [...values].reverse() : values;
-}
-
-function legendSymbolMetrics(
-  symbolType: LegendSymbolType,
-  explicitSize: number | undefined,
-): LegendSymbolMetrics {
-  const size = explicitSize ?? (symbolType === 'line' || symbolType === 'area' ? 28 : 10);
-  if (symbolType === 'line' || symbolType === 'area') {
-    return {
-      type: symbolType,
-      width: size,
-      height: Math.max(8, Math.min(12, Math.round(size * 0.4))),
-    };
-  }
-  return {
-    type: symbolType,
-    width: size,
-    height: size,
-  };
-}
-
 function createLegendSymbol(
-  metrics: LegendSymbolMetrics,
+  metrics: ReturnType<typeof legendSymbolMetrics>,
   x: number,
   y: number,
   color: string,
@@ -257,4 +193,54 @@ function createLegendSymbol(
       strokeWidth: 0.5,
     },
   } as SymbolMark;
+}
+
+function appendHorizontalLegendMarks(input: {
+  marks: AnyMark[];
+  legendEntries: ReturnType<typeof resolveLegendEntries>;
+  legendSpec: LegendSpec;
+  scale: AnyScale;
+  layout: Layout;
+  x: number;
+  y: number;
+  labelFontSize: number;
+}): void {
+  const flow = buildLegendFlowLayout({
+    entries: input.legendEntries,
+    legendSpec: input.legendSpec,
+    availableWidth: input.layout.legend?.width ?? 1,
+  });
+  const titleHeight = legendTitleHeight(input.legendSpec);
+  const availableContentHeight = Math.max(0, (input.layout.legend?.height ?? 0) - titleHeight);
+  const contentY =
+    input.y + titleHeight + Math.max(0, (availableContentHeight - flow.contentHeight) / 2);
+
+  let entryIndex = 0;
+  for (let rowIndex = 0; rowIndex < flow.rows.length; rowIndex += 1) {
+    const row = flow.rows[rowIndex];
+    if (!row) continue;
+    let entryX = input.x + Math.max(0, ((input.layout.legend?.width ?? 0) - row.width) / 2);
+    const rowY = contentY + rowIndex * flow.rowGap;
+    for (const item of row.items) {
+      const color = input.scale(item.entry.value) as string;
+      const symbolY = rowY + (flow.rowHeight - item.metrics.height) / 2;
+      input.marks.push(createLegendSymbol(item.metrics, entryX, symbolY, color, entryIndex));
+      input.marks.push({
+        type: 'text',
+        x: entryX + item.metrics.width + LEGEND_SYMBOL_LABEL_GAP,
+        y: rowY + flow.rowHeight / 2,
+        text: item.entry.label,
+        datum: { entryIndex },
+        fontSize: input.labelFontSize,
+        fontFamily: input.legendSpec.labelFontFamily ?? 'system-ui, sans-serif',
+        textAlign: 'left',
+        textBaseline: 'middle',
+        style: {
+          fill: input.legendSpec.labelColor ?? '#000',
+        },
+      } as TextMark);
+      entryX += item.width + flow.entryGap;
+      entryIndex += 1;
+    }
+  }
 }

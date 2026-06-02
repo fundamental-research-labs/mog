@@ -18,6 +18,7 @@ export type SourceLinkedAxisNumberFormatResolutions = Partial<
 >;
 
 const GENERAL_FORMAT = 'General';
+const PERCENT_STACKED_AXIS_FORMAT = '0%';
 const SOURCE_LINKED_AXIS_FORMATS_EXTRA_KEY = 'sourceLinkedAxisNumberFormats';
 const SOURCE_LINKED_AXIS_ROLES: SourceLinkedAxisRole[] = [
   'category',
@@ -25,6 +26,15 @@ const SOURCE_LINKED_AXIS_ROLES: SourceLinkedAxisRole[] = [
   'value',
   'secondary value',
 ];
+const PERCENT_STACKED_CHART_TYPES = new Set<string>([
+  'lineMarkersStacked100',
+  'cylinderColStacked100',
+  'cylinderBarStacked100',
+  'coneColStacked100',
+  'coneBarStacked100',
+  'pyramidColStacked100',
+  'pyramidBarStacked100',
+]);
 
 function normalizeFormatCode(formatCode: string | null | undefined): string | undefined {
   const normalized = formatCode?.trim();
@@ -155,6 +165,48 @@ function sourceLinkedAxisFormat(
   return firstCategorySourceFormat(config);
 }
 
+function isPercentStackedSubType(subType: ChartConfig['subType'] | undefined): boolean {
+  return subType === 'percentStacked' || subType === 'markersPercentStacked';
+}
+
+function isPercentStackedChartType(type: string | undefined): boolean {
+  return PERCENT_STACKED_CHART_TYPES.has(String(type));
+}
+
+function hasPercentStackedValueAxis(config: ChartConfig, axisGroup: 0 | 1): boolean {
+  if (isPercentStackedSubType(config.subType) || isPercentStackedChartType(config.type)) {
+    return true;
+  }
+
+  return (
+    config.series
+      ?.filter((series) => isSeriesBoundToAxis(series, axisGroup))
+      .some((series) => isPercentStackedChartType(series.type)) ?? false
+  );
+}
+
+function percentStackedAxisFormat(
+  config: ChartConfig,
+  role: SourceLinkedAxisRole,
+): string | undefined {
+  const axisGroup = valueAxisGroup(role);
+  if (axisGroup === undefined) return undefined;
+  return hasPercentStackedValueAxis(config, axisGroup) ? PERCENT_STACKED_AXIS_FORMAT : undefined;
+}
+
+function resolvedAxisNumberFormat(
+  axis: SingleAxisConfig,
+  config: ChartConfig,
+  role: SourceLinkedAxisRole,
+  resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
+): string | undefined {
+  const explicitAxisFormat = normalizeFormatCode(axis.numberFormat);
+  if (explicitAxisFormat) return explicitAxisFormat;
+  const percentFormat = percentStackedAxisFormat(config, role);
+  if (percentFormat) return percentFormat;
+  return sourceLinkedAxisFormat(config, role, resolutions).formatCode;
+}
+
 function axisWithResolvedNumberFormat(
   axis: SingleAxisConfig | undefined,
   config: ChartConfig,
@@ -162,10 +214,13 @@ function axisWithResolvedNumberFormat(
   resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
 ): SingleAxisConfig | undefined {
   if (!axis?.linkNumberFormat) return axis;
-  const resolution = sourceLinkedAxisFormat(config, role, resolutions);
-  const numberFormat = resolution.formatCode ?? normalizeFormatCode(axis.numberFormat);
+  const numberFormat = resolvedAxisNumberFormat(axis, config, role, resolutions);
   if (!numberFormat || numberFormat === axis.numberFormat) return axis;
   return { ...axis, numberFormat };
+}
+
+function sourceFormatLabel(resolution: SourceLinkedAxisNumberFormatResolution): string {
+  return resolution.formatCode ?? GENERAL_FORMAT;
 }
 
 function axisSourceFormatDiagnostic(
@@ -176,6 +231,25 @@ function axisSourceFormatDiagnostic(
 ): string | undefined {
   if (!axis?.linkNumberFormat) return undefined;
   const resolution = sourceLinkedAxisFormat(config, role, resolutions);
+  const explicitAxisFormat = normalizeFormatCode(axis.numberFormat);
+  const percentFormat = percentStackedAxisFormat(config, role);
+  if (
+    percentFormat &&
+    (!explicitAxisFormat || explicitAxisFormat === percentFormat) &&
+    resolution.formatCode &&
+    resolution.formatCode !== percentFormat
+  ) {
+    return `${role} axis percent-stacked number format uses ${percentFormat} instead of source format ${sourceFormatLabel(
+      resolution,
+    )}`;
+  }
+
+  if (explicitAxisFormat && resolution.formatCode && resolution.formatCode !== explicitAxisFormat) {
+    return `${role} axis source-linked number format keeps explicit axis format ${explicitAxisFormat} instead of source format ${sourceFormatLabel(
+      resolution,
+    )}`;
+  }
+
   if (resolution.missingSource) {
     return `${role} axis source-linked number format has no source format; using ${
       normalizeFormatCode(axis.numberFormat) ?? GENERAL_FORMAT
@@ -190,10 +264,11 @@ function axisSourceFormatDiagnostic(
 /**
  * Resolve Excel source-linked axis formats before rendering.
  *
- * Category axes inherit imported category label/cache formats. Value axes inherit
- * the first visible bound series' value cache format for their axis group; this
- * keeps primary and secondary value axes independent while preserving the
- * original linkNumberFormat contract for export.
+ * Explicit axis formats are authoritative. Otherwise category axes inherit
+ * imported category label/cache formats and value axes inherit a percent-stack
+ * default or the first visible bound series' value cache format for their axis
+ * group. This keeps primary and secondary value axes independent while
+ * preserving the original linkNumberFormat contract for export.
  */
 export function withSourceLinkedAxisNumberFormats(
   config: ChartConfig,

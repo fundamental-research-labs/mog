@@ -739,7 +739,7 @@ function toChartObject(d: WireChart): ChartObject {
     axis: chart.axis,
     colors: chart.colors,
     series: chart.series,
-    displayBlanksAs: chart.displayBlanksAs,
+    ...(chart.displayBlanksAs ? { displayBlanksAs: chart.displayBlanksAs } : {}),
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
     gapDepth: chart.gapDepth,

@@ -87,6 +87,12 @@ function numericField(fields: Record<string, unknown>, key: string): number | un
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function isExplicitDisplayBlanksAs(
+  value: unknown,
+): value is NonNullable<Chart['displayBlanksAs']> {
+  return value === 'gap' || value === 'span' || value === 'zero';
+}
+
 function waterfallConfigToWire(
   waterfall: NonNullable<ChartConfig['waterfall']>,
 ): NonNullable<ChartFloatingObject['waterfall']> {
@@ -579,7 +585,9 @@ function chartConfigToInternal(config: ChartConfig): ChartFloatingObject {
     boxplot: boxplotConfigToWire(config.boxplot),
     hierarchy: hierarchyChartConfigToWire(config.hierarchy),
     regionMap: regionMapConfigToWire(config.regionMap),
-    displayBlanksAs: config.displayBlanksAs,
+    ...(isExplicitDisplayBlanksAs(config.displayBlanksAs)
+      ? { displayBlanksAs: config.displayBlanksAs }
+      : {}),
     plotVisibleOnly: config.plotVisibleOnly,
     gapWidth: config.gapWidth,
     gapDepth: config.gapDepth,
@@ -725,7 +733,9 @@ function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpdatePaylo
     result.hierarchy = hierarchyChartConfigToWire(updates.hierarchy);
   if (updates.regionMap !== undefined) result.regionMap = regionMapConfigToWire(updates.regionMap);
 
-  if (updates.displayBlanksAs !== undefined) result.displayBlanksAs = updates.displayBlanksAs;
+  if (isExplicitDisplayBlanksAs(updates.displayBlanksAs)) {
+    result.displayBlanksAs = updates.displayBlanksAs;
+  }
   if (updates.plotVisibleOnly !== undefined) result.plotVisibleOnly = updates.plotVisibleOnly;
   if (updates.gapWidth !== undefined) result.gapWidth = updates.gapWidth;
   if (updates.gapDepth !== undefined) result.gapDepth = updates.gapDepth;
@@ -874,7 +884,9 @@ function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     boxplot: wireToBoxplotConfig(chart.boxplot),
     hierarchy: wireToHierarchyChartConfig(chart.hierarchy),
     regionMap: wireToRegionMapConfig(chart.regionMap),
-    displayBlanksAs: chart.displayBlanksAs as Chart['displayBlanksAs'],
+    ...(isExplicitDisplayBlanksAs(chart.displayBlanksAs)
+      ? { displayBlanksAs: chart.displayBlanksAs }
+      : {}),
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
     gapDepth: chart.gapDepth,

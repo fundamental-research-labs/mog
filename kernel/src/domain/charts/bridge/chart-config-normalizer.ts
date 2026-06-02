@@ -316,7 +316,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     boxplot: wireToBoxplotConfig(normalizedChart.boxplot),
     hierarchy: wireToHierarchyChartConfig(normalizedChart.hierarchy),
     regionMap: wireToRegionMapConfig(normalizedChart.regionMap),
-    displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
+    ...(normalizedChart.displayBlanksAs
+      ? {
+          displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
+        }
+      : {}),
     plotVisibleOnly: normalizedChart.plotVisibleOnly,
     gapWidth: normalizedChart.gapWidth,
     gapDepth: normalizedChart.gapDepth,

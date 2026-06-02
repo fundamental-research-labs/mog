@@ -27,6 +27,7 @@ const SCATTER_X_FIELD = 'x';
 const VALUE_FIELD = 'value';
 const BUBBLE_SIZE_FIELD = 'size';
 const RAW_BUBBLE_SIZE_FIELD = '__mogRawBubbleSize';
+const CLIP_TO_PLOT_AREA_FIELD = '__mogClipToPlotArea';
 const SERIES_INDEX_FIELD = '__mogSeriesIndex';
 const SOURCE_SERIES_INDEX_FIELD = '__mogSourceSeriesIndex';
 const SOURCE_SERIES_KEY_FIELD = '__mogSourceSeriesKey';
@@ -84,6 +85,7 @@ export function collectCartesianGeometryLayerTrace(
         };
   if (areaGeometry.points.length === 0) return undefined;
 
+  const sizeScale = sizeScaleTrace(input);
   return {
     layerIndex: input.layerIndex,
     markType: input.markType,
@@ -92,6 +94,7 @@ export function collectCartesianGeometryLayerTrace(
     sizeField: input.encoding?.size?.field,
     xScale: scaleTrace(input.scales.x, input.encoding?.x, 'bottom'),
     yScale: scaleTrace(input.scales.y, input.encoding?.y, 'left'),
+    ...(sizeScale ? { sizeScale } : {}),
     points: areaGeometry.points,
     ...(input.markType === 'area'
       ? {
@@ -468,6 +471,7 @@ function pointTraceFromDatum(
 function pointIdentity(datum: DataRow): Partial<CartesianGeometryPointTrace> {
   const sourceSeriesKey = stringValue(datum[SOURCE_SERIES_KEY_FIELD]);
   const category = scalarValue(datum[CATEGORY_FIELD]);
+  const clipToPlotArea = booleanValue(datum[CLIP_TO_PLOT_AREA_FIELD]);
   return {
     seriesIndex: integerValue(datum[SERIES_INDEX_FIELD]),
     sourceSeriesIndex: integerValue(datum[SOURCE_SERIES_INDEX_FIELD]),
@@ -478,6 +482,7 @@ function pointIdentity(datum: DataRow): Partial<CartesianGeometryPointTrace> {
     yValue: numericValue(datum[VALUE_FIELD]),
     normalizedSize: numericValue(datum[BUBBLE_SIZE_FIELD]),
     rawBubbleSize: numericValue(datum[RAW_BUBBLE_SIZE_FIELD]),
+    ...(clipToPlotArea !== undefined ? { clipToPlotArea } : {}),
   };
 }
 
@@ -533,6 +538,25 @@ function scaleTrace(
     tickStep: positiveNumber(axis?.tickStep),
   };
   return removeUndefinedScaleFields(trace);
+}
+
+function sizeScaleTrace(
+  input: CartesianGeometryLayerTraceInput,
+): CartesianGeometryScaleTrace | undefined {
+  const channel = input.encoding?.size;
+  if (!channel || Array.isArray(channel)) return undefined;
+
+  const range =
+    channel.scale === null ? undefined : numericPair(channel.scale?.range as unknown[] | undefined);
+  const domain =
+    numericPair(channel.scale?.domain as unknown[] | undefined) ??
+    numericDataExtent(input.data, channel.field);
+  return removeUndefinedScaleFields({
+    field: channel.field,
+    type: channel.type,
+    domain,
+    range,
+  });
 }
 
 function tickValues(
@@ -605,6 +629,22 @@ function numericPair(values: unknown[] | undefined): [number, number] | undefine
   return first !== undefined && second !== undefined ? [first, second] : undefined;
 }
 
+function numericDataExtent(
+  data: DataRow[],
+  field: string | undefined,
+): [number, number] | undefined {
+  if (!field) return undefined;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const datum of data) {
+    const value = numericValue(datum[field]);
+    if (value === undefined) continue;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return Number.isFinite(min) && Number.isFinite(max) ? [min, max] : undefined;
+}
+
 function isTraceableMarkType(markType: MarkType): boolean {
   return (
     markType === 'line' ||
@@ -642,6 +682,10 @@ function integerValue(value: unknown): number | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function roundCoordinate(value: number): number {

@@ -52,12 +52,39 @@ export type ExcelCategoryPositionPolicy = 'between' | 'onCategory' | 'centeredSi
 
 export type ExcelCartesianXGeometryMode = 'categoryPoint' | 'dateSerial' | 'quantitative';
 
+export type ExcelCartesianAxisRole =
+  | 'categoryX'
+  | 'dateCategoryX'
+  | 'xValue'
+  | 'primaryYValue'
+  | 'secondaryYValue';
+
+export type ExcelCartesianScaleAuthority = 'explicitDomain' | 'excelAutoDomain';
+
+export type ExcelCartesianAxisSourceGeometry = {
+  axisPosition?: string;
+  crossing?: 'automatic' | 'max' | 'min' | 'custom';
+  crossingValue?: number;
+  crossBetween?: string;
+  reverse?: boolean;
+  scaleType?: string;
+  logBase?: number;
+  explicitMin?: number;
+  explicitMax?: number;
+  majorUnit?: number;
+  minorUnit?: number;
+  tickLabelPosition?: string;
+};
+
 export type ExcelCartesianValueAxisGeometry = {
   axisGroup: 'primary' | 'secondary';
+  axisRole: 'primaryYValue' | 'secondaryYValue';
   domain?: [number, number];
   includeZero: boolean;
   explicitDomain: boolean;
+  scaleAuthority: ExcelCartesianScaleAuthority;
   tickStep?: number;
+  source?: ExcelCartesianAxisSourceGeometry;
 };
 
 export type ExcelCartesianSeriesGeometry = {
@@ -78,15 +105,24 @@ export type ExcelCartesianGeometryPlan = {
     modes: ExcelCartesianXGeometryMode[];
     category?: {
       mode: 'categoryPoint' | 'dateSerial';
+      axisRole: 'categoryX' | 'dateCategoryX';
       domain: Array<string | number>;
       pointCount: number;
+      scaleAuthority: ExcelCartesianScaleAuthority;
+      source?: ExcelCartesianAxisSourceGeometry;
       positionPolicy?: ExcelCategoryPositionPolicy;
       stableKeys: boolean;
     };
     quantitative?: {
       mode: 'quantitative';
+      axisRole: 'xValue';
       domain?: [number, number];
       field: typeof SCATTER_X_FIELD;
+      includeZero: boolean;
+      explicitDomain: boolean;
+      scaleAuthority: ExcelCartesianScaleAuthority;
+      tickStep?: number;
+      source?: ExcelCartesianAxisSourceGeometry;
     };
   };
   valueAxes: ExcelCartesianValueAxisGeometry[];
@@ -97,6 +133,8 @@ export type ExcelCartesianGeometryPlan = {
     groups: Array<{
       axisGroup: 'primary' | 'secondary';
       xRole: 'category' | 'quantitative';
+      groupKey?: string;
+      memberCount?: number;
       seriesIndices: number[];
     }>;
   };
@@ -105,9 +143,14 @@ export type ExcelCartesianGeometryPlan = {
     bubbleScale: number;
     showNegBubbles: boolean;
     maxRenderableMagnitude: number;
+    sizeDomain: [number, number];
+    sizeRange: [number, number];
     maxRenderedArea: number;
+    maxRenderedRadius: number;
     normalizedSizeField: typeof BUBBLE_SIZE_FIELD;
     rawSizeField: typeof RAW_BUBBLE_SIZE_FIELD;
+    clippingPolicy: 'clipToPlotArea' | 'overflowPlotArea';
+    sizeScaleAuthority: 'excelBubbleScale';
   };
   series: ExcelCartesianSeriesGeometry[];
 };
@@ -134,15 +177,14 @@ export function buildExcelCartesianGeometryPlan(
     .map((item) => item.seriesIndex);
   const xModes = uniqueModes(series.map((item) => item.xMode));
   const quantitativeX = hasQuantitativeX
-    ? {
-        mode: 'quantitative' as const,
-        domain: quantitativeXGeometryDomain(config, data, quantitativeSeriesIndices),
-        field: SCATTER_X_FIELD as typeof SCATTER_X_FIELD,
-      }
+    ? quantitativeXGeometry(config, data, quantitativeSeriesIndices)
     : undefined;
+  const categoryAxisConfig = categoryAxisConfigForGeometry(config);
+  const categoryAxisExplicitDomain = hasExplicitAxisDomain(categoryAxisConfig);
   const categoryX = hasCategoryX
     ? {
         mode: useDateSerialCategoryAxis ? ('dateSerial' as const) : ('categoryPoint' as const),
+        axisRole: useDateSerialCategoryAxis ? ('dateCategoryX' as const) : ('categoryX' as const),
         domain: useStableCategoryKeys
           ? data.categories.map((_category, index) => categoryKeyForIndex(index))
           : data.categories.map((category) =>
@@ -151,6 +193,8 @@ export function buildExcelCartesianGeometryPlan(
                 : String(category),
             ),
         pointCount: data.categories.length,
+        scaleAuthority: scaleAuthority(categoryAxisExplicitDomain),
+        ...optionalAxisSource(categoryAxisConfig),
         positionPolicy: useDateSerialCategoryAxis
           ? undefined
           : resolveExcelCategoryPositionPolicy(config, data, false),
@@ -468,6 +512,7 @@ function buildExcelValueAxisGeometry(
     );
     const axisConfig = valueAxisConfigForIndex(config, axisIndex);
     const configuredScale = axisConfig ? buildAxisScaleSpec(axisConfig, false) : undefined;
+    const explicitDomain = hasExplicitScaleDomain(configuredScale?.domain);
     const channel = excelValueEncodingForAxis({
       config,
       baseY: { field: VALUE_FIELD, type: 'quantitative' },
@@ -481,10 +526,13 @@ function buildExcelValueAxisGeometry(
     });
     return {
       axisGroup: axisIndex === 1 ? 'secondary' : 'primary',
+      axisRole: axisIndex === 1 ? 'secondaryYValue' : 'primaryYValue',
       domain: scaleDomain(channel.scale?.domain),
       includeZero,
-      explicitDomain: hasExplicitScaleDomain(configuredScale?.domain),
+      explicitDomain,
+      scaleAuthority: scaleAuthority(explicitDomain),
       tickStep: positiveNumber(channel.axis?.tickStep),
+      ...optionalAxisSource(axisConfig),
     };
   });
 }
@@ -504,6 +552,8 @@ function buildExcelAreaGeometry(
     {
       axisGroup: 'primary' | 'secondary';
       xRole: 'category' | 'quantitative';
+      groupKey: string;
+      memberCount: number;
       seriesIndices: number[];
     }
   >();
@@ -512,9 +562,12 @@ function buildExcelAreaGeometry(
     const group = groupsByKey.get(key) ?? {
       axisGroup: item.axisGroup,
       xRole: item.xRole,
+      groupKey: key,
+      memberCount: 0,
       seriesIndices: [],
     };
     group.seriesIndices.push(item.seriesIndex);
+    group.memberCount = group.seriesIndices.length;
     groupsByKey.set(key, group);
   }
 
@@ -540,15 +593,22 @@ function buildExcelBubbleGeometry(
 
   const sourceScale = typeof config.bubbleScale === 'number' ? config.bubbleScale : 100;
   const bubbleScale = Math.max(0, Math.min(300, sourceScale));
+  const maxRenderableMagnitude = maxRenderableBubbleMagnitude(data, config);
+  const maxRenderedArea = 6400 * (bubbleScale / 100);
   return {
     bubble: {
       sizeRepresents: config.sizeRepresents === 'w' ? 'w' : 'area',
       bubbleScale,
       showNegBubbles: config.showNegBubbles === true,
-      maxRenderableMagnitude: maxRenderableBubbleMagnitude(data, config),
-      maxRenderedArea: 6400 * (bubbleScale / 100),
+      maxRenderableMagnitude,
+      sizeDomain: [0, maxRenderableMagnitude],
+      sizeRange: [0, maxRenderedArea],
+      maxRenderedArea,
+      maxRenderedRadius: Math.sqrt(maxRenderedArea / Math.PI),
       normalizedSizeField: BUBBLE_SIZE_FIELD,
       rawSizeField: RAW_BUBBLE_SIZE_FIELD,
+      clippingPolicy: 'overflowPlotArea',
+      sizeScaleAuthority: 'excelBubbleScale',
     },
   };
 }
@@ -651,17 +711,31 @@ function scaleDomain(domain: unknown): [number, number] | undefined {
   return min !== undefined && max !== undefined ? [min, max] : undefined;
 }
 
-function quantitativeXGeometryDomain(
+function quantitativeXGeometry(
   config: ChartConfig,
   data: ChartData,
   memberIndices: readonly number[],
-): [number, number] | undefined {
+): NonNullable<ExcelCartesianGeometryPlan['x']['quantitative']> {
   const memberSet = new Set(memberIndices);
   const memberData: ChartData = {
     ...data,
     series: data.series.filter((_series, index) => memberSet.has(index)),
   };
-  return scaleDomain(excelQuantitativeXEncoding({ config, data: memberData }).scale?.domain);
+  const axisConfig = quantitativeXAxisConfigForGeometry(config);
+  const configuredScale = axisConfig ? buildAxisScaleSpec(axisConfig, false) : undefined;
+  const explicitDomain = hasExplicitScaleDomain(configuredScale?.domain);
+  const channel = excelQuantitativeXEncoding({ config, data: memberData });
+  return {
+    mode: 'quantitative',
+    axisRole: 'xValue',
+    domain: scaleDomain(channel.scale?.domain),
+    field: SCATTER_X_FIELD,
+    includeZero: false,
+    explicitDomain,
+    scaleAuthority: scaleAuthority(explicitDomain),
+    tickStep: positiveNumber(channel.axis?.tickStep),
+    ...optionalAxisSource(axisConfig),
+  };
 }
 
 function excelCategoryPointScale(
@@ -755,6 +829,14 @@ function valueAxisConfigForIndex(
   return config.axis?.yAxis ?? config.axis?.valueAxis;
 }
 
+function categoryAxisConfigForGeometry(config: ChartConfig): SingleAxisConfig | undefined {
+  return config.axis?.xAxis ?? config.axis?.categoryAxis;
+}
+
+function quantitativeXAxisConfigForGeometry(config: ChartConfig): SingleAxisConfig | undefined {
+  return config.axis?.xAxis ?? config.axis?.valueAxis;
+}
+
 function isExcelCartesianChartType(type: ChartType): boolean {
   if (isBarLikeChartType(type)) return true;
   switch (type) {
@@ -779,6 +861,44 @@ function isPointPathExcelCartesianSeriesType(type: ChartType): boolean {
 
 function hasExplicitScaleDomain(domain: unknown): boolean {
   return Array.isArray(domain) && domain.some((bound) => bound !== undefined);
+}
+
+function hasExplicitAxisDomain(axis: SingleAxisConfig | undefined): boolean {
+  return axis?.min !== undefined || axis?.max !== undefined;
+}
+
+function scaleAuthority(explicitDomain: boolean): ExcelCartesianScaleAuthority {
+  return explicitDomain ? 'explicitDomain' : 'excelAutoDomain';
+}
+
+function optionalAxisSource(
+  axis: SingleAxisConfig | undefined,
+): { source?: ExcelCartesianAxisSourceGeometry } {
+  const source = axisSourceGeometry(axis);
+  return source ? { source } : {};
+}
+
+function axisSourceGeometry(
+  axis: SingleAxisConfig | undefined,
+): ExcelCartesianAxisSourceGeometry | undefined {
+  if (!axis) return undefined;
+  const source: ExcelCartesianAxisSourceGeometry = {
+    axisPosition: axis.position,
+    crossing: axis.crossesAt,
+    crossingValue: axis.crossesAtValue,
+    crossBetween: axis.crossBetween,
+    reverse: axis.reverse,
+    scaleType: axis.scaleType ?? axis.axisType ?? axis.type,
+    logBase: axis.logBase,
+    explicitMin: axis.min,
+    explicitMax: axis.max,
+    majorUnit: axis.majorUnit,
+    minorUnit: axis.minorUnit,
+    tickLabelPosition: axis.tickLabelPosition,
+  };
+  const entries = Object.entries(source).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return undefined;
+  return Object.fromEntries(entries) as ExcelCartesianAxisSourceGeometry;
 }
 
 function positiveNumber(value: unknown): number | undefined {

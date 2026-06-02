@@ -21,6 +21,14 @@ type BarGeometrySnapshot = NonNullable<
 type CartesianGeometrySnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['plot']['cartesianGeometry']
 >;
+type CartesianGeometryAxisRole = NonNullable<
+  CartesianGeometrySnapshot['layers']
+>[number]['xAxisRole'];
+type CartesianGeometryValueAxisRole = NonNullable<
+  CartesianGeometrySnapshot['layers']
+>[number]['yAxisRole'];
+
+const CATEGORY_FIELD = 'category';
 
 export function snapshotBarGeometry(
   config: ChartConfig,
@@ -135,7 +143,9 @@ export function snapshotCartesianGeometry(
   if (!plan) return undefined;
 
   const seriesGeometry = seriesPointGeometry(trace);
-  const layerSnapshots = trace?.layers.map((layer) => snapshotLayerGeometry(layer, trace));
+  const layerSnapshots = trace?.layers.map((layer) => snapshotLayerGeometry(layer, trace, plan));
+  const categoryXScale = categoryXLayerScale(trace);
+  const quantitativeXScale = quantitativeXLayerScale(trace, plan.x.quantitative?.field);
 
   return {
     ...plan,
@@ -155,7 +165,7 @@ export function snapshotCartesianGeometry(
         ? {
             category: {
               ...plan.x.category,
-              ...scaleRangeSnapshot(firstLayerScale(trace, 'x'), trace, 'x'),
+              ...scaleRangeSnapshot(categoryXScale, trace, 'x'),
             },
           }
         : {}),
@@ -163,7 +173,7 @@ export function snapshotCartesianGeometry(
         ? {
             quantitative: {
               ...plan.x.quantitative,
-              ...quantitativeXScaleSnapshot(firstLayerScale(trace, 'x'), trace),
+              ...quantitativeXScaleSnapshot(quantitativeXScale, trace),
             },
           }
         : {}),
@@ -202,7 +212,11 @@ export function snapshotCartesianGeometry(
         ...(bubblePoints.length > 0
           ? {
               bubbleGeometry: {
+                sizeDomain: plan.bubble?.sizeDomain,
+                sizeRange: plan.bubble?.sizeRange,
                 maxRenderedArea: plan.bubble?.maxRenderedArea,
+                maxRenderedRadius: plan.bubble?.maxRenderedRadius,
+                clippingPolicy: plan.bubble?.clippingPolicy,
                 points: bubblePoints,
               },
             }
@@ -246,21 +260,25 @@ function snapshotPointGeometry(
 function snapshotLayerGeometry(
   layer: CartesianGeometryLayerTrace,
   trace: CartesianGeometryTrace,
+  plan: NonNullable<ReturnType<typeof buildExcelCartesianGeometryPlan>>,
 ): NonNullable<CartesianGeometrySnapshot['layers']>[number] {
+  const seriesIndices = uniqueNumbers(
+    layer.points
+      .map((point) => point.seriesIndex)
+      .filter((value): value is number => value !== undefined),
+  );
   return {
     layerIndex: layer.layerIndex,
     markType: layer.markType,
     xField: layer.xField,
     yField: layer.yField,
     sizeField: layer.sizeField,
+    ...layerAxisRoles(layer, plan, seriesIndices),
     xScale: snapshotScaleGeometry(layer.xScale, trace, 'x'),
     yScale: snapshotScaleGeometry(layer.yScale, trace, 'y'),
+    ...(layer.sizeScale ? { sizeScale: layer.sizeScale } : {}),
     pointCount: layer.points.length,
-    seriesIndices: uniqueNumbers(
-      layer.points
-        .map((point) => point.seriesIndex)
-        .filter((value): value is number => value !== undefined),
-    ),
+    seriesIndices,
     area: layer.area,
   };
 }
@@ -317,14 +335,48 @@ function valueAxisScaleSnapshot(
   };
 }
 
-function firstLayerScale(
+function categoryXLayerScale(
   trace: CartesianGeometryTrace | undefined,
-  axis: 'x' | 'y',
 ): CartesianGeometryScaleTrace | undefined {
   if (!trace) return undefined;
-  return axis === 'x'
-    ? trace.layers.find((layer) => layer.xScale)?.xScale
-    : trace.layers.find((layer) => layer.yScale)?.yScale;
+  return trace.layers.find((layer) => layer.xField === CATEGORY_FIELD && layer.xScale)?.xScale;
+}
+
+function quantitativeXLayerScale(
+  trace: CartesianGeometryTrace | undefined,
+  field: string | undefined,
+): CartesianGeometryScaleTrace | undefined {
+  if (!trace || !field) return undefined;
+  return trace.layers.find((layer) => layer.xField === field && layer.xScale)?.xScale;
+}
+
+function layerAxisRoles(
+  layer: CartesianGeometryLayerTrace,
+  plan: NonNullable<ReturnType<typeof buildExcelCartesianGeometryPlan>>,
+  seriesIndices: readonly number[],
+): {
+  xAxisRole?: CartesianGeometryAxisRole;
+  yAxisRole?: CartesianGeometryValueAxisRole;
+} {
+  const xAxisRole =
+    layer.xField === plan.x.quantitative?.field
+      ? ('xValue' as const)
+      : plan.x.category?.axisRole;
+  const yAxisRole = layerValueAxisRole(plan, seriesIndices);
+  return {
+    ...(xAxisRole ? { xAxisRole } : {}),
+    ...(yAxisRole ? { yAxisRole } : {}),
+  };
+}
+
+function layerValueAxisRole(
+  plan: NonNullable<ReturnType<typeof buildExcelCartesianGeometryPlan>>,
+  seriesIndices: readonly number[],
+): CartesianGeometryValueAxisRole | undefined {
+  const seriesIndexSet = new Set(seriesIndices);
+  const series = plan.series.find((item) => seriesIndexSet.has(item.seriesIndex));
+  if (!series) return undefined;
+  return series?.axisGroup === 'secondary' ? 'secondaryYValue' : 'primaryYValue';
 }
 
 function scaleRangeSnapshot(

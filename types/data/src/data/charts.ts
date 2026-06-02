@@ -1605,16 +1605,43 @@ export interface ResolvedChartBarGeometrySnapshot {
 
 export interface ResolvedChartCartesianValueAxisGeometrySnapshot {
   axisGroup: 'primary' | 'secondary';
+  axisRole?: 'primaryYValue' | 'secondaryYValue';
   domain?: [number, number];
   includeZero: boolean;
   explicitDomain: boolean;
+  scaleAuthority?: ResolvedChartCartesianScaleAuthority;
   tickStep?: number;
+  source?: ResolvedChartCartesianAxisSourceSnapshot;
   tickValues?: Array<string | number | null>;
   range?: [number, number];
   plotRange?: [number, number];
 }
 
 export type ResolvedChartCartesianGeometryStatus = 'available' | 'unavailable';
+
+export type ResolvedChartCartesianAxisRole =
+  | 'categoryX'
+  | 'dateCategoryX'
+  | 'xValue'
+  | 'primaryYValue'
+  | 'secondaryYValue';
+
+export type ResolvedChartCartesianScaleAuthority = 'explicitDomain' | 'excelAutoDomain';
+
+export interface ResolvedChartCartesianAxisSourceSnapshot {
+  axisPosition?: string;
+  crossing?: 'automatic' | 'max' | 'min' | 'custom';
+  crossingValue?: number;
+  crossBetween?: string;
+  reverse?: boolean;
+  scaleType?: string;
+  logBase?: number;
+  explicitMin?: number;
+  explicitMax?: number;
+  majorUnit?: number;
+  minorUnit?: number;
+  tickLabelPosition?: string;
+}
 
 export interface ResolvedChartCartesianScaleGeometrySnapshot {
   field?: string;
@@ -1645,6 +1672,7 @@ export interface ResolvedChartCartesianPointGeometrySnapshot {
   chartY: number;
   renderedArea?: number;
   renderedRadius?: number;
+  clipToPlotArea?: boolean;
   layerIndex?: number;
   markType?: string;
   segmentIndex?: number;
@@ -1665,8 +1693,17 @@ export interface ResolvedChartCartesianLayerGeometrySnapshot {
   xField?: string;
   yField?: string;
   sizeField?: string;
+  xAxisRole?: Extract<
+    ResolvedChartCartesianAxisRole,
+    'categoryX' | 'dateCategoryX' | 'xValue'
+  >;
+  yAxisRole?: Extract<
+    ResolvedChartCartesianAxisRole,
+    'primaryYValue' | 'secondaryYValue'
+  >;
   xScale?: ResolvedChartCartesianScaleGeometrySnapshot;
   yScale?: ResolvedChartCartesianScaleGeometrySnapshot;
+  sizeScale?: ResolvedChartCartesianScaleGeometrySnapshot;
   pointCount: number;
   seriesIndices: number[];
   area?: {
@@ -1677,8 +1714,11 @@ export interface ResolvedChartCartesianLayerGeometrySnapshot {
 
 export interface ResolvedChartCartesianCategoryXGeometrySnapshot {
   mode: 'categoryPoint' | 'dateSerial';
+  axisRole?: 'categoryX' | 'dateCategoryX';
   domain: Array<string | number>;
   pointCount: number;
+  scaleAuthority?: ResolvedChartCartesianScaleAuthority;
+  source?: ResolvedChartCartesianAxisSourceSnapshot;
   positionPolicy?: 'between' | 'onCategory' | 'centeredSingleton';
   stableKeys: boolean;
   range?: [number, number];
@@ -1687,8 +1727,14 @@ export interface ResolvedChartCartesianCategoryXGeometrySnapshot {
 
 export interface ResolvedChartCartesianQuantitativeXGeometrySnapshot {
   mode: 'quantitative';
+  axisRole?: 'xValue';
   domain?: [number, number];
   field: string;
+  includeZero?: boolean;
+  explicitDomain?: boolean;
+  scaleAuthority?: ResolvedChartCartesianScaleAuthority;
+  tickStep?: number;
+  source?: ResolvedChartCartesianAxisSourceSnapshot;
   tickValues?: Array<string | number | null>;
   range?: [number, number];
   plotRange?: [number, number];
@@ -1701,6 +1747,8 @@ export interface ResolvedChartAreaGeometrySnapshot {
   groups: Array<{
     axisGroup: 'primary' | 'secondary';
     xRole: ChartSeriesXRole;
+    groupKey?: string;
+    memberCount?: number;
     seriesIndices: number[];
   }>;
 }
@@ -1710,9 +1758,14 @@ export interface ResolvedChartBubbleGeometrySnapshot {
   bubbleScale: number;
   showNegBubbles: boolean;
   maxRenderableMagnitude: number;
+  sizeDomain?: [number, number];
+  sizeRange?: [number, number];
   maxRenderedArea: number;
+  maxRenderedRadius?: number;
   normalizedSizeField: string;
   rawSizeField: string;
+  clippingPolicy?: 'clipToPlotArea' | 'overflowPlotArea';
+  sizeScaleAuthority?: 'excelBubbleScale';
 }
 
 export interface ResolvedChartCartesianGeometrySnapshot {
@@ -1754,7 +1807,11 @@ export interface ResolvedChartCartesianGeometrySnapshot {
       points: ResolvedChartCartesianPointGeometrySnapshot[];
     };
     bubbleGeometry?: {
+      sizeDomain?: [number, number];
+      sizeRange?: [number, number];
       maxRenderedArea?: number;
+      maxRenderedRadius?: number;
+      clippingPolicy?: 'clipToPlotArea' | 'overflowPlotArea';
       points: ResolvedChartCartesianPointGeometrySnapshot[];
     };
   }>;

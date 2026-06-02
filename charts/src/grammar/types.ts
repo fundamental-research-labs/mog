@@ -43,6 +43,7 @@ export interface CartesianGeometryPointTrace {
   chartY: number;
   renderedArea?: number;
   renderedRadius?: number;
+  clipToPlotArea?: boolean;
   segmentIndex?: number;
   stackSign?: 'positive' | 'negative';
   stackValue?: number;
@@ -63,6 +64,7 @@ export interface CartesianGeometryLayerTrace {
   sizeField?: string;
   xScale?: CartesianGeometryScaleTrace;
   yScale?: CartesianGeometryScaleTrace;
+  sizeScale?: CartesianGeometryScaleTrace;
   points: CartesianGeometryPointTrace[];
   area?: {
     baselinePixel?: number;

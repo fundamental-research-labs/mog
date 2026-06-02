@@ -159,6 +159,70 @@ describe('chartDataToRows', () => {
     expect(spanRows.map((row) => row[LINE_SEGMENT_FIELD])).toEqual([undefined, undefined]);
   });
 
+  it('emits later points from uneven multi-series scatter data', () => {
+    const data: ChartData = {
+      categories: [1],
+      series: [
+        { name: 'Short', data: [{ x: 1, y: 10 }] },
+        {
+          name: 'Long',
+          data: [
+            { x: 10, y: 20 },
+            { x: 20, y: 30 },
+            { x: 30, y: 40 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      ...baseConfig('scatter'),
+      series: [{ xRole: 'quantitative' }, { xRole: 'quantitative' }],
+    };
+
+    const rows = chartDataToRows(data, config);
+    const longRows = rows.filter((row) => row[SERIES_FIELD] === 'Long');
+
+    expect(longRows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 1, 2]);
+    expect(longRows.map((row) => row[SCATTER_X_FIELD])).toEqual([10, 20, 30]);
+    expect(longRows.map((row) => row[VALUE_FIELD])).toEqual([20, 30, 40]);
+  });
+
+  it('keeps quantitative combo scatter x values when category layers are shorter', () => {
+    const data: ChartData = {
+      categories: ['A', 'B'],
+      series: [
+        {
+          name: 'Line',
+          data: [
+            { x: 'A', y: 1 },
+            { x: 'B', y: 2 },
+          ],
+        },
+        {
+          name: 'Scatter',
+          data: [
+            { x: 3, y: 30 },
+            { x: 6, y: 60 },
+            { x: 9, y: 90 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      ...baseConfig('combo'),
+      series: [
+        { type: 'line', xRole: 'category' },
+        { type: 'scatter', xRole: 'quantitative' },
+      ],
+    };
+
+    const rows = chartDataToRows(data, config);
+    const scatterRows = rows.filter((row) => row[SERIES_FIELD] === 'Scatter');
+
+    expect(scatterRows.map((row) => row[POINT_INDEX_FIELD])).toEqual([0, 1, 2]);
+    expect(scatterRows.map((row) => row[SCATTER_X_FIELD])).toEqual([3, 6, 9]);
+  });
+
   it('emits raw and width-normalized bubble size fields', () => {
     const data: ChartData = {
       categories: [1, 2],

@@ -652,13 +652,7 @@ function xAxisY(axisSpec: AxisSpec, valueScale: AnyScale | undefined, layout: La
       }
       return plotBottom;
     case 'automatic': {
-      const domain = typeof valueScale.domain === 'function' ? valueScale.domain() : undefined;
-      const min = numericDomainValue(domain, 0);
-      const max = numericDomainValue(domain, 1);
-      if (min !== undefined && max !== undefined && min < 0 && max > 0) {
-        return clampAxisPosition(valueScale(0) as number, layout.plotArea.y, plotBottom);
-      }
-      return plotBottom;
+      return automaticValueCrossingPosition(valueScale, layout.plotArea.y, plotBottom) ?? plotBottom;
     }
     default:
       return defaultY;
@@ -673,6 +667,19 @@ function numericDomainValue(domain: unknown[] | undefined, index: number): numbe
 function clampAxisPosition(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return max;
   return Math.max(min, Math.min(max, value));
+}
+
+function automaticValueCrossingPosition(
+  valueScale: AnyScale,
+  pixelMin: number,
+  pixelMax: number,
+): number | undefined {
+  const domain = typeof valueScale.domain === 'function' ? valueScale.domain() : undefined;
+  const min = numericDomainValue(domain, 0);
+  const max = numericDomainValue(domain, 1);
+  if (min === undefined || max === undefined) return undefined;
+  const crossingValue = min <= 0 && max >= 0 ? 0 : max < 0 ? max : min;
+  return clampAxisPosition(valueScale(crossingValue) as number, pixelMin, pixelMax);
 }
 
 function isCategoricalScale(scale: AnyScale | undefined): scale is AnyScale {
@@ -1062,14 +1069,7 @@ function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout:
       return defaultX;
     case 'automatic': {
       if (typeof categoryScale.bandwidth === 'function') return defaultX;
-      const domain =
-        typeof categoryScale.domain === 'function' ? categoryScale.domain() : undefined;
-      const min = numericDomainValue(domain, 0);
-      const max = numericDomainValue(domain, 1);
-      if (min !== undefined && max !== undefined && min < 0 && max > 0) {
-        return clampAxisPosition(categoryScale(0) as number, plotLeft, plotRight);
-      }
-      return defaultX;
+      return automaticValueCrossingPosition(categoryScale, plotLeft, plotRight) ?? defaultX;
     }
     default:
       return defaultX;

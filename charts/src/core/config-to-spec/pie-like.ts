@@ -106,7 +106,7 @@ export function pieLikeSliceGeometries(input: {
 }
 
 export function pieLikeSeriesTotal(values: readonly unknown[]): number {
-  return values.reduce((sum, value) => sum + sanitizedPieLikeValue(value), 0);
+  return values.reduce<number>((sum, value) => sum + sanitizedPieLikeValue(value), 0);
 }
 
 export function pieLikeAngleUnitVector(angle: number): { x: number; y: number } {

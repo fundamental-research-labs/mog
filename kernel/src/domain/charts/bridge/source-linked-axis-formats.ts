@@ -200,6 +200,8 @@ function resolvedAxisNumberFormat(
   role: SourceLinkedAxisRole,
   resolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
 ): string | undefined {
+  const resolvedSourceFormat = normalizeFormatCode(resolutions?.[role]?.formatCode);
+  if (resolvedSourceFormat) return resolvedSourceFormat;
   const explicitAxisFormat = normalizeFormatCode(axis.numberFormat);
   if (explicitAxisFormat) return explicitAxisFormat;
   const percentFormat = percentStackedAxisFormat(config, role);

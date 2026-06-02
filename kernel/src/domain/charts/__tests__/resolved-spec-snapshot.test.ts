@@ -232,6 +232,63 @@ describe('resolved spec snapshot helpers', () => {
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
   });
 
+  it('includes imported cartesian point and path geometry in resolved snapshots', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 0, anchorCol: 0 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'area',
+        subType: 'percentStacked',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 5,
+        extra: { sourceDialect: 'ooxml' },
+      },
+      chartData: {
+        categories: ['A', 'B'],
+        series: [
+          {
+            name: 'Series 1',
+            data: [
+              { x: 'A', y: 5 },
+              { x: 'B', y: 10 },
+            ],
+          },
+        ],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.plot.cartesianGeometry?.area).toMatchObject({
+      stackMode: 'normalize',
+      baseline: 0,
+      percentDomain: [0, 100],
+    });
+    expect(snapshot.resolved.series[0].geometry).toMatchObject({
+      xMode: 'categoryPoint',
+      xRole: 'category',
+      axisGroup: 'primary',
+      stackGroup: 'area:0:category',
+    });
+  });
+
   it.each([
     ['surface', { type: 'surface' }],
     ['surface3d', { type: 'surface3d' }],

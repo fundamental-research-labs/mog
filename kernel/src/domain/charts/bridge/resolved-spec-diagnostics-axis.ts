@@ -1,4 +1,8 @@
-import type { ChartConfig } from '@mog/charts';
+import {
+  hasExcelBarGeometryConfig,
+  isImportedStandardOoxmlChart,
+  type ChartConfig,
+} from '@mog/charts';
 import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
 
 type ResolvedSnapshotSeries = ResolvedChartSpecSnapshot['resolved']['series'];
@@ -16,6 +20,8 @@ export function axisUnsupportedFeatureDiagnostics(
   const diagnostics = new Set<string>();
   const isChartEx = (config.extra as { isChartEx?: boolean } | undefined)?.isChartEx === true;
   const isHorizontal = isHorizontalChartType(config.type);
+  const consumesImportedBarColumnCrossing =
+    isImportedStandardOoxmlChart(config) && hasExcelBarGeometryConfig(config);
   const entries: Array<{
     label: string;
     role: AxisDiagnosticRole;
@@ -51,7 +57,10 @@ export function axisUnsupportedFeatureDiagnostics(
     }
     const positionDiagnostic = axisPositionDiagnostic(label, role, axisConfig, isHorizontal);
     if (positionDiagnostic) diagnostics.add(positionDiagnostic);
-    if (axisConfig.crossBetween || axisConfig.isBetweenCategories !== undefined) {
+    if (
+      !consumesImportedBarColumnCrossing &&
+      (axisConfig.crossBetween || axisConfig.isBetweenCategories !== undefined)
+    ) {
       diagnostics.add(`${label} axis category crossing policy is approximate`);
     }
     if (secondary && role === 'category') {

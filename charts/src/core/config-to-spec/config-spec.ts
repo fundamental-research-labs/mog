@@ -46,7 +46,7 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const barGeometry = effectiveBarGeometry(config);
+  const barGeometry = effectiveBarGeometry(config, data);
   if (barGeometry) {
     configSpec.barGeometry = shouldReverseImportedHorizontalBarSeries(config, barGeometry)
       ? { ...barGeometry, seriesSlotOrder: 'reverse' }

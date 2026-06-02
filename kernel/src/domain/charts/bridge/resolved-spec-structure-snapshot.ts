@@ -102,6 +102,8 @@ export function snapshotLegend(
   const entryItems =
     present && stockSourceSeries
       ? stockSourceLegendEntries(config, stockSourceSeries, deletedEntries, visible, decision)
+      : present && decision.vocabulary === 'valueBand' && data
+      ? surfaceValueBandLegendEntries(config, data, deletedEntries, visible, decision)
       : present && decision.useCategoryEntries && data
       ? categoryLegendEntries(data, deletedEntries, visible, decision)
       : present
@@ -201,6 +203,22 @@ function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocab
     'surfaceTopViewWireframe',
   ]);
   if (surfaceLegendTypes.has(config.type)) {
+    if (!isImportedChartConfig(config)) {
+      return {
+        vocabulary: 'series',
+        layer: 'rendered',
+        indexKind: 'series',
+        useCategoryEntries: false,
+      };
+    }
+    if (hasFiniteSurfaceValues(data)) {
+      return {
+        vocabulary: 'valueBand',
+        layer: 'rendered',
+        indexKind: 'valueBand',
+        useCategoryEntries: false,
+      };
+    }
     return {
       vocabulary: 'unknown',
       layer: 'unknown',
@@ -224,6 +242,105 @@ function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocab
     indexKind: 'series',
     useCategoryEntries: false,
   };
+}
+
+function surfaceValueBandLegendEntries(
+  config: ChartConfig,
+  data: ChartData,
+  deletedEntries: ReadonlySet<number>,
+  visible: boolean,
+  decision: LegendVocabularyDecision,
+): LegendEntrySnapshot[] {
+  return surfaceValueBandLabels(config, data).map((label, index) => {
+    const deleted = deletedEntries.has(index);
+    return {
+      index,
+      text: label,
+      visible: visible && !deleted,
+      ...(deleted ? { deleted: true } : {}),
+      vocabulary: decision.vocabulary,
+      indexKind: decision.indexKind,
+      valueBandIndex: index,
+    };
+  });
+}
+
+function surfaceValueBandLabels(config: ChartConfig, data: ChartData): string[] {
+  const values = finiteSurfaceValues(data);
+  if (values.length === 0) return [];
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const defaultBandCount = isSurfaceTopViewConfig(config) ? 5 : 8;
+  const labelFractionDigits = isSurfaceTopViewConfig(config) ? 2 : 3;
+  const valueAxis = config.axis?.valueAxis ?? config.axis?.yAxis;
+  const explicitMin = finiteNumber(valueAxis?.min);
+  const explicitMax = finiteNumber(valueAxis?.max);
+  const explicitStep = finiteNumber(valueAxis?.majorUnit);
+  const domainMinSeed = explicitMin ?? (minValue >= 0 ? 0 : minValue);
+  const step =
+    explicitStep ?? niceStep(Math.max(1e-9, (maxValue - domainMinSeed) / defaultBandCount));
+  const domainMin = explicitMin ?? Math.floor(domainMinSeed / step) * step;
+  let domainMax = explicitMax ?? Math.ceil(maxValue / step) * step;
+  if (domainMax <= domainMin) domainMax = domainMin + step;
+  const bandCount = Math.max(1, Math.min(12, Math.ceil((domainMax - domainMin) / step)));
+  const labels: string[] = [];
+  for (let index = 0; index < bandCount; index += 1) {
+    const min = domainMin + index * step;
+    const max = index === bandCount - 1 ? domainMax : domainMin + (index + 1) * step;
+    labels.push(
+      `${formatBandValue(min, labelFractionDigits)}-${formatBandValue(
+        max,
+        labelFractionDigits,
+      )}`,
+    );
+  }
+  return labels;
+}
+
+function finiteSurfaceValues(data: ChartData): number[] {
+  const values: number[] = [];
+  for (const series of data.series) {
+    for (const point of series.data) {
+      if (point.valueState !== undefined && point.valueState !== 'value') continue;
+      if (typeof point.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
+    }
+  }
+  return values;
+}
+
+function hasFiniteSurfaceValues(data: ChartData | undefined): data is ChartData {
+  return data !== undefined && finiteSurfaceValues(data).length > 0;
+}
+
+function isSurfaceTopViewConfig(config: ChartConfig): boolean {
+  return (
+    config.type === 'surface' ||
+    config.type === 'surfaceTopView' ||
+    config.type === 'surfaceTopViewWireframe' ||
+    config.surfaceTopView === true
+  );
+}
+
+function isImportedChartConfig(config: ChartConfig): boolean {
+  if (typeof config.extra !== 'object' || config.extra === null) return false;
+  const extra = config.extra as { imported?: unknown; sourceDialect?: unknown };
+  return extra.imported === true || typeof extra.sourceDialect === 'string';
+}
+
+function niceStep(rawStep: number): number {
+  const exponent = Math.floor(Math.log10(rawStep));
+  const magnitude = Math.pow(10, exponent);
+  const fraction = rawStep / magnitude;
+  const niceFraction = fraction < 1.5 ? 1 : fraction < 3 ? 2 : fraction < 7 ? 5 : 10;
+  return niceFraction * magnitude;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function formatBandValue(value: number, fractionDigits: number): string {
+  return value.toFixed(fractionDigits);
 }
 
 function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {

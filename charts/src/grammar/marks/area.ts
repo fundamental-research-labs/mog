@@ -120,8 +120,8 @@ export function generateAreaMarks(
   const groups = groupDataByEncoding(data, encodings.detail ?? encodings.color);
   const marks: PathMark[] = [];
 
-  // Determine if stacking is enabled
-  const isStacked = config?.stack !== undefined && config.stack !== false && groups.size > 1;
+  // Stack mode applies even when Excel imports only expose one visible area series.
+  const isStacked = config?.stack !== undefined && config.stack !== false;
   const isPercentStacked = config?.stack === 'normalize';
 
   // For stacked areas, we need an effective y-scale that accounts for cumulative

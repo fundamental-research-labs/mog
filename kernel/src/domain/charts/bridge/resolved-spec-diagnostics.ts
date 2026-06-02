@@ -20,7 +20,7 @@ import {
   barShapeDiagnostics,
   isSurfaceFamilyConfig,
   isSurfaceTopViewConfig,
-  surfaceFamilyDiagnostics,
+  surfaceUnsupportedFeatureDiagnostics,
 } from './resolved-spec-diagnostics-surface';
 import {
   importStatusUnsupportedDiagnostics,
@@ -60,7 +60,7 @@ export function unsupportedFeatureDiagnostics(input: {
       unsupported.push('3-D chart rendering is approximated by the 2-D chart backend');
     }
   }
-  unsupported.push(...surfaceFamilyDiagnostics(config));
+  unsupported.push(...surfaceUnsupportedFeatureDiagnostics(config, series));
   if (config.type === 'regionMap')
     unsupported.push('region map rendering uses placeholder geometry');
   if (config.type === 'treemap')

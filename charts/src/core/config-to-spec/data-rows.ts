@@ -74,8 +74,10 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const gapSegmentsBySeries = data.series.map(() => 0);
   let waterfallRunningTotal = 0;
   const totalWaterfallIndices = waterfallTotalIndices(config);
-  for (let i = 0; i < categories.length; i++) {
-    const rawCategory = categories[i];
+  const rowCount = Math.max(categories.length, ...data.series.map((series) => series.data.length));
+  for (let i = 0; i < rowCount; i++) {
+    const rawCategory =
+      categories[i] ?? data.series.find((series) => series.data[i])?.data[i]?.x ?? '';
     const category = useExcelDateSerialCategories ? toFiniteNumber(rawCategory) : undefined;
     const rowCategory = useStableCategoryKeys
       ? categoryKeyForIndex(i)
@@ -110,6 +112,8 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         continue;
       }
       if (point && shouldIncludePointInRows(point, config, seriesConfig)) {
+        const rowValue =
+          point.valueState === 'blank' && config?.displayBlanksAs === 'zero' ? 0 : point.y;
         const row = buildBaseRow({
           rawCategory,
           rowCategory,
@@ -119,7 +123,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           sourceSeriesIndex,
           sourceSeriesKey: seriesSourceKey(series, seriesIndex),
           seriesOrder: seriesOrderForDataSeries(series, seriesConfig, seriesIndex),
-          value: point.y,
+          value: rowValue,
         });
         if (config?.displayBlanksAs === 'gap') {
           row[LINE_SEGMENT_FIELD] = gapSegmentsBySeries[seriesIndex];

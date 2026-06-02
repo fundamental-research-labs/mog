@@ -1,4 +1,4 @@
-import type { ChartConfig } from '@mog/charts';
+import type { ChartConfig, ChartData } from '@mog/charts';
 import type {
   ChartFamilySupportSnapshot,
   ResolvedChartSpecSnapshot,
@@ -10,6 +10,7 @@ import {
   barShapeDiagnostics,
   isSurfaceFamilyConfig,
   isSurfaceTopViewConfig,
+  surfaceApproximationDiagnostics,
   surfacePlaceholderDiagnostics,
 } from './resolved-spec-diagnostics-surface';
 
@@ -22,6 +23,7 @@ type ChartSeriesStockRole = NonNullable<
 export function buildChartFamilySupportSnapshot(input: {
   chart: ChartFloatingObject;
   config: ChartConfig;
+  chartData: ChartData;
   legend: LegendSnapshot;
   seriesProjection: SeriesProjectionSnapshot;
 }): ChartFamilySupportSnapshot {
@@ -47,17 +49,25 @@ export function buildChartFamilySupportSnapshot(input: {
     };
   }
 
-  if (isImportedChartConfig(config) && isSurfaceFamilyConfig(config)) {
-    const diagnostics = surfacePlaceholderDiagnostics(config);
+  if (isSurfaceFamilyConfig(config)) {
+    const renderable = hasFiniteSurfaceValues(input.chartData);
+    const topView = isSurfaceTopViewConfig(config);
     return {
       schemaVersion: 1,
       family,
       sourceFamily,
-      supportLevel: 'preservedPlaceholder',
-      reason: isSurfaceTopViewConfig(config)
-        ? 'contourProjectionIncomplete'
-        : 'surfaceProjectionIncomplete',
-      diagnostics,
+      supportLevel: renderable ? 'approximate' : 'preservedPlaceholder',
+      reason: renderable
+        ? topView
+          ? 'contourApproximation'
+          : 'surfaceApproximation'
+        : topView
+          ? 'contourProjectionIncomplete'
+          : 'surfaceProjectionIncomplete',
+      diagnostics: renderable
+        ? surfaceApproximationDiagnostics(config)
+        : surfacePlaceholderDiagnostics(config),
+      renderedAs: topView ? 'contour' : 'surface3d',
     };
   }
 
@@ -109,7 +119,7 @@ export function buildChartFamilySupportSnapshot(input: {
 export function familySupportCompilerDiagnostics(
   support: ChartFamilySupportSnapshot,
 ): string[] {
-  if (support.supportLevel === 'exact') return [];
+  if (support.supportLevel === 'exact' || support.supportLevel === 'approximate') return [];
   return support.diagnostics;
 }
 
@@ -274,6 +284,9 @@ function stockProjectionDiagnostic(
 
 function chartFamily(config: ChartConfig): string {
   if (config.type === 'bubble3DEffect') return 'bubble';
+  if (isSurfaceFamilyConfig(config)) {
+    return isSurfaceTopViewConfig(config) ? 'surface' : 'surface3d';
+  }
   if (isThreeDBarShapeConfig(config)) return 'bar3d';
   return config.type;
 }
@@ -282,12 +295,6 @@ function sourceFamilyForChart(chart: ChartFloatingObject, fallback: string): str
   const raw = (chart as { chartType?: unknown }).chartType;
   if (typeof raw === 'string' && raw.trim()) return raw.trim();
   return fallback;
-}
-
-function isImportedChartConfig(config: ChartConfig): boolean {
-  if (typeof config.extra !== 'object' || config.extra === null) return false;
-  const extra = config.extra as { imported?: unknown; sourceDialect?: unknown };
-  return extra.imported === true || typeof extra.sourceDialect === 'string';
 }
 
 function isThreeDChartConfig(config: ChartConfig): boolean {
@@ -329,6 +336,17 @@ function isThreeDBarShapeConfig(config: ChartConfig): boolean {
     default:
       return false;
   }
+}
+
+function hasFiniteSurfaceValues(data: ChartData): boolean {
+  return data.series.some((series) =>
+    series.data.some(
+      (point) =>
+        point?.valueState !== 'hidden' &&
+        typeof point?.y === 'number' &&
+        Number.isFinite(point.y),
+    ),
+  );
 }
 
 function importStatusToken(status: unknown, key: string): string | undefined {

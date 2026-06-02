@@ -12,7 +12,7 @@ import {
   buildChartFamilySupportSnapshot,
   familySupportCompilerDiagnostics,
 } from './chart-family-support';
-import { snapshotBarGeometry } from './resolved-spec-plot-snapshot';
+import { snapshotBarGeometry, snapshotCartesianGeometry } from './resolved-spec-plot-snapshot';
 import { hashJson, snapshotScalar } from './resolved-spec-primitives';
 import {
   chartGapDepth,
@@ -63,7 +63,8 @@ export function buildResolvedChartSpecSnapshot(input: {
   const seriesReferencesByIndex = new Map(
     input.resolvedRanges.seriesReferences.map((reference) => [reference.index, reference]),
   );
-  const series = input.chartData.series.map((dataSeries, index) =>
+  const cartesianGeometry = snapshotCartesianGeometry(input.config, input.chartData);
+  const seriesWithoutGeometry = input.chartData.series.map((dataSeries, index) =>
     snapshotSeries(
       dataSeries,
       index,
@@ -73,6 +74,9 @@ export function buildResolvedChartSpecSnapshot(input: {
       seriesReferencesByIndex.get(seriesSourceIndex(dataSeries, index)),
     ),
   );
+  const series = cartesianGeometry
+    ? withSeriesGeometry(seriesWithoutGeometry, cartesianGeometry)
+    : seriesWithoutGeometry;
   const seriesProjection = snapshotSeriesProjection(
     input.config,
     input.chartData,
@@ -83,6 +87,7 @@ export function buildResolvedChartSpecSnapshot(input: {
   const familySupport = buildChartFamilySupportSnapshot({
     chart: input.chart,
     config: input.config,
+    chartData: input.chartData,
     legend,
     seriesProjection,
   });
@@ -97,7 +102,6 @@ export function buildResolvedChartSpecSnapshot(input: {
         input.config,
       ),
     }),
-    ...familySupport.diagnostics,
   ]);
 
   return {
@@ -160,6 +164,7 @@ export function buildResolvedChartSpecSnapshot(input: {
         gapDepth: chartGapDepth(input.config),
         overlap: input.config.overlap,
         barGeometry: snapshotBarGeometry(input.config, input.chartData, input.layout ?? null),
+        cartesianGeometry,
       },
       ranges: {
         dataRange: snapshotRange(input.resolvedRanges.dataRange),
@@ -201,4 +206,30 @@ export function buildResolvedChartSpecSnapshot(input: {
 
 function uniqueDiagnostics(diagnostics: readonly string[]): string[] {
   return Array.from(new Set(diagnostics.filter((diagnostic) => diagnostic.trim().length > 0)));
+}
+
+function withSeriesGeometry(
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  cartesianGeometry: NonNullable<
+    ResolvedChartSpecSnapshot['resolved']['plot']['cartesianGeometry']
+  >,
+): ResolvedChartSpecSnapshot['resolved']['series'] {
+  const geometryBySeriesIndex = new Map(
+    cartesianGeometry.series.map((item) => [item.seriesIndex, item]),
+  );
+  return series.map((item) => {
+    const geometry = geometryBySeriesIndex.get(item.index);
+    if (!geometry) return item;
+    return {
+      ...item,
+      geometry: {
+        xMode: geometry.xMode,
+        xRole: geometry.xRole,
+        axisGroup: geometry.axisGroup,
+        stackGroup: geometry.stackGroup,
+        markerLayer: geometry.markerLayer,
+        bubbleSizeAuthority: geometry.bubbleSizeAuthority,
+      },
+    };
+  });
 }

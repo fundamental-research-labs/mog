@@ -114,6 +114,11 @@ function categoricalCategorySeriesIndex(data: ChartData, config: ChartConfig): n
 
 export function normalizeImportedCategoryData(data: ChartData, config: ChartConfig): ChartData {
   const seriesConfigs = config.series ?? [];
+  const hasImportedCategorySource = data.series.some((series, index) =>
+    isImportedCategoryCarrier(seriesConfigForDataSeries(series, seriesConfigs, index)),
+  );
+  if (!hasImportedCategorySource) return data;
+
   const categorySeriesIndex = categoricalCategorySeriesIndex(data, config);
   const categoryDataSeries =
     categorySeriesIndex >= 0 ? data.series[categorySeriesIndex] : undefined;
@@ -121,7 +126,7 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
     categoryDataSeries && categorySeriesIndex >= 0
       ? seriesConfigForDataSeries(categoryDataSeries, seriesConfigs, categorySeriesIndex)
       : undefined;
-  if (!seriesConfig) return data;
+  if (!seriesConfig) return extendImportedCategoryDomain(data);
 
   const categoryCache = importedCategoryCache(seriesConfig);
   const categoryPointCount = importedCachePointCount(categoryCache);
@@ -135,7 +140,7 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
   const maxLength = Math.max(
     hasQuantitativeSeries ? 0 : data.categories.length,
     categoryPointCount ?? 0,
-    ...categoricalSeriesIndexes.map((index) => data.series[index].data.length),
+    ...data.series.map((series) => series.data.length),
   );
   if (maxLength <= 0) return data;
 
@@ -187,6 +192,27 @@ export function normalizeImportedCategoryData(data: ChartData, config: ChartConf
   });
 
   return changed ? { ...data, categories, series } : data;
+}
+
+function extendImportedCategoryDomain(data: ChartData): ChartData {
+  const maxLength = Math.max(
+    data.categories.length,
+    ...data.series.map((series) => series.data.length),
+  );
+  if (maxLength <= data.categories.length) return data;
+
+  let changed = false;
+  const categories: Array<string | number> = [];
+  for (let pointIndex = 0; pointIndex < maxLength; pointIndex += 1) {
+    const category =
+      data.categories[pointIndex] ??
+      data.series.find((series) => series.data[pointIndex])?.data[pointIndex]?.x ??
+      '';
+    categories.push(category);
+    if (category !== data.categories[pointIndex]) changed = true;
+  }
+
+  return changed ? { ...data, categories } : data;
 }
 
 export function trimTrailingBlankChartData(data: ChartData): ChartData {

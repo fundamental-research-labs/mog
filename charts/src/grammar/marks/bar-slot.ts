@@ -226,7 +226,18 @@ export function barSlotCenterOffset(
   if (!context || !categoryScale) return 0;
   const fullBandSize =
     typeof categoryScale.bandwidth === 'function' ? categoryScale.bandwidth() : 0;
-  if (!Number.isFinite(fullBandSize) || fullBandSize <= 0) return 0;
+  if (!Number.isFinite(fullBandSize) || fullBandSize < 0) return 0;
+  if (context.barGeometry) {
+    const categoryStep = scaleStep(categoryScale, fullBandSize);
+    if (!Number.isFinite(categoryStep) || categoryStep <= 0) return 0;
+    const slot = barSlotForDatum(context, categoryScale, fullBandSize, datum, dataIndex);
+    if (context.barGeometry.categoryPositionPolicy === 'onCategory') {
+      return slot.offset + slot.size / 2;
+    }
+    const bandSize = fullBandSize > 0 ? fullBandSize : categoryStep;
+    return slot.offset + slot.size / 2 - bandSize / 2;
+  }
+  if (fullBandSize <= 0) return 0;
   const slot = barSlotForDatum(context, categoryScale, fullBandSize, datum, dataIndex);
   return slot.offset + slot.size / 2 - fullBandSize / 2;
 }

@@ -2,7 +2,7 @@ import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
 import { tickStep } from '../../primitives/scales/linear';
 import type { ChartConfig, ChartData } from '../../types';
 import { explicitDomainBound, isHorizontalBarType } from './axis';
-import { hasExcelBarGeometryConfig } from './bar-geometry';
+import { effectiveBarGeometry, hasExcelBarGeometryConfig } from './bar-geometry';
 import { categoryDisplayLabel, categoryKeyForIndex } from './category-axis';
 import { resolveStackMode } from './subtypes';
 
@@ -14,17 +14,40 @@ const HEADROOM_STEP_FRACTION = 0.2;
 
 export function applyBarCategorySpacingScale(
   config: ChartConfig,
+  data: ChartData,
   encoding: EncodingSpec,
   isHorizontal: boolean,
 ): void {
   if (!hasExcelBarGeometryConfig(config)) return;
   const categoryChannel = isHorizontal ? encoding.y : encoding.x;
-  if (!categoryChannel) return;
+  if (!categoryChannel || categoryChannel.type !== 'nominal') return;
+  if (
+    categoryChannel.scale?.type !== undefined &&
+    categoryChannel.scale.type !== 'band' &&
+    categoryChannel.scale.type !== 'point'
+  ) {
+    return;
+  }
+
+  const barGeometry = effectiveBarGeometry(config, data);
+  if (barGeometry?.categoryPositionPolicy === 'onCategory') {
+    categoryChannel.scale = {
+      ...(categoryChannel.scale ?? {}),
+      type: 'point',
+      padding: 0,
+      categoryPositionPolicy: 'onCategory',
+    };
+    return;
+  }
 
   categoryChannel.scale = {
     ...(categoryChannel.scale ?? {}),
+    type: 'band',
     paddingInner: 0,
     paddingOuter: 0,
+    ...(barGeometry?.categoryPositionPolicy
+      ? { categoryPositionPolicy: barGeometry.categoryPositionPolicy }
+      : {}),
   };
 }
 
@@ -209,16 +232,28 @@ function roundDomainBound(value: number): number {
 export function applyAutomaticCategoryAxisCrossing(encoding: EncodingSpec): void {
   const x = encoding.x;
   const y = encoding.y;
-  if (!x || !y || x.type !== 'nominal' || y.type !== 'quantitative') return;
-  if (x.axis === null || x.axis?.crossesAt !== undefined) return;
+  if (!x || !y) return;
 
-  const scaleDomain = Array.isArray(y.scale?.domain) ? y.scale.domain : undefined;
+  if (x.type === 'nominal' && y.type === 'quantitative') {
+    applyAutomaticCrossingToCategoryChannel(x, y);
+  } else if (y.type === 'nominal' && x.type === 'quantitative') {
+    applyAutomaticCrossingToCategoryChannel(y, x);
+  }
+}
+
+function applyAutomaticCrossingToCategoryChannel(
+  categoryChannel: ChannelSpec,
+  valueChannel: ChannelSpec,
+): void {
+  if (categoryChannel.axis === null || categoryChannel.axis?.crossesAt !== undefined) return;
+
+  const scaleDomain = Array.isArray(valueChannel.scale?.domain) ? valueChannel.scale.domain : undefined;
   const min = explicitDomainBound(scaleDomain, 0);
   const max = explicitDomainBound(scaleDomain, 1);
   if (min === undefined || max === undefined || min >= 0 || max <= 0) return;
 
-  x.axis = {
-    ...(x.axis ?? {}),
+  categoryChannel.axis = {
+    ...(categoryChannel.axis ?? {}),
     crossesAt: 'automatic',
   };
 }

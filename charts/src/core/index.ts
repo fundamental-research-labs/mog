@@ -26,9 +26,12 @@ export {
   DEFAULT_EXCEL_BAR_GAP_WIDTH,
   DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP,
   DEFAULT_EXCEL_STACKED_BAR_OVERLAP,
+  barBaselinePixelForDomain,
+  barBaselineValueForDomain,
   barGroupingForConfig,
   barGroupingForConfigSpec,
   barOrientationForChartType,
+  chartImportSourceDialect,
   effectiveBarGeometry,
   effectiveBarGeometryFromSpec,
   effectiveGapWidth,
@@ -37,6 +40,7 @@ export {
   hasExcelBarGeometryConfig,
   hasExcelBarGeometrySpec,
   isBarLikeChartType,
+  isImportedStandardOoxmlChart,
   isStackedBarGrouping,
   resolveBarGeometryGroups,
   stackModeForChartType,
@@ -44,6 +48,10 @@ export {
   type BarSlotGeometry,
   type ResolveBarGeometryGroupsOptions,
 } from './config-to-spec/bar-geometry';
+export {
+  buildExcelCartesianGeometryPlan,
+  type ExcelCartesianGeometryPlan,
+} from './config-to-spec/excel-cartesian-geometry';
 export * from './style-resolver';
 export {
   rustToTsChartType,

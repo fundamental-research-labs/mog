@@ -934,6 +934,8 @@ export type ChartFamilySupportReason =
   | 'exactRenderer'
   | 'standardRenderer'
   | 'stockSourceProjectionIncomplete'
+  | 'surfaceApproximation'
+  | 'contourApproximation'
   | 'surfaceProjectionIncomplete'
   | 'contourProjectionIncomplete'
   | 'threeDApproximation'
@@ -1239,6 +1241,7 @@ export interface ResolvedChartLegendEntrySnapshot {
   sourceSeriesIndex?: number;
   sourceSeriesKey?: string;
   pointIndex?: number;
+  valueBandIndex?: number;
   stockRole?: ChartSeriesStockRole;
 }
 
@@ -1273,6 +1276,7 @@ export interface ResolvedChartSeriesSnapshot {
   showMarkers?: boolean;
   markerStyle?: string;
   renderLayerCount?: number;
+  geometry?: ResolvedChartSeriesGeometrySnapshot;
   color?: string;
   source: {
     values?: string;
@@ -1303,6 +1307,20 @@ export interface ResolvedChartSeriesSnapshot {
   pointCount: number;
   renderedPointCount: number;
   dataHash: string;
+}
+
+export type ResolvedChartCartesianXGeometryMode =
+  | 'categoryPoint'
+  | 'dateSerial'
+  | 'quantitative';
+
+export interface ResolvedChartSeriesGeometrySnapshot {
+  xMode: ResolvedChartCartesianXGeometryMode;
+  xRole?: ChartSeriesXRole;
+  axisGroup: 'primary' | 'secondary';
+  stackGroup?: string;
+  markerLayer?: boolean;
+  bubbleSizeAuthority?: 'series';
 }
 
 export interface ResolvedChartSourceSeriesSnapshot {
@@ -1444,11 +1462,89 @@ export interface ResolvedChartBarGeometrySnapshot {
   seriesIndices: number[];
   yAxisIndex?: 0 | 1;
   seriesSlotOrder?: 'source' | 'reverse';
+  categoryAxisRole?: 'x' | 'y';
+  valueAxisRole?: 'x' | 'y';
+  categoryPositionPolicy?: 'between' | 'onCategory' | 'centeredSingleton';
+  categoryCrossing?: 'between' | 'midCat';
+  valueCrossing?: 'automatic' | 'min' | 'max' | 'custom';
+  valueCrossingValue?: number;
+  baselineValue?: number;
+  baselinePixel?: number;
+  valueAxisDomain?: [number, number];
+  percentDomain?: [number, number];
+  geometryStatus?: 'exact' | 'verifiedDefault' | 'approximate';
+  plotAreaSource?: 'auto' | 'manual';
   categoryAxisLength?: number;
   visibleCategoryCount?: number;
   categoryPitch?: number;
   barSize?: number;
   offsets?: ResolvedChartBarGeometryOffsetSnapshot[];
+}
+
+export interface ResolvedChartCartesianValueAxisGeometrySnapshot {
+  axisGroup: 'primary' | 'secondary';
+  domain?: [number, number];
+  includeZero: boolean;
+  explicitDomain: boolean;
+  tickStep?: number;
+}
+
+export interface ResolvedChartCartesianCategoryXGeometrySnapshot {
+  mode: 'categoryPoint' | 'dateSerial';
+  domain: Array<string | number>;
+  pointCount: number;
+  positionPolicy?: 'between' | 'onCategory' | 'centeredSingleton';
+  stableKeys: boolean;
+}
+
+export interface ResolvedChartCartesianQuantitativeXGeometrySnapshot {
+  mode: 'quantitative';
+  domain?: [number, number];
+  field: string;
+}
+
+export interface ResolvedChartAreaGeometrySnapshot {
+  stackMode: 'none' | 'zero' | 'normalize' | 'center';
+  baseline: number;
+  percentDomain?: [number, number];
+  groups: Array<{
+    axisGroup: 'primary' | 'secondary';
+    xRole: ChartSeriesXRole;
+    seriesIndices: number[];
+  }>;
+}
+
+export interface ResolvedChartBubbleGeometrySnapshot {
+  sizeRepresents: 'area' | 'w';
+  bubbleScale: number;
+  showNegBubbles: boolean;
+  maxRenderableMagnitude: number;
+  maxRenderedArea: number;
+  normalizedSizeField: string;
+  rawSizeField: string;
+}
+
+export interface ResolvedChartCartesianGeometrySnapshot {
+  x: {
+    modes: ResolvedChartCartesianXGeometryMode[];
+    category?: ResolvedChartCartesianCategoryXGeometrySnapshot;
+    quantitative?: ResolvedChartCartesianQuantitativeXGeometrySnapshot;
+  };
+  valueAxes: ResolvedChartCartesianValueAxisGeometrySnapshot[];
+  area?: ResolvedChartAreaGeometrySnapshot;
+  bubble?: ResolvedChartBubbleGeometrySnapshot;
+  series: Array<{
+    seriesIndex: number;
+    type: string;
+    xRole: ChartSeriesXRole;
+    xMode: ResolvedChartCartesianXGeometryMode;
+    axisGroup: 'primary' | 'secondary';
+    showLines?: boolean;
+    showMarkers?: boolean;
+    stackGroup?: string;
+    markerLayer?: boolean;
+    bubbleSizeAuthority?: 'series';
+  }>;
 }
 
 /** Package identity/authority metadata for import/export diagnostics. */
@@ -1517,6 +1613,7 @@ export interface ResolvedChartSpecSnapshot {
       gapDepth?: number;
       overlap?: number;
       barGeometry?: ResolvedChartBarGeometrySnapshot[];
+      cartesianGeometry?: ResolvedChartCartesianGeometrySnapshot;
     };
     ranges: {
       dataRange: ChartRangeReferenceSnapshot | null;

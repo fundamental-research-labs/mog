@@ -232,7 +232,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applySecondaryCategoryAxis(config, encoding, isHorizontal);
-  applyBarCategorySpacingScale(config, encoding, isHorizontal);
+  applyBarCategorySpacingScale(config, data, encoding, isHorizontal);
   if (!isXYChart) {
     if (chartType !== 'combo') {
       applyExcelCategoryPointScale(isHorizontal ? encoding.y : encoding.x, config, data, {

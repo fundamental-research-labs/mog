@@ -65,6 +65,11 @@ function plottedPointIndices(mark: PathMark): number[] {
     : [];
 }
 
+function pathYCoordinates(path: string): number[] {
+  const coordinates = (path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  return coordinates.filter((_, index) => index % 2 === 1);
+}
+
 describe('displayBlanksAs line and area path semantics', () => {
   it('breaks line paths at gap blanks and connects across span blanks', () => {
     const gapPaths = dataPaths('line', 'gap');
@@ -88,5 +93,41 @@ describe('displayBlanksAs line and area path semantics', () => {
 
     expect(gapPaths.map(plottedPointIndices)).toEqual([[0], [2]]);
     expect(spanPaths.map(plottedPointIndices)).toEqual([[0, 2]]);
+  });
+
+  it('renders one-series percent-stacked area as a normalized positive band', () => {
+    const spec = configToSpec(
+      {
+        type: 'area',
+        subType: 'percentStacked',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 8,
+        height: 5,
+      },
+      {
+        categories: ['A', 'B'],
+        series: [
+          {
+            name: 'Series 1',
+            data: [
+              { x: 'A', y: 5 },
+              { x: 'B', y: 10 },
+            ],
+          },
+        ],
+      },
+    );
+
+    const result = compile(spec);
+    const area = result.marks.find((mark): mark is PathMark => mark.type === 'path');
+    expect(area).toBeDefined();
+
+    const yCoordinates = pathYCoordinates(area!.path);
+    expect(Math.min(...yCoordinates)).toBeCloseTo(result.layout.plotArea.y, 5);
+    expect(Math.max(...yCoordinates)).toBeCloseTo(
+      result.layout.plotArea.y + result.layout.plotArea.height,
+      5,
+    );
   });
 });

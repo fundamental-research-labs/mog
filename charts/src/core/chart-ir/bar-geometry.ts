@@ -1,10 +1,12 @@
 import type {
+  AxisCategoryCrossing,
   BarGeometryGrouping,
   BarGeometrySpec,
+  BarValueCrossingPolicy,
   ConfigSpec,
   StackMode,
 } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../types';
+import type { ChartConfig, ChartData, ChartType, SeriesConfig, SingleAxisConfig } from '../../types';
 import { seriesConfigForDataSeries } from '../series-identity';
 
 export const DEFAULT_EXCEL_BAR_GAP_WIDTH = 150;
@@ -178,7 +180,9 @@ export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'se
 }
 
 export function effectiveBarGeometry(
-  config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap' | 'series'>,
+  config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap' | 'series'> &
+    Partial<Pick<ChartConfig, 'axis' | 'extra'>>,
+  data?: Pick<ChartData, 'categories' | 'series'>,
 ): BarGeometrySpec | undefined {
   if (!hasExcelBarGeometryConfig(config)) return undefined;
 
@@ -189,12 +193,16 @@ export function effectiveBarGeometry(
         )?.type
       : undefined;
   const geometryType = firstBarSeriesType ?? (config.type === 'combo' ? 'column' : config.type);
-  return effectiveBarGeometryForType(config, geometryType);
+  return effectiveBarGeometryForType(config, geometryType, data);
 }
 
 function effectiveBarGeometryForType(
-  config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap'>,
+  config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap'> &
+    Partial<Pick<ChartConfig, 'axis' | 'extra'>>,
   geometryType: ChartType | string,
+  data?: Pick<ChartData, 'categories' | 'series'>,
+  yAxisIndex?: 0 | 1,
+  seriesIndices?: readonly number[],
 ): BarGeometrySpec {
   const sourceGapWidth = finiteNumber(config.gapWidth);
   const sourceOverlap = finiteNumber(config.overlap);
@@ -205,7 +213,7 @@ function effectiveBarGeometryForType(
   const gapWidth = effectiveGapWidth(sourceGapWidth);
   const overlap = effectiveOverlap(sourceOverlap, grouping);
 
-  return {
+  const baseGeometry: BarGeometrySpec = {
     orientation: barOrientationForChartType(geometryType),
     grouping,
     sourceGapWidth,
@@ -217,17 +225,22 @@ function effectiveBarGeometryForType(
       : {}),
     ...(sourceOverlap !== undefined && sourceOverlap !== overlap ? { overlapClamped: true } : {}),
   };
+  return withBarColumnImportedGeometryContract(config, baseGeometry, {
+    data,
+    yAxisIndex,
+    seriesIndices,
+  });
 }
 
 export function resolveBarGeometryGroups(
   config: ChartConfig,
-  chartData: Pick<ChartData, 'series'>,
+  chartData: Pick<ChartData, 'categories' | 'series'>,
   options: ResolveBarGeometryGroupsOptions = {},
 ): BarGeometryGroup[] {
   if (!hasExcelBarGeometryConfig(config)) return [];
 
   if (config.type !== 'combo') {
-    const geometry = effectiveBarGeometry(config);
+    const geometry = effectiveBarGeometry(config, chartData);
     if (!geometry) return [];
     const seriesIndices = chartData.series
       .map((series, index) => ({
@@ -251,7 +264,13 @@ export function resolveBarGeometryGroups(
     return [
       {
         key: `bar:0:${geometry.orientation ?? 'vertical'}:${geometry.grouping}`,
-        geometry: withImportedSeriesSlotOrder(config, { ...geometry, seriesIndices }),
+        geometry: withImportedSeriesSlotOrder(
+          config,
+          withBarColumnImportedGeometryContract(config, geometry, {
+            data: chartData,
+            seriesIndices,
+          }),
+        ),
         seriesIndices,
       },
     ];
@@ -271,12 +290,22 @@ export function resolveBarGeometryGroups(
     }
 
     const yAxisIndex = normalizeBarGeometryYAxisIndex(seriesConfig?.yAxisIndex ?? series.yAxisIndex);
-    const geometry = effectiveBarGeometryForType(config, seriesType);
+    const geometry = effectiveBarGeometryForType(
+      config,
+      seriesType,
+      chartData,
+      yAxisIndex,
+      [index],
+    );
     const key = `bar:${yAxisIndex ?? 0}:${geometry.orientation ?? 'vertical'}:${geometry.grouping}`;
     const existing = groups.get(key);
     if (existing) {
       existing.seriesIndices.push(index);
-      existing.geometry = { ...existing.geometry, seriesIndices: existing.seriesIndices };
+      existing.geometry = withBarColumnImportedGeometryContract(config, existing.geometry, {
+        data: chartData,
+        yAxisIndex,
+        seriesIndices: existing.seriesIndices,
+      });
       continue;
     }
 
@@ -390,8 +419,259 @@ export function excelBarSlotGeometry(
   const clusterUnits = 1 + (safeGroupCount - 1) * groupStepUnits;
   const barSize = categoryStep / (clusterUnits + gapRatio);
   const clusterSize = barSize * clusterUnits;
+  if (geometry.categoryPositionPolicy === 'onCategory') {
+    return {
+      offset: -clusterSize / 2 + safeGroupIndex * barSize * groupStepUnits,
+      size: barSize,
+    };
+  }
   return {
     offset: (categoryStep - clusterSize) / 2 + safeGroupIndex * barSize * groupStepUnits,
     size: barSize,
   };
+}
+
+export function barBaselineValueForDomain(
+  geometry: Pick<BarGeometrySpec, 'valueCrossing' | 'valueCrossingValue'> | undefined,
+  domain: readonly unknown[] | undefined,
+): number | undefined {
+  const domainMin = numericDomainBound(domain, 0);
+  const domainMax = numericDomainBound(domain, 1);
+  const crossing = geometry?.valueCrossing ?? 'automatic';
+
+  if (crossing === 'custom') {
+    return finiteNumber(geometry?.valueCrossingValue) ?? 0;
+  }
+  if (crossing === 'min') return domainMin;
+  if (crossing === 'max') return domainMax;
+  if (domainMin === undefined || domainMax === undefined) return 0;
+  if (domainMin <= 0 && domainMax >= 0) return 0;
+  return domainMax < 0 ? domainMax : domainMin;
+}
+
+export function barBaselinePixelForDomain(input: {
+  geometry: Pick<BarGeometrySpec, 'valueCrossing' | 'valueCrossingValue'> | undefined;
+  domain: readonly unknown[] | undefined;
+  range: readonly [number, number];
+}): number | undefined {
+  const baselineValue = barBaselineValueForDomain(input.geometry, input.domain);
+  const domainMin = numericDomainBound(input.domain, 0);
+  const domainMax = numericDomainBound(input.domain, 1);
+  if (
+    baselineValue === undefined ||
+    domainMin === undefined ||
+    domainMax === undefined ||
+    domainMin === domainMax
+  ) {
+    return undefined;
+  }
+  const t = (baselineValue - domainMin) / (domainMax - domainMin);
+  const raw = input.range[0] + t * (input.range[1] - input.range[0]);
+  const min = Math.min(input.range[0], input.range[1]);
+  const max = Math.max(input.range[0], input.range[1]);
+  return clamp(raw, min, max);
+}
+
+function withBarColumnImportedGeometryContract(
+  config: Pick<ChartConfig, 'type' | 'axis' | 'extra'>,
+  geometry: BarGeometrySpec,
+  options: {
+    data?: Pick<ChartData, 'categories' | 'series'>;
+    yAxisIndex?: 0 | 1;
+    seriesIndices?: readonly number[];
+  } = {},
+): BarGeometrySpec {
+  const orientation = geometry.orientation ?? barOrientationForChartType(config.type);
+  const categoryAxisRole = orientation === 'horizontal' ? 'y' : 'x';
+  const valueAxisRole = orientation === 'horizontal' ? 'x' : 'y';
+  const categoryAxis = categoryAxisConfig(config, orientation);
+  const valueAxis = valueAxisConfig(config, orientation, options.yAxisIndex);
+  const categoryCrossing =
+    normalizeAxisCategoryCrossing(valueAxis) ??
+    normalizeAxisCategoryCrossing(categoryAxis) ??
+    'between';
+  const categoryPositionPolicy = categoryPositionPolicyForCrossing(
+    categoryCrossing,
+    options.data?.categories.length,
+  );
+  const valueCrossing = normalizeValueCrossing(categoryAxis?.crossesAt) ?? 'automatic';
+  const valueCrossingValue = finiteNumber(categoryAxis?.crossesAtValue);
+  const valueAxisDomain = valueDomainForGeometry(geometry, options.data, options.seriesIndices);
+  const baselineValue = barBaselineValueForDomain(
+    { valueCrossing, valueCrossingValue },
+    valueAxisDomain,
+  );
+  const percentDomain =
+    geometry.grouping === 'percentStacked'
+      ? percentStackedDomain(options.data, options.seriesIndices)
+      : undefined;
+
+  return {
+    ...geometry,
+    categoryAxisRole,
+    valueAxisRole,
+    categoryPositionPolicy,
+    categoryCrossing,
+    valueCrossing,
+    ...(valueCrossingValue !== undefined ? { valueCrossingValue } : {}),
+    ...(baselineValue !== undefined ? { baselineValue } : {}),
+    ...(valueAxisDomain ? { valueAxisDomain } : {}),
+    ...(percentDomain ? { percentDomain } : {}),
+    geometryStatus: geometryStatusForConfig(config),
+    plotAreaSource: 'auto',
+    ...(options.seriesIndices ? { seriesIndices: [...options.seriesIndices] } : {}),
+  };
+}
+
+function categoryAxisConfig(
+  config: Pick<ChartConfig, 'axis'>,
+  orientation: BarGeometrySpec['orientation'],
+): SingleAxisConfig | undefined {
+  if (!config.axis) return undefined;
+  return orientation === 'horizontal'
+    ? (config.axis.categoryAxis ?? config.axis.yAxis)
+    : (config.axis.xAxis ?? config.axis.categoryAxis);
+}
+
+function valueAxisConfig(
+  config: Pick<ChartConfig, 'axis'>,
+  orientation: BarGeometrySpec['orientation'],
+  yAxisIndex: 0 | 1 | undefined,
+): SingleAxisConfig | undefined {
+  if (!config.axis) return undefined;
+  if (yAxisIndex === 1) return config.axis.secondaryValueAxis ?? config.axis.secondaryYAxis;
+  return orientation === 'horizontal'
+    ? (config.axis.valueAxis ?? config.axis.xAxis)
+    : (config.axis.yAxis ?? config.axis.valueAxis);
+}
+
+function normalizeAxisCategoryCrossing(
+  axis: SingleAxisConfig | undefined,
+): AxisCategoryCrossing | undefined {
+  const crossBetween = axis?.crossBetween?.toLowerCase();
+  if (crossBetween === 'between') return 'between';
+  if (crossBetween === 'midcat' || crossBetween === 'mid_cat' || crossBetween === 'mid-cat') {
+    return 'midCat';
+  }
+  if (axis?.isBetweenCategories === true) return 'between';
+  if (axis?.isBetweenCategories === false) return 'midCat';
+  return undefined;
+}
+
+function categoryPositionPolicyForCrossing(
+  crossing: AxisCategoryCrossing,
+  categoryCount: number | undefined,
+): NonNullable<BarGeometrySpec['categoryPositionPolicy']> {
+  if (categoryCount !== undefined && categoryCount <= 1) return 'centeredSingleton';
+  return crossing === 'midCat' ? 'onCategory' : 'between';
+}
+
+function normalizeValueCrossing(value: unknown): BarValueCrossingPolicy | undefined {
+  return value === 'automatic' || value === 'min' || value === 'max' || value === 'custom'
+    ? value
+    : undefined;
+}
+
+function geometryStatusForConfig(
+  config: Pick<ChartConfig, 'extra'>,
+): NonNullable<BarGeometrySpec['geometryStatus']> {
+  const dialect = chartImportSourceDialect(config);
+  if (dialect === 'ooxml') return 'exact';
+  if (dialect === 'ooxml-chart-ex') return 'approximate';
+  return 'verifiedDefault';
+}
+
+function valueDomainForGeometry(
+  geometry: BarGeometrySpec,
+  data: Pick<ChartData, 'categories' | 'series'> | undefined,
+  seriesIndices: readonly number[] | undefined,
+): [number, number] | undefined {
+  if (!data) return undefined;
+  const values =
+    geometry.grouping === 'percentStacked'
+      ? percentStackedDomain(data, seriesIndices)
+      : geometry.grouping === 'stacked'
+        ? stackedValueDomain(data, seriesIndices)
+        : valueExtent(memberValues(data, seriesIndices));
+  return values;
+}
+
+function percentStackedDomain(
+  data: Pick<ChartData, 'categories' | 'series'> | undefined,
+  seriesIndices: readonly number[] | undefined,
+): [number, number] | undefined {
+  if (!data) return undefined;
+  let hasPositive = false;
+  let hasNegative = false;
+  const members = memberIndexSet(seriesIndices);
+  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
+    data.series.forEach((series, seriesIndex) => {
+      if (members && !members.has(seriesIndex)) return;
+      const value = series.data[pointIndex]?.y;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return;
+      if (value > 0) hasPositive = true;
+      else hasNegative = true;
+    });
+  }
+
+  const min = hasNegative ? -100 : 0;
+  const max = hasPositive ? 100 : 0;
+  return min === max ? [min, min + 100] : [min, max];
+}
+
+function stackedValueDomain(
+  data: Pick<ChartData, 'categories' | 'series'>,
+  seriesIndices: readonly number[] | undefined,
+): [number, number] | undefined {
+  const values: number[] = [];
+  const members = memberIndexSet(seriesIndices);
+  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
+    let positive = 0;
+    let negative = 0;
+    data.series.forEach((series, seriesIndex) => {
+      if (members && !members.has(seriesIndex)) return;
+      const value = series.data[pointIndex]?.y;
+      if (typeof value !== 'number' || !Number.isFinite(value)) return;
+      if (value >= 0) positive += value;
+      else negative += value;
+    });
+    values.push(positive, negative);
+  }
+  return valueExtent(values);
+}
+
+function memberValues(
+  data: Pick<ChartData, 'series'>,
+  seriesIndices: readonly number[] | undefined,
+): number[] {
+  const values: number[] = [];
+  const members = memberIndexSet(seriesIndices);
+  data.series.forEach((series, seriesIndex) => {
+    if (members && !members.has(seriesIndex)) return;
+    for (const point of series.data) {
+      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
+    }
+  });
+  return values;
+}
+
+function memberIndexSet(seriesIndices: readonly number[] | undefined): Set<number> | undefined {
+  return seriesIndices && seriesIndices.length > 0 ? new Set(seriesIndices) : undefined;
+}
+
+function valueExtent(values: readonly number[]): [number, number] | undefined {
+  const finiteValues = values.filter((value) => Number.isFinite(value));
+  if (finiteValues.length === 0) return undefined;
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
+  if (min === max) {
+    if (min === 0) return [0, 1];
+    return min > 0 ? [0, max] : [min, 0];
+  }
+  return [Math.min(0, min), Math.max(0, max)];
+}
+
+function numericDomainBound(domain: readonly unknown[] | undefined, index: number): number | undefined {
+  const value = domain?.[index];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

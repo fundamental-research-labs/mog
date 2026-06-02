@@ -139,7 +139,7 @@ export function buildComboLayers(
         xRole,
       });
 
-      if (memberIndices.length > 1 && memberIndices.includes(i)) {
+      if (memberIndices.length >= 1 && memberIndices.includes(i)) {
         const groupKey = `area:${yAxisIndex ?? 0}:${xRole}`;
         if (memberIndices[0] === i && !emittedAreaGroups.has(groupKey)) {
           emittedAreaGroups.add(groupKey);

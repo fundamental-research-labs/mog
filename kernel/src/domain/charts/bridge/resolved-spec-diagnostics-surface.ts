@@ -1,4 +1,7 @@
 import type { ChartConfig } from '@mog/charts';
+import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
+
+type ResolvedSnapshotSeries = ResolvedChartSpecSnapshot['resolved']['series'];
 
 export function barShapeDiagnostics(config: ChartConfig): string[] {
   const shapes = new Set<string>();
@@ -9,9 +12,37 @@ export function barShapeDiagnostics(config: ChartConfig): string[] {
   return Array.from(shapes);
 }
 
-export function surfaceFamilyDiagnostics(config: ChartConfig): string[] {
+export function surfaceFamilyDiagnostics(
+  config: ChartConfig,
+  series?: ResolvedSnapshotSeries,
+): string[] {
   if (!isImportedChartConfig(config) || !isSurfaceFamilyConfig(config)) return [];
-  return surfacePlaceholderDiagnostics(config);
+  return hasFiniteSurfaceValues(series)
+    ? surfaceApproximationDiagnostics(config)
+    : surfacePlaceholderDiagnostics(config);
+}
+
+export function surfaceUnsupportedFeatureDiagnostics(
+  config: ChartConfig,
+  series?: ResolvedSnapshotSeries,
+): string[] {
+  if (!isImportedChartConfig(config) || !isSurfaceFamilyConfig(config)) return [];
+  return hasFiniteSurfaceValues(series) ? [] : surfacePlaceholderDiagnostics(config);
+}
+
+export function surfaceApproximationDiagnostics(config: ChartConfig): string[] {
+  const diagnostics: string[] = [];
+  if (isSurfaceTopViewConfig(config)) {
+    diagnostics.push(
+      'contour/top-view surface chart is rendered as a Mog contour approximation',
+    );
+  } else {
+    diagnostics.push('surface chart is rendered as a Mog surface approximation');
+  }
+  if (isSurfaceWireframeConfig(config)) {
+    diagnostics.push('surface wireframe is projected from source grid data');
+  }
+  return diagnostics;
 }
 
 export function surfacePlaceholderDiagnostics(config: ChartConfig): string[] {
@@ -63,5 +94,13 @@ function isSurfaceWireframeConfig(config: ChartConfig): boolean {
     config.wireframe === true ||
     config.type === 'surfaceWireframe' ||
     config.type === 'surfaceTopViewWireframe'
+  );
+}
+
+function hasFiniteSurfaceValues(series: ResolvedSnapshotSeries | undefined): boolean {
+  return (
+    series?.some((item) =>
+      item.values.some((value) => typeof value === 'number' && Number.isFinite(value)),
+    ) ?? false
   );
 }

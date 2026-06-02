@@ -265,6 +265,7 @@ export interface ScaleSpec {
   exponent?: number;
   base?: number;
   scheme?: string;
+  categoryPositionPolicy?: BarCategoryPositionPolicy;
 }
 
 // =============================================================================
@@ -851,6 +852,12 @@ export type BarGeometryOrientation = 'horizontal' | 'vertical';
 
 export type BarSeriesSlotOrder = 'source' | 'reverse';
 
+export type BarCategoryPositionPolicy = 'between' | 'onCategory' | 'centeredSingleton';
+
+export type BarValueCrossingPolicy = 'automatic' | 'min' | 'max' | 'custom';
+
+export type BarGeometryStatus = 'exact' | 'verifiedDefault' | 'approximate';
+
 export interface BarGeometrySpec {
   /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
   orientation?: BarGeometryOrientation;
@@ -872,6 +879,28 @@ export interface BarGeometrySpec {
   seriesIndices?: number[];
   /** Render order for clustered series slots within one category. */
   seriesSlotOrder?: BarSeriesSlotOrder;
+  /** Axis/channel role that owns category placement for this bar group. */
+  categoryAxisRole?: 'x' | 'y';
+  /** Axis/channel role that owns value scaling and the bar baseline for this group. */
+  valueAxisRole?: 'x' | 'y';
+  /** Imported category placement policy consumed by the category scale. */
+  categoryPositionPolicy?: BarCategoryPositionPolicy;
+  /** Normalized OOXML crossBetween/isBetweenCategories policy. */
+  categoryCrossing?: AxisCategoryCrossing;
+  /** Normalized crossing policy that places the category axis on the value scale. */
+  valueCrossing?: BarValueCrossingPolicy;
+  /** Custom value-scale crossing value when valueCrossing is custom. */
+  valueCrossingValue?: number;
+  /** Baseline value resolved from valueCrossing and the effective value-axis domain. */
+  baselineValue?: number;
+  /** Effective value-axis domain used for stack/baseline diagnostics when known. */
+  valueAxisDomain?: [number, number];
+  /** Effective percent-stack domain when this group normalizes stacks. */
+  percentDomain?: [number, number];
+  /** Whether imported geometry was consumed exactly, defaulted, or approximated. */
+  geometryStatus?: BarGeometryStatus;
+  /** Plot-area authority available to the geometry resolver. */
+  plotAreaSource?: 'auto' | 'manual';
 }
 
 /**

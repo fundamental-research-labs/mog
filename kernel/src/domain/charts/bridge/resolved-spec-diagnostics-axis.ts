@@ -1,4 +1,5 @@
 import {
+  effectiveBarGeometry,
   hasExcelBarGeometryConfig,
   isImportedStandardOoxmlChart,
   type ChartConfig,
@@ -21,7 +22,9 @@ export function axisUnsupportedFeatureDiagnostics(
   const isChartEx = (config.extra as { isChartEx?: boolean } | undefined)?.isChartEx === true;
   const isHorizontal = isHorizontalChartType(config.type);
   const consumesImportedBarColumnCrossing =
-    isImportedStandardOoxmlChart(config) && hasExcelBarGeometryConfig(config);
+    isImportedStandardOoxmlChart(config) &&
+    hasExcelBarGeometryConfig(config) &&
+    effectiveBarGeometry(config)?.categoryCrossing !== undefined;
   const entries: Array<{
     label: string;
     role: AxisDiagnosticRole;

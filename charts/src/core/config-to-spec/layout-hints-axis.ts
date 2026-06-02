@@ -193,7 +193,17 @@ function axisLabelForValue(
   const mapped = axis?.labelTextByValue?.[String(value)];
   if (mapped !== undefined) return mapped;
   if (axis?.formatType === 'time') return formatExcelSerialDateTick(value, format);
+  if (axis?.percentAxisLabelPolicy === 'percentFromHundred') {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(numeric)) {
+      return formatTickValue(numeric / 100, percentAxisFormat(format ?? axis.format));
+    }
+  }
   return formatTickValue(value, format ?? axis?.format);
+}
+
+function percentAxisFormat(format: string | undefined): string {
+  return format && format.includes('%') ? format : '0%';
 }
 
 function xAxisLabelSide(axis: AxisSpec | undefined): Extract<LayoutSide, 'top' | 'bottom'> {
@@ -339,7 +349,7 @@ function estimateQuantitativeAxisLabelWidth(
   const values = ticks.length > 0 ? ticks : domain;
   const maxLabelLength = Math.max(
     0,
-    ...values.map((value) => formatTickValue(value, format ?? axis?.format).length),
+    ...values.map((value) => axisLabelForValue(axis, value, format ?? axis?.format).length),
   );
   if (maxLabelLength === 0) return undefined;
 

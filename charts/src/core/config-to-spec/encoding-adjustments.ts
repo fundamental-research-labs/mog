@@ -2,7 +2,11 @@ import type { ChannelSpec, EncodingSpec } from '../../grammar/spec';
 import { tickStep } from '../../primitives/scales/linear';
 import type { ChartConfig, ChartData } from '../../types';
 import { explicitDomainBound, isHorizontalBarType } from './axis';
-import { effectiveBarGeometry, hasExcelBarGeometryConfig } from './bar-geometry';
+import {
+  chartImportSourceDialect,
+  effectiveBarGeometry,
+  hasExcelBarGeometryConfig,
+} from './bar-geometry';
 import { categoryDisplayLabel, categoryKeyForIndex } from './category-axis';
 import { resolveStackMode } from './subtypes';
 
@@ -132,6 +136,7 @@ export function applyStackedValueDomain(
 ): void {
   const stack = resolveStackMode(config);
   if (!stack) return;
+  if (chartImportSourceDialect(config) === 'ooxml' && hasExcelBarGeometryConfig(config)) return;
 
   const chartType = config.type;
   const valueChannel = isHorizontalBarType(chartType) ? encoding.x : encoding.y;

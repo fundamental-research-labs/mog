@@ -9,6 +9,7 @@ import type {
 } from '../../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig } from '../../../types';
 import { applyAutoValueAxisTicks, buildAxisScaleSpec, mapAxisConfigToAxisSpec } from '../axis';
+import { applyBarGeometryValueAxisLayout } from '../bar-axis-layout';
 import {
   applyAutomaticCategoryAxisCrossing,
   applyMogAutoValueAxisScale,
@@ -82,6 +83,7 @@ export function buildComboLayers(
     data,
     seriesConfigs,
     baseY: yEncoding,
+    barGeometryGroups,
   });
 
   for (let i = 0; i < data.series.length; i += 1) {
@@ -615,6 +617,7 @@ function buildExcelComboGeometry(input: {
   data: ChartData;
   seriesConfigs: SeriesConfig[];
   baseY: NonNullable<EncodingSpec['y']>;
+  barGeometryGroups: BarGeometryGroup[];
 }): ExcelComboGeometry | undefined {
   if (!usesExcelCartesianGeometry(input.config)) return undefined;
 
@@ -650,16 +653,20 @@ function buildExcelComboGeometry(input: {
 
   const yByAxis = new Map<0 | 1, NonNullable<EncodingSpec['y']>>();
   for (const [axisIndex, memberIndices] of membersByAxis) {
-    yByAxis.set(
+    const channel = excelValueEncodingForAxis({
+      config: input.config,
+      baseY: input.baseY,
       axisIndex,
-      excelValueEncodingForAxis({
-        config: input.config,
-        baseY: input.baseY,
-        axisIndex,
-        values: comboAxisValues(input.config, input.data, memberIndices),
-        includeZero: includeZeroByAxis.get(axisIndex) ?? false,
-      }) as NonNullable<EncodingSpec['y']>,
+      values: comboAxisValues(input.config, input.data, memberIndices),
+      includeZero: includeZeroByAxis.get(axisIndex) ?? false,
+    }) as NonNullable<EncodingSpec['y']>;
+    const barGroup = input.barGeometryGroups.find(
+      (group) => (group.yAxisIndex ?? 0) === axisIndex,
     );
+    if (barGroup?.geometry.grouping === 'percentStacked') {
+      applyBarGeometryValueAxisLayout(channel, barGroup.geometry);
+    }
+    yByAxis.set(axisIndex, channel);
   }
 
   return {

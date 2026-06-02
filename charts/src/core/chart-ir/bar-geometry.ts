@@ -8,6 +8,7 @@ import type {
 } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig, SingleAxisConfig } from '../../types';
 import { seriesConfigForDataSeries } from '../series-identity';
+import { resolveBarColumnAxisLayout } from './bar-axis-layout';
 
 export const DEFAULT_EXCEL_BAR_GAP_WIDTH = 150;
 export const DEFAULT_EXCEL_CLUSTERED_BAR_OVERLAP = 0;
@@ -181,7 +182,7 @@ export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'se
 
 export function effectiveBarGeometry(
   config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap' | 'series'> &
-    Partial<Pick<ChartConfig, 'axis' | 'extra'>>,
+    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height'>>,
   data?: Pick<ChartData, 'categories' | 'series'>,
 ): BarGeometrySpec | undefined {
   if (!hasExcelBarGeometryConfig(config)) return undefined;
@@ -198,7 +199,7 @@ export function effectiveBarGeometry(
 
 function effectiveBarGeometryForType(
   config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap'> &
-    Partial<Pick<ChartConfig, 'axis' | 'extra'>>,
+    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height'>>,
   geometryType: ChartType | string,
   data?: Pick<ChartData, 'categories' | 'series'>,
   yAxisIndex?: 0 | 1,
@@ -473,7 +474,8 @@ export function barBaselinePixelForDomain(input: {
 }
 
 function withBarColumnImportedGeometryContract(
-  config: Pick<ChartConfig, 'type' | 'axis' | 'extra'>,
+  config: Pick<ChartConfig, 'type' | 'axis' | 'extra'> &
+    Partial<Pick<ChartConfig, 'width' | 'height'>>,
   geometry: BarGeometrySpec,
   options: {
     data?: Pick<ChartData, 'categories' | 'series'>;
@@ -496,15 +498,23 @@ function withBarColumnImportedGeometryContract(
   );
   const valueCrossing = normalizeValueCrossing(categoryAxis?.crossesAt) ?? 'automatic';
   const valueCrossingValue = finiteNumber(categoryAxis?.crossesAtValue);
-  const valueAxisDomain = valueDomainForGeometry(geometry, options.data, options.seriesIndices);
+  const axisLayout = resolveBarColumnAxisLayout({
+    sourceDialect: chartImportSourceDialect(config),
+    orientation,
+    grouping: geometry.grouping,
+    data: options.data,
+    seriesIndices: options.seriesIndices,
+    categoryAxis,
+    valueAxis,
+    chartWidth: config.width,
+    chartHeight: config.height,
+  });
+  const valueAxisDomain = axisLayout.valueAxisDomain;
   const baselineValue = barBaselineValueForDomain(
     { valueCrossing, valueCrossingValue },
     valueAxisDomain,
   );
-  const percentDomain =
-    geometry.grouping === 'percentStacked'
-      ? percentStackedDomain(options.data, options.seriesIndices)
-      : undefined;
+  const geometryStatus = geometryStatusForConfig(config, axisLayout.axisLayoutStatus);
 
   return {
     ...geometry,
@@ -516,8 +526,30 @@ function withBarColumnImportedGeometryContract(
     ...(valueCrossingValue !== undefined ? { valueCrossingValue } : {}),
     ...(baselineValue !== undefined ? { baselineValue } : {}),
     ...(valueAxisDomain ? { valueAxisDomain } : {}),
-    ...(percentDomain ? { percentDomain } : {}),
-    geometryStatus: geometryStatusForConfig(config),
+    ...(axisLayout.categoryTickLabelSkip !== undefined
+      ? { categoryTickLabelSkip: axisLayout.categoryTickLabelSkip }
+      : {}),
+    ...(axisLayout.categoryTickMarkSkip !== undefined
+      ? { categoryTickMarkSkip: axisLayout.categoryTickMarkSkip }
+      : {}),
+    ...(axisLayout.categoryTickSkipSource
+      ? { categoryTickSkipSource: axisLayout.categoryTickSkipSource }
+      : {}),
+    ...(axisLayout.valueAxisTickStep !== undefined
+      ? { valueAxisTickStep: axisLayout.valueAxisTickStep }
+      : {}),
+    ...(axisLayout.valueAxisTickCount !== undefined
+      ? { valueAxisTickCount: axisLayout.valueAxisTickCount }
+      : {}),
+    ...(axisLayout.percentDomain ? { percentDomain: axisLayout.percentDomain } : {}),
+    ...(axisLayout.percentAxisLabelPolicy
+      ? { percentAxisLabelPolicy: axisLayout.percentAxisLabelPolicy }
+      : {}),
+    ...(axisLayout.axisLayoutStatus ? { axisLayoutStatus: axisLayout.axisLayoutStatus } : {}),
+    ...(axisLayout.axisLayoutStatusReason
+      ? { axisLayoutStatusReason: axisLayout.axisLayoutStatusReason }
+      : {}),
+    geometryStatus,
     plotAreaSource: 'auto',
     ...(options.seriesIndices ? { seriesIndices: [...options.seriesIndices] } : {}),
   };
@@ -574,101 +606,13 @@ function normalizeValueCrossing(value: unknown): BarValueCrossingPolicy | undefi
 
 function geometryStatusForConfig(
   config: Pick<ChartConfig, 'extra'>,
+  axisLayoutStatus: BarGeometrySpec['axisLayoutStatus'] | undefined,
 ): NonNullable<BarGeometrySpec['geometryStatus']> {
+  if (axisLayoutStatus === 'approximate') return 'approximate';
   const dialect = chartImportSourceDialect(config);
   if (dialect === 'ooxml') return 'exact';
   if (dialect === 'ooxml-chart-ex') return 'approximate';
   return 'verifiedDefault';
-}
-
-function valueDomainForGeometry(
-  geometry: BarGeometrySpec,
-  data: Pick<ChartData, 'categories' | 'series'> | undefined,
-  seriesIndices: readonly number[] | undefined,
-): [number, number] | undefined {
-  if (!data) return undefined;
-  const values =
-    geometry.grouping === 'percentStacked'
-      ? percentStackedDomain(data, seriesIndices)
-      : geometry.grouping === 'stacked'
-        ? stackedValueDomain(data, seriesIndices)
-        : valueExtent(memberValues(data, seriesIndices));
-  return values;
-}
-
-function percentStackedDomain(
-  data: Pick<ChartData, 'categories' | 'series'> | undefined,
-  seriesIndices: readonly number[] | undefined,
-): [number, number] | undefined {
-  if (!data) return undefined;
-  let hasPositive = false;
-  let hasNegative = false;
-  const members = memberIndexSet(seriesIndices);
-  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
-    data.series.forEach((series, seriesIndex) => {
-      if (members && !members.has(seriesIndex)) return;
-      const value = series.data[pointIndex]?.y;
-      if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return;
-      if (value > 0) hasPositive = true;
-      else hasNegative = true;
-    });
-  }
-
-  const min = hasNegative ? -100 : 0;
-  const max = hasPositive ? 100 : 0;
-  return min === max ? [min, min + 100] : [min, max];
-}
-
-function stackedValueDomain(
-  data: Pick<ChartData, 'categories' | 'series'>,
-  seriesIndices: readonly number[] | undefined,
-): [number, number] | undefined {
-  const values: number[] = [];
-  const members = memberIndexSet(seriesIndices);
-  for (let pointIndex = 0; pointIndex < data.categories.length; pointIndex += 1) {
-    let positive = 0;
-    let negative = 0;
-    data.series.forEach((series, seriesIndex) => {
-      if (members && !members.has(seriesIndex)) return;
-      const value = series.data[pointIndex]?.y;
-      if (typeof value !== 'number' || !Number.isFinite(value)) return;
-      if (value >= 0) positive += value;
-      else negative += value;
-    });
-    values.push(positive, negative);
-  }
-  return valueExtent(values);
-}
-
-function memberValues(
-  data: Pick<ChartData, 'series'>,
-  seriesIndices: readonly number[] | undefined,
-): number[] {
-  const values: number[] = [];
-  const members = memberIndexSet(seriesIndices);
-  data.series.forEach((series, seriesIndex) => {
-    if (members && !members.has(seriesIndex)) return;
-    for (const point of series.data) {
-      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
-    }
-  });
-  return values;
-}
-
-function memberIndexSet(seriesIndices: readonly number[] | undefined): Set<number> | undefined {
-  return seriesIndices && seriesIndices.length > 0 ? new Set(seriesIndices) : undefined;
-}
-
-function valueExtent(values: readonly number[]): [number, number] | undefined {
-  const finiteValues = values.filter((value) => Number.isFinite(value));
-  if (finiteValues.length === 0) return undefined;
-  const min = Math.min(...finiteValues);
-  const max = Math.max(...finiteValues);
-  if (min === max) {
-    if (min === 0) return [0, 1];
-    return min > 0 ? [0, max] : [min, 0];
-  }
-  return [Math.min(0, min), Math.max(0, max)];
 }
 
 function numericDomainBound(domain: readonly unknown[] | undefined, index: number): number | undefined {

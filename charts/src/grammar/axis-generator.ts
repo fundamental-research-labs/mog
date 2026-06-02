@@ -1447,7 +1447,17 @@ function formatAxisTickResult(
   if (axisSpec.formatType === 'time') {
     return formatExcelValueResult(value, format);
   }
+  if (axisSpec.percentAxisLabelPolicy === 'percentFromHundred') {
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(numeric)) {
+      return formatExcelValueResult(numeric / 100, percentAxisFormat(format));
+    }
+  }
   return formatTickValueResult(value, format);
+}
+
+function percentAxisFormat(format: string | undefined): string {
+  return format && format.includes('%') ? format : '0%';
 }
 
 const EXCEL_SERIAL_UNIX_EPOCH = 25569;

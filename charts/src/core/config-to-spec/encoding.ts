@@ -22,6 +22,7 @@ import {
   applyCategoryAxisLabels,
   applyStackedValueDomain,
 } from './encoding-adjustments';
+import { applyBarColumnAxisLayout } from './bar-axis-layout';
 import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
 import {
   applyExcelCartesianValueScales,
@@ -315,6 +316,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
+  applyBarColumnAxisLayout(config, data, encoding);
   applyCartesianValueAxisDefaults(encoding, {
     includeZero: useExcelCartesian ? excelChartValueAxisIncludesZero(config) : !isXYChart,
   });

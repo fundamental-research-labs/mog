@@ -82,6 +82,11 @@ export function generateBarMarks(
   let percentDomainMin = 0;
   let percentDomainMax = 100;
   if (isPercentStacked) {
+    const geometryPercentDomain = config?.barGeometry?.percentDomain;
+    if (geometryPercentDomain) {
+      percentDomainMin = geometryPercentDomain[0];
+      percentDomainMax = geometryPercentDomain[1];
+    }
     if (catField && valField) {
       const totals = new Map<string, { positive: number; negativeMagnitude: number }>();
       for (const d of renderData) {
@@ -111,9 +116,11 @@ export function generateBarMarks(
         }
         return { ...d, [valField]: 0 };
       });
-      percentDomainMin = hasNegative ? -100 : 0;
-      percentDomainMax = hasPositive ? 100 : 0;
-      if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
+      if (!geometryPercentDomain) {
+        percentDomainMin = hasNegative ? -100 : 0;
+        percentDomainMax = hasPositive ? 100 : 0;
+        if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
+      }
     }
   }
 

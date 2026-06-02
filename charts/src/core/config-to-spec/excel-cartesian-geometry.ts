@@ -5,7 +5,6 @@ import type {
   MarkType,
   ScaleSpec,
 } from '../../grammar/spec';
-import { tickStep } from '../../primitives/scales/linear';
 import type {
   ChartConfig,
   ChartData,
@@ -13,6 +12,7 @@ import type {
   SeriesConfig,
   SingleAxisConfig,
 } from '../../types';
+import { resolveExcelAutoValueAxisScale } from '../chart-ir/excel-value-axis-scale';
 import { seriesConfigForDataSeries } from '../series-identity';
 import {
   applyAutoValueAxisTicks,
@@ -47,9 +47,6 @@ import {
 import { resolveStackMode } from './subtypes';
 
 const EXCEL_VALUE_AXIS_TICK_COUNT = 5;
-const EXCEL_DIVERGING_VALUE_AXIS_TICK_COUNT = 8;
-const DOMAIN_EPSILON = 1e-10;
-const HEADROOM_STEP_FRACTION = 0.2;
 
 export type ExcelCategoryPositionPolicy = 'between' | 'onCategory' | 'centeredSingleton';
 
@@ -331,58 +328,25 @@ export function applyExcelAutoValueAxisScale(
   if (scaleSpec.type && scaleSpec.type !== 'linear') return;
   if (hasExplicitScaleDomain(scaleSpec.domain)) return;
 
-  const finiteValues = values.filter((value) => Number.isFinite(value));
-  if (finiteValues.length === 0) return;
-
-  const dataMin = Math.min(...finiteValues);
-  const dataMax = Math.max(...finiteValues);
-  let axisMin = options.includeZero ? Math.min(0, dataMin) : dataMin;
-  let axisMax = options.includeZero ? Math.max(0, dataMax) : dataMax;
-  if (axisMin === axisMax) {
-    if (axisMin === 0) {
-      axisMax = 1;
-    } else if (axisMin > 0) {
-      axisMin = options.includeZero ? 0 : axisMin * 0.9;
-      axisMax *= 1.1;
-    } else {
-      axisMin *= 1.1;
-      axisMax = options.includeZero ? 0 : axisMax * 0.9;
-    }
-  }
-
-  const requestedTickCount = options.tickCount ?? EXCEL_VALUE_AXIS_TICK_COUNT;
-  const tickCount =
-    options.includeZero && dataMin < 0 && dataMax > 0
-      ? Math.max(requestedTickCount, EXCEL_DIVERGING_VALUE_AXIS_TICK_COUNT)
-      : requestedTickCount;
   const explicitTickStep = positiveNumber(channel.axis?.tickStep);
-  const step = explicitTickStep ?? Math.abs(tickStep(axisMin, axisMax, tickCount));
-  if (!Number.isFinite(step) || step <= 0) return;
-
-  let domainMin = Math.floor(axisMin / step) * step;
-  let domainMax = Math.ceil(axisMax / step) * step;
-
-  if (options.includeZero && dataMin >= 0) domainMin = Math.min(0, domainMin);
-  if (options.includeZero && dataMax <= 0) domainMax = Math.max(0, domainMax);
-  if (domainMin === domainMax) domainMax = domainMin + step;
-
-  if (domainMax > 0 && dataMax > 0 && domainMax - dataMax <= step * HEADROOM_STEP_FRACTION) {
-    domainMax += step;
-  }
-  if (domainMin < 0 && dataMin < 0 && dataMin - domainMin <= step * HEADROOM_STEP_FRACTION) {
-    domainMin -= step;
-  }
+  const resolved = resolveExcelAutoValueAxisScale({
+    values,
+    includeZero: options.includeZero,
+    tickCount: options.tickCount ?? EXCEL_VALUE_AXIS_TICK_COUNT,
+    explicitTickStep,
+  });
+  if (!resolved) return;
 
   channel.scale = {
     ...scaleSpec,
-    domain: [roundDomainBound(domainMin), roundDomainBound(domainMax)],
+    domain: resolved.domain,
     nice: false,
     ...(options.includeZero ? { zero: true } : { zero: false }),
   };
   if (channel.axis !== null && channel.axis !== undefined) {
     channel.axis = {
       ...channel.axis,
-      tickStep: explicitTickStep ?? roundDomainBound(step),
+      tickStep: explicitTickStep ?? resolved.tickStep,
     };
   }
 }
@@ -823,9 +787,4 @@ function positiveNumber(value: unknown): number | undefined {
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function roundDomainBound(value: number): number {
-  if (Math.abs(value) < DOMAIN_EPSILON) return 0;
-  return Number.parseFloat(value.toPrecision(12));
 }

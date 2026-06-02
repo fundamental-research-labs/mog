@@ -279,6 +279,9 @@ export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
 export type AxisLabelPosition = 'nextTo' | 'low' | 'high' | 'none';
 export type AxisTickMark = 'none' | 'out' | 'in' | 'cross';
 export type AxisCategoryCrossing = 'between' | 'midCat';
+export type AxisTickSkipSource = 'explicit' | 'importedAuto' | 'rendererAuto' | 'none';
+export type AxisPercentLabelPolicy = 'percentFromHundred';
+export type AxisLayoutStatus = 'exact' | 'verifiedDefault' | 'approximate';
 
 export type AxisTickIntervalUnit = 'day' | 'month' | 'year';
 
@@ -305,9 +308,11 @@ export interface AxisSpec {
   labelOverlap?: boolean | 'parity' | 'greedy';
   labelPosition?: AxisLabelPosition;
   tickLabelSkip?: number;
+  tickLabelSkipSource?: AxisTickSkipSource;
   ticks?: boolean;
   tickMark?: AxisTickMark;
   tickMarkSkip?: number;
+  tickMarkSkipSource?: AxisTickSkipSource;
   tickCount?: number;
   tickSize?: number;
   tickColor?: string;
@@ -335,6 +340,9 @@ export interface AxisSpec {
   crossesAtValue?: number;
   categoryCrossing?: AxisCategoryCrossing;
   format?: string;
+  percentAxisLabelPolicy?: AxisPercentLabelPolicy;
+  axisLayoutStatus?: AxisLayoutStatus;
+  axisLayoutStatusReason?: string;
   displayUnitFactor?: number;
   displayUnitLabel?: string;
   linkNumberFormat?: boolean;
@@ -857,6 +865,9 @@ export type BarCategoryPositionPolicy = 'between' | 'onCategory' | 'centeredSing
 export type BarValueCrossingPolicy = 'automatic' | 'min' | 'max' | 'custom';
 
 export type BarGeometryStatus = 'exact' | 'verifiedDefault' | 'approximate';
+export type BarAxisTickSkipSource = AxisTickSkipSource;
+export type BarPercentAxisLabelPolicy = AxisPercentLabelPolicy;
+export type BarAxisLayoutStatus = BarGeometryStatus;
 
 export interface BarGeometrySpec {
   /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
@@ -885,6 +896,12 @@ export interface BarGeometrySpec {
   valueAxisRole?: 'x' | 'y';
   /** Imported category placement policy consumed by the category scale. */
   categoryPositionPolicy?: BarCategoryPositionPolicy;
+  /** Effective category-axis label skip consumed before layout and rendering. */
+  categoryTickLabelSkip?: number;
+  /** Effective category-axis tick-mark skip consumed before layout and rendering. */
+  categoryTickMarkSkip?: number;
+  /** Authority for effective category-axis label/tick skip. */
+  categoryTickSkipSource?: BarAxisTickSkipSource;
   /** Normalized OOXML crossBetween/isBetweenCategories policy. */
   categoryCrossing?: AxisCategoryCrossing;
   /** Normalized crossing policy that places the category axis on the value scale. */
@@ -895,8 +912,18 @@ export interface BarGeometrySpec {
   baselineValue?: number;
   /** Effective value-axis domain used for stack/baseline diagnostics when known. */
   valueAxisDomain?: [number, number];
+  /** Effective value-axis major tick step when resolved by imported axis layout. */
+  valueAxisTickStep?: number;
+  /** Effective value-axis major tick count when resolved by imported axis layout. */
+  valueAxisTickCount?: number;
   /** Effective percent-stack domain when this group normalizes stacks. */
   percentDomain?: [number, number];
+  /** Percent-stack label policy for the value axis. */
+  percentAxisLabelPolicy?: BarPercentAxisLabelPolicy;
+  /** Whether imported axis-layout geometry was consumed exactly, defaulted, or approximated. */
+  axisLayoutStatus?: BarAxisLayoutStatus;
+  /** Stable diagnostic reason when the axis-layout status is not exact/defaulted. */
+  axisLayoutStatusReason?: string;
   /** Whether imported geometry was consumed exactly, defaulted, or approximated. */
   geometryStatus?: BarGeometryStatus;
   /** Plot-area authority available to the geometry resolver. */

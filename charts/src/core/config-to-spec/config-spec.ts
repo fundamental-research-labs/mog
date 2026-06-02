@@ -61,7 +61,7 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  if (config.type === 'bubble') {
+  if (config.type === 'bubble' || config.type === 'bubble3DEffect') {
     if (typeof config.bubbleScale === 'number') {
       configSpec.bubbleScale = config.bubbleScale;
       hasConfig = true;

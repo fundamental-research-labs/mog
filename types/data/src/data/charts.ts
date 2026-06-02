@@ -922,6 +922,43 @@ export interface ChartSeriesProjectionDiagnostic {
   message?: string;
 }
 
+/** Support level for the resolved rendering contract of a chart family. */
+export type ChartFamilySupportLevel =
+  | 'exact'
+  | 'approximate'
+  | 'preservedPlaceholder'
+  | 'unsupported';
+
+/** Deterministic reason for a chart family's support level. */
+export type ChartFamilySupportReason =
+  | 'exactRenderer'
+  | 'standardRenderer'
+  | 'stockSourceProjectionIncomplete'
+  | 'surfaceProjectionIncomplete'
+  | 'contourProjectionIncomplete'
+  | 'threeDApproximation'
+  | 'bubbleLegendSeriesDomain'
+  | 'radarLayoutFidelity'
+  | 'unsupportedImportStatus'
+  | 'preservedPlaceholderImportStatus';
+
+/**
+ * Public-safe resolved support contract for specialty chart families.
+ *
+ * This supplements `implementation.renderStatus`, which remains a broad
+ * compatibility status. Consumers that need parity semantics should use this
+ * versioned contract.
+ */
+export interface ChartFamilySupportSnapshot {
+  schemaVersion: 1;
+  family: string;
+  sourceFamily?: string;
+  supportLevel: ChartFamilySupportLevel;
+  reason: ChartFamilySupportReason;
+  diagnostics: string[];
+  renderedAs?: string;
+}
+
 /** Workbook-level pivot chart projection summary used by render diagnostics. */
 export interface PivotChartProjectionData {
   sourceRef?: string;
@@ -1275,6 +1312,7 @@ export interface ResolvedChartSourceSeriesSnapshot {
   sourceSeriesKey: string;
   name?: string;
   type?: string;
+  visibleOrder?: number;
   axisGroup?: 'primary' | 'secondary';
   xRole?: ChartSeriesXRole;
   stockRole?: ChartSeriesStockRole;
@@ -1314,6 +1352,13 @@ export interface ResolvedChartProjectedRoleMappingSnapshot {
   projectedSourceSeriesKey: string;
 }
 
+export interface ResolvedChartStockRenderProjectionSnapshot {
+  projectionType: 'stockGlyph';
+  renderedSeriesIndex: number;
+  renderedSourceSeriesKey: string;
+  roles: ResolvedChartProjectedRoleMappingSnapshot[];
+}
+
 export interface ResolvedChartSeriesProjectionSnapshot {
   authority: ChartSeriesProjectionAuthority;
   expectedImportedSeriesCount: number;
@@ -1325,6 +1370,7 @@ export interface ResolvedChartSeriesProjectionSnapshot {
   sourceSeriesCount?: number;
   sourceRoleSeriesCount?: number;
   projectedRoleMappings?: ResolvedChartProjectedRoleMappingSnapshot[];
+  stockRenderProjection?: ResolvedChartStockRenderProjectionSnapshot;
 }
 
 /** Normalized top-level chart layout rectangle in chart-relative coordinates. */
@@ -1438,6 +1484,7 @@ export interface ResolvedChartSpecSnapshot {
   implementation: {
     renderAuthority: 'chartBridge';
     renderStatus: 'renderable';
+    familySupport?: ChartFamilySupportSnapshot;
     compilerPathId: 'ts-grammar' | 'wasm-transforms+ts-grammar';
     compilerInputHash: string;
     compilerVersion: 1;

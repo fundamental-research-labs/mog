@@ -41,6 +41,8 @@ type SourceSeriesSnapshot = NonNullable<
 type ProjectedRoleMappingSnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['seriesProjection']['projectedRoleMappings']
 >[number];
+type StockRenderProjectionSnapshot =
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['stockRenderProjection'];
 type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
 
 export function hasRenderableChartExData(config: ChartConfig): boolean {
@@ -279,6 +281,7 @@ export function snapshotSeriesProjection(
     sourceSeriesCount: sourceSeries.length,
     sourceRoleSeriesCount: sourceSeries.filter((item) => item.stockRole !== undefined).length,
     projectedRoleMappings: stockProjection.projectedRoleMappings,
+    stockRenderProjection: stockProjection.stockRenderProjection,
   };
 }
 
@@ -298,6 +301,7 @@ function snapshotSourceSeriesInventory(
       sourceSeriesKey: item.sourceSeriesKey,
       name: item.name,
       type: item.type,
+      visibleOrder: item.visibleOrder,
       axisGroup: item.axisGroup,
       xRole: item.xRole,
       stockRole: item.stockRole,
@@ -335,6 +339,7 @@ function snapshotSourceSeriesInventory(
       sourceSeriesKey,
       name: configured.name ?? defaultSourceSeriesName(configured, sourceSeriesIndex),
       type: configured.type,
+      visibleOrder: configured.visibleOrder,
       axisGroup: configured.yAxisIndex === 1 ? 'secondary' : 'primary',
       xRole: effectiveSeriesXRole(config, configured, configured.type),
       stockRole,
@@ -379,6 +384,7 @@ function stockProjectionContext(
   stockRoleBySourceKey: Map<string, ChartSeriesStockRole>;
   renderedSeries?: ResolvedSeriesSnapshot;
   projectedRoleMappings?: ProjectedRoleMappingSnapshot[];
+  stockRenderProjection?: StockRenderProjectionSnapshot;
 } {
   const stockRoleBySourceKey = new Map<string, ChartSeriesStockRole>();
   const seriesConfigs = config.series ?? [];
@@ -409,10 +415,21 @@ function stockProjectionContext(
     }
   }
 
+  const stockRenderProjection: StockRenderProjectionSnapshot | undefined =
+    renderedSeries && projectedRoleMappings.length > 0
+      ? {
+          projectionType: 'stockGlyph',
+          renderedSeriesIndex: renderedSeries.index,
+          renderedSourceSeriesKey: renderedSeries.sourceSeriesKey,
+          roles: projectedRoleMappings,
+        }
+      : undefined;
+
   return {
     stockRoleBySourceKey,
     renderedSeries,
     ...(projectedRoleMappings.length > 0 ? { projectedRoleMappings } : {}),
+    ...(stockRenderProjection ? { stockRenderProjection } : {}),
   };
 }
 

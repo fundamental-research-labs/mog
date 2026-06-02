@@ -25,6 +25,8 @@ const AXIS_COLOR = '#bfbfbf';
 const LABEL_COLOR = '#444444';
 const VALUE_LABEL_COLOR = '#666666';
 const DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
+const RADAR_PLOT_INSET = 8;
+const RADAR_LABEL_GAP = 8;
 
 export function generateRadarMarks(
   markSpec: MarkSpec,
@@ -88,7 +90,7 @@ export function generateRadarMarks(
 
 function radarGeometry(layout: Layout): { cx: number; cy: number; radius: number } {
   const { plotArea } = layout;
-  const radius = Math.max(0, Math.min(plotArea.width, plotArea.height) / 2 - 18);
+  const radius = Math.max(0, Math.min(plotArea.width, plotArea.height) / 2 - RADAR_PLOT_INSET);
   return {
     cx: plotArea.x + plotArea.width / 2,
     cy: plotArea.y + plotArea.height / 2,
@@ -207,7 +209,7 @@ function generateCategoryLabelMarks(
   geometry: { cx: number; cy: number; radius: number },
 ): TextMark[] {
   return categories.map((category, index) => {
-    const point = pointAt(index, categories.length, geometry, geometry.radius + 14);
+    const point = pointAt(index, categories.length, geometry, geometry.radius + RADAR_LABEL_GAP);
     const cos = Math.cos(point.angle);
     const sin = Math.sin(point.angle);
     return {

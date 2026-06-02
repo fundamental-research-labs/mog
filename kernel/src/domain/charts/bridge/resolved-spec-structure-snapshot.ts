@@ -16,6 +16,8 @@ type CategoryLevelSnapshot = NonNullable<
 >[number];
 type LegendSnapshot = ResolvedChartSpecSnapshot['resolved']['legend'];
 type LegendEntrySnapshot = NonNullable<LegendSnapshot['entryItems']>[number];
+type SeriesProjectionSnapshot = ResolvedChartSpecSnapshot['resolved']['seriesProjection'];
+type SourceSeriesSnapshot = NonNullable<SeriesProjectionSnapshot['sourceSeries']>[number];
 
 type LegendVocabularyDecision = {
   vocabulary: ChartLegendEntryVocabulary;
@@ -76,6 +78,7 @@ export function snapshotLegend(
   config: ChartConfig,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
   data?: ChartData,
+  seriesProjection?: SeriesProjectionSnapshot,
 ): LegendSnapshot {
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
@@ -87,9 +90,19 @@ export function snapshotLegend(
       .map((entry) => entry.idx) ?? [],
   );
   const visible = present ? (legend?.visible ?? legend?.show ?? true) : false;
-  const decision = legendVocabularyFor(config, data);
+  const stockSourceSeries = stockLegendSourceSeries(config, seriesProjection);
+  const decision = stockSourceSeries
+    ? {
+        vocabulary: 'stockSourceRole' as const,
+        layer: 'source' as const,
+        indexKind: 'stockRole' as const,
+        useCategoryEntries: false,
+      }
+    : legendVocabularyFor(config, data);
   const entryItems =
-    present && decision.useCategoryEntries && data
+    present && stockSourceSeries
+      ? stockSourceLegendEntries(config, stockSourceSeries, deletedEntries, visible, decision)
+      : present && decision.useCategoryEntries && data
       ? categoryLegendEntries(data, deletedEntries, visible, decision)
       : present
         ? seriesLegendEntries(config, series, deletedEntries, visible, decision)
@@ -154,6 +167,31 @@ function seriesLegendEntries(
   });
 }
 
+function stockSourceLegendEntries(
+  config: ChartConfig,
+  sourceSeries: SourceSeriesSnapshot[],
+  deletedEntries: ReadonlySet<number>,
+  visible: boolean,
+  decision: LegendVocabularyDecision,
+): LegendEntrySnapshot[] {
+  return sourceSeries.map((item, index) => {
+    const configured = config.series?.[item.sourceSeriesIndex] ?? config.series?.[index];
+    const deleted = deletedEntries.has(index) || deletedEntries.has(item.sourceSeriesIndex);
+    const styleHidden = isNoFillNoLineSeriesConfig(configured);
+    return {
+      index,
+      text: item.name ?? `Series ${item.sourceSeriesIndex + 1}`,
+      visible: visible && !deleted && !styleHidden,
+      ...(deleted ? { deleted: true } : {}),
+      vocabulary: decision.vocabulary,
+      indexKind: decision.indexKind,
+      sourceSeriesIndex: item.sourceSeriesIndex,
+      sourceSeriesKey: item.sourceSeriesKey,
+      ...(item.stockRole ? { stockRole: item.stockRole } : {}),
+    };
+  });
+}
+
 function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocabularyDecision {
   const surfaceLegendTypes = new Set([
     'surface',
@@ -192,15 +230,7 @@ function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data 
   if (!data) return false;
   if (isPointLegendChartType(config.type)) return true;
   if (config.varyByCategories !== undefined) return config.varyByCategories;
-  const legend = config.legend;
-  return (
-    config.type === 'bubble' &&
-    data.series.length === 1 &&
-    legend !== undefined &&
-    legend.show === true &&
-    legend.visible !== false &&
-    legend.position !== 'none'
-  );
+  return false;
 }
 
 function isPointLegendChartType(type: ChartConfig['type']): boolean {
@@ -246,4 +276,13 @@ export function groupingFor(
   if (config.subType === 'percentStacked') return 'percentStacked';
   if (config.subType === 'clustered') return 'clustered';
   return 'standard';
+}
+
+function stockLegendSourceSeries(
+  config: ChartConfig,
+  seriesProjection: SeriesProjectionSnapshot | undefined,
+): SourceSeriesSnapshot[] | undefined {
+  if (config.type !== 'stock') return undefined;
+  const sourceSeries = seriesProjection?.sourceSeries?.filter((item) => item.stockRole);
+  return sourceSeries && sourceSeries.length > 0 ? sourceSeries : undefined;
 }

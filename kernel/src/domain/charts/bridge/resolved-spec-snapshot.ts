@@ -8,6 +8,10 @@ import type {
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import type { ResolvedChartRangeReferences } from '../chart-range-references';
 import { sourceLinkedAxisNumberFormatDiagnostics } from './chart-render-data-normalizer';
+import {
+  buildChartFamilySupportSnapshot,
+  familySupportCompilerDiagnostics,
+} from './chart-family-support';
 import { snapshotBarGeometry } from './resolved-spec-plot-snapshot';
 import { hashJson, snapshotScalar } from './resolved-spec-primitives';
 import {
@@ -69,13 +73,32 @@ export function buildResolvedChartSpecSnapshot(input: {
       seriesReferencesByIndex.get(seriesSourceIndex(dataSeries, index)),
     ),
   );
-  const legend = snapshotLegend(input.config, series, input.chartData);
   const seriesProjection = snapshotSeriesProjection(
     input.config,
     input.chartData,
     series,
     seriesReferencesByIndex,
   );
+  const legend = snapshotLegend(input.config, series, input.chartData, seriesProjection);
+  const familySupport = buildChartFamilySupportSnapshot({
+    chart: input.chart,
+    config: input.config,
+    legend,
+    seriesProjection,
+  });
+  const unsupportedFeatures = uniqueDiagnostics([
+    ...unsupportedFeatureDiagnostics({
+      chart: input.chart,
+      config: input.config,
+      series,
+      layout: input.layout ?? null,
+      hasRenderableChartExData: hasRenderableChartExData(input.config),
+      sourceLinkedAxisNumberFormatDiagnostics: sourceLinkedAxisNumberFormatDiagnostics(
+        input.config,
+      ),
+    }),
+    ...familySupport.diagnostics,
+  ]);
 
   return {
     schemaVersion: 1,
@@ -102,6 +125,7 @@ export function buildResolvedChartSpecSnapshot(input: {
     implementation: {
       renderAuthority: 'chartBridge',
       renderStatus: 'renderable',
+      familySupport,
       compilerPathId: input.compilerPathId,
       compilerInputHash: input.compilerInputHash,
       compilerVersion: 1,
@@ -168,17 +192,13 @@ export function buildResolvedChartSpecSnapshot(input: {
       compiler: [
         ...input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
         ...renderAuthorityDiagnostics(series),
+        ...familySupportCompilerDiagnostics(familySupport),
       ],
-      unsupportedFeatures: unsupportedFeatureDiagnostics({
-        chart: input.chart,
-        config: input.config,
-        series,
-        layout: input.layout ?? null,
-        hasRenderableChartExData: hasRenderableChartExData(input.config),
-        sourceLinkedAxisNumberFormatDiagnostics: sourceLinkedAxisNumberFormatDiagnostics(
-          input.config,
-        ),
-      }),
+      unsupportedFeatures,
     },
   };
+}
+
+function uniqueDiagnostics(diagnostics: readonly string[]): string[] {
+  return Array.from(new Set(diagnostics.filter((diagnostic) => diagnostic.trim().length > 0)));
 }

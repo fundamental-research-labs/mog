@@ -156,7 +156,8 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   // --- X/Y encoding for all other chart types ---
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);
-  const isXYChart = chartType === 'scatter' || chartType === 'bubble';
+  const isXYChart =
+    chartType === 'scatter' || chartType === 'bubble' || chartType === 'bubble3DEffect';
   const useExcelCartesian = usesExcelCartesianGeometry(config);
   const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
   const useStableCategoryKeys = shouldUseStableCategoryKeys(
@@ -190,7 +191,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       scale: { zero: false, nice: true },
     };
     encoding.y = valueChannel;
-    if (chartType === 'bubble') {
+    if (chartType === 'bubble' || chartType === 'bubble3DEffect') {
       encoding.size = {
         field: BUBBLE_SIZE_FIELD,
         type: 'quantitative',
@@ -349,7 +350,9 @@ function bubbleMaxArea(config: ChartConfig): number {
 }
 
 function categoryLegendSymbolType(config: ChartConfig): LegendSpec['symbolType'] | undefined {
-  if (config.type === 'bubble' || config.type === 'scatter') return 'circle';
+  if (config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter') {
+    return 'circle';
+  }
   return undefined;
 }
 

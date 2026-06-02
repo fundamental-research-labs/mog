@@ -158,26 +158,13 @@ function resolvedSeriesColors(config: ChartConfig, data?: ChartData): string[] {
   return seriesColors;
 }
 
-export function variesColorsByCategory(config: ChartConfig, data?: ChartData): boolean {
+export function variesColorsByCategory(config: ChartConfig, _data?: ChartData): boolean {
   if (config.varyByCategories !== undefined) return config.varyByCategories;
   return (
     config.type === 'pie' ||
     config.type === 'doughnut' ||
     config.type === 'pie3d' ||
-    config.type === 'ofPie' ||
-    defaultsToBubbleCategoryColors(config, data)
-  );
-}
-
-function defaultsToBubbleCategoryColors(config: ChartConfig, data?: ChartData): boolean {
-  const legend = config.legend;
-  return (
-    config.type === 'bubble' &&
-    data?.series.length === 1 &&
-    legend !== undefined &&
-    legend.show === true &&
-    legend.visible !== false &&
-    legend.position !== 'none'
+    config.type === 'ofPie'
   );
 }
 

@@ -7,6 +7,7 @@ export {
   buildSeriesLegendDomain,
   isLegendEntryVisible,
   legendSymbolType,
+  usesPointLegendEntries,
   visibleLegendDomain,
   type LegendDomain,
 } from './legend-domain';

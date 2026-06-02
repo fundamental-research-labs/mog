@@ -227,7 +227,7 @@ function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocab
     };
   }
 
-  if (usesCategoryLegendEntries(config, data)) {
+  if (usesPointLegendEntries(config, data)) {
     return {
       vocabulary: 'category',
       layer: 'rendered',
@@ -343,11 +343,9 @@ function formatBandValue(value: number, fractionDigits: number): string {
   return value.toFixed(fractionDigits);
 }
 
-function usesCategoryLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
+function usesPointLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
   if (!data) return false;
-  if (isPointLegendChartType(config.type)) return true;
-  if (config.varyByCategories !== undefined) return config.varyByCategories;
-  return false;
+  return isPointLegendChartType(config.type);
 }
 
 function isPointLegendChartType(type: ChartConfig['type']): boolean {

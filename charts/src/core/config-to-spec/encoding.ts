@@ -38,6 +38,7 @@ import {
   buildSeriesLegendDomain,
   isLegendShown,
   legendSymbolType,
+  usesPointLegendEntries,
   visibleLegendDomain,
 } from './legend';
 import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
@@ -251,17 +252,21 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   if (variesColorsByCategory(config, data)) {
+    const categoryValues = data.categories.map((category) => String(category));
     const categoryLegendDomain = buildCategoryLegendDomain(config, data);
+    const seriesLegendDomain = buildSeriesLegendDomain(config, data, {
+      entryValueForSeries: ({ renderedIndex }) =>
+        categoryValues[renderedIndex] ?? categoryValues[0],
+    });
     const categoryColors = resolvedCategoryColors(config, data);
+    const usePointLegendEntries = usesPointLegendEntries(config);
     encoding.color = {
       field: 'category',
       type: 'nominal',
-      ...(data.categories.length > 0 || (categoryColors && categoryColors.length > 0)
+      ...(categoryValues.length > 0 || (categoryColors && categoryColors.length > 0)
         ? {
             scale: {
-              ...(data.categories.length > 0
-                ? { domain: data.categories.map((category) => String(category)) }
-                : {}),
+              ...(categoryValues.length > 0 ? { domain: categoryValues } : {}),
               ...(categoryColors && categoryColors.length > 0 ? { range: categoryColors } : {}),
             },
           }
@@ -269,9 +274,13 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       ...(config.legend
         ? {
             legend: buildLegendSpec(config.legend, config, {
-              symbolType: categoryLegendSymbolType(config),
-              entries: categoryLegendDomain?.entries,
-              values: categoryLegendDomain?.values,
+              symbolType: usePointLegendEntries
+                ? categoryLegendSymbolType(config)
+                : legendSymbolType(config, data),
+              entries: usePointLegendEntries
+                ? categoryLegendDomain?.entries
+                : (seriesLegendDomain?.entries ?? []),
+              values: usePointLegendEntries ? categoryLegendDomain?.values : undefined,
             }),
           }
         : {}),

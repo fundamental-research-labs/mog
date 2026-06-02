@@ -3,9 +3,17 @@ import type { ChartConfig, ChartData, ChartType, LegendConfig, SeriesConfig } fr
 import { seriesConfigForDataSeries, seriesSourceIndex, seriesSourceKey } from '../series-identity';
 import { MARK_TYPE_MAP } from './constants';
 import { isLegendShown } from './legend-spec';
+import { isPieLikeChartType } from './pie-like';
 import { isNoFillNoLineSeries } from './style';
 
 type LegendEntryConfig = NonNullable<LegendConfig['entries']>[number];
+type SeriesLegendEntryValueResolver = (input: {
+  series: ChartData['series'][number];
+  renderedIndex: number;
+  sourceSeriesIndex: number;
+  sourceSeriesKey: string;
+  name: string;
+}) => string | undefined;
 
 export interface LegendDomain {
   values: string[];
@@ -33,6 +41,9 @@ export function visibleLegendDomain(config: ChartConfig, data: ChartData): strin
 export function buildSeriesLegendDomain(
   config: ChartConfig,
   data: ChartData,
+  options: {
+    entryValueForSeries?: SeriesLegendEntryValueResolver;
+  } = {},
 ): LegendDomain | undefined {
   const legend = config.legend;
   if (!isLegendShown(legend)) return undefined;
@@ -50,8 +61,16 @@ export function buildSeriesLegendDomain(
     if (!name) continue;
     if (!names.includes(name)) names.push(name);
     const sourceKey = seriesConfig?.sourceSeriesKey ?? seriesSourceKey(series, index);
+    const entryValue =
+      options.entryValueForSeries?.({
+        series,
+        renderedIndex: index,
+        sourceSeriesIndex: sourceIndex,
+        sourceSeriesKey: sourceKey,
+        name,
+      }) ?? name;
     entries.push({
-      value: name,
+      value: entryValue,
       label: name,
       symbolType: legendSymbolTypeForSeries(config, series, seriesConfig, index),
       seriesIndex: index,
@@ -65,6 +84,10 @@ export function buildSeriesLegendDomain(
     forceColorEncoding: data.series.length === 1 && names.length > 0,
     ...(entries.length > 0 ? { entries } : {}),
   };
+}
+
+export function usesPointLegendEntries(config: Pick<ChartConfig, 'type'>): boolean {
+  return isPieLikeChartType(config.type);
 }
 
 export function buildCategoryLegendDomain(

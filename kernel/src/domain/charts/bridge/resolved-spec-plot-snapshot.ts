@@ -71,36 +71,56 @@ export function snapshotBarGeometry(
       sourceOverlap: geometry.sourceOverlap,
       gapWidth: geometry.gapWidth,
       overlap: geometry.overlap,
-      gapWidthClamped: geometry.gapWidthClamped,
-      overlapClamped: geometry.overlapClamped,
+      ...(geometry.gapWidthClamped !== undefined ? { gapWidthClamped: geometry.gapWidthClamped } : {}),
+      ...(geometry.overlapClamped !== undefined ? { overlapClamped: geometry.overlapClamped } : {}),
       seriesIndices: group.seriesIndices,
-      yAxisIndex: group.yAxisIndex,
-      seriesSlotOrder: geometry.seriesSlotOrder,
+      ...(group.yAxisIndex !== undefined ? { yAxisIndex: group.yAxisIndex } : {}),
+      ...(geometry.seriesSlotOrder !== undefined ? { seriesSlotOrder: geometry.seriesSlotOrder } : {}),
       categoryAxisRole: geometry.categoryAxisRole,
       valueAxisRole: geometry.valueAxisRole,
       categoryPositionPolicy: geometry.categoryPositionPolicy,
-      categoryTickLabelSkip: geometry.categoryTickLabelSkip,
-      categoryTickMarkSkip: geometry.categoryTickMarkSkip,
-      categoryTickSkipSource: geometry.categoryTickSkipSource,
+      ...(geometry.categoryTickLabelSkip !== undefined
+        ? { categoryTickLabelSkip: geometry.categoryTickLabelSkip }
+        : {}),
+      ...(geometry.categoryTickMarkSkip !== undefined
+        ? { categoryTickMarkSkip: geometry.categoryTickMarkSkip }
+        : {}),
+      ...(geometry.categoryTickSkipSource !== undefined
+        ? { categoryTickSkipSource: geometry.categoryTickSkipSource }
+        : {}),
       categoryCrossing: geometry.categoryCrossing,
       valueCrossing: geometry.valueCrossing,
-      valueCrossingValue: geometry.valueCrossingValue,
-      baselineValue: geometry.baselineValue,
-      baselinePixel,
-      valueAxisDomain: geometry.valueAxisDomain,
-      valueAxisTickStep: geometry.valueAxisTickStep,
-      valueAxisTickCount: geometry.valueAxisTickCount,
-      percentDomain: geometry.percentDomain,
-      percentAxisLabelPolicy: geometry.percentAxisLabelPolicy,
-      axisLayoutStatus: geometry.axisLayoutStatus,
-      axisLayoutStatusReason: geometry.axisLayoutStatusReason,
+      ...(geometry.valueCrossingValue !== undefined
+        ? { valueCrossingValue: geometry.valueCrossingValue }
+        : {}),
+      ...(geometry.baselineValue !== undefined ? { baselineValue: geometry.baselineValue } : {}),
+      ...(baselinePixel !== undefined ? { baselinePixel } : {}),
+      ...(geometry.valueAxisDomain !== undefined
+        ? { valueAxisDomain: geometry.valueAxisDomain }
+        : {}),
+      ...(geometry.valueAxisTickStep !== undefined
+        ? { valueAxisTickStep: geometry.valueAxisTickStep }
+        : {}),
+      ...(geometry.valueAxisTickCount !== undefined
+        ? { valueAxisTickCount: geometry.valueAxisTickCount }
+        : {}),
+      ...(geometry.percentDomain !== undefined ? { percentDomain: geometry.percentDomain } : {}),
+      ...(geometry.percentAxisLabelPolicy !== undefined
+        ? { percentAxisLabelPolicy: geometry.percentAxisLabelPolicy }
+        : {}),
+      ...(geometry.axisLayoutStatus !== undefined
+        ? { axisLayoutStatus: geometry.axisLayoutStatus }
+        : {}),
+      ...(geometry.axisLayoutStatusReason !== undefined
+        ? { axisLayoutStatusReason: geometry.axisLayoutStatusReason }
+        : {}),
       geometryStatus: geometry.geometryStatus,
       plotAreaSource: geometry.plotAreaSource,
-      categoryAxisLength,
+      ...(categoryAxisLength !== undefined ? { categoryAxisLength } : {}),
       visibleCategoryCount,
-      categoryPitch,
-      barSize,
-      offsets,
+      ...(categoryPitch !== undefined ? { categoryPitch } : {}),
+      ...(barSize !== undefined ? { barSize } : {}),
+      ...(offsets !== undefined ? { offsets } : {}),
     };
   });
 }

@@ -2339,7 +2339,7 @@ describe('configToSpec - stock chart', () => {
 
 describe('buildStockLayers', () => {
   it('should produce two HLC layers (wick + close tick)', () => {
-    const config = makeConfig({ type: 'stock' });
+    const config = makeConfig({ type: 'stock', subType: 'hlc' });
     const layers = buildStockLayers(config, STOCK_SERIES_DATA, []);
     expect(layers).toHaveLength(2);
     expect((layers[0].mark as MarkSpec).type).toBe('rule');

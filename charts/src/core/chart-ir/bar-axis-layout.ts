@@ -4,10 +4,7 @@ import type {
   BarGeometryStatus,
 } from '../../grammar/spec';
 import type { ChartData, SingleAxisConfig } from '../../types';
-import {
-  resolveExcelAutoValueAxisScale,
-  roundExcelAxisBound,
-} from './excel-value-axis-scale';
+import { resolveExcelAutoValueAxisScale } from './excel-value-axis-scale';
 
 export type BarAxisTickSkipSource = 'explicit' | 'importedAuto' | 'rendererAuto' | 'none';
 export type BarPercentAxisLabelPolicy = 'percentFromHundred';
@@ -236,7 +233,7 @@ function resolveValueAxisLayout(input: ResolveBarColumnAxisLayoutInput): {
       : {};
   }
 
-  return { domain: valueExtent(values) };
+  return {};
 }
 
 function resolveAxisLayoutStatus(
@@ -292,18 +289,6 @@ function tickCountForStep(domain: [number, number], step: number): number | unde
   if (!Number.isFinite(step) || step <= 0) return undefined;
   const count = Math.floor(Math.abs(domain[1] - domain[0]) / step) + 1;
   return Number.isFinite(count) && count > 0 ? count : undefined;
-}
-
-function valueExtent(values: readonly number[]): [number, number] | undefined {
-  const finiteValues = values.filter((value) => Number.isFinite(value));
-  if (finiteValues.length === 0) return undefined;
-  const min = Math.min(...finiteValues);
-  const max = Math.max(...finiteValues);
-  if (min === max) {
-    if (min === 0) return [0, 1];
-    return min > 0 ? [0, roundExcelAxisBound(max)] : [roundExcelAxisBound(min), 0];
-  }
-  return [roundExcelAxisBound(Math.min(0, min)), roundExcelAxisBound(Math.max(0, max))];
 }
 
 function memberIndexSet(seriesIndices: readonly number[] | undefined): Set<number> | undefined {

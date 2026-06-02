@@ -146,7 +146,12 @@ export function snapshotSeries(
     configured,
     stockValues,
   );
-  const stockPointProjection = includeStockValues
+  const stockPointProjection = shouldUseStockRenderedPointProjection(
+    config,
+    effectiveType,
+    configured,
+    stockValues,
+  )
     ? stockRenderedPointProjection(
         Array.from({ length }, (_, pointIndex) => series.data[pointIndex]),
         stockSubTypeFromConfig(config, { categories: [], series: [series] }),
@@ -561,6 +566,26 @@ function shouldSnapshotStockValues(
     config.type === 'stock' ||
     effectiveType === 'stock' ||
     configured?.stockRole !== undefined ||
+    Object.values(stockValues).some((values) => values.some((value) => value !== null))
+  );
+}
+
+function shouldUseStockRenderedPointProjection(
+  config: ChartConfig,
+  effectiveType: string | undefined,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  stockValues: {
+    open: Array<number | null>;
+    high: Array<number | null>;
+    low: Array<number | null>;
+    close: Array<number | null>;
+    volume: Array<number | null>;
+  },
+): boolean {
+  if (configured?.stockRole !== undefined) return false;
+  return (
+    config.type === 'stock' ||
+    effectiveType === 'stock' ||
     Object.values(stockValues).some((values) => values.some((value) => value !== null))
   );
 }

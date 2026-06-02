@@ -51,7 +51,8 @@ export function shouldIncludePointInRows(
   if (point.valueState === 'hidden') return false;
   if (
     config?.type === 'stock' &&
-    !isRenderableStockPoint(point, stockSubTypeFromConfig(config))
+    !isRenderableStockPoint(point, stockSubTypeFromConfig(config)) &&
+    !hasOpenCloseStockPoint(point)
   ) {
     return false;
   }
@@ -110,4 +111,8 @@ export function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConf
 
 function isScatterLikeChart(config?: ChartConfig): boolean {
   return config?.type === 'scatter' || config?.type === 'bubble';
+}
+
+function hasOpenCloseStockPoint(point: ChartDataPoint): boolean {
+  return toFiniteNumber(point.open) !== undefined && toFiniteNumber(point.close) !== undefined;
 }

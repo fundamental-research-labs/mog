@@ -997,11 +997,11 @@ describe('resolved spec snapshot helpers', () => {
 
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
       'pivot chart field buttons are preserved but not rendered (showAllFieldButtons, showAxisFieldButtons, showValueFieldButtons)',
-      'manual plot layout is preserved but not rendered',
-      'manual title layout is preserved but not rendered',
-      'manual legend layout is preserved but not rendered',
-      'manual data-label layout is preserved but not rendered',
-      'chart data table is preserved but not rendered',
+      'manual plot layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual title layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual legend layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual data-label layout is preserved-only; no rendered data-label bounds were reported',
+      'chart data table is preserved-only; no rendered data-table bounds were reported',
       'view3D camera/depth is preserved but rendered as a 2-D approximation',
       'floor/sideWall/backWall surfaces are preserved but not rendered',
     ]);

@@ -81,14 +81,11 @@ export function applyBarGeometryValueAxisLayout(
       zero: true,
     };
   }
-  if (
-    channel.axis !== null &&
-    (geometry.valueAxisTickStep !== undefined ||
-      geometry.valueAxisTickCount !== undefined ||
-      geometry.percentAxisLabelPolicy !== undefined ||
-      geometry.axisLayoutStatus !== undefined ||
-      geometry.axisLayoutStatusReason !== undefined)
-  ) {
+  const hasValueAxisLayout =
+    geometry.valueAxisTickStep !== undefined ||
+    geometry.valueAxisTickCount !== undefined ||
+    geometry.percentAxisLabelPolicy !== undefined;
+  if (channel.axis !== null && hasValueAxisLayout) {
     channel.axis = {
       ...(channel.axis ?? {}),
       ...(geometry.valueAxisTickStep !== undefined

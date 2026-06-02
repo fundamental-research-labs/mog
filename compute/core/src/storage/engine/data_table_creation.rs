@@ -6,7 +6,7 @@ use crate::snapshot::{MutationResult, RecalcResult};
 
 use super::data_table_formula;
 use super::mutation::{self, MutationOutput};
-use super::{services, YrsComputeEngine};
+use super::{YrsComputeEngine, services};
 
 pub(super) fn create_data_table(
     engine: &mut YrsComputeEngine,

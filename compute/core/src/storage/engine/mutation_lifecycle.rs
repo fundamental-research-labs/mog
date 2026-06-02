@@ -2,8 +2,8 @@ use value_types::ComputeError;
 
 use crate::snapshot::{MutationResult, SheetLifecycleRuntimeHint};
 
-use super::mutation_coordinator::SheetLifecycleHistoryHint;
 use super::YrsComputeEngine;
+use super::mutation_coordinator::SheetLifecycleHistoryHint;
 
 impl YrsComputeEngine {
     pub(super) fn attach_sheet_lifecycle_runtime_hint(

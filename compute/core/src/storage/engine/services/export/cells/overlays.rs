@@ -10,7 +10,7 @@ use super::materialize::{
     build_cell_data_for_cell_id, explicit_blank_cell, is_imported_style_only_blank_cell,
     is_plain_blank_cell, range_payload_cell,
 };
-use super::style_ids::format_range_style_id_at;
+use super::style_ids::FormatRangeStyleLookup;
 use super::yrs_reads::batch_read_props_array_refs_and_formula_metadata;
 
 pub(in crate::storage::engine) fn export_cells_for_sheet(
@@ -30,6 +30,8 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
     // Build a reverse map: cell_id → (row, col) from grid_indexes.
     let grid = stores.grid_indexes.get(sheet_id);
     let sheet_mirror = mirror.get_sheet(sheet_id);
+    let format_range_style_lookup =
+        sheet_mirror.map(|sheet| FormatRangeStyleLookup::new(sheet, palette));
     let mut cells_by_pos: FxHashMap<(u32, u32), CellData> = FxHashMap::default();
     let mut range_override_positions: FxHashSet<(u32, u32)> = FxHashSet::default();
 
@@ -66,9 +68,9 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 false,
             ) {
                 if cell.style_id.is_none()
-                    && let Some(sheet) = sheet_mirror
+                    && let Some(lookup) = &format_range_style_lookup
                 {
-                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
+                    cell.style_id = lookup.style_id_at(row, col);
                 }
                 cells_by_pos.insert((row, col), cell);
             }
@@ -88,7 +90,9 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 }
                 None => {
                     let mut cell = range_payload_cell(row, col, value);
-                    cell.style_id = format_range_style_id_at(sheet, row, col, palette);
+                    cell.style_id = format_range_style_lookup
+                        .as_ref()
+                        .and_then(|lookup| lookup.style_id_at(row, col));
                     cells_by_pos.insert((row, col), cell);
                 }
             }
@@ -137,7 +141,9 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                     continue;
                 }
                 if replacement.style_id.is_none() {
-                    replacement.style_id = format_range_style_id_at(sheet, row, col, palette);
+                    replacement.style_id = format_range_style_lookup
+                        .as_ref()
+                        .and_then(|lookup| lookup.style_id_at(row, col));
                 }
 
                 if cells_by_pos.get(&(row, col)).is_some_and(|existing| {

@@ -680,9 +680,8 @@ impl YrsComputeEngine {
                 end_row,
                 end_col,
             } => {
-                let mut recalc = self.mutation_remove_subtotals(
-                    &sheet_id, start_row, start_col, end_row, end_col,
-                )?;
+                let mut recalc = self
+                    .mutation_remove_subtotals(&sheet_id, start_row, start_col, end_row, end_col)?;
                 self.prepare_recalc_for_flush(&mut recalc);
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc))
             }

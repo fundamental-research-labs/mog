@@ -3,6 +3,7 @@ use std::sync::Arc;
 use yrs::types::map::MapRef;
 use yrs::{Any, ReadTxn};
 
+use crate::domain::chart::normalize_explicit_display_blanks_as;
 use crate::domain::floating_object::ChartData;
 use crate::yrs_schema::helpers::{read_bool, read_number, read_string};
 
@@ -97,7 +98,11 @@ pub(super) fn append_chart_entries(entries: &mut Vec<(String, Any)>, d: &ChartDa
     if let Some(a) = option_sub_object(&d.region_map) {
         entries.push(("regionMap".into(), a));
     }
-    if let Some(ref v) = d.display_blanks_as {
+    if let Some(v) = d
+        .display_blanks_as
+        .as_deref()
+        .and_then(normalize_explicit_display_blanks_as)
+    {
         entries.push(("displayBlanksAs".into(), Any::String(Arc::from(v.as_str()))));
     }
     if let Some(v) = d.plot_visible_only {
@@ -321,7 +326,8 @@ pub(super) fn read_chart<R: ReadTxn>(map: &MapRef, txn: &R) -> ChartData {
         boxplot: read_sub_object(map, txn, "boxplot"),
         hierarchy: read_sub_object(map, txn, "hierarchy"),
         region_map: read_sub_object(map, txn, "regionMap"),
-        display_blanks_as: read_string(map, txn, "displayBlanksAs"),
+        display_blanks_as: read_string(map, txn, "displayBlanksAs")
+            .and_then(|value| normalize_explicit_display_blanks_as(&value)),
         plot_visible_only: read_bool(map, txn, "plotVisibleOnly"),
         gap_width: read_number(map, txn, "gapWidth").map(|n| n as u32),
         gap_depth: read_number(map, txn, "gapDepth").map(|n| n as u32),

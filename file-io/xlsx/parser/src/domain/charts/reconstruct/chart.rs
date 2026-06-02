@@ -1,4 +1,7 @@
-use domain_types::{ChartDefinition, chart::ChartSpec};
+use domain_types::{
+    ChartDefinition,
+    chart::{ChartSpec, normalize_explicit_display_blanks_as},
+};
 use ooxml_types::charts::{self, DisplayBlanksAs};
 
 use super::{
@@ -42,7 +45,10 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         disp_blanks_as: spec
             .display_blanks_as
             .as_deref()
-            .map(DisplayBlanksAs::from_ooxml),
+            .and_then(|value| {
+                normalize_explicit_display_blanks_as(value)
+                    .map(|normalized| DisplayBlanksAs::from_ooxml(&normalized))
+            }),
         show_d_lbls_over_max: spec.show_data_labels_over_max,
         show_all_field_buttons: spec
             .show_all_field_buttons

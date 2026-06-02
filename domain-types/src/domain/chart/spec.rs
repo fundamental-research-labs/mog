@@ -19,6 +19,15 @@ use super::{
     PivotChartProjectionData, RegionMapConfigData,
 };
 
+/// Normalize an explicitly supplied chart blank-cell policy.
+pub fn normalize_explicit_display_blanks_as(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    match trimmed {
+        "gap" | "span" | "zero" => Some(trimmed.to_string()),
+        _ => None,
+    }
+}
+
 /// Chart-level line feature such as drop lines, high-low lines, or series lines.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, DescribeSchema)]
 #[serde(rename_all = "camelCase")]
@@ -619,7 +628,10 @@ impl ChartSpec {
             hierarchy: chart_data.hierarchy.clone(),
             region_map: chart_data.region_map.clone(),
             // Chart-level properties
-            display_blanks_as: chart_data.display_blanks_as.clone(),
+            display_blanks_as: chart_data
+                .display_blanks_as
+                .as_deref()
+                .and_then(normalize_explicit_display_blanks_as),
             plot_visible_only: chart_data.plot_visible_only,
             gap_width: chart_data.gap_width,
             gap_depth: chart_data.gap_depth,
@@ -879,7 +891,10 @@ impl ChartSpec {
             boxplot: self.boxplot.clone(),
             hierarchy: self.hierarchy.clone(),
             region_map: self.region_map.clone(),
-            display_blanks_as: self.display_blanks_as.clone(),
+            display_blanks_as: self
+                .display_blanks_as
+                .as_deref()
+                .and_then(normalize_explicit_display_blanks_as),
             plot_visible_only: self.plot_visible_only,
             gap_width: self.gap_width,
             gap_depth: self.gap_depth,

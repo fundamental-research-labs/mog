@@ -27,6 +27,11 @@ import {
   stockSubTypeFromRolePresence,
 } from './stock-semantics';
 import {
+  stockRolePlan,
+  type StockRole,
+  type StockRolePlan,
+} from './stock-role-plan';
+import {
   HIDDEN_CHART_CELL,
   type CellDataAccessor,
   type ChartCellValue,
@@ -41,6 +46,8 @@ import {
   xyValue,
 } from './data-extractor-primitives';
 import { chartDataSeriesIdentity } from './series-identity';
+
+export { stockRolePlan, type StockRole, type StockRolePlan } from './stock-role-plan';
 
 function defaultSeriesName(seriesConfig: SeriesConfig, seriesIndex: number): string {
   if (
@@ -92,12 +99,6 @@ export function hasRenderableImportedSeriesData(seriesConfig: SeriesConfig): boo
   );
 }
 
-export type StockRole = NonNullable<SeriesConfig['stockRole']>;
-export type StockRolePlan = Partial<Record<StockRole, number>> & {
-  high: number;
-  low: number;
-  close: number;
-};
 type StockRoleDimensions = {
   open?: ImportedDimension;
   high: ImportedDimension;
@@ -105,103 +106,6 @@ type StockRoleDimensions = {
   close: ImportedDimension;
   volume?: ImportedDimension;
 };
-
-function isStockVolumeSeriesType(chartType: string | undefined): boolean {
-  return (
-    chartType === 'bar' ||
-    chartType === 'column' ||
-    chartType === 'bar3D' ||
-    chartType === 'bar3d' ||
-    chartType === 'column3D' ||
-    chartType === 'column3d'
-  );
-}
-
-function explicitStockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
-  const roles: Partial<Record<StockRole, number>> = {};
-  let explicitRoleCount = 0;
-
-  for (let index = 0; index < seriesConfigs.length; index += 1) {
-    const role = seriesConfigs[index].stockRole;
-    if (!role) continue;
-    if (roles[role] !== undefined) return null;
-    roles[role] = index;
-    explicitRoleCount += 1;
-  }
-
-  if (explicitRoleCount === 0 || explicitRoleCount !== seriesConfigs.length) return null;
-  if (roles.high === undefined || roles.low === undefined || roles.close === undefined) {
-    return null;
-  }
-
-  return {
-    ...(roles.volume !== undefined ? { volume: roles.volume } : {}),
-    ...(roles.open !== undefined ? { open: roles.open } : {}),
-    high: roles.high,
-    low: roles.low,
-    close: roles.close,
-  };
-}
-
-export function stockRolePlan(seriesConfigs: SeriesConfig[]): StockRolePlan | null {
-  const explicitPlan = explicitStockRolePlan(seriesConfigs);
-  if (explicitPlan) return explicitPlan;
-
-  const stockIndices: number[] = [];
-  const volumeIndices: number[] = [];
-
-  seriesConfigs.forEach((seriesConfig, index) => {
-    if (seriesConfig.type === 'stock') stockIndices.push(index);
-    if (isStockVolumeSeriesType(seriesConfig.type)) volumeIndices.push(index);
-  });
-
-  if (
-    volumeIndices.length === 1 &&
-    (stockIndices.length === 3 || stockIndices.length === 4) &&
-    stockIndices.length + volumeIndices.length === seriesConfigs.length
-  ) {
-    return stockIndices.length === 4
-      ? {
-          volume: volumeIndices[0],
-          open: stockIndices[0],
-          high: stockIndices[1],
-          low: stockIndices[2],
-          close: stockIndices[3],
-        }
-      : {
-          volume: volumeIndices[0],
-          high: stockIndices[0],
-          low: stockIndices[1],
-          close: stockIndices[2],
-        };
-  }
-
-  if (
-    volumeIndices.length === 0 &&
-    (stockIndices.length === 3 || stockIndices.length === 4) &&
-    stockIndices.length === seriesConfigs.length
-  ) {
-    return stockIndices.length === 4
-      ? {
-          open: stockIndices[0],
-          high: stockIndices[1],
-          low: stockIndices[2],
-          close: stockIndices[3],
-        }
-      : { high: stockIndices[0], low: stockIndices[1], close: stockIndices[2] };
-  }
-
-  if (seriesConfigs.length >= 5) {
-    return { volume: 0, open: 1, high: 2, low: 3, close: 4 };
-  }
-  if (seriesConfigs.length >= 4) {
-    return { open: 0, high: 1, low: 2, close: 3 };
-  }
-  if (seriesConfigs.length >= 3) {
-    return { high: 0, low: 1, close: 2 };
-  }
-  return null;
-}
 
 function hasCategoryDimensionConfig(seriesConfig: SeriesConfig): boolean {
   return Boolean(

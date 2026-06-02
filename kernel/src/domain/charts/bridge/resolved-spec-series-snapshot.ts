@@ -10,7 +10,8 @@ import {
   stockRenderedPointProjection,
   stockRenderedRoleValueProjectionFromRoleValues,
   stockRoleOrder,
-  stockRolePlan,
+  stockRolePlanWithEvidence,
+  stockSourceCompositionFromConfig,
   stockSubTypeFromConfig,
   stockSubTypeFromRolePresence,
   type ChartConfig,
@@ -50,6 +51,8 @@ type ProjectedRoleMappingSnapshot = NonNullable<
 >[number];
 type StockRenderProjectionSnapshot =
   ResolvedChartSpecSnapshot['resolved']['seriesProjection']['stockRenderProjection'];
+type StockGlyphGeometrySnapshot =
+  ResolvedChartSpecSnapshot['resolved']['plot']['stockGlyphGeometry'];
 type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
 
 export function hasRenderableChartExData(config: ChartConfig): boolean {
@@ -135,6 +138,11 @@ export function snapshotSeries(
   };
   const name = snapshotSeriesName(series, configured, sourceSeriesIndex);
   const effectiveType = series.type ?? configured?.type;
+  const stockColorAuthorityContext = stockSeriesColorAuthorityContext(
+    config,
+    configured,
+    sourceSeriesIndex,
+  );
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
   const colorAuthority = resolveSeriesColorAuthority({
     config,
@@ -142,6 +150,7 @@ export function snapshotSeries(
     sourceSeriesIndex,
     renderedSeriesIndex: index,
     fallbackType: (effectiveType ?? config.type) as ChartConfig['type'],
+    ...stockColorAuthorityContext,
   });
   const includeStockValues = shouldSnapshotStockValues(
     config,
@@ -244,11 +253,47 @@ function seriesProjectionAuthority(
   return config.dataRange ? 'liveRange' : 'unavailable';
 }
 
+function stockSeriesColorAuthorityContext(
+  config: ChartConfig,
+  configured: ChartSeriesConfig | undefined,
+  sourceSeriesIndex: number,
+): {
+  stockSourceRole?: ChartSeriesStockRole;
+  stockSourceRoleIndex?: number;
+  stockSourceRoleOrder?: readonly ChartSeriesStockRole[];
+} {
+  if (!shouldProjectStockSeries(config)) return {};
+  const composition = stockSourceCompositionFromConfig(config);
+  if (composition.sourceKind === 'modeled') return {};
+  if (!isExactOrVerifiedDefaultStockEvidence(composition.sourceRoleSemanticStatus)) return {};
+
+  const configuredIndex = configured ? config.series?.indexOf(configured) : undefined;
+  const roleIndex =
+    configuredIndex !== undefined && configuredIndex >= 0
+      ? configuredIndex
+      : sourceSeriesIndex;
+  const stockSourceRole =
+    configured?.stockRole ??
+    composition.sourceRoleOrder[roleIndex] ??
+    composition.sourceRoleOrder[sourceSeriesIndex];
+  if (!stockSourceRole) return {};
+  return {
+    stockSourceRole,
+    stockSourceRoleIndex: roleIndex,
+    stockSourceRoleOrder: composition.sourceRoleOrder,
+  };
+}
+
+function isExactOrVerifiedDefaultStockEvidence(value: unknown): boolean {
+  return value === 'exact' || value === 'verifiedDefault';
+}
+
 export function snapshotSeriesProjection(
   config: ChartConfig,
   data: ChartData,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
   seriesReferencesByIndex?: ReadonlyMap<number, SeriesRangeReference>,
+  stockGlyphGeometry?: StockGlyphGeometrySnapshot,
 ): ResolvedChartSpecSnapshot['resolved']['seriesProjection'] {
   const renderedPointCountBySourceSeriesKey: Record<string, number> = {};
   for (const item of series) {
@@ -256,7 +301,7 @@ export function snapshotSeriesProjection(
   }
 
   const projectedKeys = new Set(series.map((item) => item.sourceSeriesKey));
-  const stockProjection = stockProjectionContext(config, data, series);
+  const stockProjection = stockProjectionContext(config, data, series, stockGlyphGeometry);
   const sourceSeries = snapshotSourceSeriesInventory(
     config,
     series,
@@ -414,6 +459,7 @@ function stockProjectionContext(
   config: ChartConfig,
   data: ChartData,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
+  stockGlyphGeometry: StockGlyphGeometrySnapshot | undefined,
 ): {
   stockRoleBySourceKey: Map<string, ChartSeriesStockRole>;
   renderedSeries?: ResolvedSeriesSnapshot;
@@ -422,10 +468,12 @@ function stockProjectionContext(
 } {
   const stockRoleBySourceKey = new Map<string, ChartSeriesStockRole>();
   const seriesConfigs = config.series ?? [];
-  const roles =
+  const stockSourceComposition = stockSourceCompositionFromConfig(config, data);
+  const roleEvidence =
     shouldProjectStockSeries(config) && seriesConfigs.length > 0
-      ? stockRolePlan(seriesConfigs)
+      ? stockRolePlanWithEvidence(seriesConfigs, stockSourceComposition)
       : null;
+  const roles = roleEvidence?.roles ?? null;
   if (!roles) return { stockRoleBySourceKey };
   const stockSubType = stockSubTypeFromRolePresence(roles);
 
@@ -457,6 +505,84 @@ function stockProjectionContext(
           renderedSeriesIndex: renderedSeries.index,
           renderedSourceSeriesKey: renderedSeries.sourceSeriesKey,
           roles: projectedRoleMappings,
+          subType: stockGlyphGeometry?.subType ?? stockSubType,
+          ...(stockGlyphGeometry?.xMode !== undefined ? { xMode: stockGlyphGeometry.xMode } : {}),
+          geometryStatus: stockGlyphGeometry?.geometryStatus ?? 'unavailable',
+          ...(stockGlyphGeometry?.geometryStatusReason !== undefined
+            ? { geometryStatusReason: stockGlyphGeometry.geometryStatusReason }
+            : stockGlyphGeometry
+              ? {}
+              : { geometryStatusReason: 'stockGlyphGeometryUnavailable' }),
+          ...(stockGlyphGeometry?.visual !== undefined
+            ? {
+                visual: stockGlyphGeometry.visual,
+                visualStatus: stockGlyphGeometry.visual.visualStatus,
+                ...(stockGlyphGeometry.visual.visualStatusReason !== undefined
+                  ? { visualStatusReason: stockGlyphGeometry.visual.visualStatusReason }
+                  : {}),
+                priceGlyphMode: stockGlyphGeometry.visual.priceGlyphMode,
+                ...(stockGlyphGeometry.visual.sourceRoleVisuals !== undefined
+                  ? { sourceRoleVisuals: stockGlyphGeometry.visual.sourceRoleVisuals }
+                  : {}),
+              }
+            : { visualStatus: 'incomplete', visualStatusReason: 'stockGlyphVisualUnavailable' }),
+          stockSourceComposition,
+          ...(roleEvidence?.sourceRoleSemanticStatus !== undefined
+            ? { sourceRoleSemanticStatus: roleEvidence.sourceRoleSemanticStatus }
+            : stockSourceComposition.sourceRoleSemanticStatus !== undefined
+              ? { sourceRoleSemanticStatus: stockSourceComposition.sourceRoleSemanticStatus }
+              : {}),
+          ...(roleEvidence?.sourceRoleSemanticSource !== undefined
+            ? { sourceRoleSemanticSource: roleEvidence.sourceRoleSemanticSource }
+            : stockSourceComposition.sourceRoleSemanticSource !== undefined
+              ? { sourceRoleSemanticSource: stockSourceComposition.sourceRoleSemanticSource }
+              : {}),
+          ...(roleEvidence?.sourceRoleSemanticReason !== undefined
+            ? { sourceRoleSemanticReason: roleEvidence.sourceRoleSemanticReason }
+            : stockSourceComposition.sourceRoleSemanticReason !== undefined
+              ? { sourceRoleSemanticReason: stockSourceComposition.sourceRoleSemanticReason }
+              : {}),
+          ...(stockGlyphGeometry?.volumeAxisPolicy !== undefined
+            ? { volumeAxisPolicy: stockGlyphGeometry.volumeAxisPolicy }
+            : {}),
+          ...(stockGlyphGeometry?.highLowEndpointPolicy !== undefined
+            ? { highLowEndpointPolicy: stockGlyphGeometry.highLowEndpointPolicy }
+            : {}),
+          sourceRoleLineLayerCount:
+            stockGlyphGeometry?.visual?.sourceRoleVisuals?.filter(
+              (visual) => visual.layerMode === 'overlayLayer' && visual.lineVisible,
+            ).length ?? 0,
+          sourceRoleMarkerLayerCount:
+            stockGlyphGeometry?.visual?.sourceRoleVisuals?.filter(
+              (visual) => visual.layerMode === 'overlayLayer' && visual.markerVisible,
+            ).length ?? 0,
+          ...(stockGlyphGeometry?.priceScale !== undefined
+            ? { priceScale: stockGlyphGeometry.priceScale }
+            : {}),
+          ...(stockGlyphGeometry?.gapWidth !== undefined
+            ? { gapWidth: stockGlyphGeometry.gapWidth }
+            : {}),
+          ...(stockGlyphGeometry?.slotOccupancy !== undefined
+            ? { slotOccupancy: stockGlyphGeometry.slotOccupancy }
+            : {}),
+          ...(stockGlyphGeometry?.glyphWidth !== undefined
+            ? { glyphWidth: stockGlyphGeometry.glyphWidth }
+            : {}),
+          ...(stockGlyphGeometry?.tickLength !== undefined
+            ? { tickLength: stockGlyphGeometry.tickLength }
+            : {}),
+          ...(stockGlyphGeometry?.volumeBarWidth !== undefined
+            ? { volumeBarWidth: stockGlyphGeometry.volumeBarWidth }
+            : {}),
+          ...(stockGlyphGeometry?.volumeScale !== undefined
+            ? { volumeScale: stockGlyphGeometry.volumeScale }
+            : {}),
+          ...(stockGlyphGeometry?.volumeSurface !== undefined
+            ? { volumeSurface: stockGlyphGeometry.volumeSurface }
+            : {}),
+          ...(stockGlyphGeometry?.points !== undefined
+            ? { geometryPointCount: stockGlyphGeometry.points.length }
+            : {}),
           ...stockRenderedRoleValueProjectionFromRoleValues(
             renderedSeries.stockValues ?? {},
             renderedSeries.categories.length > 0

@@ -27,6 +27,15 @@ function withOpacity(color: string, opacity: number | undefined): string {
   return `rgba(${r}, ${g}, ${b}, ${clamp01(opacity)})`;
 }
 
+function multiplyOpacity(
+  base: number | undefined,
+  multiplier: number | undefined,
+): number | undefined {
+  if (base === undefined) return multiplier;
+  if (multiplier === undefined) return base;
+  return clamp01(base * multiplier);
+}
+
 function renderableSolid(color: string | undefined, opacity: number | undefined): string | null {
   return color ? withOpacity(color, opacity) : null;
 }
@@ -35,12 +44,20 @@ function paintToCanvasStyle(
   ctx: CanvasRenderingContext2D,
   paint: PaintSpec | undefined,
   bounds: PaintBounds | undefined,
+  opacityMultiplier?: number,
 ): string | CanvasGradient | CanvasPattern | null {
   if (!paint || paint.type === 'none') return null;
-  if (paint.type === 'solid') return renderableSolid(paint.color, paint.opacity);
-  if (paint.type === 'groupInherited') return paintToCanvasStyle(ctx, paint.fallback, bounds);
+  if (paint.type === 'solid') {
+    return renderableSolid(paint.color, multiplyOpacity(paint.opacity, opacityMultiplier));
+  }
+  if (paint.type === 'groupInherited') {
+    return paintToCanvasStyle(ctx, paint.fallback, bounds, opacityMultiplier);
+  }
   if (paint.type === 'pattern') {
-    return renderableSolid(paint.foreground ?? paint.background, paint.opacity);
+    return renderableSolid(
+      paint.foreground ?? paint.background,
+      multiplyOpacity(paint.opacity, opacityMultiplier),
+    );
   }
   if (paint.type === 'image') {
     return null;
@@ -57,7 +74,10 @@ function paintToCanvasStyle(
         : Math.max(box.width, box.height) / 2;
     const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, radius));
     for (const stop of paint.stops) {
-      gradient.addColorStop(clamp01(stop.offset), withOpacity(stop.color, stop.opacity));
+      gradient.addColorStop(
+        clamp01(stop.offset),
+        withOpacity(stop.color, multiplyOpacity(stop.opacity, opacityMultiplier)),
+      );
     }
     return gradient;
   }
@@ -71,7 +91,10 @@ function paintToCanvasStyle(
   const y1 = box.y + box.height / 2 + dy / 2;
   const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
   for (const stop of paint.stops) {
-    gradient.addColorStop(clamp01(stop.offset), withOpacity(stop.color, stop.opacity));
+    gradient.addColorStop(
+      clamp01(stop.offset),
+      withOpacity(stop.color, multiplyOpacity(stop.opacity, opacityMultiplier)),
+    );
   }
   return gradient;
 }
@@ -107,8 +130,10 @@ export function applyStyle(
   if (fill) {
     ctx.fillStyle = fill;
   }
+  const strokeOpacity = style.line?.opacity;
   const stroke =
-    paintToCanvasStyle(ctx, style.line?.paint ?? style.strokePaint, bounds) ?? style.stroke;
+    paintToCanvasStyle(ctx, style.line?.paint ?? style.strokePaint, bounds, strokeOpacity) ??
+    withOpacity(style.stroke ?? '', strokeOpacity);
   if (stroke) {
     ctx.strokeStyle = stroke;
   }

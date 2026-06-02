@@ -4,6 +4,7 @@ import {
   MARKER_SHAPE_FIELD,
   MARKER_SIZE_FIELD,
   MARKER_STROKE_FIELD,
+  MARKER_STROKE_WIDTH_FIELD,
   MARKER_VISIBLE_FIELD,
   POINT_FILL_FIELD,
   POINT_STROKE_FIELD,
@@ -20,6 +21,7 @@ export function buildMarkerLayers(encoding: EncodingSpec): UnitSpec[] {
       mark: {
         type: 'point',
         strokeWidth: 1,
+        strokeWidthField: MARKER_STROKE_WIDTH_FIELD,
         ...(encoding.x.field === SCATTER_X_FIELD ? { skipInvalidPositions: true } : {}),
       },
       encoding: {

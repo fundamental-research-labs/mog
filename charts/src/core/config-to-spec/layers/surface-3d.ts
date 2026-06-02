@@ -3,7 +3,11 @@ import type { ChartConfig, ChartData } from '../../../types';
 import { buildConfigSpec } from '../config-spec';
 import { chartDataToRows } from '../data-rows';
 import { buildUnitSpec, type ChartDimensions } from '../spec-assembly';
-import { buildSurface3DBands, buildSurfaceContourEncoding } from './surface-contour';
+import {
+  buildSurface3DBands,
+  buildSurfaceContourEncoding,
+  sourceSurfaceBandFormats,
+} from './surface-contour';
 
 export function shouldRenderSurface3D(config: ChartConfig): boolean {
   if (config.surfaceTopView === true) return false;
@@ -27,6 +31,7 @@ export function buildSurface3DSpec(input: {
     mark: {
       type: 'surface3d',
       contourBands: bands,
+      sourceSurfaceBandFormats: sourceSurfaceBandFormats(input.config),
       contourWireframe: input.config.wireframe === true || input.config.type === 'surfaceWireframe',
       surfaceView3d: normalizeSurfaceView3D(input.config.view3d),
     },

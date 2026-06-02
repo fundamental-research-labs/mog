@@ -46,6 +46,10 @@ export function applyBarGeometryCategoryAxisLayout(
     ...(geometry.categoryTickSkipSource && geometry.categoryTickMarkSkip !== undefined
       ? { tickMarkSkipSource: geometry.categoryTickSkipSource }
       : {}),
+    ...(geometry.categoryTickStatus ? { categoryTickStatus: geometry.categoryTickStatus } : {}),
+    ...(geometry.categoryTickStatusReason
+      ? { categoryTickStatusReason: geometry.categoryTickStatusReason }
+      : {}),
   };
   if (channel.secondaryAxis !== null && channel.secondaryAxis !== undefined) {
     channel.secondaryAxis = {
@@ -63,6 +67,10 @@ export function applyBarGeometryCategoryAxisLayout(
         : {}),
       ...(geometry.categoryTickSkipSource && geometry.categoryTickMarkSkip !== undefined
         ? { tickMarkSkipSource: geometry.categoryTickSkipSource }
+        : {}),
+      ...(geometry.categoryTickStatus ? { categoryTickStatus: geometry.categoryTickStatus } : {}),
+      ...(geometry.categoryTickStatusReason
+        ? { categoryTickStatusReason: geometry.categoryTickStatusReason }
         : {}),
     };
   }
@@ -96,6 +104,15 @@ export function applyBarGeometryValueAxisLayout(
         : {}),
       ...(geometry.percentAxisLabelPolicy
         ? { percentAxisLabelPolicy: geometry.percentAxisLabelPolicy }
+        : {}),
+      ...(geometry.valueAxisScaleSource
+        ? { valueAxisScaleSource: geometry.valueAxisScaleSource }
+        : {}),
+      ...(geometry.valueAxisScaleStatus
+        ? { valueAxisScaleStatus: geometry.valueAxisScaleStatus }
+        : {}),
+      ...(geometry.valueAxisScaleStatusReason
+        ? { valueAxisScaleStatusReason: geometry.valueAxisScaleStatusReason }
         : {}),
       ...(geometry.axisLayoutStatus ? { axisLayoutStatus: geometry.axisLayoutStatus } : {}),
       ...(geometry.axisLayoutStatusReason

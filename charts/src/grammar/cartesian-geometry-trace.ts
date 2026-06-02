@@ -1,9 +1,11 @@
 import type { AnyScale, ResolvedEncodings, ScaleMap } from './encoding-resolver';
+import { resolveAxisCrossingPosition, type AxisCrossingPeerScaleKind } from './axis-generator';
 import {
   centeredScalePosition,
   groupDataByEncoding,
   invokeScale,
   isBlankValueDatum,
+  shouldSortPathByX,
   splitDataByLineSegment,
 } from './marks/helpers';
 import type {
@@ -16,17 +18,25 @@ import type {
   MarkType,
 } from './spec';
 import type {
+  CartesianAreaSurfaceExtentTrace,
+  CartesianAreaSurfaceStyleTrace,
+  CartesianAxisCrossingTrace,
   CartesianGeometryLayerTrace,
   CartesianGeometryPointTrace,
   CartesianGeometryScaleTrace,
   CartesianGeometryTrace,
+  CartesianPathAxisLayoutTrace,
 } from './types';
+import { areaStyleForDatum } from './marks/area';
+import { resolveAreaSurfaceCaps } from './marks/area-surface-extent';
 
 const CATEGORY_FIELD = 'category';
 const SCATTER_X_FIELD = 'x';
 const VALUE_FIELD = 'value';
 const BUBBLE_SIZE_FIELD = 'size';
 const RAW_BUBBLE_SIZE_FIELD = '__mogRawBubbleSize';
+const SOURCE_BLANK_FIELD = '__mogSourceBlank';
+const MARKER_SIZE_FIELD = '__mogMarkerSize';
 const CLIP_TO_PLOT_AREA_FIELD = '__mogClipToPlotArea';
 const SERIES_INDEX_FIELD = '__mogSeriesIndex';
 const SOURCE_SERIES_INDEX_FIELD = '__mogSourceSeriesIndex';
@@ -74,30 +84,47 @@ export function collectCartesianGeometryLayerTrace(
   if (!isTraceableMarkType(input.markType)) return undefined;
   if (!input.scales.x || !input.scales.y) return undefined;
 
-  const areaGeometry =
-    input.markType === 'area'
-      ? collectAreaGeometry(input)
-      : {
-          points:
-            input.markType === 'line'
-              ? collectLinePoints(input)
-              : collectPointGeometry(input).points,
-        };
-  if (areaGeometry.points.length === 0) return undefined;
+  const areaGeometry = input.markType === 'area' ? collectAreaGeometry(input) : undefined;
+  const points =
+    areaGeometry?.points ??
+    (input.markType === 'line' ? collectLinePoints(input) : collectPointGeometry(input).points);
+  if (points.length === 0) return undefined;
 
   const sizeScale = sizeScaleTrace(input);
+  const resolvedSizeAuthority = sizeAuthority(input);
   return {
     layerIndex: input.layerIndex,
     markType: input.markType,
+    layerRole: layerRole(input, resolvedSizeAuthority),
+    ...(resolvedSizeAuthority ? { sizeAuthority: resolvedSizeAuthority } : {}),
+    ...(isPathMarkType(input.markType)
+      ? { pathOrder: input.markSpec.pathOrder ?? 'xAscending' }
+      : {}),
     xField: input.encoding?.x?.field,
     yField: input.encoding?.y?.field,
     sizeField: input.encoding?.size?.field,
-    xScale: scaleTrace(input.scales.x, input.encoding?.x, 'bottom'),
-    yScale: scaleTrace(input.scales.y, input.encoding?.y, 'left'),
+    xScale: scaleTrace(
+      input.scales.x,
+      input.encoding?.x,
+      'bottom',
+      axisCrossingTrace(input, 'x'),
+    ),
+    yScale: scaleTrace(
+      input.scales.y,
+      input.encoding?.y,
+      'left',
+      axisCrossingTrace(input, 'y'),
+    ),
     ...(sizeScale ? { sizeScale } : {}),
-    points: areaGeometry.points,
-    ...(input.markType === 'area'
+    points,
+    ...(areaGeometry !== undefined
       ? {
+          ...(areaGeometry.surfaceStyles.length > 0
+            ? { areaSurfaceStyles: areaGeometry.surfaceStyles }
+            : {}),
+          ...(areaGeometry.surfaceExtents.length > 0
+            ? { areaSurfaceExtents: areaGeometry.surfaceExtents }
+            : {}),
           area: {
             baselinePixel: areaGeometry.baselinePixel,
             baselinePlotY:
@@ -122,6 +149,7 @@ function collectLinePoints(input: CartesianGeometryLayerTraceInput): CartesianGe
   for (const [, groupData] of groups) {
     for (const segmentData of splitDataByLineSegment(groupData)) {
       const segmentPoints: CartesianGeometryPointTrace[] = [];
+      const sortByX = shouldSortPathByX(input.markSpec);
       for (const datum of segmentData) {
         if (isBlankValueDatum(datum)) continue;
         const x = centeredScalePosition(xScale, input.encodings.x?.accessor(datum));
@@ -129,8 +157,15 @@ function collectLinePoints(input: CartesianGeometryLayerTraceInput): CartesianGe
         if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
         segmentPoints.push(pointTraceFromDatum(datum, x, y, input, { segmentIndex }));
       }
-      segmentPoints.sort((a, b) => a.xPixel - b.xPixel);
-      points.push(...segmentPoints);
+      if (sortByX) {
+        segmentPoints.sort((a, b) => a.xPixel - b.xPixel);
+      }
+      points.push(
+        ...segmentPoints.map((point, pathIndex) => ({
+          ...point,
+          pathIndex,
+        })),
+      );
       segmentIndex += 1;
     }
   }
@@ -185,11 +220,13 @@ function collectPointGeometry(input: CartesianGeometryLayerTraceInput): {
 
 function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
   points: CartesianGeometryPointTrace[];
+  surfaceStyles: CartesianAreaSurfaceStyleTrace[];
+  surfaceExtents: CartesianAreaSurfaceExtentTrace[];
   baselinePixel?: number;
 } {
   const xScale = input.scales.x;
   const yScale = input.scales.y;
-  if (!xScale || !yScale) return { points: [] };
+  if (!xScale || !yScale) return { points: [], surfaceStyles: [], surfaceExtents: [] };
 
   const groups = groupDataByEncoding(input.data, input.encodings.detail ?? input.encodings.color);
   const isStacked = input.config?.stack !== undefined && input.config.stack !== false;
@@ -229,6 +266,9 @@ function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
   }
 
   const points: CartesianGeometryPointTrace[] = [];
+  const surfaceStyles: CartesianAreaSurfaceStyleTrace[] = [];
+  const surfaceExtents: CartesianAreaSurfaceExtentTrace[] = [];
+  const surfaceStyleKeys = new Set<string>();
   let segmentIndex = 0;
   for (const [, groupData] of groups) {
     for (const segmentData of splitDataByLineSegment(groupData)) {
@@ -298,8 +338,34 @@ function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
         }
       }
 
-      topPoints.sort((a, b) => a.x - b.x);
-      for (const topPoint of topPoints) {
+      if (shouldSortPathByX(input.markSpec)) {
+        topPoints.sort((a, b) => a.x - b.x);
+      }
+      if (topPoints.length === 1 && input.markSpec.areaSurfaceExtentPolicy === undefined) {
+        const point = topPoints[0];
+        topPoints.push({ ...point, x: point.x + 1 });
+      }
+      const styleDatum = topPoints[0]?.datum;
+      if (styleDatum) {
+        const styleTrace = areaSurfaceStyleTrace(input, styleDatum, surfaceStyles.length);
+        const styleKey = [
+          styleTrace.seriesIndex ?? '',
+          styleTrace.sourceSeriesKey ?? '',
+          styleTrace.fill ?? '',
+          styleTrace.fillOpacity ?? '',
+          styleTrace.stroke ?? '',
+          styleTrace.strokeWidth ?? '',
+          styleTrace.strokeOpacity ?? '',
+        ].join(':');
+        if (!surfaceStyleKeys.has(styleKey)) {
+          surfaceStyleKeys.add(styleKey);
+          surfaceStyles.push(styleTrace);
+        }
+      }
+      const extentTrace = areaSurfaceExtentTrace(input, topPoints, segmentIndex);
+      if (extentTrace) surfaceExtents.push(extentTrace);
+      for (let pathIndex = 0; pathIndex < topPoints.length; pathIndex += 1) {
+        const topPoint = topPoints[pathIndex];
         const bottomPixel = isStacked
           ? stackedBottomPixel(
               topPoint,
@@ -311,6 +377,7 @@ function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
         points.push(
           pointTraceFromDatum(topPoint.datum, topPoint.x, topPoint.y, input, {
             segmentIndex,
+            pathIndex,
             stackSign: topPoint.stackSign,
             stackValue: topPoint.stackValue,
             percentValue: topPoint.percentValue,
@@ -324,7 +391,7 @@ function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
     }
   }
 
-  return { points, baselinePixel: roundCoordinate(areaBaseline) };
+  return { points, surfaceStyles, surfaceExtents, baselinePixel: roundCoordinate(areaBaseline) };
 }
 
 interface AreaTopPoint {
@@ -482,8 +549,116 @@ function pointIdentity(datum: DataRow): Partial<CartesianGeometryPointTrace> {
     yValue: numericValue(datum[VALUE_FIELD]),
     normalizedSize: numericValue(datum[BUBBLE_SIZE_FIELD]),
     rawBubbleSize: numericValue(datum[RAW_BUBBLE_SIZE_FIELD]),
+    sourceBlank: booleanValue(datum[SOURCE_BLANK_FIELD]),
     ...(clipToPlotArea !== undefined ? { clipToPlotArea } : {}),
   };
+}
+
+function areaSurfaceStyleTrace(
+  input: CartesianGeometryLayerTraceInput,
+  datum: DataRow,
+  styleIndex: number,
+): CartesianAreaSurfaceStyleTrace {
+  const style = areaStyleForDatum(
+    input.markSpec,
+    datum,
+    input.scales,
+    input.encodings,
+    styleIndex,
+  );
+  const fillPaint = style.fillPaint;
+  const strokePaint = style.line?.paint ?? style.strokePaint;
+  const fillOpacity = paintOpacity(fillPaint);
+  const strokeWidth = style.line?.width ?? style.strokeWidth;
+  const strokeDash = style.line?.dash ?? style.strokeDash;
+  const strokeOpacity = effectiveOpacity(paintOpacity(strokePaint), style.line?.opacity);
+  const fillPresent =
+    fillPaint?.type === 'none' || style.fill !== undefined || fillPaint !== undefined;
+  const strokePresent =
+    strokePaint?.type === 'none' ||
+    style.stroke !== undefined ||
+    strokePaint !== undefined ||
+    strokeWidth !== undefined;
+  const status: CartesianAreaSurfaceStyleTrace['styleStatus'] =
+    fillPresent || strokePresent ? 'exact' : 'missing';
+  const identity = pointIdentity(datum);
+  return {
+    ...(identity.seriesIndex !== undefined ? { seriesIndex: identity.seriesIndex } : {}),
+    ...(identity.sourceSeriesIndex !== undefined
+      ? { sourceSeriesIndex: identity.sourceSeriesIndex }
+      : {}),
+    ...(identity.sourceSeriesKey !== undefined ? { sourceSeriesKey: identity.sourceSeriesKey } : {}),
+    ...(typeof style.fill === 'string' ? { fill: style.fill } : {}),
+    ...(fillPaint ? { fillPaintType: fillPaint.type } : {}),
+    ...(fillOpacity !== undefined ? { fillOpacity } : {}),
+    ...(typeof style.stroke === 'string' ? { stroke: style.stroke } : {}),
+    ...(strokePaint ? { strokePaintType: strokePaint.type } : {}),
+    ...(strokeWidth !== undefined ? { strokeWidth } : {}),
+    ...(strokeDash ? { strokeDash } : {}),
+    ...(strokeOpacity !== undefined ? { strokeOpacity } : {}),
+    styleStatus: status,
+    ...(status === 'missing'
+      ? { styleStatusReason: 'area surface has no renderable fill or stroke style' }
+      : {}),
+  };
+}
+
+function areaSurfaceExtentTrace(
+  input: CartesianGeometryLayerTraceInput,
+  topPoints: AreaTopPoint[],
+  segmentIndex: number,
+): CartesianAreaSurfaceExtentTrace | undefined {
+  if (topPoints.length === 0) return undefined;
+  const first = topPoints[0];
+  const last = topPoints[topPoints.length - 1];
+  const caps = resolveAreaSurfaceCaps({
+    markSpec: input.markSpec,
+    layout: input.layout,
+    firstPointX: first.x,
+    lastPointX: last.x,
+  });
+  const identity = pointIdentity(first.datum);
+  return {
+    ...(identity.seriesIndex !== undefined ? { seriesIndex: identity.seriesIndex } : {}),
+    ...(identity.sourceSeriesIndex !== undefined
+      ? { sourceSeriesIndex: identity.sourceSeriesIndex }
+      : {}),
+    ...(identity.sourceSeriesKey !== undefined ? { sourceSeriesKey: identity.sourceSeriesKey } : {}),
+    segmentIndex,
+    pointCount: topPoints.length,
+    policy: caps.policy,
+    firstPointX: roundCoordinate(caps.firstPointX),
+    lastPointX: roundCoordinate(caps.lastPointX),
+    leftCapX: roundCoordinate(caps.leftCapX),
+    rightCapX: roundCoordinate(caps.rightCapX),
+    firstPointPlotX: normalizePlotX(caps.firstPointX, input.layout),
+    lastPointPlotX: normalizePlotX(caps.lastPointX, input.layout),
+    leftCapPlotX: normalizePlotX(caps.leftCapX, input.layout),
+    rightCapPlotX: normalizePlotX(caps.rightCapX, input.layout),
+    clippingPolicy: caps.clippingPolicy,
+    extentStatus: caps.status,
+    ...(caps.statusReason ? { extentStatusReason: caps.statusReason } : {}),
+  };
+}
+
+function paintOpacity(
+  paint: { type: string; opacity?: number; stops?: Array<{ opacity?: number }> } | undefined,
+): number | undefined {
+  if (!paint || paint.type === 'none') return undefined;
+  if (typeof paint.opacity === 'number' && Number.isFinite(paint.opacity)) return paint.opacity;
+  if (!paint.stops || paint.stops.length === 0) return undefined;
+  const first = paint.stops[0]?.opacity;
+  if (typeof first !== 'number' || !Number.isFinite(first)) return undefined;
+  return paint.stops.every((stop) => stop.opacity === first) ? first : undefined;
+}
+
+function effectiveOpacity(
+  paintLevelOpacity: number | undefined,
+  lineOpacity: number | undefined,
+): number | undefined {
+  if (paintLevelOpacity === undefined) return lineOpacity;
+  if (lineOpacity === undefined) return paintLevelOpacity;
+  return roundCoordinate(Math.max(0, Math.min(1, paintLevelOpacity * lineOpacity)));
 }
 
 function definedExtraGeometry(
@@ -492,6 +667,7 @@ function definedExtraGeometry(
 ): Partial<CartesianGeometryPointTrace> {
   return {
     ...(extra.segmentIndex !== undefined ? { segmentIndex: extra.segmentIndex } : {}),
+    ...(extra.pathIndex !== undefined ? { pathIndex: extra.pathIndex } : {}),
     ...(extra.stackSign ? { stackSign: extra.stackSign } : {}),
     ...(extra.stackValue !== undefined ? { stackValue: roundCoordinate(extra.stackValue) } : {}),
     ...(extra.percentValue !== undefined
@@ -521,10 +697,42 @@ function definedExtraGeometry(
   };
 }
 
+function isPathMarkType(markType: MarkType): boolean {
+  return markType === 'line' || markType === 'area';
+}
+
+function layerRole(
+  input: CartesianGeometryLayerTraceInput,
+  resolvedSizeAuthority = sizeAuthority(input),
+): CartesianGeometryLayerTrace['layerRole'] {
+  if (input.markType === 'line') return 'linePath';
+  if (input.markType === 'area') return 'areaFill';
+  if (isPointMarkType(input.markType)) {
+    return resolvedSizeAuthority === 'bubbleSize' ? 'bubble' : 'marker';
+  }
+  return undefined;
+}
+
+function sizeAuthority(
+  input: CartesianGeometryLayerTraceInput,
+): CartesianGeometryLayerTrace['sizeAuthority'] {
+  if (!isPointMarkType(input.markType)) return undefined;
+  const sizeField = input.encoding?.size?.field;
+  if (sizeField === BUBBLE_SIZE_FIELD) return 'bubbleSize';
+  if (sizeField === MARKER_SIZE_FIELD) return 'markerStyle';
+  if (positiveNumber(input.markSpec.size) !== undefined) return 'fixedMarkSize';
+  return undefined;
+}
+
+function isPointMarkType(markType: MarkType): boolean {
+  return markType === 'point' || markType === 'circle' || markType === 'square';
+}
+
 function scaleTrace(
   scale: AnyScale | undefined,
   channel: EncodingSpec[keyof EncodingSpec] | undefined,
   defaultOrient: 'bottom' | 'left',
+  crossing?: CartesianAxisCrossingTrace,
 ): CartesianGeometryScaleTrace | undefined {
   if (!scale || !channel || Array.isArray(channel)) return undefined;
   const axis = channel.axis && channel.axis !== null ? (channel.axis as AxisSpec) : undefined;
@@ -536,8 +744,84 @@ function scaleTrace(
     range: numericPair(scale.range?.()),
     tickValues: tickValues(scale, axis),
     tickStep: positiveNumber(axis?.tickStep),
+    crossing,
+    pathAxisLayout: pathAxisLayoutTrace(axis),
   };
   return removeUndefinedScaleFields(trace);
+}
+
+function axisCrossingTrace(
+  input: CartesianGeometryLayerTraceInput,
+  axisRole: 'x' | 'y',
+): CartesianAxisCrossingTrace | undefined {
+  const channel = axisRole === 'x' ? input.encoding?.x : input.encoding?.y;
+  if (!channel || Array.isArray(channel) || channel.axis === null) return undefined;
+  const peerChannel = axisRole === 'x' ? input.encoding?.y : input.encoding?.x;
+  const peerScale = axisRole === 'x' ? input.scales.y : input.scales.x;
+  const axisSpec = (channel.axis && channel.axis !== null ? channel.axis : {}) as AxisSpec;
+  const resolved = resolveAxisCrossingPosition({
+    axisRole,
+    axisSpec,
+    peerScale,
+    layout: input.layout,
+    peerScaleKind: crossingPeerScaleKind(peerChannel, peerScale),
+  });
+  const renderedPixel = roundCoordinate(resolved.pixel);
+  return {
+    axisRole,
+    axisOrient: resolved.axisOrient,
+    peerScaleKind: resolved.peerScaleKind,
+    effectiveMode: resolved.effectiveMode,
+    renderedPixel,
+    renderedPlotPosition:
+      axisRole === 'x'
+        ? normalizePlotY(renderedPixel, input.layout)
+        : normalizePlotX(renderedPixel, input.layout),
+    ...(resolved.sourceCrossing ? { sourceCrossing: resolved.sourceCrossing } : {}),
+    ...(resolved.sourceCrossingValue !== undefined
+      ? { sourceCrossingValue: resolved.sourceCrossingValue }
+      : {}),
+    ...(resolved.sourceCategoryCrossing
+      ? { sourceCategoryCrossing: resolved.sourceCategoryCrossing }
+      : {}),
+    ...(resolved.categoryCrossingApplication
+      ? { categoryCrossingApplication: resolved.categoryCrossingApplication }
+      : {}),
+  };
+}
+
+function crossingPeerScaleKind(
+  channel: EncodingSpec[keyof EncodingSpec] | undefined,
+  scale: AnyScale | undefined,
+): AxisCrossingPeerScaleKind {
+  if (channel && !Array.isArray(channel) && channel.type === 'temporal') return 'dateSerial';
+  return typeof scale?.bandwidth === 'function' ? 'categoryPoint' : 'quantitative';
+}
+
+function pathAxisLayoutTrace(axis: AxisSpec | undefined): CartesianPathAxisLayoutTrace | undefined {
+  if (!axis) return undefined;
+  const trace: CartesianPathAxisLayoutTrace = {
+    categoryTickLabelSkip: positiveInteger(axis.tickLabelSkip),
+    categoryTickMarkSkip: positiveInteger(axis.tickMarkSkip),
+    categoryTickSkipSource: axis.tickLabelSkipSource ?? axis.tickMarkSkipSource,
+    axisLength: positiveNumber(axis.pathAxisLength),
+    categoryPitch: positiveNumber(axis.pathCategoryPitch),
+    labelBudget: positiveNumber(axis.pathLabelBudget),
+    projectedLabelWidth: positiveNumber(axis.pathProjectedLabelWidth),
+    visibleLabelCount: positiveInteger(axis.pathVisibleLabelCount),
+    axisLayoutStatus: axis.axisLayoutStatus,
+    axisLayoutStatusReason: axis.axisLayoutStatusReason,
+    categoryAxisLayoutStatus: axis.pathCategoryAxisLayoutStatus,
+    categoryAxisLayoutStatusReason: axis.pathCategoryAxisLayoutStatusReason,
+    valueAxisLayoutStatus: axis.pathValueAxisLayoutStatus,
+    valueAxisLayoutStatusReason: axis.pathValueAxisLayoutStatusReason,
+    reservationStatus: axis.pathAxisReservationStatus,
+    reservationStatusReason: axis.pathAxisReservationStatusReason,
+  };
+  const clean = Object.fromEntries(
+    Object.entries(trace).filter(([, value]) => value !== undefined),
+  ) as CartesianPathAxisLayoutTrace;
+  return Object.keys(clean).length > 0 ? clean : undefined;
 }
 
 function sizeScaleTrace(
@@ -674,6 +958,10 @@ function numericValue(value: unknown): number | undefined {
 
 function positiveNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function integerValue(value: unknown): number | undefined {

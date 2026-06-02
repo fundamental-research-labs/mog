@@ -13,6 +13,7 @@ import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spe
 import { centeredScalePosition, definedStyle } from './helpers';
 import { directPosition } from './direct-position';
 import { barSlotCenterOffset, createBarSlotContext } from './bar-slot';
+import { pieDoughnutArcFrame } from '../../core/config-to-spec/pie-like';
 
 /**
  * Generate text marks.
@@ -90,6 +91,8 @@ export function generateTextMarks(
     const color = stringField(datum, markSpec.colorField) ?? encodedColor;
     const fontSize =
       numberField(datum, markSpec.fontSizeField) ?? markSpec.fontSize ?? markSpec.size ?? 12;
+    const maxWidth = textMaxWidth(datum, markSpec, layout, config?.layoutHints?.pieDoughnut);
+    const lineHeight = textLineHeight(datum, markSpec, fontSize);
     const textAlign = stringField(datum, markSpec.alignField) ?? markSpec.align ?? 'center';
     const textBaseline =
       stringField(datum, markSpec.baselineField) ?? markSpec.textBaseline ?? 'middle';
@@ -104,6 +107,8 @@ export function generateTextMarks(
       textAlign: normalizeTextAlign(textAlign),
       textBaseline: normalizeTextBaseline(textBaseline),
       rotation: degreesToRadians(numberField(datum, markSpec.angleField) ?? markSpec.angle),
+      ...(maxWidth !== undefined ? { maxWidth } : {}),
+      ...(lineHeight !== undefined ? { lineHeight } : {}),
       datum,
       style: {
         fill: color,
@@ -129,6 +134,32 @@ function numberField(datum: DataRow, field: string | undefined): number | undefi
   if (!field) return undefined;
   const value = datum[field];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function textMaxWidth(
+  datum: DataRow,
+  markSpec: MarkSpec,
+  layout: Layout,
+  pieDoughnutHints: NonNullable<ConfigSpec['layoutHints']>['pieDoughnut'] | undefined,
+): number | undefined {
+  const raw = numberField(datum, markSpec.maxWidthField) ?? markSpec.maxWidth;
+  if (raw === undefined || raw <= 0) return undefined;
+  if (markSpec.coordinateSystem === 'plotRadiusFraction') {
+    const frame = pieDoughnutArcFrame(layout.plotArea, pieDoughnutHints);
+    return Math.max(1, raw * frame.radius * 2);
+  }
+  return raw;
+}
+
+function textLineHeight(
+  datum: DataRow,
+  markSpec: MarkSpec,
+  fontSize: number,
+): number | undefined {
+  const raw = numberField(datum, markSpec.lineHeightField) ?? markSpec.lineHeight;
+  if (raw === undefined || raw <= 0) return undefined;
+  if (raw <= 3) return raw * fontSize;
+  return raw;
 }
 
 function stringField(datum: DataRow, field: string | undefined): string | undefined {

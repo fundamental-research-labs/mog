@@ -4,6 +4,7 @@ import {
   categoryAxisLabelsInsidePlot,
   estimateBarColumnAxisReservations,
   estimateNominalYAxisLabelWidth,
+  estimatePathChartAxisReservations,
   estimateSecondaryYAxisLabelWidth,
   estimateXAxisBottomMargin,
   estimateYAxisLabelWidth,
@@ -23,7 +24,9 @@ export function buildLayoutHints(
     estimateNominalYAxisLabelWidth(encoding, data) ?? estimateYAxisLabelWidth(encoding);
   const rightYAxisLabelWidth = estimateSecondaryYAxisLabelWidth(config, data);
   const bottomMargin = estimateXAxisBottomMargin(encoding, data);
-  const axisReservations = estimateBarColumnAxisReservations(config, encoding, data);
+  const axisReservations =
+    estimateBarColumnAxisReservations(config, encoding, data) ??
+    estimatePathChartAxisReservations(config, encoding, data);
   const xAxisLabelsInsidePlot = categoryAxisLabelsInsidePlot('x', encoding, data);
   const yAxisLabelsInsidePlot = categoryAxisLabelsInsidePlot('y', encoding, data);
   const manualPlotArea = manualLayoutFromValue(config.plotLayout ?? config.plotArea?.layout);

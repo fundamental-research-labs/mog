@@ -2,7 +2,7 @@ import type { RectMark, TextMark } from '../../primitives/types';
 import type { ChartConfig, ChartData } from '../../types';
 import { compile } from '../../grammar/compiler';
 import { configToSpec } from '../config-to-spec';
-import { SERIES_FILL_FIELD } from '../config-to-spec/fields';
+import { PIE_COLOR_KEY_FIELD, SERIES_FILL_FIELD } from '../config-to-spec/fields';
 
 function importedBarConfig(): ChartConfig {
   return {
@@ -229,11 +229,11 @@ describe('configToSpec bar series colors', () => {
 
     const spec = configToSpec(config, data);
     expect(spec.encoding?.color).toMatchObject({
-      field: 'category',
+      field: PIE_COLOR_KEY_FIELD,
       type: 'nominal',
       legend: {
         orient: 'right',
-        values: ['Category A', 'Category B', 'Category C'],
+        values: ['point-0', 'point-1', 'point-2'],
       },
     });
 

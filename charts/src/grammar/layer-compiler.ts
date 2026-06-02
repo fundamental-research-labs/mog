@@ -9,15 +9,24 @@
 
 import { extendDataForLayerFields, sanitizeDataForScales } from '../algebra/data-sanitize';
 import type { AnyMark, RectMark } from '../primitives/types';
+import {
+  buildSurfaceApproximationTrace,
+  buildThreeDApproximationTrace,
+  collectSurfaceApproximationLayerTrace,
+  collectThreeDApproximationLayerTrace,
+} from './approximation-traces';
 import { generateAxes, generateYAxis } from './axis-generator';
 import {
   buildCartesianGeometryTrace,
   collectCartesianGeometryLayerTrace,
 } from './cartesian-geometry-trace';
+import { buildPieDoughnutLabelLayoutTrace } from './data-label-trace';
+import { buildBarGeometryTrace, collectBarGeometryLayerTrace } from './bar-geometry-trace';
 import { createScales, resolveEncodings, type ScaleMap } from './encoding-resolver';
-import { calculateLayout } from './layout';
-import { generateLegends } from './legend-generator';
+import { calculatePathReconciledLayout } from './path-cartesian-reconcile';
+import { buildLegendTrace, generateLegends } from './legend-generator';
 import { generateMarks } from './marks';
+import { buildStockGlyphTrace, collectStockGlyphLayerTrace } from './stock-glyph-geometry';
 import type {
   AxisOrient,
   ChartFrameSpec,
@@ -30,7 +39,15 @@ import type {
 } from './spec';
 import { generateTitle } from './title-generator';
 import { applyTransforms } from './transforms';
-import type { CartesianGeometryLayerTrace, CompileOptions, CompileResult } from './types';
+import type {
+  BarGeometryLayerTrace,
+  CartesianGeometryLayerTrace,
+  CompileOptions,
+  CompileResult,
+  SurfaceApproximationLayerTrace,
+  StockGlyphLayerTrace,
+  ThreeDApproximationLayerTrace,
+} from './types';
 
 /**
  * Get mark type from spec.
@@ -99,14 +116,20 @@ export function compileLayered(
   options: CompileOptions,
 ): CompileResult {
   // Calculate shared layout
-  const layout = calculateLayout(spec, {
+  const reconciled = calculatePathReconciledLayout(spec, data, {
     width: options.width ?? (typeof spec.width === 'number' ? spec.width : 600),
     height: options.height ?? (typeof spec.height === 'number' ? spec.height : 400),
   });
+  const compiledSpec = reconciled.spec;
+  const layout = reconciled.layout;
+  const hasIndependentY = compiledSpec.resolve?.scale?.y === 'independent';
 
   // Merge top-level shared encodings and layer encodings to create shared scales.
-  const mergedEncoding = mergeEncodings([spec.encoding, ...spec.layer.map((l) => l.encoding)]);
-  const mergedData = spec.layer.flatMap((layer) => {
+  const mergedEncoding = mergeEncodings([
+    compiledSpec.encoding,
+    ...compiledSpec.layer.map((l) => l.encoding),
+  ], { mergeY: !hasIndependentY });
+  const mergedData = compiledSpec.layer.flatMap((layer) => {
     if (layer.data && 'values' in layer.data) {
       return layer.data.values;
     }
@@ -119,28 +142,32 @@ export function compileLayered(
   // ALL fields from ALL layers for each channel, otherwise the second layer's
   // values will be mapped through a scale whose domain doesn't include them,
   // producing wildly out-of-bounds coordinates.
-  const scaleData = extendDataForLayerFields(mergedData, mergedEncoding, spec.layer);
+  const scaleData = extendDataForLayerFields(mergedData, mergedEncoding, compiledSpec.layer);
 
   // Sanitize data for scale creation: replace non-finite numeric values with undefined
   // so they don't pollute the domain (e.g., Infinity in data causes scale to return NaN
   // for all inputs, making every layer produce zero marks).
   const sanitizedMergedData = sanitizeDataForScales(scaleData, mergedEncoding);
   // Use first layer's mark type for shared scale defaults (e.g., zero inclusion)
-  const firstLayerMark = spec.layer && spec.layer.length > 0 ? spec.layer[0].mark : undefined;
+  const firstLayerMark =
+    compiledSpec.layer && compiledSpec.layer.length > 0 ? compiledSpec.layer[0].mark : undefined;
   const firstLayerMarkType = getMarkType(firstLayerMark);
   const scales = createScales(mergedEncoding, sanitizedMergedData, layout, firstLayerMarkType);
 
   // Compile each layer
   const allMarks: AnyMark[] = [];
   const cartesianLayerTraces: Array<CartesianGeometryLayerTrace | undefined> = [];
+  const barGeometryLayerTraces: Array<BarGeometryLayerTrace | undefined> = [];
+  const stockGlyphLayerTraces: Array<StockGlyphLayerTrace | undefined> = [];
+  const threeDApproximationLayerTraces: Array<ThreeDApproximationLayerTrace | undefined> = [];
+  const surfaceApproximationLayerTraces: Array<SurfaceApproximationLayerTrace | undefined> = [];
   const independentYAxes: AnyMark[] = [];
   const emittedIndependentYAxes = new Set<AxisOrient>();
-  const hasIndependentY = spec.resolve?.scale?.y === 'independent';
   let sharedXAxisValueScale: ScaleMap['y'];
   let sharedXAxisValueScaleOrient: AxisOrient | undefined;
 
-  for (let layerIndex = 0; layerIndex < spec.layer.length; layerIndex += 1) {
-    const layerItem = spec.layer[layerIndex];
+  for (let layerIndex = 0; layerIndex < compiledSpec.layer.length; layerIndex += 1) {
+    const layerItem = compiledSpec.layer[layerIndex];
     const layerUnit = layerItem;
     const layerData = layerUnit.data && 'values' in layerUnit.data ? layerUnit.data.values : data;
 
@@ -175,7 +202,7 @@ export function compileLayered(
         }
       }
 
-      if (spec.resolve?.axis?.y === 'independent' && layerUnit.encoding.y.axis !== null) {
+      if (compiledSpec.resolve?.axis?.y === 'independent' && layerUnit.encoding.y.axis !== null) {
         const orient = yAxisOrient(layerUnit.encoding);
         if (!emittedIndependentYAxes.has(orient) && layerScales.y) {
           independentYAxes.push(
@@ -183,10 +210,10 @@ export function compileLayered(
               layerUnit.encoding.y,
               layerScales.y,
               layout,
-              spec.config?.axis,
+              compiledSpec.config?.axis,
               scales.x,
               undefined,
-              spec.config?.layoutHints,
+              compiledSpec.config?.layoutHints,
             ),
           );
           emittedIndependentYAxes.add(orient);
@@ -195,7 +222,7 @@ export function compileLayered(
     }
 
     const layerEncodings = resolveEncodings(layerUnit.encoding, transformedLayerData, layerScales);
-    const layerMarkConfig = markConfigForLayer(spec.config, layerUnit.config);
+    const layerMarkConfig = markConfigForLayer(compiledSpec.config, layerUnit.config);
 
     const layerMarks = generateMarks(
       markType,
@@ -209,6 +236,19 @@ export function compileLayered(
     );
 
     allMarks.push(...layerMarks);
+    barGeometryLayerTraces.push(
+      collectBarGeometryLayerTrace({
+        layerIndex,
+        markType,
+        data: transformedLayerData,
+        marks: layerMarks,
+        scales: layerScales,
+        encodings: layerEncodings,
+        layout,
+        encoding: layerUnit.encoding,
+        config: layerMarkConfig,
+      }),
+    );
     cartesianLayerTraces.push(
       collectCartesianGeometryLayerTrace({
         layerIndex,
@@ -220,6 +260,37 @@ export function compileLayered(
         layout,
         encoding: layerUnit.encoding,
         config: layerMarkConfig,
+      }),
+    );
+    stockGlyphLayerTraces.push(
+      collectStockGlyphLayerTrace({
+        layerIndex,
+        markSpec,
+        data: transformedLayerData,
+        scales: layerScales,
+        encodings: layerEncodings,
+        layout,
+        encoding: layerUnit.encoding,
+      }),
+    );
+    threeDApproximationLayerTraces.push(
+      collectThreeDApproximationLayerTrace({
+        layerIndex,
+        markType,
+        markSpec,
+        data: transformedLayerData,
+        marks: layerMarks,
+        layout,
+      }),
+    );
+    surfaceApproximationLayerTraces.push(
+      collectSurfaceApproximationLayerTrace({
+        layerIndex,
+        markType,
+        markSpec,
+        data: transformedLayerData,
+        marks: layerMarks,
+        layout,
       }),
     );
   }
@@ -234,17 +305,18 @@ export function compileLayered(
           hasIndependentY ? withoutYEncoding(mergedEncoding) : mergedEncoding,
           sharedAxisScales,
           layout,
-          spec.config,
+          compiledSpec.config,
         ),
         ...independentYAxes,
       ];
   const legends = options.skipLegend ? [] : generateLegends(mergedEncoding, scales, layout);
-  const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
+  const legendTrace = buildLegendTrace(mergedEncoding, layout, legends);
+  const title = options.skipTitle ? undefined : generateTitle(compiledSpec.title, layout);
   const background = [
     ...generateFrameMarks(
-      spec.config?.chartFrame ??
-        (spec.config?.background
-          ? { fill: { type: 'solid', color: spec.config.background } }
+      compiledSpec.config?.chartFrame ??
+        (compiledSpec.config?.background
+          ? { fill: { type: 'solid', color: compiledSpec.config.background } }
           : undefined),
       0,
       0,
@@ -252,7 +324,7 @@ export function compileLayered(
       layout.height,
     ),
     ...generateFrameMarks(
-      spec.config?.plotFrame,
+      compiledSpec.config?.plotFrame,
       layout.plotArea.x,
       layout.plotArea.y,
       layout.plotArea.width,
@@ -263,6 +335,18 @@ export function compileLayered(
   // Dev-mode assertion: all data marks must carry their source datum
   const clippedMarks = clipMarksToPlotArea(allMarks, layout.plotArea);
   const cartesianGeometry = buildCartesianGeometryTrace(layout, cartesianLayerTraces);
+  const barGeometryTrace = buildBarGeometryTrace(layout, barGeometryLayerTraces);
+  const stockGlyphTrace = buildStockGlyphTrace(layout, stockGlyphLayerTraces);
+  const threeDApproximationTrace = buildThreeDApproximationTrace(threeDApproximationLayerTraces);
+  const surfaceApproximationTrace = buildSurfaceApproximationTrace(surfaceApproximationLayerTraces);
+  const pieDoughnutLabelLayoutTrace = buildPieDoughnutLabelLayoutTrace({
+    marks: clippedMarks,
+    layout,
+    config: compiledSpec.config,
+    ...(options.textMeasurementContext
+      ? { textMeasurementContext: options.textMeasurementContext }
+      : {}),
+  });
 
   assertDataMarksHaveDatum(clippedMarks);
 
@@ -281,6 +365,12 @@ export function compileLayered(
     layout,
     scales,
     cartesianGeometry,
+    barGeometryTrace,
+    stockGlyphTrace,
+    legendTrace,
+    pieDoughnutLabelLayoutTrace,
+    threeDApproximationTrace,
+    surfaceApproximationTrace,
   };
 }
 
@@ -352,7 +442,10 @@ function clipMarksToPlotArea(
 /**
  * Merge encodings from multiple layer specs.
  */
-export function mergeEncodings(encodings: (EncodingSpec | undefined)[]): EncodingSpec {
+export function mergeEncodings(
+  encodings: (EncodingSpec | undefined)[],
+  options: { mergeY?: boolean } = {},
+): EncodingSpec {
   const merged: Record<string, unknown> = {};
 
   for (const encoding of encodings) {
@@ -361,9 +454,56 @@ export function mergeEncodings(encodings: (EncodingSpec | undefined)[]): Encodin
     for (const [key, value] of Object.entries(encoding)) {
       if (value && !(key in merged)) {
         merged[key] = value;
+      } else if (value && key in merged && isSharedNumericScaleChannel(key, options)) {
+        merged[key] = mergeChannelForSharedScale(merged[key], value);
       }
     }
   }
 
   return merged as EncodingSpec;
+}
+
+function isSharedNumericScaleChannel(key: string, options: { mergeY?: boolean }): boolean {
+  return key === 'x' || (key === 'y' && options.mergeY !== false);
+}
+
+function mergeChannelForSharedScale(existing: unknown, next: unknown): unknown {
+  if (!isChannelSpec(existing) || !isChannelSpec(next)) return existing;
+  const domain = mergedNumericDomain(existing.scale?.domain, next.scale?.domain);
+  if (!domain) return existing;
+  return {
+    ...existing,
+    scale: {
+      ...(existing.scale ?? {}),
+      domain,
+      nice: false,
+    },
+  };
+}
+
+function mergedNumericDomain(
+  existingDomain: unknown[] | 'unaggregated' | undefined,
+  nextDomain: unknown[] | 'unaggregated' | undefined,
+): [number, number] | undefined {
+  const existing = numericDomain(existingDomain);
+  const next = numericDomain(nextDomain);
+  if (!existing && !next) return undefined;
+  if (!existing) return next;
+  if (!next) return existing;
+  return [Math.min(existing[0], next[0]), Math.max(existing[1], next[1])];
+}
+
+function numericDomain(domain: unknown[] | 'unaggregated' | undefined): [number, number] | undefined {
+  if (!Array.isArray(domain) || domain.length < 2) return undefined;
+  const first = finiteNumber(domain[0]);
+  const last = finiteNumber(domain[domain.length - 1]);
+  return first !== undefined && last !== undefined ? [first, last] : undefined;
+}
+
+function isChannelSpec(value: unknown): value is NonNullable<EncodingSpec['x']> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

@@ -16,8 +16,15 @@ import {
   pieDoughnutArcFrame,
   pieDoughnutExplosionOffset,
 } from '../../core/config-to-spec/pie-like';
-
-const POINT_EXPLOSION_FIELD = '__mogPointExplosion';
+import {
+  PIE_SLICE_CENTER_X_FIELD,
+  PIE_SLICE_CENTER_Y_FIELD,
+  PIE_SLICE_END_ANGLE_FIELD,
+  PIE_SLICE_INNER_RADIUS_RATIO_FIELD,
+  PIE_SLICE_OUTER_RADIUS_RATIO_FIELD,
+  PIE_SLICE_START_ANGLE_FIELD,
+  POINT_EXPLOSION_FIELD,
+} from '../../core/config-to-spec/fields';
 
 function datumString(datum: DataRow, field: string | undefined): string | undefined {
   if (!field) return undefined;
@@ -68,10 +75,12 @@ export function generateArcMarks(
   for (let i = 0; i < renderData.length; i++) {
     const datum = renderData[i];
     const angle = angles[i];
-    const endAngle = startAngle + angle;
+    const rowGeometry = rowArcGeometry(datum, frame);
+    const rawStartAngle = rowGeometry?.startAngle ?? startAngle;
+    const endAngle = rowGeometry?.endAngle ?? startAngle + angle;
 
     // Compute padded start/end angles
-    const paddedStart = startAngle + padAngle / 2;
+    const paddedStart = rawStartAngle + padAngle / 2;
     const paddedEnd = endAngle - padAngle / 2;
 
     const colorValue = encodings.color?.accessor(datum);
@@ -95,15 +104,19 @@ export function generateArcMarks(
 
     const explosion = datumNumber(datum, POINT_EXPLOSION_FIELD) ?? markExplosionOffset(markSpec, i);
     const midAngle = (paddedStart + paddedEnd) / 2;
-    const explosionOffset = pieDoughnutExplosionOffset(outerRadius, explosion);
+    const arcOuterRadius = rowGeometry?.outerRadius ?? outerRadius;
+    const arcInnerRadius = Math.min(arcOuterRadius, rowGeometry?.innerRadius ?? innerRadius);
+    const explosionOffset = rowGeometry
+      ? 0
+      : pieDoughnutExplosionOffset(arcOuterRadius, explosion);
     const explosionVector = arcAngleUnitVector(midAngle);
 
     marks.push({
       type: 'arc',
-      x: frame.centerX + explosionVector.x * explosionOffset,
-      y: frame.centerY + explosionVector.y * explosionOffset,
-      innerRadius,
-      outerRadius,
+      x: (rowGeometry?.x ?? frame.centerX) + explosionVector.x * explosionOffset,
+      y: (rowGeometry?.y ?? frame.centerY) + explosionVector.y * explosionOffset,
+      innerRadius: arcInnerRadius,
+      outerRadius: arcOuterRadius,
       startAngle: paddedStart,
       endAngle: paddedEnd,
       datum: arcDatum,
@@ -125,6 +138,45 @@ export function generateArcMarks(
   }
 
   return marks;
+}
+
+function rowArcGeometry(
+  datum: DataRow,
+  frame: ReturnType<typeof pieDoughnutArcFrame>,
+):
+  | {
+      x: number;
+      y: number;
+      innerRadius: number;
+      outerRadius: number;
+      startAngle: number;
+      endAngle: number;
+    }
+  | undefined {
+  const startAngle = datumNumber(datum, PIE_SLICE_START_ANGLE_FIELD);
+  const endAngle = datumNumber(datum, PIE_SLICE_END_ANGLE_FIELD);
+  const centerX = datumNumber(datum, PIE_SLICE_CENTER_X_FIELD);
+  const centerY = datumNumber(datum, PIE_SLICE_CENTER_Y_FIELD);
+  const innerRatio = datumNumber(datum, PIE_SLICE_INNER_RADIUS_RATIO_FIELD);
+  const outerRatio = datumNumber(datum, PIE_SLICE_OUTER_RADIUS_RATIO_FIELD);
+  if (
+    startAngle === undefined ||
+    endAngle === undefined ||
+    centerX === undefined ||
+    centerY === undefined ||
+    innerRatio === undefined ||
+    outerRatio === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    x: frame.centerX + (centerX - 0.5) * frame.radius * 2,
+    y: frame.centerY + (centerY - 0.5) * frame.radius * 2,
+    innerRadius: Math.max(0, innerRatio) * frame.radius,
+    outerRadius: Math.max(0, outerRatio) * frame.radius,
+    startAngle,
+    endAngle,
+  };
 }
 
 function resolveArcRadius(

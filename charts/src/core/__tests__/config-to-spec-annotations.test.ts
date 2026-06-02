@@ -2,6 +2,7 @@ import { isLayerSpec, type LayerSpec } from '../../grammar/spec';
 import { compile } from '../../grammar/compiler';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
+import { pieDoughnutArcFrame } from '../config-to-spec/pie-like';
 import {
   DATA_LABEL_ANCHOR_X_FIELD,
   DATA_LABEL_DX_FIELD,
@@ -31,6 +32,8 @@ import {
   POINT_EXPLOSION_FIELD,
   POINT_FILL_FIELD,
   POINT_STYLE_VISIBLE_FIELD,
+  PIE_SLICE_CENTER_X_FIELD,
+  PIE_SLICE_CENTER_Y_FIELD,
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_HIGH_FIELD,
@@ -609,11 +612,12 @@ describe('configToSpec annotation layers', () => {
     });
     const arcMarks = compiled.marks.filter((mark) => mark.type === 'arc');
     const explodedArc = arcMarks.find((mark) => mark.datum?.[POINT_EXPLOSION_FIELD] === 12)!;
-    const centerX = compiled.layout.plotArea.x + compiled.layout.plotArea.width / 2;
-    const centerY = compiled.layout.plotArea.y + compiled.layout.plotArea.height / 2;
-    expect(Math.hypot(explodedArc.x - centerX, explodedArc.y - centerY)).toBeCloseTo(
-      Math.min(explodedArc.outerRadius * 0.25, 12),
-    );
+    const centerX = Number(explodedArc.datum?.[PIE_SLICE_CENTER_X_FIELD]);
+    const centerY = Number(explodedArc.datum?.[PIE_SLICE_CENTER_Y_FIELD]);
+    expect(Math.hypot(centerX - 0.5, centerY - 0.5)).toBeCloseTo(0.06);
+    const frame = pieDoughnutArcFrame(compiled.layout.plotArea, spec.config?.layoutHints?.pieDoughnut);
+    expect(explodedArc.x).toBeCloseTo(frame.centerX + (centerX - 0.5) * frame.radius * 2);
+    expect(explodedArc.y).toBeCloseTo(frame.centerY + (centerY - 0.5) * frame.radius * 2);
   });
 
   it('aligns imported doughnut labels with rotated slices and hole-size geometry', () => {
@@ -1164,7 +1168,7 @@ describe('configToSpec annotation layers', () => {
     expect(rows[0][ERROR_BAR_Y_MAX_FIELD]).toBeUndefined();
   });
 
-  it('adds analysis-line and up/down-bar annotation layers, including stock charts', () => {
+  it('consumes stock up/down bars as native stock glyph visual metadata', () => {
     const data: ChartData = {
       categories: ['A', 'B'],
       series: [
@@ -1205,22 +1209,22 @@ describe('configToSpec annotation layers', () => {
     };
 
     const spec = asLayerSpec(config, data);
-    const upDownLayers = spec.layer.filter((layer) =>
-      layer.transform?.some(
-        (transform) =>
-          transform.type === 'filter' &&
-          typeof transform.filter === 'object' &&
-          (transform.filter.equal === 'up' || transform.filter.equal === 'down'),
-      ),
+    const stockLayer = spec.layer.find(
+      (layer) => typeof layer.mark === 'object' && layer.mark.type === 'stockGlyph',
     );
 
-    expect(upDownLayers).toHaveLength(2);
-    expect(upDownLayers[0].data).toEqual({
-      values: expect.arrayContaining([
-        expect.objectContaining({ __mogAnalysisDirection: 'up' }),
-        expect.objectContaining({ __mogAnalysisDirection: 'down' }),
-      ]),
-    });
+    expect(stockLayer?.mark).toEqual(
+      expect.objectContaining({
+        type: 'stockGlyph',
+        stockVisual: expect.objectContaining({
+          importedUpDownBars: true,
+          priceGlyphMode: 'upDownBody',
+          gapWidth: 150,
+          upBody: expect.objectContaining({ fill: '#ffffff' }),
+          downBody: expect.objectContaining({ fill: '#333333' }),
+        }),
+      }),
+    );
   });
 
   it('renders area point style overrides as datum-level point overlays', () => {

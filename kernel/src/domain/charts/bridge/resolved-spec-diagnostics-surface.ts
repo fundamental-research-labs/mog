@@ -1,5 +1,8 @@
 import type { ChartConfig } from '@mog/charts';
-import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
+import type {
+  ResolvedChartSpecSnapshot,
+  ResolvedChartSurfaceApproximationContractKind,
+} from '@mog-sdk/contracts/data/charts';
 
 type ResolvedSnapshotSeries = ResolvedChartSpecSnapshot['resolved']['series'];
 
@@ -62,6 +65,16 @@ export function surfacePlaceholderDiagnostics(config: ChartConfig): string[] {
     );
   }
   return diagnostics;
+}
+
+export function surfaceApproximationContractForConfig(
+  config: ChartConfig,
+): ResolvedChartSurfaceApproximationContractKind | undefined {
+  if (!isSurfaceFamilyConfig(config)) return undefined;
+  const topView = isSurfaceTopViewConfig(config);
+  const wireframe = isSurfaceWireframeConfig(config);
+  if (topView) return wireframe ? 'contourWireframe' : 'contourFilled';
+  return wireframe ? 'surface3dWireframe' : 'surface3dFilled';
 }
 
 export function isSurfaceFamilyConfig(config: ChartConfig): boolean {

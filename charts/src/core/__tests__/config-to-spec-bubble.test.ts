@@ -1,6 +1,6 @@
 import type { SymbolMark, TextMark } from '../../primitives/types';
 import { compile } from '../../grammar/compiler';
-import type { UnitSpec } from '../../grammar/spec';
+import type { LayerSpec, UnitSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
 import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from '../config-to-spec/fields';
@@ -11,6 +11,19 @@ function asUnitSpec(config: ChartConfig, data: ChartData): UnitSpec {
 
 function specRows(spec: UnitSpec) {
   return spec.data && 'values' in spec.data ? spec.data.values : [];
+}
+
+function bubbleSizeRange(spec: UnitSpec): unknown[] | undefined {
+  const layered = spec as unknown as LayerSpec;
+  if (Array.isArray(layered.layer)) {
+    const bubbleLayer = layered.layer.find((layer): layer is UnitSpec => {
+      if ('layer' in layer) return false;
+      const markType = typeof layer.mark === 'string' ? layer.mark : layer.mark.type;
+      return markType === 'point' && layer.encoding?.size?.field === BUBBLE_SIZE_FIELD;
+    });
+    return bubbleLayer?.encoding?.size?.scale?.range as unknown[] | undefined;
+  }
+  return spec.encoding?.size?.scale?.range as unknown[] | undefined;
 }
 
 function symbolMarks(config: ChartConfig, data: ChartData): SymbolMark[] {
@@ -151,11 +164,11 @@ describe('configToSpec bubble size semantics', () => {
       data,
     );
 
-    expect(oversized.encoding?.size?.scale?.range).toEqual([0, 19200]);
-    expect(undersized.encoding?.size?.scale?.range).toEqual([0, 0]);
+    expect(bubbleSizeRange(oversized)).toEqual([0, 19200]);
+    expect(bubbleSizeRange(undersized)).toEqual([0, 0]);
   });
 
-  it('renders imported single-series bubbles with a series legend entry', () => {
+  it('renders imported single-series vary-by-category bubbles with point legend entries', () => {
     const categories = [39.14, 68.58, 18.47, 91.87, 17.74, 31.66, 15.32, 95.27];
     const data: ChartData = {
       categories,
@@ -181,6 +194,8 @@ describe('configToSpec bubble size semantics', () => {
       anchorCol: 0,
       width: 8,
       height: 5,
+      varyByCategories: true,
+      extra: { sourceDialect: 'ooxml' },
       legend: { show: true, visible: true, position: 'right' },
       workbookTheme: {
         colors: [
@@ -203,13 +218,14 @@ describe('configToSpec bubble size semantics', () => {
     };
 
     const spec = asUnitSpec(config, data);
+    const expectedLegendValues = data.series[0]!.data.map((point) => String(point.x));
     expect(spec.encoding?.color).toMatchObject({
-      field: 'series',
+      field: 'category',
       type: 'nominal',
       legend: {
         orient: 'right',
-        values: ['Products'],
         symbolType: 'circle',
+        entries: expectedLegendValues.map((value) => ({ value, label: value })),
       },
     });
 
@@ -219,9 +235,13 @@ describe('configToSpec bubble size semantics', () => {
       .filter((mark): mark is TextMark => mark.type === 'text')
       .map((mark) => mark.text);
 
-    expect(new Set(symbols.map((mark) => mark.style.fill))).toEqual(new Set(['#1f77b4']));
+    expect(new Set(symbols.map((mark) => mark.style.fill))).toEqual(
+      new Set(['#4F81BD', '#C0504D', '#9BBB59', '#8064A2', '#4BACC6', '#F79646']),
+    );
     expect(Math.max(...symbols.map((mark) => mark.size))).toBeCloseTo(6400, 5);
     expect(symbols.every((mark) => mark.clip === undefined)).toBe(true);
-    expect(legendLabels).toContain('Products');
+    for (const label of expectedLegendValues) {
+      expect(legendLabels).toContain(label);
+    }
   });
 });

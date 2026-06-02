@@ -41,7 +41,7 @@ export const CHART_NAMESPACES = {
  */
 export function wrapChartXML(content: string, options: ChartXMLOptions): string {
   const { title, axes, legend } = options;
-  const displayBlanksAs = normalizeDisplayBlanksAs(options.displayBlanksAs);
+  const displayBlanksAsXML = displayBlanksAsElement(options.displayBlanksAs);
   const plotVisibleOnly = options.plotVisibleOnly === false ? '0' : '1';
 
   // Generate title XML
@@ -71,17 +71,18 @@ export function wrapChartXML(content: string, options: ChartXMLOptions): string 
     </c:plotArea>
     ${legendXML}
     <c:plotVisOnly val="${plotVisibleOnly}"/>
-    <c:dispBlanksAs val="${displayBlanksAs}"/>
+    ${displayBlanksAsXML}
     <c:showDLblsOverMax val="0"/>
   </c:chart>
   ${generateChartSpaceStyleXML()}
 </c:chartSpace>`;
 }
 
-function normalizeDisplayBlanksAs(
+function displayBlanksAsElement(
   value: ChartXMLOptions['displayBlanksAs'],
-): 'gap' | 'zero' | 'span' {
-  return value === 'zero' || value === 'span' ? value : 'gap';
+): string {
+  if (value !== 'gap' && value !== 'zero' && value !== 'span') return '';
+  return `<c:dispBlanksAs val="${value}"/>`;
 }
 
 /**

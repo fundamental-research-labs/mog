@@ -1,12 +1,15 @@
 import type { ChannelSpec, LegendSpec } from '../../grammar/spec';
 import type { ChartConfig, LegendConfig } from '../../types';
-import { buildLegendSpec } from './legend-spec';
+import { buildLegendSpec, isLegendShown } from './legend-spec';
 
 export {
   buildCategoryLegendDomain,
+  buildPiePointLegendDomain,
   buildSeriesLegendDomain,
+  buildStockSourceLegendDomain,
   isLegendEntryVisible,
   legendSymbolType,
+  pieLegendDisplayLabel,
   usesPointLegendEntries,
   visibleLegendDomain,
   type LegendDomain,
@@ -51,13 +54,15 @@ export function buildColorEncoding(options: {
       ...(colors && colors.length > 0 ? { range: colors } : {}),
     };
   }
-  if (legend) {
+  if (isLegendShown(legend)) {
     channel.legend = buildLegendSpec(legend, config, {
       reverse: reverseLegend,
       symbolType,
       entries: legendEntries,
       values: legendValues,
     });
+  } else {
+    channel.legend = null;
   }
   return channel;
 }

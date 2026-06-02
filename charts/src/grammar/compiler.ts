@@ -18,7 +18,7 @@
 
 import type { AnyMark, RectMark } from '../primitives/types';
 import { createScales, resolveEncodings } from './encoding-resolver';
-import { calculateLayout } from './layout';
+import { calculatePathReconciledLayout } from './path-cartesian-reconcile';
 import {
   isLayerSpec,
   type ChartFrameSpec,
@@ -31,23 +31,95 @@ import { applyTransforms } from './transforms';
 
 // Import from extracted modules
 import { sanitizeDataForScales } from '../algebra/data-sanitize';
+import {
+  buildSurfaceApproximationTrace,
+  buildThreeDApproximationTrace,
+  collectSurfaceApproximationLayerTrace,
+  collectThreeDApproximationLayerTrace,
+} from './approximation-traces';
 import { generateAxes } from './axis-generator';
 import {
   buildCartesianGeometryTrace,
   collectCartesianGeometryLayerTrace,
 } from './cartesian-geometry-trace';
+import { buildPieDoughnutLabelLayoutTrace } from './data-label-trace';
+import { buildBarGeometryTrace, collectBarGeometryLayerTrace } from './bar-geometry-trace';
 import { compileLayered } from './layer-compiler';
-import { generateLegends } from './legend-generator';
+import { buildLegendTrace, generateLegends } from './legend-generator';
 import { generateMarks } from './marks';
+import { buildStockGlyphTrace, collectStockGlyphLayerTrace } from './stock-glyph-geometry';
 import { generateTitle } from './title-generator';
 import type {
   CartesianGeometryCoordinateSystem,
+  CartesianAxisCrossingTrace,
   CartesianGeometryLayerTrace,
+  CartesianGeometryLayerRole,
   CartesianGeometryPointTrace,
+  CartesianPathAxisLayoutTrace,
   CartesianGeometryScaleTrace,
+  CartesianGeometrySizeAuthority,
   CartesianGeometryTrace,
+  BarGeometryCoordinateSystem,
+  BarGeometryGroupTrace,
+  BarGeometryLayerTrace,
+  BarGeometryTrace,
+  BarGeometryTraceStatus,
+  BarRectangleTrace,
   CompileOptions,
   CompileResult,
+  LegendFlowEntryBoundsTrace,
+  LegendFlowTrace,
+  LegendFlowTraceOrient,
+  LegendFlowTraceOverflowPolicy,
+  LegendTrace,
+  PieDoughnutLabelLayoutTrace,
+  PieDoughnutLabelLayoutTraceEntry,
+  ProjectionBoundsTrace,
+  ProjectionOccupancyTrace,
+  ProjectionOccupancyTraceSource,
+  ProjectionTraceCoordinateSpace,
+  TextMeasurementAuthority,
+  TextMeasurementContext,
+  SurfaceApproximationBandAuthority,
+  SurfaceApproximationBandTrace,
+  SurfaceApproximationBandsTrace,
+  SurfaceApproximationContractKind,
+  SurfaceApproximationDensityTrace,
+  SurfaceApproximationGeometryStatus,
+  SurfaceApproximationGridSource,
+  SurfaceApproximationGridTrace,
+  SurfaceApproximationLayerTrace,
+  SurfaceApproximationMarkCountsTrace,
+  SurfaceApproximationMode,
+  SurfaceApproximationPlotAreaPolicy,
+  SurfaceApproximationProjectionTrace,
+  SurfaceApproximationRenderer,
+  SurfaceApproximationTrace,
+  SurfaceApproximationValueDomainTrace,
+  StockGlyphBodyRectTrace,
+  StockGlyphCoordinateSystem,
+  StockGlyphDirection,
+  StockGlyphLayerTrace,
+  StockGlyphPointTrace,
+  StockGlyphScaleTrace,
+  StockGlyphSegmentRole,
+  StockGlyphSegmentTrace,
+  StockGlyphSurfaceTrace,
+  StockGlyphTrace,
+  StockGlyphVolumeRectTrace,
+  StockGlyphXMode,
+  ThreeDApproximationBarShapesTrace,
+  ThreeDApproximationDepthClampStatus,
+  ThreeDApproximationDepthSource,
+  ThreeDApproximationFaceCountsTrace,
+  ThreeDApproximationFaceRole,
+  ThreeDApproximationGeometryStatus,
+  ThreeDApproximationLayerTrace,
+  ThreeDApproximationMarkType,
+  ThreeDApproximationProjectionTrace,
+  ThreeDApproximationRenderer,
+  ThreeDApproximationTrace,
+  ThreeDBarShape,
 } from './types';
 
 // =============================================================================
@@ -59,12 +131,75 @@ import type {
 // with callers that import them from '../grammar/compiler'.
 export type {
   CartesianGeometryCoordinateSystem,
+  CartesianAxisCrossingTrace,
   CartesianGeometryLayerTrace,
+  CartesianGeometryLayerRole,
   CartesianGeometryPointTrace,
+  CartesianPathAxisLayoutTrace,
   CartesianGeometryScaleTrace,
+  CartesianGeometrySizeAuthority,
   CartesianGeometryTrace,
+  BarGeometryCoordinateSystem,
+  BarGeometryGroupTrace,
+  BarGeometryLayerTrace,
+  BarGeometryTrace,
+  BarGeometryTraceStatus,
+  BarRectangleTrace,
   CompileOptions,
   CompileResult,
+  LegendFlowEntryBoundsTrace,
+  LegendFlowTrace,
+  LegendFlowTraceOrient,
+  LegendFlowTraceOverflowPolicy,
+  LegendTrace,
+  PieDoughnutLabelLayoutTrace,
+  PieDoughnutLabelLayoutTraceEntry,
+  ProjectionBoundsTrace,
+  ProjectionOccupancyTrace,
+  ProjectionOccupancyTraceSource,
+  ProjectionTraceCoordinateSpace,
+  TextMeasurementAuthority,
+  TextMeasurementContext,
+  SurfaceApproximationBandAuthority,
+  SurfaceApproximationBandTrace,
+  SurfaceApproximationBandsTrace,
+  SurfaceApproximationContractKind,
+  SurfaceApproximationDensityTrace,
+  SurfaceApproximationGeometryStatus,
+  SurfaceApproximationGridSource,
+  SurfaceApproximationGridTrace,
+  SurfaceApproximationLayerTrace,
+  SurfaceApproximationMarkCountsTrace,
+  SurfaceApproximationMode,
+  SurfaceApproximationPlotAreaPolicy,
+  SurfaceApproximationProjectionTrace,
+  SurfaceApproximationRenderer,
+  SurfaceApproximationTrace,
+  SurfaceApproximationValueDomainTrace,
+  StockGlyphBodyRectTrace,
+  StockGlyphCoordinateSystem,
+  StockGlyphDirection,
+  StockGlyphLayerTrace,
+  StockGlyphPointTrace,
+  StockGlyphScaleTrace,
+  StockGlyphSegmentRole,
+  StockGlyphSegmentTrace,
+  StockGlyphSurfaceTrace,
+  StockGlyphTrace,
+  StockGlyphVolumeRectTrace,
+  StockGlyphXMode,
+  ThreeDApproximationBarShapesTrace,
+  ThreeDApproximationDepthClampStatus,
+  ThreeDApproximationDepthSource,
+  ThreeDApproximationFaceCountsTrace,
+  ThreeDApproximationFaceRole,
+  ThreeDApproximationGeometryStatus,
+  ThreeDApproximationLayerTrace,
+  ThreeDApproximationMarkType,
+  ThreeDApproximationProjectionTrace,
+  ThreeDApproximationRenderer,
+  ThreeDApproximationTrace,
+  ThreeDBarShape,
 };
 
 // =============================================================================
@@ -106,24 +241,26 @@ export function compile(
   }
 
   // Calculate layout
-  const layout = calculateLayout(spec, {
+  const reconciled = calculatePathReconciledLayout(spec, transformedData, {
     width: options.width ?? (typeof spec.width === 'number' ? spec.width : 600),
     height: options.height ?? (typeof spec.height === 'number' ? spec.height : 400),
   });
+  const compiledSpec = reconciled.spec;
+  const layout = reconciled.layout;
 
   // Sanitize data for scale creation: replace non-finite numeric values with undefined
   // so they don't pollute the domain (e.g., Infinity makes scale return NaN for all inputs).
-  const sanitizedData = sanitizeDataForScales(transformedData, spec.encoding);
+  const sanitizedData = sanitizeDataForScales(transformedData, compiledSpec.encoding);
 
   // Determine mark type (needed for scale defaults like zero inclusion)
-  const markType = getMarkType(spec.mark);
+  const markType = getMarkType(compiledSpec.mark);
 
   // Create scales
-  const scales = createScales(spec.encoding, sanitizedData, layout, markType);
+  const scales = createScales(compiledSpec.encoding, sanitizedData, layout, markType);
 
   // Resolve encodings
-  const encodings = resolveEncodings(spec.encoding, transformedData, scales);
-  const markSpec = getMarkSpec(spec.mark);
+  const encodings = resolveEncodings(compiledSpec.encoding, transformedData, scales);
+  const markSpec = getMarkSpec(compiledSpec.mark);
   const marks = generateMarks(
     markType,
     markSpec,
@@ -131,8 +268,8 @@ export function compile(
     scales,
     encodings,
     layout,
-    spec.encoding,
-    spec.config,
+    compiledSpec.encoding,
+    compiledSpec.config,
   );
   const cartesianGeometry = buildCartesianGeometryTrace(layout, [
     collectCartesianGeometryLayerTrace({
@@ -143,25 +280,80 @@ export function compile(
       scales,
       encodings,
       layout,
-      encoding: spec.encoding,
-      config: spec.config,
+      encoding: compiledSpec.encoding,
+      config: compiledSpec.config,
+    }),
+  ]);
+  const barGeometryTrace = buildBarGeometryTrace(layout, [
+    collectBarGeometryLayerTrace({
+      layerIndex: 0,
+      markType,
+      data: transformedData,
+      marks,
+      scales,
+      encodings,
+      layout,
+      encoding: compiledSpec.encoding,
+      config: compiledSpec.config,
+    }),
+  ]);
+  const stockGlyphTrace = buildStockGlyphTrace(layout, [
+    collectStockGlyphLayerTrace({
+      layerIndex: 0,
+      markSpec,
+      data: transformedData,
+      scales,
+      encodings,
+      layout,
+      encoding: compiledSpec.encoding,
+    }),
+  ]);
+  const threeDApproximationTrace = buildThreeDApproximationTrace([
+    collectThreeDApproximationLayerTrace({
+      layerIndex: 0,
+      markType,
+      markSpec,
+      data: transformedData,
+      marks,
+      layout,
+    }),
+  ]);
+  const surfaceApproximationTrace = buildSurfaceApproximationTrace([
+    collectSurfaceApproximationLayerTrace({
+      layerIndex: 0,
+      markType,
+      markSpec,
+      data: transformedData,
+      marks,
+      layout,
     }),
   ]);
   const clippedMarks = clipMarksToPlotArea(marks, layout.plotArea);
+  const pieDoughnutLabelLayoutTrace = buildPieDoughnutLabelLayoutTrace({
+    marks: clippedMarks,
+    layout,
+    config: compiledSpec.config,
+    ...(options.textMeasurementContext
+      ? { textMeasurementContext: options.textMeasurementContext }
+      : {}),
+  });
 
   // Generate axes
-  const axes = options.skipAxes ? [] : generateAxes(spec.encoding, scales, layout, spec.config);
+  const axes = options.skipAxes
+    ? []
+    : generateAxes(compiledSpec.encoding, scales, layout, compiledSpec.config);
 
   // Generate legend
-  const legends = options.skipLegend ? [] : generateLegends(spec.encoding, scales, layout);
+  const legends = options.skipLegend ? [] : generateLegends(compiledSpec.encoding, scales, layout);
+  const legendTrace = buildLegendTrace(compiledSpec.encoding, layout, legends);
 
   // Generate title
   const title = options.skipTitle ? undefined : generateTitle(spec.title, layout);
   const background = [
     ...generateFrameMarks(
-      spec.config?.chartFrame ??
-        (spec.config?.background
-          ? { fill: { type: 'solid', color: spec.config.background } }
+      compiledSpec.config?.chartFrame ??
+        (compiledSpec.config?.background
+          ? { fill: { type: 'solid', color: compiledSpec.config.background } }
           : undefined),
       0,
       0,
@@ -169,7 +361,7 @@ export function compile(
       layout.height,
     ),
     ...generateFrameMarks(
-      spec.config?.plotFrame,
+      compiledSpec.config?.plotFrame,
       layout.plotArea.x,
       layout.plotArea.y,
       layout.plotArea.width,
@@ -195,6 +387,12 @@ export function compile(
     layout,
     scales,
     cartesianGeometry,
+    barGeometryTrace,
+    stockGlyphTrace,
+    legendTrace,
+    pieDoughnutLabelLayoutTrace,
+    threeDApproximationTrace,
+    surfaceApproximationTrace,
   };
 }
 

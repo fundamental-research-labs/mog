@@ -13,7 +13,13 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
-import { DATA_LABEL_VISIBLE_FIELD, POINT_EXPLOSION_FIELD } from '../../core/chart-ir/fields';
+import {
+  CATEGORY_FIELD,
+  DATA_LABEL_VISIBLE_FIELD,
+  POINT_EXPLOSION_FIELD,
+  POINT_FILL_FIELD,
+  POINT_INDEX_FIELD,
+} from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec, LegendSpec, UnitSpec } from '../../grammar/spec';
 import type { ExportOptions, LegendPosition, OOXMLExportResult } from '../ooxml-types';
 import { extractChartTitle, wrapChartXMLNoAxes } from './chart-xml';
@@ -293,6 +299,28 @@ function extractPieData(
     throw new Error('Pie chart requires category and value fields');
   }
 
+  const pointRows = data
+    .filter((row) => typeof row[POINT_INDEX_FIELD] === 'number')
+    .sort((a, b) => Number(a[POINT_INDEX_FIELD]) - Number(b[POINT_INDEX_FIELD]));
+  if (pointRows.length > 0) {
+    const colors = colorRangeForEncoding(encoding);
+    return pointRows.map((row, fallbackIndex) => {
+      const pointIndex = Number(row[POINT_INDEX_FIELD]);
+      const labelValue = row[CATEGORY_FIELD] ?? row[categoryField];
+      const value = Number(row[valueField]);
+      const explosion = pointExplosionForRows(mark, pointIndex, [row]);
+      return {
+        label:
+          labelValue !== undefined && labelValue !== null && String(labelValue).length > 0
+            ? String(labelValue)
+            : `Point ${pointIndex + 1}`,
+        value: Number.isFinite(value) ? value : 0,
+        color: pointColorForRow(row, pointIndex, fallbackIndex, colors),
+        ...(explosion !== undefined ? { explosion } : {}),
+      };
+    });
+  }
+
   // Group data by category using shared algebra module and sum values
   const groups = groupBy(data, categoryField);
   const colors = colorRangeForEncoding(encoding);
@@ -314,6 +342,20 @@ function extractPieData(
   }
 
   return pieData;
+}
+
+function pointColorForRow(
+  row: DataRow,
+  pointIndex: number,
+  fallbackIndex: number,
+  colors: readonly string[],
+): string {
+  const explicitFill = row[POINT_FILL_FIELD];
+  if (typeof explicitFill === 'string' && explicitFill.length > 0) return explicitFill;
+  if (colors.length > 0) {
+    return colors[pointIndex % colors.length] ?? colors[fallbackIndex % colors.length];
+  }
+  return getDefaultColor(pointIndex);
 }
 
 function pointExplosionForRows(

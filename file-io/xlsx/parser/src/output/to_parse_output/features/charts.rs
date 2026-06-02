@@ -50,6 +50,10 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
 
             // Extract complete ChartSpec from ChartSpace + anchor info
             let mut spec = extract_chart_spec_from_chart_space(chart_space, &ref_info);
+            spec.display_blanks_as = chart
+                .display_options
+                .disp_blanks_as
+                .map(|value| value.to_ooxml().to_string());
             if let Some((position, frame)) = matched_frame.or_else(|| chart_frames.get(idx)) {
                 spec.position = position.clone();
                 apply_chart_frame_to_spec(&mut spec, frame);
@@ -949,7 +953,10 @@ pub(crate) fn build_fallback_chart_spec(
         boxplot: None,
         hierarchy: None,
         region_map: None,
-        display_blanks_as: None,
+        display_blanks_as: chart
+            .display_options
+            .disp_blanks_as
+            .map(|value| value.to_ooxml().to_string()),
         plot_visible_only: None,
         gap_width: None,
         gap_depth: None,

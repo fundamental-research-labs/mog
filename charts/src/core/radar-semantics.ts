@@ -7,8 +7,18 @@ export const RADAR_PLOT_INSET = 8;
 export const RADAR_LABEL_GAP = 8;
 export const RADAR_START_ANGLE = -Math.PI / 2;
 export const RADAR_AUTO_VALUE_TICK_COUNT = 9;
-export const RADAR_DEFAULT_FILLED_OPACITY = 0.18;
+export const RADAR_DEFAULT_FILLED_OPACITY = 0.5;
+export const RADAR_DEFAULT_SERIES_STROKE_WIDTH = 2;
 export const RADAR_DEFAULT_MARKER_SIZE = 49;
+export const RADAR_DEFAULT_GRID_COLOR = '#d9d9d9';
+export const RADAR_DEFAULT_GRID_WIDTH = 1;
+export const RADAR_DEFAULT_SPOKE_COLOR = '#bfbfbf';
+export const RADAR_DEFAULT_SPOKE_WIDTH = 1;
+export const RADAR_DEFAULT_CATEGORY_LABEL_COLOR = '#444444';
+export const RADAR_DEFAULT_CATEGORY_LABEL_FONT_SIZE = 11;
+export const RADAR_DEFAULT_VALUE_LABEL_COLOR = '#666666';
+export const RADAR_DEFAULT_VALUE_LABEL_FONT_SIZE = 10;
+export const RADAR_DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
 
 const RADAR_TICK_EPSILON = 1e-10;
 const FALLBACK_RADAR_TICK_STEP = 0.2;
@@ -34,6 +44,13 @@ export interface RadarValueDomain {
 }
 
 export type RadarValueScaleAuthority = 'explicitAxis' | 'excelAuto' | 'fallback';
+export type RadarBlankPolicy = 'gap' | 'span' | 'zero';
+export type RadarBlankPolicyAuthority =
+  | 'explicit'
+  | 'excelDefault'
+  | 'chartCacheLiveSourceBlank';
+
+export const RADAR_EXCEL_DEFAULT_BLANK_POLICY: RadarBlankPolicy = 'span';
 
 export interface RadarValueScale {
   domain: RadarValueDomain;
@@ -42,6 +59,18 @@ export interface RadarValueScale {
   explicitDomain: boolean;
   explicitTickStep: boolean;
   authority: RadarValueScaleAuthority;
+}
+
+export interface RadarBlankPolicyResolution {
+  displayBlanksAs?: RadarBlankPolicy;
+  blankPolicy: RadarBlankPolicy;
+  blankPolicyAuthority: RadarBlankPolicyAuthority;
+}
+
+export interface ResolveRadarBlankPolicyInput {
+  displayBlanksAs?: RadarBlankPolicy;
+  cacheZeroLiveBlankEvidenceCount?: number;
+  contradictoryCacheLiveBlankEvidenceCount?: number;
 }
 
 export interface ResolveRadarValueScaleInput {
@@ -95,6 +124,7 @@ export function resolveRadarValueScale(
     explicitMin: finiteNumber(input.explicitMin),
     explicitMax: finiteNumber(input.explicitMax),
     explicitTickStep,
+    headroomStepFraction: 0,
   });
 
   if (resolved) {
@@ -156,6 +186,38 @@ export function radarAutomaticMarkerShape(
 ): (typeof RADAR_AUTO_MARKER_SHAPES)[number] {
   const index = Math.max(0, Math.floor(seriesIndex));
   return RADAR_AUTO_MARKER_SHAPES[index % RADAR_AUTO_MARKER_SHAPES.length];
+}
+
+export function radarBlankPolicyFromDisplayBlanksAs(
+  displayBlanksAs: RadarBlankPolicy | undefined,
+): RadarBlankPolicyResolution {
+  return resolveRadarBlankPolicy({ displayBlanksAs });
+}
+
+export function resolveRadarBlankPolicy(
+  input: ResolveRadarBlankPolicyInput,
+): RadarBlankPolicyResolution {
+  const displayBlanksAs = input.displayBlanksAs;
+  if (displayBlanksAs === 'gap' || displayBlanksAs === 'span' || displayBlanksAs === 'zero') {
+    return {
+      displayBlanksAs,
+      blankPolicy: displayBlanksAs,
+      blankPolicyAuthority: 'explicit',
+    };
+  }
+  if (
+    (input.cacheZeroLiveBlankEvidenceCount ?? 0) > 0 &&
+    (input.contradictoryCacheLiveBlankEvidenceCount ?? 0) === 0
+  ) {
+    return {
+      blankPolicy: 'zero',
+      blankPolicyAuthority: 'chartCacheLiveSourceBlank',
+    };
+  }
+  return {
+    blankPolicy: RADAR_EXCEL_DEFAULT_BLANK_POLICY,
+    blankPolicyAuthority: 'excelDefault',
+  };
 }
 
 function fallbackRadarDomain(input: ResolveRadarValueScaleInput): RadarValueDomain | undefined {

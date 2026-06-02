@@ -5,7 +5,22 @@ import type {
   SingleAxisConfig,
 } from '@mog-sdk/contracts/data/charts';
 
-export type SourceLinkedAxisRole = 'category' | 'secondary category' | 'value' | 'secondary value';
+import {
+  isXYValueAxisChartType,
+  secondarySemanticCategoryAxisForModel,
+  secondaryValueAxisForModel,
+  semanticCategoryAxisForModel,
+  xValueAxisForModel,
+  yValueAxisForModel,
+} from './axis-role';
+
+export type SourceLinkedAxisRole =
+  | 'category'
+  | 'secondary category'
+  | 'value'
+  | 'secondary value'
+  | 'x value'
+  | 'y value';
 
 export type SourceLinkedAxisNumberFormatResolution = {
   formatCode?: string;
@@ -25,6 +40,8 @@ const SOURCE_LINKED_AXIS_ROLES: SourceLinkedAxisRole[] = [
   'secondary category',
   'value',
   'secondary value',
+  'x value',
+  'y value',
 ];
 const PERCENT_STACKED_CHART_TYPES = new Set<string>([
   'lineMarkersStacked100',
@@ -116,9 +133,13 @@ function firstCategorySourceFormat(config: ChartConfig): SourceLinkedAxisNumberF
 }
 
 function valueAxisGroup(role: SourceLinkedAxisRole): 0 | 1 | undefined {
-  if (role === 'value') return 0;
+  if (role === 'value' || role === 'y value') return 0;
   if (role === 'secondary value') return 1;
   return undefined;
+}
+
+function roleUsesCategorySource(role: SourceLinkedAxisRole): boolean {
+  return role === 'category' || role === 'secondary category' || role === 'x value';
 }
 
 function isSeriesBoundToAxis(series: SeriesConfig, axisGroup: 0 | 1): boolean {
@@ -162,6 +183,7 @@ function sourceLinkedAxisFormat(
   if (explicitResolution) return explicitResolution;
   const axisGroup = valueAxisGroup(role);
   if (axisGroup !== undefined) return firstValueSourceFormat(config, axisGroup);
+  if (roleUsesCategorySource(role)) return firstCategorySourceFormat(config);
   return firstCategorySourceFormat(config);
 }
 
@@ -281,6 +303,9 @@ export function withSourceLinkedAxisNumberFormats(
   const effectiveResolutions =
     resolutions ?? sourceLinkedAxisNumberFormatResolutionsFromConfig(config);
   const extra = withSourceLinkedAxisNumberFormatExtra(config, resolutions);
+  if (isXYValueAxisChartType(config.type)) {
+    return withXYSourceLinkedAxisNumberFormats(config, axis, effectiveResolutions, extra);
+  }
 
   const categoryAxis = axisWithResolvedNumberFormat(
     axis.categoryAxis ?? axis.xAxis,
@@ -330,6 +355,73 @@ export function withSourceLinkedAxisNumberFormats(
   };
 }
 
+function withXYSourceLinkedAxisNumberFormats(
+  config: ChartConfig,
+  axis: NonNullable<ChartConfig['axis']>,
+  effectiveResolutions: SourceLinkedAxisNumberFormatResolutions | undefined,
+  extra: ChartConfig['extra'],
+): ChartConfig {
+  const currentCategoryAxis = semanticCategoryAxisForModel(config);
+  const currentSecondaryCategoryAxis = secondarySemanticCategoryAxisForModel(config);
+  const currentXValueAxis = xValueAxisForModel(config);
+  const currentYValueAxis = yValueAxisForModel(config);
+  const currentSecondaryValueAxis = secondaryValueAxisForModel(config);
+  const categoryAxis = axisWithResolvedNumberFormat(
+    currentCategoryAxis,
+    config,
+    'category',
+    effectiveResolutions,
+  );
+  const secondaryCategoryAxis = axisWithResolvedNumberFormat(
+    currentSecondaryCategoryAxis,
+    config,
+    'secondary category',
+    effectiveResolutions,
+  );
+  const xValueAxis = axisWithResolvedNumberFormat(
+    currentXValueAxis,
+    config,
+    'x value',
+    effectiveResolutions,
+  );
+  const yValueAxis = axisWithResolvedNumberFormat(
+    currentYValueAxis,
+    config,
+    'y value',
+    effectiveResolutions,
+  );
+  const secondaryValueAxis = axisWithResolvedNumberFormat(
+    currentSecondaryValueAxis,
+    config,
+    'secondary value',
+    effectiveResolutions,
+  );
+
+  if (
+    categoryAxis === currentCategoryAxis &&
+    secondaryCategoryAxis === currentSecondaryCategoryAxis &&
+    xValueAxis === currentXValueAxis &&
+    yValueAxis === currentYValueAxis &&
+    secondaryValueAxis === currentSecondaryValueAxis &&
+    extra === config.extra
+  ) {
+    return config;
+  }
+
+  return {
+    ...config,
+    ...(extra === config.extra ? {} : { extra }),
+    axis: {
+      ...axis,
+      ...(categoryAxis ? { categoryAxis } : {}),
+      ...(secondaryCategoryAxis ? { secondaryCategoryAxis } : {}),
+      ...(xValueAxis ? { xAxis: xValueAxis } : {}),
+      ...(yValueAxis ? { valueAxis: yValueAxis, yAxis: yValueAxis } : {}),
+      ...(secondaryValueAxis ? { secondaryValueAxis, secondaryYAxis: secondaryValueAxis } : {}),
+    },
+  };
+}
+
 export function sourceLinkedAxisNumberFormatDiagnostics(
   config: ChartConfig,
   resolutions?: SourceLinkedAxisNumberFormatResolutions,
@@ -338,6 +430,40 @@ export function sourceLinkedAxisNumberFormatDiagnostics(
   if (!axis) return [];
   const effectiveResolutions =
     resolutions ?? sourceLinkedAxisNumberFormatResolutionsFromConfig(config);
+  if (isXYValueAxisChartType(config.type)) {
+    return [
+      axisSourceFormatDiagnostic(
+        semanticCategoryAxisForModel(config),
+        config,
+        'category',
+        effectiveResolutions,
+      ),
+      axisSourceFormatDiagnostic(
+        secondarySemanticCategoryAxisForModel(config),
+        config,
+        'secondary category',
+        effectiveResolutions,
+      ),
+      axisSourceFormatDiagnostic(
+        xValueAxisForModel(config),
+        config,
+        'x value',
+        effectiveResolutions,
+      ),
+      axisSourceFormatDiagnostic(
+        yValueAxisForModel(config),
+        config,
+        'y value',
+        effectiveResolutions,
+      ),
+      axisSourceFormatDiagnostic(
+        secondaryValueAxisForModel(config),
+        config,
+        'secondary value',
+        effectiveResolutions,
+      ),
+    ].filter((diagnostic): diagnostic is string => Boolean(diagnostic));
+  }
   return [
     axisSourceFormatDiagnostic(
       axis.categoryAxis ?? axis.xAxis,

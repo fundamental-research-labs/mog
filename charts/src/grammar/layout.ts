@@ -76,6 +76,7 @@ const TOP_LEGEND_TOP_PADDING = 8;
 const SIDE_LEGEND_GAP = 10;
 const DEFAULT_SIDE_LEGEND_HEIGHT = 180;
 const DATA_TABLE_TOP_PADDING = 6;
+const PIE_BASE_MARGIN = 14;
 
 // =============================================================================
 // Layout Calculation
@@ -357,6 +358,10 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
     return margin;
   }
 
+  if (layoutHints?.pieDoughnut?.preferSquareArcPlot === true) {
+    applyPieDoughnutBaseMargins(margin, paddingSides, layoutHints.pieDoughnut);
+  }
+
   const xAxes = collectChannelAxes(encodings, 'x');
   for (const { axis, channel } of xAxes) {
     const side = axis?.orient === 'top' ? 'top' : 'bottom';
@@ -421,6 +426,35 @@ function calculateMargins(spec: ChartSpec): Layout['margin'] {
   }
 
   return margin;
+}
+
+function applyPieDoughnutBaseMargins(
+  margin: Layout['margin'],
+  paddingSides: Layout['margin'],
+  hints: NonNullable<ConfigSpec['layoutHints']>['pieDoughnut'],
+): void {
+  const labelPressure = pieDoughnutMarginLabelPressure(hints);
+  const explosionPressure =
+    hints?.explosionPaddingPx ??
+    (((hints?.explosionPaddingPercent ?? 0) > 0 ? hints?.explosionPaddingPercent ?? 0 : 0) / 100) *
+      24;
+  const base = PIE_BASE_MARGIN + labelPressure + explosionPressure;
+  margin.top = Math.min(margin.top, base + paddingSides.top);
+  margin.right = Math.min(margin.right, base + paddingSides.right);
+  margin.bottom = Math.min(margin.bottom, base + paddingSides.bottom);
+  margin.left = Math.min(margin.left, base + paddingSides.left);
+}
+
+function pieDoughnutMarginLabelPressure(
+  hints: NonNullable<ConfigSpec['layoutHints']>['pieDoughnut'],
+): number {
+  const hasOutsideLabels = (hints?.outsideLabelCount ?? 0) > 0;
+  const hasDefaultLabels = (hints?.defaultLabelCount ?? 0) > 0;
+  const hasZeroSliceLabels =
+    (hints?.zeroValueLabelCount ?? 0) > 0 || (hints?.nearZeroValueLabelCount ?? 0) > 0;
+  const hasLongLabels = (hints?.maxLabelTextLength ?? 0) > 18;
+  if (!hasOutsideLabels && !hasDefaultLabels && !hasZeroSliceLabels && !hasLongLabels) return 0;
+  return 8 + (hasDefaultLabels ? 4 : 0) + (hasZeroSliceLabels ? 4 : 0);
 }
 
 function applyAxisReservations(

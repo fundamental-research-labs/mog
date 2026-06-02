@@ -17,6 +17,7 @@ import {
   definedStyle,
   groupDataByEncoding,
   isBlankValueDatum,
+  shouldSortPathByX,
   splitDataByLineSegment,
 } from './helpers';
 import { buildInterpolatedPath } from './path-interpolation';
@@ -65,8 +66,9 @@ export function generateLineMarks(
       // Skip empty groups, but allow single-point groups (degenerate path)
       if (pts.length === 0) continue;
 
-      // Sort by x-coordinate to ensure monotonic left-to-right path
-      pts.sort((a, b) => a.x - b.x);
+      if (shouldSortPathByX(markSpec)) {
+        pts.sort((a, b) => a.x - b.x);
+      }
 
       // Build SVG path string based on interpolation mode
       const pathStr = buildInterpolatedPath(pts, interpolate);

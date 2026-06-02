@@ -8,7 +8,7 @@ import { groupByAccessor } from '../../algebra/group-by';
 import type { MarkStyle } from '../../primitives/types';
 import type { AnyScale, ResolvedEncodings } from '../encoding-resolver';
 import { BLANK_VALUE_FIELD, LINE_SEGMENT_FIELD } from '../internal-fields';
-import type { DataRow } from '../spec';
+import type { DataRow, MarkSpec } from '../spec';
 
 /**
  * Safely invoke a scale function with a value.
@@ -76,6 +76,10 @@ export function splitDataByLineSegment(data: DataRow[]): DataRow[][] {
     }
   }
   return [...groups.values()];
+}
+
+export function shouldSortPathByX(markSpec: MarkSpec): boolean {
+  return markSpec.pathOrder !== 'source';
 }
 
 /**

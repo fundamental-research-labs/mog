@@ -18,6 +18,8 @@ import {
   DATA_LABEL_LEADER_STROKE_FIELD,
   DATA_LABEL_LEADER_STROKE_WIDTH_FIELD,
   DATA_LABEL_LEADER_VISIBLE_FIELD,
+  DATA_LABEL_LINE_HEIGHT_FIELD,
+  DATA_LABEL_MAX_WIDTH_FIELD,
   DATA_LABEL_ROTATION_FIELD,
   DATA_LABEL_TEXT_FIELD,
   DATA_LABEL_VALUE_ANCHOR_FIELD,
@@ -60,6 +62,8 @@ export function buildDataLabelLayers(encoding: EncodingSpec, config?: ChartConfi
     colorField: DATA_LABEL_COLOR_FIELD,
     fontSizeField: DATA_LABEL_FONT_SIZE_FIELD,
     angleField: DATA_LABEL_ROTATION_FIELD,
+    maxWidthField: DATA_LABEL_MAX_WIDTH_FIELD,
+    lineHeightField: DATA_LABEL_LINE_HEIGHT_FIELD,
     ...(alignToBarSlot ? { alignToBarSlot: true } : {}),
     ...(!position
       ? {

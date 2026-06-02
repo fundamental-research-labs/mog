@@ -223,6 +223,8 @@ export interface ChartTextMark extends ChartBaseMark {
   textAlign: ChartTextAlign;
   textBaseline: ChartTextBaseline;
   rotation?: number;
+  maxWidth?: number;
+  lineHeight?: number;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
   underline?: boolean;

@@ -12,6 +12,7 @@ export interface ExcelAutoValueAxisScaleInput {
   explicitMin?: number;
   explicitMax?: number;
   explicitTickStep?: number;
+  headroomStepFraction?: number;
 }
 
 export interface ExcelAutoValueAxisScale {
@@ -19,6 +20,7 @@ export interface ExcelAutoValueAxisScale {
   tickStep: number;
   tickCount: number;
   explicitDomain: boolean;
+  explicitTickStep: boolean;
 }
 
 export function resolveExcelAutoValueAxisScale(
@@ -80,19 +82,23 @@ export function resolveExcelAutoValueAxisScale(
     else if (input.explicitMin === undefined) domainMin = domainMax - step;
   }
 
+  const headroomStepFraction = input.headroomStepFraction ?? HEADROOM_STEP_FRACTION;
+
   if (
+    headroomStepFraction > 0 &&
     input.explicitMax === undefined &&
     domainMax > 0 &&
     dataMax > 0 &&
-    domainMax - dataMax <= step * HEADROOM_STEP_FRACTION
+    domainMax - dataMax <= step * headroomStepFraction
   ) {
     domainMax += step;
   }
   if (
+    headroomStepFraction > 0 &&
     input.explicitMin === undefined &&
     domainMin < 0 &&
     dataMin < 0 &&
-    dataMin - domainMin <= step * HEADROOM_STEP_FRACTION
+    dataMin - domainMin <= step * headroomStepFraction
   ) {
     domainMin -= step;
   }
@@ -102,6 +108,7 @@ export function resolveExcelAutoValueAxisScale(
     tickStep: roundDomainBound(step),
     tickCount: resolvedTickCount,
     explicitDomain: input.explicitMin !== undefined || input.explicitMax !== undefined,
+    explicitTickStep: input.explicitTickStep !== undefined,
   };
 }
 

@@ -14,7 +14,7 @@
  */
 
 import { groupBy } from '../../algebra/group-by';
-import { RAW_BUBBLE_SIZE_FIELD, SERIES_FIELD } from '../../core/chart-ir/fields';
+import { MARKER_SIZE_FIELD, RAW_BUBBLE_SIZE_FIELD, SERIES_FIELD } from '../../core/chart-ir/fields';
 import type { ChartSpec, DataRow, EncodingSpec } from '../../grammar/spec';
 import type {
   ExportOptions,
@@ -50,7 +50,8 @@ export function generateScatterChartXML(
   const sheetName = options?.sheetName ?? 'Sheet1';
 
   // Check if this should be a bubble chart (has size encoding)
-  const hasSizeEncoding = encoding.size?.field !== undefined;
+  const hasSizeEncoding =
+    encoding.size?.field !== undefined && encoding.size.field !== MARKER_SIZE_FIELD;
 
   if (hasSizeEncoding) {
     return generateBubbleChartXML(spec, data, options);

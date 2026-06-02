@@ -321,7 +321,10 @@ fn test_parse_display_options() {
 
     let chart = Chart::parse(xml);
     assert!(chart.display_options.plot_vis_only);
-    assert_eq!(chart.display_options.disp_blanks_as, DisplayBlanksAs::Zero);
+    assert_eq!(
+        chart.display_options.disp_blanks_as,
+        Some(DisplayBlanksAs::Zero)
+    );
 }
 
 #[test]

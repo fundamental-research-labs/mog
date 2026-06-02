@@ -226,7 +226,10 @@ describe('resolved spec snapshot helpers', () => {
         message: 'Unknown sheet "Missing"',
       },
     ]);
-    expect(snapshot.diagnostics.compiler).toEqual(['Unknown sheet "Missing"']);
+    expect(snapshot.diagnostics.compiler).toEqual([
+      'Unknown sheet "Missing"',
+      'surface approximation trace is missing',
+    ]);
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);

@@ -2,6 +2,7 @@ import type {
   BarGeometryGrouping,
   BarGeometryOrientation,
   BarGeometryStatus,
+  BarValueAxisScaleSource,
 } from '../../grammar/spec';
 import type { ChartData, SingleAxisConfig } from '../../types';
 import { resolveExcelAutoValueAxisScale } from './excel-value-axis-scale';
@@ -14,11 +15,16 @@ export interface BarColumnAxisLayout {
   categoryTickLabelSkip?: number;
   categoryTickMarkSkip?: number;
   categoryTickSkipSource?: BarAxisTickSkipSource;
+  categoryTickStatus?: BarAxisLayoutStatus;
+  categoryTickStatusReason?: string;
   valueAxisDomain?: [number, number];
   valueAxisTickStep?: number;
   valueAxisTickCount?: number;
   percentDomain?: [number, number];
   percentAxisLabelPolicy?: BarPercentAxisLabelPolicy;
+  valueAxisScaleSource?: BarValueAxisScaleSource;
+  valueAxisScaleStatus?: BarAxisLayoutStatus;
+  valueAxisScaleStatusReason?: string;
   axisLayoutStatus?: BarAxisLayoutStatus;
   axisLayoutStatusReason?: string;
 }
@@ -47,12 +53,22 @@ export function resolveBarColumnAxisLayout(
 ): BarColumnAxisLayout {
   const skip = resolveCategoryTickSkip(input);
   const value = resolveValueAxisLayout(input);
-  const status = resolveAxisLayoutStatus(input.sourceDialect, skip.source, skip.labelSkip);
+  const categoryStatus = resolveCategoryTickStatus(
+    input.sourceDialect,
+    skip.source,
+  );
+  const valueStatus = {
+    status: value.status,
+    ...(value.reason ? { reason: value.reason } : {}),
+  };
+  const status = aggregateAxisLayoutStatus(categoryStatus, valueStatus);
 
   return {
     ...(skip.labelSkip !== undefined ? { categoryTickLabelSkip: skip.labelSkip } : {}),
     ...(skip.markSkip !== undefined ? { categoryTickMarkSkip: skip.markSkip } : {}),
     ...(skip.source !== 'none' ? { categoryTickSkipSource: skip.source } : {}),
+    categoryTickStatus: categoryStatus.status,
+    ...(categoryStatus.reason ? { categoryTickStatusReason: categoryStatus.reason } : {}),
     ...(value.domain ? { valueAxisDomain: value.domain } : {}),
     ...(value.tickStep !== undefined ? { valueAxisTickStep: value.tickStep } : {}),
     ...(value.tickCount !== undefined ? { valueAxisTickCount: value.tickCount } : {}),
@@ -60,6 +76,9 @@ export function resolveBarColumnAxisLayout(
     ...(value.percentAxisLabelPolicy
       ? { percentAxisLabelPolicy: value.percentAxisLabelPolicy }
       : {}),
+    valueAxisScaleSource: value.source,
+    valueAxisScaleStatus: value.status,
+    ...(value.reason ? { valueAxisScaleStatusReason: value.reason } : {}),
     axisLayoutStatus: status.status,
     ...(status.reason ? { axisLayoutStatusReason: status.reason } : {}),
   };
@@ -184,62 +203,107 @@ function resolveValueAxisLayout(input: ResolveBarColumnAxisLayoutInput): {
   tickCount?: number;
   percentDomain?: [number, number];
   percentAxisLabelPolicy?: BarPercentAxisLabelPolicy;
+  source: BarValueAxisScaleSource;
+  status: BarAxisLayoutStatus;
+  reason?: string;
 } {
+  const explicitMin = finiteNumber(input.valueAxis?.min);
+  const explicitMax = finiteNumber(input.valueAxis?.max);
+  const explicitTickStep = positiveNumber(input.valueAxis?.majorUnit);
+  const hasExplicitScale =
+    explicitMin !== undefined || explicitMax !== undefined || explicitTickStep !== undefined;
+  const hasCompleteExplicitScale =
+    explicitMin !== undefined && explicitMax !== undefined && explicitTickStep !== undefined;
+
+  if (input.sourceDialect === 'ooxml-chart-ex') {
+    return {
+      source: hasCompleteExplicitScale ? 'explicit' : 'heuristic',
+      status: 'approximate',
+      reason: 'chartExBarColumnAxisLayoutApproximation',
+    };
+  }
+
   if (input.grouping === 'percentStacked') {
     const percentDomain = percentStackedDomainForData(input.data, input.seriesIndices) ?? [0, 100];
     const domain: [number, number] = [
-      finiteNumber(input.valueAxis?.min) ?? percentDomain[0],
-      finiteNumber(input.valueAxis?.max) ?? percentDomain[1],
+      explicitMin ?? percentDomain[0],
+      explicitMax ?? percentDomain[1],
     ];
-    const tickStep = positiveNumber(input.valueAxis?.majorUnit) ?? percentAxisTickStep(domain);
+    const tickStep = explicitTickStep ?? percentAxisTickStep(domain);
+    const exactness = percentStackedValueScaleStatus(
+      input.sourceDialect,
+      hasExplicitScale,
+      hasCompleteExplicitScale,
+    );
     return {
       domain,
       tickStep,
       tickCount: tickCountForStep(domain, tickStep),
       percentDomain: domain,
       percentAxisLabelPolicy: 'percentFromHundred',
+      ...exactness,
     };
   }
 
-  if (!input.data) return {};
+  if (!input.data) {
+    return missingValueScaleStatus(input.sourceDialect);
+  }
   const values =
     input.grouping === 'stacked'
       ? stackedValuesForData(input.data, input.seriesIndices)
       : memberValuesForData(input.data, input.seriesIndices);
-  if (values.length === 0) return {};
+  if (values.length === 0) {
+    return missingValueScaleStatus(input.sourceDialect);
+  }
 
   if (isLogarithmicAxis(input.valueAxis)) {
-    const explicitMin = finiteNumber(input.valueAxis?.min);
-    const explicitMax = finiteNumber(input.valueAxis?.max);
     return explicitMin !== undefined && explicitMax !== undefined
-      ? { domain: [explicitMin, explicitMax] }
-      : {};
+      ? {
+          domain: [explicitMin, explicitMax],
+          source: 'explicit',
+          status: explicitTickStep !== undefined ? 'exact' : 'approximate',
+          ...(explicitTickStep !== undefined
+            ? { tickStep: explicitTickStep }
+            : { reason: 'logarithmicValueAxisTickStepMissing' }),
+        }
+      : {
+          source: hasExplicitScale ? 'explicit' : 'missing',
+          status: 'approximate',
+          reason: 'logarithmicValueAxisScaleUnsupported',
+        };
   }
 
   if (input.sourceDialect === 'ooxml') {
     const resolved = resolveExcelAutoValueAxisScale({
       values,
       includeZero: true,
-      explicitMin: finiteNumber(input.valueAxis?.min),
-      explicitMax: finiteNumber(input.valueAxis?.max),
-      explicitTickStep: positiveNumber(input.valueAxis?.majorUnit),
+      explicitMin,
+      explicitMax,
+      explicitTickStep,
     });
     return resolved
       ? {
           domain: resolved.domain,
           tickStep: resolved.tickStep,
           tickCount: resolved.tickCount,
+          source: hasCompleteExplicitScale ? 'explicit' : 'excelAutoModel',
+          status: hasExplicitScale && !hasCompleteExplicitScale ? 'approximate' : 'exact',
+          ...(hasExplicitScale && !hasCompleteExplicitScale
+            ? { reason: 'importedAutoValueAxisScalePartialExplicitAxis' }
+            : {}),
         }
-      : {};
+      : missingValueScaleStatus(input.sourceDialect);
   }
 
-  return {};
+  return {
+    source: hasCompleteExplicitScale ? 'explicit' : 'excelAutoModel',
+    status: hasCompleteExplicitScale ? 'exact' : 'verifiedDefault',
+  };
 }
 
-function resolveAxisLayoutStatus(
+function resolveCategoryTickStatus(
   sourceDialect: ResolveBarColumnAxisLayoutInput['sourceDialect'],
   skipSource: BarAxisTickSkipSource,
-  labelSkip: number | undefined,
 ): { status: BarAxisLayoutStatus; reason?: string } {
   if (sourceDialect === 'ooxml-chart-ex') {
     return {
@@ -248,15 +312,71 @@ function resolveAxisLayoutStatus(
     };
   }
   if (sourceDialect === 'ooxml') {
-    if (skipSource === 'importedAuto' && (labelSkip ?? 1) > 1) {
-      return {
-        status: 'approximate',
-        reason: 'importedAutoCategoryTickSkipHeuristic',
-      };
+    if (skipSource === 'importedAuto') {
+      return { status: 'exact' };
     }
     return { status: 'exact' };
   }
   return { status: 'verifiedDefault' };
+}
+
+function aggregateAxisLayoutStatus(
+  categoryStatus: { status: BarAxisLayoutStatus; reason?: string },
+  valueStatus: { status: BarAxisLayoutStatus; reason?: string },
+): { status: BarAxisLayoutStatus; reason?: string } {
+  if (categoryStatus.status === 'approximate') return categoryStatus;
+  if (valueStatus.status === 'approximate') return valueStatus;
+  if (categoryStatus.status === 'verifiedDefault' || valueStatus.status === 'verifiedDefault') {
+    return { status: 'verifiedDefault' };
+  }
+  return { status: 'exact' };
+}
+
+function percentStackedValueScaleStatus(
+  sourceDialect: ResolveBarColumnAxisLayoutInput['sourceDialect'],
+  hasExplicitScale: boolean,
+  hasCompleteExplicitScale: boolean,
+): { source: BarValueAxisScaleSource; status: BarAxisLayoutStatus; reason?: string } {
+  if (hasCompleteExplicitScale) {
+    return { source: 'explicit', status: 'exact' };
+  }
+  if (!hasExplicitScale) {
+    return {
+      source: 'percentStackedDefault',
+      status:
+        sourceDialect === 'ooxml' || sourceDialect === undefined
+          ? 'verifiedDefault'
+          : 'approximate',
+      ...(sourceDialect === 'ooxml-chart-ex'
+        ? { reason: 'chartExBarColumnAxisLayoutApproximation' }
+        : {}),
+    };
+  }
+  return {
+    source: 'heuristic',
+    status: 'approximate',
+    reason:
+      sourceDialect === 'ooxml'
+        ? 'importedAutoValueAxisScaleHeuristic'
+        : 'percentStackedValueAxisScaleIncompleteExplicitAxis',
+  };
+}
+
+function missingValueScaleStatus(
+  sourceDialect: ResolveBarColumnAxisLayoutInput['sourceDialect'],
+): {
+  source: BarValueAxisScaleSource;
+  status: BarAxisLayoutStatus;
+  reason?: string;
+} {
+  if (sourceDialect === undefined) {
+    return { source: 'missing', status: 'verifiedDefault' };
+  }
+  return {
+    source: 'missing',
+    status: 'approximate',
+    reason: 'barColumnValueAxisScaleMissing',
+  };
 }
 
 function approximateCategoryAxisLength(input: ResolveBarColumnAxisLayoutInput): number {

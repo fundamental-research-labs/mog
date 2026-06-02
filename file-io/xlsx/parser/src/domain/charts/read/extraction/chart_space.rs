@@ -731,6 +731,7 @@ fn extract_chart_style_context(
             None,
         );
     }
+    push_marker_style_owners(&mut context.owners, inputs.cs);
 
     if context.color_map_override.is_none()
         && context.diagnostics.is_empty()
@@ -775,6 +776,72 @@ fn series_source_path(series: &domain_types::chart::ChartSeriesData) -> String {
     match series.idx {
         Some(idx) => format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[c:idx={idx}]"),
         None => "c:chartSpace/c:chart/c:plotArea/*/c:ser".to_string(),
+    }
+}
+
+fn push_marker_style_owners(
+    owners: &mut Vec<domain_types::ChartStyleOwnerData>,
+    cs: &ooxml_types::charts::ChartSpace,
+) {
+    for group in &cs.chart.plot_area.chart_groups {
+        for (series_position, series) in group.series.iter().enumerate() {
+            let source_path = raw_series_source_path(series, series_position);
+            if let Some(marker) = series.marker.as_ref() {
+                let format = extract_chart_format(marker.sp_pr.as_ref(), None);
+                push_style_owner(
+                    owners,
+                    &marker_owner_key(series, series_position),
+                    &format!("{source_path}/c:marker"),
+                    format.as_ref(),
+                    None,
+                );
+            }
+
+            for point in &series.d_pt {
+                let Some(marker) = point.marker.as_ref() else {
+                    continue;
+                };
+                let format = extract_chart_format(marker.sp_pr.as_ref(), None);
+                push_style_owner(
+                    owners,
+                    &marker_point_owner_key(series, series_position, point.idx),
+                    &format!("{source_path}/c:dPt[c:idx={}]/c:marker", point.idx),
+                    format.as_ref(),
+                    None,
+                );
+            }
+        }
+    }
+}
+
+fn marker_owner_key(series: &ooxml_types::charts::ChartSeries, series_position: usize) -> String {
+    if series.idx == 0 && series_position != 0 {
+        format!("marker(series={series_position})")
+    } else {
+        format!("marker(seriesIdx={})", series.idx)
+    }
+}
+
+fn marker_point_owner_key(
+    series: &ooxml_types::charts::ChartSeries,
+    series_position: usize,
+    point_index: u32,
+) -> String {
+    if series.idx == 0 && series_position != 0 {
+        format!("markerPoint(series={series_position},point={point_index})")
+    } else {
+        format!("markerPoint(seriesIdx={},pointIdx={point_index})", series.idx)
+    }
+}
+
+fn raw_series_source_path(
+    series: &ooxml_types::charts::ChartSeries,
+    series_position: usize,
+) -> String {
+    if series.idx == 0 && series_position != 0 {
+        format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[{series_position}]")
+    } else {
+        format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[c:idx={}]", series.idx)
     }
 }
 
@@ -860,6 +927,7 @@ fn extract_stock_sub_type_from_plot_area(
     match (stock_series_count?, volume_series_count) {
         (3, 0) => Some(ChartSubType::Hlc),
         (4, 0) => Some(ChartSubType::Ohlc),
+        (5, 0) => Some(ChartSubType::VolumeOhlc),
         (3, 1) => Some(ChartSubType::VolumeHlc),
         (4, 1) => Some(ChartSubType::VolumeOhlc),
         _ => None,

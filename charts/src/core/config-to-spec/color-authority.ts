@@ -9,6 +9,7 @@ import type {
   ChartColor,
   ChartConfig,
   ChartFormat,
+  ChartSeriesStockRole,
   ChartType,
   PointFormat,
   SeriesConfig,
@@ -38,6 +39,9 @@ interface ResolveSeriesColorAuthorityInput {
   sourceSeriesIndex: number;
   renderedSeriesIndex?: number;
   fallbackType?: ChartType;
+  stockSourceRole?: ChartSeriesStockRole;
+  stockSourceRoleIndex?: number;
+  stockSourceRoleOrder?: readonly ChartSeriesStockRole[];
 }
 
 export function resolveSeriesColorAuthority(
@@ -103,9 +107,13 @@ export function resolveSeriesColorAuthority(
     primary ??
     resolvePaletteFallbackAuthority({
       config,
+      fallbackType,
       sourceSeriesIndex,
       renderedSeriesIndex,
       ownerKey,
+      stockSourceRole: input.stockSourceRole,
+      stockSourceRoleIndex: input.stockSourceRoleIndex,
+      stockSourceRoleOrder: input.stockSourceRoleOrder,
     });
   const points = resolvePointColorAuthorities(config, series, sourceSeriesIndex);
   const summary = fallback ?? unknownAuthority(ownerKey);
@@ -298,9 +306,13 @@ function resolveFormatLineAuthority(input: {
 
 function resolvePaletteFallbackAuthority(input: {
   config: ChartConfig | undefined;
+  fallbackType: ChartType | undefined;
   sourceSeriesIndex: number;
   renderedSeriesIndex: number | undefined;
   ownerKey: string;
+  stockSourceRole: ChartSeriesStockRole | undefined;
+  stockSourceRoleIndex: number | undefined;
+  stockSourceRoleOrder: readonly ChartSeriesStockRole[] | undefined;
 }): PaintAuthority | undefined {
   const { config, sourceSeriesIndex, renderedSeriesIndex, ownerKey } = input;
   if (!config) {
@@ -339,7 +351,63 @@ function resolvePaletteFallbackAuthority(input: {
     }
   }
 
+  const stockDefault = stockRoleDefaultAuthority(input);
+  if (stockDefault) return stockDefault;
+
   return defaultPaletteAuthority(sourceSeriesIndex, ownerKey);
+}
+
+const EXCEL_STOCK_ROLE_DEFAULT_COLOR_AUTHORITY_SOURCE: ResolvedChartColorAuthoritySource =
+  'excelStockRoleDefault';
+const EXCEL_STOCK_ROLE_DEFAULT_COLORS = [
+  '#4472c4',
+  '#ed7d31',
+  '#a5a5a5',
+  '#ffc000',
+  '#5b9bd5',
+];
+
+function stockRoleDefaultAuthority(input: {
+  fallbackType: ChartType | undefined;
+  ownerKey: string;
+  stockSourceRole: ChartSeriesStockRole | undefined;
+  stockSourceRoleIndex: number | undefined;
+  stockSourceRoleOrder: readonly ChartSeriesStockRole[] | undefined;
+}): PaintAuthority | undefined {
+  if (input.fallbackType !== 'stock') return undefined;
+  if (!input.stockSourceRole || !input.stockSourceRoleOrder?.length) return undefined;
+  const roleIndex = stockRoleDefaultIndex({
+    role: input.stockSourceRole,
+    roleIndex: input.stockSourceRoleIndex,
+    sourceRoleOrder: input.stockSourceRoleOrder,
+  });
+  if (roleIndex === undefined) return undefined;
+  const color =
+    EXCEL_STOCK_ROLE_DEFAULT_COLORS[roleIndex % EXCEL_STOCK_ROLE_DEFAULT_COLORS.length];
+  if (!color) return undefined;
+  return {
+    color,
+    source: EXCEL_STOCK_ROLE_DEFAULT_COLOR_AUTHORITY_SOURCE,
+    ownerKey: input.ownerKey,
+    explicit: false,
+    fallback: false,
+  };
+}
+
+function stockRoleDefaultIndex(input: {
+  role: ChartSeriesStockRole;
+  roleIndex: number | undefined;
+  sourceRoleOrder: readonly ChartSeriesStockRole[];
+}): number | undefined {
+  if (
+    input.roleIndex !== undefined &&
+    input.roleIndex >= 0 &&
+    input.sourceRoleOrder[input.roleIndex] === input.role
+  ) {
+    return input.roleIndex;
+  }
+  const index = input.sourceRoleOrder.indexOf(input.role);
+  return index >= 0 ? index : undefined;
 }
 
 function defaultPaletteAuthority(index: number, ownerKey: string): PaintAuthority {

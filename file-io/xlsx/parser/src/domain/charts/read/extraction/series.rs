@@ -101,6 +101,11 @@ fn stock_role_for_group_series(
         (4, 1) => Some(Role::High),
         (4, 2) => Some(Role::Low),
         (4, 3) => Some(Role::Close),
+        (5, 0) => Some(Role::Volume),
+        (5, 1) => Some(Role::Open),
+        (5, 2) => Some(Role::High),
+        (5, 3) => Some(Role::Low),
+        (5, 4) => Some(Role::Close),
         _ => None,
     }
 }
@@ -131,7 +136,7 @@ fn stock_plot_shape(plot_area: &ooxml_types::charts::PlotArea) -> Option<StockPl
     let stock_series_count = stock_series_count?;
     matches!(
         (stock_series_count, volume_series_count),
-        (3, 0) | (4, 0) | (3, 1) | (4, 1)
+        (3, 0) | (4, 0) | (5, 0) | (3, 1) | (4, 1)
     )
     .then_some(StockPlotShape {
         stock_series_count,

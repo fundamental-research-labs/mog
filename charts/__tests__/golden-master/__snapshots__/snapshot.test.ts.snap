@@ -33,7 +33,14 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
     "path": "M169.73336361571654,342 L169.73336361571654,234.66666666666669 L264.7140585964116,127.33333333333334 L359.69475357710655,20 L359.69475357710655,342 Z",
     "style": {
       "fill": "#1f77b4",
-      "opacity": 0.7,
+      "fillPaint": {
+        "color": "#1f77b4",
+        "opacity": 0.7,
+        "type": "solid",
+      },
+      "line": {
+        "width": 1,
+      },
       "stroke": "#1f77b4",
       "strokeWidth": 1,
     },
@@ -68,7 +75,14 @@ exports[`golden-master: area chart golden-master: area chart marks 1`] = `
     "path": "M169.73336361571654,342 L169.73336361571654,181 L264.7140585964116,73.66666666666669 L359.69475357710655,288.3333333333333 L359.69475357710655,342 Z",
     "style": {
       "fill": "#ff7f0e",
-      "opacity": 0.7,
+      "fillPaint": {
+        "color": "#ff7f0e",
+        "opacity": 0.7,
+        "type": "solid",
+      },
+      "line": {
+        "width": 1,
+      },
       "stroke": "#ff7f0e",
       "strokeWidth": 1,
     },
@@ -1611,7 +1625,14 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
     "path": "M169.73336361571654,270.44444444444446 L264.7140585964116,198.88888888888889 L359.69475357710655,127.33333333333334 L359.69475357710655,342 L264.7140585964116,342 L169.73336361571654,342 Z",
     "style": {
       "fill": "#1f77b4",
-      "opacity": 0.7,
+      "fillPaint": {
+        "color": "#1f77b4",
+        "opacity": 0.7,
+        "type": "solid",
+      },
+      "line": {
+        "width": 1,
+      },
       "stroke": "#1f77b4",
       "strokeWidth": 1,
     },
@@ -1646,7 +1667,14 @@ exports[`golden-master: stacked area chart golden-master: stacked area chart mar
     "path": "M169.73336361571654,163.11111111111111 L264.7140585964116,20 L359.69475357710655,91.55555555555554 L359.69475357710655,127.33333333333334 L264.7140585964116,198.88888888888889 L169.73336361571654,270.44444444444446 Z",
     "style": {
       "fill": "#ff7f0e",
-      "opacity": 0.7,
+      "fillPaint": {
+        "color": "#ff7f0e",
+        "opacity": 0.7,
+        "type": "solid",
+      },
+      "line": {
+        "width": 1,
+      },
       "stroke": "#ff7f0e",
       "strokeWidth": 1,
     },

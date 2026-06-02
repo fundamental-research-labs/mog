@@ -40,6 +40,22 @@ export function applyAxisLineStyle(
     spec.domainWidth = lineWidth;
     spec.tickWidth = lineWidth;
   }
+  const axisLineDash = dashStyleToStrokeDash(
+    axisLine?.dashStyle,
+    linePointsToCanvasPx(axisLine?.width),
+  );
+  if (axisLineDash) {
+    spec.domainDash = axisLineDash;
+    spec.tickDash = axisLineDash;
+  }
+  if (axisLine) {
+    const opacity =
+      axisLine.transparency === undefined
+        ? 1
+        : Math.max(0, Math.min(1, 1 - axisLine.transparency));
+    spec.domainOpacity = opacity;
+    spec.tickOpacity = opacity;
+  }
 }
 
 export function applyAxisGridlineStyle(
@@ -47,6 +63,7 @@ export function applyAxisGridlineStyle(
   axisConf: SingleAxisConfig,
   context: ResolveChartColorOptions,
 ): void {
+  if (axisConf.gridlineFormat?.noFill === true) spec.grid = false;
   const gridlineColor = resolveGridlineColor(axisConf.gridlineFormat?.color, context);
   if (gridlineColor) spec.gridColor = gridlineColor;
   if (axisConf.gridlineFormat?.width !== undefined) {
@@ -63,6 +80,7 @@ export function applyAxisGridlineStyle(
         ? 1
         : Math.max(0, Math.min(1, 1 - axisConf.gridlineFormat.transparency));
   }
+  if (axisConf.minorGridlineFormat?.noFill === true) spec.minorGrid = false;
   const minorGridlineColor = resolveGridlineColor(axisConf.minorGridlineFormat?.color, context);
   if (minorGridlineColor) spec.minorGridColor = minorGridlineColor;
   if (axisConf.minorGridlineFormat?.width !== undefined) {

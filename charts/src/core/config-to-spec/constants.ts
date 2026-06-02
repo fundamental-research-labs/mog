@@ -42,7 +42,7 @@ export const MARK_TYPE_MAP: Record<ChartType, MarkType> = {
   bubble: 'point',
   combo: 'bar', // default layer mark; combo uses layers
   radar: 'radar',
-  stock: 'rule', // stock uses rule marks for OHLC ranges
+  stock: 'stockGlyph',
   funnel: 'bar',
   waterfall: 'bar',
   // 3D variants lower to path-based projected marks while preserving the shared ChartMark IR.

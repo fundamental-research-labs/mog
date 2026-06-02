@@ -307,7 +307,16 @@ describe('resolved spec structure snapshot helpers', () => {
     });
     const data: ChartData = {
       categories: ['Category A', 'Category B', 'Category C'],
-      series: [{ name: 'Measure', data: [] }],
+      series: [
+        {
+          name: 'Measure',
+          data: [
+            { x: 'Category A', y: 10 },
+            { x: 'Category B', y: 20 },
+            { x: 'Category C', y: 30 },
+          ],
+        },
+      ],
     };
 
     expect(snapshotLegend(config, [seriesSnapshot('Measure', 0)], data)).toEqual({
@@ -357,7 +366,16 @@ describe('resolved spec structure snapshot helpers', () => {
     });
     const data: ChartData = {
       categories: ['Category A', 'Category B', 'Category C'],
-      series: [{ name: 'Measure', data: [] }],
+      series: [
+        {
+          name: 'Measure',
+          data: [
+            { x: 'Category A', y: 10 },
+            { x: 'Category B', y: 20 },
+            { x: 'Category C', y: 30 },
+          ],
+        },
+      ],
     };
 
     expect(snapshotLegend(config, [seriesSnapshot('Measure', 0)], data)).toEqual({
@@ -370,29 +388,47 @@ describe('resolved spec structure snapshot helpers', () => {
           text: 'Category A',
           index: 0,
           visible: true,
-          vocabulary: 'category',
+          vocabulary: 'point',
           indexKind: 'point',
           pointIndex: 0,
+          pointKey: 'series:0:point-0',
+          legendKey: 'point-0',
+          colorKey: 'point-0',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
         },
         {
           text: 'Category B',
           index: 1,
           visible: false,
           deleted: true,
-          vocabulary: 'category',
+          vocabulary: 'point',
           indexKind: 'point',
           pointIndex: 1,
+          pointKey: 'series:0:point-1',
+          legendKey: 'point-1',
+          colorKey: 'point-1',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
         },
         {
           text: 'Category C',
           index: 2,
           visible: true,
-          vocabulary: 'category',
+          vocabulary: 'point',
           indexKind: 'point',
           pointIndex: 2,
+          pointKey: 'series:0:point-2',
+          legendKey: 'point-2',
+          colorKey: 'point-2',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
         },
       ],
-      entryVocabulary: 'category',
+      entryVocabulary: 'point',
       entryIndexKind: 'point',
       entryLayer: 'rendered',
       visibleEntries: ['Category A', 'Category C'],
@@ -401,17 +437,29 @@ describe('resolved spec structure snapshot helpers', () => {
           text: 'Category A',
           index: 0,
           visible: true,
-          vocabulary: 'category',
+          vocabulary: 'point',
           indexKind: 'point',
           pointIndex: 0,
+          pointKey: 'series:0:point-0',
+          legendKey: 'point-0',
+          colorKey: 'point-0',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
         },
         {
           text: 'Category C',
           index: 2,
           visible: true,
-          vocabulary: 'category',
+          vocabulary: 'point',
           indexKind: 'point',
           pointIndex: 2,
+          pointKey: 'series:0:point-2',
+          legendKey: 'point-2',
+          colorKey: 'point-2',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
         },
       ],
     });
@@ -421,6 +469,7 @@ describe('resolved spec structure snapshot helpers', () => {
     const config = chartConfig({
       type: 'bubble',
       varyByCategories: true,
+      extra: { sourceDialect: 'ooxml' },
       legend: {
         show: true,
         visible: true,
@@ -430,7 +479,16 @@ describe('resolved spec structure snapshot helpers', () => {
     });
     const data: ChartData = {
       categories: [1, 2, 3],
-      series: [{ name: 'Products', data: [] }],
+      series: [
+        {
+          name: 'Products',
+          data: [
+            { x: 1, y: 10, size: 100 },
+            { x: 2, y: 20, size: 200 },
+            { x: 3, y: 30, size: 300 },
+          ],
+        },
+      ],
     };
 
     expect(snapshotLegend(config, [seriesSnapshot('Products', 0)], data)).toEqual({
@@ -458,14 +516,24 @@ describe('resolved spec structure snapshot helpers', () => {
     });
   });
 
-  it('reports standard bubble support as exact when the legend uses source series entries', () => {
+  it('requires cartesian geometry evidence before imported bubble support can be exact', () => {
     const config = chartConfig({
       type: 'bubble',
+      varyByCategories: true,
+      extra: { sourceDialect: 'ooxml' },
       legend: { show: true, visible: true, position: 'right' },
     });
     const data: ChartData = {
       categories: [1, 2],
-      series: [{ name: 'Products', data: [] }],
+      series: [
+        {
+          name: 'Products',
+          data: [
+            { x: 1, y: 10, size: 100 },
+            { x: 2, y: 20, size: 200 },
+          ],
+        },
+      ],
     };
     const legend = snapshotLegend(config, [seriesSnapshot('Products', 0)], data);
 
@@ -478,8 +546,8 @@ describe('resolved spec structure snapshot helpers', () => {
         seriesProjection: seriesProjectionSnapshot(),
       }),
     ).toMatchObject({
-      supportLevel: 'exact',
-      reason: 'exactRenderer',
+      supportLevel: 'approximate',
+      reason: 'xyCartesianGeometryEvidenceMissing',
       renderedAs: 'bubble',
     });
     expect(
@@ -492,7 +560,7 @@ describe('resolved spec structure snapshot helpers', () => {
       }),
     ).toMatchObject({
       supportLevel: 'approximate',
-      reason: 'bubbleLegendSeriesDomain',
+      reason: 'xyCartesianGeometryEvidenceMissing',
     });
   });
 });

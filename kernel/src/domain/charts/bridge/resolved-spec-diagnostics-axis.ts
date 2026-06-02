@@ -1,14 +1,18 @@
-import {
-  effectiveBarGeometry,
-  hasExcelBarGeometryConfig,
-  isImportedStandardOoxmlChart,
-  type ChartConfig,
-} from '@mog/charts';
+import type { ChartConfig } from '@mog/charts';
 import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
+
+import {
+  isXYValueAxisChartType,
+  secondarySemanticCategoryAxisForModel,
+  secondaryValueAxisForModel,
+  semanticCategoryAxisForModel,
+  xValueAxisForModel,
+  yValueAxisForModel,
+} from './axis-role';
 
 type ResolvedSnapshotSeries = ResolvedChartSpecSnapshot['resolved']['series'];
 type SingleAxisConfig = NonNullable<NonNullable<ChartConfig['axis']>['categoryAxis']>;
-type AxisDiagnosticRole = 'category' | 'value' | 'series';
+type AxisDiagnosticRole = 'category' | 'value' | 'xValue' | 'yValue' | 'series';
 type AxisOrientation = 'horizontal' | 'vertical';
 type AxisPosition = 'bottom' | 'top' | 'left' | 'right';
 
@@ -21,32 +25,8 @@ export function axisUnsupportedFeatureDiagnostics(
   const diagnostics = new Set<string>();
   const isChartEx = (config.extra as { isChartEx?: boolean } | undefined)?.isChartEx === true;
   const isHorizontal = isHorizontalChartType(config.type);
-  const consumesImportedBarColumnCrossing =
-    isImportedStandardOoxmlChart(config) &&
-    hasExcelBarGeometryConfig(config) &&
-    effectiveBarGeometry(config)?.categoryCrossing !== undefined;
-  const entries: Array<{
-    label: string;
-    role: AxisDiagnosticRole;
-    axisConfig: SingleAxisConfig | undefined;
-    secondary?: boolean;
-  }> = [
-    { label: 'category', role: 'category', axisConfig: axis.categoryAxis ?? axis.xAxis },
-    { label: 'value', role: 'value', axisConfig: axis.valueAxis ?? axis.yAxis },
-    {
-      label: 'secondary category',
-      role: 'category',
-      axisConfig: axis.secondaryCategoryAxis,
-      secondary: true,
-    },
-    {
-      label: 'secondary value',
-      role: 'value',
-      axisConfig: axis.secondaryValueAxis ?? axis.secondaryYAxis,
-      secondary: true,
-    },
-    { label: 'series/depth', role: 'series', axisConfig: axis.seriesAxis },
-  ];
+  const isXYChart = isXYValueAxisChartType(config.type);
+  const entries = axisDiagnosticEntries(config);
 
   for (const { label, role, axisConfig, secondary } of entries) {
     if (!axisConfig) continue;
@@ -58,14 +38,14 @@ export function axisUnsupportedFeatureDiagnostics(
         `ChartEx ${label} axis metadata is preserved but rendered through the standard chart axis backend`,
       );
     }
-    const positionDiagnostic = axisPositionDiagnostic(label, role, axisConfig, isHorizontal);
+    const positionDiagnostic = axisPositionDiagnostic(
+      label,
+      role,
+      axisConfig,
+      isHorizontal,
+      isXYChart,
+    );
     if (positionDiagnostic) diagnostics.add(positionDiagnostic);
-    if (
-      !consumesImportedBarColumnCrossing &&
-      (axisConfig.crossBetween || axisConfig.isBetweenCategories !== undefined)
-    ) {
-      diagnostics.add(`${label} axis category crossing policy is approximate`);
-    }
     if (secondary && role === 'category') {
       const scaleDiagnostic = secondaryCategoryIndependentScaleDiagnostic(label, axisConfig);
       if (scaleDiagnostic) diagnostics.add(scaleDiagnostic);
@@ -83,6 +63,7 @@ function axisPositionDiagnostic(
   role: AxisDiagnosticRole,
   axisConfig: SingleAxisConfig,
   isHorizontalChart: boolean,
+  isXYChart: boolean,
 ): string | undefined {
   if (!axisConfig.position) return undefined;
   const position = normalizeAxisPosition(axisConfig.position);
@@ -95,9 +76,13 @@ function axisPositionDiagnostic(
     expectedOrientation === 'horizontal'
       ? new Set<AxisPosition>(['bottom', 'top'])
       : new Set<AxisPosition>(['left', 'right']);
-  return allowed.has(position)
-    ? undefined
-    : `${label} axis position "${axisConfig.position}" does not match ${expectedOrientation} axis geometry`;
+  if (allowed.has(position)) return undefined;
+  if (isXYChart && isXYValueDiagnosticRole(role)) return undefined;
+  return `${label} axis position "${axisConfig.position}" does not match ${expectedOrientation} axis geometry`;
+}
+
+function isXYValueDiagnosticRole(role: AxisDiagnosticRole): boolean {
+  return role === 'xValue' || role === 'yValue' || role === 'value';
 }
 
 function expectedAxisOrientation(
@@ -105,8 +90,69 @@ function expectedAxisOrientation(
   isHorizontalChart: boolean,
 ): AxisOrientation | undefined {
   if (role === 'series') return undefined;
+  if (role === 'xValue') return 'horizontal';
+  if (role === 'yValue') return 'vertical';
   if (role === 'category') return isHorizontalChart ? 'vertical' : 'horizontal';
   return isHorizontalChart ? 'horizontal' : 'vertical';
+}
+
+function axisDiagnosticEntries(config: ChartConfig): Array<{
+  label: string;
+  role: AxisDiagnosticRole;
+  axisConfig: SingleAxisConfig | undefined;
+  secondary?: boolean;
+}> {
+  const axis = config.axis;
+  if (!axis) return [];
+  if (isXYValueAxisChartType(config.type)) {
+    return [
+      {
+        label: 'category',
+        role: 'category',
+        axisConfig: semanticCategoryAxisForModel(config),
+      },
+      {
+        label: 'x value',
+        role: 'xValue',
+        axisConfig: xValueAxisForModel(config),
+      },
+      {
+        label: 'y value',
+        role: 'yValue',
+        axisConfig: yValueAxisForModel(config),
+      },
+      {
+        label: 'secondary category',
+        role: 'category',
+        axisConfig: secondarySemanticCategoryAxisForModel(config),
+        secondary: true,
+      },
+      {
+        label: 'secondary value',
+        role: 'value',
+        axisConfig: secondaryValueAxisForModel(config),
+        secondary: true,
+      },
+      { label: 'series/depth', role: 'series', axisConfig: axis.seriesAxis },
+    ];
+  }
+  return [
+    { label: 'category', role: 'category', axisConfig: axis.categoryAxis ?? axis.xAxis },
+    { label: 'value', role: 'value', axisConfig: axis.valueAxis ?? axis.yAxis },
+    {
+      label: 'secondary category',
+      role: 'category',
+      axisConfig: axis.secondaryCategoryAxis,
+      secondary: true,
+    },
+    {
+      label: 'secondary value',
+      role: 'value',
+      axisConfig: axis.secondaryValueAxis ?? axis.secondaryYAxis,
+      secondary: true,
+    },
+    { label: 'series/depth', role: 'series', axisConfig: axis.seriesAxis },
+  ];
 }
 
 function normalizeAxisPosition(position: string): AxisPosition | undefined {
@@ -201,7 +247,12 @@ function logAxisDiagnostics(
 }
 
 function positiveDomainCandidateValues(label: string, series: ResolvedSnapshotSeries): number[] {
-  if (label === 'value') {
+  if (label === 'x value') {
+    return series
+      .flatMap((item) => item.xValues)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  }
+  if (label === 'value' || label === 'y value') {
     return series
       .filter((item) => item.axisGroup !== 'secondary')
       .flatMap((item) => item.values)

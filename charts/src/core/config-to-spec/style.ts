@@ -244,11 +244,6 @@ export function applySeriesLineFormat(
     const strokeWidth = linePointsToCanvasPx(line.width);
     if (strokeWidth !== undefined) mark.strokeWidth = strokeWidth;
   }
-  if (hasExplicitNoLine(seriesConf)) {
-    mark.opacity = 0;
-    mark.strokeWidth = 0;
-  }
-
   const lineWidth = linePointsToCanvasPx(seriesConf?.lineWidth);
   if (lineWidth !== undefined && !hasExplicitNoLine(seriesConf)) mark.strokeWidth = lineWidth;
 }

@@ -102,6 +102,8 @@ type SerializableTextMark = SerializableMarkBase & {
   textAlign: 'left' | 'center' | 'right';
   textBaseline: 'top' | 'middle' | 'bottom';
   rotation?: number;
+  maxWidth?: number;
+  lineHeight?: number;
   fontWeight?: 'normal' | 'bold' | number;
   fontStyle?: 'normal' | 'italic';
 };
@@ -261,6 +263,8 @@ function serializeMark(mark: ChartMark, index: number): SerializableMark {
         textAlign: textAlignField(mark.textAlign, index),
         textBaseline: textBaselineField(mark.textBaseline, index),
         rotation: optionalFiniteNumber(mark.rotation, 'rotation', index),
+        maxWidth: optionalFiniteNumber(mark.maxWidth, 'maxWidth', index),
+        lineHeight: optionalFiniteNumber(mark.lineHeight, 'lineHeight', index),
         fontWeight: fontWeightField(mark.fontWeight, index),
         fontStyle: fontStyleField(mark.fontStyle, index),
         ...(clip ? { clip } : {}),
@@ -293,11 +297,17 @@ function serializeStyle(source: ChartMarkStyle, index: number): SerializableStyl
     optionalStringInto(style, 'fill', source.fill, index);
   }
 
-  const strokePaint = serializablePaint(source.line?.paint ?? source.strokePaint);
+  const strokeOpacity = source.line?.opacity;
+  const strokePaint = serializablePaint(source.line?.paint ?? source.strokePaint, strokeOpacity);
   if (strokePaint.kind === 'color') {
     style.stroke = strokePaint.color;
   } else if (strokePaint.kind !== 'none') {
-    optionalStringInto(style, 'stroke', source.stroke, index);
+    optionalStringInto(
+      style,
+      'stroke',
+      typeof source.stroke === 'string' ? withPaintOpacity(source.stroke, strokeOpacity) : undefined,
+      index,
+    );
   }
 
   optionalNumberInto(style, 'strokeWidth', source.line?.width ?? source.strokeWidth, index);
@@ -417,28 +427,46 @@ type SerializablePaint =
   | { kind: 'unsupported' }
   | { kind: 'color'; color: string };
 
-function serializablePaint(paint: ChartPaint | undefined): SerializablePaint {
+function serializablePaint(
+  paint: ChartPaint | undefined,
+  opacityMultiplier?: number,
+): SerializablePaint {
   if (!paint) return { kind: 'unsupported' };
 
   switch (paint.type) {
     case 'none':
       return { kind: 'none' };
     case 'solid':
-      return { kind: 'color', color: withPaintOpacity(paint.color, paint.opacity) };
+      return {
+        kind: 'color',
+        color: withPaintOpacity(paint.color, multiplyOpacity(paint.opacity, opacityMultiplier)),
+      };
     case 'pattern': {
       const color = paint.foreground ?? paint.background;
       return color
-        ? { kind: 'color', color: withPaintOpacity(color, paint.opacity) }
+        ? {
+            kind: 'color',
+            color: withPaintOpacity(color, multiplyOpacity(paint.opacity, opacityMultiplier)),
+          }
         : { kind: 'unsupported' };
     }
     case 'groupInherited':
-      return serializablePaint(paint.fallback);
+      return serializablePaint(paint.fallback, opacityMultiplier);
     case 'linearGradient':
     case 'radialGradient':
     case 'rectangularGradient':
     case 'image':
       return { kind: 'unsupported' };
   }
+}
+
+function multiplyOpacity(
+  base: number | undefined,
+  multiplier: number | undefined,
+): number | undefined {
+  if (base === undefined) return multiplier;
+  if (multiplier === undefined) return base;
+  return Math.max(0, Math.min(1, base * multiplier));
 }
 
 function withPaintOpacity(color: string, opacity: number | undefined): string {

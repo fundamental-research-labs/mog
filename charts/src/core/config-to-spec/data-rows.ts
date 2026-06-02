@@ -1,5 +1,11 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartDataPointValueState, PointFormat } from '../../types';
+import type {
+  ChartConfig,
+  ChartData,
+  ChartDataPointValueState,
+  ChartType,
+  PointFormat,
+} from '../../types';
 import { isHorizontalBarType } from './axis';
 import {
   categoryKeyForIndex,
@@ -11,15 +17,18 @@ import {
   BLANK_VALUE_FIELD,
   BUBBLE_SIZE_FIELD,
   CLIP_TO_PLOT_AREA_FIELD,
+  PIE_POINT_KEY_FIELD,
   POINT_INDEX_FIELD,
   RAW_BUBBLE_SIZE_FIELD,
   SCATTER_X_FIELD,
   LINE_SEGMENT_FIELD,
   SERIES_OPACITY_FIELD,
+  SOURCE_BLANK_FIELD,
   VALUE_FIELD,
 } from './fields';
 import {
   bubbleSizeValue,
+  effectiveBlankPolicyForRows,
   isBubbleSeries,
   isQuantitativeXSeries,
   maxRenderableBubbleMagnitude,
@@ -49,6 +58,9 @@ import {
 import { applyCategoryFormat, buildBaseRow } from './data-row-base';
 import { applyStockFields } from './data-row-stock';
 import { applyWaterfallFields, waterfallTotalIndices } from './data-row-waterfall';
+import { isSupportedChartType, resolveComboSeriesType } from './layers/combo-series-options';
+import { piePointKey } from './pie-doughnut-geometry';
+import { isPieLikeChartType } from './pie-like';
 
 /**
  * Convert ChartData (categories + series) to flat DataRow[] for the grammar.
@@ -72,6 +84,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
   const maxBubbleMagnitude = maxRenderableBubbleMagnitude(data, config);
   const totalsBySeries = data.series.map((series) => seriesTotal(series.data));
   const pieLabelGeometries = buildPieLabelGeometries(data, config);
+  const blankPolicy = effectiveBlankPolicyForRows(config);
   const gapSegmentsBySeries = data.series.map(() => 0);
   let waterfallRunningTotal = 0;
   const totalWaterfallIndices = waterfallTotalIndices(config);
@@ -88,6 +101,13 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
       const seriesConfig = seriesConfigForDataSeries(series, seriesConfigs, seriesIndex);
       const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
       const sourceSeriesIndex = seriesSourceIndex(series, seriesIndex);
+      const sourceSeriesKey = seriesSourceKey(series, seriesIndex);
+      const renderedSeriesType = effectiveRenderedSeriesType(
+        config,
+        series,
+        seriesConfig,
+        seriesIndex,
+      );
       const point = series.data[i];
       if (shouldBreakScatterLineAtPoint(point, config, seriesConfig)) {
         gapSegmentsBySeries[seriesIndex] += 1;
@@ -101,13 +121,15 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           pointIndex: i,
           seriesIndex,
           sourceSeriesIndex,
-          sourceSeriesKey: seriesSourceKey(series, seriesIndex),
+          sourceSeriesKey,
           seriesOrder: seriesOrderForDataSeries(series, seriesConfig, seriesIndex),
         });
+        applyPiePointKey(row, config, sourceSeriesIndex, sourceSeriesKey, i);
         row[BLANK_VALUE_FIELD] = true;
+        row[SOURCE_BLANK_FIELD] = true;
         applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
         rows.push(row);
-        if (config?.displayBlanksAs === 'gap') {
+        if (blankPolicy === 'gap') {
           gapSegmentsBySeries[seriesIndex] += 1;
         }
         continue;
@@ -121,11 +143,22 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           pointIndex: i,
           seriesIndex,
           sourceSeriesIndex,
-          sourceSeriesKey: seriesSourceKey(series, seriesIndex),
+          sourceSeriesKey,
           seriesOrder: seriesOrderForDataSeries(series, seriesConfig, seriesIndex),
           value: rowValue,
         });
-        if (config?.displayBlanksAs === 'gap') {
+        applyPiePointKey(row, config, sourceSeriesIndex, sourceSeriesKey, i);
+        if (point.valueState === 'blank') {
+          row[SOURCE_BLANK_FIELD] = true;
+        }
+        if (
+          config?.type === 'radar' &&
+          blankPolicy === 'zero' &&
+          point.valueState === 'blank'
+        ) {
+          row[BLANK_VALUE_FIELD] = true;
+        }
+        if (blankPolicy === 'gap') {
           row[LINE_SEGMENT_FIELD] = gapSegmentsBySeries[seriesIndex];
         }
         if (isQuantitativeX) {
@@ -156,6 +189,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           pieLabelGeometry: pieLabelGeometries[seriesIndex]?.[i],
           seriesValues: series.data.map((item) => item?.y),
           pointFormat,
+          seriesType: renderedSeriesType,
         });
         applySeriesVisualStyle(row, config, seriesConfig, sourceSeriesIndex, point.y, pointFormat);
         if (config?.type === 'waterfall') {
@@ -171,12 +205,39 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
           }
         }
         applyCategoryFormat(row, data.categoryFormatCodes?.[i]);
-        applyStockFields(row, point);
+        applyStockFields(row, point, config);
         rows.push(row);
       }
     }
   }
   return rows;
+}
+
+function applyPiePointKey(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  sourceSeriesIndex: number,
+  sourceSeriesKey: string,
+  pointIndex: number,
+): void {
+  if (!isPieLikeChartType(config?.type)) return;
+  row[PIE_POINT_KEY_FIELD] = piePointKey({ sourceSeriesIndex, sourceSeriesKey, pointIndex });
+}
+
+function effectiveRenderedSeriesType(
+  config: ChartConfig | undefined,
+  series: ChartData['series'][number],
+  seriesConfig: SeriesConfig | undefined,
+  renderedSeriesIndex: number,
+): ChartType | undefined {
+  if (isSupportedChartType(seriesConfig?.type)) return seriesConfig.type;
+  if (isSupportedChartType(series.type)) return series.type;
+  if (!config) return undefined;
+  if (config.type === 'combo') {
+    const resolved = resolveComboSeriesType(config, series, seriesConfig, renderedSeriesIndex);
+    return isSupportedChartType(resolved) ? resolved : undefined;
+  }
+  return config.type;
 }
 
 function applyPointAnnotations(
@@ -197,11 +258,19 @@ function applyPointAnnotations(
     pieLabelGeometry?: PieLabelGeometry;
     seriesValues: Array<number | undefined>;
     pointFormat?: PointFormat;
+    seriesType?: ChartType;
   },
 ): void {
   const { config, seriesConfig, pointFormat } = context;
   applyPointStyle(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
-  applyMarker(row, config, seriesConfig, context.sourceSeriesIndex, pointFormat);
+  applyMarker(
+    row,
+    config,
+    seriesConfig,
+    context.sourceSeriesIndex,
+    pointFormat,
+    context.seriesType,
+  );
   applyDataLabel(row, context, pointFormat);
   applyErrorBars(row, context);
 }

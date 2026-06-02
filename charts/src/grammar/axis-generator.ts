@@ -32,6 +32,29 @@ const ESTIMATED_TEXT_WIDTH_RATIO = 0.6;
 const GRAMMAR_AXIS_LABEL_FONT_SIZE = 11;
 const GRAMMAR_AXIS_TITLE_FONT_SIZE = 12;
 
+export type AxisCrossingPeerScaleKind = 'quantitative' | 'categoryPoint' | 'dateSerial';
+export type AxisCrossingEffectiveMode =
+  | 'automaticValue'
+  | 'min'
+  | 'max'
+  | 'customValue'
+  | 'categoryEdge'
+  | 'categoryCenter'
+  | 'defaultEdge';
+
+export interface AxisCrossingPosition {
+  axisRole: 'x' | 'y';
+  axisOrient: AxisOrient;
+  peerScaleKind: AxisCrossingPeerScaleKind;
+  effectiveMode: AxisCrossingEffectiveMode;
+  pixel: number;
+  plotPosition: number;
+  sourceCrossing?: AxisSpec['crossesAt'];
+  sourceCrossingValue?: number;
+  sourceCategoryCrossing?: AxisSpec['categoryCrossing'];
+  categoryCrossingApplication?: 'applied' | 'notApplicableQuantitativePeer';
+}
+
 function axisDatum(role: string, axisPart: AxisPart): { role: string; axisPart: AxisPart } {
   return { role, axisPart };
 }
@@ -619,44 +642,212 @@ function xTickPath(
 }
 
 function xAxisY(axisSpec: AxisSpec, valueScale: AnyScale | undefined, layout: Layout): number {
-  const plotBottom = layout.plotArea.y + layout.plotArea.height;
-  const defaultY = xAxisOrient(axisSpec) === 'top' ? layout.plotArea.y : plotBottom;
-  if (!valueScale) return defaultY;
+  return resolveAxisCrossingPosition({
+    axisRole: 'x',
+    axisSpec,
+    peerScale: valueScale,
+    layout,
+  }).pixel;
+}
 
-  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(valueScale)) {
-    const side = xAxisCategoryCrossingSide(axisSpec, xAxisOrient(axisSpec));
+export function resolveAxisCrossingPosition(input: {
+  axisRole: 'x' | 'y';
+  axisSpec: AxisSpec;
+  peerScale: AnyScale | undefined;
+  layout: Layout;
+  peerScaleKind?: AxisCrossingPeerScaleKind;
+}): AxisCrossingPosition {
+  if (input.axisRole === 'x') {
+    return resolveXAxisCrossingPosition({
+      ...input,
+      axisRole: 'x',
+    });
+  }
+  return resolveYAxisCrossingPosition({
+    ...input,
+    axisRole: 'y',
+  });
+}
+
+function resolveXAxisCrossingPosition(input: {
+  axisRole: 'x';
+  axisSpec: AxisSpec;
+  peerScale: AnyScale | undefined;
+  layout: Layout;
+  peerScaleKind?: AxisCrossingPeerScaleKind;
+}): AxisCrossingPosition {
+  const { axisSpec, layout, peerScale } = input;
+  const plotBottom = layout.plotArea.y + layout.plotArea.height;
+  const orient = xAxisOrient(axisSpec);
+  const defaultY = orient === 'top' ? layout.plotArea.y : plotBottom;
+  const peerScaleKind = input.peerScaleKind ?? inferPeerScaleKind(peerScale);
+  const result = (effectiveMode: AxisCrossingEffectiveMode, pixel: number): AxisCrossingPosition =>
+    axisCrossingPositionResult({
+      axisRole: 'x',
+      axisOrient: orient,
+      axisSpec,
+      peerScaleKind,
+      effectiveMode,
+      pixel,
+      pixelMin: layout.plotArea.y,
+      pixelMax: plotBottom,
+    });
+  if (!peerScale) return result('defaultEdge', defaultY);
+
+  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(peerScale)) {
+    const side = xAxisCategoryCrossingSide(axisSpec, orient);
     if (side) {
-      return categoricalScaleCrossingPosition(
-        valueScale,
-        side,
-        layout.plotArea.y,
-        plotBottom,
-        'y',
-        defaultY,
+      return result(
+        'categoryCenter',
+        categoricalScaleCrossingPosition(
+          peerScale,
+          side,
+          layout.plotArea.y,
+          plotBottom,
+          'y',
+          defaultY,
+        ),
       );
     }
   }
 
   switch (axisSpec.crossesAt) {
     case 'min':
-      return plotBottom;
+      return result('min', plotBottom);
     case 'max':
-      return layout.plotArea.y;
+      return result('max', layout.plotArea.y);
     case 'custom':
       if (axisSpec.crossesAtValue !== undefined) {
-        return clampAxisPosition(
-          valueScale(axisSpec.crossesAtValue) as number,
-          layout.plotArea.y,
-          plotBottom,
+        return result(
+          'customValue',
+          clampAxisPosition(
+            peerScale(axisSpec.crossesAtValue) as number,
+            layout.plotArea.y,
+            plotBottom,
+          ),
         );
       }
-      return plotBottom;
+      return result('defaultEdge', plotBottom);
     case 'automatic': {
-      return automaticValueCrossingPosition(valueScale, layout.plotArea.y, plotBottom) ?? plotBottom;
+      if (isCategoricalScale(peerScale)) return result('categoryEdge', defaultY);
+      return result(
+        'automaticValue',
+        automaticValueCrossingPosition(peerScale, layout.plotArea.y, plotBottom) ?? plotBottom,
+      );
     }
     default:
-      return defaultY;
+      return result(isCategoricalScale(peerScale) ? 'categoryEdge' : 'defaultEdge', defaultY);
   }
+}
+
+function resolveYAxisCrossingPosition(input: {
+  axisRole: 'y';
+  axisSpec: AxisSpec;
+  peerScale: AnyScale | undefined;
+  layout: Layout;
+  peerScaleKind?: AxisCrossingPeerScaleKind;
+}): AxisCrossingPosition {
+  const { axisSpec, layout, peerScale } = input;
+  const plotLeft = layout.plotArea.x;
+  const plotRight = layout.plotArea.x + layout.plotArea.width;
+  const orient = yAxisOrient(axisSpec);
+  const defaultX = orient === 'right' ? plotRight : plotLeft;
+  const peerScaleKind = input.peerScaleKind ?? inferPeerScaleKind(peerScale);
+  const result = (effectiveMode: AxisCrossingEffectiveMode, pixel: number): AxisCrossingPosition =>
+    axisCrossingPositionResult({
+      axisRole: 'y',
+      axisOrient: orient,
+      axisSpec,
+      peerScaleKind,
+      effectiveMode,
+      pixel,
+      pixelMin: plotLeft,
+      pixelMax: plotRight,
+    });
+  if (!peerScale) return result('defaultEdge', defaultX);
+
+  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(peerScale)) {
+    const side = yAxisCategoryCrossingSide(axisSpec, orient);
+    if (side) {
+      return result(
+        'categoryCenter',
+        categoricalScaleCrossingPosition(
+          peerScale,
+          side,
+          plotLeft,
+          plotRight,
+          'x',
+          defaultX,
+        ),
+      );
+    }
+  }
+
+  switch (axisSpec.crossesAt) {
+    case 'min':
+      return result('min', plotLeft);
+    case 'max':
+      return result('max', plotRight);
+    case 'custom':
+      if (axisSpec.crossesAtValue !== undefined && typeof peerScale.bandwidth !== 'function') {
+        return result(
+          'customValue',
+          clampAxisPosition(peerScale(axisSpec.crossesAtValue) as number, plotLeft, plotRight),
+        );
+      }
+      return result('defaultEdge', defaultX);
+    case 'automatic': {
+      if (typeof peerScale.bandwidth === 'function') return result('categoryEdge', defaultX);
+      return result(
+        'automaticValue',
+        automaticValueCrossingPosition(peerScale, plotLeft, plotRight) ?? defaultX,
+      );
+    }
+    default:
+      return result(isCategoricalScale(peerScale) ? 'categoryEdge' : 'defaultEdge', defaultX);
+  }
+}
+
+function axisCrossingPositionResult(input: {
+  axisRole: 'x' | 'y';
+  axisOrient: AxisOrient;
+  axisSpec: AxisSpec;
+  peerScaleKind: AxisCrossingPeerScaleKind;
+  effectiveMode: AxisCrossingEffectiveMode;
+  pixel: number;
+  pixelMin: number;
+  pixelMax: number;
+}): AxisCrossingPosition {
+  const clampedPixel = clampAxisPosition(input.pixel, input.pixelMin, input.pixelMax);
+  const plotExtent = input.pixelMax - input.pixelMin;
+  const sourceCategoryCrossing = input.axisSpec.categoryCrossing;
+  const categoryCrossingApplication =
+    sourceCategoryCrossing === undefined
+      ? undefined
+      : input.peerScaleKind === 'categoryPoint'
+        ? 'applied'
+        : 'notApplicableQuantitativePeer';
+  return {
+    axisRole: input.axisRole,
+    axisOrient: input.axisOrient,
+    peerScaleKind: input.peerScaleKind,
+    effectiveMode: input.effectiveMode,
+    pixel: clampedPixel,
+    plotPosition:
+      Number.isFinite(plotExtent) && plotExtent !== 0
+        ? (clampedPixel - input.pixelMin) / plotExtent
+        : NaN,
+    ...(input.axisSpec.crossesAt ? { sourceCrossing: input.axisSpec.crossesAt } : {}),
+    ...(input.axisSpec.crossesAtValue !== undefined
+      ? { sourceCrossingValue: input.axisSpec.crossesAtValue }
+      : {}),
+    ...(sourceCategoryCrossing ? { sourceCategoryCrossing } : {}),
+    ...(categoryCrossingApplication ? { categoryCrossingApplication } : {}),
+  };
+}
+
+function inferPeerScaleKind(scale: AnyScale | undefined): AxisCrossingPeerScaleKind {
+  return isCategoricalScale(scale) ? 'categoryPoint' : 'quantitative';
 }
 
 function numericDomainValue(domain: unknown[] | undefined, index: number): number | undefined {
@@ -1034,46 +1225,12 @@ function yAxisTitleSide(
 }
 
 function yAxisX(axisSpec: AxisSpec, categoryScale: AnyScale | undefined, layout: Layout): number {
-  const plotLeft = layout.plotArea.x;
-  const plotRight = layout.plotArea.x + layout.plotArea.width;
-  const defaultX = yAxisOrient(axisSpec) === 'right' ? plotRight : plotLeft;
-  if (!categoryScale) return defaultX;
-
-  if (axisSpec.categoryCrossing === 'midCat' && isCategoricalScale(categoryScale)) {
-    const side = yAxisCategoryCrossingSide(axisSpec, yAxisOrient(axisSpec));
-    if (side) {
-      return categoricalScaleCrossingPosition(
-        categoryScale,
-        side,
-        plotLeft,
-        plotRight,
-        'x',
-        defaultX,
-      );
-    }
-  }
-
-  switch (axisSpec.crossesAt) {
-    case 'min':
-      return plotLeft;
-    case 'max':
-      return plotRight;
-    case 'custom':
-      if (axisSpec.crossesAtValue !== undefined && typeof categoryScale.bandwidth !== 'function') {
-        return clampAxisPosition(
-          categoryScale(axisSpec.crossesAtValue) as number,
-          plotLeft,
-          plotRight,
-        );
-      }
-      return defaultX;
-    case 'automatic': {
-      if (typeof categoryScale.bandwidth === 'function') return defaultX;
-      return automaticValueCrossingPosition(categoryScale, plotLeft, plotRight) ?? defaultX;
-    }
-    default:
-      return defaultX;
-  }
+  return resolveAxisCrossingPosition({
+    axisRole: 'y',
+    axisSpec,
+    peerScale: categoryScale,
+    layout,
+  }).pixel;
 }
 
 function yLabelLayout(
@@ -1457,7 +1614,7 @@ function formatAxisTickResult(
 }
 
 function percentAxisFormat(format: string | undefined): string {
-  return format && format.includes('%') ? format : '0%';
+  return format && format.length > 0 ? format : '0%';
 }
 
 const EXCEL_SERIAL_UNIX_EPOCH = 25569;

@@ -1,6 +1,10 @@
 import type { ChannelSpec, EncodingSpec, LegendSpec } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartDataPoint, SingleAxisConfig } from '../../types';
-import { resolveRadarValueScale } from '../radar-semantics';
+import {
+  radarBlankPolicyFromDisplayBlanksAs,
+  resolveRadarValueScale,
+  type RadarBlankPolicy,
+} from '../radar-semantics';
 import {
   applyAutoValueAxisTicks,
   buildAxisScaleSpec,
@@ -25,6 +29,7 @@ import {
 } from './encoding-adjustments';
 import { applyBarColumnAxisLayout } from './bar-axis-layout';
 import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
+import { applyPathChartAxisLayout } from './path-axis-layout';
 import {
   applyExcelCartesianValueScales,
   applyExcelCategoryPointScale,
@@ -32,21 +37,24 @@ import {
   excelChartValueAxisIncludesZero,
   usesExcelCartesianGeometry,
 } from './excel-cartesian-geometry';
+import { maxRenderableBubbleMagnitude } from './data-point-values';
 import { hasSecondaryYAxis } from './secondary-axis';
 import {
   buildCategoryLegendDomain,
   buildColorEncoding,
   buildLegendSpec,
+  buildPiePointLegendDomain,
   buildSeriesLegendDomain,
   isLegendShown,
   legendSymbolType,
   usesPointLegendEntries,
   visibleLegendDomain,
 } from './legend';
-import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
+import { BUBBLE_SIZE_FIELD, PIE_COLOR_KEY_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
 import { isNoFillNoLineSeries, resolvedCategoryColors, variesColorsByCategory } from './style';
 import { resolveStackMode } from './subtypes';
 import { isPieLikeChartType } from './pie-like';
+import { pieDoughnutColorDomain } from './pie-doughnut-geometry';
 
 /**
  * Build the main encoding spec for a chart.
@@ -69,15 +77,19 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       type: 'quantitative',
     };
     encoding.color = {
-      field: 'category',
+      field: PIE_COLOR_KEY_FIELD,
       type: 'nominal',
     };
     const categoryColors = resolvedCategoryColors(config, data);
-    if (categoryColors) {
-      encoding.color.scale = { range: categoryColors };
+    const legendDomain = buildPiePointLegendDomain(config, data);
+    const colorDomain = pieDoughnutColorDomain(config, data);
+    if (categoryColors || colorDomain.length > 0) {
+      encoding.color.scale = {
+        ...(colorDomain.length > 0 ? { domain: colorDomain } : {}),
+        ...(categoryColors ? { range: categoryColors } : {}),
+      };
     }
     if (isLegendShown(config.legend)) {
-      const legendDomain = buildCategoryLegendDomain(config, data);
       encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
         entries: legendDomain?.entries,
@@ -222,12 +234,16 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     };
     encoding.y = valueChannel;
     if (chartType === 'bubble' || chartType === 'bubble3DEffect') {
+      const sizeScale = {
+        range: [0, bubbleMaxArea(config)],
+        ...(useExcelCartesian
+          ? { domain: [0, maxRenderableBubbleMagnitude(data, config)] }
+          : {}),
+      };
       encoding.size = {
         field: BUBBLE_SIZE_FIELD,
         type: 'quantitative',
-        scale: {
-          range: [0, bubbleMaxArea(config)],
-        },
+        scale: sizeScale,
         legend: null,
       };
     }
@@ -302,19 +318,17 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
             },
           }
         : {}),
-      ...(config.legend
-        ? {
-            legend: buildLegendSpec(config.legend, config, {
-              symbolType: usePointLegendEntries
-                ? categoryLegendSymbolType(config)
-                : legendSymbolType(config, data),
-              entries: usePointLegendEntries
-                ? categoryLegendDomain?.entries
-                : (seriesLegendDomain?.entries ?? []),
-              values: usePointLegendEntries ? categoryLegendDomain?.values : undefined,
-            }),
-          }
-        : {}),
+      legend: isLegendShown(config.legend)
+        ? buildLegendSpec(config.legend, config, {
+            symbolType: usePointLegendEntries
+              ? categoryLegendSymbolType(config)
+              : legendSymbolType(config, data),
+            entries: usePointLegendEntries
+              ? categoryLegendDomain?.entries
+              : (seriesLegendDomain?.entries ?? []),
+            values: usePointLegendEntries ? categoryLegendDomain?.values : undefined,
+          })
+        : null,
     };
   } else {
     // Color encoding for multi-series.
@@ -347,6 +361,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
 
   applyStackedValueDomain(config, data, encoding);
   applyBarColumnAxisLayout(config, data, encoding);
+  applyPathChartAxisLayout(config, data, encoding);
   applyCartesianValueAxisDefaults(encoding, {
     includeZero: useExcelCartesian ? excelChartValueAxisIncludesZero(config) : !isXYChart,
   });
@@ -378,6 +393,7 @@ function applyCartesianValueAxisDefaults(
 }
 
 function shouldReverseSeriesLegend(config: ChartConfig): boolean {
+  if (config.type === 'area' && resolveStackMode(config) !== undefined) return true;
   const barGeometry = effectiveBarGeometry(config);
   return barGeometry ? shouldReverseImportedHorizontalBarSeries(config, barGeometry) : false;
 }
@@ -396,9 +412,10 @@ function categoryLegendSymbolType(config: ChartConfig): LegendSpec['symbolType']
 
 function renderableRadarValues(data: ChartData, config: ChartConfig): number[] {
   const values: number[] = [];
+  const { blankPolicy } = radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs);
   for (const series of data.series) {
     for (const point of series.data) {
-      const value = renderableRadarValue(point, config);
+      const value = renderableRadarValue(point, blankPolicy);
       if (value !== undefined) values.push(value);
     }
   }
@@ -407,10 +424,10 @@ function renderableRadarValues(data: ChartData, config: ChartConfig): number[] {
 
 function renderableRadarValue(
   point: ChartDataPoint | undefined,
-  config: ChartConfig,
+  blankPolicy: RadarBlankPolicy,
 ): number | undefined {
   if (!point || point.valueState === 'hidden') return undefined;
-  if (point.valueState === 'blank') return config.displayBlanksAs === 'zero' ? 0 : undefined;
+  if (point.valueState === 'blank') return blankPolicy === 'zero' ? 0 : undefined;
   if (point.valueState && point.valueState !== 'value') return undefined;
   return typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : undefined;
 }

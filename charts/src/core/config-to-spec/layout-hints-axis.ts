@@ -1,11 +1,24 @@
-import type { AxisSpec, ChannelSpec, ConfigSpec, EncodingSpec, ScaleSpec } from '../../grammar/spec';
+import type {
+  AxisLayoutStatus,
+  AxisSpec,
+  ChannelSpec,
+  ConfigSpec,
+  EncodingSpec,
+  ScaleSpec,
+} from '../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../types';
 import { formatExcelSerialDateTick, formatTickValue } from '../../grammar/axis-generator';
 import { generateTicks, niceLinear } from '../../primitives/scales/linear';
 import { buildAxisScaleSpec, explicitDomainBound, mapAxisConfigToAxisSpec } from './axis';
-import { hasExcelBarGeometryConfig } from './bar-geometry';
+import { chartImportSourceDialect, hasExcelBarGeometryConfig } from './bar-geometry';
 import { categoryDisplayLabel } from './category-axis';
+import { isPathLikeChartType } from './path-axis-layout';
 import { hasSecondaryYAxis } from './secondary-axis';
+import { seriesConfigForDataSeries } from '../series-identity';
+import {
+  isSupportedChartType,
+  resolveComboSeriesType,
+} from './layers/combo-series-options';
 
 const UNRESOLVED_AXIS_LABEL_FONT_SIZE = 11;
 const AXIS_TEXT_WIDTH_RATIO = 0.6;
@@ -38,6 +51,72 @@ export function estimateBarColumnAxisReservations(
   reserveAxis('y', encoding.y, encoding.y?.secondaryAxis, encoding, data, reservations);
 
   return reservations;
+}
+
+export function estimatePathChartAxisReservations(
+  config: ChartConfig,
+  encoding: EncodingSpec | undefined,
+  data: ChartData | undefined,
+): AxisReservations | undefined {
+  if (!encoding || !hasImportedPathAxisLayout(config, data)) return undefined;
+
+  const reservations: Required<Pick<NonNullable<AxisReservations>, LayoutSide>> & {
+    source: 'excelPath';
+    status?: AxisLayoutStatus;
+    statusReason?: string;
+  } = {
+    source: 'excelPath',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  };
+  const status = pathAxisReservationStatus(encoding);
+  if (status.status) reservations.status = status.status;
+  if (status.reason) reservations.statusReason = status.reason;
+
+  reserveAxis('x', encoding.x, encoding.x?.axis, encoding, data, reservations);
+  reserveAxis('x', encoding.x, encoding.x?.secondaryAxis, encoding, data, reservations);
+  reserveAxis('y', encoding.y, encoding.y?.axis, encoding, data, reservations);
+  reserveAxis('y', encoding.y, encoding.y?.secondaryAxis, encoding, data, reservations);
+
+  return reservations;
+}
+
+function hasImportedPathAxisLayout(
+  config: ChartConfig,
+  data: ChartData | undefined,
+): boolean {
+  if (chartImportSourceDialect(config) === undefined) return false;
+  if (isPathLikeChartType(config.type)) return true;
+  if (config.type !== 'combo' || !data) return false;
+
+  return data.series.some((series, index) => {
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
+    const seriesType = resolveComboSeriesType(config, series, seriesConfig, index);
+    return isSupportedChartType(seriesType) && isPathLikeChartType(seriesType);
+  });
+}
+
+function pathAxisReservationStatus(encoding: EncodingSpec): {
+  status?: AxisLayoutStatus;
+  reason?: string;
+} {
+  for (const axis of [
+    encoding.x?.axis,
+    encoding.x?.secondaryAxis,
+    encoding.y?.axis,
+    encoding.y?.secondaryAxis,
+  ]) {
+    if (!axis || axis === null) continue;
+    if (axis.pathAxisReservationStatus) {
+      return {
+        status: axis.pathAxisReservationStatus,
+        reason: axis.pathAxisReservationStatusReason,
+      };
+    }
+  }
+  return {};
 }
 
 function reserveAxis(
@@ -203,7 +282,7 @@ function axisLabelForValue(
 }
 
 function percentAxisFormat(format: string | undefined): string {
-  return format && format.includes('%') ? format : '0%';
+  return format && format.length > 0 ? format : '0%';
 }
 
 function xAxisLabelSide(axis: AxisSpec | undefined): Extract<LayoutSide, 'top' | 'bottom'> {

@@ -13,7 +13,15 @@
  * Pure functions - no side effects.
  */
 
-import type { ChartSpec, DataRow } from '../../grammar/spec';
+import type {
+  ChartSpec,
+  DataRow,
+  StockGlyphBodyVisualSpec,
+  StockGlyphSourceRoleVisualSpec,
+  StockGlyphStrokeVisualSpec,
+  StockGlyphVisualSpec,
+  StockGlyphVolumeVisualSpec,
+} from '../../grammar/spec';
 import type { ExportOptions, LineGrouping, OOXMLExportResult, SeriesData } from '../ooxml-types';
 import { AXIS_IDS, generateCategoryAxisXML, generateValueAxisXML } from './axis-xml';
 import { extractChartTitle, wrapChartXML } from './chart-xml';
@@ -21,8 +29,21 @@ import { columnLetter } from './column-util';
 import { extractSeriesData } from './data-util';
 import { quoteSheetName } from '@mog/spreadsheet-utils';
 import { generateCategoryValueSeriesXML, sanitizeNumericValue } from './shared-xml';
-import { stockLayerEncoding, stockLayerUsesOpenClose } from './stock-layer-detection';
-import { escapeXml, generateDataLabelsXML, generateMarkerXML, getDefaultColor } from './style-xml';
+import {
+  stockLayerEncoding,
+  stockLayerUsesOpenClose,
+  stockLayerVisual,
+} from './stock-layer-detection';
+import {
+  escapeXml,
+  generateDataLabelsXML,
+  generateMarkerXML,
+  generateShapePropertiesXML,
+  generateSimpleLineXML,
+  generateSrgbColorXML,
+  getDefaultColor,
+  type MarkerSymbol,
+} from './style-xml';
 
 // =============================================================================
 // Main Export Function
@@ -230,11 +251,15 @@ export function generateStockChartXML(
     throw new Error('Stock chart export requires an x/category encoding');
   }
   const sheetName = options?.sheetName ?? 'Sheet1';
+  const stockVisual = stockLayerVisual(spec);
 
   const dateField = encoding.x?.field ?? 'category';
 
   // Detect volume/HLC/OHLC shape from the modeled stock rows.
-  const hasVolume = data.some((row) => row.volume !== undefined);
+  const hasVolume =
+    stockVisual?.volumeAxisPolicy === 'stockValueAxis'
+      ? false
+      : data.some((row) => row.volume !== undefined);
   const hasOpen = stockLayerUsesOpenClose(spec) ?? data.some((row) => row.open !== undefined);
   const seriesFields = hasOpen ? ['open', 'high', 'low', 'close'] : ['high', 'low', 'close'];
   const seriesNames = hasOpen ? ['Open', 'High', 'Low', 'Close'] : ['High', 'Low', 'Close'];
@@ -259,6 +284,7 @@ export function generateStockChartXML(
       index: stockStartIndex + idx,
       valueColumnIndex: stockStartColumn + idx,
       chartKind: 'stock',
+      roleVisual: stockSourceRoleVisual(stockVisual, field),
       catRef,
       catStartRow,
       catEndRow,
@@ -276,12 +302,15 @@ export function generateStockChartXML(
         catStartRow,
         catEndRow,
         sheetName: quotedSheet,
+        stockVisual,
       })}
     `
     : '';
 
   const chartContent = `${volumeChartContent}<c:stockChart>
     ${seriesXMLParts.join('\n    ')}
+    ${generateHighLowLinesXML(stockVisual)}
+    ${generateUpDownBarsXML(stockVisual, hasOpen)}
     <c:axId val="${stockCategoryAxisId}"/>
     <c:axId val="${stockValueAxisId}"/>
   </c:stockChart>`;
@@ -324,6 +353,7 @@ function generateVolumeBarChartXML(params: {
   catStartRow: number;
   catEndRow: number;
   sheetName: string;
+  stockVisual?: StockGlyphVisualSpec;
 }): string {
   const volumeSeries = generateStockSeriesXML({
     ...params,
@@ -332,7 +362,9 @@ function generateVolumeBarChartXML(params: {
     index: 0,
     valueColumnIndex: 1,
     chartKind: 'bar',
+    volumeVisual: params.stockVisual?.volume,
   });
+  const gapWidth = params.stockVisual?.volume?.gapWidth ?? 150;
 
   return `<c:barChart>
     <c:barDir val="col"/>
@@ -340,7 +372,7 @@ function generateVolumeBarChartXML(params: {
     <c:varyColors val="0"/>
     ${volumeSeries}
     ${generateDataLabelsXML()}
-    <c:gapWidth val="150"/>
+    <c:gapWidth val="${gapWidth}"/>
     <c:overlap val="0"/>
     <c:axId val="${AXIS_IDS.CATEGORY}"/>
     <c:axId val="${AXIS_IDS.VALUE}"/>
@@ -355,6 +387,8 @@ function generateStockSeriesXML(params: {
   index: number;
   valueColumnIndex: number;
   chartKind: 'bar' | 'stock';
+  volumeVisual?: StockGlyphVolumeVisualSpec;
+  roleVisual?: StockGlyphSourceRoleVisualSpec;
   catRef: string;
   catStartRow: number;
   catEndRow: number;
@@ -368,6 +402,8 @@ function generateStockSeriesXML(params: {
     index,
     valueColumnIndex,
     chartKind,
+    volumeVisual,
+    roleVisual,
     catRef,
     catStartRow,
     catEndRow,
@@ -378,16 +414,8 @@ function generateStockSeriesXML(params: {
   const valRef = `${sheetName}!$${valCol}$${catStartRow}:$${valCol}$${catEndRow}`;
   const shapePropertiesXML =
     chartKind === 'bar'
-      ? `<c:spPr>
-        <a:solidFill><a:srgbClr val="${getDefaultColor(index)}"/></a:solidFill>
-        <a:ln><a:noFill/></a:ln>
-      </c:spPr>`
-      : `<c:spPr>
-        <a:ln w="28575">
-          <a:solidFill><a:srgbClr val="${getDefaultColor(index)}"/></a:solidFill>
-        </a:ln>
-      </c:spPr>
-      <c:marker><c:symbol val="none"/></c:marker>`;
+      ? generateVolumeSeriesSpPrXML(volumeVisual, index)
+      : generateStockRoleSeriesStyleXML(roleVisual);
 
   return `<c:ser>
       <c:idx val="${index}"/>
@@ -414,4 +442,135 @@ function generateStockSeriesXML(params: {
         </c:numRef>
       </c:val>
     </c:ser>`;
+}
+
+function stockSourceRoleVisual(
+  stockVisual: StockGlyphVisualSpec | undefined,
+  field: string,
+): StockGlyphSourceRoleVisualSpec | undefined {
+  if (
+    field !== 'open' &&
+    field !== 'high' &&
+    field !== 'low' &&
+    field !== 'close'
+  ) {
+    return undefined;
+  }
+  return stockVisual?.sourceRoleVisuals?.find((visual) => visual.role === field);
+}
+
+function generateStockRoleSeriesStyleXML(
+  visual: StockGlyphSourceRoleVisualSpec | undefined,
+): string {
+  return `${generateStockRoleLineSpPrXML(visual)}
+      ${generateStockRoleMarkerXML(visual)}`;
+}
+
+function generateStockRoleLineSpPrXML(
+  visual: StockGlyphSourceRoleVisualSpec | undefined,
+): string {
+  if (!visual?.lineVisible || visual.line.strokeWidth <= 0) {
+    return `<c:spPr>
+        <a:ln w="28575">
+          <a:noFill/>
+        </a:ln>
+      </c:spPr>`;
+  }
+  return `<c:spPr>${generateSimpleLineXML(visual.line.stroke, visual.line.strokeWidth)}</c:spPr>`;
+}
+
+function generateStockRoleMarkerXML(
+  visual: StockGlyphSourceRoleVisualSpec | undefined,
+): string {
+  if (!visual?.markerVisible) return '<c:marker><c:symbol val="none"/></c:marker>';
+
+  const marker = visual.marker;
+  const strokeWidth = Math.max(0, Math.round(marker.strokeWidth * 12700));
+  const strokeFill =
+    strokeWidth > 0
+      ? `<a:solidFill>${generateSrgbColorXML(marker.stroke)}</a:solidFill>`
+      : '<a:noFill/>';
+  return `<c:marker>
+        <c:symbol val="${stockMarkerSymbol(marker.shape)}"/>
+        <c:size val="${stockMarkerSize(marker.size)}"/>
+        <c:spPr>
+          <a:solidFill>${generateSrgbColorXML(marker.fill)}</a:solidFill>
+          <a:ln w="${strokeWidth}">
+            ${strokeFill}
+          </a:ln>
+        </c:spPr>
+      </c:marker>`;
+}
+
+function stockMarkerSymbol(shape: string): MarkerSymbol {
+  switch (shape) {
+    case 'square':
+    case 'diamond':
+    case 'star':
+    case 'dash':
+    case 'x':
+      return shape;
+    case 'triangle':
+    case 'triangle-up':
+      return 'triangle';
+    case 'cross':
+    case 'plus':
+      return 'plus';
+    case 'dot':
+    case 'circle':
+      return 'circle';
+    default:
+      return 'circle';
+  }
+}
+
+function stockMarkerSize(area: number): number {
+  return Math.max(2, Math.min(72, Math.round(Math.sqrt(area))));
+}
+
+function generateHighLowLinesXML(stockVisual: StockGlyphVisualSpec | undefined): string {
+  if (!stockVisual) return '<c:hiLowLines/>';
+  if (stockVisual.highLowLine.strokeWidth <= 0) return '<c:hiLowLines/>';
+  return `<c:hiLowLines>${generateLineSpPrXML(stockVisual.highLowLine)}</c:hiLowLines>`;
+}
+
+function generateUpDownBarsXML(
+  stockVisual: StockGlyphVisualSpec | undefined,
+  hasOpen: boolean,
+): string {
+  if (!hasOpen || stockVisual?.priceGlyphMode !== 'upDownBody') return '';
+  return `<c:upDownBars>
+      <c:gapWidth val="${stockVisual.gapWidth}"/>
+      <c:upBars>${generateBodySpPrXML(stockVisual.upBody)}</c:upBars>
+      <c:downBars>${generateBodySpPrXML(stockVisual.downBody)}</c:downBars>
+    </c:upDownBars>`;
+}
+
+function generateLineSpPrXML(visual: StockGlyphStrokeVisualSpec): string {
+  return `<c:spPr>${generateSimpleLineXML(visual.stroke, visual.strokeWidth)}</c:spPr>`;
+}
+
+function generateBodySpPrXML(visual: StockGlyphBodyVisualSpec): string {
+  return generateShapePropertiesXML({
+    fill: visual.fill,
+    stroke: visual.borderWidth > 0 ? visual.border : undefined,
+    strokeWidth: visual.borderWidth > 0 ? visual.borderWidth : undefined,
+  });
+}
+
+function generateVolumeSeriesSpPrXML(
+  visual: StockGlyphVolumeVisualSpec | undefined,
+  index: number,
+): string {
+  if (!visual) {
+    return `<c:spPr>
+        <a:solidFill><a:srgbClr val="${getDefaultColor(index)}"/></a:solidFill>
+        <a:ln><a:noFill/></a:ln>
+      </c:spPr>`;
+  }
+  return generateShapePropertiesXML({
+    fill: visual.fill,
+    stroke: visual.borderWidth > 0 ? visual.border : undefined,
+    strokeWidth: visual.borderWidth > 0 ? visual.borderWidth : undefined,
+  });
 }

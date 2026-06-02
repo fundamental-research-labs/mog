@@ -7,6 +7,7 @@ import type {
   StackMode,
 } from '../../grammar/spec';
 import type { ChartConfig, ChartData, ChartType, SeriesConfig, SingleAxisConfig } from '../../types';
+import { manualLayoutFromValue } from '../config-to-spec/layout-hints-manual';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { resolveBarColumnAxisLayout } from './bar-axis-layout';
 
@@ -104,6 +105,16 @@ type ChartRenderExtraMetadata = {
   sourceDialect?: unknown;
 };
 
+type BarPlotAreaContract = Pick<
+  BarGeometrySpec,
+  | 'plotAreaAuthority'
+  | 'categoryPitchAuthority'
+  | 'categoryPitchStatus'
+  | 'categoryPitchStatusReason'
+> & {
+  plotAreaSource: NonNullable<BarGeometrySpec['plotAreaSource']>;
+};
+
 function finiteNumber(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -182,7 +193,7 @@ export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'se
 
 export function effectiveBarGeometry(
   config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap' | 'series'> &
-    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height'>>,
+    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height' | 'plotLayout' | 'plotArea'>>,
   data?: Pick<ChartData, 'categories' | 'series'>,
 ): BarGeometrySpec | undefined {
   if (!hasExcelBarGeometryConfig(config)) return undefined;
@@ -199,7 +210,7 @@ export function effectiveBarGeometry(
 
 function effectiveBarGeometryForType(
   config: Pick<ChartConfig, 'type' | 'subType' | 'gapWidth' | 'overlap'> &
-    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height'>>,
+    Partial<Pick<ChartConfig, 'axis' | 'extra' | 'width' | 'height' | 'plotLayout' | 'plotArea'>>,
   geometryType: ChartType | string,
   data?: Pick<ChartData, 'categories' | 'series'>,
   yAxisIndex?: 0 | 1,
@@ -352,7 +363,7 @@ function withImportedSeriesSlotOrder(
 }
 
 export function chartImportSourceDialect(
-  config: Pick<ChartConfig, 'extra'>,
+  config: Partial<Pick<ChartConfig, 'extra'>>,
 ): ChartImportSourceDialect | undefined {
   if (typeof config.extra !== 'object' || config.extra === null) return undefined;
 
@@ -475,7 +486,7 @@ export function barBaselinePixelForDomain(input: {
 
 function withBarColumnImportedGeometryContract(
   config: Pick<ChartConfig, 'type' | 'axis' | 'extra'> &
-    Partial<Pick<ChartConfig, 'width' | 'height'>>,
+    Partial<Pick<ChartConfig, 'width' | 'height' | 'plotLayout' | 'plotArea'>>,
   geometry: BarGeometrySpec,
   options: {
     data?: Pick<ChartData, 'categories' | 'series'>;
@@ -514,7 +525,12 @@ function withBarColumnImportedGeometryContract(
     { valueCrossing, valueCrossingValue },
     valueAxisDomain,
   );
-  const geometryStatus = geometryStatusForConfig(config, axisLayout.axisLayoutStatus);
+  const plotAreaContract = plotAreaAuthorityForConfig(config);
+  const geometryStatus = geometryStatusForConfig(
+    config,
+    axisLayout.axisLayoutStatus,
+    plotAreaContract.plotAreaSource,
+  );
 
   return {
     ...geometry,
@@ -535,6 +551,12 @@ function withBarColumnImportedGeometryContract(
     ...(axisLayout.categoryTickSkipSource
       ? { categoryTickSkipSource: axisLayout.categoryTickSkipSource }
       : {}),
+    ...(axisLayout.categoryTickStatus
+      ? { categoryTickStatus: axisLayout.categoryTickStatus }
+      : {}),
+    ...(axisLayout.categoryTickStatusReason
+      ? { categoryTickStatusReason: axisLayout.categoryTickStatusReason }
+      : {}),
     ...(axisLayout.valueAxisTickStep !== undefined
       ? { valueAxisTickStep: axisLayout.valueAxisTickStep }
       : {}),
@@ -545,13 +567,51 @@ function withBarColumnImportedGeometryContract(
     ...(axisLayout.percentAxisLabelPolicy
       ? { percentAxisLabelPolicy: axisLayout.percentAxisLabelPolicy }
       : {}),
+    ...(axisLayout.valueAxisScaleSource
+      ? { valueAxisScaleSource: axisLayout.valueAxisScaleSource }
+      : {}),
+    ...(axisLayout.valueAxisScaleStatus
+      ? { valueAxisScaleStatus: axisLayout.valueAxisScaleStatus }
+      : {}),
+    ...(axisLayout.valueAxisScaleStatusReason
+      ? { valueAxisScaleStatusReason: axisLayout.valueAxisScaleStatusReason }
+      : {}),
     ...(axisLayout.axisLayoutStatus ? { axisLayoutStatus: axisLayout.axisLayoutStatus } : {}),
     ...(axisLayout.axisLayoutStatusReason
       ? { axisLayoutStatusReason: axisLayout.axisLayoutStatusReason }
       : {}),
-    geometryStatus,
-    plotAreaSource: 'auto',
+    ...geometryStatus,
+    ...plotAreaContract,
     ...(options.seriesIndices ? { seriesIndices: [...options.seriesIndices] } : {}),
+  };
+}
+
+function plotAreaAuthorityForConfig(
+  config: Partial<Pick<ChartConfig, 'plotLayout' | 'plotArea' | 'extra'>>,
+): BarPlotAreaContract {
+  const dialect = chartImportSourceDialect(config);
+  const manualPlotArea = manualLayoutFromValue(config.plotLayout ?? config.plotArea?.layout);
+  if (dialect === 'ooxml' && manualPlotArea) {
+    return {
+      plotAreaSource: 'manual',
+      plotAreaAuthority: 'manualLayout',
+      categoryPitchAuthority: 'manualLayout',
+    };
+  }
+  if (dialect === 'ooxml') {
+    return {
+      plotAreaSource: 'auto',
+      plotAreaAuthority: 'rendererAuto',
+      categoryPitchAuthority: 'rendererAuto',
+      categoryPitchStatus: 'approximate',
+      categoryPitchStatusReason: 'importedAutoPlotAreaCategoryPitch',
+    };
+  }
+  return {
+    plotAreaSource: manualPlotArea ? 'manual' : 'auto',
+    plotAreaAuthority: manualPlotArea ? 'manualLayout' : 'rendererAuto',
+    categoryPitchAuthority: manualPlotArea ? 'manualLayout' : 'rendererAuto',
+    categoryPitchStatus: 'verifiedDefault',
   };
 }
 
@@ -607,12 +667,22 @@ function normalizeValueCrossing(value: unknown): BarValueCrossingPolicy | undefi
 function geometryStatusForConfig(
   config: Pick<ChartConfig, 'extra'>,
   axisLayoutStatus: BarGeometrySpec['axisLayoutStatus'] | undefined,
-): NonNullable<BarGeometrySpec['geometryStatus']> {
-  if (axisLayoutStatus === 'approximate') return 'approximate';
+  plotAreaSource: NonNullable<BarGeometrySpec['plotAreaSource']>,
+): Pick<BarGeometrySpec, 'geometryStatus' | 'geometryStatusReason'> {
   const dialect = chartImportSourceDialect(config);
-  if (dialect === 'ooxml') return 'exact';
-  if (dialect === 'ooxml-chart-ex') return 'approximate';
-  return 'verifiedDefault';
+  if (dialect === 'ooxml-chart-ex') return { geometryStatus: 'approximate' };
+  if (dialect === 'ooxml') {
+    const autoPlotArea = plotAreaSource === 'auto';
+    return {
+      geometryStatus:
+        axisLayoutStatus === 'approximate' || autoPlotArea ? 'approximate' : 'exact',
+      ...(autoPlotArea
+        ? { geometryStatusReason: 'importedAutoPlotAreaCategoryPitch' }
+        : {}),
+    };
+  }
+  if (axisLayoutStatus === 'approximate') return { geometryStatus: 'approximate' };
+  return { geometryStatus: 'verifiedDefault' };
 }
 
 function numericDomainBound(domain: readonly unknown[] | undefined, index: number): number | undefined {

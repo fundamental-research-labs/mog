@@ -27,7 +27,13 @@ describe('depth-3d mark helpers', () => {
     expect(marks[0].path).toBe('M14,26 L34,46');
     expect(marks[1].path).toBe('M10,20 L14,26');
     expect(marks[2].path).toBe('M30,40 L34,46');
-    expect(marks[3]).toBe(lineMark);
+    expect(marks[3]).toEqual({
+      ...lineMark,
+      datum: {
+        sourceDatum: lineMark.datum,
+        chart3dDepthFace: 'front',
+      },
+    });
     expect(marks[0].style.stroke).toBe('#386b9e');
   });
 
@@ -51,7 +57,13 @@ describe('depth-3d mark helpers', () => {
     expect(marks).toHaveLength(6);
     expect(marks[0].path).toBe('M2,13 L2,3 L12,3 L12,13 Z');
     expect(marks[1].path).toBe('M0,10 L0,0 L2,3 L2,13 Z');
-    expect(marks[5]).toBe(areaMark);
+    expect(marks[5]).toEqual({
+      ...areaMark,
+      datum: {
+        sourceDatum: areaMark.datum,
+        chart3dDepthFace: 'front',
+      },
+    });
     expect(marks[1].style.fill).toBe('#6b9e38');
     expect(marks[1].style.opacity).toBeCloseTo(0.576);
   });

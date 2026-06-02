@@ -8,6 +8,14 @@ import {
   type SourceLinkedAxisNumberFormatResolutions,
   type SourceLinkedAxisRole,
 } from './chart-render-data-normalizer';
+import {
+  isXYValueAxisChartType,
+  secondarySemanticCategoryAxisForModel,
+  secondaryValueAxisForModel,
+  semanticCategoryAxisForModel,
+  xValueAxisForModel,
+  yValueAxisForModel,
+} from './axis-role';
 import { isCellHidden, type HiddenCellVisibility } from './hidden-visibility';
 
 type ResolvedFormatBridge = {
@@ -31,6 +39,8 @@ const SOURCE_LINKED_AXIS_ROLES: SourceLinkedAxisRole[] = [
   'secondary category',
   'value',
   'secondary value',
+  'x value',
+  'y value',
 ];
 
 function sourceLinkedAxisForRole(
@@ -39,6 +49,21 @@ function sourceLinkedAxisForRole(
 ): NonNullable<ChartConfig['axis']>['categoryAxis'] | undefined {
   const axis = config.axis;
   if (!axis) return undefined;
+  if (isXYValueAxisChartType(config.type)) {
+    switch (role) {
+      case 'category':
+        return semanticCategoryAxisForModel(config);
+      case 'secondary category':
+        return secondarySemanticCategoryAxisForModel(config);
+      case 'value':
+      case 'y value':
+        return yValueAxisForModel(config);
+      case 'x value':
+        return xValueAxisForModel(config);
+      case 'secondary value':
+        return secondaryValueAxisForModel(config);
+    }
+  }
   switch (role) {
     case 'category':
       return axis.categoryAxis ?? axis.xAxis;
@@ -48,6 +73,9 @@ function sourceLinkedAxisForRole(
       return axis.valueAxis ?? axis.yAxis;
     case 'secondary value':
       return axis.secondaryValueAxis ?? axis.secondaryYAxis;
+    case 'x value':
+    case 'y value':
+      return undefined;
   }
 }
 
@@ -100,7 +128,10 @@ function liveSourceRangesForAxisRole(
   role: SourceLinkedAxisRole,
 ): CellRange[] {
   const axisGroup = axisGroupForRole(role);
-  const sourceKind = role === 'category' || role === 'secondary category' ? 'categories' : 'values';
+  const sourceKind =
+    role === 'category' || role === 'secondary category' || role === 'x value'
+      ? 'categories'
+      : 'values';
   const ranges: CellRange[] = [];
 
   for (const reference of resolvedRanges.seriesReferences) {

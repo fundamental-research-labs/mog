@@ -3,7 +3,6 @@ import type { CompileResult } from '../../grammar/types';
 import type { PathMark } from '../../primitives/types';
 import type { ChartConfig, ChartData } from '../../types';
 import { configToSpec } from '../config-to-spec';
-import { CANDLESTICK_BAR_WIDTH } from '../config-to-spec/constants';
 import {
   STOCK_CLOSE_FIELD,
   STOCK_HIGH_FIELD,
@@ -121,26 +120,46 @@ describe('configToSpec stock render layers', () => {
     );
   });
 
-  it('renders OHLC open-close bodies with candlestick width instead of full-height rules', () => {
+  it('renders OHLC open and close ticks instead of full-height bodies', () => {
     const result = compileStock(stockConfig('ohlc'), stockData());
     const marks = pathMarks(result);
-    const body = marks.find(
+    const openTick = marks.find(
       (mark) =>
-        mark.style.strokeWidth === CANDLESTICK_BAR_WIDTH &&
+        isHorizontal(mark) &&
         mark.datum?.[STOCK_OPEN_FIELD] === 14 &&
+        !isCloseTick(mark, result) &&
+        mark.datum?.[STOCK_CLOSE_FIELD] === 20,
+    );
+    const closeTick = marks.find(
+      (mark) =>
+        isHorizontal(mark) &&
+        mark.datum?.[STOCK_OPEN_FIELD] === 14 &&
+        isCloseTick(mark, result) &&
         mark.datum?.[STOCK_CLOSE_FIELD] === 20,
     );
 
-    expect(body).toBeDefined();
-    expect(isVertical(body!)).toBe(true);
-    const bodyPath = endpoints(body!);
-    expect(Math.abs(bodyPath.y2 - bodyPath.y1)).toBeGreaterThan(0);
-    expect(Math.abs(bodyPath.y2 - bodyPath.y1)).toBeLessThan(result.layout.plotArea.height);
-    expect(body!.datum).toEqual(
+    expect(openTick).toBeDefined();
+    expect(closeTick).toBeDefined();
+    expect(openTick!.datum).toEqual(
       expect.objectContaining({
         [STOCK_OPEN_FIELD]: 14,
         [STOCK_CLOSE_FIELD]: 20,
       }),
     );
+    expect(closeTick!.datum).toEqual(openTick!.datum);
   });
 });
+
+function isCloseTick(mark: PathMark, result: CompileResult): boolean {
+  const path = endpoints(mark);
+  return (
+    result.stockGlyphTrace?.points.some(
+      (point) =>
+        point.closeTick !== undefined &&
+        path.x1 === point.closeTick.x1 &&
+        path.y1 === point.closeTick.y1 &&
+        path.x2 === point.closeTick.x2 &&
+        path.y2 === point.closeTick.y2,
+    ) ?? false
+  );
+}

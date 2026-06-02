@@ -145,6 +145,7 @@ export class ChartInstanceImpl implements ChartInstance {
       this._cachedCompile = compile(spec, undefined, {
         width,
         height,
+        textMeasurementContext: this.renderer.getContext(),
       });
       this._dirty = false;
     }

@@ -3,11 +3,20 @@ import type {
   ChartData,
   ChartDataPoint,
   ChartSeriesStockRole,
+  SeriesConfig,
+  StockSourceComposition,
   StockSubType,
+  StockVolumeAxisPolicy,
 } from '../types';
+import {
+  isStockVolumeSeriesType,
+  stockRolePlanWithEvidence,
+} from './stock-role-plan';
 
 const STOCK_SUBTYPES = new Set(['hlc', 'ohlc', 'volume-hlc', 'volume-ohlc']);
 const STOCK_ROLE_ORDER: ChartSeriesStockRole[] = ['volume', 'open', 'high', 'low', 'close'];
+const STOCK_SOURCE_KINDS = new Set(['singleStockChart', 'comboVolumeBarStockChart', 'modeled']);
+const STOCK_VOLUME_AXIS_POLICIES = new Set(['stockValueAxis', 'separateVolumeAxis']);
 const STOCK_ROLES_BY_SUBTYPE: Record<StockSubType, ChartSeriesStockRole[]> = {
   hlc: ['high', 'low', 'close'],
   ohlc: ['open', 'high', 'low', 'close'],
@@ -94,6 +103,87 @@ export function stockSubTypeFromRolePresence(
 
 export function expectedStockRolesForSubtype(subType: StockSubType): ChartSeriesStockRole[] {
   return [...STOCK_ROLES_BY_SUBTYPE[subType]];
+}
+
+export function stockSourceCompositionFromConfig(
+  config: Pick<
+    ChartConfig,
+    'series' | 'subType' | 'stockSourceComposition' | 'highLowLines' | 'upDownBars'
+  >,
+  data?: ChartData,
+): StockSourceComposition {
+  const explicit = normalizedStockSourceComposition(config.stockSourceComposition);
+  const evidence = stockRolePlanWithEvidence(config.series ?? [], explicit);
+  if (explicit) {
+    return stockSourceCompositionWithEvidence(explicit, evidence);
+  }
+
+  const subType = stockSubTypeFromConfig(config, data);
+  const sourceRoleOrder = evidence?.sourceRoleOrder ?? expectedStockRolesForSubtype(subType);
+  const hasVolume = sourceRoleOrder.includes('volume');
+  const volumeIndex = evidence?.roles.volume;
+  const volumeSeries =
+    volumeIndex !== undefined
+      ? config.series?.[volumeIndex]
+      : sourceSeriesForRole(config.series ?? [], 'volume');
+  const separateVolumeAxis = Boolean(volumeSeries && isStockVolumeSeriesType(volumeSeries.type));
+  const roleSemanticsUsable = isUsableStockRoleSemanticStatus(
+    evidence?.sourceRoleSemanticStatus,
+  );
+  const sourceKind =
+    hasVolume && separateVolumeAxis
+      ? 'comboVolumeBarStockChart'
+      : roleSemanticsUsable
+        ? 'singleStockChart'
+        : 'modeled';
+  const volumeAxisPolicy: StockVolumeAxisPolicy =
+    hasVolume && (separateVolumeAxis || !roleSemanticsUsable)
+      ? 'separateVolumeAxis'
+      : 'stockValueAxis';
+
+  return stockSourceCompositionWithEvidence(
+    {
+      sourceKind,
+      sourceRoleOrder,
+      highLowLines: config.highLowLines?.visible !== false,
+      upDownBars: config.upDownBars !== undefined,
+      volumeAxisPolicy,
+    },
+    evidence,
+  );
+}
+
+export function stockSourceRoleOrder(
+  config: Pick<
+    ChartConfig,
+    'series' | 'subType' | 'stockSourceComposition' | 'highLowLines' | 'upDownBars'
+  >,
+  data?: ChartData,
+): ChartSeriesStockRole[] {
+  return [...stockSourceCompositionFromConfig(config, data).sourceRoleOrder];
+}
+
+export function stockVolumeAxisPolicy(
+  config: Pick<
+    ChartConfig,
+    'series' | 'subType' | 'stockSourceComposition' | 'highLowLines' | 'upDownBars'
+  >,
+  data?: ChartData,
+): StockVolumeAxisPolicy {
+  return stockSourceCompositionFromConfig(config, data).volumeAxisPolicy;
+}
+
+export function stockValueAxisRoles(
+  config: Pick<
+    ChartConfig,
+    'series' | 'subType' | 'stockSourceComposition' | 'highLowLines' | 'upDownBars'
+  >,
+  data?: ChartData,
+): ChartSeriesStockRole[] {
+  const composition = stockSourceCompositionFromConfig(config, data);
+  return composition.volumeAxisPolicy === 'stockValueAxis'
+    ? [...composition.sourceRoleOrder]
+    : composition.sourceRoleOrder.filter((role) => role !== 'volume');
 }
 
 export function requiredStockPriceRolesForSubtype(
@@ -209,6 +299,85 @@ function hasStockData(data: ChartData): boolean {
 
 function isStockSubType(value: unknown): value is StockSubType {
   return typeof value === 'string' && STOCK_SUBTYPES.has(value);
+}
+
+function normalizedStockSourceComposition(
+  value: unknown,
+): StockSourceComposition | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Partial<StockSourceComposition>;
+  const sourceKind =
+    typeof candidate.sourceKind === 'string' && STOCK_SOURCE_KINDS.has(candidate.sourceKind)
+      ? candidate.sourceKind
+      : undefined;
+  const volumeAxisPolicy =
+    typeof candidate.volumeAxisPolicy === 'string' &&
+    STOCK_VOLUME_AXIS_POLICIES.has(candidate.volumeAxisPolicy)
+      ? candidate.volumeAxisPolicy
+      : undefined;
+  const sourceRoleOrder = Array.isArray(candidate.sourceRoleOrder)
+    ? candidate.sourceRoleOrder.filter(isStockRole)
+    : [];
+  if (!sourceKind || !volumeAxisPolicy || sourceRoleOrder.length === 0) return undefined;
+  return {
+    sourceKind,
+    sourceRoleOrder,
+    ...(candidate.sourceRoleSemanticStatus === 'exact' ||
+    candidate.sourceRoleSemanticStatus === 'verifiedDefault' ||
+    candidate.sourceRoleSemanticStatus === 'approximate' ||
+    candidate.sourceRoleSemanticStatus === 'missing'
+      ? { sourceRoleSemanticStatus: candidate.sourceRoleSemanticStatus }
+      : {}),
+    ...(typeof candidate.sourceRoleSemanticSource === 'string'
+      ? { sourceRoleSemanticSource: candidate.sourceRoleSemanticSource }
+      : {}),
+    ...(typeof candidate.sourceRoleSemanticReason === 'string'
+      ? { sourceRoleSemanticReason: candidate.sourceRoleSemanticReason }
+      : {}),
+    highLowLines: candidate.highLowLines !== false,
+    upDownBars: candidate.upDownBars === true,
+    volumeAxisPolicy,
+  };
+}
+
+function stockSourceCompositionWithEvidence(
+  composition: StockSourceComposition,
+  evidence: ReturnType<typeof stockRolePlanWithEvidence>,
+): StockSourceComposition {
+  if (!evidence) return composition;
+  return {
+    ...composition,
+    sourceRoleSemanticStatus:
+      composition.sourceRoleSemanticStatus ?? evidence.sourceRoleSemanticStatus,
+    sourceRoleSemanticSource:
+      composition.sourceRoleSemanticSource ?? evidence.sourceRoleSemanticSource,
+    ...(composition.sourceRoleSemanticReason !== undefined
+      ? { sourceRoleSemanticReason: composition.sourceRoleSemanticReason }
+      : evidence.sourceRoleSemanticReason !== undefined
+        ? { sourceRoleSemanticReason: evidence.sourceRoleSemanticReason }
+        : {}),
+  };
+}
+
+function isUsableStockRoleSemanticStatus(status: string | undefined): boolean {
+  return status === 'exact' || status === 'verifiedDefault';
+}
+
+function sourceSeriesForRole(
+  seriesConfigs: readonly SeriesConfig[],
+  role: ChartSeriesStockRole,
+): SeriesConfig | undefined {
+  return seriesConfigs.find((series) => series.stockRole === role);
+}
+
+function isStockRole(value: unknown): value is ChartSeriesStockRole {
+  return (
+    value === 'volume' ||
+    value === 'open' ||
+    value === 'high' ||
+    value === 'low' ||
+    value === 'close'
+  );
 }
 
 function stockFiniteNumber(value: unknown): number | undefined {

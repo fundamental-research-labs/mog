@@ -24,7 +24,10 @@ import { SERIES_FILL_FIELD, SERIES_STROKE_FIELD, SERIES_STROKE_WIDTH_FIELD } fro
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 import { barOrientationForChartType } from './bar-geometry';
-import { RADAR_DEFAULT_FILLED_OPACITY } from '../radar-semantics';
+import {
+  RADAR_DEFAULT_FILLED_OPACITY,
+  radarBlankPolicyFromDisplayBlanksAs,
+} from '../radar-semantics';
 import {
   defaultPieLikeExplosionPercent,
   doughnutInnerRadiusRatio,
@@ -212,6 +215,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       fillField: SERIES_FILL_FIELD,
       strokeField: SERIES_STROKE_FIELD,
       strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      radarBlankPolicy: radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs).blankPolicy,
     };
     if (radarFilled) {
       mark.fillOpacity = RADAR_DEFAULT_FILLED_OPACITY;

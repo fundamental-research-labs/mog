@@ -1,10 +1,13 @@
 import type { ChartConfig, ChartData, ChartDataPoint, SeriesConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { seriesConfigForDataSeries } from '../series-identity';
+import { radarBlankPolicyFromDisplayBlanksAs } from '../radar-semantics';
 import {
   isRenderableStockPoint,
   stockSubTypeFromConfig,
 } from '../stock-semantics';
+
+type BlankPolicy = 'gap' | 'span' | 'zero';
 
 export function isQuantitativeXSeries(
   config: ChartConfig | undefined,
@@ -65,7 +68,7 @@ export function shouldIncludePointInRows(
   if (isQuantitativeX && point.valueState) return false;
   if (!point.valueState || point.valueState === 'value') return true;
   if (point.valueState === 'blank') {
-    return config?.displayBlanksAs === 'zero';
+    return effectiveBlankPolicyForRows(config) === 'zero';
   }
   return false;
 }
@@ -76,7 +79,9 @@ export function renderedPointValueForRows(
   seriesConfig?: SeriesConfig,
 ): number | null {
   if (!point || !shouldIncludePointInRows(point, config, seriesConfig)) return null;
-  return point.valueState === 'blank' && config?.displayBlanksAs === 'zero' ? 0 : point.y;
+  return point.valueState === 'blank' && effectiveBlankPolicyForRows(config) === 'zero'
+    ? 0
+    : point.y;
 }
 
 export function shouldEmitBlankRow(
@@ -85,7 +90,8 @@ export function shouldEmitBlankRow(
   seriesConfig?: SeriesConfig,
 ): boolean {
   if (isQuantitativeXSeries(config, seriesConfig)) return false;
-  if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
+  const blankPolicy = effectiveBlankPolicyForRows(config);
+  if (blankPolicy !== 'gap' && blankPolicy !== 'span') return false;
   if (!point) return true;
   return point.valueState === 'blank';
 }
@@ -97,7 +103,7 @@ export function shouldBreakScatterLineAtPoint(
 ): boolean {
   if (!isQuantitativeXSeries(config, seriesConfig)) return false;
   if ((seriesConfig?.showLines ?? config?.showLines) !== true) return false;
-  if (config?.displayBlanksAs !== 'gap') return false;
+  if (effectiveBlankPolicyForRows(config) !== 'gap') return false;
   return !point || !shouldIncludePointInRows(point, config, seriesConfig);
 }
 
@@ -115,6 +121,17 @@ export function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConf
     }
   }
   return max;
+}
+
+export function effectiveBlankPolicyForRows(config?: ChartConfig): BlankPolicy | undefined {
+  if (config?.type === 'radar') {
+    return radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs).blankPolicy;
+  }
+  return isBlankPolicy(config?.displayBlanksAs) ? config.displayBlanksAs : undefined;
+}
+
+function isBlankPolicy(value: unknown): value is BlankPolicy {
+  return value === 'gap' || value === 'span' || value === 'zero';
 }
 
 function isScatterLikeChart(config?: ChartConfig): boolean {

@@ -7,7 +7,11 @@ import type {
 } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
-import { normalizeImportedComboChart } from '../../../bridges/compute/chart-import-normalization';
+import {
+  normalizeImportedComboChart,
+  normalizeImportedDisplayBlanksAsValue,
+} from '../../../bridges/compute/chart-import-normalization';
+import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,
   wireToDataLabelConfig,
@@ -80,7 +84,7 @@ function isStandardXYValueAxisPair(
   axis: NonNullable<ChartConfig['axis']>,
   chartType: ChartConfig['type'] | undefined,
 ): boolean {
-  if (chartType !== 'scatter' && chartType !== 'bubble') return false;
+  if (!isXYValueAxisChartType(chartType)) return false;
   if (axis.categoryAxis || axis.xAxis) return false;
   return Boolean(axis.valueAxis && (axis.secondaryValueAxis || axis.secondaryYAxis));
 }
@@ -271,6 +275,9 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
   const layoutAuthority = (normalizedChart as ChartWithLayoutAuthority).layoutAuthority;
   const pivotProjection = (normalizedChart as ChartWithPivotProjection).pivotProjection;
+  const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(
+    normalizedChart.displayBlanksAs,
+  ) as ChartConfig['displayBlanksAs'] | undefined;
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
@@ -316,11 +323,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     boxplot: wireToBoxplotConfig(normalizedChart.boxplot),
     hierarchy: wireToHierarchyChartConfig(normalizedChart.hierarchy),
     regionMap: wireToRegionMapConfig(normalizedChart.regionMap),
-    ...(normalizedChart.displayBlanksAs
-      ? {
-          displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
-        }
-      : {}),
+    ...(displayBlanksAs ? { displayBlanksAs } : {}),
     plotVisibleOnly: normalizedChart.plotVisibleOnly,
     gapWidth: normalizedChart.gapWidth,
     gapDepth: normalizedChart.gapDepth,
@@ -356,6 +359,9 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
     seriesLines: wireToChartLineSettings(normalizedChart.seriesLines),
     upDownBars: wireToUpDownBarsConfig(normalizedChart.upDownBars),
+    stockSourceComposition: (normalizedChart as {
+      stockSourceComposition?: ChartConfig['stockSourceComposition'];
+    }).stockSourceComposition,
     barShape: normalizedChart.barShape as ChartConfig['barShape'],
     heightPt: normalizedChart.heightPt,
     widthPt: normalizedChart.widthPt,

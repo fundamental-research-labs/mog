@@ -1,4 +1,10 @@
-import type { ChartConfig, ChartData } from '@mog/charts';
+import {
+  buildPieDoughnutGeometry,
+  pieLegendDisplayLabel,
+  type ChartConfig,
+  type ChartData,
+  type LegendTrace,
+} from '@mog/charts';
 import type {
   ChartLegendEntryIndexKind,
   ChartLegendEntryVocabulary,
@@ -79,6 +85,7 @@ export function snapshotLegend(
   series: ResolvedChartSpecSnapshot['resolved']['series'],
   data?: ChartData,
   seriesProjection?: SeriesProjectionSnapshot,
+  legendTrace?: LegendTrace,
 ): LegendSnapshot {
   const legend = config.legend;
   const present = !!legend && legend.position !== 'none';
@@ -105,7 +112,7 @@ export function snapshotLegend(
       : present && decision.vocabulary === 'valueBand' && data
       ? surfaceValueBandLegendEntries(config, data, deletedEntries, visible, decision)
       : present && decision.useCategoryEntries && data
-      ? categoryLegendEntries(data, deletedEntries, visible, decision)
+      ? categoryLegendEntries(config, data, deletedEntries, visible, decision)
       : present
         ? seriesLegendEntries(config, series, deletedEntries, visible, decision)
         : [];
@@ -114,6 +121,7 @@ export function snapshotLegend(
     present,
     visible,
     position: legend?.position,
+    ...renderedLegendSnapshot({ present, visible, legendTrace }),
     entries: entryItems.map((entry) => entry.text),
     visibleEntries: visibleEntryItems.map((entry) => entry.text),
     entryVocabulary: decision.vocabulary,
@@ -124,22 +132,175 @@ export function snapshotLegend(
   };
 }
 
+function renderedLegendSnapshot(input: {
+  present: boolean;
+  visible: boolean;
+  legendTrace?: LegendTrace;
+}): Pick<LegendSnapshot, 'rendered'> {
+  const trace = input.legendTrace;
+  if (!trace) return {};
+
+  const rendered = {
+    present: trace.renderedPresent,
+    visible: trace.renderedVisible,
+    markCount: trace.generatedMarkCount,
+    ...(trace.sourceChannels.length > 0 ? { sourceChannels: trace.sourceChannels } : {}),
+    ...(trace.area ? { area: normalizedLegendArea(trace) } : {}),
+    ...(trace.flow
+      ? {
+          flow: {
+            orient: trace.flow.orient,
+            entryCount: trace.flow.entryCount,
+            renderedEntryCount: trace.flow.renderedEntryCount,
+            visibleEntryCount: trace.flow.visibleEntryCount,
+            clippedEntryCount: trace.flow.clippedEntryCount,
+            rowCount: trace.flow.rowCount,
+            columnCount: trace.flow.columnCount,
+            rowGap: trace.flow.rowGap,
+            entryGap: trace.flow.entryGap,
+            contentWidth: trace.flow.contentWidth,
+            contentHeight: trace.flow.contentHeight,
+            overflowPolicy: trace.flow.overflowPolicy,
+            entries: trace.flow.entries.map((entry) => ({
+              entryIndex: entry.entryIndex,
+              rowIndex: entry.rowIndex,
+              columnIndex: entry.columnIndex,
+              text: entry.text,
+              x: entry.x,
+              y: entry.y,
+              width: entry.width,
+              height: entry.height,
+              symbolBounds: entry.symbolBounds,
+              labelBounds: entry.labelBounds,
+              drawn: entry.drawn,
+              clipped: entry.clipped,
+            })),
+          },
+        }
+      : {}),
+    ...(trace.renderedEntries && trace.renderedEntries.length > 0
+      ? {
+          entries: trace.renderedEntries.map((entry) => ({
+            value: entry.value,
+            text: entry.label,
+            ...(entry.symbolType !== undefined ? { symbolType: entry.symbolType } : {}),
+            ...(entry.seriesIndex !== undefined ? { seriesIndex: entry.seriesIndex } : {}),
+            ...(entry.sourceSeriesIndex !== undefined
+              ? { sourceSeriesIndex: entry.sourceSeriesIndex }
+              : {}),
+            ...(entry.sourceSeriesKey !== undefined
+              ? { sourceSeriesKey: entry.sourceSeriesKey }
+              : {}),
+            ...(entry.pointIndex !== undefined ? { pointIndex: entry.pointIndex } : {}),
+            ...(entry.pointKey !== undefined ? { pointKey: entry.pointKey } : {}),
+            ...(entry.legendKey !== undefined ? { legendKey: entry.legendKey } : {}),
+            ...(entry.colorKey !== undefined ? { colorKey: entry.colorKey } : {}),
+            ...(entry.stockRole !== undefined ? { stockRole: entry.stockRole } : {}),
+          })),
+        }
+      : {}),
+    ...legendMismatchReason(input.present, input.visible, trace),
+  };
+  return { rendered };
+}
+
+function normalizedLegendArea(trace: LegendTrace): NonNullable<
+  NonNullable<LegendSnapshot['rendered']>['area']
+> {
+  const width = trace.chartWidth || 1;
+  const height = trace.chartHeight || 1;
+  const area = trace.area!;
+  return {
+    left: area.x / width,
+    top: area.y / height,
+    width: area.width / width,
+    height: area.height / height,
+  };
+}
+
+function legendMismatchReason(
+  present: boolean,
+  visible: boolean,
+  trace: LegendTrace,
+): Pick<NonNullable<LegendSnapshot['rendered']>, 'mismatchReason'> {
+  if ((!present || !visible) && trace.renderedPresent) {
+    return { mismatchReason: 'legendRenderedWithoutVisibleSourceLegend' };
+  }
+  if (present && visible && !trace.renderedPresent) {
+    return { mismatchReason: 'visibleSourceLegendNotRendered' };
+  }
+  if (trace.renderedPresent && !trace.renderedVisible) {
+    return { mismatchReason: 'legendLayoutReservedWithoutMarks' };
+  }
+  return {};
+}
+
 function categoryLegendEntries(
+  config: ChartConfig,
   data: ChartData,
   deletedEntries: ReadonlySet<number>,
   visible: boolean,
   decision: LegendVocabularyDecision,
 ): LegendEntrySnapshot[] {
-  return data.categories.map((category, index) => {
-    const deleted = deletedEntries.has(index);
+  if (!isPieLikePointLegendChartType(config.type)) {
+    return data.categories.map((category, index) => {
+      const deleted = deletedEntries.has(index);
+      return {
+        index,
+        text: categoryLegendDisplayLabel(category, index),
+        visible: visible && !deleted,
+        ...(deleted ? { deleted: true } : {}),
+        vocabulary: decision.vocabulary,
+        indexKind: decision.indexKind,
+        pointIndex: index,
+      };
+    });
+  }
+  return pieLikeLegendEntries(config, data, deletedEntries, visible, decision);
+}
+
+function pieLikeLegendEntries(
+  config: ChartConfig,
+  data: ChartData,
+  deletedEntries: ReadonlySet<number>,
+  visible: boolean,
+  decision: LegendVocabularyDecision,
+): LegendEntrySnapshot[] {
+  const geometry = buildPieDoughnutGeometry({
+    config,
+    data,
+    chartWidth: 2,
+    chartHeight: 2,
+    plotArea: { x: 0, y: 0, width: 2, height: 2 },
+    includeSeries: ({ seriesConfig }) => !isNoFillNoLineSeriesConfig(seriesConfig),
+  });
+  const points =
+    geometry?.rings[0]?.slices.map((slice) => ({
+      pointIndex: slice.pointIndex,
+      pointKey: slice.pointKey,
+      legendKey: slice.legendKey,
+      colorKey: slice.colorKey,
+      category: slice.category,
+      seriesIndex: slice.seriesIndex,
+      sourceSeriesIndex: slice.sourceSeriesIndex,
+      sourceSeriesKey: slice.sourceSeriesKey,
+    })) ?? [];
+  return points.map((point, index) => {
+    const deleted = deletedEntries.has(point.pointIndex);
     return {
       index,
-      text: String(category),
+      text: pieLegendDisplayLabel(point.category, point.pointIndex),
       visible: visible && !deleted,
       ...(deleted ? { deleted: true } : {}),
       vocabulary: decision.vocabulary,
       indexKind: decision.indexKind,
-      pointIndex: index,
+      pointIndex: point.pointIndex,
+      pointKey: point.pointKey,
+      legendKey: point.legendKey,
+      colorKey: point.colorKey,
+      seriesIndex: point.seriesIndex,
+      sourceSeriesIndex: point.sourceSeriesIndex,
+      sourceSeriesKey: point.sourceSeriesKey,
     };
   });
 }
@@ -224,6 +385,15 @@ function legendVocabularyFor(config: ChartConfig, data?: ChartData): LegendVocab
       layer: 'unknown',
       indexKind: 'unknown',
       useCategoryEntries: false,
+    };
+  }
+
+  if (data && isPieLikePointLegendChartType(config.type)) {
+    return {
+      vocabulary: 'point',
+      layer: 'rendered',
+      indexKind: 'point',
+      useCategoryEntries: true,
     };
   }
 
@@ -345,11 +515,11 @@ function formatBandValue(value: number, fractionDigits: number): string {
 
 function usesPointLegendEntries(config: ChartConfig, data?: ChartData): data is ChartData {
   if (!data) return false;
-  if (isPointLegendChartType(config.type)) return true;
-  return isXYPointLegendConfig(config);
+  if (isPieLikePointLegendChartType(config.type)) return true;
+  return isXYPointLegendConfig(config) && data.series.some((series) => series.data.length > 0);
 }
 
-function isPointLegendChartType(type: ChartConfig['type']): boolean {
+function isPieLikePointLegendChartType(type: ChartConfig['type']): boolean {
   return (
     type === 'pie' ||
     type === 'pieExploded' ||
@@ -363,7 +533,18 @@ function isPointLegendChartType(type: ChartConfig['type']): boolean {
 
 function isXYPointLegendConfig(config: ChartConfig): boolean {
   if (config.varyByCategories !== true) return false;
+  if (isImportedChartConfig(config)) return false;
   return config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter';
+}
+
+function categoryLegendDisplayLabel(
+  category: string | number | null | undefined,
+  pointIndex: number,
+): string {
+  if (category !== undefined && category !== null && String(category) !== '') {
+    return String(category);
+  }
+  return `Point ${pointIndex + 1}`;
 }
 
 export function snapshotRange(reference: ResolvedChartRangeReference | null): RangeSnapshot | null {

@@ -1,10 +1,18 @@
 import type { DataRow } from '../../grammar/spec';
-import type { ChartColor, ChartConfig, ChartFormat, PointFormat, SeriesConfig } from '../../types';
+import type {
+  ChartColor,
+  ChartConfig,
+  ChartFormat,
+  ChartType,
+  PointFormat,
+  SeriesConfig,
+} from '../../types';
 import {
   MARKER_FILL_FIELD,
   MARKER_SHAPE_FIELD,
   MARKER_SIZE_FIELD,
   MARKER_STROKE_FIELD,
+  MARKER_STROKE_WIDTH_FIELD,
   MARKER_VISIBLE_FIELD,
   POINT_EXPLOSION_FIELD,
   POINT_FILL_FIELD,
@@ -13,13 +21,17 @@ import {
   POINT_STROKE_WIDTH_FIELD,
   SERIES_FILL_FIELD,
   SERIES_FILL_OPACITY_FIELD,
+  SERIES_STROKE_DASH_FIELD,
   SERIES_STROKE_FIELD,
+  SERIES_STROKE_OPACITY_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
+  SOURCE_BLANK_FIELD,
 } from './fields';
 import { isNoFillNoLineSeries, resolveSeriesColor } from './style';
 import {
   resolveChartFillColor,
   resolveChartLineStyle,
+  mergeChartFormats,
   resolveChartOwnerFormat,
   resolverContextFromConfig,
 } from '../style-resolver';
@@ -70,7 +82,13 @@ export function applyMarker(
   seriesConfig: SeriesConfig | undefined,
   sourceSeriesIndex: number,
   pointFormat: PointFormat | undefined,
+  seriesType?: ChartType,
 ): void {
+  if (shouldSuppressSourceBlankMarker(row, config, seriesType)) {
+    row[MARKER_VISIBLE_FIELD] = false;
+    return;
+  }
+
   const style = pointFormat?.markerStyle ?? seriesConfig?.markerStyle;
   const hasPointMarkerOverride =
     pointFormat?.markerStyle !== undefined || pointFormat?.markerSize !== undefined;
@@ -87,7 +105,7 @@ export function applyMarker(
         seriesConfig?.markerStyle !== undefined ||
         seriesConfig?.markerSize !== undefined ||
         seriesConfig?.showMarkers === true ||
-        isMarkerDefaultChart(config, seriesConfig?.type);
+        isMarkerDefaultChart(config, seriesConfig);
   if (!showMarkers) return;
 
   row[MARKER_VISIBLE_FIELD] = true;
@@ -96,12 +114,23 @@ export function applyMarker(
     pointFormat?.markerSize ?? seriesConfig?.markerSize,
   );
   const pointLine = pointFormat?.lineFormat ?? pointFormat?.visualFormat?.line;
-  const ownerKey =
+  const seriesMarkerOwnerKey = markerOwnerKey(sourceSeriesIndex);
+  const pointMarkerOwnerKey =
     pointFormat?.idx === undefined
-      ? markerOwnerKey(sourceSeriesIndex)
+      ? undefined
       : markerPointOwnerKey(sourceSeriesIndex, pointFormat.idx);
+  const ownerKey = pointMarkerOwnerKey ?? seriesMarkerOwnerKey;
   const resolverContext = config ? resolverContextFromConfig(config, ownerKey) : {};
+  const seriesMarkerFormat = config
+    ? resolveChartOwnerFormat(config, seriesMarkerOwnerKey, undefined)
+    : undefined;
+  const pointMarkerFormat =
+    config && pointMarkerOwnerKey
+      ? resolveChartOwnerFormat(config, pointMarkerOwnerKey, undefined)
+      : undefined;
+  const markerFormat = mergeChartFormats(seriesMarkerFormat, pointMarkerFormat);
   const fill =
+    markerFillColor(markerFormat, resolverContext) ??
     resolveChartColor(
       pointFormat?.markerBackgroundColor ?? seriesConfig?.markerBackgroundColor,
       resolverContext,
@@ -109,6 +138,7 @@ export function applyMarker(
     colorToCss(pointFormat?.fill, resolverContext) ??
     resolveChartFillColor(pointFormat?.visualFormat?.fill, resolverContext);
   const stroke =
+    lineColor(markerFormat?.line, resolverContext) ??
     resolveChartColor(
       pointFormat?.markerForegroundColor ?? seriesConfig?.markerForegroundColor,
       resolverContext,
@@ -117,6 +147,29 @@ export function applyMarker(
     colorToCss(pointFormat?.border?.color);
   if (fill) row[MARKER_FILL_FIELD] = fill;
   if (stroke) row[MARKER_STROKE_FIELD] = stroke;
+  const strokeWidth = markerStrokeWidth(markerFormat?.line ?? pointLine, pointFormat);
+  if (strokeWidth !== undefined) row[MARKER_STROKE_WIDTH_FIELD] = strokeWidth;
+}
+
+function shouldSuppressSourceBlankMarker(
+  row: DataRow,
+  config: ChartConfig | undefined,
+  seriesType: ChartType | undefined,
+): boolean {
+  if (row[SOURCE_BLANK_FIELD] !== true) return false;
+  if (config?.displayBlanksAs !== 'zero') return false;
+  if (!seriesType || config.type === 'radar') return false;
+  return isPathSeriesWithBlankMarkerSuppression(seriesType);
+}
+
+function isPathSeriesWithBlankMarkerSuppression(seriesType: ChartType): boolean {
+  return (
+    seriesType === 'line' ||
+    seriesType === 'lineMarkers' ||
+    seriesType === 'lineMarkersStacked' ||
+    seriesType === 'lineMarkersStacked100' ||
+    seriesType === 'area'
+  );
 }
 
 export function applySeriesVisualStyle(
@@ -140,12 +193,26 @@ export function applySeriesVisualStyle(
   const format = config
     ? resolveChartOwnerFormat(config, ownerKey, seriesConfig?.format)
     : seriesConfig?.format;
-  const stroke = lineColor(format?.line, resolverContext);
-  const strokeWidth = linePointsToCanvasPx(format?.line?.width);
-  const fillOpacity = resolveFormatFillOpacity(format);
+  const line =
+    format?.line?.noFill === true
+      ? undefined
+      : resolveChartLineStyle(format?.line, resolverContext, {
+          widthToPx: linePointsToCanvasPx,
+        });
+  const stroke = line?.paint?.type === 'solid' ? line.paint.color : undefined;
+  const strokeWidth = line?.width ?? linePointsToCanvasPx(seriesConfig.lineWidth);
+  const strokeOpacity = line?.opacity;
+  const strokeDash = line?.dash;
+  const fillOpacity =
+    resolveFormatFillOpacity(format) ?? (format?.fill?.type === 'solid' ? 1 : undefined);
   if (stroke) row[SERIES_STROKE_FIELD] = stroke;
-  if (format?.line?.noFill === true) row[SERIES_STROKE_WIDTH_FIELD] = 0;
-  if (strokeWidth !== undefined) row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
+  if (format?.line?.noFill === true) {
+    row[SERIES_STROKE_WIDTH_FIELD] = 0;
+  } else if (strokeWidth !== undefined) {
+    row[SERIES_STROKE_WIDTH_FIELD] = strokeWidth;
+  }
+  if (strokeDash !== undefined) row[SERIES_STROKE_DASH_FIELD] = strokeDash;
+  if (strokeOpacity !== undefined) row[SERIES_STROKE_OPACITY_FIELD] = strokeOpacity;
   if (fillOpacity !== undefined) row[SERIES_FILL_OPACITY_FIELD] = fillOpacity;
 }
 
@@ -184,6 +251,25 @@ function colorToCss(
   return undefined;
 }
 
+function markerFillColor(
+  format: ChartFormat | undefined,
+  context: Parameters<typeof resolveChartColor>[1] = {},
+): string | undefined {
+  if (format?.fill?.type === 'none') return 'rgba(0, 0, 0, 0)';
+  return resolveChartFillColor(format?.fill, context);
+}
+
+function markerStrokeWidth(
+  line: PointFormat['lineFormat'] | undefined,
+  pointFormat: PointFormat | undefined,
+): number | undefined {
+  if (line?.noFill === true) return 0;
+  if (line?.width === 0) return 0;
+  const lineWidth = linePointsToCanvasPx(line?.width);
+  if (lineWidth !== undefined) return lineWidth;
+  return pointFormat?.border?.width;
+}
+
 function pointChartFormat(pointFormat: PointFormat | undefined): ChartFormat | undefined {
   if (!pointFormat) return undefined;
   const base = pointFormat.visualFormat;
@@ -203,7 +289,14 @@ function markerPointOwnerKey(sourceSeriesIndex: number, pointIndex: number): str
   return `markerPoint(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`;
 }
 
-function isMarkerDefaultChart(config?: ChartConfig, seriesType?: string): boolean {
+function isMarkerDefaultChart(
+  config: ChartConfig | undefined,
+  seriesConfig: SeriesConfig | undefined,
+): boolean {
+  const seriesType = seriesConfig?.type;
+  if (config?.type === 'scatter' || seriesType === 'scatter') {
+    return seriesConfig?.showLines !== true && config?.showLines !== true;
+  }
   return (
     config?.type === 'lineMarkers' ||
     config?.type === 'lineMarkersStacked' ||
@@ -221,7 +314,7 @@ function isRadarMarkerDefault(config?: ChartConfig): boolean {
   );
 }
 
-function excelMarkerShape(
+export function excelMarkerShape(
   style: string | undefined,
   sourceSeriesIndex: number,
   config: ChartConfig | undefined,
@@ -249,7 +342,7 @@ function excelMarkerShape(
   }
 }
 
-function markerPointSizeToArea(size?: number): number {
+export function markerPointSizeToArea(size?: number): number {
   const diameter = size ?? 7;
   return Math.max(4, diameter * diameter);
 }

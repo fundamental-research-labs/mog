@@ -1,4 +1,7 @@
 import type {
+  AxisLayoutStatus,
+  AxisPercentLabelPolicy,
+  AxisTickSkipSource,
   ChannelSpec,
   EncodingSpec,
   MarkSpec,
@@ -13,7 +16,7 @@ import type {
   SingleAxisConfig,
 } from '../../types';
 import { resolveExcelAutoValueAxisScale } from '../chart-ir/excel-value-axis-scale';
-import { seriesConfigForDataSeries } from '../series-identity';
+import { seriesConfigForDataSeries, seriesSourceIndex } from '../series-identity';
 import {
   applyAutoValueAxisTicks,
   buildAxisScaleSpec,
@@ -21,7 +24,12 @@ import {
   mapAxisConfigToAxisSpec,
   resolveAxisConfigForChannel,
 } from './axis';
-import { normalizeCategoryCrossing } from './axis-format-normalization';
+import {
+  normalizeCategoryCrossing,
+  normalizeValueAxisCrossingPlan,
+  type NormalizedAxisPeerKind,
+  type NormalizedValueAxisCrossingPlan,
+} from './axis-format-normalization';
 import { chartImportSourceDialect, isBarLikeChartType } from './bar-geometry';
 import {
   categoryKeyForIndex,
@@ -38,12 +46,27 @@ import {
 } from './fields';
 import { maxRenderableBubbleMagnitude } from './data-point-values';
 import {
+  pathStackModeForMemberIndices,
+  pathValueAxisIncludesZero,
+  resolvePathAxisLayoutForMembers,
+} from './path-axis-layout';
+import type { PathChartAxisLayout } from '../chart-ir/path-axis-layout';
+import { isNoFillNoLineSeries } from './style';
+import {
   effectiveShowLines,
   effectiveShowMarkers,
   isSupportedChartType,
   normalizeYAxisIndex,
   resolveComboSeriesType,
 } from './layers/combo-series-options';
+import {
+  isCartesianVisualSeriesType,
+  isPathVisualSeriesType,
+  resolveCartesianSeriesVisualContract,
+  type XYLineInterpolation,
+  type XYSeriesVisualContract,
+  type XYVisualContractStatus,
+} from './xy-visual-contract';
 import { resolveStackMode } from './subtypes';
 
 const EXCEL_VALUE_AXIS_TICK_COUNT = 5;
@@ -60,12 +83,14 @@ export type ExcelCartesianAxisRole =
   | 'secondaryYValue';
 
 export type ExcelCartesianScaleAuthority = 'explicitDomain' | 'excelAutoDomain';
+export type ExcelCartesianRenderedAxisOrient = 'top' | 'bottom' | 'left' | 'right';
 
 export type ExcelCartesianAxisSourceGeometry = {
   axisPosition?: string;
   crossing?: 'automatic' | 'max' | 'min' | 'custom';
   crossingValue?: number;
   crossBetween?: string;
+  isBetweenCategories?: boolean;
   reverse?: boolean;
   scaleType?: string;
   logBase?: number;
@@ -76,6 +101,11 @@ export type ExcelCartesianAxisSourceGeometry = {
   tickLabelPosition?: string;
 };
 
+export type ExcelCartesianAxisCrossingGeometry = Omit<
+  NormalizedValueAxisCrossingPlan,
+  'unsupportedReason'
+>;
+
 export type ExcelCartesianValueAxisGeometry = {
   axisGroup: 'primary' | 'secondary';
   axisRole: 'primaryYValue' | 'secondaryYValue';
@@ -84,7 +114,39 @@ export type ExcelCartesianValueAxisGeometry = {
   explicitDomain: boolean;
   scaleAuthority: ExcelCartesianScaleAuthority;
   tickStep?: number;
+  percentAxisLabelPolicy?: AxisPercentLabelPolicy;
+  axisLayoutStatus?: AxisLayoutStatus;
+  axisLayoutStatusReason?: string;
+  valueAxisLayoutStatus?: AxisLayoutStatus;
+  valueAxisLayoutStatusReason?: string;
+  renderedAxisOrient?: ExcelCartesianRenderedAxisOrient;
+  axisVisualStatus?: XYVisualContractStatus;
+  axisVisualStatusReason?: string;
+  crossingStatus?: XYVisualContractStatus;
+  crossingStatusReason?: string;
+  crossing?: ExcelCartesianAxisCrossingGeometry;
+  reservationStatus?: XYVisualContractStatus;
+  reservationStatusReason?: string;
   source?: ExcelCartesianAxisSourceGeometry;
+};
+
+export type ExcelCartesianPathAxisLayoutGeometry = {
+  categoryTickLabelSkip?: number;
+  categoryTickMarkSkip?: number;
+  categoryTickSkipSource?: AxisTickSkipSource;
+  axisLength?: number;
+  categoryPitch?: number;
+  labelBudget?: number;
+  projectedLabelWidth?: number;
+  visibleLabelCount?: number;
+  axisLayoutStatus?: AxisLayoutStatus;
+  axisLayoutStatusReason?: string;
+  categoryAxisLayoutStatus?: AxisLayoutStatus;
+  categoryAxisLayoutStatusReason?: string;
+  valueAxisLayoutStatus?: AxisLayoutStatus;
+  valueAxisLayoutStatusReason?: string;
+  reservationStatus?: AxisLayoutStatus;
+  reservationStatusReason?: string;
 };
 
 export type ExcelCartesianSeriesGeometry = {
@@ -95,6 +157,41 @@ export type ExcelCartesianSeriesGeometry = {
   axisGroup: 'primary' | 'secondary';
   showLines?: boolean;
   showMarkers?: boolean;
+  sourceShowLines?: boolean;
+  lineVisibleInk?: boolean;
+  lineNoFill?: boolean;
+  lineZeroWidth?: boolean;
+  lineStroke?: string;
+  lineStrokeWidth?: number;
+  lineDash?: number[];
+  lineOpacity?: number;
+  lineInterpolation?: XYLineInterpolation;
+  lineVisualStatus?: XYVisualContractStatus;
+  lineVisualStatusReason?: string;
+  sourceShowMarkers?: boolean;
+  markerVisibleInk?: boolean;
+  markerShape?: string;
+  markerSize?: number;
+  markerFill?: string;
+  markerStroke?: string;
+  markerStrokeWidth?: number;
+  markerOpacity?: number;
+  markerVisualStatus?: XYVisualContractStatus;
+  markerVisualStatusReason?: string;
+  blankMarkerPolicy?: 'notApplicable' | 'suppressSourceBlankMarkers';
+  blankMarkerPolicyStatus?: XYVisualContractStatus;
+  blankMarkerPolicyStatusReason?: string;
+  sourceBlankPointCount?: number;
+  zeroProjectedSourceBlankPointCount?: number;
+  sourceBlankMarkerGeometryCount?: number;
+  suppressedSourceBlankMarkerCount?: number;
+  markerEligiblePointCount?: number;
+  bubbleVisibleInk?: boolean;
+  bubbleVisualStatus?: XYVisualContractStatus;
+  bubbleVisualStatusReason?: string;
+  colorAuthorityStatus?: XYVisualContractStatus;
+  colorAuthoritySource?: string;
+  colorAuthorityReason?: string;
   stackGroup?: string;
   markerLayer?: boolean;
   bubbleSizeAuthority?: 'series';
@@ -111,6 +208,7 @@ export type ExcelCartesianGeometryPlan = {
       scaleAuthority: ExcelCartesianScaleAuthority;
       source?: ExcelCartesianAxisSourceGeometry;
       positionPolicy?: ExcelCategoryPositionPolicy;
+      pathAxisLayout?: ExcelCartesianPathAxisLayoutGeometry;
       stableKeys: boolean;
     };
     quantitative?: {
@@ -123,6 +221,14 @@ export type ExcelCartesianGeometryPlan = {
       scaleAuthority: ExcelCartesianScaleAuthority;
       tickStep?: number;
       source?: ExcelCartesianAxisSourceGeometry;
+      renderedAxisOrient?: ExcelCartesianRenderedAxisOrient;
+      axisVisualStatus?: XYVisualContractStatus;
+      axisVisualStatusReason?: string;
+      crossingStatus?: XYVisualContractStatus;
+      crossingStatusReason?: string;
+      crossing?: ExcelCartesianAxisCrossingGeometry;
+      reservationStatus?: XYVisualContractStatus;
+      reservationStatusReason?: string;
     };
   };
   valueAxes: ExcelCartesianValueAxisGeometry[];
@@ -136,6 +242,7 @@ export type ExcelCartesianGeometryPlan = {
       groupKey?: string;
       memberCount?: number;
       seriesIndices: number[];
+      hiddenGeometrySeriesIndices?: number[];
     }>;
   };
   bubble?: {
@@ -181,6 +288,19 @@ export function buildExcelCartesianGeometryPlan(
     : undefined;
   const categoryAxisConfig = categoryAxisConfigForGeometry(config);
   const categoryAxisExplicitDomain = hasExplicitAxisDomain(categoryAxisConfig);
+  const categoryPathSeriesIndices = series
+    .filter((item) => item.xRole === 'category' && isPathGeometrySeriesType(item.type))
+    .map((item) => item.seriesIndex);
+  const categoryPathAxisLayout =
+    hasCategoryX && categoryPathSeriesIndices.length > 0
+      ? resolvePathAxisLayoutForMembers({
+          config,
+          data,
+          memberIndices: categoryPathSeriesIndices,
+          categoryAxis: categoryAxisConfig,
+          useDateSerialCategoryAxis: useDateSerialCategoryAxis,
+        })
+      : undefined;
   const categoryX = hasCategoryX
     ? {
         mode: useDateSerialCategoryAxis ? ('dateSerial' as const) : ('categoryPoint' as const),
@@ -198,6 +318,7 @@ export function buildExcelCartesianGeometryPlan(
         positionPolicy: useDateSerialCategoryAxis
           ? undefined
           : resolveExcelCategoryPositionPolicy(config, data, false),
+        ...optionalPathAxisLayout(categoryPathAxisLayout),
         stableKeys: useStableCategoryKeys,
       }
     : undefined;
@@ -328,7 +449,10 @@ export function excelValueEncodingForAxis(input: {
             grid: axisSpec.grid ?? false,
             title: axisSpec.title ?? axisConfig.title ?? null,
           }
-        : axisSpec;
+        : {
+            ...axisSpec,
+            orient: xyValueAxisOrient(axisConfig, 'primaryYValue'),
+          };
 
     const scaleSpec = buildAxisScaleSpec(axisConfig, false);
     if (scaleSpec) {
@@ -345,10 +469,18 @@ export function excelQuantitativeXEncoding(input: {
   data: ChartData;
 }): ChannelSpec {
   const axisConfig = input.config.axis?.xAxis ?? input.config.axis?.valueAxis;
+  const axisSpec = axisConfig
+    ? mapAxisConfigToAxisSpec(axisConfig, input.config, 'valueAxis')
+    : undefined;
   const channel: ChannelSpec = {
     field: SCATTER_X_FIELD,
     type: 'quantitative',
-    axis: axisConfig ? mapAxisConfigToAxisSpec(axisConfig, input.config, 'valueAxis') : undefined,
+    axis: axisSpec
+      ? {
+          ...axisSpec,
+          orient: xyValueAxisOrient(axisConfig, 'xValue'),
+        }
+      : undefined,
     scale: {
       zero: false,
       nice: true,
@@ -424,6 +556,53 @@ export function withExcelAreaBaseline<T extends MarkType | MarkSpec>(
   return { ...markSpec, baseline };
 }
 
+export function withExcelCartesianPathOrder<T extends MarkType | MarkSpec>(
+  mark: T,
+  config: ChartConfig,
+): T | MarkSpec {
+  if (!usesExcelCartesianGeometry(config)) return mark;
+  const markType = typeof mark === 'string' ? mark : mark.type;
+  if (markType !== 'line' && markType !== 'area') return mark;
+  if (typeof mark === 'string') return { type: mark, pathOrder: 'source' };
+  const markSpec = mark as MarkSpec;
+  return { ...markSpec, pathOrder: 'source' };
+}
+
+export function withExcelAreaSurfaceExtentPolicy<T extends MarkType | MarkSpec>(
+  mark: T,
+  config: ChartConfig,
+  data: ChartData | undefined,
+): T | MarkSpec {
+  if (!usesExcelCartesianGeometry(config) || !data) return mark;
+  const markType = typeof mark === 'string' ? mark : mark.type;
+  if (markType !== 'area') return mark;
+
+  const positionPolicy = resolveExcelCategoryPositionPolicy(config, data, false);
+  const areaSurfaceExtentPolicy =
+    positionPolicy === 'between'
+      ? 'plotEdgeCaps'
+      : positionPolicy === 'centeredSingleton'
+        ? 'centeredSingleton'
+        : 'pointCaps';
+  if (typeof mark === 'string') return { type: mark, areaSurfaceExtentPolicy };
+  return { ...(mark as MarkSpec), areaSurfaceExtentPolicy };
+}
+
+export function withExcelCartesianGeometryMark<T extends MarkType | MarkSpec>(
+  mark: T,
+  config: ChartConfig,
+  options: { yChannel?: ChannelSpec | undefined; data?: ChartData | undefined } = {},
+): T | MarkSpec {
+  return withExcelAreaSurfaceExtentPolicy(
+    withExcelCartesianPathOrder(
+      withExcelAreaBaseline(mark, config, options.yChannel),
+      config,
+    ),
+    config,
+    options.data,
+  );
+}
+
 export function chartValueValues(data: ChartData, memberIndices?: readonly number[]): number[] {
   const values: number[] = [];
   const memberSet = memberIndices ? new Set(memberIndices) : undefined;
@@ -457,6 +636,7 @@ function buildExcelCartesianSeriesGeometry(
   const seriesConfigs = config.series ?? [];
   return data.series.flatMap((series, index) => {
     const seriesConfig = seriesConfigForDataSeries(series, seriesConfigs, index);
+    const sourceSeriesIndex = seriesSourceIndex(series, index);
     const seriesType = resolveGeometrySeriesType(config, series, seriesConfig, index);
     if (!seriesType || !isPointPathExcelCartesianSeriesType(seriesType)) return [];
 
@@ -465,8 +645,25 @@ function buildExcelCartesianSeriesGeometry(
       : 'category';
     const axisIndex = normalizeYAxisIndex(seriesConfig?.yAxisIndex ?? series.yAxisIndex) ?? 0;
     const markType = MARK_TYPE_MAP[seriesType];
-    const showLines = effectiveShowLines(seriesConfig, seriesType, config);
-    const showMarkers = effectiveShowMarkers(seriesConfig, seriesType, config, !showLines);
+    const visual = isCartesianVisualSeriesType(seriesType)
+      ? resolveCartesianSeriesVisualContract({
+          config,
+          seriesType,
+          seriesConfig,
+          sourceSeriesIndex,
+        })
+      : undefined;
+    const showLines =
+      visual?.sourceShowLines ?? effectiveShowLines(seriesConfig, seriesType, config);
+    const showMarkers =
+      visual?.sourceShowMarkers ??
+      effectiveShowMarkers(seriesConfig, seriesType, config, !showLines);
+    const blankMarkerPolicy = pathBlankMarkerPolicyGeometry({
+      config,
+      series,
+      seriesType,
+      markerVisibleInk: visual?.markerVisibleInk ?? showMarkers,
+    });
     const stackMode = resolveStackMode(config);
     const stackGroup =
       markType === 'area' && stackMode !== undefined ? `area:${axisIndex}:${xRole}` : undefined;
@@ -485,12 +682,135 @@ function buildExcelCartesianSeriesGeometry(
         axisGroup: axisIndex === 1 ? 'secondary' : 'primary',
         showLines,
         showMarkers,
+        ...(visual ? xySeriesVisualGeometry(visual) : {}),
+        ...blankMarkerPolicy,
         ...(stackGroup ? { stackGroup } : {}),
-        ...(showMarkers ? { markerLayer: true } : {}),
-        ...(seriesType === 'bubble' ? { bubbleSizeAuthority: 'series' as const } : {}),
+        ...((visual?.markerVisibleInk ?? showMarkers) ? { markerLayer: true } : {}),
+        ...(seriesType === 'bubble' || seriesType === 'bubble3DEffect'
+          ? { bubbleSizeAuthority: 'series' as const }
+          : {}),
       },
     ];
   });
+}
+
+function xySeriesVisualGeometry(
+  visual: XYSeriesVisualContract,
+): Pick<
+  ExcelCartesianSeriesGeometry,
+  | 'sourceShowLines'
+  | 'lineVisibleInk'
+  | 'lineNoFill'
+  | 'lineZeroWidth'
+  | 'lineStroke'
+  | 'lineStrokeWidth'
+  | 'lineDash'
+  | 'lineOpacity'
+  | 'lineInterpolation'
+  | 'lineVisualStatus'
+  | 'lineVisualStatusReason'
+  | 'sourceShowMarkers'
+  | 'markerVisibleInk'
+  | 'markerShape'
+  | 'markerSize'
+  | 'markerFill'
+  | 'markerStroke'
+  | 'markerStrokeWidth'
+  | 'markerOpacity'
+  | 'markerVisualStatus'
+  | 'markerVisualStatusReason'
+  | 'bubbleVisibleInk'
+  | 'bubbleVisualStatus'
+  | 'bubbleVisualStatusReason'
+  | 'colorAuthorityStatus'
+  | 'colorAuthoritySource'
+  | 'colorAuthorityReason'
+> {
+  return {
+    sourceShowLines: visual.sourceShowLines,
+    lineVisibleInk: visual.lineVisibleInk,
+    lineNoFill: visual.lineNoFill,
+    lineZeroWidth: visual.lineZeroWidth,
+    ...(visual.lineStroke ? { lineStroke: visual.lineStroke } : {}),
+    ...(visual.lineStrokeWidth !== undefined ? { lineStrokeWidth: visual.lineStrokeWidth } : {}),
+    ...(visual.lineDash ? { lineDash: visual.lineDash } : {}),
+    ...(visual.lineOpacity !== undefined ? { lineOpacity: visual.lineOpacity } : {}),
+    lineInterpolation: visual.lineInterpolation,
+    lineVisualStatus: visual.lineVisualStatus,
+    ...(visual.lineVisualStatusReason
+      ? { lineVisualStatusReason: visual.lineVisualStatusReason }
+      : {}),
+    sourceShowMarkers: visual.sourceShowMarkers,
+    markerVisibleInk: visual.markerVisibleInk,
+    markerShape: visual.markerShape,
+    markerSize: visual.markerSize,
+    ...(visual.markerFill ? { markerFill: visual.markerFill } : {}),
+    ...(visual.markerStroke ? { markerStroke: visual.markerStroke } : {}),
+    ...(visual.markerStrokeWidth !== undefined
+      ? { markerStrokeWidth: visual.markerStrokeWidth }
+      : {}),
+    ...(visual.markerOpacity !== undefined ? { markerOpacity: visual.markerOpacity } : {}),
+    markerVisualStatus: visual.markerVisualStatus,
+    ...(visual.markerVisualStatusReason
+      ? { markerVisualStatusReason: visual.markerVisualStatusReason }
+      : {}),
+    bubbleVisibleInk: visual.bubbleVisibleInk,
+    ...(visual.bubbleVisualStatus ? { bubbleVisualStatus: visual.bubbleVisualStatus } : {}),
+    ...(visual.bubbleVisualStatusReason
+      ? { bubbleVisualStatusReason: visual.bubbleVisualStatusReason }
+      : {}),
+    colorAuthorityStatus: visual.colorAuthorityStatus,
+    ...(visual.colorAuthoritySource ? { colorAuthoritySource: visual.colorAuthoritySource } : {}),
+    ...(visual.colorAuthorityReason ? { colorAuthorityReason: visual.colorAuthorityReason } : {}),
+  };
+}
+
+function pathBlankMarkerPolicyGeometry(input: {
+  config: ChartConfig;
+  series: ChartData['series'][number];
+  seriesType: ChartType;
+  markerVisibleInk: boolean;
+}): Pick<
+  ExcelCartesianSeriesGeometry,
+  | 'blankMarkerPolicy'
+  | 'blankMarkerPolicyStatus'
+  | 'blankMarkerPolicyStatusReason'
+  | 'sourceBlankPointCount'
+  | 'zeroProjectedSourceBlankPointCount'
+> {
+  if (!isPathVisualSeriesType(input.seriesType)) return {};
+
+  const sourceBlankPointCount = input.series.data.filter(
+    (point) => point?.valueState === 'blank',
+  ).length;
+  const zeroProjectedSourceBlankPointCount =
+    input.config.displayBlanksAs === 'zero' ? sourceBlankPointCount : 0;
+
+  if (zeroProjectedSourceBlankPointCount <= 0) {
+    return {
+      blankMarkerPolicy: 'notApplicable',
+      blankMarkerPolicyStatus: 'verifiedDefault',
+      blankMarkerPolicyStatusReason: 'noZeroProjectedSourceBlanks',
+      ...(sourceBlankPointCount > 0 ? { sourceBlankPointCount } : {}),
+    };
+  }
+
+  if (!input.markerVisibleInk) {
+    return {
+      blankMarkerPolicy: 'notApplicable',
+      blankMarkerPolicyStatus: 'verifiedDefault',
+      blankMarkerPolicyStatusReason: 'sourceMarkerDisabled',
+      sourceBlankPointCount,
+      zeroProjectedSourceBlankPointCount,
+    };
+  }
+
+  return {
+    blankMarkerPolicy: 'suppressSourceBlankMarkers',
+    blankMarkerPolicyStatus: 'exact',
+    sourceBlankPointCount,
+    zeroProjectedSourceBlankPointCount,
+  };
 }
 
 function buildExcelValueAxisGeometry(
@@ -507,9 +827,15 @@ function buildExcelValueAxisGeometry(
   }
 
   return Array.from(byAxis.entries()).map(([axisIndex, members]) => {
-    const includeZero = members.some((item) =>
-      excelSeriesValueAxisIncludesZero(config, item.type as ChartType),
-    );
+    const memberIndices = members.map((item) => item.seriesIndex);
+    const pathMemberIndices = members
+      .filter((item) => isPathGeometrySeriesType(item.type))
+      .map((item) => item.seriesIndex);
+    const stackMode = pathStackModeForMemberIndices(config, data, pathMemberIndices);
+    const includeZero =
+      pathMemberIndices.length > 0
+        ? pathValueAxisIncludesZero(config, data, pathMemberIndices, stackMode)
+        : members.some((item) => excelSeriesValueAxisIncludesZero(config, item.type as ChartType));
     const axisConfig = valueAxisConfigForIndex(config, axisIndex);
     const configuredScale = axisConfig ? buildAxisScaleSpec(axisConfig, false) : undefined;
     const explicitDomain = hasExplicitScaleDomain(configuredScale?.domain);
@@ -517,21 +843,60 @@ function buildExcelValueAxisGeometry(
       config,
       baseY: { field: VALUE_FIELD, type: 'quantitative' },
       axisIndex,
-      values: geometryAxisValues(
-        config,
-        data,
-        members.map((item) => item.seriesIndex),
-      ),
+      values: geometryAxisValues(config, data, memberIndices),
       includeZero,
     });
+    const pathAxisLayout =
+      pathMemberIndices.length > 0
+        ? resolvePathAxisLayoutForMembers({
+            config,
+            data,
+            memberIndices: pathMemberIndices,
+            axisIndex,
+            valueAxis: axisConfig,
+            stackMode,
+            includeZero: pathValueAxisIncludesZero(config, data, pathMemberIndices, stackMode),
+          })
+        : undefined;
+    const stackedAreaMembers = comboPathStackedAreaMemberIndices(config, data, pathMemberIndices);
+    const effectivePathAxisLayout =
+      pathAxisLayout &&
+      stackedAreaMembers.length > 0 &&
+      nonStackedMemberIndices(pathMemberIndices, stackedAreaMembers).length > 0
+        ? withoutPathValueScaleLayout(pathAxisLayout)
+        : pathAxisLayout;
+    const axisRole = axisIndex === 1 ? 'secondaryYValue' : 'primaryYValue';
+    const axisContract = xyAxisVisualContract(
+      axisRole,
+      axisConfig,
+      xyValueAxisOrient(axisConfig, axisRole),
+      valueAxisPeerKindForMembers(config, data, members),
+      defaultCategoryCrossing(config),
+    );
     return {
       axisGroup: axisIndex === 1 ? 'secondary' : 'primary',
-      axisRole: axisIndex === 1 ? 'secondaryYValue' : 'primaryYValue',
-      domain: scaleDomain(channel.scale?.domain),
+      axisRole,
+      domain: effectivePathAxisLayout?.valueAxisDomain ?? scaleDomain(channel.scale?.domain),
       includeZero,
       explicitDomain,
       scaleAuthority: scaleAuthority(explicitDomain),
-      tickStep: positiveNumber(channel.axis?.tickStep),
+      tickStep: effectivePathAxisLayout?.valueAxisTickStep ?? positiveNumber(channel.axis?.tickStep),
+      ...(effectivePathAxisLayout?.percentAxisLabelPolicy
+        ? { percentAxisLabelPolicy: effectivePathAxisLayout.percentAxisLabelPolicy }
+        : {}),
+      ...(effectivePathAxisLayout?.valueAxisLayoutStatus
+        ? {
+            axisLayoutStatus: effectivePathAxisLayout.valueAxisLayoutStatus,
+            valueAxisLayoutStatus: effectivePathAxisLayout.valueAxisLayoutStatus,
+          }
+        : {}),
+      ...(effectivePathAxisLayout?.valueAxisLayoutStatusReason
+        ? {
+            axisLayoutStatusReason: effectivePathAxisLayout.valueAxisLayoutStatusReason,
+            valueAxisLayoutStatusReason: effectivePathAxisLayout.valueAxisLayoutStatusReason,
+          }
+        : {}),
+      ...axisContract,
       ...optionalAxisSource(axisConfig),
     };
   });
@@ -555,18 +920,28 @@ function buildExcelAreaGeometry(
       groupKey: string;
       memberCount: number;
       seriesIndices: number[];
+      hiddenGeometrySeriesIndices: number[];
     }
   >();
   for (const item of areaSeries) {
     const key = item.stackGroup ?? `area:${item.axisGroup}:${item.xRole}:${item.seriesIndex}`;
+    const seriesConfig = seriesConfigForDataSeries(
+      data.series[item.seriesIndex],
+      config.series ?? [],
+      item.seriesIndex,
+    );
     const group = groupsByKey.get(key) ?? {
       axisGroup: item.axisGroup,
       xRole: item.xRole,
       groupKey: key,
       memberCount: 0,
       seriesIndices: [],
+      hiddenGeometrySeriesIndices: [],
     };
     group.seriesIndices.push(item.seriesIndex);
+    if (isNoFillNoLineSeries(seriesConfig)) {
+      group.hiddenGeometrySeriesIndices.push(item.seriesIndex);
+    }
     group.memberCount = group.seriesIndices.length;
     groupsByKey.set(key, group);
   }
@@ -579,7 +954,16 @@ function buildExcelAreaGeometry(
       ...(stackMode === 'normalize'
         ? { percentDomain: percentStackedGeometryDomain(data, memberIndices) }
         : {}),
-      groups: Array.from(groupsByKey.values()),
+      groups: Array.from(groupsByKey.values()).map((group) => ({
+        axisGroup: group.axisGroup,
+        xRole: group.xRole,
+        groupKey: group.groupKey,
+        memberCount: group.memberCount,
+        seriesIndices: group.seriesIndices,
+        ...(group.hiddenGeometrySeriesIndices.length > 0
+          ? { hiddenGeometrySeriesIndices: group.hiddenGeometrySeriesIndices }
+          : {}),
+      })),
     },
   };
 }
@@ -633,8 +1017,10 @@ function isQuantitativeGeometryXSeries(
   return (
     config.type === 'scatter' ||
     config.type === 'bubble' ||
+    config.type === 'bubble3DEffect' ||
     seriesType === 'scatter' ||
-    seriesType === 'bubble'
+    seriesType === 'bubble' ||
+    seriesType === 'bubble3DEffect'
   );
 }
 
@@ -643,7 +1029,7 @@ function geometryAxisValues(
   data: ChartData,
   memberIndices: readonly number[],
 ): number[] {
-  const stackMode = resolveStackMode(config);
+  const stackMode = pathStackModeForMemberIndices(config, data, memberIndices);
   if (stackMode === 'normalize') return percentStackedGeometryDomain(data, memberIndices);
   if (stackMode === 'zero') {
     return [
@@ -652,6 +1038,38 @@ function geometryAxisValues(
     ];
   }
   return chartValueValues(data, memberIndices);
+}
+
+function comboPathStackedAreaMemberIndices(
+  config: ChartConfig,
+  data: ChartData,
+  memberIndices: readonly number[],
+): number[] {
+  if (config.type !== 'combo' || !resolveStackMode(config)) return [];
+  const memberSet = new Set(memberIndices);
+  return data.series.flatMap((series, index) => {
+    if (!memberSet.has(index)) return [];
+    const seriesConfig = seriesConfigForDataSeries(series, config.series ?? [], index);
+    const seriesType = resolveGeometrySeriesType(config, series, seriesConfig, index);
+    return seriesType && MARK_TYPE_MAP[seriesType] === 'area' ? [index] : [];
+  });
+}
+
+function nonStackedMemberIndices(
+  memberIndices: readonly number[],
+  stackedAreaMembers: readonly number[],
+): number[] {
+  if (stackedAreaMembers.length === 0) return [...memberIndices];
+  const stackedSet = new Set(stackedAreaMembers);
+  return memberIndices.filter((index) => !stackedSet.has(index));
+}
+
+function withoutPathValueScaleLayout(layout: PathChartAxisLayout): PathChartAxisLayout {
+  const rest = { ...layout };
+  delete rest.valueAxisDomain;
+  delete rest.valueAxisTickStep;
+  delete rest.valueAxisTickCount;
+  return rest;
 }
 
 function percentStackedGeometryDomain(
@@ -725,6 +1143,12 @@ function quantitativeXGeometry(
   const configuredScale = axisConfig ? buildAxisScaleSpec(axisConfig, false) : undefined;
   const explicitDomain = hasExplicitScaleDomain(configuredScale?.domain);
   const channel = excelQuantitativeXEncoding({ config, data: memberData });
+  const axisContract = xyAxisVisualContract(
+    'xValue',
+    axisConfig,
+    xyValueAxisOrient(axisConfig, 'xValue'),
+    'quantitative',
+  );
   return {
     mode: 'quantitative',
     axisRole: 'xValue',
@@ -734,6 +1158,7 @@ function quantitativeXGeometry(
     explicitDomain,
     scaleAuthority: scaleAuthority(explicitDomain),
     tickStep: positiveNumber(channel.axis?.tickStep),
+    ...axisContract,
     ...optionalAxisSource(axisConfig),
   };
 }
@@ -752,7 +1177,7 @@ function excelCategoryPointScale(
     domain: options.useStableCategoryKeys
       ? data.categories.map((_category, index) => categoryKeyForIndex(index))
       : data.categories.map((category) => String(category)),
-    padding: policy === 'between' ? 0.5 : 0,
+    padding: policy === 'between' || policy === 'centeredSingleton' ? 0.5 : 0,
   };
 }
 
@@ -819,6 +1244,121 @@ function secondaryValueEncoding(
   };
 }
 
+type XYValueAxisRole = 'xValue' | 'primaryYValue' | 'secondaryYValue';
+
+function valueAxisPeerKindForMembers(
+  config: ChartConfig,
+  data: ChartData,
+  members: readonly ExcelCartesianSeriesGeometry[],
+): NormalizedAxisPeerKind {
+  if (members.some((item) => item.xRole === 'quantitative')) return 'quantitative';
+  return shouldUseDateSerialCategoryAxis(config, data, false) ? 'dateSerial' : 'categoryPoint';
+}
+
+function xyAxisVisualContract(
+  role: XYValueAxisRole,
+  axisConfig: SingleAxisConfig | undefined,
+  renderedAxisOrient: ExcelCartesianRenderedAxisOrient,
+  peerAxisKind: NormalizedAxisPeerKind,
+  defaultSourceCategoryCrossing?: 'between' | 'midCat',
+): {
+  renderedAxisOrient: ExcelCartesianRenderedAxisOrient;
+  axisVisualStatus: XYVisualContractStatus;
+  axisVisualStatusReason?: string;
+  crossingStatus: XYVisualContractStatus;
+  crossingStatusReason?: string;
+  crossing?: ExcelCartesianAxisCrossingGeometry;
+  reservationStatus: XYVisualContractStatus;
+  reservationStatusReason?: string;
+} {
+  const sourcePosition = normalizeSourceAxisPosition(axisConfig?.position);
+  const expected = role === 'xValue' ? 'horizontal' : 'vertical';
+  const sourceOrientation = sourcePosition ? axisPositionOrientation(sourcePosition) : undefined;
+  const axisVisualStatus =
+    axisConfig?.position && !sourcePosition
+      ? 'approximate'
+      : !axisConfig
+        ? 'verifiedDefault'
+        : sourceOrientation === undefined || sourceOrientation === expected
+          ? 'exact'
+          : 'verifiedDefault';
+  const crossingPlan = normalizeValueAxisCrossingPlan(
+    axisConfig,
+    peerAxisKind,
+    peerAxisKind === 'categoryPoint' ? defaultSourceCategoryCrossing : undefined,
+  );
+  const { unsupportedReason, ...crossing } = crossingPlan;
+  const crossingStatus: XYVisualContractStatus = unsupportedReason
+    ? 'approximate'
+    : axisConfig
+      ? 'exact'
+      : 'verifiedDefault';
+  const axisVisualStatusReason =
+    axisConfig?.position && !sourcePosition
+      ? `sourceAxisPositionUnrecognized:${axisConfig.position}`
+      : sourceOrientation && sourceOrientation !== expected
+        ? `sourceAxisPositionStoredAs${sourcePosition};renderedAs${renderedAxisOrient}`
+        : !axisConfig
+          ? 'excelDefaultValueAxis'
+          : undefined;
+  return {
+    renderedAxisOrient,
+    axisVisualStatus,
+    ...(axisVisualStatusReason ? { axisVisualStatusReason } : {}),
+    crossingStatus,
+    ...(unsupportedReason
+      ? { crossingStatusReason: unsupportedReason }
+      : !axisConfig
+        ? { crossingStatusReason: 'excelDefaultCrossing' }
+        : {}),
+    crossing,
+    reservationStatus: axisConfig ? 'exact' : 'verifiedDefault',
+    ...(!axisConfig ? { reservationStatusReason: 'excelDefaultAxisReservation' } : {}),
+  };
+}
+
+function xyValueAxisOrient(
+  axisConfig: SingleAxisConfig | undefined,
+  role: XYValueAxisRole,
+): ExcelCartesianRenderedAxisOrient {
+  const position = normalizeSourceAxisPosition(axisConfig?.position);
+  if (role === 'xValue') {
+    return position === 'top' || position === 'bottom' ? position : 'bottom';
+  }
+  if (role === 'secondaryYValue') {
+    return position === 'left' || position === 'right' ? position : 'right';
+  }
+  return position === 'left' || position === 'right' ? position : 'left';
+}
+
+function normalizeSourceAxisPosition(
+  position: string | undefined,
+): ExcelCartesianRenderedAxisOrient | undefined {
+  if (!position) return undefined;
+  switch (position.toLowerCase()) {
+    case 'b':
+    case 'bottom':
+      return 'bottom';
+    case 't':
+    case 'top':
+      return 'top';
+    case 'l':
+    case 'left':
+      return 'left';
+    case 'r':
+    case 'right':
+      return 'right';
+    default:
+      return undefined;
+  }
+}
+
+function axisPositionOrientation(
+  position: ExcelCartesianRenderedAxisOrient,
+): 'horizontal' | 'vertical' {
+  return position === 'top' || position === 'bottom' ? 'horizontal' : 'vertical';
+}
+
 function valueAxisConfigForIndex(
   config: ChartConfig,
   axisIndex: 0 | 1,
@@ -859,6 +1399,63 @@ function isPointPathExcelCartesianSeriesType(type: ChartType): boolean {
   return markType === 'line' || markType === 'area' || markType === 'point';
 }
 
+function isPathGeometrySeriesType(type: string): boolean {
+  if (!isSupportedChartType(type)) return false;
+  const markType = MARK_TYPE_MAP[type];
+  return markType === 'line' || markType === 'area';
+}
+
+function optionalPathAxisLayout(
+  layout: PathChartAxisLayout | undefined,
+): { pathAxisLayout?: ExcelCartesianPathAxisLayoutGeometry } {
+  if (!layout) return {};
+  const pathAxisLayout: ExcelCartesianPathAxisLayoutGeometry = {
+    ...(layout.categoryTickLabelSkip !== undefined
+      ? { categoryTickLabelSkip: layout.categoryTickLabelSkip }
+      : {}),
+    ...(layout.categoryTickMarkSkip !== undefined
+      ? { categoryTickMarkSkip: layout.categoryTickMarkSkip }
+      : {}),
+    ...(layout.categoryTickSkipSource
+      ? { categoryTickSkipSource: layout.categoryTickSkipSource }
+      : {}),
+    ...(layout.axisLength !== undefined ? { axisLength: layout.axisLength } : {}),
+    ...(layout.categoryPitch !== undefined ? { categoryPitch: layout.categoryPitch } : {}),
+    ...(layout.labelBudget !== undefined ? { labelBudget: layout.labelBudget } : {}),
+    ...(layout.projectedLabelWidth !== undefined
+      ? { projectedLabelWidth: layout.projectedLabelWidth }
+      : {}),
+    ...(layout.visibleLabelCount !== undefined ? { visibleLabelCount: layout.visibleLabelCount } : {}),
+    ...(layout.categoryAxisLayoutStatus
+      ? {
+          axisLayoutStatus: layout.categoryAxisLayoutStatus,
+          categoryAxisLayoutStatus: layout.categoryAxisLayoutStatus,
+        }
+      : layout.axisLayoutStatus
+        ? { axisLayoutStatus: layout.axisLayoutStatus }
+        : {}),
+    ...(layout.categoryAxisLayoutStatusReason
+      ? {
+          axisLayoutStatusReason: layout.categoryAxisLayoutStatusReason,
+          categoryAxisLayoutStatusReason: layout.categoryAxisLayoutStatusReason,
+        }
+      : layout.axisLayoutStatusReason
+        ? { axisLayoutStatusReason: layout.axisLayoutStatusReason }
+        : {}),
+    ...(layout.valueAxisLayoutStatus
+      ? { valueAxisLayoutStatus: layout.valueAxisLayoutStatus }
+      : {}),
+    ...(layout.valueAxisLayoutStatusReason
+      ? { valueAxisLayoutStatusReason: layout.valueAxisLayoutStatusReason }
+      : {}),
+    ...(layout.reservationStatus ? { reservationStatus: layout.reservationStatus } : {}),
+    ...(layout.reservationStatusReason
+      ? { reservationStatusReason: layout.reservationStatusReason }
+      : {}),
+  };
+  return Object.keys(pathAxisLayout).length > 0 ? { pathAxisLayout } : {};
+}
+
 function hasExplicitScaleDomain(domain: unknown): boolean {
   return Array.isArray(domain) && domain.some((bound) => bound !== undefined);
 }
@@ -887,6 +1484,7 @@ function axisSourceGeometry(
     crossing: axis.crossesAt,
     crossingValue: axis.crossesAtValue,
     crossBetween: axis.crossBetween,
+    isBetweenCategories: axis.isBetweenCategories,
     reverse: axis.reverse,
     scaleType: axis.scaleType ?? axis.axisType ?? axis.type,
     logBase: axis.logBase,

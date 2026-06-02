@@ -14,6 +14,10 @@ export interface PieLabelGeometry {
   centerY: number;
   innerRadiusRatio: number;
   outerRadiusRatio: number;
+  sliceAngle: number;
+  maxWidth: number;
+  lineHeight: number;
+  leaderVisible: boolean;
 }
 
 export function applyDataLabel(

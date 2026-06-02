@@ -33,8 +33,11 @@ import {
   SERIES_FILL_FIELD,
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
+  PIE_COLOR_KEY_FIELD,
+  PIE_POINT_KEY_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
+  STOCK_HIGH_LOW_MIN_FIELD,
   STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
@@ -571,11 +574,10 @@ describe('buildMark - mark type mapping', () => {
     });
   });
 
-  it('should map stock to rule as default base mark', () => {
-    // Stock charts use rule marks for OHLC ranges
+  it('should map stock to stockGlyph as default base mark', () => {
     const config = makeConfig({ type: 'stock' });
     const mark = buildMark(config);
-    expect(mark).toBe('rule');
+    expect(mark).toBe('stockGlyph');
   });
 });
 
@@ -781,7 +783,7 @@ describe('buildEncoding - chart type encodings', () => {
     expect(encoding.theta!.field).toBe('value');
     expect(encoding.theta!.type).toBe('quantitative');
     expect(encoding.color).toBeDefined();
-    expect(encoding.color!.field).toBe('category');
+    expect(encoding.color!.field).toBe(PIE_COLOR_KEY_FIELD);
     expect(encoding.color!.type).toBe('nominal');
   });
 
@@ -817,12 +819,12 @@ describe('buildEncoding - multi-series', () => {
     expect(encoding.color).toBeUndefined();
   });
 
-  it('should always add color encoding for pie charts (maps to category)', () => {
+  it('should always add color encoding for pie charts (maps to stable point keys)', () => {
     const config = makeConfig({ type: 'pie' });
     const encoding = buildEncoding(config, SINGLE_SERIES_DATA);
 
     expect(encoding.color).toBeDefined();
-    expect(encoding.color!.field).toBe('category');
+    expect(encoding.color!.field).toBe(PIE_COLOR_KEY_FIELD);
   });
 
   it('resolves imported theme luminance transforms with Excel HSL luminance math', () => {
@@ -2326,24 +2328,28 @@ describe('configToSpec - stock chart', () => {
     const config = makeConfig({ type: 'stock' });
     const spec = configToSpec(config, STOCK_SERIES_DATA);
     expect(spec.layer).toBeDefined();
-    expect(spec.layer!.length).toBeGreaterThanOrEqual(2);
+    expect(spec.layer!).toHaveLength(1);
   });
 
-  it('should have high-low rule and close tick layers for HLC charts', () => {
+  it('should have a stock glyph layer for HLC charts', () => {
     const config = makeConfig({ type: 'stock', subType: 'hlc' });
     const spec = configToSpec(config, STOCK_SERIES_DATA);
     const markTypes = spec.layer!.map((l) => (l.mark as MarkSpec).type);
-    expect(markTypes).toEqual(['rule', 'tick']);
+    expect(markTypes).toEqual(['stockGlyph']);
+    expect(spec.layer![0].mark).toEqual(
+      expect.objectContaining({ type: 'stockGlyph', stockSubType: 'hlc' }),
+    );
   });
 });
 
 describe('buildStockLayers', () => {
-  it('should produce two HLC layers (wick + close tick)', () => {
+  it('should produce one HLC stock glyph layer', () => {
     const config = makeConfig({ type: 'stock', subType: 'hlc' });
     const layers = buildStockLayers(config, STOCK_SERIES_DATA, []);
-    expect(layers).toHaveLength(2);
-    expect((layers[0].mark as MarkSpec).type).toBe('rule');
-    expect((layers[1].mark as MarkSpec).type).toBe('tick');
+    expect(layers).toHaveLength(1);
+    expect(layers[0].mark).toEqual(
+      expect.objectContaining({ type: 'stockGlyph', stockSubType: 'hlc' }),
+    );
   });
 });
 
@@ -3124,19 +3130,31 @@ describe('configToSpec dropped fields', () => {
       return values as [number, number, number, number];
     }
 
-    it('creates HLC layers (rule + tick) for hlc sub-type', () => {
+    function samePath(
+      coordinates: [number, number, number, number],
+      segment: { x1: number; y1: number; x2: number; y2: number },
+    ): boolean {
+      return (
+        coordinates[0] === segment.x1 &&
+        coordinates[1] === segment.y1 &&
+        coordinates[2] === segment.x2 &&
+        coordinates[3] === segment.y2
+      );
+    }
+
+    it('creates an HLC stock glyph layer for hlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'hlc' });
       const rows = [{ category: 'Day1', high: 110, low: 90, close: 105 }];
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 2 layers: rule (wick) + tick (close)
-      expect(layers.length).toBe(2);
-      expect((layers[0].mark as MarkSpec).type).toBe('rule');
-      expect((layers[1].mark as MarkSpec).type).toBe('tick');
+      expect(layers.length).toBe(1);
+      expect(layers[0].mark).toEqual(
+        expect.objectContaining({ type: 'stockGlyph', stockSubType: 'hlc' }),
+      );
     });
 
-    it('renders HLC high-low wicks from low to high instead of full-height rules', () => {
+    it('renders HLC high-low wicks from high to low instead of full-height rules', () => {
       const config = makeConfig({ type: 'stock', subType: 'hlc' });
       const result = compile(configToSpec(config, stockData), undefined, {
         skipAxes: true,
@@ -3144,27 +3162,29 @@ describe('configToSpec dropped fields', () => {
         skipTitle: true,
       });
       const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
-      const [, lowY, , highY] = pathCoordinates(paths[0]);
+      const [, highY, , lowY] = pathCoordinates(paths[0]);
+      const expectedLowY = result.scales.y!(90) as number;
+      const expectedHighY = result.scales.y!(110) as number;
 
-      expect(lowY).toBeCloseTo(result.scales.y!(90) as number);
-      expect(highY).toBeCloseTo(result.scales.y!(110) as number);
+      expect(Math.abs(lowY - expectedLowY)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(highY - expectedHighY)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(lowY - highY)).toBeGreaterThan(0);
       expect(Math.abs(lowY - highY)).toBeLessThan(result.layout.plotArea.height);
     });
 
-    it('creates OHLC layers (wick rule + body rule) for ohlc sub-type', () => {
+    it('creates an OHLC stock glyph layer for ohlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'ohlc' });
       const rows = [{ category: 'Day1', open: 95, high: 110, low: 90, close: 105 }];
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 2 layers: rule (wick) + rule (body)
-      expect(layers.length).toBe(2);
-      expect((layers[0].mark as MarkSpec).type).toBe('rule');
-      expect((layers[1].mark as MarkSpec).type).toBe('rule');
+      expect(layers.length).toBe(1);
+      expect(layers[0].mark).toEqual(
+        expect.objectContaining({ type: 'stockGlyph', stockSubType: 'ohlc' }),
+      );
     });
 
-    it('renders OHLC bodies from open to close on the same value scale', () => {
+    it('renders OHLC open and close ticks on the same value scale', () => {
       const config = makeConfig({ type: 'stock', subType: 'ohlc' });
       const result = compile(configToSpec(config, stockData), undefined, {
         skipAxes: true,
@@ -3172,26 +3192,40 @@ describe('configToSpec dropped fields', () => {
         skipTitle: true,
       });
       const paths = result.marks.filter((mark): mark is PathMark => mark.type === 'path');
-      const body = paths[2];
-      const [, openY, , closeY] = pathCoordinates(body);
+      const glyphPoint = result.stockGlyphTrace?.points[0];
+      const openTick = paths.find((path) =>
+        glyphPoint?.openTick ? samePath(pathCoordinates(path), glyphPoint.openTick) : false,
+      );
+      const closeTick = paths.find((path) =>
+        glyphPoint?.closeTick ? samePath(pathCoordinates(path), glyphPoint.closeTick) : false,
+      );
+      expect(openTick).toBeDefined();
+      expect(closeTick).toBeDefined();
+      const [openX1, openY, openX2, openY2] = pathCoordinates(openTick!);
+      const [closeX1, closeY, closeX2, closeY2] = pathCoordinates(closeTick!);
 
-      expect(openY).toBeCloseTo(result.scales.y!(95) as number);
-      expect(closeY).toBeCloseTo(result.scales.y!(105) as number);
-      expect(body.style.strokeWidth).toBe(14);
+      expect(openY).toBeCloseTo(glyphPoint!.openTick!.y1);
+      expect(closeY).toBeCloseTo(glyphPoint!.closeTick!.y1);
+      expect(openY2).toBe(openY);
+      expect(closeY2).toBe(closeY);
+      expect(openX1).toBeLessThan(openX2);
+      expect(closeX1).toBeLessThan(closeX2);
     });
 
-    it('adds volume layer for volume-ohlc sub-type', () => {
+    it('adds volume geometry to the stock glyph for volume-ohlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'volume-ohlc' as any });
       const rows = [{ category: 'Day1', open: 95, high: 110, low: 90, close: 105, volume: 1000 }];
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 3 layers: volume bar + rule (wick) + rule (body)
-      expect(layers.length).toBe(3);
-      expect((layers[0].mark as MarkSpec).type).toBe('bar');
-      expect((layers[0].mark as MarkSpec).opacity).toBe(0.3);
-      expect((layers[1].mark as MarkSpec).type).toBe('rule');
-      expect((layers[2].mark as MarkSpec).type).toBe('rule');
+      expect(layers.length).toBe(1);
+      expect(layers[0].mark).toEqual(
+        expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'volume-ohlc',
+          stockVolumeField: STOCK_VOLUME_FIELD,
+        }),
+      );
     });
 
     it('uses an independent hidden volume y-scale for volume stock charts', () => {
@@ -3222,13 +3256,12 @@ describe('configToSpec dropped fields', () => {
         scale: { y: 'independent' },
         axis: { y: 'independent' },
       });
-      expect(spec.layer[0]?.encoding?.y).toEqual(
-        expect.objectContaining({
-          field: STOCK_VOLUME_FIELD,
-          type: 'quantitative',
-          axis: null,
-        }),
-      );
+      expect(spec.layer[0]?.encoding?.y).toMatchObject({
+        field: STOCK_HIGH_LOW_MIN_FIELD,
+        type: 'quantitative',
+        axis: { tickStep: 5 },
+        scale: { domain: [90, 115], zero: false, nice: false },
+      });
     });
 
     it('keeps volume stock OHLC wicks and bodies on the price scale', () => {
@@ -3270,28 +3303,31 @@ describe('configToSpec dropped fields', () => {
         },
       );
       const volumePaths = withVolume.marks.filter((mark): mark is PathMark => mark.type === 'path');
-      const [, lowY, , highY] = pathCoordinates(volumePaths[0]);
-      const [, openY, , closeY] = pathCoordinates(volumePaths[2]);
+      const [, highY, , lowY] = pathCoordinates(volumePaths[0]);
+      const [, openY] = pathCoordinates(volumePaths[1]);
+      const [, closeY] = pathCoordinates(volumePaths[2]);
 
       expect(lowY).toBeGreaterThan(highY);
-      expect(openY).toBeGreaterThan(closeY);
       expect(openY).toBeLessThan(lowY);
       expect(closeY).toBeGreaterThan(highY);
       expect(Math.abs(lowY - highY)).toBeGreaterThan(5);
       expect(Math.abs(openY - closeY)).toBeGreaterThan(2);
     });
 
-    it('adds volume layer for volume-hlc sub-type', () => {
+    it('adds volume geometry to the stock glyph for volume-hlc sub-type', () => {
       const config = makeConfig({ type: 'stock', subType: 'volume-hlc' as any });
       const rows = [{ category: 'Day1', high: 110, low: 90, close: 105, volume: 1000 }];
 
       const layers = buildStockLayers(config, stockData, rows);
 
-      // Should have 3 layers: volume bar + rule (wick) + tick (close)
-      expect(layers.length).toBe(3);
-      expect((layers[0].mark as MarkSpec).type).toBe('bar');
-      expect((layers[1].mark as MarkSpec).type).toBe('rule');
-      expect((layers[2].mark as MarkSpec).type).toBe('tick');
+      expect(layers.length).toBe(1);
+      expect(layers[0].mark).toEqual(
+        expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'volume-hlc',
+          stockVolumeField: STOCK_VOLUME_FIELD,
+        }),
+      );
     });
   });
 });

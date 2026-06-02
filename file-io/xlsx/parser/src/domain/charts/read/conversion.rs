@@ -109,7 +109,10 @@ pub(super) fn convert_chart_to_chart_spec(
         boxplot: None,
         hierarchy: None,
         region_map: None,
-        display_blanks_as: None,
+        display_blanks_as: chart
+            .display_options
+            .disp_blanks_as
+            .map(|value| value.to_ooxml().to_string()),
         plot_visible_only: None,
         gap_width: None,
         gap_depth: None,

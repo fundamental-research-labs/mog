@@ -61,7 +61,7 @@ use domain_types::domain::slicer::{
 };
 use domain_types::domain::table::Table as CanonicalTable;
 use domain_types::domain::validation::{CellValidationResult, ColumnSchema, RangeSchema};
-use domain_types::{CellFormat, ResolvedCellFormat, SheetProtectionOptions};
+use domain_types::{CellFormat, ResolvedCellFormat, SheetProtectionOptions, TotalsFunction};
 
 /// Bridge service wrapping the compute engine for FFI exposure.
 ///

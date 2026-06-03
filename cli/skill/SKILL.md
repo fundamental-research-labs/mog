@@ -261,3 +261,10 @@ Common workbook namespaces: `sheets`, `history`, `names`, `scenarios`,
   pnpm --filter @mog/cli typecheck
   pnpm --filter @mog/cli test:e2e
   ```
+- Provider-backed agent E2E tests are opt-in because they run real Codex or
+  Claude agent sessions:
+  ```bash
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog/cli test:agent-e2e
+  ```

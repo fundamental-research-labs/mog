@@ -176,7 +176,11 @@ export const ContextMenuItem = forwardRef<HTMLDivElement, ContextMenuItemProps>(
       {icon && <span className="w-4 h-4 flex items-center justify-center shrink-0">{icon}</span>}
       <span className="flex-1">{children}</span>
       {shortcut && (
-        <kbd className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary">{shortcut}</kbd>
+        <kbd
+          aria-hidden="true"
+          data-shortcut={shortcut}
+          className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary before:content-[attr(data-shortcut)]"
+        />
       )}
     </RadixContextMenu.Item>
   ),

@@ -220,8 +220,16 @@ export function useContextMenuHandler(
           targetCol = hit.col;
           target = 'column-header';
 
-          // If column is not in selection, select it
-          if (!isColumnInSelection(hit.col, selection.ranges)) {
+          // Keep a full-column selection, or a multi-column partial span used for
+          // header operations such as selecting A:C to unhide B. A single-cell
+          // selection such as A1 should still become the whole clicked column.
+          const hasColumnHeaderSelection = selection.ranges.some(
+            (range) =>
+              hit.col >= range.startCol &&
+              hit.col <= range.endCol &&
+              (range.isFullColumn || range.startCol !== range.endCol),
+          );
+          if (!hasColumnHeaderSelection) {
             selection.selectColumn(hit.col, false, false);
           }
           break;

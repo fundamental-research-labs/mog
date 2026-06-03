@@ -35,6 +35,7 @@ use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 use crate::mirror::{CellMirror, SheetMirror};
 use crate::scheduler::input::CellWrite;
 use crate::storage::engine::mutation::CellInput;
+use crate::storage::sheet::hyperlinks;
 use cell_types::{CellId, SheetId};
 use compute_document::cell_serde::{cell_value_to_any, yrs_any_to_cell_value};
 use compute_document::hex::id_to_hex;
@@ -295,7 +296,8 @@ fn yrs_store_formula(
         (KEY_VALUE, Any::Null),
         (KEY_FORMULA, Any::String(Arc::from(body))),
     ]);
-    cells_map.insert(txn, &*cell_hex, cell_prelim);
+    let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+    hyperlinks::write_formula_hyperlink_metadata(&cell_map, txn, Some(body));
     if let (Some(rh), Some(ch)) = (row_hex.as_ref(), col_hex.as_ref()) {
         write_cell_position_to_yrs(txn, sheets, sheet_hex, &cell_hex, rh.as_str(), ch.as_str());
     }
@@ -725,7 +727,8 @@ pub fn import_values(
                 ]),
                 None => MapPrelim::from([(KEY_VALUE, v)]),
             };
-            cells_map.insert(&mut txn, &*cell_hex, cell_prelim);
+            let cell_map: MapRef = cells_map.insert(&mut txn, &*cell_hex, cell_prelim);
+            hyperlinks::write_formula_hyperlink_metadata(&cell_map, &mut txn, formula.as_deref());
             if let (Some(rh), Some(ch)) = (row_hex.as_ref(), col_hex.as_ref()) {
                 write_cell_position_to_yrs(
                     &mut txn,

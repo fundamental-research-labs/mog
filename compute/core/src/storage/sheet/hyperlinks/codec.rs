@@ -10,6 +10,7 @@ use super::keys::{
 
 pub(super) fn read_hyperlink_url<T: yrs::ReadTxn>(txn: &T, cell_map: &MapRef) -> Option<String> {
     read_string_key(txn, cell_map, KEY_HYPERLINK)
+        .or_else(|| super::formula::read_formula_hyperlink_url(txn, cell_map))
 }
 
 pub(super) fn decode_full_hyperlink<T: yrs::ReadTxn>(

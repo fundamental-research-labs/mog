@@ -11,6 +11,7 @@ use cell_types::SheetId;
 use value_types::ComputeError;
 
 use crate::storage::YrsStorage;
+use crate::storage::sheet::hyperlinks;
 
 // ===========================================================================
 // Hydration: populate yrs document from snapshot
@@ -133,6 +134,11 @@ impl YrsStorage {
                     cell_data.identity_formula.as_ref(),
                 );
                 let cell_map: MapRef = cells_map.insert(&mut txn, &*cell_hex, cell_prelim);
+                hyperlinks::write_formula_hyperlink_metadata(
+                    &cell_map,
+                    &mut txn,
+                    cell_data.formula.as_deref(),
+                );
                 if let Some(idf) = &cell_data.identity_formula {
                     write_identity_formula_to_yrs(&cell_map, &mut txn, idf).map_err(|e| {
                         ComputeError::InternalPanic {

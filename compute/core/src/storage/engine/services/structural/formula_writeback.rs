@@ -4,6 +4,7 @@ use domain_types::domain::named_range::DefinedName;
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::hyperlinks;
 use crate::storage::workbook::named_ranges;
 
 /// Refresh `KEY_FORMULA` sub-keys in Yrs cell maps for any formula-bearing
@@ -128,6 +129,11 @@ pub(super) fn invalidate_stale_yrs_formulas(
                     &mut txn,
                     KEY_FORMULA,
                     Any::String(Arc::from(shifted_body.as_str())),
+                );
+                hyperlinks::write_formula_hyperlink_metadata(
+                    &cell_map,
+                    &mut txn,
+                    Some(shifted_body.as_str()),
                 );
             }
         }

@@ -7,6 +7,7 @@ use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::hyperlinks;
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 use super::range_sort::sort_range_backed_rows;
@@ -342,6 +343,7 @@ pub(in crate::storage::engine) fn mutation_sort_range(
                         KEY_FORMULA,
                         Any::String(std::sync::Arc::from(body)),
                     );
+                    hyperlinks::write_formula_hyperlink_metadata(&cell_map, &mut txn, Some(body));
                 }
             }
         }

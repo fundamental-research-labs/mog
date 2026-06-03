@@ -12,6 +12,7 @@ use formula_types::IdentityFormula;
 
 use crate::mirror::CellMirror;
 use crate::storage::YrsStorage;
+use crate::storage::sheet::hyperlinks;
 use compute_document::hex::id_to_hex;
 use value_types::CellValue;
 use yrs::{Array, Map, Origin, Transact};
@@ -223,6 +224,11 @@ impl YrsStorage {
                 let cell_prelim =
                     build_cell_prelim(&value, formula.as_deref(), identity_formula.as_ref());
                 let cell_map: yrs::MapRef = cells_map.insert(&mut txn, &*cell_hex, cell_prelim);
+                hyperlinks::write_formula_hyperlink_metadata(
+                    &cell_map,
+                    &mut txn,
+                    formula.as_deref(),
+                );
                 if let Some(idf) = &identity_formula
                     && let Err(e) = write_identity_formula_to_yrs(&cell_map, &mut txn, idf)
                 {

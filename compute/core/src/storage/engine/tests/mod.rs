@@ -13,6 +13,7 @@ mod test_core;
 mod test_data_bounds;
 mod test_deferred_xlsx_import;
 mod test_formatting;
+mod test_hyperlink_formula;
 mod test_named_range_refers_to;
 mod test_old_value;
 mod test_outline_visibility;

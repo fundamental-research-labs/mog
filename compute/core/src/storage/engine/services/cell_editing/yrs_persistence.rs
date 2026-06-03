@@ -4,6 +4,7 @@ use yrs::{Map, MapRef, Origin, Out, Transact, TransactionMut};
 
 use crate::storage::cells::values::write_cell_position_to_yrs;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::hyperlinks;
 use compute_document::cell_serde::build_cell_prelim;
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_CELLS;
@@ -89,7 +90,8 @@ pub(in crate::storage::engine) fn write_cell_to_yrs_in_txn(
         && let Some(Out::YMap(cells_map)) = sheet_map.get(&*txn, KEY_CELLS)
     {
         let cell_prelim = build_cell_prelim(value, formula, None);
-        cells_map.insert(txn, &*cell_hex, cell_prelim);
+        let cell_map = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        hyperlinks::write_formula_hyperlink_metadata(&cell_map, txn, formula);
     }
 
     write_cell_position_to_yrs(txn, sheets_map, sheet_hex, &cell_hex, row_hex, col_hex);

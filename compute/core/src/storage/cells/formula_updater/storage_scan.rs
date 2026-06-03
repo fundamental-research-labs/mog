@@ -3,6 +3,8 @@ use std::sync::Arc;
 use compute_document::schema::{KEY_CELLS, KEY_FORMULA, KEY_FORMULA_TEMPLATE, KEY_SHEET_ORDER};
 use yrs::{Any, Array, ArrayRef, Doc, Map, MapRef, Out, Transact};
 
+use crate::storage::sheet::hyperlinks;
+
 /// Formula field values to write for a matching cell.
 pub(super) struct FormulaFieldUpdate {
     pub(super) new_template: Option<String>,
@@ -103,6 +105,11 @@ where
                     &mut txn,
                     KEY_FORMULA,
                     Any::String(Arc::from(new_formula.as_str())),
+                );
+                hyperlinks::write_formula_hyperlink_metadata(
+                    &cell_map,
+                    &mut txn,
+                    Some(new_formula.as_str()),
                 );
             }
         }

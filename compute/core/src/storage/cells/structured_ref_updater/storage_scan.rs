@@ -4,6 +4,8 @@ use compute_document::schema::{KEY_CELLS, KEY_FORMULA, KEY_FORMULA_TEMPLATE, KEY
 use compute_document::undo::ORIGIN_USER_EDIT;
 use yrs::{Any, Array, ArrayRef, Doc, Map, MapRef, Origin, Out, Transact};
 
+use crate::storage::sheet::hyperlinks;
+
 struct CellFormulaUpdate {
     sheet_hex: String,
     cell_hex: String,
@@ -96,6 +98,11 @@ where
                 &mut txn,
                 KEY_FORMULA,
                 Any::String(Arc::from(update.new_formula.as_str())),
+            );
+            hyperlinks::write_formula_hyperlink_metadata(
+                &cell_map,
+                &mut txn,
+                Some(update.new_formula.as_str()),
             );
         }
     }

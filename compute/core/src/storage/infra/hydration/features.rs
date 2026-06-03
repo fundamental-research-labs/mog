@@ -19,6 +19,7 @@ use super::helpers::get_or_create_cell_id_for_pos;
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
 };
+use crate::storage::sheet::hyperlinks;
 use crate::storage::sheet::schemas;
 use domain_types::domain::hyperlink::HyperlinkTargetKind;
 use formula_types::CellRef;
@@ -62,6 +63,7 @@ pub(super) fn hydrate_cells(
             None, // No identity formulas in ParseOutput
         );
         let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        hyperlinks::write_formula_hyperlink_metadata(&cell_map, txn, cell.formula.as_deref());
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }
@@ -148,6 +150,7 @@ pub(super) fn hydrate_cells_with_ids(
 
         let cell_prelim = build_cell_prelim(&cell.value, cell.formula.as_deref(), None);
         let cell_map: MapRef = cells_map.insert(txn, &*cell_hex, cell_prelim);
+        hyperlinks::write_formula_hyperlink_metadata(&cell_map, txn, cell.formula.as_deref());
         if let Some(array_ref) = cell.array_ref.as_deref() {
             write_array_ref_to_yrs(&cell_map, txn, array_ref);
         }

@@ -45,7 +45,11 @@ function makeSceneGraph(objects: FakeSceneObject[]) {
   };
 }
 
-function makeRenderer(rowHeights: Record<number, number>, colWidths: Record<number, number>) {
+function makeRenderer(
+  rowHeights: Record<number, number>,
+  colWidths: Record<number, number>,
+  coordinateSnap = true,
+) {
   const visibleRows = Object.keys(rowHeights)
     .map(Number)
     .sort((a, b) => a - b);
@@ -88,12 +92,35 @@ function makeRenderer(rowHeights: Record<number, number>, colWidths: Record<numb
         getVisibleRange() {
           return visibleRange;
         },
-        documentPixelToCell(x: number, y: number) {
-          // 100px-wide columns, 24px tall rows for the test fixture.
-          return { row: Math.floor(y / 24), col: Math.floor(x / 100) };
-        },
+        ...(coordinateSnap
+          ? {
+              documentPixelToCell(x: number, y: number) {
+                // 100px-wide columns, 24px tall rows for the test fixture.
+                return { row: Math.floor(y / 24), col: Math.floor(x / 100) };
+              },
+            }
+          : {}),
       };
     },
+  };
+}
+
+function makePositionDimensions(rowHeights: number[], colWidths: number[]) {
+  const rowTops = rowHeights.reduce<number[]>((tops, height, index) => {
+    tops[index] = index === 0 ? 0 : tops[index - 1]! + rowHeights[index - 1]!;
+    return tops;
+  }, []);
+  const colLefts = colWidths.reduce<number[]>((lefts, width, index) => {
+    lefts[index] = index === 0 ? 0 : lefts[index - 1]! + colWidths[index - 1]!;
+    return lefts;
+  }, []);
+  return {
+    totalRows: rowHeights.length,
+    totalCols: colWidths.length,
+    getRowTop: (row: number) => rowTops[row] ?? NaN,
+    getRowHeight: (row: number) => rowHeights[row] ?? NaN,
+    getColLeft: (col: number) => colLefts[col] ?? NaN,
+    getColWidth: (col: number) => colWidths[col] ?? NaN,
   };
 }
 
@@ -107,6 +134,11 @@ function setupRuntime(opts: {
   rowHeights: Record<number, number>;
   colWidths: Record<number, number>;
   bridgeColPositions?: Record<number, number>;
+  coordinateSnap?: boolean;
+  positionDimensions?: {
+    rowHeights: number[];
+    colWidths: number[];
+  };
 }): RuntimeBundle {
   const g = globalThis as { window?: Record<string, unknown>; document?: unknown };
 
@@ -134,7 +166,17 @@ function setupRuntime(opts: {
     },
   };
 
-  const renderer = makeRenderer(opts.rowHeights, opts.colWidths);
+  const renderer = makeRenderer(
+    opts.rowHeights,
+    opts.colWidths,
+    opts.coordinateSnap ?? true,
+  );
+  const positionDimensions = opts.positionDimensions
+    ? makePositionDimensions(
+        opts.positionDimensions.rowHeights,
+        opts.positionDimensions.colWidths,
+      )
+    : null;
   const fakeCoordinator = {
     renderer: {
       ...renderer,
@@ -156,6 +198,15 @@ function setupRuntime(opts: {
           getVisibleRange() {
             return renderer.getCoordinateSystem().getVisibleRange();
           },
+          ...(positionDimensions
+            ? {
+                getPositionDimensions: () => positionDimensions,
+                getMergeAnchor: (row: number, col: number) =>
+                  row === 2 && col === 2
+                    ? { startRow: 1, startCol: 1, endRow: 2, endCol: 2 }
+                    : null,
+              }
+            : {}),
         };
       },
       getViewport() {
@@ -358,6 +409,34 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
       boundsPx: { x: 200, y: 48, w: 18, h: 18 },
       visible: true,
     });
+  });
+
+  test('getRenderedDrawings snaps anchors via geometry when direct cell snap is unavailable', async () => {
+    runtime = setupRuntime({
+      drawings: [
+        {
+          id: 'pic-geometry',
+          type: 'picture',
+          bounds: { x: 192, y: 40, width: 64, height: 40 },
+          zIndex: 1,
+          visible: true,
+          groupId: null,
+          data: { src: 'mog://image/geometry.png' } as any,
+        },
+      ],
+      rowHeights: { 0: 20, 1: 20, 2: 20, 3: 20, 4: 20 },
+      colWidths: { 0: 64, 1: 64, 2: 64, 3: 64, 4: 64 },
+      coordinateSnap: false,
+      positionDimensions: {
+        rowHeights: [20, 20, 20, 20, 20],
+        colWidths: [64, 64, 64, 64, 64],
+      },
+    });
+
+    const drawings = await runtime.api.getRenderedDrawings();
+    expect(drawings).toHaveLength(1);
+    expect(drawings[0].anchor.from).toEqual({ row: 2, col: 3 });
+    expect(drawings[0].anchor.to).toEqual({ row: 4, col: 4 });
   });
 
   test('getRenderedRowHeight reports the canvas-drawn row height (custom value)', async () => {

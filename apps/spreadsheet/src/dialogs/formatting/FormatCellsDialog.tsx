@@ -400,6 +400,7 @@ export function FormatCellsDialog() {
       onClose={handleCancel}
       dialogId="format-cells"
       width={600}
+      dataAttributes={{ 'data-testid': 'overlay-format-cells' }}
       initialFocusRef={activeTab === 'number' ? numberCategoryListboxRef : undefined}
       onEnterKeyDown={() => {
         void handleOK();

@@ -293,9 +293,68 @@ export function createConsoleAPI(
           return { row: r.row, col: r.col };
         }
       }
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      const dims = geometry?.getPositionDimensions?.();
+      if (dims) {
+        const row = findIndexAtPosition(
+          docY,
+          dims.totalRows,
+          (idx: number) => dims.getRowTop(idx),
+          (idx: number) => dims.getRowHeight(idx),
+        );
+        const col = findIndexAtPosition(
+          docX,
+          dims.totalCols,
+          (idx: number) => dims.getColLeft(idx),
+          (idx: number) => dims.getColWidth(idx),
+        );
+        if (row != null && col != null) {
+          const merge = geometry?.getMergeAnchor?.(row, col);
+          if (
+            merge &&
+            typeof merge.startRow === 'number' &&
+            typeof merge.startCol === 'number'
+          ) {
+            return { row: merge.startRow, col: merge.startCol };
+          }
+          return { row, col };
+        }
+      }
     } catch {
       // fall through
     }
+    return null;
+  }
+
+  function findIndexAtPosition(
+    position: number,
+    total: number | undefined,
+    getStart: (index: number) => number,
+    getSize: (index: number) => number,
+  ): number | null {
+    if (!Number.isFinite(position) || !Number.isFinite(total) || total! <= 0) {
+      return null;
+    }
+
+    let lo = 0;
+    let hi = Math.max(0, Math.floor(total!) - 1);
+    while (lo <= hi) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      const start = getStart(mid);
+      const size = getSize(mid);
+      if (!Number.isFinite(start) || !Number.isFinite(size) || size <= 0) {
+        return null;
+      }
+      const end = start + size;
+      if (position < start) {
+        hi = mid - 1;
+      } else if (position >= end) {
+        lo = mid + 1;
+      } else {
+        return mid;
+      }
+    }
+
     return null;
   }
 

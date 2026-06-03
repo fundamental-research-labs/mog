@@ -251,6 +251,7 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
       onClose={handleCancel}
       dialogId="paste-special-dialog"
       width={400}
+      dataAttributes={{ 'data-testid': 'overlay-paste-special' }}
       onOpenAutoFocus={handleOpenAutoFocus}
       onEnterKeyDown={handleOk}
     >

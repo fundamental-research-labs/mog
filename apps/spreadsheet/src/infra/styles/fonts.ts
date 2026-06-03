@@ -107,6 +107,7 @@ export function buildFontFamilyWithFallbacks(fontFamily: string): string {
  */
 export const SYSTEM_FONTS = [
   'Arial',
+  'Courier New',
   'Arial Black',
   'Arial Narrow',
   'Calibri',
@@ -117,7 +118,6 @@ export const SYSTEM_FONTS = [
   'Consolas',
   'Constantia',
   'Corbel',
-  'Courier New',
   'Georgia',
   'Impact',
   'Lucida Console',

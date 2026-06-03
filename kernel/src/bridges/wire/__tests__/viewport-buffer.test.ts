@@ -470,6 +470,22 @@ describe('BinaryViewportBuffer', () => {
       acc.moveTo(0, 0);
       expect(acc.format).toEqual({ italic: true });
     });
+
+    it('keeps implicit default fontFamily readable but non-enumerable', () => {
+      vb.setBuffer(
+        buildTestViewportBuffer({
+          rows: 1,
+          cols: 1,
+          palette: [{ fontFamily: 'Calibri', fontSize: 11 }],
+          paletteStartIndex: 0,
+        }),
+      );
+
+      const acc = vb.createAccessor();
+      acc.moveTo(0, 0);
+      expect(acc.format.fontFamily).toBe('Calibri');
+      expect(JSON.parse(JSON.stringify(acc.format))).toEqual({ fontSize: 11 });
+    });
   });
 
   // -----------------------------------------------------------------------

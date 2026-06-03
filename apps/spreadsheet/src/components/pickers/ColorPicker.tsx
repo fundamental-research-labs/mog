@@ -218,6 +218,7 @@ const STANDARD_COLORS = [
   '#00B050', // Green
   '#00B0F0', // Light Blue
   '#0070C0', // Blue
+  '#0000FF', // Pure Blue
   '#002060', // Dark Blue
   '#7030A0', // Purple
 ];

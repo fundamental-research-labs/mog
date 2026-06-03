@@ -684,6 +684,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               icon={<DecreaseIndentIcon />}
               onClick={() => dispatch('DECREASE_INDENT')}
               disabled={!canFormatCells || indent === 0}
+              style={indent === 0 ? { width: 21 } : undefined}
               aria-label="Decrease indent"
             />
           </Tooltip>

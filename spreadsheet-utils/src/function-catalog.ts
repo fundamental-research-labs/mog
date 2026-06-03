@@ -17,11 +17,18 @@ import type { FunctionMetadata } from '@mog-sdk/contracts/utils/function-registr
 import { globalRegistry } from './function-registry';
 
 // =============================================================================
-// Compact definition format: [name, category, description, minArgs, maxArgs]
+// Compact definition format: [name, category, description, minArgs, maxArgs, arguments?]
 // maxArgs = -1 means Infinity (variadic)
 // =============================================================================
 
-type FnDef = [string, FunctionCategory, string, number, number];
+type FnDef = [
+  string,
+  FunctionCategory,
+  string,
+  number,
+  number,
+  FunctionMetadata['arguments']?,
+];
 
 const C = FunctionCategory;
 
@@ -31,7 +38,28 @@ const C = FunctionCategory;
 
 const INLINE_FUNCTIONS: FnDef[] = [
   // Aggregates
-  ['SUM', C.MATH, 'Adds all numbers in a range of cells', 1, -1],
+  [
+    'SUM',
+    C.MATH,
+    'Adds all numbers in a range of cells',
+    1,
+    -1,
+    [
+      {
+        name: 'number1',
+        description: 'The first number, cell reference, or range to add',
+        type: 'number',
+        optional: false,
+      },
+      {
+        name: 'number2',
+        description: 'Additional numbers, cell references, or ranges to add',
+        type: 'number',
+        optional: true,
+        repeating: true,
+      },
+    ],
+  ],
   ['AVERAGE', C.STATISTICAL, 'Returns the average of its arguments', 1, -1],
   ['COUNT', C.STATISTICAL, 'Counts the number of cells that contain numbers', 0, -1],
   ['COUNTA', C.STATISTICAL, 'Counts the number of non-empty cells', 0, -1],
@@ -828,12 +856,13 @@ export function ensureFunctionCatalog(): void {
   populated = true;
 
   const entries: FunctionMetadata[] = ALL_DEFINITIONS.map(
-    ([name, category, description, minArgs, maxArgs]) => ({
+    ([name, category, description, minArgs, maxArgs, args]) => ({
       name,
       category,
       description,
       minArgs,
       maxArgs: maxArgs === -1 ? Infinity : maxArgs,
+      arguments: args,
     }),
   );
 

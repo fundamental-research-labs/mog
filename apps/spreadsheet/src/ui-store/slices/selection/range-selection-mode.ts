@@ -34,6 +34,8 @@ export interface RangeSelectionModeState {
   sourceInputId: string | null;
   /** Current range being selected (live updated during selection) */
   currentRange: string;
+  /** Placeholder from the source input, mirrored for minimized readback */
+  sourceInputPlaceholder: string | null;
   /** Whether to allow multiple ranges separated by commas */
   allowMultipleRanges: boolean;
   /** Callback to invoke when range selection completes (Enter pressed) */
@@ -65,6 +67,7 @@ export interface RangeSelectionModeSlice {
     initialRange: string,
     options?: {
       allowMultipleRanges?: boolean;
+      sourceInputPlaceholder?: string;
       onComplete?: (range: string) => void;
       onCancel?: () => void;
     },
@@ -100,6 +103,7 @@ const initialRangeSelectionModeState: RangeSelectionModeState = {
   sourceDialogId: null,
   sourceInputId: null,
   currentRange: '',
+  sourceInputPlaceholder: null,
   allowMultipleRanges: false,
   onComplete: null,
   onCancel: null,
@@ -124,6 +128,7 @@ export const createRangeSelectionModeSlice: StateCreator<
         sourceDialogId: dialogId,
         sourceInputId: inputId,
         currentRange: initialRange,
+        sourceInputPlaceholder: options.sourceInputPlaceholder ?? null,
         allowMultipleRanges: options.allowMultipleRanges ?? false,
         onComplete: options.onComplete ?? null,
         onCancel: options.onCancel ?? null,

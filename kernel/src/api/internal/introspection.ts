@@ -219,7 +219,13 @@ function convertToFunctionInfo(metadata: {
 
   // Generate syntax string
   let syntax = `${metadata.name}(`;
-  if (minArgs === 0 && maxArgs === 0) {
+  if (args.length > 0) {
+    const parts = args.flatMap((arg) => {
+      const label = arg.optional ? `[${arg.name}]` : arg.name;
+      return arg.repeating ? [label, '...'] : [label];
+    });
+    syntax += parts.join(', ') + ')';
+  } else if (minArgs === 0 && maxArgs === 0) {
     syntax += ')';
   } else if (maxArgs === Infinity) {
     syntax += `value1, [value2], ...)`;

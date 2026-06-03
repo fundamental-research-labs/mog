@@ -168,6 +168,26 @@ export interface BinaryColDimension {
 // ---------------------------------------------------------------------------
 
 const EMPTY_FORMAT: CellFormat = Object.freeze({});
+const DEFAULT_PALETTE_FONT_FAMILY = 'Calibri';
+
+function markDefaultPaletteFontFamilyImplicit(palette: FormatPalette): void {
+  const defaultLocalIndex = 0 - palette.start_index;
+  if (defaultLocalIndex < 0 || defaultLocalIndex >= palette.formats.length) {
+    return;
+  }
+
+  const format = palette.formats[defaultLocalIndex];
+  if (format?.fontFamily !== DEFAULT_PALETTE_FONT_FAMILY) {
+    return;
+  }
+
+  Object.defineProperty(format, 'fontFamily', {
+    configurable: true,
+    enumerable: false,
+    value: DEFAULT_PALETTE_FONT_FAMILY,
+    writable: true,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // CF extras types
@@ -330,6 +350,7 @@ export class BinaryViewportBuffer {
         start_index: decoded.startIndex,
         formats: decoded.formats,
       };
+      markDefaultPaletteFontFamilyImplicit(this._palette);
     } else {
       this._palette = { start_index: 0, formats: [] };
     }
@@ -674,6 +695,7 @@ export class BinaryViewportBuffer {
           }
           this._palette.formats[localIdx] = deltaFormats[i];
         }
+        markDefaultPaletteFontFamilyImplicit(this._palette);
       }
     }
 

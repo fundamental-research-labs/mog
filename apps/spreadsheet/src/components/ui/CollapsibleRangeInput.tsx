@@ -118,6 +118,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
     const handleCollapseClick = useCallback(() => {
       startRangeSelectionMode(dialogId, inputId, value, {
         allowMultipleRanges,
+        sourceInputPlaceholder: typeof placeholder === 'string' ? placeholder : undefined,
         onComplete: (range: string) => {
           onChange(range);
           // Return focus to input after completion

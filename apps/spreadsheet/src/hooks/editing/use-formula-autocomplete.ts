@@ -210,7 +210,10 @@ function metadataToFunctionInfo(meta: FunctionMetadata): FunctionInfo {
   // Build syntax string
   let syntax: string;
   if (args.length > 0) {
-    const argParts = args.map((arg) => (arg.optional ? `[${arg.name}]` : arg.name));
+    const argParts = args.flatMap((arg) => {
+      const label = arg.optional ? `[${arg.name}]` : arg.name;
+      return arg.repeating ? [label, '...'] : [label];
+    });
     syntax = `${meta.name}(${argParts.join(', ')})`;
   } else {
     const min = meta.minArgs ?? 0;

@@ -116,9 +116,9 @@ export function FormulaArgumentHint({
             >
               {arg.optional ? '[' : ''}
               {arg.name}
-              {arg.repeating ? ', ...' : ''}
               {arg.optional ? ']' : ''}
             </span>
+            {arg.repeating ? <span className="text-text-muted">, ...</span> : null}
             {i < args.length - 1 ? <span className="text-text-muted">, </span> : ''}
           </span>
         ))}

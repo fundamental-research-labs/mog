@@ -33,6 +33,10 @@ export interface CheckboxProps {
   value?: string;
   /** Whether the checkbox is required */
   required?: boolean;
+  /** Accessible label for icon-only or externally-labelled checkboxes */
+  'aria-label'?: string;
+  /** ID of an external label element */
+  'aria-labelledby'?: string;
   /** Optional stable test selector forwarded to the Radix root */
   'data-testid'?: string;
 }
@@ -108,6 +112,8 @@ export function Checkbox({
   name,
   value,
   required,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
   'data-testid': dataTestId,
 }: CheckboxProps) {
   // Generate a stable unique ID if not provided
@@ -153,6 +159,8 @@ export function Checkbox({
       name={name}
       value={value}
       required={required}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       className={checkboxClasses}
       data-testid={dataTestId}
     >

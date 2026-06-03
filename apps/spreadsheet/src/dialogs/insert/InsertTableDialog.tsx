@@ -328,7 +328,7 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
             dialogId="insert-table-dialog"
             inputId="table-range"
             placeholder="e.g., A1:D10"
-            label="Table range"
+            label="Create Table selected range"
             error={!!rangeError}
             autoFocus
           />

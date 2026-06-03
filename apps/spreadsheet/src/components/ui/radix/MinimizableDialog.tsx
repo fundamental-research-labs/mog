@@ -60,6 +60,8 @@ interface MinimizedDialogBarProps {
   title: string;
   /** Live range value selected while the dialog is minimized */
   range: string;
+  /** Placeholder from the source input, preserved for selector/readback parity */
+  sourceInputPlaceholder: string | null;
   /** Called when the restore/expand button is clicked */
   onRestore: () => void;
 }
@@ -70,7 +72,13 @@ interface MinimizedDialogBarProps {
  * Shows a small bar at the bottom-left of the viewport with the dialog title
  * and a button to restore the dialog.
  */
-function MinimizedDialogBar({ dialogId, title, range, onRestore }: MinimizedDialogBarProps) {
+function MinimizedDialogBar({
+  dialogId,
+  title,
+  range,
+  sourceInputPlaceholder,
+  onRestore,
+}: MinimizedDialogBarProps) {
   return (
     <div
       className="fixed bottom-4 left-4 z-ss-modal flex max-w-[min(420px,calc(100vw-32px))] items-center gap-2 bg-ss-surface rounded-ss-md shadow-ss-lg border border-ss-border px-3 py-2"
@@ -80,7 +88,13 @@ function MinimizedDialogBar({ dialogId, title, range, onRestore }: MinimizedDial
       data-testid="minimized-dialog-bar"
     >
       <span className="text-body-sm font-medium text-ss-text truncate">{title}</span>
-      <input className="sr-only" readOnly value={range} aria-label={`${title} selected range`} />
+      <input
+        className="sr-only"
+        readOnly
+        value={range}
+        placeholder={sourceInputPlaceholder ?? undefined}
+        aria-label={`${title} selected range`}
+      />
       {range && (
         <span className="text-body-sm text-ss-text-secondary truncate border-l border-ss-border pl-2">
           {range}
@@ -155,6 +169,7 @@ export function MinimizableDialog({
   const isDialogMinimized = useUIStore((s) => s.isDialogMinimized(dialogId));
   const sourceDialogId = useUIStore((s) => s.rangeSelectionMode.sourceDialogId);
   const currentRange = useUIStore((s) => s.rangeSelectionMode.currentRange);
+  const sourceInputPlaceholder = useUIStore((s) => s.rangeSelectionMode.sourceInputPlaceholder);
   const dispatchAction = useDispatch();
 
   // Suppress onEnterKeyDown while CollapsibleRangeInput's global Enter handler
@@ -179,6 +194,25 @@ export function MinimizableDialog({
     dispatchAction('COMPLETE_RANGE_SELECTION');
   };
 
+  useEffect(() => {
+    if (!isDialogMinimized || sourceDialogId !== dialogId) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatchAction('COMPLETE_RANGE_SELECTION');
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        dispatchAction('CANCEL_RANGE_SELECTION');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isDialogMinimized, sourceDialogId, dialogId, dispatchAction]);
+
   // When minimized as the SOURCE dialog, show the minimized bar
   if (isDialogMinimized && sourceDialogId === dialogId) {
     return (
@@ -186,6 +220,7 @@ export function MinimizableDialog({
         dialogId={dialogId}
         title={title}
         range={currentRange}
+        sourceInputPlaceholder={sourceInputPlaceholder}
         onRestore={handleRestore}
       />
     );

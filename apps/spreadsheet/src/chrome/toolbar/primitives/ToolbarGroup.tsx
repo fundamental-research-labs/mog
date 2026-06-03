@@ -148,6 +148,10 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   // Full/Compact/Icons mode - render normal group with mode context
   // Default tooltip title if not provided
   const launchTitle = dialogLaunchTitle ?? `${label} Settings`;
+  const launcherTestId = `ribbon-dialog-launcher-${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}`;
 
   return (
     <RibbonVisibilityGroup group={groupVisibility.groupKey}>
@@ -173,6 +177,8 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
                   <button
                     type="button"
                     onClick={onDialogLaunch}
+                    data-ribbon-dialog-launcher="true"
+                    data-testid={launcherTestId}
                     className="
  absolute right-0 bottom-0
  w-3 h-3

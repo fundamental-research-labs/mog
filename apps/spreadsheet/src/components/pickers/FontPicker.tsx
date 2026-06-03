@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CheckmarkSvg, WarningSvg } from '@mog/icons';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import { useUIStore, useWorkbook } from '../../infra/context';
 import {
@@ -35,31 +36,76 @@ import { FontPreviewTooltip } from './FontPreviewTooltip';
 
 /**
  * Get icon for a font based on its category.
- * Returns emoji icon to help users identify font types.
+ * Returns a category token rendered as an SVG so option text remains just
+ * the font family name for selection/readback.
  */
-function getFontCategoryIcon(font: string): string | null {
+type FontCategoryIcon = 'monospace' | 'script' | 'symbol' | 'cjk';
+
+function getFontCategoryIcon(font: string): FontCategoryIcon | null {
   // Monospace fonts (code/terminal)
   if (MONOSPACE_FONTS.includes(font as (typeof MONOSPACE_FONTS)[number])) {
-    return '⌨'; // Keyboard icon for monospace
+    return 'monospace';
   }
 
   // Script/Handwriting fonts
   if (SCRIPT_FONTS.includes(font as (typeof SCRIPT_FONTS)[number])) {
-    return '✍'; // Writing hand for script
+    return 'script';
   }
 
   // Symbol fonts
   if (SYMBOL_FONTS.includes(font as (typeof SYMBOL_FONTS)[number])) {
-    return '☺'; // Smiley for symbols/wingdings
+    return 'symbol';
   }
 
   // CJK fonts
   if (CJK_FONTS.includes(font as (typeof CJK_FONTS)[number])) {
-    return '文'; // Chinese character for CJK fonts
+    return 'cjk';
   }
 
   // No icon for system/extended/macOS fonts (too generic)
   return null;
+}
+
+function FontCategoryIndicator({ icon }: { icon: FontCategoryIcon }) {
+  const commonProps = {
+    width: 12,
+    height: 12,
+    viewBox: '0 0 12 12',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.4,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+
+  return (
+    <span className="mr-1.5 text-ss-text-tertiary text-body-sm" aria-hidden="true">
+      {icon === 'monospace' && (
+        <svg {...commonProps}>
+          <rect x="1.5" y="2.5" width="9" height="7" rx="1" />
+          <path d="M3.5 5h1M6 5h1M8.5 5h.5M3.5 7h5" />
+        </svg>
+      )}
+      {icon === 'script' && (
+        <svg {...commonProps}>
+          <path d="M2 9.5c2.3-4.6 3.9-6.8 4.7-6.3.7.4.1 2.3-1.6 5.6" />
+          <path d="M5 8.8c1.6-1.4 2.9-1.5 3.8-.3.5.7 1 .9 1.7.5" />
+        </svg>
+      )}
+      {icon === 'symbol' && (
+        <svg {...commonProps}>
+          <circle cx="6" cy="6" r="4.2" />
+          <path d="M4.3 5h.1M7.6 5h.1M4.5 7.3c.9.8 2.1.8 3 0" />
+        </svg>
+      )}
+      {icon === 'cjk' && (
+        <svg {...commonProps}>
+          <path d="M2 3h8M6 2v8M3.5 5.5h5M3 9h6" />
+        </svg>
+      )}
+    </span>
+  );
 }
 
 /** Delay in ms before showing the font preview tooltip */
@@ -74,7 +120,7 @@ interface FontItemProps {
   isSelected: boolean;
   isFocused: boolean;
   isAvailable?: boolean;
-  icon?: string | null;
+  icon?: FontCategoryIcon | null;
   onClick: () => void;
   onMouseEnter: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onMouseLeave: () => void;
@@ -122,14 +168,22 @@ function FontItem({
       role="option"
     >
       {/* Category icon */}
-      {icon && <span className="mr-1.5 text-ss-text-tertiary text-body-sm">{icon}</span>}
+      {icon && <FontCategoryIndicator icon={icon} />}
       <span className={!isAvailable ? 'opacity-60' : ''}>{font}</span>
       {!isAvailable && (
-        <span className="ml-1 text-ss-warning text-body-sm" title="Font not installed">
-          ⚠
+        <span
+          className="ml-1 inline-flex text-ss-warning"
+          title="Font not installed"
+          aria-hidden="true"
+        >
+          <WarningSvg className="h-3 w-3" />
         </span>
       )}
-      {isSelected && <span className="ml-auto text-ss-primary text-body-lg font-bold">✓</span>}
+      {isSelected && (
+        <span className="ml-auto inline-flex text-ss-primary" aria-hidden="true">
+          <CheckmarkSvg className="h-3.5 w-3.5" />
+        </span>
+      )}
     </button>
   );
 }
@@ -356,10 +410,12 @@ export function FontPicker({
     (fontTheme: 'major' | 'minor') => {
       if (onSelect) {
         onSelect({ type: 'theme', fontTheme });
+      } else {
+        // Also call legacy onChange with the resolved font for backward compatibility
+        const resolvedFont =
+          fontTheme === 'major' ? themeFonts.headings.font : themeFonts.body.font;
+        onChange(resolvedFont);
       }
-      // Also call legacy onChange with the resolved font for backward compatibility
-      const resolvedFont = fontTheme === 'major' ? themeFonts.headings.font : themeFonts.body.font;
-      onChange(resolvedFont);
       onClose?.();
     },
     [onSelect, onChange, onClose, themeFonts],
@@ -391,10 +447,10 @@ export function FontPicker({
       // Notify parent via new API if available
       if (onSelect) {
         onSelect({ type: 'font', fontFamily });
+      } else {
+        // Notify parent via legacy callback
+        onChange(fontFamily);
       }
-
-      // Notify parent via legacy callback
-      onChange(fontFamily);
       onClose?.();
     },
     [onChange, onSelect, onClose, wb.notifications, clearPreviewFont],
@@ -609,7 +665,9 @@ export function FontPicker({
                 >
                   {fontInfo.display}
                   {isSelected && (
-                    <span className="ml-auto text-ss-primary text-body-lg font-bold">✓</span>
+                    <span className="ml-auto inline-flex text-ss-primary" aria-hidden="true">
+                      <CheckmarkSvg className="h-3.5 w-3.5" />
+                    </span>
                   )}
                 </button>
               );

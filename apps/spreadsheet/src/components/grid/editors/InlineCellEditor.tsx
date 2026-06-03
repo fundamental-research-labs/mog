@@ -420,7 +420,14 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
       break;
     case 'bottom':
     default:
-      verticalPaddingTop = Math.max(0, effectiveCellRect.height - totalTextHeight - paddingY);
+      {
+        const maxNonClippingTopPadding = Math.max(0, effectiveCellRect.height - totalTextHeight);
+        const preferredBottomAlignedPadding = Math.max(
+          paddingY,
+          maxNonClippingTopPadding - paddingY,
+        );
+        verticalPaddingTop = Math.min(maxNonClippingTopPadding, preferredBottomAlignedPadding);
+      }
       break;
   }
 

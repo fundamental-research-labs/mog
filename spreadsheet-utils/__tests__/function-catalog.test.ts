@@ -59,4 +59,13 @@ describe('function catalog', () => {
       });
     }
   });
+
+  it('exposes concrete SUM argument labels for formula hints', () => {
+    ensureFunctionCatalog();
+
+    expect(globalRegistry.getMetadata('SUM')?.arguments).toEqual([
+      expect.objectContaining({ name: 'number1', optional: false }),
+      expect.objectContaining({ name: 'number2', optional: true, repeating: true }),
+    ]);
+  });
 });

@@ -396,6 +396,109 @@ function getActiveSheetId(): string | null {
   }
 }
 
+type MergeBounds = {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+};
+
+function readNumberProperty(
+  source: Record<string, unknown>,
+  camel: string,
+  snake: string,
+): number | null {
+  const value = source[camel] ?? source[snake];
+  return typeof value === 'number' ? value : null;
+}
+
+function normalizeMergeBounds(value: unknown): MergeBounds | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const source = value as Record<string, unknown>;
+  const nested = source.merge;
+  const mergeSource =
+    nested && typeof nested === 'object' ? (nested as Record<string, unknown>) : source;
+
+  const startRow =
+    readNumberProperty(source, 'startRow', 'start_row') ??
+    readNumberProperty(mergeSource, 'startRow', 'start_row');
+  const startCol =
+    readNumberProperty(source, 'startCol', 'start_col') ??
+    readNumberProperty(mergeSource, 'startCol', 'start_col');
+  const endRow =
+    readNumberProperty(source, 'endRow', 'end_row') ??
+    readNumberProperty(mergeSource, 'endRow', 'end_row');
+  const endCol =
+    readNumberProperty(source, 'endCol', 'end_col') ??
+    readNumberProperty(mergeSource, 'endCol', 'end_col');
+
+  if (startRow === null || startCol === null || endRow === null || endCol === null) {
+    return null;
+  }
+
+  return { startRow, startCol, endRow, endCol };
+}
+
+function isCoveredMergeCell(merge: MergeBounds, row: number, col: number): boolean {
+  return (
+    row >= merge.startRow &&
+    row <= merge.endRow &&
+    col >= merge.startCol &&
+    col <= merge.endCol &&
+    (row !== merge.startRow || col !== merge.startCol)
+  );
+}
+
+function findCoveredMerge(
+  merges: ReadonlyArray<MergeBounds>,
+  row: number,
+  col: number,
+): MergeBounds | null {
+  return merges.find((merge) => isCoveredMergeCell(merge, row, col)) ?? null;
+}
+
+function emptyCellValue(
+  row: number,
+  col: number,
+  viewportId: string,
+): import('../types').ProgrammaticCellValue {
+  return {
+    row,
+    col,
+    viewportId,
+    displayText: null,
+    valueType: 0,
+    hasFormula: false,
+    errorText: null,
+  };
+}
+
+function readViewportMerges(bridge: any, viewportId: string): MergeBounds[] {
+  const buffer =
+    bridge.getViewportBuffer?.(viewportId) ??
+    bridge.getPerViewportStates?.()?.get?.(viewportId)?.buffer ??
+    null;
+  const rawMerges = buffer?.getMerges?.();
+  if (!Array.isArray(rawMerges)) return [];
+  return rawMerges
+    .map((merge) => normalizeMergeBounds(merge))
+    .filter((merge): merge is MergeBounds => merge !== null);
+}
+
+async function readSheetMerges(bridge: any, sheetId: string): Promise<MergeBounds[]> {
+  if (typeof bridge.getAllMergesInSheet !== 'function') return [];
+  try {
+    const rawMerges = await bridge.getAllMergesInSheet(sheetId);
+    if (!Array.isArray(rawMerges)) return [];
+    return rawMerges
+      .map((merge) => normalizeMergeBounds(merge))
+      .filter((merge): merge is MergeBounds => merge !== null);
+  } catch {
+    return [];
+  }
+}
+
 function readFormulaHyperlinkUrl(formula: unknown): string | null {
   if (typeof formula !== 'string') return null;
   const match = formula.match(/^\s*=?\s*HYPERLINK\s*\(\s*"((?:[^"]|"")*)"/i);
@@ -472,6 +575,7 @@ export async function readCellsViaBridge(
 
   const sheetId = getActiveSheetId();
   if (!sheetId) return out;
+  const merges = await readSheetMerges(bridge, sheetId);
 
   // Issue one queryRange per requested cell, in parallel. Each call is sparse
   // (the result array is empty when the cell holds no value), so even very
@@ -492,6 +596,11 @@ export async function readCellsViaBridge(
   );
 
   for (const { row, col, cell } of settled) {
+    if (findCoveredMerge(merges, row, col)) {
+      out[`${row},${col}`] = emptyCellValue(row, col, '__bridge__');
+      continue;
+    }
+
     const formatted: string | null =
       typeof cell?.formatted === 'string' && cell.formatted !== '' ? cell.formatted : null;
     const formula: string | undefined =
@@ -693,6 +802,9 @@ export function readCellValue(
     if (!accessor) return null;
     const exists = accessor.moveTo?.(row, col);
     if (!exists) return null;
+    if (findCoveredMerge(readViewportMerges(bridge, vpId), row, col)) {
+      return emptyCellValue(row, col, vpId);
+    }
     const displayText = hasLinkedUnlabeledCheckboxOverlay(row, col)
       ? ''
       : (accessor.displayText ?? null);

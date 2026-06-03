@@ -70,7 +70,7 @@ export function MergeWarningDialog() {
         <Button variant="secondary" onClick={handleCancel}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleConfirm}>
+        <Button variant="primary" onClick={handleConfirm} data-confirm-button="true">
           OK
         </Button>
       </DialogFooter>

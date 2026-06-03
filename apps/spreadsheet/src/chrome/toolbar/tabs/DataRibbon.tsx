@@ -14,7 +14,7 @@
  * Uses RibbonButton for consistent button styling (single source of truth).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useActiveCell, useUIStore } from '../../../internal-api';
 import { parseCSV } from '../../../domain/clipboard/clipboard-parser';
 import {
@@ -238,6 +238,7 @@ export function DataRibbon({
   const workbook = useWorkbook();
   const activeSheetId = useActiveSheetId();
   const { row: activeRow, col: activeCol } = useActiveCell();
+  const fromWebInputRef = useRef<HTMLInputElement | null>(null);
 
   // F1: Validation circles state
   const validationCirclesVisible = useUIStore((s) => s.validationCirclesVisible);
@@ -264,6 +265,21 @@ export function DataRibbon({
   const handleGetDataClick = useCallback(() => {
     setIsGetDataDropdownOpen(!isGetDataDropdownOpen);
   }, [isGetDataDropdownOpen, setIsGetDataDropdownOpen]);
+
+  const [isFromWebDialogOpen, setIsFromWebDialogOpen] = useState(false);
+  const [fromWebUrl, setFromWebUrl] = useState('');
+  const [fromWebError, setFromWebError] = useState('');
+  const [fromWebStatus, setFromWebStatus] = useState('');
+
+  const validateFromWebUrl = useCallback((value: string) => {
+    if (value.trim().length === 0) return '';
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:' ? '' : 'Enter a valid URL.';
+    } catch {
+      return 'Enter a valid URL.';
+    }
+  }, []);
 
   const handleImportCsv = useCallback(() => {
     setIsGetDataDropdownOpen(false);
@@ -351,8 +367,75 @@ export function DataRibbon({
     }
     if (onImportFromWeb) {
       onImportFromWeb();
+      return;
     }
+    setFromWebUrl('');
+    setFromWebError('');
+    setFromWebStatus('');
+    setIsFromWebDialogOpen(true);
   }, [hostCommands, onImportFromWeb, setIsGetDataDropdownOpen]);
+
+  useEffect(() => {
+    if (!isFromWebDialogOpen) return;
+    const focusTimer = window.setTimeout(() => fromWebInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [isFromWebDialogOpen]);
+
+  const handleFromWebUrlChange = useCallback(
+    (value: string) => {
+      setFromWebUrl(value);
+      setFromWebError(validateFromWebUrl(value));
+      setFromWebStatus('');
+    },
+    [validateFromWebUrl],
+  );
+
+  const handleCloseFromWebDialog = useCallback(() => {
+    setIsFromWebDialogOpen(false);
+    setFromWebUrl('');
+    setFromWebError('');
+    setFromWebStatus('');
+  }, []);
+
+  const handleConfirmFromWebImport = useCallback(async () => {
+    const validationError = validateFromWebUrl(fromWebUrl);
+    if (validationError) {
+      setFromWebError(validationError);
+      fromWebInputRef.current?.focus();
+      return;
+    }
+
+    setFromWebError('');
+    setFromWebStatus('Importing...');
+    try {
+      const response = await fetch(fromWebUrl);
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      const text = await response.text();
+      const contentType = response.headers.get('content-type') ?? '';
+      const isJson = /\bjson\b/i.test(contentType) || /\.json(?:[?#]|$)/i.test(fromWebUrl);
+      const updates = isJson
+        ? jsonToCellUpdates(JSON.parse(text), activeRow, activeCol)
+        : csvToCellUpdates(text);
+
+      if (updates.length > 0) {
+        await workbook.getSheetById(activeSheetId).setCells(updates);
+      }
+      handleCloseFromWebDialog();
+    } catch (error) {
+      setFromWebStatus('');
+      setFromWebError(error instanceof Error ? error.message : 'Unable to import from this URL.');
+    }
+  }, [
+    activeCol,
+    activeRow,
+    activeSheetId,
+    fromWebUrl,
+    handleCloseFromWebDialog,
+    validateFromWebUrl,
+    workbook,
+  ]);
 
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
   const handleGroupClick = useCallback(() => {
@@ -434,6 +517,65 @@ export function DataRibbon({
 
   return (
     <>
+      {isFromWebDialogOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="from-web-import-title"
+          data-testid="from-web-import-dialog"
+          className="fixed left-1/2 top-24 z-[1000] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 rounded border border-ss-border bg-ss-surface p-4 shadow-ss-lg"
+        >
+          <div className="space-y-3">
+            <div>
+              <h2 id="from-web-import-title" className="text-sm font-semibold text-ss-text">
+                Import from Web
+              </h2>
+              <p className="mt-1 text-xs text-ss-text-secondary">
+                Enter a URL for a CSV or JSON source.
+              </p>
+            </div>
+            <label className="block text-xs font-medium text-ss-text" htmlFor="from-web-url-input">
+              URL
+            </label>
+            <input
+              ref={fromWebInputRef}
+              id="from-web-url-input"
+              type="url"
+              value={fromWebUrl}
+              onChange={(event) => handleFromWebUrlChange(event.target.value)}
+              placeholder="https://example.com/data.csv"
+              aria-label="URL"
+              aria-invalid={fromWebError.length > 0}
+              className="h-8 w-full rounded border border-ss-border bg-ss-input px-2 text-sm text-ss-text outline-none focus:border-ss-accent"
+            />
+            {(fromWebError || fromWebStatus) && (
+              <div
+                role={fromWebError ? 'alert' : 'status'}
+                className={`text-xs ${fromWebError ? 'text-ss-danger' : 'text-ss-text-secondary'}`}
+              >
+                {fromWebError || fromWebStatus}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleCloseFromWebDialog}
+                className="h-8 rounded border border-ss-border px-3 text-sm text-ss-text hover:bg-ss-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmFromWebImport()}
+                className="h-8 rounded bg-ss-accent px-3 text-sm text-white hover:bg-ss-accent-hover"
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Import Data Group - Improved with import options */}
       <ToolbarGroup
         label={PRODUCT_VOCABULARY.importData.label}

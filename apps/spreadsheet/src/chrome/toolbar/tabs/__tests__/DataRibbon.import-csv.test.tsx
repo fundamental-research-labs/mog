@@ -240,6 +240,24 @@ describe('DataRibbon CSV import', () => {
     expect(mockSetCells).not.toHaveBeenCalled();
   });
 
+  it('opens a focused From Web URL workflow by default', async () => {
+    render(<DataRibbon />);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'From Web' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Import from Web' });
+    const input = screen.getByLabelText('URL');
+
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(dialog).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Import' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeVisible();
+
+    fireEvent.change(input, { target: { value: 'not-a-url' } });
+
+    expect(screen.getByText('Enter a valid URL.')).toBeVisible();
+  });
+
   it('exposes Forecast Sheet as a visible enabled command that opens the forecast action', () => {
     render(<DataRibbon />);
 

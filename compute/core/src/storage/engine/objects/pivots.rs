@@ -1,6 +1,9 @@
 use super::shared;
 use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::pivot_materialization::{
+    apply_pivot_format_ranges, clear_pivot_format_ranges,
+};
 use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -267,6 +270,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         pivot_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        clear_pivot_format_ranges(&mut self.mirror, pivot_id);
         // Clear materialized cells before deleting
         if let Some(config) = services::objects::pivot_get(&self.stores, sheet_id, pivot_id)
             && let Some(output_sheet_id) = self.mirror.sheet_by_name(&config.output_sheet_name)
@@ -451,6 +455,7 @@ impl YrsComputeEngine {
 
         // 3. Clear old cells if previously materialized
         {
+            clear_pivot_format_ranges(&mut self.mirror, pivot_id);
             let output_sheet_uuid = output_sheet_id.to_uuid_string();
             let old_def = self
                 .mirror
@@ -504,6 +509,14 @@ impl YrsComputeEngine {
             config.output_location.col,
             &result,
             &row_field_names,
+        );
+        apply_pivot_format_ranges(
+            &mut self.mirror,
+            &output_sheet_id,
+            pivot_id,
+            config.output_location.row,
+            config.output_location.col,
+            &result,
         );
 
         // 6. Register bounds for GETPIVOTDATA

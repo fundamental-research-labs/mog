@@ -1,9 +1,177 @@
-use cell_types::SheetId;
+use cell_types::{RangeId, SheetId};
+use domain_types::CellFormat;
 use value_types::ComputeError;
 
-use crate::mirror::CellMirror;
+use crate::mirror::{CellMirror, FormatRange};
 
 use super::{YrsComputeEngine, services, stores::EngineStores};
+
+const PIVOT_FORMAT_RANGE_PREFIX: u128 = 0xC8F0u128 << 112;
+const PIVOT_FORMAT_RANGE_SLOT_BITS: u32 = 48;
+const PIVOT_FORMAT_RANGE_SLOT_MASK: u128 = (1u128 << PIVOT_FORMAT_RANGE_SLOT_BITS) - 1;
+const PIVOT_FORMAT_RANGE_OWNER_MASK: u128 = !PIVOT_FORMAT_RANGE_SLOT_MASK;
+
+pub(in crate::storage::engine) fn clear_pivot_format_ranges(
+    mirror: &mut CellMirror,
+    pivot_id: &str,
+) {
+    let owner_prefix = pivot_format_owner_prefix(pivot_id);
+    let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+    for sheet_id in sheet_ids {
+        if let Some(sheet) = mirror.get_sheet_mut(&sheet_id) {
+            let removed_ids: Vec<RangeId> = sheet
+                .format_ranges
+                .iter()
+                .filter(|range| range.id.as_u128() & PIVOT_FORMAT_RANGE_OWNER_MASK == owner_prefix)
+                .map(|range| range.id)
+                .collect();
+            if removed_ids.is_empty() {
+                continue;
+            }
+            sheet
+                .format_ranges
+                .retain(|range| range.id.as_u128() & PIVOT_FORMAT_RANGE_OWNER_MASK != owner_prefix);
+            for range_id in removed_ids {
+                sheet.range_format_cache.remove(&range_id);
+                sheet.range_xlsx_style_id_cache.remove(&range_id);
+            }
+        }
+    }
+}
+
+pub(in crate::storage::engine) fn apply_pivot_format_ranges(
+    mirror: &mut CellMirror,
+    output_sheet_id: &SheetId,
+    pivot_id: &str,
+    anchor_row: u32,
+    anchor_col: u32,
+    result: &compute_pivot::types::PivotTableResult,
+) {
+    clear_pivot_format_ranges(mirror, pivot_id);
+
+    let measure_count = result.measure_descriptors.len();
+    if measure_count == 0 {
+        return;
+    }
+
+    let mut slot = 0u128;
+    let mut push_measure_range = |mirror: &mut CellMirror,
+                                  measure_index: usize,
+                                  start_row: u32,
+                                  start_col: u32,
+                                  end_row: u32,
+                                  end_col: u32| {
+        if start_row > end_row || start_col > end_col {
+            return;
+        }
+        let Some(number_format) = result
+            .measure_descriptors
+            .get(measure_index)
+            .and_then(|descriptor| descriptor.number_format.as_ref())
+        else {
+            return;
+        };
+        let Some(sheet) = mirror.get_sheet_mut(output_sheet_id) else {
+            return;
+        };
+        let range_id = pivot_format_range_id(pivot_id, slot);
+        slot = slot.saturating_add(1);
+        sheet.format_ranges.retain(|range| range.id != range_id);
+        sheet.format_ranges.push(FormatRange {
+            id: range_id,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+        });
+        sheet.range_format_cache.insert(
+            range_id,
+            CellFormat {
+                number_format: Some(number_format.clone()),
+                ..Default::default()
+            },
+        );
+        sheet.range_xlsx_style_id_cache.remove(&range_id);
+    };
+
+    let bounds = &result.rendered_bounds;
+    let data_start_row = anchor_row + bounds.first_data_row;
+    if !result.rows.is_empty() {
+        let data_end_row = data_start_row + result.rows.len() as u32 - 1;
+        for data_col_offset in 0..bounds.num_data_cols {
+            let measure_index = data_col_offset as usize % measure_count;
+            let col = anchor_col + bounds.first_data_col + data_col_offset;
+            push_measure_range(
+                mirror,
+                measure_index,
+                data_start_row,
+                col,
+                data_end_row,
+                col,
+            );
+        }
+    }
+
+    if let Some(row_totals) = result.grand_totals.row.as_ref() {
+        let row = anchor_row + bounds.total_rows.saturating_sub(1);
+        for value_index in 0..row_totals.len() {
+            let measure_index = value_index % measure_count;
+            let col = anchor_col + bounds.first_data_col + value_index as u32;
+            push_measure_range(mirror, measure_index, row, col, row, col);
+        }
+    }
+
+    let num_value_fields = result
+        .grand_totals
+        .grand
+        .as_ref()
+        .map(|g| g.len().max(1))
+        .or_else(|| {
+            result
+                .grand_totals
+                .column
+                .as_ref()
+                .and_then(|c| c.first().map(|row| row.len().max(1)))
+        })
+        .unwrap_or(measure_count) as u32;
+
+    if let Some(column_totals) = result.grand_totals.column.as_ref() {
+        for (row_index, row_totals) in column_totals.iter().enumerate() {
+            let row = data_start_row + row_index as u32;
+            for value_index in 0..row_totals.len() {
+                let measure_index = value_index % measure_count;
+                let col = anchor_col + bounds.total_cols - num_value_fields + value_index as u32;
+                push_measure_range(mirror, measure_index, row, col, row, col);
+            }
+        }
+    }
+
+    if let Some(grand) = result.grand_totals.grand.as_ref() {
+        let row = anchor_row + bounds.total_rows.saturating_sub(1);
+        for value_index in 0..grand.len() {
+            let measure_index = value_index % measure_count;
+            let col = anchor_col + bounds.total_cols - num_value_fields + value_index as u32;
+            push_measure_range(mirror, measure_index, row, col, row, col);
+        }
+    }
+}
+
+fn pivot_format_range_id(pivot_id: &str, slot: u128) -> RangeId {
+    RangeId::from_raw(pivot_format_owner_prefix(pivot_id) | (slot & PIVOT_FORMAT_RANGE_SLOT_MASK))
+}
+
+fn pivot_format_owner_prefix(pivot_id: &str) -> u128 {
+    PIVOT_FORMAT_RANGE_PREFIX | ((stable_hash64(pivot_id) as u128) << PIVOT_FORMAT_RANGE_SLOT_BITS)
+}
+
+fn stable_hash64(input: &str) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01B3);
+    }
+    hash
+}
 
 impl YrsComputeEngine {
     /// Materialize all pivot tables across all sheets after recalc.
@@ -124,6 +292,7 @@ impl YrsComputeEngine {
         }
 
         for (sheet_id, pivot_id, config) in &pivot_pairs {
+            clear_pivot_format_ranges(mirror, pivot_id);
             let output_sheet_id = match mirror.sheet_by_name(&config.output_sheet_name) {
                 Some(id) => id,
                 None => continue,
@@ -183,6 +352,14 @@ impl YrsComputeEngine {
                         &result,
                         &row_field_names,
                     );
+                    apply_pivot_format_ranges(
+                        mirror,
+                        &output_sheet_id,
+                        pivot_id,
+                        config.output_location.row,
+                        config.output_location.col,
+                        &result,
+                    );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
                     mirror.upsert_pivot_table_def(def);
@@ -215,6 +392,7 @@ impl YrsComputeEngine {
             }
         }
         for (sheet_id, pivot_id, config) in &pivot_pairs {
+            clear_pivot_format_ranges(&mut self.mirror, pivot_id);
             // Resolve output sheet
             let output_sheet_id = match self.mirror.sheet_by_name(&config.output_sheet_name) {
                 Some(id) => id,
@@ -279,6 +457,14 @@ impl YrsComputeEngine {
                         config.output_location.col,
                         &result,
                         &row_field_names,
+                    );
+                    apply_pivot_format_ranges(
+                        &mut self.mirror,
+                        &output_sheet_id,
+                        pivot_id,
+                        config.output_location.row,
+                        config.output_location.col,
+                        &result,
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);

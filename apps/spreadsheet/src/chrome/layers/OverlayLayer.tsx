@@ -77,6 +77,7 @@ import { CommentPopover } from '../../components/comments';
 // App-eval harness mirrors
 // =============================================================================
 import { HarnessOverlayMirrors } from '../../components/canvas-overlays/HarnessOverlayMirrors';
+import { TotalRowDropdown } from '../../components/table/TotalRowDropdown';
 
 // =============================================================================
 // OverlayLayer Component
@@ -166,6 +167,9 @@ export function OverlayLayer() {
 
       {/* Insert Shape Menu */}
       <InsertShapeMenu />
+
+      {/* Table total row function dropdown */}
+      <TotalRowDropdown />
 
       {/* Object Context Menu — now rendered by SpreadsheetGrid via Radix ContextMenu */}
 

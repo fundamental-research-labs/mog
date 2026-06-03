@@ -5,16 +5,15 @@
 //!
 //! Supports text identity grouping, date grouping, and number grouping.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use chrono::Datelike;
 use value_types::CellValue;
 use value_types::date_serial::serial_to_date;
 
-use compute_stats::sort::{
-    SortConfig as StatsSortConfig, sort_by_custom_order_in_place, sort_by_in_place,
-};
-use compute_stats::values::{GroupKey, cell_value_to_group_key};
+use compute_stats::sort::{SortConfig as StatsSortConfig, sort_by_custom_order_in_place};
+use compute_stats::values::{GroupKey, cell_value_to_group_key, cell_value_to_sort_key};
 
 use crate::error::RelationalError;
 use crate::types::{
@@ -240,8 +239,43 @@ fn sort_nodes_in_place(nodes: &mut [AggregatedNode], field: &GroupField) {
     if let Some(custom_list) = effective_custom_list {
         sort_by_custom_order_in_place(nodes, |node| node.value.clone(), custom_list, &sort_config);
     } else {
-        sort_by_in_place(nodes, |node| node.value.clone(), &sort_config);
+        sort_nodes_by_pivot_label_in_place(nodes, stats_direction);
     }
+}
+
+fn sort_nodes_by_pivot_label_in_place(
+    nodes: &mut [AggregatedNode],
+    direction: compute_stats::types::SortDirection,
+) {
+    nodes.sort_by(|a, b| {
+        let a_blank = a.value.is_visually_blank();
+        let b_blank = b.value.is_visually_blank();
+        match (a_blank, b_blank) {
+            (true, true) => Ordering::Equal,
+            (true, false) => {
+                if direction == compute_stats::types::SortDirection::Asc {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            }
+            (false, true) => {
+                if direction == compute_stats::types::SortDirection::Asc {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }
+            }
+            (false, false) => {
+                let ord = cell_value_to_sort_key(&a.value).cmp(&cell_value_to_sort_key(&b.value));
+                if direction == compute_stats::types::SortDirection::Desc {
+                    ord.reverse()
+                } else {
+                    ord
+                }
+            }
+        }
+    });
 }
 
 // ============================================================================

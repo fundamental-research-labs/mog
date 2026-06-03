@@ -13,6 +13,7 @@ import type {
   TableInfo,
   TableOptions,
   TableUpdateOptions,
+  TotalsFunction,
 } from '../types';
 import type {
   TableAddColumnReceipt,
@@ -526,6 +527,18 @@ export interface WorksheetTables {
    * @param visible - Whether to show the totals row
    */
   setShowTotals(tableName: string, visible: boolean): Promise<void>;
+
+  /**
+   * Set the totals row aggregation function for a named table column.
+   *
+   * Enables the totals row if needed, persists table column metadata, and
+   * writes or clears the totals cell formula.
+   *
+   * @param tableName - Table name
+   * @param columnName - Column header name
+   * @param func - Totals function to apply, or "none" to clear
+   */
+  setTotalsFunction(tableName: string, columnName: string, func: TotalsFunction): Promise<void>;
 
   // ---------------------------------------------------------------------------
   // Filter & collection access

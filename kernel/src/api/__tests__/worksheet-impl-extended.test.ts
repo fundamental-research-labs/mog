@@ -235,6 +235,7 @@ function createMockCtx(): any {
       toggleHeaderRow: jest.fn().mockResolvedValue(undefined),
       toggleTotalsRow: jest.fn().mockResolvedValue(undefined),
       setTable: jest.fn().mockResolvedValue(undefined),
+      setTableTotalsFunction: jest.fn().mockResolvedValue(undefined),
       setTableStyle: jest.fn().mockResolvedValue(undefined),
       updateSlicerConfig: jest.fn().mockResolvedValue(undefined),
       getSlicerState: jest.fn().mockResolvedValue(null),
@@ -271,6 +272,7 @@ function createMockCtx(): any {
         formatToApply: 'h:mm:ss',
       }),
       setCell: jest.fn().mockResolvedValue(undefined),
+      setCellValueParsed: jest.fn().mockResolvedValue(undefined),
       setCellFormat: jest.fn().mockResolvedValue(undefined),
       setCells: jest.fn().mockResolvedValue(undefined),
       setCellsByPosition: jest.fn().mockResolvedValue(undefined),
@@ -882,6 +884,56 @@ describe('WorksheetImpl Extended Methods', () => {
       await ws.tables.setShowTotals('Table1', true);
 
       expect(ctx.computeBridge.toggleTotalsRow).toHaveBeenCalledWith('Table1');
+    });
+
+    it('setTotalsFunction persists table metadata before writing the totals formula', async () => {
+      (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValueOnce({
+        id: 'Table1',
+        name: 'Table1',
+        range: 'A1:D10',
+        hasHeaderRow: true,
+        hasTotalsRow: true,
+        columns: [
+          { id: '1', name: 'A', index: 0 },
+          { id: '2', name: 'B', index: 1 },
+          { id: '3', name: 'Price', index: 2 },
+        ],
+      });
+
+      await ws.tables.setTotalsFunction('Table1', 'Price', 'sum');
+
+      expect(ctx.computeBridge.beginUndoGroup).toHaveBeenCalled();
+      expect(ctx.computeBridge.setTableTotalsFunction).toHaveBeenCalledWith('Table1', 2, 'sum');
+      expect(ctx.computeBridge.setCellValueParsed).toHaveBeenNthCalledWith(1, SHEET_ID, 9, 2, '0');
+      expect(ctx.computeBridge.setCellValueParsed).toHaveBeenNthCalledWith(
+        2,
+        SHEET_ID,
+        9,
+        2,
+        '=SUBTOTAL(109,Table1[Price])',
+      );
+      expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalled();
+    });
+
+    it('setTotalsFunction none clears table metadata and totals cell', async () => {
+      (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValueOnce({
+        id: 'Table1',
+        name: 'Table1',
+        range: 'A1:D10',
+        hasHeaderRow: true,
+        hasTotalsRow: true,
+        columns: [
+          { id: '1', name: 'A', index: 0 },
+          { id: '2', name: 'B', index: 1 },
+          { id: '3', name: 'Price', index: 2 },
+        ],
+      });
+
+      await ws.tables.setTotalsFunction('Table1', 'Price', 'none');
+
+      expect(ctx.computeBridge.setTableTotalsFunction).toHaveBeenCalledWith('Table1', 2, null);
+      expect(ctx.computeBridge.setCellValueParsed).toHaveBeenCalledTimes(1);
+      expect(ctx.computeBridge.setCellValueParsed).toHaveBeenCalledWith(SHEET_ID, 9, 2, '');
     });
 
     it('setShowHeaders delegates to computeBridge.toggleHeaderRow when state differs', async () => {

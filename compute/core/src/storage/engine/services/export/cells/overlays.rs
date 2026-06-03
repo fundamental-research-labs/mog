@@ -188,7 +188,11 @@ pub(in crate::storage::engine) fn export_cells_for_sheet(
                 if let std::collections::hash_map::Entry::Vacant(entry) =
                     cells_by_pos.entry((row, col))
                 {
-                    entry.insert(range_payload_cell(row, col, value.clone()));
+                    let mut cell = range_payload_cell(row, col, value.clone());
+                    if let Some(lookup) = &format_range_style_lookup {
+                        cell.style_id = lookup.style_id_at(row, col);
+                    }
+                    entry.insert(cell);
                 }
             }
         }

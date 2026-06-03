@@ -4,7 +4,7 @@ use bridge_core as bridge;
 use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
-use domain_types::domain::table::Table as CanonicalTable;
+use domain_types::domain::table::{Table as CanonicalTable, TotalsFunction};
 use formula_types::{StructureChange, TableDef};
 use value_types::ComputeError;
 
@@ -431,6 +431,24 @@ impl YrsComputeEngine {
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let result =
             services::tables::toggle_totals_row(&mut self.stores, &mut self.mirror, table_name)?;
+        Ok((serialize_multi_viewport_patches(&[]), result))
+    }
+
+    /// Set totals function metadata for a table column.
+    #[bridge::write(scope = "workbook")]
+    pub fn set_table_totals_function(
+        &mut self,
+        table_name: &str,
+        column_index: u32,
+        totals_function: Option<TotalsFunction>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let result = services::tables::set_table_totals_function(
+            &mut self.stores,
+            &mut self.mirror,
+            table_name,
+            column_index,
+            totals_function,
+        )?;
         Ok((serialize_multi_viewport_patches(&[]), result))
     }
 

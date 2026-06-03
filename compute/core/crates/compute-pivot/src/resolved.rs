@@ -11,8 +11,8 @@ use value_types::CellValue;
 use super::calc_field::CalcFieldExpr;
 use super::types::{
     AggregateFunction, CellRange, DateGrouping, FieldId, LayoutForm, NumberGrouping,
-    OutputLocation, PivotField, PivotFilterCondition, ShowValuesAsConfig, SortDirection,
-    TopBottomBy, TopBottomType,
+    OutputLocation, PivotField, PivotFilterCondition, PivotValueSource, PlacementId,
+    ShowValuesAsConfig, SortDirection, TopBottomBy, TopBottomType,
 };
 
 // ============================================================================
@@ -282,8 +282,14 @@ impl ResolvedSortByValue {
 /// Resolved value placement — aggregate function guaranteed, field resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedValuePlacement {
+    /// Stable placement identity.
+    pub(crate) placement_id: PlacementId,
     /// The field ID for this value placement.
     pub(crate) field_id: FieldId,
+    /// User-facing source field name.
+    pub(crate) source_field_name: String,
+    /// Source descriptor for result metadata.
+    pub(crate) source: PivotValueSource,
     /// Pre-resolved source column index.
     pub(crate) column_index: usize,
     /// Position within the values area.
@@ -299,10 +305,28 @@ pub struct ResolvedValuePlacement {
 }
 
 impl ResolvedValuePlacement {
+    /// Stable placement identity.
+    #[must_use]
+    pub fn placement_id(&self) -> &PlacementId {
+        &self.placement_id
+    }
+
     /// The field ID for this value placement.
     #[must_use]
     pub fn field_id(&self) -> &FieldId {
         &self.field_id
+    }
+
+    /// User-facing source field name.
+    #[must_use]
+    pub fn source_field_name(&self) -> &str {
+        &self.source_field_name
+    }
+
+    /// Source descriptor for result metadata.
+    #[must_use]
+    pub fn source(&self) -> &PivotValueSource {
+        &self.source
     }
 
     /// Pre-resolved source column index.

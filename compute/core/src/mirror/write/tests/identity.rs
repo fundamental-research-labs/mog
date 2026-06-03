@@ -188,3 +188,21 @@ fn ensure_cell_id_preserves_projected_col_data() {
     let sheet = mirror.get_sheet(&sheet_id).unwrap();
     assert_eq!(sheet.col_data[&4][3], CellValue::from("right"));
 }
+
+#[test]
+fn ensure_cell_id_preserves_existing_materialized_col_data() {
+    let (mut mirror, sheet_id) = make_mirror();
+    let id_alloc = cell_types::IdAllocator::new();
+
+    {
+        let sheet = mirror.get_sheet_mut(&sheet_id).unwrap();
+        sheet.col_data.insert(5, vec![CellValue::Null; 100]);
+        sheet.col_data.get_mut(&5).unwrap()[3] = CellValue::number(250.0);
+    }
+
+    mirror.ensure_cell_id(&sheet_id, SheetPos::new(3, 5), &id_alloc);
+
+    let sheet = mirror.get_sheet(&sheet_id).unwrap();
+    assert_eq!(sheet.col_data[&5][3], CellValue::number(250.0));
+    assert!(sheet.pos_to_id.contains_key(&SheetPos::new(3, 5)));
+}

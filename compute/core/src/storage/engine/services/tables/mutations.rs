@@ -482,6 +482,47 @@ pub(in crate::storage::engine) fn remove_table_column(
     Ok(MutationResult::empty())
 }
 
+/// Set the totals function metadata for a table column.
+pub(in crate::storage::engine) fn set_table_totals_function(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    table_name: &str,
+    column_index: u32,
+    totals_function: Option<domain_types::domain::table::TotalsFunction>,
+) -> Result<MutationResult, ComputeError> {
+    let table = mirror
+        .get_table(table_name)
+        .cloned()
+        .ok_or_else(|| ComputeError::Eval {
+            message: format!("Table not found: {}", table_name),
+        })?;
+    let idx = column_index as usize;
+    if idx >= table.columns.len() {
+        return Err(ComputeError::Eval {
+            message: format!(
+                "Column index {} out of range (table has {} columns)",
+                column_index,
+                table.columns.len()
+            ),
+        });
+    }
+
+    let mut updated = table;
+    updated.columns[idx].totals_function = totals_function.and_then(|func| {
+        (!matches!(func, domain_types::domain::table::TotalsFunction::None)).then_some(func)
+    });
+    stores.compute.set_table(mirror, updated.clone());
+    persist_table_to_yrs(stores, &updated);
+
+    let mut result = MutationResult::empty();
+    result.table_changes.push(TableChange {
+        name: updated.name,
+        sheet_id: updated.sheet_id,
+        kind: ChangeKind::Set,
+    });
+    Ok(result)
+}
+
 /// Add a calculated column to a table.
 pub(in crate::storage::engine) fn add_calculated_column(
     stores: &mut EngineStores,
@@ -771,10 +812,32 @@ pub(in crate::storage::engine) fn convert_table_to_range(
         &table_info,
     );
 
+    let sheet_id = SheetId::from_uuid_str(&table.sheet_id).map_err(|_| ComputeError::Eval {
+        message: format!("Invalid sheet ID in table: {}", table_name),
+    })?;
+    let table_filter = filters::get_table_filter(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        &sheet_id,
+        &table.id,
+    )
+    .map(|filter| (sheet_id, filter.id));
+
     stores.compute.remove_table(mirror, table_name);
-    remove_table_from_yrs(stores, table_name);
+    remove_table_from_yrs_with_filter(stores, table_name, table_filter.as_ref());
 
     let mut result = MutationResult::empty();
+    if let Some((filter_sheet_id, filter_id)) = table_filter {
+        result.filter_changes.push(FilterChange {
+            sheet_id: filter_sheet_id.to_uuid_string(),
+            filter_id,
+            filter_kind: Some("tableFilter".to_string()),
+            action: Some("deleted".to_string()),
+            hidden_row_count: None,
+            visible_row_count: None,
+            kind: ChangeKind::Removed,
+        });
+    }
     result.table_changes.push(TableChange {
         name: table_name.to_string(),
         sheet_id: sheet_id_str,

@@ -33,6 +33,12 @@ fn b4a_compute_with_show_values_as_percent_of_grand_total() {
     let result = compute_with_show_values_as(&config, &sample_sales_data(), Some(&expand_all()));
     assert!(result.errors.is_none(), "errors: {:?}", result.errors);
     assert_eq!(result.rows.len(), 2);
+    assert_eq!(result.measure_descriptors.len(), 1);
+    assert_eq!(result.measure_descriptors[0].name, "Sum of Sales");
+    assert_eq!(
+        result.measure_descriptors[0].number_format.as_deref(),
+        Some("0%")
+    );
 
     let mut total = 0.0;
     for row in &result.rows {

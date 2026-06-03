@@ -5,7 +5,7 @@ use value_types::CellValue;
 
 use crate::engine::VALUES_FIELD_KEY;
 use crate::resolved::{ResolvedAxisPlacement, ResolvedCalculatedField, ResolvedValuePlacement};
-use crate::types::{FieldId, PivotColumnHeader, PivotHeader};
+use crate::types::{AggregateFunction, FieldId, PivotColumnHeader, PivotHeader};
 
 use super::visibility::{
     count_visible_leaves, get_nodes_at_depth_agg, get_visible_leaves, is_node_expanded,
@@ -132,8 +132,11 @@ fn measure_headers(
     headers.extend(value_placements.iter().map(|vp| {
         let display = vp.display_name().unwrap_or("");
         let value = if display.is_empty() {
-            let agg = format!("{:?}", vp.aggregate_function()).to_lowercase();
-            format!("{} of {}", agg, vp.field_id())
+            format!(
+                "{} of {}",
+                aggregate_caption(vp.aggregate_function()),
+                vp.source_field_name()
+            )
         } else {
             display.to_string()
         };
@@ -151,10 +154,28 @@ fn measure_headers(
     headers
 }
 
+fn aggregate_caption(aggregate: AggregateFunction) -> &'static str {
+    match aggregate {
+        AggregateFunction::Sum => "Sum",
+        AggregateFunction::Count => "Count",
+        AggregateFunction::CountA => "CountA",
+        AggregateFunction::CountUnique => "CountUnique",
+        AggregateFunction::Average => "Average",
+        AggregateFunction::Min => "Min",
+        AggregateFunction::Max => "Max",
+        AggregateFunction::Product => "Product",
+        AggregateFunction::StdDev => "StdDev",
+        AggregateFunction::StdDevP => "StdDevP",
+        AggregateFunction::Var => "Var",
+        AggregateFunction::VarP => "VarP",
+        _ => "Value",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AggregateFunction, SortDirection};
+    use crate::types::{PivotValueSource, PlacementId, SortDirection};
 
     fn node(value: CellValue) -> AggregatedNode {
         AggregatedNode {
@@ -204,7 +225,12 @@ mod tests {
     #[test]
     fn no_column_fields_emit_value_headers_with_aggregate_fallback() {
         let values = [ResolvedValuePlacement {
-            field_id: FieldId::from("sales"),
+            placement_id: PlacementId::from("value-revenue"),
+            field_id: FieldId::from("field_2"),
+            source_field_name: "Revenue".to_string(),
+            source: PivotValueSource::Field {
+                field_id: FieldId::from("field_2"),
+            },
             column_index: 2,
             position: 0,
             display_name: None,
@@ -215,10 +241,10 @@ mod tests {
 
         let headers = build_column_headers(&[], &[], &values, &[], None);
 
-        assert_eq!(headers[0].headers[0].key, "value_sales");
+        assert_eq!(headers[0].headers[0].key, "value_field_2");
         assert_eq!(
             headers[0].headers[0].value,
-            CellValue::Text("sum of sales".into())
+            CellValue::Text("Sum of Revenue".into())
         );
     }
 
@@ -226,7 +252,12 @@ mod tests {
     fn calculated_fields_extend_value_header_width() {
         let values = [
             ResolvedValuePlacement {
+                placement_id: PlacementId::from("value-revenue"),
                 field_id: FieldId::from("revenue"),
+                source_field_name: "Revenue".to_string(),
+                source: PivotValueSource::Field {
+                    field_id: FieldId::from("revenue"),
+                },
                 column_index: 1,
                 position: 0,
                 display_name: Some("Revenue".to_string()),
@@ -235,7 +266,12 @@ mod tests {
                 show_values_as: None,
             },
             ResolvedValuePlacement {
+                placement_id: PlacementId::from("value-cost"),
                 field_id: FieldId::from("cost"),
+                source_field_name: "Cost".to_string(),
+                source: PivotValueSource::Field {
+                    field_id: FieldId::from("cost"),
+                },
                 column_index: 2,
                 position: 1,
                 display_name: Some("Cost".to_string()),

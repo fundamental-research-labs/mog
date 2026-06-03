@@ -11,7 +11,7 @@ use crate::resolved::{
 use crate::types::{
     BinaryFilterOp, FieldId, FilterOperator, LayoutForm, NullaryFilterOp, PivotError, PivotField,
     PivotFieldArea, PivotFieldPlacement, PivotFilterCondition, PivotFilterConditionFlat,
-    PivotTableConfig, ShowValuesAs, SortDirection, TopBottomBy, UnaryFilterOp,
+    PivotTableConfig, PivotValueSource, ShowValuesAs, SortDirection, TopBottomBy, UnaryFilterOp,
 };
 
 /// Validate and resolve a pivot table configuration.
@@ -134,10 +134,16 @@ pub fn validate_and_resolve(config: &PivotTableConfig) -> Result<ResolvedPivotCo
     let mut value_placements: Vec<ResolvedValuePlacement> = Vec::new();
     for placement in &config.placements {
         if let PivotFieldPlacement::Value(val) = placement {
-            match field_map.get(val.base.field_id.as_ref()) {
+            let source_field_id = val.field_id().unwrap_or(&val.base.field_id);
+            match field_map.get(source_field_id.as_ref()) {
                 Some(field) => {
                     value_placements.push(ResolvedValuePlacement {
-                        field_id: val.base.field_id.clone(),
+                        placement_id: val.base.placement_id.clone(),
+                        field_id: source_field_id.clone(),
+                        source_field_name: field.name.clone(),
+                        source: PivotValueSource::Field {
+                            field_id: source_field_id.clone(),
+                        },
                         column_index: field.source_column as usize,
                         position: val.base.position,
                         display_name: val.base.display_name.clone(),
@@ -146,14 +152,14 @@ pub fn validate_and_resolve(config: &PivotTableConfig) -> Result<ResolvedPivotCo
                         show_values_as: val.show_values_as.clone(),
                     });
                 }
-                None if calc_field_ids.contains(val.base.field_id.as_ref()) => {
+                None if calc_field_ids.contains(source_field_id.as_ref()) => {
                     // Calculated-field introspection placement — engine
                     // emits it via apply_calc_fields_to_values, not via
                     // ResolvedValuePlacement. Skip silently.
                 }
                 None => {
                     errors.push(PivotError::UnknownField {
-                        field_id: val.base.field_id.to_string(),
+                        field_id: source_field_id.to_string(),
                         context: "value placement references unknown field".to_string(),
                     });
                 }

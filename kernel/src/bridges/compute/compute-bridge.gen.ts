@@ -412,6 +412,7 @@ export interface GeneratedBridgeMethods {
   resizeTable(tableName: string, newStartRow: number, newStartCol: number, newEndRow: number, newEndCol: number): Promise<MutationResult>;
   setTableStyle(tableName: string, styleName: string): Promise<MutationResult>;
   toggleTotalsRow(tableName: string): Promise<MutationResult>;
+  setTableTotalsFunction(tableName: string, columnIndex: number, totalsFunction: TotalsFunction | null): Promise<MutationResult>;
   toggleHeaderRow(tableName: string): Promise<MutationResult>;
   toggleBandedRows(tableName: string): Promise<MutationResult>;
   toggleBandedCols(tableName: string): Promise<MutationResult>;
@@ -2247,6 +2248,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   toggleTotalsRow(tableName: string): Promise<MutationResult> {
     return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_totals_row', { docId: this.core.docId, tableName }));
+  }
+
+  setTableTotalsFunction(tableName: string, columnIndex: number, totalsFunction: TotalsFunction | null): Promise<MutationResult> {
+    return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_totals_function', { docId: this.core.docId, tableName, columnIndex, totalsFunction }));
   }
 
   toggleHeaderRow(tableName: string): Promise<MutationResult> {

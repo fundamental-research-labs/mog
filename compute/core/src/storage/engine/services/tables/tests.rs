@@ -775,6 +775,69 @@ mod tests {
         assert!(!reconstructed.auto_calculated_columns);
     }
 
+    #[test]
+    fn set_table_totals_function_persists_metadata_and_clears_none() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+
+        engine
+            .create_table(
+                &sid,
+                "Table1".into(),
+                0,
+                0,
+                3,
+                1,
+                vec!["A".into(), "Amount".into()],
+                true,
+            )
+            .expect("create_table");
+
+        engine
+            .set_table_totals_function(
+                "Table1",
+                1,
+                Some(domain_types::domain::table::TotalsFunction::Sum),
+            )
+            .expect("set totals function");
+
+        let table = engine.get_table_by_name("Table1").expect("table");
+        assert_eq!(
+            table.columns[1].totals_function,
+            Some(domain_types::domain::table::TotalsFunction::Sum)
+        );
+
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let doc = engine.stores.storage.doc().clone();
+        let txn = doc.transact();
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
+            .expect("binding must exist");
+        let binding: domain_types::domain::table::TableBinding =
+            serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            binding.columns[1].totals_function,
+            Some(domain_types::domain::table::TotalsFunction::Sum)
+        );
+        drop(txn);
+
+        engine
+            .set_table_totals_function(
+                "Table1",
+                1,
+                Some(domain_types::domain::table::TotalsFunction::None),
+            )
+            .expect("clear totals function");
+
+        let table = engine.get_table_by_name("Table1").expect("table");
+        assert_eq!(table.columns[1].totals_function, None);
+        let txn = doc.transact();
+        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
+            .expect("binding must exist");
+        let binding: domain_types::domain::table::TableBinding =
+            serde_json::from_str(&json).unwrap();
+        assert_eq!(binding.columns[1].totals_function, None);
+    }
+
     /// table_range_id and table_name_from_range_id are inverse operations.
     #[test]
     fn range_id_round_trip() {
@@ -916,7 +979,7 @@ mod tests {
             )
             .expect("create_table");
 
-        engine
+        let (_, result) = engine
             .convert_table_to_range("Table1")
             .expect("convert_to_range");
 
@@ -927,6 +990,20 @@ mod tests {
             compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
                 .is_none(),
             "binding must be cleaned up after convert_to_range"
+        );
+        assert!(
+            engine.get_filters_in_sheet(&sid).is_empty(),
+            "convert_to_range must remove the table-owned filter"
+        );
+        assert!(
+            result.filter_changes.iter().any(|change| {
+                change.sheet_id == sid.to_uuid_string()
+                    && change.filter_kind.as_deref() == Some("tableFilter")
+                    && change.action.as_deref() == Some("deleted")
+                    && change.kind == ChangeKind::Removed
+            }),
+            "convert_to_range must emit a table-filter deletion receipt, got {:?}",
+            result.filter_changes
         );
     }
 

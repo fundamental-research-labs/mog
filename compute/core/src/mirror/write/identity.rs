@@ -36,11 +36,13 @@ impl CellMirror {
             formula: None,
         };
 
-        // If position is within an active projection, register the CellId for
-        // identity tracking only - do NOT write Null to col_data.
+        // If position is within an active projection or already has a
+        // materialized non-null value, register the CellId for identity
+        // tracking only - do NOT write Null to col_data.
         if self
             .projection_registry
             .is_projected(sheet_id, pos.row(), pos.col())
+            || self.has_non_null_col_data(sheet_id, pos)
         {
             if let Some(s) = self.sheets.get_mut(sheet_id) {
                 s.cells.insert(new_id, entry);
@@ -55,6 +57,14 @@ impl CellMirror {
         // Normal path: full insert with col_data write
         self.insert_cell(sheet_id, new_id, pos, entry);
         Some(new_id)
+    }
+
+    fn has_non_null_col_data(&self, sheet_id: &SheetId, pos: SheetPos) -> bool {
+        self.sheets
+            .get(sheet_id)
+            .and_then(|sheet| sheet.col_data.get(&pos.col()))
+            .and_then(|col_vec| col_vec.get(pos.row() as usize))
+            .is_some_and(|value| !value.is_null())
     }
 
     /// Get or create a CellId at the given position, preserving `col_data`.

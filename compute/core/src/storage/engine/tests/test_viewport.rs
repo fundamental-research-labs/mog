@@ -3,8 +3,10 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::SheetSnapshot;
+use crate::storage::engine::pivot_materialization::apply_pivot_format_ranges;
 use compute_pivot::types::{
-    FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
+    AggregateFunction, FieldId, PivotGrandTotals, PivotHeader, PivotMeasureDescriptor,
+    PivotRenderedBounds, PivotRow, PivotTableResult, PivotValueSource, PlacementId,
 };
 use value_types::CellValue;
 
@@ -27,6 +29,112 @@ fn test_register_viewport_appears_in_registry() {
     assert_eq!(id, "main");
     assert_eq!(*sheet_hex, sid.to_uuid_string());
     assert_eq!((*sr, *sc, *er, *ec), (0, 0, 50, 20));
+}
+
+#[test]
+fn test_viewport_binary_renders_pivot_percent_measure_format() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let anchor_row = 0;
+    let anchor_col = 4;
+    let result = PivotTableResult {
+        column_headers: vec![],
+        rows: vec![
+            PivotRow {
+                key: "row_north".to_string(),
+                headers: vec![PivotHeader {
+                    key: "T:north".to_string(),
+                    value: CellValue::from("North"),
+                    field_id: FieldId::from("field_0"),
+                    depth: 0,
+                    span: 1,
+                    is_expandable: false,
+                    is_expanded: true,
+                    is_subtotal: false,
+                    is_grand_total: false,
+                    parent_key: None,
+                    child_keys: None,
+                }],
+                values: vec![CellValue::number(0.25)],
+                depth: 0,
+                is_subtotal: false,
+                is_grand_total: false,
+                source_row_indices: None,
+            },
+            PivotRow {
+                key: "row_south".to_string(),
+                headers: vec![PivotHeader {
+                    key: "T:south".to_string(),
+                    value: CellValue::from("South"),
+                    field_id: FieldId::from("field_0"),
+                    depth: 0,
+                    span: 1,
+                    is_expandable: false,
+                    is_expanded: true,
+                    is_subtotal: false,
+                    is_grand_total: false,
+                    parent_key: None,
+                    child_keys: None,
+                }],
+                values: vec![CellValue::number(0.75)],
+                depth: 0,
+                is_subtotal: false,
+                is_grand_total: false,
+                source_row_indices: None,
+            },
+        ],
+        grand_totals: PivotGrandTotals {
+            row: Some(vec![CellValue::number(1.0)]),
+            column: None,
+            grand: Some(vec![CellValue::number(1.0)]),
+            row_label: Some("Grand Total".to_string()),
+        },
+        rendered_bounds: PivotRenderedBounds {
+            total_rows: 4,
+            total_cols: 2,
+            first_data_row: 1,
+            first_data_col: 1,
+            num_data_cols: 1,
+        },
+        source_row_count: 2,
+        measure_descriptors: vec![PivotMeasureDescriptor {
+            placement_id: PlacementId::from("value-revenue"),
+            source: PivotValueSource::Field {
+                field_id: FieldId::from("revenue"),
+            },
+            aggregate_function: AggregateFunction::Sum,
+            name: "Sum of Revenue".to_string(),
+            number_format: Some("0%".to_string()),
+        }],
+        value_records: vec![],
+        errors: None,
+    };
+
+    engine.mirror.materialize_pivot(
+        &sid,
+        anchor_row,
+        anchor_col,
+        &result,
+        &["Region".to_string()],
+    );
+    apply_pivot_format_ranges(
+        &mut engine.mirror,
+        &sid,
+        "pivot-percent",
+        anchor_row,
+        anchor_col,
+        &result,
+    );
+
+    let viewport = engine.build_viewport_render_data(&sid, 0, 0, 5, 8);
+
+    let cell =
+        |row: usize, col: usize| &viewport.cells[row * viewport.viewport_cols as usize + col];
+    assert_eq!(cell(1, 5).formatted.as_deref(), Some("25%"));
+    assert_eq!(cell(2, 5).formatted.as_deref(), Some("75%"));
+    assert_eq!(cell(3, 5).formatted.as_deref(), Some("100%"));
 }
 
 // -------------------------------------------------------------------

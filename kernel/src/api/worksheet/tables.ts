@@ -339,7 +339,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       const tables = this;
       info.setTotalsRow = (visible: boolean) => tables.setShowTotals(name, visible);
       info.setTotalsFunction = (columnName: string, func: string) =>
-        tables.setColumnTotalsFunction(name, columnName, func as TotalsFunction);
+        tables.setTotalsFunction(name, columnName, func as TotalsFunction);
 
       // containsCell(row, col): returns true if the 0-based (row, col) falls within
       // the table's range (including header and totals rows).
@@ -939,6 +939,19 @@ export class WorksheetTablesImpl implements WorksheetTables {
    * first).  If the totals row is not yet enabled this method enables it
    * automatically.
    */
+  async setTotalsFunction(
+    tableName: string,
+    columnName: string,
+    func: TotalsFunction,
+  ): Promise<void> {
+    await this.ctx.computeBridge.beginUndoGroup();
+    try {
+      await this.setColumnTotalsFunction(tableName, columnName, func);
+    } finally {
+      await this.ctx.computeBridge.endUndoGroup();
+    }
+  }
+
   private async setColumnTotalsFunction(
     tableName: string,
     columnName: string,
@@ -979,12 +992,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
       var: 110,
       varp: 111,
     };
-    const funcNum = funcNumMap[func.toLowerCase()] ?? 109;
+    const normalizedFunc = func.toLowerCase();
+    const funcNum = funcNumMap[normalizedFunc] ?? 109;
 
     // Use table-qualified structured reference: =SUBTOTAL(109,TableName[ColumnName]).
     // The WASM evaluator resolves Table1[Amount] correctly; bare [Amount] gives #NAME?.
     // tableGetTotalsFormula returns the unqualified form, so we build it ourselves.
-    const formula = `=SUBTOTAL(${funcNum},${tableName}[${columnName}])`;
+    const formula =
+      normalizedFunc === 'none' ? '' : `=SUBTOTAL(${funcNum},${tableName}[${columnName}])`;
 
     // Write into the totals row cell.
     const totalsCol = parsed.startCol + colIdx;
@@ -997,6 +1012,17 @@ export class WorksheetTablesImpl implements WorksheetTables {
       [{ row: totalsRow, col: totalsCol }],
       'editing this totals cell',
     );
+
+    await this.ctx.computeBridge.setTableTotalsFunction(
+      tableName,
+      colIdx,
+      normalizedFunc === 'none' ? null : func,
+    );
+
+    if (normalizedFunc === 'none') {
+      await this.ctx.computeBridge.setCellValueParsed(this.sheetId, totalsRow, totalsCol, '');
+      return;
+    }
 
     // WASM normalises ANY formula written to a freshly-created totals cell to the
     // unqualified structured-reference form ([Amount]), stripping the table qualifier

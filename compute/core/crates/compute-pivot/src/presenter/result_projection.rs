@@ -4,7 +4,8 @@ use compute_relational::{AggregatedNode, QueryResult};
 
 use crate::resolved::{ResolvedAxisPlacement, ResolvedPivotConfig};
 use crate::types::{
-    LayoutForm, PivotExpansionState, PivotRenderedBounds, PivotRow, PivotTableResult,
+    AggregateFunction, LayoutForm, PivotExpansionState, PivotMeasureDescriptor,
+    PivotRenderedBounds, PivotRow, PivotTableResult, ShowValuesAs,
 };
 
 use super::column_headers::build_column_headers;
@@ -125,8 +126,78 @@ pub fn query_result_to_pivot(
         grand_totals,
         rendered_bounds,
         source_row_count: data_row_count,
-        measure_descriptors: Vec::new(),
+        measure_descriptors: build_measure_descriptors(config),
         value_records: Vec::new(),
         errors: None,
+    }
+}
+
+fn build_measure_descriptors(config: &ResolvedPivotConfig) -> Vec<PivotMeasureDescriptor> {
+    config
+        .value_placements()
+        .iter()
+        .map(|placement| {
+            let name = placement
+                .display_name()
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} of {}",
+                        aggregate_caption(placement.aggregate_function()),
+                        placement.source_field_name()
+                    )
+                });
+            PivotMeasureDescriptor {
+                placement_id: placement.placement_id().clone(),
+                source: placement.source().clone(),
+                aggregate_function: placement.aggregate_function(),
+                name,
+                number_format: effective_measure_number_format(placement),
+            }
+        })
+        .collect()
+}
+
+fn effective_measure_number_format(
+    placement: &crate::resolved::ResolvedValuePlacement,
+) -> Option<String> {
+    placement.number_format().map(str::to_string).or_else(|| {
+        placement
+            .show_values_as()
+            .is_some_and(|show_values_as| {
+                is_percent_show_values_as(&show_values_as.calculation_type)
+            })
+            .then(|| "0%".to_string())
+    })
+}
+
+fn is_percent_show_values_as(calculation_type: &ShowValuesAs) -> bool {
+    match calculation_type {
+        ShowValuesAs::PercentOfGrandTotal
+        | ShowValuesAs::PercentOfColumnTotal
+        | ShowValuesAs::PercentOfRowTotal
+        | ShowValuesAs::PercentOfParentRowTotal
+        | ShowValuesAs::PercentOfParentColumnTotal
+        | ShowValuesAs::PercentDifference
+        | ShowValuesAs::PercentRunningTotal => true,
+        _ => false,
+    }
+}
+
+fn aggregate_caption(aggregate: AggregateFunction) -> &'static str {
+    match aggregate {
+        AggregateFunction::Sum => "Sum",
+        AggregateFunction::Count => "Count",
+        AggregateFunction::CountA => "CountA",
+        AggregateFunction::CountUnique => "CountUnique",
+        AggregateFunction::Average => "Average",
+        AggregateFunction::Min => "Min",
+        AggregateFunction::Max => "Max",
+        AggregateFunction::Product => "Product",
+        AggregateFunction::StdDev => "StdDev",
+        AggregateFunction::StdDevP => "StdDevP",
+        AggregateFunction::Var => "Var",
+        AggregateFunction::VarP => "VarP",
+        _ => "Value",
     }
 }

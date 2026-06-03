@@ -405,6 +405,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   resizeTable: 'write',
   setTableStyle: 'write',
   toggleTotalsRow: 'write',
+  setTableTotalsFunction: 'write',
   toggleHeaderRow: 'write',
   toggleBandedRows: 'write',
   toggleBandedCols: 'write',

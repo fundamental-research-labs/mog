@@ -517,7 +517,7 @@ export const EXECUTE_CONSOLIDATE: AsyncActionHandler = async (deps): Promise<Act
       const row: string[] = [];
       for (let c = range.startCol; c <= range.endCol; c++) {
         const cell = await ws.getCell(r, c);
-        const val = cell?.displayText ?? cell?.value;
+        const val = cell?.value;
         row.push(val != null ? String(val) : '');
       }
       rows.push(row);

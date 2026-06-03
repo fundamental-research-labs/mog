@@ -12,7 +12,10 @@
 import { useCallback } from 'react';
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader } from '@mog/shell';
 import { useDispatch, useUIStore } from '../../internal-api';
-import type { ConsolidateFunction } from '../../ui-store/slices/dialogs/consolidate-dialog';
+import type {
+  ConsolidateFunction,
+  ConsolidateSourceRef,
+} from '../../ui-store/slices/dialogs/consolidate-dialog';
 
 const FUNCTION_OPTIONS: Array<{ value: ConsolidateFunction; label: string }> = [
   { value: 'sum', label: 'Sum' },
@@ -147,7 +150,7 @@ export function ConsolidateDialog() {
               {sourceReferences.length === 0 ? (
                 <div className="text-gray-400 text-xs p-1">No references added</div>
               ) : (
-                sourceReferences.map((ref) => (
+                sourceReferences.map((ref: ConsolidateSourceRef) => (
                   <div key={ref.id} className="px-1 py-0.5">
                     {ref.reference}
                   </div>

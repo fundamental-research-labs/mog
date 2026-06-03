@@ -303,6 +303,9 @@ export const InsertShapeMenu = React.memo(function InsertShapeMenu() {
     <div className="fixed inset-0 z-ss-overlay" onClick={handleOverlayClick}>
       <div
         ref={menuRef}
+        data-testid="insert-shape-menu"
+        role="menu"
+        aria-label="Insert Shapes"
         className="absolute bg-ss-surface rounded-ss-lg shadow-ss-lg border border-ss-border p-3 min-w-[280px] max-w-[360px] z-ss-modal"
         style={{
           left: menuPosition.left,
@@ -325,6 +328,8 @@ export const InsertShapeMenu = React.memo(function InsertShapeMenu() {
                   <button
                     key={shape.type}
                     type="button"
+                    role="menuitem"
+                    aria-label={shape.label}
                     title={shape.label}
                     className="flex items-center justify-center w-10 h-10 p-0 border border-transparent rounded bg-transparent cursor-pointer transition-all duration-ss-fast text-ss-text-secondary hover:bg-ss-surface-tertiary hover:border-ss-border"
                     onClick={(e) => handleShapeSelect(shape.type, e)}

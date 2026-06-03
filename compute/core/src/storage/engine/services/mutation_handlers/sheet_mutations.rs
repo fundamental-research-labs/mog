@@ -201,9 +201,9 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
     stores.merge_indexes.remove(sheet_id);
     stores.layout_indexes.remove(sheet_id);
 
-    // 4. Regenerate formula strings — references to the deleted sheet
-    //    should now display as #REF! in the formula bar.
-    stores.compute.regenerate_formula_strings(mirror);
+    // 4. Refresh the rendered cache; authored formula text was rewritten before
+    // deletion so `#REF!A1` suffixes/absolute markers survive readback.
+    stores.compute.regenerate_formula_string_cache(mirror);
 
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {
@@ -253,13 +253,10 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
         name,
     );
 
-    // 2. Rename in mirror
-    mirror.rename_sheet(sheet_id, name);
-
-    // 4. Rename in ComputeCore
+    // 2. Rename in ComputeCore, which updates the mirror and in-memory formula text.
     stores.compute.rename_sheet(mirror, sheet_id, name);
 
-    // 5. Update formula templates
+    // 3. Update persisted formula templates/text.
     if let Some(ref old) = old_name {
         crate::storage::cells::formula_updater::update_formula_templates_on_sheet_rename(
             stores.storage.doc(),

@@ -621,6 +621,10 @@ impl YrsComputeEngine {
                 self.mirror
                     .sync_cell_position_mapping(sheet_id, *cell_id, *new_pos);
             }
+
+            if !occupied_positions.is_empty() {
+                self.stores.compute.regenerate_formula_strings(&self.mirror);
+            }
         }
 
         // Detect structural meta changes (rows/cols modified by undo/redo/sync).

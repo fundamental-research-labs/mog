@@ -474,9 +474,13 @@ impl ComputeCore {
         self.sheet_order.insert(sheet_id, next_pos);
         self.rebuild_ordered_sheets_cache();
 
-        // Parse formulas for the new sheet using bulk parallel parsing.
-        // These are new cells with no prior edges, so set_precedents_fresh is safe.
-        self.bulk_parse_and_register(mirror, formula_cells);
+        // Append formulas for the new sheet without rebuilding the workbook graph.
+        // `bulk_parse_and_register` is an init-only helper: it replaces the graph
+        // with edges for just the provided cells, which drops existing dependents
+        // during sheet-copy/add workflows.
+        for (cell_id, sheet_id, formula) in formula_cells {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+        }
 
         Ok(())
     }
@@ -489,6 +493,8 @@ impl ComputeCore {
         mirror: &mut CellMirror,
         sheet_id: &SheetId,
     ) -> Result<RecalcResult, ComputeError> {
+        let deleted_sheet_name = mirror.get_sheet(sheet_id).map(|sheet| sheet.name.clone());
+
         // Collect cell IDs from this sheet before removing
         let cell_ids: Vec<CellId> = if let Some(sheet) = mirror.get_sheet(sheet_id) {
             sheet.cell_ids().copied().collect()
@@ -509,6 +515,10 @@ impl ComputeCore {
             }
         }
         let external_dependents: Vec<CellId> = ext_dep_set.into_iter().collect();
+
+        if let Some(name) = deleted_sheet_name.as_deref() {
+            self.rewrite_formula_text_on_sheet_delete(name);
+        }
 
         // Remove from graph and caches
         for cell_id in &cell_ids {
@@ -542,11 +552,38 @@ impl ComputeCore {
 
     /// Rename a sheet. May need to reparse formulas that reference the old name.
     pub fn rename_sheet(&mut self, mirror: &mut CellMirror, sheet_id: &SheetId, name: &str) {
+        let old_name = mirror.get_sheet(sheet_id).map(|sheet| sheet.name.clone());
         mirror.rename_sheet(sheet_id, name);
-        // Formulas use resolved SheetIds internally, so no reparsing needed.
-        // But formula_strings (A1 display cache) contain sheet names, so we
-        // must regenerate them to reflect the new name.
-        self.regenerate_formula_strings(mirror);
+        if let Some(old) = old_name.as_deref() {
+            self.rewrite_formula_text_on_sheet_rename(old, name);
+        }
+        // Identity formulas use SheetIds internally; refreshing the render cache
+        // updates sheet names without clobbering preserved authored formula text.
+        self.regenerate_formula_string_cache(mirror);
+    }
+
+    pub(crate) fn rewrite_formula_text_on_sheet_rename(&mut self, old_name: &str, new_name: &str) {
+        if old_name.is_empty() || new_name.is_empty() || old_name == new_name {
+            return;
+        }
+        for formula in self.cell_formula_text.values_mut() {
+            *formula = crate::storage::cells::formula_updater::replace_sheet_name_in_a1_formula(
+                formula, old_name, new_name,
+            );
+        }
+    }
+
+    fn rewrite_formula_text_on_sheet_delete(&mut self, deleted_sheet_name: &str) {
+        if deleted_sheet_name.is_empty() {
+            return;
+        }
+        for formula in self.cell_formula_text.values_mut() {
+            *formula =
+                crate::storage::cells::formula_updater::replace_sheet_name_with_ref_error_in_a1_formula(
+                    formula,
+                    deleted_sheet_name,
+                );
+        }
     }
 
     // -----------------------------------------------------------------------

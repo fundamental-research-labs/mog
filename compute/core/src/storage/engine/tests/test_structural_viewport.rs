@@ -233,4 +233,10 @@ fn relocate_precedent_regenerates_dependent_formula_text() {
         .expect("C1 moved value");
     assert_eq!(c1.value, CellValue::Number(FiniteF64::must(10.0)));
     assert!(c1.formula.is_none());
+
+    engine.undo().expect("undo relocate");
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=A1*2"));
+
+    engine.redo().expect("redo relocate");
+    assert_eq!(engine.get_formula(&cell_id_b1()).as_deref(), Some("=C1*2"));
 }

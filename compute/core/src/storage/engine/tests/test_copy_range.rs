@@ -577,6 +577,17 @@ fn formula_at(
     Some(engine.to_a1_display(display_sheet, formula))
 }
 
+fn stored_formula_text_at(
+    engine: &YrsComputeEngine,
+    sheet: &SheetId,
+    row: u32,
+    col: u32,
+) -> Option<String> {
+    let sm = engine.mirror().get_sheet(sheet)?;
+    let cell_id = sm.cell_id_at(SheetPos::new(row, col))?;
+    engine.get_formula(&cell_id)
+}
+
 #[test]
 fn test_copy_range_cross_sheet_rebinds_naked_refs() {
     let snap = cross_sheet_copy_snapshot();
@@ -661,5 +672,98 @@ fn test_copy_range_cross_sheet_rebinds_naked_refs() {
         d1_value,
         CellValue::Number(FiniteF64::must(77.0)),
         "Sheet2!D1 should still resolve Sheet3!A1 = 77"
+    );
+}
+
+#[test]
+fn test_copy_range_cross_sheet_preserves_authored_source_sheet_refs() {
+    let snap = cross_sheet_copy_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+    let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 4, "=Sheet1!A1+Sheet1!B1")
+        .unwrap();
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sheet1,
+            src_start_row: 0,
+            src_start_col: 4,
+            src_end_row: 0,
+            src_end_col: 4,
+            target_sheet_id: sheet2,
+            target_row: 0,
+            target_col: 4,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 4).as_deref(),
+        Some("=Sheet1!A1+Sheet1!B1"),
+        "copy must preserve explicit authored source-sheet qualifiers"
+    );
+
+    let value = engine
+        .mirror()
+        .get_cell_value_at(&sheet2, SheetPos::new(0, 4))
+        .cloned()
+        .unwrap_or(CellValue::Null);
+    assert_eq!(
+        value,
+        CellValue::Number(FiniteF64::must(30.0)),
+        "target formula should still evaluate against Sheet1!A1:B1"
+    );
+}
+
+#[test]
+fn test_copy_range_cross_sheet_preserves_explicit_ref_to_target_sheet() {
+    let snap = cross_sheet_copy_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+    let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
+
+    engine.set_cell_value_parsed(&sheet2, 0, 0, "14").unwrap();
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 4, "=Sheet2!A1")
+        .unwrap();
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sheet1,
+            src_start_row: 0,
+            src_start_col: 4,
+            src_end_row: 0,
+            src_end_col: 4,
+            target_sheet_id: sheet2,
+            target_row: 0,
+            target_col: 1,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 1).as_deref(),
+        Some("=Sheet2!A1"),
+        "copy must keep the explicit target-sheet qualifier instead of collapsing to a naked ref"
+    );
+
+    let value = engine
+        .mirror()
+        .get_cell_value_at(&sheet2, SheetPos::new(0, 1))
+        .cloned()
+        .unwrap_or(CellValue::Null);
+    assert_eq!(
+        value,
+        CellValue::Number(FiniteF64::must(14.0)),
+        "target formula should evaluate against Sheet2!A1"
     );
 }

@@ -374,6 +374,20 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         let format_result =
                             compute_formats::format_value(&value, format_code, locale);
                         let formatted = format_result.text;
+                        let formula = mirror.cse_anchor_covering(sheet_id, row, col).and_then(
+                            |(anchor_id, _)| {
+                                engine
+                                    .stores
+                                    .compute
+                                    .get_formula(&anchor_id)
+                                    .map(str::to_string)
+                                    .or_else(|| {
+                                        mirror
+                                            .get_formula(&anchor_id)
+                                            .map(|f| format!("={}", f.template))
+                                    })
+                            },
+                        );
 
                         visitor(CellVisit {
                             row,
@@ -381,7 +395,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                             cell_id: None,
                             value,
                             formatted,
-                            formula: None,
+                            formula,
                             is_projection: true,
                             effective_format: effective,
                         });

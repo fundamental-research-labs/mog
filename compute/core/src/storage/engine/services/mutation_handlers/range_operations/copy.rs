@@ -74,6 +74,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
         tgt_col: u32,
         value: CellValue,
         formula: Option<formula_types::IdentityFormula>,
+        source_formula_text: Option<String>,
         ref_positions: Vec<compute_fill::formula_adjust::RefPosition>,
         format: Option<domain_types::CellFormat>,
     }
@@ -104,10 +105,12 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                     .unwrap_or(CellValue::Null);
 
                 // Read source formula (identity formula for ref adjustment)
-                let (formula, ref_positions) = if let Some(sm) = sheet_mirror {
+                let (formula, source_formula_text, ref_positions) = if let Some(sm) = sheet_mirror {
                     if let Some(cell_id) = sm.cell_id_at(pos) {
                         if let Some(entry) = sm.get_cell(&cell_id) {
                             if let Some(ref id_formula) = entry.formula {
+                                let formula_text =
+                                    stores.compute.get_formula(&cell_id).map(str::to_string);
                                 let positions: Vec<compute_fill::formula_adjust::RefPosition> =
                                     id_formula
                                         .refs
@@ -122,18 +125,18 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                                             )
                                         })
                                         .collect();
-                                (Some((**id_formula).clone()), positions)
+                                (Some((**id_formula).clone()), formula_text, positions)
                             } else {
-                                (None, Vec::new())
+                                (None, None, Vec::new())
                             }
                         } else {
-                            (None, Vec::new())
+                            (None, None, Vec::new())
                         }
                     } else {
-                        (None, Vec::new())
+                        (None, None, Vec::new())
                     }
                 } else {
-                    (None, Vec::new())
+                    (None, None, Vec::new())
                 };
 
                 // Skip blank cells when skip_blanks is enabled
@@ -176,6 +179,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                     tgt_col,
                     value,
                     formula,
+                    source_formula_text,
                     ref_positions,
                     format,
                 });
@@ -214,6 +218,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
                 source_sheet_id,
                 target_sheet_id,
                 id_formula,
+                src.source_formula_text.as_deref(),
                 src.src_row,
                 src.src_col,
                 src.tgt_row,

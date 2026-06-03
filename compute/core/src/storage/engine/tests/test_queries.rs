@@ -150,6 +150,40 @@ fn test_query_range_returns_formula_text() {
     assert_eq!(a2.value, CellValue::Number(FiniteF64::must(30.0)));
 }
 
+#[test]
+fn test_query_range_returns_cse_formula_text_for_members() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine.set_cell_value_parsed(&sid, 0, 0, "10").unwrap();
+    engine.set_cell_value_parsed(&sid, 0, 1, "1").unwrap();
+    engine.set_cell_value_parsed(&sid, 1, 0, "20").unwrap();
+    engine.set_cell_value_parsed(&sid, 1, 1, "2").unwrap();
+    engine.set_cell_value_parsed(&sid, 2, 0, "30").unwrap();
+    engine.set_cell_value_parsed(&sid, 2, 1, "3").unwrap();
+
+    engine
+        .set_array_formula(&sid, 0, 3, 2, 3, "=A1:A3*B1:B3".to_string())
+        .expect("set CSE array formula");
+
+    let range = engine.query_range(&sid, 0, 3, 2, 3);
+
+    for row in 0..=2u32 {
+        let cell = range
+            .cells
+            .iter()
+            .find(|cell| cell.row == row && cell.col == 3)
+            .unwrap_or_else(|| panic!("missing D{} from query_range", row + 1));
+        assert_eq!(
+            cell.formula.as_deref(),
+            Some("=A1:A3*B1:B3"),
+            "D{} should expose the CSE anchor formula text",
+            row + 1
+        );
+    }
+}
+
 /// Verify that non-formula cells have formula = None.
 #[test]
 fn test_query_range_no_formula_for_literals() {

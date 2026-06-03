@@ -890,12 +890,7 @@ impl ComputeCore {
         }
     }
 
-    /// Regenerate all `formula_strings` entries from CellEntry.formula IdentityFormulas.
-    ///
-    /// Walks all sheets, finds cells with IdentityFormulas, and converts them back
-    /// to A1 notation using the mirror's current position mappings. This is needed
-    /// after structural changes because positions have shifted.
-    pub(crate) fn regenerate_formula_strings(&mut self, mirror: &CellMirror) {
+    fn regenerate_formula_strings_inner(&mut self, mirror: &CellMirror, update_cell_text: bool) {
         self.formula_strings.clear();
         let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
@@ -905,11 +900,27 @@ impl ComputeCore {
                     if let Some(formula) = &entry.formula {
                         let a1 = compute_parser::to_a1_string(formula, &lookup);
                         self.formula_strings.insert(*cell_id, a1.clone());
-                        self.cell_formula_text.insert(*cell_id, a1);
+                        if update_cell_text {
+                            self.cell_formula_text.insert(*cell_id, a1);
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// Regenerate formula display/readback text from CellEntry.formula identities.
+    ///
+    /// Use this when coordinates have actually changed (structural edits,
+    /// relocate/cut undo/redo). Rename/delete paths should preserve authored text
+    /// with targeted rewrites and refresh only the render cache.
+    pub(crate) fn regenerate_formula_strings(&mut self, mirror: &CellMirror) {
+        self.regenerate_formula_strings_inner(mirror, true);
+    }
+
+    /// Regenerate only the identity-rendered display cache.
+    pub(crate) fn regenerate_formula_string_cache(&mut self, mirror: &CellMirror) {
+        self.regenerate_formula_strings_inner(mirror, false);
     }
 
     /// Rebuild the dependency graph from the cached ASTs.

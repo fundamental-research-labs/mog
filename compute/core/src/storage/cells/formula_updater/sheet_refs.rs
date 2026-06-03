@@ -89,7 +89,7 @@ pub(super) fn replace_sheet_name_in_template(
 }
 
 /// Replace sheet name in an A1 formula string.
-pub(super) fn replace_sheet_name_in_a1_formula(
+pub(crate) fn replace_sheet_name_in_a1_formula(
     formula: &str,
     old_name: &str,
     new_name: &str,
@@ -112,6 +112,34 @@ pub(super) fn replace_sheet_name_in_a1_formula(
         let unquoted_pattern = format!("{}!", escape_regex(old_name));
         if let Ok(re) = Regex::new(&unquoted_pattern) {
             result = re.replace_all(&result, replacement.as_str()).to_string();
+        }
+    }
+
+    result
+}
+
+/// Replace a deleted sheet prefix with `#REF!` while preserving the authored
+/// A1 suffix (`$A$1`, `A1:B2`, full rows/cols, etc.).
+pub(crate) fn replace_sheet_name_with_ref_error_in_a1_formula(
+    formula: &str,
+    old_name: &str,
+) -> String {
+    if old_name.is_empty() || formula.is_empty() {
+        return formula.to_string();
+    }
+
+    let mut result = formula.to_string();
+
+    let quoted_old = old_name.replace('\'', "''");
+    let quoted_pattern = format!("'{}'!", escape_regex(&quoted_old));
+    if let Ok(re) = Regex::new(&quoted_pattern) {
+        result = re.replace_all(&result, "#REF!").to_string();
+    }
+
+    if !sheet_name_needs_quoting(old_name) {
+        let unquoted_pattern = format!("{}!", escape_regex(old_name));
+        if let Ok(re) = Regex::new(&unquoted_pattern) {
+            result = re.replace_all(&result, "#REF!").to_string();
         }
     }
 

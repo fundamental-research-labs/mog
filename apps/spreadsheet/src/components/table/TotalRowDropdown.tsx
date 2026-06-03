@@ -9,7 +9,7 @@
  * Enhanced with formula preview on hover
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TotalFunction } from '@mog-sdk/contracts/tables';
 import { dispatch } from '../../actions';
@@ -83,6 +83,10 @@ export function TotalRowDropdown(): React.ReactElement | null {
 
   // Track hovered function for formula preview
   const [hoveredFunction, setHoveredFunction] = useState<TotalFunction | null>(null);
+  const virtualRef = useRef(createVirtualRef(0, 0));
+  if (position) {
+    virtualRef.current = createVirtualRef(position.x, position.y);
+  }
 
   // Get table and column info for formula preview via Workbook/Worksheet API (async)
   const [tableInfo, setTableInfo] = useState<{ columnName: string } | null>(null);
@@ -143,13 +147,15 @@ export function TotalRowDropdown(): React.ReactElement | null {
 
   return (
     <Popover open={isOpen} onOpenChange={(open) => !open && closeTotalRowDropdown()}>
-      <PopoverAnchor virtualRef={{ current: createVirtualRef(position.x, position.y) }} />
+      <PopoverAnchor virtualRef={virtualRef} />
       <PopoverContent
         side="bottom"
         align="start"
         shadow="lg"
-        closeOnClickOutside={true}
+        closeOnClickOutside={false}
         closeOnEscape={true}
+        onInteractOutside={(event) => event.preventDefault()}
+        onFocusOutside={(event) => event.preventDefault()}
         width={180}
         role="listbox"
         aria-label="Select total function for column"

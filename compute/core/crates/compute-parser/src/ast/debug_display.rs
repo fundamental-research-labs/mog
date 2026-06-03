@@ -85,39 +85,106 @@ fn format_range(
 
 /// Format a structured reference directly to a formatter.
 fn format_structured_ref(f: &mut fmt::Formatter<'_>, sr: &StructuredRef) -> fmt::Result {
-    write!(f, "{}[", sr.table_name)?;
     let specs = &sr.specifiers;
+    if specs.is_empty() {
+        write!(f, "{}", sr.table_name)?;
+        return Ok(());
+    }
+
     if specs.len() == 1 {
-        format_specifier(f, &specs[0])?;
-    } else {
-        for (i, spec) in specs.iter().enumerate() {
-            if i > 0 {
-                write!(f, ",")?;
-            }
-            format_specifier(f, spec)?;
+        write!(f, "{}[", sr.table_name)?;
+        format_single_specifier(f, &specs[0])?;
+        write!(f, "]")?;
+        return Ok(());
+    }
+
+    if specs.len() == 2
+        && let (StructuredRefSpecifier::ThisRow, StructuredRefSpecifier::Column { name }) =
+            (&specs[0], &specs[1])
+    {
+        write!(f, "{}[@{}]", sr.table_name, escape_column_name(name))?;
+        return Ok(());
+    }
+
+    write!(f, "{}[", sr.table_name)?;
+    for (i, spec) in specs.iter().enumerate() {
+        if i > 0 {
+            write!(f, ",")?;
         }
+        format_specifier(f, spec)?;
     }
     write!(f, "]")
+}
+
+fn format_single_specifier(
+    f: &mut fmt::Formatter<'_>,
+    spec: &StructuredRefSpecifier,
+) -> fmt::Result {
+    match spec {
+        StructuredRefSpecifier::Column { name } => {
+            write!(f, "{}", escape_column_name(name))
+        }
+        StructuredRefSpecifier::ColumnRange { start, end } => {
+            write!(
+                f,
+                "[{}]:[{}]",
+                escape_column_name(start),
+                escape_column_name(end)
+            )
+        }
+        StructuredRefSpecifier::ThisRow => write!(f, "@"),
+        StructuredRefSpecifier::Special { item } => format_special_item(f, *item),
+    }
 }
 
 fn format_specifier(f: &mut fmt::Formatter<'_>, spec: &StructuredRefSpecifier) -> fmt::Result {
     match spec {
         StructuredRefSpecifier::Column { name } => {
-            write!(f, "[{name}]")
+            write!(f, "[{}]", escape_column_name(name))
         }
         StructuredRefSpecifier::ColumnRange { start, end } => {
-            write!(f, "[{start}]:[{end}]")
+            write!(
+                f,
+                "[{}]:[{}]",
+                escape_column_name(start),
+                escape_column_name(end)
+            )
         }
         StructuredRefSpecifier::ThisRow => {
             write!(f, "[#This Row]")
         }
-        StructuredRefSpecifier::Special { item } => match item {
-            SpecialItem::All => write!(f, "[#All]"),
-            SpecialItem::Data => write!(f, "[#Data]"),
-            SpecialItem::Headers => write!(f, "[#Headers]"),
-            SpecialItem::Totals => write!(f, "[#Totals]"),
-            SpecialItem::ThisRow => write!(f, "[#This Row]"),
-        },
+        StructuredRefSpecifier::Special { item } => {
+            write!(f, "[")?;
+            format_special_item(f, *item)?;
+            write!(f, "]")
+        }
+    }
+}
+
+fn format_special_item(f: &mut fmt::Formatter<'_>, item: SpecialItem) -> fmt::Result {
+    match item {
+        SpecialItem::All => write!(f, "#All"),
+        SpecialItem::Data => write!(f, "#Data"),
+        SpecialItem::Headers => write!(f, "#Headers"),
+        SpecialItem::Totals => write!(f, "#Totals"),
+        SpecialItem::ThisRow => write!(f, "#This Row"),
+    }
+}
+
+fn escape_column_name(name: &str) -> String {
+    if name.contains('\'')
+        || name.contains('[')
+        || name.contains(']')
+        || name.contains('#')
+        || name.contains('@')
+    {
+        let escaped = name
+            .replace('\'', "''")
+            .replace('[', "[[")
+            .replace(']', "]]");
+        format!("'{escaped}'")
+    } else {
+        name.to_string()
     }
 }
 

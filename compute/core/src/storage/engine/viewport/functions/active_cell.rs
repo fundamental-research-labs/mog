@@ -6,7 +6,7 @@ use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
-use crate::storage::sheet::{hyperlinks, merges};
+use crate::storage::sheet::merges;
 
 pub(in crate::storage::engine::viewport) fn get_active_cell(
     stores: &EngineStores,
@@ -55,27 +55,16 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
                 .unwrap_or(CellValue::Null)
         });
 
-    // Get formula text from ComputeCore (A1-notation string), falling back to
-    // the mirror's identity formula template.
-    let formula = stores
-        .compute
-        .get_formula(&effective_cell_id)
-        .map(|s| s.to_string())
-        .or_else(|| {
-            mirror
-                .get_formula(&effective_cell_id)
-                .map(|f| format!("={}", f.template))
-        })
-        .or_else(|| {
-            effective_pos.and_then(|p| {
-                crate::storage::engine::data_table_formula::formula_at(
-                    mirror,
-                    sheet_id,
-                    p.row(),
-                    p.col(),
-                )
-            })
-        });
+    let formula = effective_pos.and_then(|p| {
+        crate::storage::engine::cell_semantics::formula_text_for_cell(
+            stores,
+            mirror,
+            sheet_id,
+            p.row(),
+            p.col(),
+            Some(effective_cell_id),
+        )
+    });
 
     // Resolve format and metadata from properties.
     let cell_id_hex = id_to_hex(cell_id.as_u128());
@@ -295,14 +284,13 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
 
     // Hyperlink URL.
     let hyperlink_url = pos.and_then(|p| {
-        let grid = stores.grid_indexes.get(sheet_id)?;
-        hyperlinks::get_hyperlink(
-            stores.storage.doc(),
-            stores.storage.sheets(),
+        crate::storage::engine::cell_semantics::hyperlink_url_for_cell(
+            stores,
+            mirror,
             sheet_id,
-            grid,
             p.row(),
             p.col(),
+            Some(effective_cell_id),
         )
     });
 

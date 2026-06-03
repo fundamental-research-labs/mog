@@ -6,8 +6,8 @@
  *
  * Write operations delegate to ComputeBridge (Rust compute core) via dedicated
  * setHyperlink / removeHyperlink bridge commands.
- * Read operations query ComputeBridge via a dedicated getHyperlink bridge command
- * that reads directly from the Yrs CRDT (bypassing the CellMirror).
+ * Read operations query ComputeBridge via a dedicated getHyperlink bridge command,
+ * then fall back to the single-cell range readback for derived formula hyperlinks.
  * MutationResultHandler handles event emission -- no manual event emission here.
  *
  */
@@ -61,7 +61,10 @@ export async function getHyperlink(
   col: number,
 ): Promise<string | undefined> {
   const url = await ctx.computeBridge.getHyperlink(sheetId, row, col);
-  return url ?? undefined;
+  if (url) return url;
+
+  const range = await ctx.computeBridge.queryRange(sheetId, row, col, row, col);
+  return range.cells?.[0]?.hyperlinkUrl ?? undefined;
 }
 
 /**

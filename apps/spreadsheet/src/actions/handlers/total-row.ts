@@ -29,8 +29,12 @@ import { guardBridgeMutation } from './bridge-error-guard';
 async function findTable(wb: Workbook, tableId: string) {
   for (const name of await wb.getSheetNames()) {
     const ws = await wb.getSheet(name);
-    const table = await ws.tables.get(tableId);
-    if (table) return { ws, table };
+    const direct = await ws.tables.get(tableId);
+    if (direct) return { ws, table: direct };
+
+    const tables = await ws.tables.list();
+    const match = tables.find((table) => table.id === tableId || table.name === tableId);
+    if (match) return { ws, table: match };
   }
   return null;
 }

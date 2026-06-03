@@ -15,6 +15,80 @@ use compute_formats;
 use domain_types::CellFormat;
 use value_types::CellValue;
 
+use crate::storage::sheet::hyperlinks;
+
+fn normalize_formula_text(formula: &str) -> String {
+    if formula.starts_with('=') {
+        formula.to_string()
+    } else {
+        format!("={formula}")
+    }
+}
+
+pub(in crate::storage::engine) fn formula_text_for_cell(
+    stores: &super::stores::EngineStores,
+    mirror: &crate::mirror::CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    cell_id: Option<cell_types::CellId>,
+) -> Option<String> {
+    if let Some(cell_id) = cell_id {
+        if let Some(formula) = stores.compute.get_formula(&cell_id) {
+            return Some(normalize_formula_text(formula));
+        }
+        if let Some(formula) = mirror.get_formula(&cell_id) {
+            return Some(stores.compute.to_a1_display(mirror, sheet_id, formula));
+        }
+    }
+
+    if let Some(formula) = super::data_table_formula::formula_at(mirror, sheet_id, row, col) {
+        return Some(formula);
+    }
+
+    let grid_index = stores.grid_indexes.get(sheet_id)?;
+    let raw = cell_values::get_raw_value(
+        mirror,
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        row,
+        col,
+        grid_index,
+    );
+    if raw.starts_with('=') {
+        Some(raw)
+    } else {
+        None
+    }
+}
+
+pub(in crate::storage::engine) fn hyperlink_url_for_cell(
+    stores: &super::stores::EngineStores,
+    mirror: &crate::mirror::CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    cell_id: Option<cell_types::CellId>,
+) -> Option<String> {
+    if let Some(grid) = stores.grid_indexes.get(sheet_id)
+        && let Some(url) = hyperlinks::get_hyperlink(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            grid,
+            row,
+            col,
+        )
+    {
+        return Some(url);
+    }
+
+    formula_text_for_cell(stores, mirror, sheet_id, row, col, cell_id)
+        .as_deref()
+        .and_then(hyperlinks::formula_hyperlink_url)
+}
+
 // ---------------------------------------------------------------------------
 // CellInfo — combined cell metadata returned by get_cell_info
 // ---------------------------------------------------------------------------
@@ -109,46 +183,15 @@ impl YrsComputeEngine {
     pub fn get_cell_info(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<CellInfo> {
         let value = self.get_cell_value(sheet_id, row, col);
 
-        // Get formula: prefer ComputeCore's formula_strings (authoritative after
-        // structural changes), falling back to Yrs KEY_FORMULA for cold reads.
-        let formula = {
-            let from_compute = self
-                .mirror
-                .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                .and_then(|cid| self.stores.compute.get_formula(&cid))
-                .map(|f| {
-                    if f.starts_with('=') {
-                        f.to_string()
-                    } else {
-                        format!("={}", f)
-                    }
-                });
-
-            if from_compute.is_some() {
-                from_compute
-            } else if let Some(formula) =
-                super::data_table_formula::formula_at(&self.mirror, sheet_id, row, col)
-            {
-                Some(formula)
-            } else if let Some(grid_index) = self.stores.grid_indexes.get(sheet_id) {
-                let raw = cell_values::get_raw_value(
-                    &self.mirror,
-                    self.stores.storage.doc(),
-                    self.stores.storage.sheets(),
-                    sheet_id,
-                    row,
-                    col,
-                    grid_index,
-                );
-                if raw.starts_with('=') {
-                    Some(raw)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
+        let formula = formula_text_for_cell(
+            &self.stores,
+            &self.mirror,
+            sheet_id,
+            row,
+            col,
+            self.mirror
+                .resolve_cell_id(sheet_id, SheetPos::new(row, col)),
+        );
 
         // Get effective format
         let cell_id_hex = self
@@ -209,14 +252,7 @@ impl YrsComputeEngine {
         let cell_id = self.mirror.resolve_cell_id(sheet_id, pos);
 
         let formula = if include_formula {
-            cell_id
-                .and_then(|cid| {
-                    self.mirror
-                        .get_formula(&cid)
-                        .map(|f| self.stores.compute.to_a1_display(&self.mirror, sheet_id, f))
-                        .or_else(|| self.stores.compute.get_formula(&cid).map(|s| s.to_string()))
-                })
-                .or_else(|| super::data_table_formula::formula_at(&self.mirror, sheet_id, row, col))
+            formula_text_for_cell(&self.stores, &self.mirror, sheet_id, row, col, cell_id)
         } else {
             None
         };

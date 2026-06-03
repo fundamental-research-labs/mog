@@ -10,13 +10,20 @@ import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 
+jest.mock('../bridge-error-guard', () => ({
+  guardBridgeMutation: async (fn: () => Promise<unknown>) => {
+    await fn();
+    return true;
+  },
+}));
+
 import { SET_TOTAL_ROW_FUNCTION } from '../total-row';
 
 describe('SET_TOTAL_ROW_FUNCTION', () => {
   function makeDeps() {
     const setTotalsFunction = jest.fn().mockResolvedValue(undefined);
     const table = {
-      id: 'Table1',
+      id: 'table-guid-1',
       name: 'Table1',
       hasTotalsRow: true,
       columns: [
@@ -27,6 +34,7 @@ describe('SET_TOTAL_ROW_FUNCTION', () => {
     const ws = {
       tables: {
         get: jest.fn().mockResolvedValue(table),
+        list: jest.fn().mockResolvedValue([table]),
         setTotalsFunction,
       },
     };
@@ -51,6 +59,22 @@ describe('SET_TOTAL_ROW_FUNCTION', () => {
     });
 
     expect(result).toEqual({ handled: true });
+    expect(setTotalsFunction).toHaveBeenCalledWith('Table1', 'Sales', 'sum');
+  });
+
+  test('resolves internal table ids and mutates through the canonical table name', async () => {
+    const { deps, setTotalsFunction } = makeDeps();
+    const ws = await (deps.workbook as any).getSheet('Sheet1');
+    ws.tables.get.mockResolvedValueOnce(null);
+
+    const result = await SET_TOTAL_ROW_FUNCTION(deps, {
+      tableId: 'table-guid-1',
+      columnIndex: 1,
+      fn: 'sum',
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(ws.tables.list).toHaveBeenCalled();
     expect(setTotalsFunction).toHaveBeenCalledWith('Table1', 'Sales', 'sum');
   });
 

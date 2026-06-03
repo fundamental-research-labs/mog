@@ -428,6 +428,9 @@ export interface DevToolsConsoleAPI {
   /** Read a single cell value from viewport buffer */
   getCellValue(row: number, col: number, viewportId?: string): ProgrammaticCellValue | null;
 
+  /** Read hyperlink metadata for a cell through the active worksheet API */
+  getCellHyperlink(row: number, col: number): Promise<string | null>;
+
   /**
    * Read a batch of cells via the compute bridge (production read path —
    * `bridge.queryRange`). Use this when assertions need cells that may

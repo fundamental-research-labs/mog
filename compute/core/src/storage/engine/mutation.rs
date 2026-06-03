@@ -425,6 +425,7 @@ impl EngineMutation {
             | EngineMutation::CreateDataTable { .. }
             | EngineMutation::ApplyScenario { .. }
             | EngineMutation::RestoreScenario { .. }
+            | EngineMutation::RenameSheet { .. }
             | EngineMutation::SortRange { .. }
             | EngineMutation::ClearRange { .. }
             | EngineMutation::ClearRangeAndReturnIds { .. }

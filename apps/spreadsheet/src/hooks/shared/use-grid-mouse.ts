@@ -275,7 +275,7 @@ interface TableHitTestOptions {
 }
 
 interface TableHitResult {
-  table: { id: string; columns: { name: string; totalFunction?: TotalFunction }[] } | null;
+  table: { id: string; columns: { name: string; totalFunction?: TotalFunction | null }[] } | null;
   region: TableRegion;
   tableColumnIndex: number | null;
 }
@@ -321,7 +321,7 @@ async function getTableHitRegion(
     id: tableInfo.name, // TableInfo.name serves as the table identifier
     columns: (tableInfo.columns ?? []).map((c: any) => ({
       name: c.name,
-      totalFunction: c.totalFunction,
+      totalFunction: c.totalFunction ?? c.totalsFunction ?? null,
     })),
   };
 
@@ -914,13 +914,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               break;
             }
 
-            // Excel opens hyperlinks on a plain click.
-            if (!e.shiftKey && !e.ctrlKey && !e.metaKey && onHyperlinkClick) {
-              if (onHyperlinkClick(cell)) {
-                return;
-              }
-            }
-
             // Calculate cell click position for sub-cell hit testing
             const cellRect = geometry.getCellRect(cell);
             if (!cellRect) return; // Cell not visible, shouldn't happen since we got a hit
@@ -1137,6 +1130,15 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             // pass raw modifiers; the machine composes
             // them with ctx.modes.{extend, additive} in its MOUSE_DOWN guards.
             selection.onMouseDown(cell, e.shiftKey, e.ctrlKey || e.metaKey);
+
+            // Plain-click hyperlinks still use the product hyperlink handler,
+            // but selection must update first so formula-bar/copy/readback
+            // surfaces observe the clicked hyperlink cell.
+            if (!e.shiftKey && !e.ctrlKey && !e.metaKey && onHyperlinkClick) {
+              if (onHyperlinkClick(cell)) {
+                return;
+              }
+            }
             break;
           }
 

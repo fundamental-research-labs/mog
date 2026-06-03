@@ -134,6 +134,14 @@ function setupRuntime(opts: {
   rowHeights: Record<number, number>;
   colWidths: Record<number, number>;
   bridgeColPositions?: Record<number, number>;
+  bridgeQueryRange?: (
+    sheetId: string,
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+  ) => Promise<{ cells?: Array<Record<string, unknown>> }>;
+  activeSheetHyperlink?: (row: number, col: number) => Promise<string | null>;
   coordinateSnap?: boolean;
   positionDimensions?: {
     rowHeights: number[];
@@ -153,11 +161,16 @@ function setupRuntime(opts: {
       getDocument: (id: string) =>
         id === 'doc-1'
           ? {
-              context: opts.bridgeColPositions
+              context: opts.bridgeColPositions || opts.bridgeQueryRange
                 ? {
                     computeBridge: {
-                      getColPosition: async (_sheetId: string, col: number) =>
-                        opts.bridgeColPositions?.[col] ?? 0,
+                      ...(opts.bridgeColPositions
+                        ? {
+                            getColPosition: async (_sheetId: string, col: number) =>
+                              opts.bridgeColPositions?.[col] ?? 0,
+                          }
+                        : {}),
+                      ...(opts.bridgeQueryRange ? { queryRange: opts.bridgeQueryRange } : {}),
                     },
                   }
                 : {},
@@ -220,6 +233,9 @@ function setupRuntime(opts: {
     workbook: {
       activeSheet: {
         getSheetId: () => 'sheet-1',
+        ...(opts.activeSheetHyperlink
+          ? { hyperlinks: { get: opts.activeSheetHyperlink } }
+          : {}),
         layout: {
           // No documentPixelToCell here — force fallback to coordinator's
           // coordinate system.
@@ -304,6 +320,55 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     (globalThis as any).window.__COORDINATOR__ = undefined;
     const drawings = await runtime.api.getRenderedDrawings();
     expect(drawings).toEqual([]);
+  });
+
+  test('getCellHyperlink reads formula-derived metadata from queryRange', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: {},
+      colWidths: {},
+      bridgeQueryRange: async (_sheetId, startRow, startCol) => ({
+        cells:
+          startRow === 0 && startCol === 1
+            ? [{ row: 0, col: 1, hyperlinkUrl: 'https://example.com' }]
+            : [],
+      }),
+    });
+
+    await expect(runtime.api.getCellHyperlink(0, 1)).resolves.toBe('https://example.com');
+    await expect(runtime.api.getCellHyperlink(1, 1)).resolves.toBeNull();
+  });
+
+  test('getCellHyperlink prefers the active worksheet hyperlink API', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: {},
+      colWidths: {},
+      activeSheetHyperlink: async (row, col) =>
+        row === 0 && col === 1 ? 'https://example.com' : null,
+      bridgeQueryRange: async () => ({
+        cells: [{ row: 0, col: 1, hyperlinkUrl: 'https://wrong.example' }],
+      }),
+    });
+
+    await expect(runtime.api.getCellHyperlink(0, 1)).resolves.toBe('https://example.com');
+  });
+
+  test('getCellHyperlink derives literal HYPERLINK formulas when metadata is absent', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: {},
+      colWidths: {},
+      bridgeQueryRange: async (_sheetId, startRow, startCol) => ({
+        cells:
+          startRow === 0 && startCol === 1
+            ? [{ row: 0, col: 1, formula: '=HYPERLINK("https://example.com","Example")' }]
+            : [],
+      }),
+    });
+
+    await expect(runtime.api.getCellHyperlink(0, 1)).resolves.toBe('https://example.com');
+    await expect(runtime.api.getCellHyperlink(1, 1)).resolves.toBeNull();
   });
 
   test('getRenderedDrawings maps scene type to user-visible drawing kind', async () => {

@@ -9,7 +9,7 @@ use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
 use crate::storage::properties;
-use crate::storage::sheet::{comments, hyperlinks, merges, sparklines};
+use crate::storage::sheet::{comments, merges, sparklines};
 
 pub(super) struct RenderCellMaterial {
     pub(super) format: domain_types::CellFormat,
@@ -106,13 +106,13 @@ pub(super) fn build_render_cell_materials(
                     sparkline_flag |= render_flags::HAS_SPARKLINE;
                 }
                 let mut hyperlink_flag = 0u16;
-                if hyperlinks::get_hyperlink(
-                    stores.storage.doc(),
-                    stores.storage.sheets(),
+                if crate::storage::engine::cell_semantics::hyperlink_url_for_cell(
+                    stores,
+                    mirror,
                     sheet_id,
-                    grid,
                     row,
                     col,
+                    grid.cell_id_at(row, col),
                 )
                 .is_some()
                 {

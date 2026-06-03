@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use compute_document::schema::{KEY_CELLS, KEY_FORMULA, KEY_FORMULA_TEMPLATE, KEY_SHEET_ORDER};
-use yrs::{Any, Array, ArrayRef, Doc, Map, MapRef, Out, Transact};
+use compute_document::undo::ORIGIN_USER_EDIT;
+use yrs::{Any, Array, ArrayRef, Doc, Map, MapRef, Origin, Out, Transact};
 
 use crate::storage::sheet::hyperlinks;
 
@@ -86,7 +87,7 @@ where
     }
 
     let count = updates.len() as u32;
-    let mut txn = doc.transact_mut();
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
 
     for update in &updates {
         if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &update.sheet_hex)

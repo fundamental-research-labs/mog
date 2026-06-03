@@ -28,6 +28,52 @@ function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
 const SHEET_ID = sheetId('sheet-1');
 
 // ---------------------------------------------------------------------------
+// getRange
+// ---------------------------------------------------------------------------
+
+describe('getRange', () => {
+  it('maps formula hyperlink metadata from queryRange cells', async () => {
+    const ctx = createMockCtx({
+      queryRange: jest.fn().mockResolvedValue({
+        cells: [
+          {
+            row: 0,
+            col: 0,
+            cellId: 'cell-a1',
+            value: 'Example',
+            formula: '=HYPERLINK("https://example.com","Example")',
+            formatted: 'Example',
+            format: { fontColor: '#0563C1', underline: true },
+            hyperlinkUrl: 'https://example.com',
+          },
+        ],
+        merges: [],
+      }),
+    });
+
+    const result = await RangeOps.getRange(ctx, SHEET_ID, {
+      sheetId: SHEET_ID,
+      startRow: 0,
+      startCol: 0,
+      endRow: 0,
+      endCol: 0,
+    });
+
+    expect(result).toEqual([
+      [
+        {
+          value: 'Example',
+          formula: '=HYPERLINK("https://example.com","Example")',
+          format: { fontColor: '#0563C1', underline: true },
+          formatted: 'Example',
+          hyperlink: 'https://example.com',
+        },
+      ],
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // clearRange
 // ---------------------------------------------------------------------------
 

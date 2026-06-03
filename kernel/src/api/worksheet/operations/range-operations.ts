@@ -73,6 +73,7 @@ export async function getRange(
           formula: cell.formula as FormulaA1 | undefined,
           format: cell.format ?? undefined,
           formatted: cell.formatted ?? undefined,
+          hyperlink: cell.hyperlinkUrl ?? undefined,
         });
       }
     }

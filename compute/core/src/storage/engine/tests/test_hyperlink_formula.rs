@@ -37,8 +37,24 @@ fn hyperlink_formula_writes_metadata_for_all_read_surfaces() {
         Some("https://example.com".to_string())
     );
     assert_eq!(
+        engine.get_active_cell(&sid, &cell_id).formula.as_deref(),
+        Some("=HYPERLINK(\"https://example.com\",\"Example\")")
+    );
+    assert_eq!(
+        engine
+            .get_raw_cell_data(&sid, 0, 0, true)
+            .and_then(|data| data.formula),
+        Some("=HYPERLINK(\"https://example.com\",\"Example\")".to_string())
+    );
+    assert_eq!(
         engine.query_range(&sid, 0, 0, 0, 0).cells[0].hyperlink_url,
         Some("https://example.com".to_string())
+    );
+    assert_eq!(
+        engine.query_range(&sid, 0, 0, 0, 0).cells[0]
+            .formula
+            .as_deref(),
+        Some("=HYPERLINK(\"https://example.com\",\"Example\")")
     );
     let viewport = engine.build_viewport_render_data(&sid, 0, 0, 1, 1);
     assert!(
@@ -68,6 +84,58 @@ fn hyperlink_formula_url_only_form_writes_metadata() {
     assert_eq!(
         engine.get_hyperlink(&sid, 0, 0),
         Some("mailto:help@example.com".to_string())
+    );
+}
+
+#[test]
+fn copied_hyperlink_formula_reads_back_target_metadata() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell(
+            &sid,
+            cell_id_a1(),
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse {
+                text: r#"=HYPERLINK("https://example.com","Example")"#.into(),
+            },
+        )
+        .expect("set hyperlink formula");
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sid,
+            src_start_row: 0,
+            src_start_col: 0,
+            src_end_row: 0,
+            src_end_col: 0,
+            target_sheet_id: sid,
+            target_row: 0,
+            target_col: 1,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .expect("copy hyperlink formula");
+
+    assert_eq!(
+        engine.get_hyperlink(&sid, 0, 1),
+        Some("https://example.com".to_string())
+    );
+    assert_eq!(
+        engine.query_range(&sid, 0, 1, 0, 1).cells[0]
+            .hyperlink_url
+            .as_deref(),
+        Some("https://example.com")
+    );
+    assert_eq!(
+        engine
+            .get_raw_cell_data(&sid, 0, 1, true)
+            .and_then(|data| data.formula),
+        Some("=HYPERLINK(\"https://example.com\",\"Example\")".to_string())
     );
 }
 

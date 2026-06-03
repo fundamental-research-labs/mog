@@ -165,16 +165,14 @@ pub(in crate::storage::engine) fn query_range(
             let format = serde_json::to_value(&visit.effective_format).ok();
 
             let hyperlink_url = if visit.cell_id.is_some() {
-                grid_index.and_then(|grid| {
-                    hyperlinks::get_hyperlink(
-                        engine.stores.storage.doc(),
-                        engine.stores.storage.sheets(),
-                        sheet_id,
-                        grid,
-                        visit.row,
-                        visit.col,
-                    )
-                })
+                crate::storage::engine::cell_semantics::hyperlink_url_for_cell(
+                    &engine.stores,
+                    &engine.mirror,
+                    sheet_id,
+                    visit.row,
+                    visit.col,
+                    visit.cell_id,
+                )
             } else {
                 None
             };

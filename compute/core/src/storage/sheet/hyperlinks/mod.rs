@@ -14,6 +14,6 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use formula::write_formula_hyperlink_metadata;
+pub(crate) use formula::{formula_hyperlink_url, write_formula_hyperlink_metadata};
 pub use mutations::{remove_hyperlink, set_hyperlink};
 pub use queries::{get_all_hyperlinks, get_hyperlink, get_hyperlink_full};

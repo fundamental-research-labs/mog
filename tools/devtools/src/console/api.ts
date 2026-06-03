@@ -32,6 +32,7 @@ import {
   printViewportDetail,
   printViewportSummary,
   readCellFormat,
+  readCellHyperlink,
   readCellValue,
   readCellsViaBridge,
   readDataBarRatio,
@@ -1065,6 +1066,10 @@ export function createConsoleAPI(
 
     getCellValue(row: number, col: number, viewportId?: string) {
       return readCellValue(row, col, viewportId);
+    },
+
+    async getCellHyperlink(row: number, col: number): Promise<string | null> {
+      return readCellHyperlink(row, col);
     },
 
     getCellsViaBridge(cells: ReadonlyArray<{ row: number; col: number }>) {

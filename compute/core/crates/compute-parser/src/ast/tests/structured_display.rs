@@ -9,7 +9,7 @@ fn test_display_structured_ref_simple() {
             name: "Col1".to_string(),
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[[Col1]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[Col1]");
 }
 
 #[test]
@@ -49,11 +49,11 @@ fn test_display_structured_ref_column_range() {
 #[test]
 fn structured_ref_special_items_display() {
     let cases = [
-        (SpecialItem::All, "Table1[[#All]]"),
-        (SpecialItem::Data, "Table1[[#Data]]"),
-        (SpecialItem::Headers, "Table1[[#Headers]]"),
-        (SpecialItem::Totals, "Table1[[#Totals]]"),
-        (SpecialItem::ThisRow, "Table1[[#This Row]]"),
+        (SpecialItem::All, "Table1[#All]"),
+        (SpecialItem::Data, "Table1[#Data]"),
+        (SpecialItem::Headers, "Table1[#Headers]"),
+        (SpecialItem::Totals, "Table1[#Totals]"),
+        (SpecialItem::ThisRow, "Table1[#This Row]"),
     ];
 
     for (item, expected) in cases {
@@ -73,8 +73,5 @@ fn structured_ref_this_row_display() {
         specifiers: vec![StructuredRefSpecifier::ThisRow],
     };
 
-    assert_eq!(
-        format!("{}", ASTNode::StructuredRef(sr)),
-        "Table1[[#This Row]]"
-    );
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[@]");
 }

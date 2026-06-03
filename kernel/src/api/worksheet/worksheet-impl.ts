@@ -1444,6 +1444,7 @@ export class WorksheetImpl implements Worksheet {
             value: normalizeCellValue(vc.value) ?? null,
             formula: (includeFormula !== false ? vc.formula : undefined) as FormulaA1 | undefined,
             format: vc.format ?? undefined,
+            hyperlink: vc.hyperlinkUrl ?? undefined,
           });
         }
       }

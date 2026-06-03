@@ -203,6 +203,120 @@ fn cross_sheet_set_cell_quoted_sheet_name_round_trips() {
     );
 }
 
+#[test]
+fn explicit_same_sheet_refs_round_trip_as_authored_text() {
+    let snapshot = make_two_sheet_snapshot(
+        vec![
+            make_cell(1, 0, 0, CellValue::number(5.0)),
+            make_cell(1, 1, 0, CellValue::number(7.0)),
+        ],
+        vec![],
+    );
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 4, "=Sheet1!A1+Sheet1!A2")
+        .unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 4),
+        "=Sheet1!A1+Sheet1!A2",
+        "explicit same-sheet qualifiers are authored source text and must survive readback"
+    );
+}
+
+#[test]
+fn cross_sheet_copy_preserves_explicit_same_sheet_refs_after_prior_copies() {
+    let snapshot = make_two_sheet_snapshot(
+        vec![
+            make_cell(1, 0, 0, CellValue::number(5.0)),
+            make_cell(1, 1, 0, CellValue::number(7.0)),
+        ],
+        vec![
+            make_cell(2, 0, 0, CellValue::number(100.0)),
+            make_cell(2, 1, 0, CellValue::number(200.0)),
+            make_cell(2, 3, 1, CellValue::number(8.0)),
+            make_cell(2, 4, 1, CellValue::number(9.0)),
+        ],
+    );
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 2, "=A1+A2")
+        .unwrap();
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 4, "=Sheet1!A1+Sheet1!A2")
+        .unwrap();
+
+    engine
+        .copy_range(
+            &sheet1,
+            0,
+            2,
+            0,
+            2,
+            &sheet2,
+            0,
+            2,
+            domain_types::CopyType::All,
+            false,
+            false,
+        )
+        .unwrap();
+    engine
+        .copy_range(
+            &sheet1,
+            0,
+            2,
+            0,
+            2,
+            &sheet2,
+            3,
+            3,
+            domain_types::CopyType::All,
+            false,
+            false,
+        )
+        .unwrap();
+    engine
+        .copy_range(
+            &sheet1,
+            0,
+            4,
+            0,
+            4,
+            &sheet2,
+            0,
+            4,
+            domain_types::CopyType::All,
+            false,
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 4),
+        "=Sheet1!A1+Sheet1!A2",
+        "copying other formulas must not normalize the explicit source formula"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 4),
+        "=Sheet1!A1+Sheet1!A2",
+        "cross-sheet copy must preserve explicit authored source-sheet qualifiers"
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet2, SheetPos::new(0, 4))
+            .cloned(),
+        Some(CellValue::number(12.0)),
+        "target formula must evaluate against Sheet1 values"
+    );
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 2. Cross-sheet autofill preserves the sheet prefix
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -357,6 +471,73 @@ fn sheet_rename_preserves_explicit_same_sheet_formula_text() {
         stored_formula_text_at(&engine, &sheet2, 0, 1),
         "='Data Sheet'!A1+1",
         "rename must update the authored same-sheet qualifier without collapsing it"
+    );
+}
+
+#[test]
+fn sheet_rename_undo_redo_rewrites_formula_text() {
+    let snapshot = make_two_sheet_snapshot(
+        vec![],
+        vec![
+            make_cell(2, 0, 0, CellValue::number(42.0)),
+            make_cell(2, 1, 0, CellValue::number(8.0)),
+            make_cell(2, 1, 1, CellValue::number(10.0)),
+        ],
+    );
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet1 = engine.mirror().sheet_by_name("Sheet1").unwrap();
+    let sheet2 = engine.mirror().sheet_by_name("Sheet2").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 0, "=Sheet2!A1")
+        .unwrap();
+    engine
+        .set_cell_value_parsed(&sheet1, 0, 1, "=SUM(Sheet2!A1:B2)")
+        .unwrap();
+    engine
+        .set_cell_value_parsed(&sheet2, 0, 2, "=Sheet2!A1+1")
+        .unwrap();
+
+    engine.rename_compute_sheet(&sheet2, "Data Sheet").unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 0),
+        "='Data Sheet'!A1"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 1),
+        "=SUM('Data Sheet'!A1:B2)"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 2),
+        "='Data Sheet'!A1+1"
+    );
+
+    engine.undo().unwrap();
+
+    assert_eq!(stored_formula_text_at(&engine, &sheet1, 0, 0), "=Sheet2!A1");
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 1),
+        "=SUM(Sheet2!A1:B2)"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 2),
+        "=Sheet2!A1+1"
+    );
+
+    engine.redo().unwrap();
+
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 0),
+        "='Data Sheet'!A1"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet1, 0, 1),
+        "=SUM('Data Sheet'!A1:B2)"
+    );
+    assert_eq!(
+        stored_formula_text_at(&engine, &sheet2, 0, 2),
+        "='Data Sheet'!A1+1"
     );
 }
 

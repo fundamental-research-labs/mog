@@ -1580,8 +1580,8 @@ export class GridEditingSystem implements IGridEditingSystem {
           await ws.comments.resolveThread(comment.threadId, true);
         }
       },
-      setHyperlink: (sheetId, row, col, url) => {
-        void workbook.getSheetById(sheetId).hyperlinks.set(row, col, url ?? '');
+      setHyperlink: async (sheetId, row, col, url) => {
+        await workbook.getSheetById(sheetId).hyperlinks.set(row, col, url ?? '');
       },
       setRangeSchema: (sheetId, range, schema, enforcement, ui) => {
         // PasteStoreOperations declares the schema's `type` as `string` for

@@ -1,6 +1,7 @@
 use super::shared;
 use crate::snapshot::MutationResult;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::cell_semantics::hyperlink_url_for_cell;
 use crate::storage::engine::services;
 use crate::storage::sheet::hyperlinks;
 use bridge_core as bridge;
@@ -46,19 +47,28 @@ impl YrsComputeEngine {
             .map(shared::with_empty_patches)
     }
 
-    /// Get the hyperlink URL for a cell at the given position.
-    /// Reads directly from the Yrs CRDT document (not the in-memory mirror).
+    /// Get the effective hyperlink URL for a cell at the given position.
+    /// Explicit hyperlink metadata wins; literal HYPERLINK() formulas are derived.
     #[bridge::read(scope = "cell")]
     pub fn get_hyperlink(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<String> {
-        let grid = self.stores.grid_indexes.get(sheet_id)?;
-        hyperlinks::get_hyperlink(
-            self.stores.storage.doc(),
-            self.stores.storage.sheets(),
+        let direct = hyperlink_url_for_cell(
+            &self.stores,
+            &self.mirror,
             sheet_id,
-            grid,
             row,
             col,
-        )
+            self.mirror
+                .resolve_cell_id(sheet_id, cell_types::SheetPos::new(row, col)),
+        );
+        if direct.is_some() {
+            return direct;
+        }
+
+        self.query_range(sheet_id, row, col, row, col)
+            .cells
+            .into_iter()
+            .next()
+            .and_then(|cell| cell.hyperlink_url)
     }
 
     /// Remove all hyperlinks in a rectangular range (single bridge call).

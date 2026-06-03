@@ -198,4 +198,66 @@ describe('Clipboard Paste Integration', () => {
     cleanup();
     clipboardActor.stop();
   });
+
+  it('waits for hyperlink metadata writes before completing paste', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': {
+          raw: 'Example',
+          formula: '=HYPERLINK("https://example.com","Example")',
+          hyperlink: 'https://example.com',
+        },
+      },
+      textSignature: 'Example',
+    };
+
+    let releaseHyperlink: (() => void) | undefined;
+    const setHyperlink = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseHyperlink = resolve;
+        }),
+    );
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn(),
+      copyRange: jest.fn(async () => undefined),
+      setHyperlink,
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+    });
+
+    clipboardActor.send({ type: 'COPY', ranges: [sourceRange], data: clipboardData });
+    clipboardActor.send({ type: 'PASTE', targetCell: { row: 0, col: 1 } });
+    await flushAsync();
+
+    let settled = false;
+    const wait = waitForPendingClipboardPaste().then(() => {
+      settled = true;
+    });
+    await flushAsync();
+
+    expect(setHyperlink).toHaveBeenCalledWith(sheetId, 0, 1, 'https://example.com');
+    expect(settled).toBe(false);
+
+    releaseHyperlink?.();
+    await wait;
+
+    expect(settled).toBe(true);
+    expect(clipboardActor.getSnapshot().matches('hasCopy')).toBe(true);
+
+    cleanup();
+    clipboardActor.stop();
+  });
 });

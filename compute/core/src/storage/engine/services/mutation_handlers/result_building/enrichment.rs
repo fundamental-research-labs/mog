@@ -5,7 +5,7 @@ use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{comments, hyperlinks, sparklines};
+use crate::storage::sheet::{comments, sparklines};
 use compute_document::hex::hex_to_id;
 use compute_wire::flags as render_flags;
 
@@ -116,16 +116,15 @@ pub(in crate::storage::engine) fn enrich_metadata_flags(
         }
 
         // --- HAS_HYPERLINK ---
-        if let Some(grid) = stores.grid_indexes.get(&sheet_id)
-            && hyperlinks::get_hyperlink(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                &sheet_id,
-                grid,
-                pos.row,
-                pos.col,
-            )
-            .is_some()
+        if crate::storage::engine::cell_semantics::hyperlink_url_for_cell(
+            stores,
+            mirror,
+            &sheet_id,
+            pos.row,
+            pos.col,
+            Some(cell_id),
+        )
+        .is_some()
         {
             change.extra_flags |= render_flags::HAS_HYPERLINK;
         }

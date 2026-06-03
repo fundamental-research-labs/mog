@@ -931,7 +931,7 @@ fn ast_display_structured_ref_this_row() {
         specifiers: vec![StructuredRefSpecifier::ThisRow],
     };
     let s = format!("{}", ASTNode::StructuredRef(sr));
-    assert_eq!(s, "T1[[#This Row]]");
+    assert_eq!(s, "T1[@]");
 }
 
 #[test]
@@ -943,7 +943,7 @@ fn ast_display_structured_ref_special_all() {
             item: SpecialItem::All,
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[[#All]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[#All]");
 }
 
 #[test]
@@ -955,7 +955,7 @@ fn ast_display_structured_ref_special_data() {
             item: SpecialItem::Data,
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[[#Data]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[#Data]");
 }
 
 #[test]
@@ -967,7 +967,7 @@ fn ast_display_structured_ref_special_totals() {
             item: SpecialItem::Totals,
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[[#Totals]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[#Totals]");
 }
 
 #[test]
@@ -979,5 +979,5 @@ fn ast_display_structured_ref_special_this_row_via_special() {
             item: SpecialItem::ThisRow,
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[[#This Row]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "T1[#This Row]");
 }

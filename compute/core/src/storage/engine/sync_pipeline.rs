@@ -555,6 +555,33 @@ impl YrsComputeEngine {
             return Ok((recalc, doc_changes));
         }
 
+        // Observer-driven sheet renames (undo/redo and remote sync) update Yrs
+        // sheet metadata directly, bypassing `mutation_rename_sheet`. Mirror the
+        // post-state name into ComputeCore so authored formula text and the A1
+        // display cache receive the same targeted sheet-name rewrite as the
+        // forward production path.
+        for smch in &doc_changes.sheet_meta {
+            if !matches!(smch.field.as_deref(), Some("name")) {
+                continue;
+            }
+            let Some(new_name) = crate::storage::sheet::properties::get_sheet_name(
+                self.stores.storage.doc(),
+                self.stores.storage.sheets(),
+                &smch.sheet_id,
+            ) else {
+                continue;
+            };
+            let needs_rename = self
+                .mirror
+                .get_sheet(&smch.sheet_id)
+                .is_some_and(|sheet| sheet.name.as_str() != new_name.as_str());
+            if needs_rename {
+                self.stores
+                    .compute
+                    .rename_sheet(&mut self.mirror, &smch.sheet_id, &new_name);
+            }
+        }
+
         // --- Identity: mirror gridIndex/posToId entries into in-memory GridIndex ---
         // The yrs `gridIndex/posToId` sub-map is the CRDT-synchronised source of
         // truth for (row, col) ↔ CellId mappings (post-R51). When a peer
@@ -622,7 +649,7 @@ impl YrsComputeEngine {
                     .sync_cell_position_mapping(sheet_id, *cell_id, *new_pos);
             }
 
-            if !occupied_positions.is_empty() {
+            if !vacated_positions.is_empty() {
                 self.stores.compute.regenerate_formula_strings(&self.mirror);
             }
         }

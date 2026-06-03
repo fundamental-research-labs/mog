@@ -302,7 +302,12 @@ export interface PasteStoreOperations {
    * @param col - Column index
    * @param url - Hyperlink URL (or undefined to clear)
    */
-  setHyperlink?(sheetId: SheetId, row: number, col: number, url: string | undefined): void;
+  setHyperlink?(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    url: string | undefined,
+  ): Promise<void> | void;
   /**
    * Create a conditional formatting rule.
    *
@@ -1208,7 +1213,7 @@ export async function executePaste(
     // Hyperlinks are applied after values so the cells exist
     if (hyperlinkUpdates.length > 0 && store.setHyperlink) {
       for (const { row, col, url } of hyperlinkUpdates) {
-        store.setHyperlink(sheetId, row, col, url);
+        await store.setHyperlink(sheetId, row, col, url);
       }
     }
 

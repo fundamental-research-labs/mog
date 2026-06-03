@@ -27,7 +27,7 @@ pub(crate) fn write_formula_hyperlink_metadata(
     }
 }
 
-fn formula_hyperlink_url(formula: &str) -> Option<String> {
+pub(crate) fn formula_hyperlink_url(formula: &str) -> Option<String> {
     let ast = compute_parser::parse_formula(formula, None)
         .ok()?
         .into_inner();

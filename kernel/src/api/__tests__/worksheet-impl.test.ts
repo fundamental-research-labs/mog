@@ -553,6 +553,37 @@ describe('WorksheetImpl', () => {
       expect(result).toEqual(mockData);
     });
 
+    it('getRawRangeData preserves formula hyperlink metadata from queryRange', async () => {
+      ctx.computeBridge.queryRange.mockResolvedValueOnce({
+        cells: [
+          {
+            row: 0,
+            col: 0,
+            cellId: 'cell-a1',
+            value: 'Example',
+            formula: '=HYPERLINK("https://example.com","Example")',
+            formatted: 'Example',
+            format: { fontColor: '#0563C1' },
+            hyperlinkUrl: 'https://example.com',
+          },
+        ],
+        merges: [],
+      });
+
+      const result = await ws.getRawRangeData('A1:A1');
+
+      expect(result).toEqual([
+        [
+          {
+            value: 'Example',
+            formula: '=HYPERLINK("https://example.com","Example")',
+            format: { fontColor: '#0563C1' },
+            hyperlink: 'https://example.com',
+          },
+        ],
+      ]);
+    });
+
     it('setRange("A1:B2", values) resolves A1 range and delegates to RangeOps.setRange', async () => {
       (RangeOps.setRange as jest.Mock).mockResolvedValue(undefined);
 

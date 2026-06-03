@@ -390,7 +390,49 @@ function getActiveSheetId(): string | null {
   try {
     const coord = (window as any).__COORDINATOR__;
     const ws = coord?.workbook?.activeSheet;
-    return ws?.sheetId ?? ws?.id ?? null;
+    return ws?.sheetId ?? ws?.id ?? ws?.getSheetId?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readFormulaHyperlinkUrl(formula: unknown): string | null {
+  if (typeof formula !== 'string') return null;
+  const match = formula.match(/^\s*=?\s*HYPERLINK\s*\(\s*"((?:[^"]|"")*)"/i);
+  if (!match) return null;
+  return match[1].replace(/""/g, '"');
+}
+
+async function readActiveSheetHyperlink(row: number, col: number): Promise<string | null> {
+  try {
+    const coord = (window as any).__COORDINATOR__;
+    const ws = coord?.workbook?.activeSheet;
+    if (!ws?.hyperlinks?.get) return null;
+    const url = await ws.hyperlinks.get(row, col);
+    return typeof url === 'string' && url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function readCellHyperlink(row: number, col: number): Promise<string | null> {
+  const worksheetUrl = await readActiveSheetHyperlink(row, col);
+  if (worksheetUrl) return worksheetUrl;
+
+  const bridge = getActiveComputeBridge();
+  if (!bridge?.queryRange) return null;
+
+  const sheetId = getActiveSheetId();
+  if (!sheetId) return null;
+
+  try {
+    const result = await bridge.queryRange(sheetId, row, col, row, col);
+    const cell = result?.cells?.find?.(
+      (candidate: { row: number; col: number }) => candidate.row === row && candidate.col === col,
+    );
+    const url = (cell as { hyperlinkUrl?: unknown } | undefined)?.hyperlinkUrl;
+    if (typeof url === 'string' && url.length > 0) return url;
+    return readFormulaHyperlinkUrl((cell as { formula?: unknown } | undefined)?.formula);
   } catch {
     return null;
   }

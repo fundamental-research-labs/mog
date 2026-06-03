@@ -96,6 +96,13 @@ export interface ClipboardContext {
    */
   isStale: boolean;
   /**
+   * Text signature for an internal cut that has been consumed or cancelled.
+   * Browser/system clipboard text can outlive our internal cut state; this
+   * prevents the next in-app paste from re-importing that same cut as an
+   * external paste.
+   */
+  suppressedInternalCutSignature: string | null;
+  /**
    * Optional kernel clipboard service for storage delegation.
    * When provided, copy/cut operations are also stored in the kernel service.
    * The shell machine keeps its own UI state (marching ants, paste preview, etc.).
@@ -129,6 +136,7 @@ const initialContext: ClipboardContext = {
   skipSizeCheck: false,
   skipOverwriteCheck: false,
   isStale: false,
+  suppressedInternalCutSignature: null,
   kernelClipboardService: undefined,
 };
 
@@ -543,6 +551,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedInternalCutSignature: null,
       };
     }),
 
@@ -567,6 +576,7 @@ export const clipboardMachine = setup({
         isCut: true,
         errorMessage: null,
         isStale: false,
+        suppressedInternalCutSignature: null,
       };
     }),
 
@@ -591,6 +601,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedInternalCutSignature: null,
       };
     }),
 
@@ -615,6 +626,7 @@ export const clipboardMachine = setup({
         isCut: true,
         errorMessage: null,
         isStale: false,
+        suppressedInternalCutSignature: null,
       };
     }),
 
@@ -673,6 +685,7 @@ export const clipboardMachine = setup({
         isCut: false,
         pastePreviewTarget: null,
         marchingAntsPhase: 0,
+        suppressedInternalCutSignature: context.data?.textSignature ?? null,
       };
     }),
 
@@ -700,6 +713,7 @@ export const clipboardMachine = setup({
         errorMessage: null,
         pasteOptions: null,
         isStale: false,
+        suppressedInternalCutSignature: context.isCut ? (context.data?.textSignature ?? null) : null,
       };
     }),
 
@@ -740,6 +754,7 @@ export const clipboardMachine = setup({
         isCut: false,
         errorMessage: null,
         isStale: false,
+        suppressedInternalCutSignature: null,
       };
     }),
 
@@ -754,6 +769,7 @@ export const clipboardMachine = setup({
         isCut: false,
         pastePreviewTarget: event.targetCell,
         pasteOptions: event.options ?? null,
+        suppressedInternalCutSignature: null,
       };
     }),
 

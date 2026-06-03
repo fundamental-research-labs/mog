@@ -132,15 +132,6 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
   // Effects
   // ===========================================================================
 
-  // Focus textarea when dialog opens
-  useEffect(() => {
-    if (isOpen && activeTab === 'editor') {
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 100);
-    }
-  }, [isOpen, activeTab]);
-
   // Reset tab to editor when dialog opens
   useEffect(() => {
     if (isOpen) {
@@ -241,6 +232,7 @@ export function EquationEditorDialog(_props: EquationEditorDialogProps) {
       onClose={handleCancel}
       dialogId="equation-editor-dialog"
       width={600}
+      initialFocusRef={textareaRef}
     >
       <DialogHeader onClose={handleCancel}>
         {isEditMode ? 'Edit Equation' : 'Insert Equation'}

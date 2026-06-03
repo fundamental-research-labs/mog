@@ -17,7 +17,7 @@
  */
 
 import type { ReactNode } from 'react';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger, Tooltip } from '@mog/shell';
 import { useRibbonCollapseLevel } from '../collapse';
@@ -60,6 +60,10 @@ export interface CollapsedGroupDropdownProps {
   isLast?: boolean;
   /** Group content - rendered inside the dropdown panel */
   children: ReactNode;
+  /** Optional controlled open state for keytip-openable collapsed groups. */
+  open?: boolean;
+  /** Optional controlled open-state setter. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 // =============================================================================
@@ -83,13 +87,33 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
   icon,
   isLast = false,
   children,
+  open,
+  onOpenChange,
 }: CollapsedGroupDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const externalOpenStartedAtRef = useRef(0);
+  const isOpen = open ?? uncontrolledOpen;
+  const setIsOpen = (nextOpen: boolean) => {
+    if (open !== undefined) {
+      if (!nextOpen && Date.now() - externalOpenStartedAtRef.current < 500) {
+        return;
+      }
+      onOpenChange?.(nextOpen);
+      return;
+    }
+    setUncontrolledOpen(nextOpen);
+  };
   const { level } = useRibbonCollapseLevel();
   const isDense = level >= 3;
   const labelClassName = isDense
     ? 'text-ribbon-compact text-ss-text-secondary leading-none whitespace-nowrap max-w-[58px] overflow-hidden text-ellipsis'
     : 'text-ribbon text-ss-text-secondary whitespace-nowrap max-w-[68px] overflow-hidden text-ellipsis';
+
+  useEffect(() => {
+    if (open) {
+      externalOpenStartedAtRef.current = Date.now();
+    }
+  }, [open]);
 
   return (
     <div

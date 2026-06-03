@@ -6,19 +6,52 @@
  */
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 
 import { getUIStore, handled, normalizeRange, type CellRange } from './helpers';
 
 function isAllCellsSelected(ranges: CellRange[]): boolean {
   if (ranges.length !== 1) return false;
   const range = normalizeRange(ranges[0]);
-  // Check if the selection covers the entire sheet (row 0 to MAX, col 0 to MAX)
-  // The selectAll range is 0-999, 0-25 per getSelectAllRange()
-  return range.startRow === 0 && range.startCol === 0 && range.endRow >= 999 && range.endCol >= 25;
+  return (
+    range.startRow === 0 &&
+    range.startCol === 0 &&
+    range.endRow === MAX_ROWS - 1 &&
+    range.endCol === MAX_COLS - 1
+  );
 }
 
 /**
- * SELECT_CURRENT_REGION - Ctrl+A progressive selection (Excel behavior)
+ * Direct current-region selection for Ctrl+Shift+*.
+ *
+ * This action intentionally does not participate in Ctrl+A's progressive
+ * timing state. Ctrl+Shift+* should always select the current region around
+ * the active cell, even when fired repeatedly in quick succession.
+ */
+export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
+  const sheetId = deps.getActiveSheetId();
+  const activeCell = deps.accessors.selection.getActiveCell();
+  const uiStore = getUIStore(deps);
+  const ws = deps.workbook.getSheetById(sheetId);
+  const region = await ws.getCurrentRegion(activeCell.row, activeCell.col);
+
+  deps.commands.selection.setSelection(
+    [
+      {
+        startRow: region.startRow,
+        startCol: region.startCol,
+        endRow: region.endRow,
+        endCol: region.endCol,
+      },
+    ],
+    activeCell,
+  );
+  uiStore?.getState()?.resetCtrlAState?.();
+  return handled();
+};
+
+/**
+ * Ctrl+A progressive selection (Excel behavior)
  *
  * Excel Parity 2.2:
  * - First press: Select current data region (contiguous cells around active cell)
@@ -29,7 +62,7 @@ function isAllCellsSelected(ranges: CellRange[]): boolean {
  *
  * Uses UIStore's CtrlAStateSlice for state management instead of module-level variables.
  */
-export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
+export const selectCurrentRegionForCtrlA: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const ranges = deps.accessors.selection.getRanges();
@@ -38,7 +71,17 @@ export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
   const nextState = uiStore?.getState()?.getNextCtrlAState?.() ?? 'region';
 
   if (nextState === 'all' && !isAllCellsSelected(ranges)) {
-    deps.commands.selection.selectAll();
+    deps.commands.selection.setSelection(
+      [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: MAX_ROWS - 1,
+          endCol: MAX_COLS - 1,
+        },
+      ],
+      activeCell,
+    );
     uiStore?.getState()?.recordCtrlAPress?.('all');
     return handled();
   }
@@ -70,7 +113,17 @@ export const selectCurrentRegion: AsyncActionHandler = async (deps) => {
     region.startCol === activeCell.col;
 
   if (isSingleCell) {
-    deps.commands.selection.selectAll();
+    deps.commands.selection.setSelection(
+      [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: MAX_ROWS - 1,
+          endCol: MAX_COLS - 1,
+        },
+      ],
+      activeCell,
+    );
     uiStore?.getState()?.recordCtrlAPress?.('all');
     return handled();
   }

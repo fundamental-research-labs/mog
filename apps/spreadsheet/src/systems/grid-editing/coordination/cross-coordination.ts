@@ -132,6 +132,23 @@ export function setupEditorToSelectionCoordination(
 
     // Editor exited formula mode
     if (wasFormulaEditing && !isFormulaEditing) {
+      if (state.matches('inactive') && previousState?.context.editingCell) {
+        const origin = previousState.context.editingCell;
+        selectionActor.send({
+          type: 'SET_SELECTION',
+          ranges: [
+            {
+              startRow: origin.row,
+              startCol: origin.col,
+              endRow: origin.row,
+              endCol: origin.col,
+            },
+          ],
+          activeCell: origin,
+          anchor: null,
+          source: 'restore',
+        });
+      }
       selectionActor.send({ type: 'EXIT_FORMULA_RANGE_MODE' });
     }
 
@@ -497,7 +514,7 @@ export function setupEditingInputInterception(
 ): EditingInputInterceptionResult {
   const {
     editorActor,
-    selectionActor: _selectionActor,
+    selectionActor,
     onCommitAndMove,
     getCurrentSheetId,
     getSheetName,
@@ -552,15 +569,14 @@ export function setupEditingInputInterception(
         return false;
       }
 
-      // Formula editing in Enter Mode - insert cell reference instead of committing
-      // When editing a formula and in Enter Mode (not Edit Mode), clicking a cell should:
+      // Formula editing - insert cell reference instead of committing.
+      // When editing a formula, clicking a cell should:
       // - Insert the cell reference into the formula at the cursor position
       // - Ctrl+click adds the reference (same as regular click in Enter Mode)
       // - Shift+click extends the current range selection
       const isFormulaEditing = editorState.matches('formulaEditing');
-      const isInEnterMode = !editorState.context.isEditMode;
 
-      if (isFormulaEditing && isInEnterMode) {
+      if (isFormulaEditing) {
         const targetSheetId = getCurrentSheetId?.();
         const targetSheetName = targetSheetId ? getSheetName?.(targetSheetId) : undefined;
 
@@ -585,6 +601,20 @@ export function setupEditingInputInterception(
           };
           formulaRangeAnchor = cell;
         }
+
+        const normalizedRange = {
+          startRow: Math.min(range.startRow, range.endRow),
+          startCol: Math.min(range.startCol, range.endCol),
+          endRow: Math.max(range.startRow, range.endRow),
+          endCol: Math.max(range.startCol, range.endCol),
+        };
+
+        selectionActor.send({
+          type: 'SET_SELECTION',
+          ranges: [normalizedRange],
+          activeCell: cell,
+          anchor: formulaRangeAnchor,
+        });
 
         editorActor.send({
           type: 'FORMULA_RANGE_SELECTED',

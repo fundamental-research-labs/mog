@@ -20,7 +20,7 @@
 
 import { assign } from 'xstate';
 import { normalizeRange, rangeFromAnchorAndCell } from '../../../shared/types';
-import { buildExtendUpdate, computeDirection, moveTo } from './helpers';
+import { computeDirection, moveTo } from './helpers';
 import type { SelectionContext, SelectionEvent } from './types';
 
 // =============================================================================
@@ -53,14 +53,20 @@ const setAnchorAndSelect = assign(
 
 /**
  * Extend selection to clicked cell (shift+click).
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
- * the clicked cell as the moving edge.
+ * Mouse Shift+Click keeps the original anchor but moves the active edge to
+ * the clicked cell. Keyboard Shift+Arrow intentionally has different active
+ * cell semantics and uses keyboard-actions.ts.
  */
 const extendToCell = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_DOWN') return {};
     const anchor = context.anchor ?? context.activeCell;
-    return buildExtendUpdate(anchor, event.cell);
+    return {
+      pendingRange: rangeFromAnchorAndCell(anchor, event.cell),
+      activeCell: event.cell,
+      anchor,
+      direction: computeDirection(anchor, event.cell),
+    };
   },
 );
 
@@ -104,9 +110,37 @@ const startMultiSelectAndExtend = assign(
     return {
       committedRanges: [...context.committedRanges, context.pendingRange],
       pendingRange: newRange,
-      activeCell: priorAnchor,
+      activeCell: event.cell,
       anchor: priorAnchor,
       direction: computeDirection(priorAnchor, event.cell),
+    };
+  },
+);
+
+/**
+ * Shift+F8 add mode plus a raw Shift+Click should add the clicked cell as a
+ * new disjoint range, then leave additive mode. Explicit Ctrl+Shift+Click
+ * still uses the extended multi-select branch above.
+ */
+const startAdditiveShiftClick = assign(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    if (event.type !== 'MOUSE_DOWN') return {};
+    const newRange = {
+      startRow: event.cell.row,
+      startCol: event.cell.col,
+      endRow: event.cell.row,
+      endCol: event.cell.col,
+    };
+    return {
+      committedRanges: [...context.committedRanges, context.pendingRange],
+      pendingRange: newRange,
+      activeCell: event.cell,
+      anchor: event.cell,
+      direction: 'down-right' as const,
+      modes: {
+        ...context.modes,
+        additive: false,
+      },
     };
   },
 );
@@ -152,6 +186,7 @@ export const mouseActions = {
   extendToCell,
   startMultiSelect,
   startMultiSelectAndExtend,
+  startAdditiveShiftClick,
   updateDragSelection,
   finalizeDrag,
 } as const;

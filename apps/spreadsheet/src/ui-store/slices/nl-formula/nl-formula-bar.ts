@@ -111,7 +111,7 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlResponseSuccess: (result) => {
-    set({ nlResult: result, nlLoading: false });
+    set({ nlResult: result, nlError: null, nlLoading: false });
   },
 
   nlResponseError: (error) => {
@@ -167,7 +167,7 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   },
 
   nlExplainResponseSuccess: (explanation) => {
-    set({ nlExplainResult: explanation, nlExplainLoading: false });
+    set({ nlExplainResult: explanation, nlExplainError: null, nlExplainLoading: false });
   },
 
   nlExplainResponseError: (error) => {

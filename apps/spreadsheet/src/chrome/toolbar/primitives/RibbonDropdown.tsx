@@ -411,8 +411,8 @@ const MenuItemRow = forwardRef<HTMLDivElement, MenuItemRowProps>(function MenuIt
       data-value={dataValue}
       {...rest}
     >
-      <span className="w-4 h-4 flex items-center justify-center shrink-0">{iconSlot}</span>
-      <span className="flex-1">{children}</span>
+      <span className="flex-1 order-2">{children}</span>
+      <span className="w-4 h-4 flex items-center justify-center shrink-0 order-1">{iconSlot}</span>
       {trailingSlot}
     </div>
   );
@@ -531,11 +531,12 @@ export function RibbonDropdownItem({
       data-value={dataValue}
       iconSlot={isSelected ? SelectedCheckmark : (icon ?? null)}
       trailingSlot={
-        shortcut ? (
-          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0">
-            {shortcut}
-          </span>
-        ) : null
+	        shortcut ? (
+	          <span className="ml-2 text-ss-text-tertiary text-dropdown-header shrink-0 order-3">
+	            {' '}
+	            {shortcut}
+	          </span>
+	        ) : null
       }
     >
       {children}

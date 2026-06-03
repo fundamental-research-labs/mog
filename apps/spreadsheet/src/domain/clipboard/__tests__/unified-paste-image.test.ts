@@ -265,6 +265,28 @@ describe('unifiedPaste — image routing', () => {
     expect((commands as any).pasteSpecial).not.toHaveBeenCalled();
   });
 
+  it('does not re-import a cancelled internal cut as external text', async () => {
+    installClipboard([makeClipItem({ 'text/plain': blobLike('A', 'text/plain') })]);
+    const commands = makeCommands();
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            data: null,
+            suppressedInternalCutSignature: 'A',
+          },
+          matches: () => false,
+        }) as any,
+      commands,
+    });
+
+    expect((commands as any).externalPaste).not.toHaveBeenCalled();
+    expect((commands as any).paste).not.toHaveBeenCalled();
+    expect((commands as any).pasteSpecial).not.toHaveBeenCalled();
+  });
+
   it('no-ops external plain text when the saved default is formats only', async () => {
     installClipboard([makeClipItem({ 'text/plain': blobLike('A', 'text/plain') })]);
     const commands = makeCommands();

@@ -1080,7 +1080,7 @@ export function FormulasRibbon() {
           <RibbonDropdown
             open={financialOpen}
             onOpenChange={setFinancialOpen}
-            menuTestId="ribbon-dropdown-menu-financial"
+            menuTestId="ribbon-dropdown-menu-formulas-financial"
             trigger={
               <RibbonButton
                 id="formulas-financial"
@@ -1099,17 +1099,23 @@ export function FormulasRibbon() {
             width="auto"
             menuLabel="Financial functions"
           >
-            {renderFunctionItems(FUNCTION_CATEGORIES.financial.functions)}
-            <RibbonDropdownDivider />
-            <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
-              More Financial Functions...
-            </RibbonDropdownItem>
+            <div
+              data-testid="ribbon-dropdown-menu-financial"
+              role="menu"
+              aria-label="Financial functions"
+            >
+              {renderFunctionItems(FUNCTION_CATEGORIES.financial.functions)}
+              <RibbonDropdownDivider />
+              <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
+                More Financial Functions...
+              </RibbonDropdownItem>
+            </div>
           </RibbonDropdown>
 
           <RibbonDropdown
             open={logicalOpen}
             onOpenChange={setLogicalOpen}
-            menuTestId="ribbon-dropdown-menu-logical"
+            menuTestId="ribbon-dropdown-menu-formulas-logical"
             trigger={
               <RibbonButton
                 id="formulas-logical"
@@ -1128,17 +1134,23 @@ export function FormulasRibbon() {
             width="auto"
             menuLabel="Logical functions"
           >
-            {renderFunctionItems(FUNCTION_CATEGORIES.logical.functions)}
-            <RibbonDropdownDivider />
-            <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
-              More Logical Functions...
-            </RibbonDropdownItem>
+            <div
+              data-testid="ribbon-dropdown-menu-logical"
+              role="menu"
+              aria-label="Logical functions"
+            >
+              {renderFunctionItems(FUNCTION_CATEGORIES.logical.functions)}
+              <RibbonDropdownDivider />
+              <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
+                More Logical Functions...
+              </RibbonDropdownItem>
+            </div>
           </RibbonDropdown>
 
           <RibbonDropdown
             open={textOpen}
             onOpenChange={setTextOpen}
-            menuTestId="ribbon-dropdown-menu-text"
+            menuTestId="ribbon-dropdown-menu-formulas-text"
             trigger={
               <RibbonButton
                 id="formulas-text"
@@ -1157,17 +1169,23 @@ export function FormulasRibbon() {
             width="auto"
             menuLabel="Text functions"
           >
-            {renderFunctionItems(FUNCTION_CATEGORIES.text.functions)}
-            <RibbonDropdownDivider />
-            <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
-              More Text Functions...
-            </RibbonDropdownItem>
+            <div
+              data-testid="ribbon-dropdown-menu-text"
+              role="menu"
+              aria-label="Text functions"
+            >
+              {renderFunctionItems(FUNCTION_CATEGORIES.text.functions)}
+              <RibbonDropdownDivider />
+              <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
+                More Text Functions...
+              </RibbonDropdownItem>
+            </div>
           </RibbonDropdown>
 
           <RibbonDropdown
             open={dateTimeOpen}
             onOpenChange={setDateTimeOpen}
-            menuTestId="ribbon-dropdown-menu-date-time"
+            menuTestId="ribbon-dropdown-menu-formulas-date-time"
             trigger={
               <RibbonButton
                 id="formulas-datetime"
@@ -1186,11 +1204,17 @@ export function FormulasRibbon() {
             width="auto"
             menuLabel="Date and time functions"
           >
-            {renderFunctionItems(FUNCTION_CATEGORIES.dateTime.functions)}
-            <RibbonDropdownDivider />
-            <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
-              More Date/Time Functions...
-            </RibbonDropdownItem>
+            <div
+              data-testid="ribbon-dropdown-menu-date-time"
+              role="menu"
+              aria-label="Date and time functions"
+            >
+              {renderFunctionItems(FUNCTION_CATEGORIES.dateTime.functions)}
+              <RibbonDropdownDivider />
+              <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
+                More Date/Time Functions...
+              </RibbonDropdownItem>
+            </div>
           </RibbonDropdown>
 
           <RibbonDropdown
@@ -1225,7 +1249,7 @@ export function FormulasRibbon() {
           <RibbonDropdown
             open={mathTrigOpen}
             onOpenChange={setMathTrigOpen}
-            menuTestId="ribbon-dropdown-menu-math-trig"
+            menuTestId="ribbon-dropdown-menu-formulas-math-trig"
             trigger={
               <RibbonButton
                 id="formulas-mathtrig"
@@ -1244,11 +1268,17 @@ export function FormulasRibbon() {
             width="auto"
             menuLabel="Math and trig functions"
           >
-            {renderFunctionItems(FUNCTION_CATEGORIES.mathTrig.functions)}
-            <RibbonDropdownDivider />
-            <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
-              More Math Functions...
-            </RibbonDropdownItem>
+            <div
+              data-testid="ribbon-dropdown-menu-math-trig"
+              role="menu"
+              aria-label="Math and trig functions"
+            >
+              {renderFunctionItems(FUNCTION_CATEGORIES.mathTrig.functions)}
+              <RibbonDropdownDivider />
+              <RibbonDropdownItem dataValue="more" onClick={handleInsertFunction}>
+                More Math Functions...
+              </RibbonDropdownItem>
+            </div>
           </RibbonDropdown>
 
           {/* More Functions with submenus */}

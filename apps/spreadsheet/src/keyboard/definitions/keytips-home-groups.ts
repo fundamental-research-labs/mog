@@ -21,6 +21,7 @@
  * Alt+H,KeyW → Toggle Wrap Text (TOGGLE_WRAP_TEXT)
  * Alt+H,KeyM → Merge dropdown (OPEN_RIBBON_DROPDOWN: home.merge)
  * Alt+H,KeyO → Orientation dropdown (OPEN_RIBBON_DROPDOWN: home.orientation)
+ * Alt+H,KeyF,KeyQ → Orientation dropdown (OPEN_RIBBON_DROPDOWN: home.orientation)
  * [also: Cells Format dropdown — see Cells group below; matcher
  * priority resolves on stable registration order]
  * Alt+H,Digit5 → Decrease Indent (DECREASE_INDENT)
@@ -194,6 +195,21 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     matchBy: 'code',
     notes:
       "Excel 365: Home → O opens Orientation dropdown. (Excel's Cells/Format dropdown has a non-trivial alternate chord; we expose it via Alt+H,KeyO,KeyF or Alt+H,KeyE,KeyT — see CellsGroup keytip notes.)",
+  },
+  {
+    id: 'keytips-home-groups.orientation-dropdown-fq',
+    bindings: altBinding('KeyH'),
+    sequence: ['KeyF', 'KeyQ'],
+    description: 'Open Orientation dropdown (Alt+H,F,Q)',
+    action: 'OPEN_RIBBON_DROPDOWN',
+    actionArg: { dropdownId: 'home.orientation' },
+    enabled: true,
+    priority: 'medium',
+    category: 'formatting',
+    contexts: HOME_CONTEXTS,
+    muscleMemory: 'occasional',
+    matchBy: 'code',
+    notes: 'Excel 365: Home → FQ opens the Alignment Orientation dropdown.',
   },
   {
     id: 'keytips-home-groups.decrease-indent',
@@ -435,6 +451,7 @@ export const KEYTIPS_HOME_GROUPS_SHORTCUTS: KeyboardShortcut[] = [
     contexts: HOME_CONTEXTS,
     muscleMemory: 'occasional',
     matchBy: 'code',
+    dispatchOnPrefixComplete: true,
   },
 
   // ===========================================================================

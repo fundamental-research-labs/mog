@@ -214,6 +214,11 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     commentActor ? asSelector(commentSelectors.draftContent) : () => [] as RichText,
   );
 
+  const composeCommentType = useSelector(
+    commentActor,
+    commentActor ? asSelector(commentSelectors.composeCommentType) : () => 'threadedComment' as const,
+  );
+
   const editingCommentId = useSelector(
     commentActor,
     commentActor ? asSelector(commentSelectors.editingCommentId) : () => null,
@@ -347,8 +352,8 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     [commands],
   );
 
-  const startCompose = useCallback(() => {
-    commands?.startCompose();
+  const startCompose = useCallback((commentType?: 'note' | 'threadedComment') => {
+    commands?.startCompose(commentType);
   }, [commands]);
 
   const requestDelete = useCallback(
@@ -385,9 +390,13 @@ export function useCommentPopover(): UseCommentPopoverReturn {
       if (!ws) return;
 
       const text = typeof content === 'string' ? content : toPlainText(content);
-      await ws.comments.add(target.row, target.col, text, currentAuthor);
+      if (composeCommentType === 'note') {
+        await ws.comments.addNote(target.row, target.col, { text, author: currentAuthor });
+        return;
+      }
+      await ws.comments.add(target.row, target.col, { text, author: currentAuthor });
     },
-    [wb, target, currentAuthor],
+    [wb, target, currentAuthor, composeCommentType],
   );
 
   const updateComment = useCallback(

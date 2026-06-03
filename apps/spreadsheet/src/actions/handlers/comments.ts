@@ -18,6 +18,7 @@
  */
 
 import type { ActionHandler, AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type { CommentComposeType } from '@mog-sdk/contracts/actors';
 
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 
@@ -33,7 +34,11 @@ import { getUIStore, handled, notHandled } from './handler-utils';
  *
  * Excel shortcut: Shift+F2 (when cell has no comment)
  */
-export const INSERT_COMMENT: AsyncActionHandler = async (deps) => {
+interface InsertCommentPayload {
+  commentType?: CommentComposeType;
+}
+
+export const INSERT_COMMENT: AsyncActionHandler = async (deps, payload?: InsertCommentPayload) => {
   const sheetId = deps.getActiveSheetId();
   const activeCell = deps.accessors.selection.getActiveCell();
   const commentCommands = deps.commands.comment;
@@ -55,7 +60,7 @@ export const INSERT_COMMENT: AsyncActionHandler = async (deps) => {
   });
 
   // Transition to compose mode
-  commentCommands.startCompose();
+  commentCommands.startCompose(payload?.commentType);
 
   return handled();
 };

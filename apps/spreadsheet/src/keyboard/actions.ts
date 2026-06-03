@@ -248,6 +248,8 @@ export type DataKeyboardAction =
   // Filter operations
   | { type: 'REAPPLY_FILTERS' };
 
+export type TableKeyboardAction = { type: 'TOGGLE_FILTER_BUTTONS' };
+
 // =============================================================================
 // Object Actions (floating objects context)
 // =============================================================================
@@ -288,6 +290,7 @@ export type KeyboardAction =
   | WorkbookKeyboardAction
   | FileKeyboardAction
   | DataKeyboardAction
+  | TableKeyboardAction
   | ObjectKeyboardAction
   | NavigationKeyboardAction;
 
@@ -473,6 +476,7 @@ export const ACTION_TARGET_MAP: Record<string, ActionTarget> = {
   // F9 Partial Formula Evaluation
   EVALUATE_FORMULA_SELECTION: 'store', // Evaluates selected portion in formula editing
   REAPPLY_FILTERS: 'store', // Reapply current filter and sort
+  TOGGLE_FILTER_BUTTONS: 'store',
 
   // ===========================================================================
   // Workbook operations

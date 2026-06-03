@@ -32,6 +32,15 @@ import { useExtensionStore } from '../../../infra/state/extension-store';
 // Type Helpers
 // =============================================================================
 
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol
+  );
+}
+
 /**
  * Get selection context (active cell and ranges) using the Actor Access Layer.
  *
@@ -105,17 +114,23 @@ export const TOGGLE_AUTO_FILTER: AsyncActionHandler = async (deps): Promise<Acti
 
   const userRange = ranges[0];
 
-  // Check if an AutoFilter already exists for this range (for toggle off)
-  const existingFilter = await ws.filters.getForRange(userRange);
+  const target = await resolveDataCommandTarget(ws, userRange);
+
+  // Toggle off uses the same target range that toggle on would create. A
+  // single-cell selection inside a data region expands to the current region,
+  // so checking only the literal selected cell misses an existing AutoFilter.
+  const existingFilter =
+    (await ws.filters.getForRange(userRange)) ??
+    (target ? await ws.filters.getForRange(target.range) : null) ??
+    (target
+      ? (await ws.filters.list()).find((filter) => rangesEqual(filter.range, target.range)) ?? null
+      : null);
 
   if (existingFilter) {
     // Filter exists - remove it
     await ws.filters.remove(existingFilter.id);
     return handled();
   }
-
-  // No existing filter - resolve the Data-tab tabular command target and create.
-  const target = await resolveDataCommandTarget(ws, userRange);
 
   if (!target) {
     // No data region found (empty cell selected)

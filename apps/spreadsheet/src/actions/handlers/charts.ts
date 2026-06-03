@@ -525,6 +525,10 @@ export const TOGGLE_CHART_SELECTION: ActionHandler = (deps, payload): ActionResu
 // Chart Z-Order Actions (13.3: Z-Order Commands)
 // =============================================================================
 
+function getTargetChartId(deps: ActionDependencies, payload: { chartId?: string } | undefined) {
+  return payload?.chartId ?? deps.accessors.object.getFirstSelectedId();
+}
+
 /**
  * BRING_CHART_TO_FRONT - Bring a chart to the front (highest z-index).
  * Payload: { chartId: string }
@@ -535,7 +539,7 @@ export const BRING_CHART_TO_FRONT: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getTargetChartId(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -561,7 +565,7 @@ export const SEND_CHART_TO_BACK: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getTargetChartId(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -587,7 +591,7 @@ export const BRING_CHART_FORWARD: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getTargetChartId(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -613,7 +617,7 @@ export const SEND_CHART_BACKWARD: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getTargetChartId(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }

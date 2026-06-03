@@ -45,7 +45,7 @@ describe('Formula Click-to-Insert Reference', () => {
     expect(sim.editorValue()).toBe('=B2');
   });
 
-  it('clicking a cell inserts reference and active cell stays at the formula cell', async () => {
+  it('clicking a cell inserts reference and selection tracks the pointed cell', async () => {
     sim = createGridSimulator({ activeCell: { row: 3, col: 2 }, sheetId: 'sheet-1' });
 
     sim.startEditing('=');
@@ -54,9 +54,61 @@ describe('Formula Click-to-Insert Reference', () => {
     // Click cell A1 (row 0, col 0)
     sim.clickCell(0, 0);
 
-    // Active cell should remain at the formula cell (3, 2), not navigate to (0, 0)
-    expect(sim.activeCell()).toEqual({ row: 3, col: 2 });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
     expect(sim.editorValue()).toBe('=A1');
+  });
+
+  it('clicking a cell during formula Edit Mode still inserts a reference', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 0 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=SUM(');
+    await sim.flush();
+    sim.system.access.commands.editor.toggleEditMode();
+    await sim.flush();
+
+    sim.clickCell(1, 1);
+
+    expect(sim.isFormulaEditing()).toBe(true);
+    expect(sim.isEditing()).toBe(true);
+    expect(sim.activeCell()).toEqual({ row: 1, col: 1 });
+    expect(sim.editorValue()).toBe('=SUM(B2');
+  });
+
+  it('cancelling formula point mode restores selection to the formula origin', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 0 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=');
+    await sim.flush();
+    sim.arrow('down');
+    await sim.flush();
+
+    expect(sim.editorValue()).toBe('=A2');
+    expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
+
+    sim.cancelEdit();
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+  });
+
+  it('cross-sheet point insert falls back to the formula end when cursor state is stale', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 1 }, sheetId: 'sheet-1' });
+
+    sim.startEditing('=SUM(A1,');
+    await sim.flush();
+
+    sim.system.access.commands.editor.setCursor(0);
+    sim.system.access.actors.editor.send({
+      type: 'FORMULA_RANGE_SELECTED',
+      range: { startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
+      color: '#4285f4',
+      sheetId: 'sheet-2',
+      sheetName: 'Sheet2',
+    });
+    await sim.flush();
+
+    expect(sim.editorValue()).toBe('=SUM(A1,Sheet2!A1');
   });
 
   it('clicking multiple cells inserts multiple references', async () => {

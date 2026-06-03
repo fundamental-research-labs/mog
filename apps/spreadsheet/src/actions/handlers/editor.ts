@@ -50,7 +50,13 @@ import { getRelativeCommandColumn, resolveDataCommandTarget } from '../data-comm
 import { guardBridgeMutation } from './bridge-error-guard';
 import { beginEditSessionFromAction } from './edit-entry';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
-import { getUIStore, handled, notHandled } from './handler-utils';
+import {
+  getUIStore,
+  handled,
+  isProtectionRejection,
+  notHandled,
+  showProtectionFeedback,
+} from './handler-utils';
 import { hasMultiCellSelection } from './selection/helpers';
 
 /**
@@ -432,11 +438,25 @@ export const CLEAR_CONTENTS: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
+  if (await selectionContainsProtectedCells(deps, targetSheetIds, ranges)) {
+    showProtectionFeedback(deps, 'Cannot edit locked cell on protected sheet');
+    return handled();
+  }
+
   await deps.workbook.undoGroup(async () => {
     for (const sheetId of targetSheetIds) {
       const ws = getWorksheet(deps, sheetId);
       for (const range of ranges) {
-        const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
+        let ok = false;
+        try {
+          ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
+        } catch (error) {
+          if (isProtectionRejection(error)) {
+            showProtectionFeedback(deps, 'Cannot edit locked cell on protected sheet');
+            return;
+          }
+          throw error;
+        }
         if (!ok) {
           return;
         }
@@ -459,6 +479,11 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { ranges } = getSelectionContext(deps);
 
+  if (await selectionContainsProtectedCells(deps, targetSheetIds, ranges)) {
+    showProtectionFeedback(deps, 'Cannot edit locked cell on protected sheet');
+    return handled();
+  }
+
   await deps.workbook.undoGroup(async () => {
     for (const sheetId of targetSheetIds) {
       const ws = getWorksheet(deps, sheetId);
@@ -472,6 +497,29 @@ export const CLEAR_ALL: AsyncActionHandler = async (deps) => {
 
   return handled();
 };
+
+async function selectionContainsProtectedCells(
+  deps: ActionDependencies,
+  targetSheetIds: SheetId[],
+  ranges: CellRange[],
+): Promise<boolean> {
+  for (const sheetId of targetSheetIds) {
+    const ws = getWorksheet(deps, sheetId);
+    for (const range of ranges) {
+      if (ws.protection.canEditCellFast(range.startRow, range.startCol) === true) {
+        continue;
+      }
+      for (let row = range.startRow; row <= range.endRow; row += 1) {
+        for (let col = range.startCol; col <= range.endCol; col += 1) {
+          if (!(await ws.protection.canEditCell(row, col))) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
 
 async function clearRangeMetadata(ws: WorksheetWithInternals, range: CellRange): Promise<void> {
   await Promise.all([

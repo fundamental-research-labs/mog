@@ -254,10 +254,20 @@ export const insertFormulaRange = assign(({ context, event }) => {
     context.formulaRefInsertEnd !== null &&
     context.cursorPosition === context.formulaRefInsertEnd;
 
+  let cursorPosition = context.cursorPosition;
+  const isCrossSheetPointRef =
+    event.sheetId && context.sheetId && event.sheetId !== context.sheetId;
+
   if (
     !isReplacingActiveRef &&
-    !isCursorAtReferencePosition(context.value, context.cursorPosition)
+    !isCursorAtReferencePosition(context.value, cursorPosition) &&
+    isCrossSheetPointRef &&
+    isCursorAtReferencePosition(context.value, context.value.length)
   ) {
+    cursorPosition = context.value.length;
+  }
+
+  if (!isReplacingActiveRef && !isCursorAtReferencePosition(context.value, cursorPosition)) {
     return {};
   }
 
@@ -274,8 +284,8 @@ export const insertFormulaRange = assign(({ context, event }) => {
     newCursorPosition = insertStart + rangeText.length;
   } else {
     // Insert at cursor (first arrow or after typing an operator)
-    insertStart = context.cursorPosition;
-    const result = insertRangeAtCursor(context.value, context.cursorPosition, rangeText);
+    insertStart = cursorPosition;
+    const result = insertRangeAtCursor(context.value, cursorPosition, rangeText);
     newValue = result.newValue;
     newCursorPosition = result.newCursorPosition;
   }

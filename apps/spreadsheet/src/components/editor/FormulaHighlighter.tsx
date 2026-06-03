@@ -632,6 +632,8 @@ export function FormulaHighlighter({
         return (
           <span
             key={`${index}-${token.start}`}
+            data-token-type={token.type}
+            data-formula-token={token.value}
             style={{
               color,
               backgroundColor,

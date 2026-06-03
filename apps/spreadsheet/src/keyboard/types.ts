@@ -64,6 +64,7 @@ export type KeyboardShortcutBase<A extends ActionType = ActionType> = Omit<
 > & {
   readonly matchBy: 'key' | 'code';
   readonly muscleMemory: MuscleMemoryLevel;
+  readonly dispatchOnPrefixComplete?: boolean;
 };
 
 /**

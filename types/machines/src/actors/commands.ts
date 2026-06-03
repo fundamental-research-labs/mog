@@ -1657,7 +1657,7 @@ export interface CommentCommands {
   /**
    * Start composing a new comment.
    */
-  startCompose(): void;
+  startCompose(commentType?: 'note' | 'threadedComment'): void;
 
   /**
    * Start editing an existing comment.

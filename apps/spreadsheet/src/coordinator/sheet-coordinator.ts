@@ -27,6 +27,7 @@ import {
 import { GridEditingSystem } from '../systems/grid-editing/grid-editing-system';
 import { setupFindReplaceCoordination } from '../systems/grid-editing/features/find-replace/find-replace-coordination';
 import { setupMergeAnchorCoordination } from '../systems/grid-editing/coordination/merge-anchor-coordination';
+import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
 import { setupNamedRangesIntegration } from '../systems/grid-editing/subscriptions/named-ranges-integration';
 import { setupScrollCommitCoordination } from '../systems/grid-editing/coordination/scroll-commit-coordination';
 import { setupSheetSwitchCoordination } from '../systems/grid-editing/subscriptions/sheet-switch-coordination';
@@ -398,6 +399,20 @@ export class SheetCoordinator {
       const editorActor = this.grid.access.actors.editor;
 
       this.crossWiringCleanups.push(wireReturnToOriginSheet(editorActor, uiStoreApi));
+    }
+
+    if (this.workbook && this.config.sheetSwitchDependencies) {
+      const uiStoreApi = this.config.sheetSwitchDependencies.uiStoreApi;
+      this.crossWiringCleanups.push(
+        setupUndoSelectionCoordination({
+          history: this.workbook.history,
+          selectionActor: this.grid.access.actors.selection,
+          getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
+          setActiveSheetId: (sheetId) => uiStoreApi.getState().setActiveSheet(sheetId),
+          saveSheetViewState: (sheetId, state) =>
+            uiStoreApi.getState().saveSheetViewState(sheetId, state),
+        }),
+      );
     }
 
     // Pending cell format: re-apply format after commit.

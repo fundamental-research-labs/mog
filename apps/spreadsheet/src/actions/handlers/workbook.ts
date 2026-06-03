@@ -129,6 +129,21 @@ interface GroupRecord {
   collapsed: boolean;
 }
 
+function findInnermostContainingGroup(
+  groups: readonly GroupRecord[],
+  start: number,
+  end: number,
+): GroupRecord | null {
+  let match: GroupRecord | null = null;
+  for (const group of groups) {
+    if (group.start > start || group.end < end) continue;
+    if (!match || group.level > match.level || group.end - group.start < match.end - match.start) {
+      match = group;
+    }
+  }
+  return match;
+}
+
 // =============================================================================
 // Sheet Navigation Actions
 // =============================================================================
@@ -268,6 +283,32 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
     await ws.outline.ungroupColumns(bounds.startCol, bounds.endCol);
     return handled();
   }
+  const state = await ws.outline.getState();
+  const containingRowGroup = findInnermostContainingGroup(
+    state.rowGroups as GroupRecord[],
+    bounds.startRow,
+    bounds.endRow,
+  );
+  if (containingRowGroup) {
+    wb.setPendingUndoDescription(
+      `Ungroup rows ${containingRowGroup.start + 1}-${containingRowGroup.end + 1}`,
+    );
+    await ws.outline.ungroupRows(containingRowGroup.start, containingRowGroup.end);
+    return handled();
+  }
+
+  const containingColumnGroup = findInnermostContainingGroup(
+    state.columnGroups as GroupRecord[],
+    bounds.startCol,
+    bounds.endCol,
+  );
+  if (containingColumnGroup) {
+    wb.setPendingUndoDescription(
+      `Ungroup columns ${containingColumnGroup.start + 1}-${containingColumnGroup.end + 1}`,
+    );
+    await ws.outline.ungroupColumns(containingColumnGroup.start, containingColumnGroup.end);
+    return handled();
+  }
   return notHandled('disabled');
 };
 
@@ -287,17 +328,16 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   const columnGroups = state.columnGroups as GroupRecord[];
 
   let toggled = false;
-  for (const group of rowGroups) {
-    if (group.collapsed && group.start <= bounds.startRow && group.end >= bounds.endRow) {
-      await ws.outline.toggleCollapsed(group.id);
-      toggled = true;
-    }
+  const rowGroup = findInnermostContainingGroup(rowGroups, bounds.startRow, bounds.endRow);
+  if (rowGroup?.collapsed) {
+    await ws.outline.toggleCollapsed(rowGroup.id);
+    toggled = true;
   }
-  for (const group of columnGroups) {
-    if (group.collapsed && group.start <= bounds.startCol && group.end >= bounds.endCol) {
-      await ws.outline.toggleCollapsed(group.id);
-      toggled = true;
-    }
+
+  const columnGroup = findInnermostContainingGroup(columnGroups, bounds.startCol, bounds.endCol);
+  if (columnGroup?.collapsed) {
+    await ws.outline.toggleCollapsed(columnGroup.id);
+    toggled = true;
   }
   return toggled ? handled() : notHandled('disabled');
 };
@@ -318,22 +358,16 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   const columnGroups = state.columnGroups as GroupRecord[];
 
   // Find the innermost expanded row group containing the selection.
-  const rowGroupsContaining = rowGroups
-    .filter((g) => !g.collapsed && g.start <= bounds.startRow && g.end >= bounds.endRow)
-    .sort((a, b) => b.level - a.level);
-
   let toggled = false;
-  if (rowGroupsContaining.length > 0) {
-    await ws.outline.toggleCollapsed(rowGroupsContaining[0].id);
+  const rowGroup = findInnermostContainingGroup(rowGroups, bounds.startRow, bounds.endRow);
+  if (rowGroup && !rowGroup.collapsed) {
+    await ws.outline.toggleCollapsed(rowGroup.id);
     toggled = true;
   }
 
-  const colGroupsContaining = columnGroups
-    .filter((g) => !g.collapsed && g.start <= bounds.startCol && g.end >= bounds.endCol)
-    .sort((a, b) => b.level - a.level);
-
-  if (colGroupsContaining.length > 0) {
-    await ws.outline.toggleCollapsed(colGroupsContaining[0].id);
+  const columnGroup = findInnermostContainingGroup(columnGroups, bounds.startCol, bounds.endCol);
+  if (columnGroup && !columnGroup.collapsed) {
+    await ws.outline.toggleCollapsed(columnGroup.id);
     toggled = true;
   }
 

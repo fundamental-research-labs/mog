@@ -11,6 +11,7 @@ import type { StoreApi } from 'zustand';
 
 import { sheetId as toSheetId, type CellFormat } from '@mog-sdk/contracts/core';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 import type { FlashFillCoordinator } from '../systems/grid-editing/features/flash-fill';
 import type { UIState } from '../ui-store';
@@ -32,6 +33,36 @@ function wasEditingNowInactive(
     prevState.matches('editing') ||
     prevState.matches('committing');
   return wasEditing && currentState.matches('inactive');
+}
+
+function getPostCommitActiveCell(
+  origin: CellCoord,
+  commitKey: ReturnType<EditorActor['getSnapshot']>['context']['commitKey'],
+  direction: ReturnType<EditorActor['getSnapshot']>['context']['commitDirection'],
+): CellCoord {
+  const next = { ...origin };
+  const movement = commitKey ?? direction;
+
+  switch (movement) {
+    case 'tab':
+    case 'right':
+      next.col += 1;
+      break;
+    case 'shift-tab':
+    case 'left':
+      next.col = Math.max(0, next.col - 1);
+      break;
+    case 'enter':
+    case 'down':
+      next.row += 1;
+      break;
+    case 'shift-enter':
+    case 'up':
+      next.row = Math.max(0, next.row - 1);
+      break;
+  }
+
+  return next;
 }
 
 // =============================================================================
@@ -79,6 +110,32 @@ export function wireReturnToOriginSheet(
         const originSheetId = prevState.context.sheetId;
         const activeSheetId = uiStoreApi.getState().activeSheetId;
         if (originSheetId && originSheetId !== activeSheetId) {
+          const origin = prevState.context.editingCell ?? prevState.context.commitActiveCell;
+          if (origin) {
+            const activeCell = getPostCommitActiveCell(
+              origin,
+              prevState.context.commitKey,
+              prevState.context.commitDirection,
+            );
+            const originSheet = toSheetId(originSheetId);
+            const existing = uiStoreApi.getState().getSheetViewState(originSheet);
+            uiStoreApi.getState().saveSheetViewState(originSheet, {
+              ranges: [
+                {
+                  startRow: activeCell.row,
+                  startCol: activeCell.col,
+                  endRow: activeCell.row,
+                  endCol: activeCell.col,
+                },
+              ],
+              activeCell,
+              anchor: null,
+              anchorCol: null,
+              anchorRow: null,
+              scrollTop: existing?.scrollTop ?? 0,
+              scrollLeft: existing?.scrollLeft ?? 0,
+            });
+          }
           uiStoreApi.getState().setActiveSheet(toSheetId(originSheetId));
         }
       }

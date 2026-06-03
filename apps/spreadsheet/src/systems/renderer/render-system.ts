@@ -441,7 +441,6 @@ export class RenderSystem implements IRenderSystem {
 
   applyCellLevelScroll(topRow: number, leftCol: number): void {
     if (this.disposed || !this.started) return;
-    if (topRow === 0 && leftCol === 0) return;
 
     // Use geometry capability to convert cell-level scroll to pixels.
     const geometry = this.getGeometry();

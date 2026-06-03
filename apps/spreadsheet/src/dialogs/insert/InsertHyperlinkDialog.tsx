@@ -103,14 +103,14 @@ export function InsertHyperlinkDialog({ onSave, onRemove }: InsertHyperlinkDialo
   useEffect(() => {
     if (isOpen) {
       setUrl(existingUrl ?? '');
-      setDisplayText('');
+      setDisplayText(cellValue ? String(cellValue) : '');
       setError(null);
       // Focus URL input after dialog renders
       setTimeout(() => {
         urlInputRef.current?.focus();
       }, 50);
     }
-  }, [isOpen, existingUrl]);
+  }, [isOpen, existingUrl, cellValue]);
 
   // Validate URL on change
   const handleUrlChange = useCallback(

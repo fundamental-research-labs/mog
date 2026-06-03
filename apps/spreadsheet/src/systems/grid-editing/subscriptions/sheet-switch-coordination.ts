@@ -326,7 +326,12 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
       // dispatch is load-bearing. Removing it would leave a regular edit
       // hanging when the user clicks a different sheet tab.
       const isFormulaEditing = editorSelectors.isFormulaEditing(editorState);
-      if (!isFormulaEditing) {
+      const isImeComposing = editorSelectors.isImeComposing(editorState);
+      if (isImeComposing) {
+        const compositionText = editorSelectors.compositionText(editorState);
+        editorActor.send({ type: 'IME_END', finalText: compositionText });
+        editorActor.send({ type: 'COMMIT', direction: 'none' });
+      } else if (!isFormulaEditing) {
         editorActor.send({ type: 'COMMIT', direction: 'none' });
       }
       // Formula editing: do NOT cancel or commit — let user build cross-sheet refs

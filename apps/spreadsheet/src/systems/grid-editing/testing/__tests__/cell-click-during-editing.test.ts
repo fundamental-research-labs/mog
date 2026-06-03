@@ -71,8 +71,38 @@ describe('Cell click during editing', () => {
     expect(sim.isFormulaEditing()).toBe(true);
     expect(sim.isEditing()).toBe(true);
     expect(sim.editorValue()).toBe('=SUM(D3');
-    // Active cell stays at the formula cell (didn't navigate away).
+    // Selection shows the pointed cell while editor context still owns the
+    // formula origin for commit.
+    expect(sim.activeCell()).toEqual({ row: 2, col: 3 });
+  });
+
+  it('click active cell during formula edit inserts ref and remains editing', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 0 } });
+
+    sim.startEditing('=SUM(');
+    await sim.flush();
+
+    sim.clickCell(0, 0);
+
+    expect(sim.isFormulaEditing()).toBe(true);
+    expect(sim.editorValue()).toBe('=SUM(A1');
     expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+  });
+
+  it('click another cell during formula edit mode inserts ref and remains editing', async () => {
+    sim = createGridSimulator({ activeCell: { row: 0, col: 0 } });
+
+    sim.startEditing('=SUM(');
+    await sim.flush();
+    sim.system.access.commands.editor.toggleEditMode();
+    await sim.flush();
+
+    sim.clickCell(2, 3);
+
+    expect(sim.isFormulaEditing()).toBe(true);
+    expect(sim.isEditing()).toBe(true);
+    expect(sim.editorValue()).toBe('=SUM(D3');
+    expect(sim.activeCell()).toEqual({ row: 2, col: 3 });
   });
 
   // ---------------------------------------------------------------------------

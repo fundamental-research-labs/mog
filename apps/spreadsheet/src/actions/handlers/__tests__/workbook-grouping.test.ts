@@ -12,6 +12,7 @@ interface MockSetup {
     groupColumns: jest.Mock;
     ungroupRows: jest.Mock;
     ungroupColumns: jest.Mock;
+    getState: jest.Mock;
   };
   workbook: {
     setPendingUndoDescription: jest.Mock;
@@ -25,6 +26,7 @@ function createMockDeps(ranges: CellRange[]): MockSetup {
     groupColumns: jest.fn().mockResolvedValue(undefined),
     ungroupRows: jest.fn().mockResolvedValue(undefined),
     ungroupColumns: jest.fn().mockResolvedValue(undefined),
+    getState: jest.fn().mockResolvedValue({ rowGroups: [], columnGroups: [] }),
   };
   const worksheet = { outline };
   const workbook = {
@@ -151,5 +153,40 @@ describe('Workbook GROUP/UNGROUP axis inference', () => {
     expect(outline.groupRows).toHaveBeenCalledWith(0, MAX_ROWS - 1);
     expect(outline.groupColumns).not.toHaveBeenCalled();
     expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Group rows 1-1048576');
+  });
+
+  it('ungroups the innermost containing row group for a single-cell selection', async () => {
+    const range: CellRange = { startRow: 2, startCol: 0, endRow: 2, endCol: 0 };
+    const { deps, outline, workbook } = createMockDeps([range]);
+    outline.getState.mockResolvedValue({
+      rowGroups: [
+        { id: 'outer', start: 1, end: 5, level: 1, collapsed: false },
+        { id: 'inner', start: 2, end: 4, level: 2, collapsed: false },
+      ],
+      columnGroups: [],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.ungroupRows).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledWith(2, 4);
+    expect(outline.ungroupColumns).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup rows 3-5');
+  });
+
+  it('keeps UNGROUP disabled when a single-cell selection is outside every outline group', async () => {
+    const range: CellRange = { startRow: 8, startCol: 0, endRow: 8, endCol: 0 };
+    const { deps, outline } = createMockDeps([range]);
+    outline.getState.mockResolvedValue({
+      rowGroups: [{ id: 'row-group', start: 1, end: 5, level: 1, collapsed: false }],
+      columnGroups: [],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(false);
+    expect(outline.ungroupRows).not.toHaveBeenCalled();
+    expect(outline.ungroupColumns).not.toHaveBeenCalled();
   });
 });

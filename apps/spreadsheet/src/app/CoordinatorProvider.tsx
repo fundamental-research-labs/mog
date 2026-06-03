@@ -88,6 +88,14 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isPrintableEditorTextKey(e: KeyboardEvent): boolean {
+  return e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+}
+
+function spreadsheetGridTarget(target: HTMLElement | null): HTMLElement | null {
+  return target?.closest<HTMLElement>('[data-testid="spreadsheet"][role="grid"]') ?? null;
+}
+
 /**
  * Hook to access pane navigation element registration.
  * Used by components to register their DOM elements for F6 navigation.
@@ -362,6 +370,29 @@ function KeyboardCaptureSetup({
         return;
       }
 
+      const target = keyboardEventTargetElement(e);
+
+      if (
+        isPrintableEditorTextKey(e) &&
+        !isEditableKeyboardTarget(target) &&
+        !isDialogKeyboardTarget(target)
+      ) {
+        const { value, cursorPosition, hasSelection, selectionAnchor } = editorSnapshot.context;
+        const selectionStart = hasSelection ? Math.min(cursorPosition, selectionAnchor) : cursorPosition;
+        const selectionEnd = hasSelection ? Math.max(cursorPosition, selectionAnchor) : cursorPosition;
+        const nextValue = value.slice(0, selectionStart) + e.key + value.slice(selectionEnd);
+        const nextCursorPosition = selectionStart + e.key.length;
+
+        coordinator.grid.access.actors.editor.send({
+          type: 'INPUT',
+          value: nextValue,
+          cursorPosition: nextCursorPosition,
+        });
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       // Only intercept navigation keys during editing
       const isNavigationKey = ['Enter', 'Tab', 'Escape'].includes(e.key);
       // Sheet switching (Ctrl/Cmd+PageDown/Up) should also be intercepted during editing
@@ -396,6 +427,40 @@ function KeyboardCaptureSetup({
       }
     };
 
+    const handlePointerDownCapture = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (!target || target.closest('[data-no-grid-pointer]') || isDialogKeyboardTarget(target)) {
+        return;
+      }
+
+      const editorSnapshot = coordinator.grid.access.actors.editor.getSnapshot();
+      if (!editorSnapshot.matches('formulaEditing')) return;
+
+      const grid = spreadsheetGridTarget(target);
+      if (!grid) return;
+
+      const hitTest = coordinator.renderer.getHitTest?.();
+      if (!hitTest) return;
+
+      const rect = grid.getBoundingClientRect();
+      const hit = hitTest.atViewportPoint({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      if (hit.type !== 'cell') return;
+
+      const handled = coordinator.grid.handleCellClick(
+        { row: hit.row, col: hit.col },
+        e.shiftKey,
+        e.ctrlKey || e.metaKey,
+      );
+      if (handled) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
     /**
      * Document-level keyup handler.
      *
@@ -424,10 +489,12 @@ function KeyboardCaptureSetup({
     const handleKeyUpCapture = createKeyUpCapture((e) => keyboardCoordinator.handleKeyUp(e));
 
     // Attach with capture: true to intercept before target
+    document.addEventListener('pointerdown', handlePointerDownCapture, { capture: true });
     document.addEventListener('keydown', handleKeyDownCapture, { capture: true });
     document.addEventListener('keyup', handleKeyUpCapture, { capture: true });
 
     return () => {
+      document.removeEventListener('pointerdown', handlePointerDownCapture, { capture: true });
       document.removeEventListener('keydown', handleKeyDownCapture, { capture: true });
       document.removeEventListener('keyup', handleKeyUpCapture, { capture: true });
     };

@@ -18,8 +18,9 @@
 import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
-import type { CellRange } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 
+import { selectCurrentRegionForCtrlA } from '../current-region';
 import { SELECT_CURRENT_REGION } from '../select-all';
 
 // =============================================================================
@@ -32,6 +33,7 @@ interface MockSetup {
   setSelection: jest.Mock;
   getCurrentRegion: jest.Mock;
   recordCtrlAPress: jest.Mock;
+  resetCtrlAState: jest.Mock;
 }
 
 function makeMockDeps(opts: {
@@ -54,6 +56,7 @@ function makeMockDeps(opts: {
     }) as never,
   );
   const recordCtrlAPress = jest.fn();
+  const resetCtrlAState = jest.fn();
   const getNextCtrlAState = jest.fn().mockReturnValue(opts.nextCtrlAState ?? 'region');
 
   const ws = {
@@ -98,18 +101,19 @@ function makeMockDeps(opts: {
     getState: () => ({
       getNextCtrlAState,
       recordCtrlAPress,
+      resetCtrlAState,
     }),
   };
 
-  return { deps, selectAll, setSelection, getCurrentRegion, recordCtrlAPress };
+  return { deps, selectAll, setSelection, getCurrentRegion, recordCtrlAPress, resetCtrlAState };
 }
 
 // =============================================================================
 // Tests
 // =============================================================================
 
-describe('SELECT_CURRENT_REGION — kernel getCurrentRegion delegation', () => {
-  test('first press calls ws.getCurrentRegion with the active cell coords', async () => {
+describe('SELECT_CURRENT_REGION — direct current-region delegation', () => {
+  test('calls ws.getCurrentRegion with the active cell coords', async () => {
     // Active cell C3 (row 2, col 2); kernel returns A1:E10 contiguous block.
     const setup = makeMockDeps({
       activeCell: { row: 2, col: 2 },
@@ -143,14 +147,11 @@ describe('SELECT_CURRENT_REGION — kernel getCurrentRegion delegation', () => {
       endCol: 4,
     });
     expect(activeCellArg).toEqual({ row: 2, col: 2 });
-    expect(setup.recordCtrlAPress).toHaveBeenCalledWith('region');
-    // Existing semantics: with a real region, we do NOT fall through to selectAll.
+    expect(setup.resetCtrlAState).toHaveBeenCalledTimes(1);
     expect(setup.selectAll).not.toHaveBeenCalled();
   });
 
-  test('isolated empty cell (kernel returns single-cell == active cell) falls through to selectAll', async () => {
-    // Excel parity preserved: when the kernel reports just the active cell
-    // (no neighbors), Ctrl+A first press jumps directly to "select all".
+  test('isolated cell still selects the kernel-returned single-cell region', async () => {
     const setup = makeMockDeps({
       activeCell: { row: 5, col: 5 },
       currentRegionResult: { startRow: 5, startCol: 5, endRow: 5, endCol: 5 },
@@ -159,11 +160,16 @@ describe('SELECT_CURRENT_REGION — kernel getCurrentRegion delegation', () => {
     const result = await SELECT_CURRENT_REGION(setup.deps);
 
     expect(result.handled).toBe(true);
-    expect(setup.selectAll).toHaveBeenCalledTimes(1);
-    expect(setup.setSelection).not.toHaveBeenCalled();
-    expect(setup.recordCtrlAPress).toHaveBeenCalledWith('all');
+    expect(setup.selectAll).not.toHaveBeenCalled();
+    expect(setup.setSelection).toHaveBeenCalledWith(
+      [{ startRow: 5, startCol: 5, endRow: 5, endCol: 5 }],
+      { row: 5, col: 5 },
+    );
+    expect(setup.resetCtrlAState).toHaveBeenCalledTimes(1);
   });
+});
 
+describe('selectCurrentRegionForCtrlA — progressive Ctrl+A behavior', () => {
   test('second press (state machine returns "all") skips region and selects all without calling kernel', async () => {
     const setup = makeMockDeps({
       activeCell: { row: 2, col: 2 },
@@ -172,12 +178,33 @@ describe('SELECT_CURRENT_REGION — kernel getCurrentRegion delegation', () => {
       nextCtrlAState: 'all',
     });
 
-    const result = await SELECT_CURRENT_REGION(setup.deps);
+    const result = await selectCurrentRegionForCtrlA(setup.deps);
 
     expect(result.handled).toBe(true);
-    expect(setup.selectAll).toHaveBeenCalledTimes(1);
+    expect(setup.setSelection).toHaveBeenCalledWith(
+      [{ startRow: 0, startCol: 0, endRow: MAX_ROWS - 1, endCol: MAX_COLS - 1 }],
+      { row: 2, col: 2 },
+    );
+    expect(setup.selectAll).not.toHaveBeenCalled();
     // Kernel must NOT be called on second press — that path is skipped.
     expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.recordCtrlAPress).toHaveBeenCalledWith('all');
+  });
+
+  test('isolated empty cell first press selects the whole sheet and preserves active cell', async () => {
+    const setup = makeMockDeps({
+      activeCell: { row: 5, col: 5 },
+      currentRegionResult: { startRow: 5, startCol: 5, endRow: 5, endCol: 5 },
+    });
+
+    const result = await selectCurrentRegionForCtrlA(setup.deps);
+
+    expect(result.handled).toBe(true);
+    expect(setup.setSelection).toHaveBeenCalledWith(
+      [{ startRow: 0, startCol: 0, endRow: MAX_ROWS - 1, endCol: MAX_COLS - 1 }],
+      { row: 5, col: 5 },
+    );
+    expect(setup.selectAll).not.toHaveBeenCalled();
     expect(setup.recordCtrlAPress).toHaveBeenCalledWith('all');
   });
 
@@ -198,7 +225,7 @@ describe('SELECT_CURRENT_REGION — kernel getCurrentRegion delegation', () => {
       () => new Promise<CellRange>((res) => (resolveKernel = res)),
     );
 
-    const pending = SELECT_CURRENT_REGION(setup.deps);
+    const pending = selectCurrentRegionForCtrlA(setup.deps);
 
     // While the kernel call is pending, the press must already be recorded.
     expect(setup.recordCtrlAPress).toHaveBeenCalledWith('region');

@@ -196,7 +196,7 @@ export function useComments(): UseCommentsReturn {
         console.warn('[use-comments] Cannot add comment: sheet not found');
         return;
       }
-      void ws.comments.add(activeCell.row, activeCell.col, text, author);
+      void ws.comments.add(activeCell.row, activeCell.col, { text, author });
     },
     [wb, activeSheetId, activeCell.row, activeCell.col],
   );
@@ -243,7 +243,7 @@ export function useComments(): UseCommentsReturn {
         console.warn('[use-comments] Cannot reply: sheet not found');
         return;
       }
-      void ws.comments.add(activeCell.row, activeCell.col, text, author);
+      void ws.comments.add(activeCell.row, activeCell.col, { text, author });
     },
     [wb, activeSheetId, activeCell.row, activeCell.col],
   );

@@ -104,6 +104,10 @@ export interface ToolbarGroupProps {
   dropdownContent?: ReactNode;
   /** Optional typed ribbon visibility key. Defaults to a normalized label. */
   visibilityKey?: string;
+  /** Optional controlled open state for groups that collapse to a dropdown. */
+  dropdownOpen?: boolean;
+  /** Optional controlled open-state setter for collapsed dropdown mode. */
+  onDropdownOpenChange?: (open: boolean) => void;
 }
 
 export const ToolbarGroup = React.memo(function ToolbarGroup({
@@ -116,6 +120,8 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   dropdownIcon,
   dropdownContent,
   visibilityKey,
+  dropdownOpen,
+  onDropdownOpenChange,
 }: ToolbarGroupProps) {
   const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
   // Get current collapse level from context (provided by TabbedToolbar)
@@ -138,7 +144,13 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   if (renderMode === 'dropdown') {
     return (
       <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+        <CollapsedGroupDropdown
+          label={label}
+          icon={dropdownIcon}
+          isLast={isLast}
+          open={dropdownOpen}
+          onOpenChange={onDropdownOpenChange}
+        >
           {dropdownContent ?? children}
         </CollapsedGroupDropdown>
       </RibbonVisibilityGroup>

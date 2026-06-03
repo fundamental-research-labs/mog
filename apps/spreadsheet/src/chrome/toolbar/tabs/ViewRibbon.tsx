@@ -11,7 +11,7 @@
  * Ribbon Polish (V1, V2, V3, V4, V5)
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { dispatch, useActiveSheetId, useUIStore } from '../../../internal-api';
 import type { SpreadsheetDisplayMode } from '../../../ui-store/slices/core/display-mode';
 
@@ -465,6 +465,7 @@ export function ViewRibbon({
   const isDropdownOpen = useUIStore((s) => s.ribbonDropdowns['view.freeze-panes'] ?? false);
   const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
   const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
+  const freezeMenuRef = useRef<HTMLDivElement | null>(null);
   const displayMode = useUIStore((s) => s.spreadsheetDisplayMode);
   const setDisplayMode = useUIStore((s) => s.setSpreadsheetDisplayMode);
   const setIsDropdownOpen = useCallback(
@@ -513,6 +514,16 @@ export function ViewRibbon({
     },
     [setIsDropdownOpen],
   );
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+
+    requestAnimationFrame(() => {
+      freezeMenuRef.current
+        ?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])')
+        ?.focus({ preventScroll: true });
+    });
+  }, [isDropdownOpen]);
 
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
@@ -895,6 +906,7 @@ export function ViewRibbon({
               onClose={() => setIsDropdownOpen(false)}
             >
               <div
+                ref={freezeMenuRef}
                 data-testid="ribbon-dropdown-menu-freeze-panes"
                 className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[180px] py-1"
                 role="menu"

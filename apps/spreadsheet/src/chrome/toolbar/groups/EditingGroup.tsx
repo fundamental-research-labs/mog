@@ -277,6 +277,9 @@ export const EditingGroup = React.memo(function EditingGroup() {
             >
               Series...
             </RibbonDropdownItem>
+            <RibbonDropdownItem dataValue="justify" disabled>
+              Justify
+            </RibbonDropdownItem>
           </RibbonDropdown>
 
           {/* Clear Dropdown */}

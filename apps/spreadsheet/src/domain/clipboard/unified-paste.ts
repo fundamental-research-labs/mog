@@ -245,6 +245,19 @@ export async function unifiedPaste(
     clipboardState.context.isStale !== true;
   const isOurClipboard =
     (internalSignature === systemSignature && systemSignature !== '') || hasFreshInternalClipboard;
+  const suppressedInternalCutSignature = normalizeClipboardSignature(
+    clipboardState.context.suppressedInternalCutSignature ?? '',
+  );
+  const isCancelledOrConsumedInternalCut =
+    !clipboardData &&
+    systemSignature !== '' &&
+    suppressedInternalCutSignature !== '' &&
+    systemSignature === suppressedInternalCutSignature;
+
+  if (isCancelledOrConsumedInternalCut) {
+    hidePendingPreview();
+    return;
+  }
 
   // 3. Route to appropriate paste method
   if (clipboardData && isOurClipboard) {

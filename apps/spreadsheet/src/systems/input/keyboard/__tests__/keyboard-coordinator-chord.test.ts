@@ -581,6 +581,43 @@ describe('KeyboardCoordinator chord — prefix completions', () => {
       jest.useRealTimers();
     }
   });
+
+  it('dispatchOnPrefixComplete opens a completed dropdown prefix while preserving longer chords', () => {
+    const { coordinator, dispatchMock } = makeCoordinator([
+      {
+        ...chordSequence('cell-styles', 'KeyH', ['KeyS'], 'OPEN_RIBBON_DROPDOWN', {
+          dropdownId: 'home.cell-styles',
+        }),
+        dispatchOnPrefixComplete: true,
+      } as KeyboardShortcut,
+      chordSequence('sort-filter', 'KeyH', ['KeyS', 'KeyO'], 'OPEN_RIBBON_DROPDOWN', {
+        dropdownId: 'home.sort-filter',
+      }),
+    ]);
+
+    altTap(coordinator);
+    coordinator.handleKeyboardEvent(evt({ code: 'KeyH', key: 'h', altKey: false }));
+
+    const prefixResult = coordinator.handleKeyboardEvent(
+      evt({ code: 'KeyS', key: 's', altKey: false }),
+    );
+    expect(prefixResult.handled).toBe(true);
+    expect(prefixResult.action).toBe('CHORD_PENDING');
+    expect(coordinator.isChordPending()).toBe(true);
+    expect(dispatchMock).toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
+      dropdownId: 'home.cell-styles',
+    });
+
+    const longerResult = coordinator.handleKeyboardEvent(
+      evt({ code: 'KeyO', key: 'o', altKey: false }),
+    );
+    expect(longerResult.handled).toBe(true);
+    expect(longerResult.action).toBe('OPEN_RIBBON_DROPDOWN');
+    expect(coordinator.isChordPending()).toBe(false);
+    expect(dispatchMock).toHaveBeenCalledWith('OPEN_RIBBON_DROPDOWN', expect.any(Object), {
+      dropdownId: 'home.sort-filter',
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

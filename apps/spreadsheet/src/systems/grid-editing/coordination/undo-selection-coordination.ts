@@ -33,6 +33,7 @@ import { selectionSelectors } from '../../../selectors';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 
 import type { WorkbookHistory } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { SelectionActor } from './cross-coordination';
 
@@ -48,6 +49,23 @@ export interface UndoSelectionCoordinationConfig {
   history: WorkbookHistory;
   /** Selection actor to restore selection on undo/redo */
   selectionActor: SelectionActor;
+  /** Get the currently active sheet ID */
+  getActiveSheetId?: () => SheetId;
+  /** Activate the sheet attached to a restored checkpoint */
+  setActiveSheetId?: (sheetId: SheetId) => void;
+  /** Override target sheet view state so sheet-switch restoration lands on the undo checkpoint */
+  saveSheetViewState?: (
+    sheetId: SheetId,
+    state: {
+      ranges: SelectionCheckpoint['ranges'];
+      activeCell: SelectionCheckpoint['activeCell'];
+      anchor: SelectionCheckpoint['anchor'];
+      anchorCol: null;
+      anchorRow: null;
+      scrollTop: number;
+      scrollLeft: number;
+    },
+  ) => void;
 }
 
 // =============================================================================
@@ -68,7 +86,7 @@ export interface UndoSelectionCoordinationConfig {
 export function setupUndoSelectionCoordination(
   config: UndoSelectionCoordinationConfig,
 ): () => void {
-  const { history, selectionActor } = config;
+  const { history, selectionActor, getActiveSheetId, setActiveSheetId, saveSheetViewState } = config;
 
   // Local stacks mirroring the Rust undo/redo depth
   // Each entry is a selection checkpoint captured before/after an operation
@@ -80,55 +98,25 @@ export function setupUndoSelectionCoordination(
     const { trigger } = event;
 
     if (trigger === 'undo') {
-      // Capture current selection for potential redo
-      const currentSnapshot = selectionActor.getSnapshot();
-      const currentSelection = currentSnapshot.context;
-      const postCheckpoint: SelectionCheckpoint = {
-        ranges: [...selectionSelectors.ranges(currentSnapshot)],
-        activeCell: { ...currentSelection.activeCell },
-        anchor: currentSelection.anchor ? { ...currentSelection.anchor } : null,
-        direction: currentSelection.direction,
-      };
-      redoSelections.push(postCheckpoint);
-
       // Restore pre-operation selection from undo stack
       const checkpoint = undoSelections.pop();
       if (checkpoint) {
-        selectionActor.send({
-          type: 'SET_SELECTION',
-          ranges: checkpoint.ranges,
-          activeCell: checkpoint.activeCell,
-          anchor: checkpoint.anchor,
-        });
+        redoSelections.push(checkpoint);
+        restoreCheckpoint(checkpoint, selectionActor, getActiveSheetId, setActiveSheetId, saveSheetViewState);
       }
     } else if (trigger === 'redo') {
-      // Capture current selection for potential undo
-      const currentSnapshot = selectionActor.getSnapshot();
-      const currentSelection = currentSnapshot.context;
-      const preCheckpoint: SelectionCheckpoint = {
-        ranges: [...selectionSelectors.ranges(currentSnapshot)],
-        activeCell: { ...currentSelection.activeCell },
-        anchor: currentSelection.anchor ? { ...currentSelection.anchor } : null,
-        direction: currentSelection.direction,
-      };
-      undoSelections.push(preCheckpoint);
-
       // Restore post-operation selection from redo stack
       const checkpoint = redoSelections.pop();
       if (checkpoint) {
-        selectionActor.send({
-          type: 'SET_SELECTION',
-          ranges: checkpoint.ranges,
-          activeCell: checkpoint.activeCell,
-          anchor: checkpoint.anchor,
-        });
+        undoSelections.push(checkpoint);
+        restoreCheckpoint(checkpoint, selectionActor, getActiveSheetId, setActiveSheetId, saveSheetViewState);
       }
     } else if (trigger === 'push') {
       // Capture current selection as pre-operation checkpoint for the undo stack.
       // The push event fires synchronously from notifyForwardMutation() before
       // the action handler continues, so the selection actor still reflects the
       // position at mutation time — the correct checkpoint for undo restoration.
-      undoSelections.push(captureSelectionCheckpoint(selectionActor));
+      undoSelections.push(captureSelectionCheckpoint(selectionActor, getActiveSheetId));
 
       // Clear redo selections on new operation (redo path is invalidated)
       redoSelections.length = 0;
@@ -156,14 +144,49 @@ export function setupUndoSelectionCoordination(
  * @param selectionActor - The selection actor to capture state from
  * @returns SelectionCheckpoint to store
  */
-export function captureSelectionCheckpoint(selectionActor: SelectionActor): SelectionCheckpoint {
+export function captureSelectionCheckpoint(
+  selectionActor: SelectionActor,
+  getActiveSheetId?: () => SheetId,
+): SelectionCheckpoint {
   const snapshot = selectionActor.getSnapshot();
   const context = snapshot.context;
 
   return {
+    ...(getActiveSheetId ? { sheetId: getActiveSheetId() } : {}),
     ranges: selectionSelectors.ranges(snapshot),
     activeCell: context.activeCell,
     anchor: context.anchor,
     direction: context.direction,
   };
+}
+
+function restoreCheckpoint(
+  checkpoint: SelectionCheckpoint,
+  selectionActor: SelectionActor,
+  getActiveSheetId?: () => SheetId,
+  setActiveSheetId?: (sheetId: SheetId) => void,
+  saveSheetViewState?: UndoSelectionCoordinationConfig['saveSheetViewState'],
+): void {
+  const targetSheetId = checkpoint.sheetId;
+
+  if (targetSheetId && setActiveSheetId && targetSheetId !== getActiveSheetId?.()) {
+    saveSheetViewState?.(targetSheetId, {
+      ranges: checkpoint.ranges,
+      activeCell: checkpoint.activeCell,
+      anchor: checkpoint.anchor,
+      anchorCol: null,
+      anchorRow: null,
+      scrollTop: 0,
+      scrollLeft: 0,
+    });
+    setActiveSheetId(targetSheetId);
+  }
+
+  selectionActor.send({
+    type: 'SET_SELECTION',
+    ranges: checkpoint.ranges,
+    activeCell: checkpoint.activeCell,
+    anchor: checkpoint.anchor,
+    source: 'restore',
+  });
 }

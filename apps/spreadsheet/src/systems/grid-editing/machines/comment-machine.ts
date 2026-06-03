@@ -27,6 +27,7 @@ import { assign, setup } from 'xstate';
 import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { RichText } from '@mog-sdk/contracts/rich-text';
+import type { CommentComposeType } from '@mog-sdk/contracts/actors';
 // Note: commentSelectors from contracts use CommentState interface, which is compatible
 // with the machine's SnapshotFrom type. We don't import CommentState here because we
 // define our own CommentState export as SnapshotFrom<typeof commentMachine>.
@@ -61,6 +62,8 @@ export interface CommentContext {
   editingCommentId: string | null;
   /** Draft content while editing/composing (rich text segments) */
   draftContent: RichText;
+  /** Comment type to create for the current compose session */
+  composeCommentType: CommentComposeType;
   /** Comment ID pending deletion (in confirmingDelete state) */
   deletingCommentId: string | null;
 }
@@ -79,7 +82,7 @@ export type CommentEvent =
   | { type: 'LEAVE_CELL' }
   | { type: 'CLOSE' }
   // Action events
-  | { type: 'START_COMPOSE' }
+  | { type: 'START_COMPOSE'; commentType?: CommentComposeType }
   | { type: 'START_EDIT'; commentId: string; content: RichText }
   | { type: 'UPDATE_DRAFT'; content: RichText }
   | { type: 'SAVE' }
@@ -119,8 +122,9 @@ export const CommentEvents = {
     type: 'CLOSE',
   }),
 
-  startCompose: (): CommentEvent => ({
+  startCompose: (commentType?: CommentComposeType): CommentEvent => ({
     type: 'START_COMPOSE',
+    commentType,
   }),
 
   startEdit: (commentId: string, content: RichText): CommentEvent => ({
@@ -174,6 +178,7 @@ const initialContext: CommentContext = {
   target: null,
   editingCommentId: null,
   draftContent: [],
+  composeCommentType: 'threadedComment',
   deletingCommentId: null,
 };
 
@@ -249,8 +254,10 @@ export const commentMachine = setup({
     }),
 
     /** Initialize empty draft for new comment */
-    initializeDraft: assign({
+    initializeCompose: assign({
       draftContent: () => [],
+      composeCommentType: ({ event }) =>
+        event.type === 'START_COMPOSE' ? (event.commentType ?? 'threadedComment') : 'threadedComment',
     }),
 
     /** Set comment pending deletion */
@@ -318,7 +325,7 @@ export const commentMachine = setup({
         },
         START_COMPOSE: {
           target: 'composing',
-          actions: 'initializeDraft',
+          actions: 'initializeCompose',
         },
         START_EDIT: {
           target: 'editing',

@@ -15,6 +15,7 @@
  * Alt+J,T,KeyH → Toggle Header row (TOGGLE_TABLE_HEADER_ROW)
  * Alt+J,T,KeyT → Toggle Total row (TOGGLE_TABLE_TOTALS_ROW)
  * Alt+J,T,KeyB → Toggle Banded rows (TOGGLE_TABLE_BANDED_ROWS)
+ * Alt+J,T,KeyF → Toggle Filter Button (TOGGLE_FILTER_BUTTONS)
  *
  */
 
@@ -108,5 +109,19 @@ export const KEYTIPS_TABLE_DESIGN_SHORTCUTS: KeyboardShortcut[] = [
     muscleMemory: 'occasional',
     matchBy: 'code',
     notes: 'Excel 365: Table Design → B toggles banded rows.',
+  },
+  {
+    id: 'keytips-table-design.filter-button',
+    bindings: altBinding('KeyJ'),
+    sequence: ['KeyT', 'KeyF'],
+    description: 'Toggle Filter Button (Alt+J,T,F)',
+    action: 'TOGGLE_FILTER_BUTTONS',
+    enabled: true,
+    priority: 'medium',
+    category: 'data',
+    contexts: TABLE_DESIGN_CONTEXTS,
+    muscleMemory: 'occasional',
+    matchBy: 'code',
+    notes: 'Excel 365: Table Design → F toggles table header filter buttons.',
   },
 ];

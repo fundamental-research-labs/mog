@@ -187,7 +187,6 @@ export function InsertRibbon() {
     () => dispatchAction('OPEN_TEXT_EFFECT_GALLERY'),
     [dispatchAction],
   );
-
   // ===========================================================================
   // Local UI State
   // ===========================================================================
@@ -206,6 +205,51 @@ export function InsertRibbon() {
     (open: boolean) =>
       open ? openRibbonDropdown('insert.sparkline') : closeRibbonDropdown('insert.sparkline'),
     [openRibbonDropdown, closeRibbonDropdown],
+  );
+  const sparklineMenuContent = (
+    <div
+      data-testid="ribbon-dropdown-menu-sparkline"
+      className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[160px] py-1"
+      role="menu"
+      aria-label="Sparkline types"
+    >
+      <RibbonVisibilityItem item="line">
+        <RibbonDropdownItem
+          dataValue="line"
+          icon={<LineSparklineIcon />}
+          onClick={() => {
+            insertSparkline('line');
+            setIsSparklineDropdownOpen(false);
+          }}
+        >
+          Line
+        </RibbonDropdownItem>
+      </RibbonVisibilityItem>
+      <RibbonVisibilityItem item="column">
+        <RibbonDropdownItem
+          dataValue="column"
+          icon={<ColumnSparklineIcon />}
+          onClick={() => {
+            insertSparkline('column');
+            setIsSparklineDropdownOpen(false);
+          }}
+        >
+          Column
+        </RibbonDropdownItem>
+      </RibbonVisibilityItem>
+      <RibbonVisibilityItem item="winLoss">
+        <RibbonDropdownItem
+          dataValue="winLoss"
+          icon={<WinLossSparklineIcon />}
+          onClick={() => {
+            insertSparkline('winLoss');
+            setIsSparklineDropdownOpen(false);
+          }}
+        >
+          Win/Loss
+        </RibbonDropdownItem>
+      </RibbonVisibilityItem>
+    </div>
   );
 
   // ===========================================================================
@@ -401,6 +445,9 @@ export function InsertRibbon() {
         label="Sparklines"
         collapseConfig={SPARKLINES_COLLAPSE_CONFIG}
         dropdownIcon={<ColumnSparklineIcon />}
+        dropdownOpen={isSparklineDropdownOpen}
+        onDropdownOpenChange={setIsSparklineDropdownOpen}
+        dropdownContent={sparklineMenuContent}
       >
         <div className="relative inline-flex">
           <RibbonButton
@@ -424,48 +471,7 @@ export function InsertRibbon() {
             open={isSparklineDropdownOpen}
             onClose={() => setIsSparklineDropdownOpen(false)}
           >
-            <div
-              data-testid="ribbon-dropdown-menu-sparkline"
-              className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[160px] py-1"
-              role="menu"
-            >
-              <RibbonVisibilityItem item="line">
-                <RibbonDropdownItem
-                  dataValue="line"
-                  icon={<LineSparklineIcon />}
-                  onClick={() => {
-                    insertSparkline('line');
-                    setIsSparklineDropdownOpen(false);
-                  }}
-                >
-                  Line
-                </RibbonDropdownItem>
-              </RibbonVisibilityItem>
-              <RibbonVisibilityItem item="column">
-                <RibbonDropdownItem
-                  dataValue="column"
-                  icon={<ColumnSparklineIcon />}
-                  onClick={() => {
-                    insertSparkline('column');
-                    setIsSparklineDropdownOpen(false);
-                  }}
-                >
-                  Column
-                </RibbonDropdownItem>
-              </RibbonVisibilityItem>
-              <RibbonVisibilityItem item="winLoss">
-                <RibbonDropdownItem
-                  dataValue="winLoss"
-                  icon={<WinLossSparklineIcon />}
-                  onClick={() => {
-                    insertSparkline('winLoss');
-                    setIsSparklineDropdownOpen(false);
-                  }}
-                >
-                  Win/Loss
-                </RibbonDropdownItem>
-              </RibbonVisibilityItem>
-            </div>
+            {sparklineMenuContent}
           </RibbonDropdownPanel>
         </div>
       </ToolbarGroup>

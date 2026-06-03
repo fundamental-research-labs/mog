@@ -7,6 +7,8 @@
  *
  */
 
+import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
+
 import { handled, type ActionDependencies, type ActionHandler } from './helpers';
 
 // =============================================================================
@@ -38,6 +40,10 @@ type RendererWithGeometry = Record<string, unknown> & {
   } | null;
 };
 
+type RendererWithCellScroll = Record<string, unknown> & {
+  applyCellLevelScroll: (topRow: number, leftCol: number) => void;
+};
+
 function getRenderer(coordinator: unknown): Record<string, unknown> | null {
   if (
     coordinator === null ||
@@ -59,6 +65,10 @@ function hasViewport(renderer: Record<string, unknown>): renderer is RendererWit
 
 function hasGeometry(renderer: Record<string, unknown>): renderer is RendererWithGeometry {
   return 'getGeometry' in renderer && typeof renderer.getGeometry === 'function';
+}
+
+function hasCellScroll(renderer: Record<string, unknown>): renderer is RendererWithCellScroll {
+  return 'applyCellLevelScroll' in renderer && typeof renderer.applyCellLevelScroll === 'function';
 }
 
 function isValidVisibleRange(range: VisibleRange | null | undefined): range is VisibleRange {
@@ -94,13 +104,14 @@ function getGeometryVisibleRange(renderer: Record<string, unknown>): VisibleRang
 function getViewportDimensions(deps: ActionDependencies): {
   visibleRows: number;
   visibleCols: number;
+  visibleRange: VisibleRange | null;
 } {
   const defaultVisibleRows = 20;
   const defaultVisibleCols = 10;
 
   const renderer = getRenderer(deps.coordinator);
   if (!renderer) {
-    return { visibleRows: defaultVisibleRows, visibleCols: defaultVisibleCols };
+    return { visibleRows: defaultVisibleRows, visibleCols: defaultVisibleCols, visibleRange: null };
   }
 
   const viewportVisibleRange = getViewportVisibleRange(renderer);
@@ -108,6 +119,7 @@ function getViewportDimensions(deps: ActionDependencies): {
     return {
       visibleRows: Math.max(1, viewportVisibleRange.endRow - viewportVisibleRange.startRow + 1),
       visibleCols: Math.max(1, viewportVisibleRange.endCol - viewportVisibleRange.startCol + 1),
+      visibleRange: viewportVisibleRange,
     };
   }
 
@@ -116,10 +128,32 @@ function getViewportDimensions(deps: ActionDependencies): {
     return {
       visibleRows: Math.max(1, geometryVisibleRange.endRow - geometryVisibleRange.startRow),
       visibleCols: Math.max(1, geometryVisibleRange.endCol - geometryVisibleRange.startCol),
+      visibleRange: geometryVisibleRange,
     };
   }
 
-  return { visibleRows: defaultVisibleRows, visibleCols: defaultVisibleCols };
+  return { visibleRows: defaultVisibleRows, visibleCols: defaultVisibleCols, visibleRange: null };
+}
+
+function applyPageScroll(
+  deps: ActionDependencies,
+  visibleRange: VisibleRange | null,
+  topRow: number,
+  leftCol: number,
+): void {
+  const renderer = getRenderer(deps.coordinator);
+  if (!renderer || !hasCellScroll(renderer)) return;
+
+  const fallbackTop = visibleRange?.startRow ?? 0;
+  const fallbackLeft = visibleRange?.startCol ?? 0;
+  renderer.applyCellLevelScroll(
+    Math.max(0, Math.min(MAX_ROWS - 1, Number.isFinite(topRow) ? topRow : fallbackTop)),
+    Math.max(0, Math.min(MAX_COLS - 1, Number.isFinite(leftCol) ? leftCol : fallbackLeft)),
+  );
+}
+
+function getActiveCellFallback(deps: ActionDependencies): { row: number; col: number } {
+  return deps.accessors?.selection?.getActiveCell?.() ?? { row: 0, col: 0 };
 }
 
 // =============================================================================
@@ -127,26 +161,54 @@ function getViewportDimensions(deps: ActionDependencies): {
 // =============================================================================
 
 export const PAGE_UP: ActionHandler = (deps) => {
-  const { visibleRows } = getViewportDimensions(deps);
+  const { visibleRows, visibleRange } = getViewportDimensions(deps);
+  const activeCell = getActiveCellFallback(deps);
   deps.commands.selection.pageUp(visibleRows, false);
+  applyPageScroll(
+    deps,
+    visibleRange,
+    (visibleRange?.startRow ?? activeCell.row) - visibleRows,
+    visibleRange?.startCol ?? activeCell.col,
+  );
   return handled();
 };
 
 export const PAGE_DOWN: ActionHandler = (deps) => {
-  const { visibleRows } = getViewportDimensions(deps);
+  const { visibleRows, visibleRange } = getViewportDimensions(deps);
+  const activeCell = getActiveCellFallback(deps);
   deps.commands.selection.pageDown(visibleRows, false);
+  applyPageScroll(
+    deps,
+    visibleRange,
+    (visibleRange?.startRow ?? activeCell.row) + visibleRows,
+    visibleRange?.startCol ?? activeCell.col,
+  );
   return handled();
 };
 
 export const PAGE_LEFT: ActionHandler = (deps) => {
-  const { visibleCols } = getViewportDimensions(deps);
+  const { visibleCols, visibleRange } = getViewportDimensions(deps);
+  const activeCell = getActiveCellFallback(deps);
   deps.commands.selection.pageLeft(visibleCols, false);
+  applyPageScroll(
+    deps,
+    visibleRange,
+    visibleRange?.startRow ?? activeCell.row,
+    (visibleRange?.startCol ?? activeCell.col) - visibleCols,
+  );
   return handled();
 };
 
 export const PAGE_RIGHT: ActionHandler = (deps) => {
-  const { visibleCols } = getViewportDimensions(deps);
+  const { visibleCols, visibleRange } = getViewportDimensions(deps);
+  const activeCell = getActiveCellFallback(deps);
   deps.commands.selection.pageRight(visibleCols, false);
+  applyPageScroll(
+    deps,
+    visibleRange,
+    visibleRange?.startRow ?? activeCell.row,
+    (visibleRange?.startCol ?? activeCell.col) + visibleCols,
+  );
   return handled();
 };
 

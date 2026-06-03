@@ -21,6 +21,7 @@ import type {
   SwitchRibbonTabPayload,
 } from '@mog-sdk/contracts/actions';
 
+import type { UIState } from '../../../ui-store/types';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 
 // =============================================================================
@@ -57,6 +58,25 @@ const OPTIMISTIC_CONTEXTUAL_RIBBON_TABS = new Set<RibbonTabId>([
   'pivot-design',
 ]);
 
+const DROPDOWN_RIBBON_TAB_BY_NAMESPACE: Partial<Record<string, RibbonTabId>> = {
+  data: 'data',
+  formulas: 'formulas',
+  home: 'home',
+  insert: 'insert',
+  page: 'page',
+  review: 'review',
+  'table-design': 'table-design',
+  view: 'view',
+};
+
+function activateRibbonTabForCommand(state: UIState, tabId: RibbonTabId) {
+  const visibleIds = [...state.visibleBaseTabs, ...state.contextualTabIds];
+  if (!visibleIds.includes(tabId) && OPTIMISTIC_CONTEXTUAL_RIBBON_TABS.has(tabId)) {
+    state.setContextualTabIds([...state.contextualTabIds, tabId]);
+  }
+  state.setActiveRibbonTab(tabId);
+}
+
 export const SWITCH_RIBBON_TAB: ActionHandler = (deps, payload): ActionResult => {
   const arg = payload as SwitchRibbonTabPayload | undefined;
   if (!arg || typeof arg.tabId !== 'string') {
@@ -74,12 +94,7 @@ export const SWITCH_RIBBON_TAB: ActionHandler = (deps, payload): ActionResult =>
   // If the tab doesn't belong (user isn't actually in a table), the next
   // setContextualTabIds call from useContextualTabs will correct it via the
   // atomic two-field transition that resets activeRibbonTab to 'home'.
-  const visibleIds = [...state.visibleBaseTabs, ...state.contextualTabIds];
-  if (!visibleIds.includes(arg.tabId) && OPTIMISTIC_CONTEXTUAL_RIBBON_TABS.has(arg.tabId)) {
-    state.setContextualTabIds([...state.contextualTabIds, arg.tabId]);
-  }
-
-  state.setActiveRibbonTab(arg.tabId);
+  activateRibbonTabForCommand(state, arg.tabId);
   return handled();
 };
 
@@ -188,7 +203,13 @@ export const OPEN_RIBBON_DROPDOWN: ActionHandler = (deps, payload): ActionResult
   if (!arg || typeof arg.dropdownId !== 'string') {
     return notHandled('disabled');
   }
-  getUIStore(deps).getState().openRibbonDropdown(arg.dropdownId);
+  const state = getUIStore(deps).getState();
+  const namespace = arg.dropdownId.split('.')[0];
+  const tabId = DROPDOWN_RIBBON_TAB_BY_NAMESPACE[namespace];
+  if (tabId) {
+    activateRibbonTabForCommand(state, tabId);
+  }
+  state.openRibbonDropdown(arg.dropdownId);
   return handled();
 };
 

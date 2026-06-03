@@ -9,6 +9,7 @@
  */
 
 import type { CommentCommands, CommentTarget } from '@mog-sdk/contracts/actors';
+import type { CommentComposeType } from '@mog-sdk/contracts/actors';
 import type { RichText } from '@mog-sdk/contracts/rich-text';
 
 // =============================================================================
@@ -49,7 +50,8 @@ export function createCommentCommands(actor: MinimalActor): CommentCommands {
     // -------------------------------------------------------------------------
     // Action Events
     // -------------------------------------------------------------------------
-    startCompose: () => actor.send({ type: 'START_COMPOSE' }),
+    startCompose: (commentType?: CommentComposeType) =>
+      actor.send({ type: 'START_COMPOSE', commentType }),
 
     startEdit: (commentId: string, content: RichText) =>
       actor.send({ type: 'START_EDIT', commentId, content }),

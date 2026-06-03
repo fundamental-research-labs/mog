@@ -253,7 +253,7 @@ export function PageSetupGroup() {
         <RibbonDropdown
           open={isMarginsOpen}
           onOpenChange={setIsMarginsOpen}
-          menuTestId="ribbon-dropdown-menu-margins"
+          menuTestId="ribbon-dropdown-menu-page-margins"
           trigger={marginsTrigger}
           width={200}
           menuLabel="Margins"
@@ -418,7 +418,7 @@ export function PageSetupGroup() {
         <RibbonDropdown
           open={isBreaksOpen}
           onOpenChange={setIsBreaksOpen}
-          menuTestId="ribbon-dropdown-menu-breaks"
+          menuTestId="ribbon-dropdown-menu-page-breaks"
           trigger={breaksTrigger}
           width={180}
           menuLabel="Page Breaks Options"

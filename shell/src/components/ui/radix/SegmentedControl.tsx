@@ -72,6 +72,8 @@ const itemClasses = [
   // Active state — Radix sets data-state="checked" on the active item
   'data-[state=checked]:bg-ss-primary',
   'data-[state=checked]:text-white',
+  'data-[state=checked]:hover:!bg-ss-primary',
+  'data-[state=checked]:hover:!text-white',
   // Disabled
   'data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed',
   // Focus

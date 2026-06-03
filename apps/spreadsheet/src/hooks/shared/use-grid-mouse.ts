@@ -425,6 +425,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   const inkModeActive = useUIStore((s) => s.inkModeActive);
   const inkTool = useUIStore((s) => s.activeTool);
   const openObjectContextMenu = useUIStore((s) => s.openObjectContextMenu);
+  const closeObjectContextMenu = useUIStore((s) => s.closeObjectContextMenu);
 
   // Compose state hooks
   const selection = useSelection();
@@ -519,6 +520,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     getHitTest,
     selection,
     onContextMenu,
+    onBeforeGridContextMenu: closeObjectContextMenu,
     onObjectContextMenu: openObjectContextMenu,
   });
 

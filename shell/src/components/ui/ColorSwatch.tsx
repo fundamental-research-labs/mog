@@ -11,6 +11,7 @@
  * - Keyboard navigation support
  */
 
+import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 
 interface ColorSwatchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'color'> {
@@ -65,14 +66,10 @@ export function isLightColor(hex: string): boolean {
  * />
  * ```
  */
-export function ColorSwatch({
-  color,
-  selected = false,
-  focused = false,
-  size = 'sm',
-  className = '',
-  ...props
-}: ColorSwatchProps) {
+export const ColorSwatch = forwardRef<HTMLButtonElement, ColorSwatchProps>(function ColorSwatch(
+  { color, selected = false, focused = false, size = 'sm', className = '', ...props },
+  ref,
+) {
   const sizes: Record<NonNullable<ColorSwatchProps['size']>, string> = {
     sm: 'w-4 h-4',
     md: 'w-6 h-6',
@@ -108,6 +105,7 @@ export function ColorSwatch({
       data-testid="color-swatch"
       data-color={color}
       data-value={color}
+      ref={ref}
       className={classes}
       style={{ backgroundColor: color }}
       title={color}
@@ -134,4 +132,4 @@ export function ColorSwatch({
       )}
     </button>
   );
-}
+});

@@ -104,6 +104,8 @@ export function BackstageNav({ activePanel, onClose }: BackstageNavProps) {
       {/* Back button */}
       <button
         type="button"
+        data-testid="backstage-back"
+        aria-label="Back"
         onClick={onClose}
         className="flex items-center gap-2 px-4 py-3 text-body text-text whitespace-nowrap hover:bg-ss-surface-hover transition-colors"
       >

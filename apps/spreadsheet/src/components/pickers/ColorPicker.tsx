@@ -19,7 +19,7 @@
  * - Falls back to Office theme colors when no theme provided
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import { applyTint } from '@mog/spreadsheet-utils/formatting/theme';
@@ -283,6 +283,7 @@ export function ColorPicker({
 
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const nativeColorInputRef = useRef<HTMLInputElement>(null);
+  const swatchRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Live preview ref for screen reader announcements
   const liveRegionRef = useRef<HTMLDivElement>(null);
@@ -296,6 +297,11 @@ export function ColorPicker({
     () => [...themeColors, ...themeTints.flat(), ...STANDARD_COLORS],
     [themeColors, themeTints],
   );
+
+  useEffect(() => {
+    if (focusedIndex === null) return;
+    swatchRefs.current[focusedIndex]?.focus();
+  }, [focusedIndex]);
 
   const handleColorClick = useCallback(
     (color: string) => {
@@ -506,9 +512,13 @@ export function ColorPicker({
                 color={color}
                 selected={value?.toUpperCase() === color.toUpperCase()}
                 focused={focusedIndex === idx}
+                ref={(node) => {
+                  swatchRefs.current[idx] = node;
+                }}
                 onClick={() => handleColorClick(color)}
+                onFocus={() => setFocusedIndex(idx)}
                 onMouseEnter={() => setFocusedIndex(idx)}
-                tabIndex={focusedIndex === idx ? 0 : -1}
+                tabIndex={focusedIndex === idx || (focusedIndex === null && idx === 0) ? 0 : -1}
               />
             );
           })}
@@ -527,9 +537,13 @@ export function ColorPicker({
                   color={color}
                   selected={value?.toUpperCase() === color.toUpperCase()}
                   focused={focusedIndex === idx}
+                  ref={(node) => {
+                    swatchRefs.current[idx] = node;
+                  }}
                   onClick={() => handleColorClick(color)}
+                  onFocus={() => setFocusedIndex(idx)}
                   onMouseEnter={() => setFocusedIndex(idx)}
-                  tabIndex={focusedIndex === idx ? 0 : -1}
+                  tabIndex={focusedIndex === idx || (focusedIndex === null && idx === 0) ? 0 : -1}
                 />
               );
             })}
@@ -549,9 +563,13 @@ export function ColorPicker({
                 color={color}
                 selected={value?.toUpperCase() === color.toUpperCase()}
                 focused={focusedIndex === idx}
+                ref={(node) => {
+                  swatchRefs.current[idx] = node;
+                }}
                 onClick={() => handleColorClick(color)}
+                onFocus={() => setFocusedIndex(idx)}
                 onMouseEnter={() => setFocusedIndex(idx)}
-                tabIndex={focusedIndex === idx ? 0 : -1}
+                tabIndex={focusedIndex === idx || (focusedIndex === null && idx === 0) ? 0 : -1}
               />
             );
           })}

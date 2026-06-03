@@ -172,6 +172,7 @@ function TabBarImpl<T extends string>({
   const deps = useActionDependencies();
   const { uiStore } = useDocumentContext();
   const displayMode = useStore(uiStore, (s) => s.displayMode);
+  const ribbonCollapsed = useStore(uiStore, (s) => s.ribbonCollapsed);
 
   // Double-click tracking for tabs toggle
   const lastClickTimeRef = useRef<number>(0);
@@ -205,13 +206,19 @@ function TabBarImpl<T extends string>({
         // Single click: switch tab
         onTabChange(tabId);
 
+        // A normal tab click should reopen a collapsed command bar so the
+        // selected tab's commands are usable immediately.
+        if (ribbonCollapsed) {
+          uiStore.getState().toggleRibbon();
+        }
+
         // In tabs-only mode, also show ribbon temporarily
         if (displayMode === 'tabs-only') {
           dispatch('SHOW_RIBBON_TEMPORARILY', deps);
         }
       }
     },
-    [displayMode, onTabChange, deps],
+    [displayMode, onTabChange, deps, ribbonCollapsed, uiStore],
   );
 
   const handleUndoClick = () => {

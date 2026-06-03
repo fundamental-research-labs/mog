@@ -178,7 +178,7 @@ export const CHARTS_COLLAPSE_CONFIG: GroupCollapseConfig = {
 export const SPARKLINES_COLLAPSE_CONFIG: GroupCollapseConfig = {
   priority: 4,
   levels: {
-    0: 'full',
+    0: 'dropdown',
     1: 'dropdown',
     2: 'dropdown',
     3: 'dropdown',
@@ -383,7 +383,7 @@ export const CALCULATION_COLLAPSE_CONFIG: GroupCollapseConfig = {
   priority: 4,
   levels: {
     0: 'full',
-    1: 'compact',
+    1: 'dropdown',
     2: 'dropdown',
     3: 'dropdown',
     4: 'hidden',

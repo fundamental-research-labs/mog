@@ -736,6 +736,10 @@ export const SHARE_DOCUMENT: AsyncActionHandler = async (deps): Promise<ActionRe
     .showNotification;
   if (showNotification) {
     showNotification('Sharing requires a connected workspace. Coming soon.');
+  } else if (deps.workbook.notifications) {
+    deps.workbook.notifications.info('Sharing requires a connected workspace. Coming soon.', {
+      title: 'Share',
+    });
   } else {
     // No notification system available — last-resort path that still produces
     // an observable effect (window-scoped event the test harness can listen

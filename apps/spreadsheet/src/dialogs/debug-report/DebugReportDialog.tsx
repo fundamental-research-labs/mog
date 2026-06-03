@@ -27,7 +27,7 @@ const IDB_EXPORT_MAX_ENTRIES: Record<IdbStoreName, number> = {
 };
 
 const IDB_EXPORT_LIMITS = {
-  maxDocIds: 2,
+  maxDocIds: 1,
   maxEntriesPerStore: IDB_EXPORT_MAX_ENTRIES,
   maxBytesPerBinaryValue: 256 * 1024,
   maxStringCharsPerValue: 64 * 1024,
@@ -220,10 +220,7 @@ async function readIndexedDBExportScope(db: IDBDatabase): Promise<IndexedDBExpor
         )
         .filter((docId): docId is string => docId !== null)
     : [];
-  const allDocIds = uniqueStrings([
-    typeof lastActiveDocId === 'string' ? lastActiveDocId : null,
-    ...recentDocIds,
-  ]);
+  const allDocIds = uniqueStrings([typeof lastActiveDocId === 'string' ? lastActiveDocId : null]);
   const docIds = allDocIds.slice(0, IDB_EXPORT_LIMITS.maxDocIds);
 
   return {
@@ -264,7 +261,7 @@ async function dumpKeyedEntries(
 ): Promise<{ entries: IndexedDBStoreEntry[]; stats: IndexedDBStoreStats }> {
   const stats = createStoreStats(true);
   stats.totalEntries = await countKeyedEntries(db, storeName, keys);
-  stats.notes.push('scoped to recent active document ids');
+  stats.notes.push('scoped to active document id');
 
   const entries = await new Promise<IndexedDBStoreEntry[]>((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
@@ -302,7 +299,7 @@ async function dumpScopedUpdateEntries(
 ): Promise<{ entries: IndexedDBStoreEntry[]; stats: IndexedDBStoreStats }> {
   const stats = createStoreStats(true);
   stats.totalEntries = await countUpdateEntriesForDocIds(db, docIds);
-  stats.notes.push('scoped to recent active document ids');
+  stats.notes.push('scoped to active document id');
   stats.notes.push('recent updates exported first');
 
   const entries: IndexedDBStoreEntry[] = [];

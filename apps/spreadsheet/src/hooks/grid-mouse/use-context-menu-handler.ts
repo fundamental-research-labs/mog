@@ -59,6 +59,8 @@ export interface UseContextMenuHandlerDeps {
   selection: ContextMenuSelectionApi;
   /** Callback invoked when context menu should be shown for cells/headers */
   onContextMenu?: (options: ContextMenuOptions) => void;
+  /** Callback invoked before a cell/header context menu opens. */
+  onBeforeGridContextMenu?: () => void;
   /** Callback invoked when context menu should be shown for floating objects (shapes, charts, images) */
   onObjectContextMenu?: ObjectContextMenuCallback;
 }
@@ -152,8 +154,15 @@ export function isMultiCellSelection(ranges: readonly CellRange[]): boolean {
 export function useContextMenuHandler(
   deps: UseContextMenuHandlerDeps,
 ): UseContextMenuHandlerReturn {
-  const { activeSheetId, containerRef, getHitTest, selection, onContextMenu, onObjectContextMenu } =
-    deps;
+  const {
+    activeSheetId,
+    containerRef,
+    getHitTest,
+    selection,
+    onContextMenu,
+    onBeforeGridContextMenu,
+    onObjectContextMenu,
+  } = deps;
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -262,6 +271,7 @@ export function useContextMenuHandler(
       // the native contextmenu event for positioning and opening the menu.
       // Radix's composeEventHandlers checks defaultPrevented before proceeding.
 
+      onBeforeGridContextMenu?.();
       onContextMenu({
         x: e.clientX,
         y: e.clientY,
@@ -270,7 +280,15 @@ export function useContextMenuHandler(
         targetCol,
       });
     },
-    [activeSheetId, containerRef, getHitTest, selection, onContextMenu, onObjectContextMenu],
+    [
+      activeSheetId,
+      containerRef,
+      getHitTest,
+      selection,
+      onContextMenu,
+      onBeforeGridContextMenu,
+      onObjectContextMenu,
+    ],
   );
 
   return { handleContextMenu };

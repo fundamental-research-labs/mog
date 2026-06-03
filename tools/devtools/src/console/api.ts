@@ -937,6 +937,25 @@ export function createConsoleAPI(
                       }
                     }
                   }
+
+                  if (sampleCells.length === 0) {
+                    for (let dr = -2; dr <= 2; dr++) {
+                      for (let dc = -2; dc <= 2; dc++) {
+                        const r = anchorRow + dr;
+                        const c = anchorCol + dc;
+                        if (r < 0 || c < 0) continue;
+                        const value = readCellValue(r, c, vpId);
+                        if (!value) continue;
+                        sampleCells.push({
+                          row: r,
+                          col: c,
+                          displayText: value.displayText ?? null,
+                          valueType: value.valueType ?? 0,
+                          format: readCellFormat(r, c, vpId),
+                        });
+                      }
+                    }
+                  }
                 }
 
                 viewportBuffers[vpId] = {

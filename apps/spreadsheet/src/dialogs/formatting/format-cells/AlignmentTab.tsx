@@ -22,7 +22,8 @@ import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState
 import { Checkbox, Input, Label, RadioGroup, SectionLabel, Select } from '@mog/shell';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../../infra/context';
+import { useSelectionRanges } from '../../../hooks/selection/use-granular-selection';
+import { useActiveSheetId, useWorkbook } from '../../../infra/context';
 // =============================================================================
 // Types
 // =============================================================================
@@ -110,7 +111,7 @@ export const AlignmentTab = forwardRef<AlignmentTabRef, AlignmentTabProps>(funct
   const dispatch = useDispatch();
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
-  const ranges = useUIStore((s) => s.toolbarRanges);
+  const ranges = useSelectionRanges();
 
   const { isMerged, canMerge, canUnmerge, isSingleCell } = useMemo(() => {
     if (!ranges || ranges.length === 0) {

@@ -32,6 +32,7 @@ import {
   FORMULA_AUDITING_COLLAPSE_CONFIG,
   FUNCTION_LIBRARY_COLLAPSE_CONFIG,
 } from '@mog-sdk/contracts/ribbon';
+import type { GroupCollapseConfig } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useWorkbookSettings } from '../../../hooks/settings/use-workbook-settings';
 import { useTraceArrows } from '../../../hooks/view/use-trace-arrows';
@@ -646,6 +647,15 @@ const FUNCTION_CATEGORIES = {
       'DVAR',
       'DVARP',
     ],
+  },
+};
+
+const FORMULAS_CALCULATION_COLLAPSE_CONFIG: GroupCollapseConfig = {
+  ...CALCULATION_COLLAPSE_CONFIG,
+  levels: {
+    ...CALCULATION_COLLAPSE_CONFIG.levels,
+    0: 'dropdown',
+    1: 'dropdown',
   },
 };
 
@@ -1536,7 +1546,7 @@ export function FormulasRibbon() {
       <ToolbarGroup
         label="Calculation"
         isLast
-        collapseConfig={CALCULATION_COLLAPSE_CONFIG}
+        collapseConfig={FORMULAS_CALCULATION_COLLAPSE_CONFIG}
         dropdownIcon={<CalculateIcon />}
       >
         <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">

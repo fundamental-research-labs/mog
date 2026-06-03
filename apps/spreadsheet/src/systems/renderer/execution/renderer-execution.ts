@@ -140,6 +140,19 @@ export interface RendererExecutionResult {
 export function setupRendererExecution(config: RendererExecutionConfig): RendererExecutionResult {
   const { rendererActor, onSparklineInvalidate, viewport: viewportAPI } = config;
 
+  function resolveUnderlyingRenderer(view: SheetViewHandle | null): GridRenderer | null {
+    // SheetView keeps the renderer out of its public handle; RenderSystem still
+    // needs this legacy accessor while downstream consumers migrate.
+    const render = view?.render as
+      | {
+          _internals?: {
+            getRenderer?: () => GridRenderer | null;
+          };
+        }
+      | undefined;
+    return render?._internals?.getRenderer?.() ?? null;
+  }
+
   // ===========================================================================
   // MODULE STATE
   // ===========================================================================
@@ -257,6 +270,7 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
           // after attach(workbook) — resolves from the attached workbook's
           // per-sheet viewport automatically on each event.
         });
+        underlyingRenderer = resolveUnderlyingRenderer(sheetView);
 
         // -------------------------------------------------------------------
         // 3. Configure freeze/split BEFORE attach() so the first computed
@@ -458,7 +472,7 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
     // ---- Instance Accessors ------------------------------------------------
 
     getContainer: () => rendererContainer,
-    getRenderer: () => underlyingRenderer,
+    getRenderer: () => underlyingRenderer ?? resolveUnderlyingRenderer(sheetView),
     getSheetView: () => sheetView,
 
     // ---- Capability Accessors ---------------------------------------------

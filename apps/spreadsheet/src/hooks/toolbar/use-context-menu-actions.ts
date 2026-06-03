@@ -1401,7 +1401,7 @@ export function useContextMenuActions(
       copy,
       paste,
       pasteSpecial,
-      canPaste: !clipboard.isPasting, // Can paste when not currently pasting
+      canPaste: clipboard.hasClipboard && !clipboard.isPasting,
 
       // Paste Options Submenu
       pasteValues,

@@ -528,11 +528,55 @@ describe('useContextMenuHandler', () => {
       expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
     });
 
-    it('does not select column when column is in current selection', () => {
+    it('selects column when column is only in a partial cell selection', () => {
       const hitResult = createHitResult('column-header', { col: 5 });
       const hitTest = createMockHitTest(hitResult);
       const selection = createMockSelectionApi([
-        { startRow: 0, endRow: 100, startCol: 0, endCol: 10 },
+        { startRow: 0, endRow: 0, startCol: 5, endCol: 5 },
+      ]);
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 200, clientY: 15 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
+    });
+
+    it('does not select column when column is in a partial multi-column span', () => {
+      const hitResult = createHitResult('column-header', { col: 1 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi([
+        { startRow: 0, endRow: 0, startCol: 0, endCol: 2 },
+      ]);
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 200, clientY: 15 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectColumn).not.toHaveBeenCalled();
+    });
+
+    it('does not select column when column is in a full-column selection', () => {
+      const hitResult = createHitResult('column-header', { col: 5 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi([
+        { startRow: 0, endRow: 1048575, startCol: 0, endCol: 10, isFullColumn: true },
       ]);
 
       const deps = createTestDeps({

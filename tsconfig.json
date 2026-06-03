@@ -58,6 +58,9 @@
       "path": "./charts"
     },
     {
+      "path": "./cli"
+    },
+    {
       "path": "./contracts"
     },
     {

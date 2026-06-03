@@ -14,6 +14,7 @@ packages:
   - 'canvas/overlay'
   - 'canvas/spatial'
   - 'charts'
+  - 'cli'
   - 'compute/napi'
   - 'compute/napi/npm/darwin-arm64'
   - 'compute/napi/npm/darwin-x64'

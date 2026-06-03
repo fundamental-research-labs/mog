@@ -1,0 +1,23 @@
+{
+  "name": "@mog/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mog": "./dist/mog.cjs"
+  },
+  "scripts": {
+    "build": "pnpm --filter @mog-sdk/node build && tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:e2e",
+    "test:e2e": "pnpm build && node testing/e2e.mjs"
+  },
+  "dependencies": {
+    "@mog-sdk/node": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  }
+}

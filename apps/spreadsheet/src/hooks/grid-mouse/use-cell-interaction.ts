@@ -400,11 +400,12 @@ export function useCellInteraction(options: UseCellInteractionOptions): UseCellI
   // Helper to handle mouse down with merged region lookup
   const handleSelectionMouseDown = useCallback(
     (cell: CellCoord, shiftKey: boolean, ctrlKey: boolean) => {
+      rootCoordinator.objects.notifyExternalSelectionActive();
       // Machine resolves merges via ctx.getMergedRegionAt; hook stops
       // pre-resolving.
       selectionCommands.mouseDown(cell, shiftKey, ctrlKey);
     },
-    [selectionCommands],
+    [rootCoordinator, selectionCommands],
   );
 
   const handleCellDoubleClick = useCallback(

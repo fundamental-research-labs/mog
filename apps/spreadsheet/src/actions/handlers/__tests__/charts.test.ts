@@ -69,6 +69,12 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       update: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined),
     },
+    objects: {
+      bringToFront: jest.fn().mockResolvedValue(undefined),
+      sendToBack: jest.fn().mockResolvedValue(undefined),
+      bringForward: jest.fn().mockResolvedValue(undefined),
+      sendBackward: jest.fn().mockResolvedValue(undefined),
+    },
     // Legacy flat aliases for backward-compatible test assertions
     getChart: jest.fn().mockResolvedValue(null),
     listCharts: jest.fn().mockResolvedValue([]),
@@ -85,6 +91,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
     addSheet: jest.fn().mockResolvedValue(mockWorksheet),
     getSheetCount: jest.fn().mockReturnValue(1),
     getSheetNames: jest.fn().mockReturnValue(['Sheet1']),
+    setPendingUndoDescription: jest.fn(),
     activeSheet: mockWorksheet,
     sheets: {
       add: jest.fn().mockResolvedValue(mockWorksheet),
@@ -578,8 +585,8 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.BRING_CHART_TO_FRONT(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.objects.bringToFront).toHaveBeenCalledWith('chart-123');
     });
 
     it('should return not handled when chartId is missing', async () => {
@@ -595,8 +602,8 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.SEND_CHART_TO_BACK(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.objects.sendToBack).toHaveBeenCalledWith('chart-123');
     });
   });
 
@@ -605,8 +612,8 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.BRING_CHART_FORWARD(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.objects.bringForward).toHaveBeenCalledWith('chart-123');
     });
   });
 
@@ -615,8 +622,8 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.SEND_CHART_BACKWARD(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.objects.sendBackward).toHaveBeenCalledWith('chart-123');
     });
   });
 });

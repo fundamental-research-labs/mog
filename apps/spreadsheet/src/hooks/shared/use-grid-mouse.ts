@@ -875,6 +875,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         switch (hit.type) {
           case 'cell': {
             const cell = { row: hit.row, col: hit.col };
+            coordinator.objects.notifyExternalSelectionActive();
 
             // Track click count for triple-click detection.
             // Sheet ID is part of cell identity here: clicking A1 on Sheet1 then A1 on
@@ -1145,12 +1146,14 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           }
 
           case 'column-header': {
+            coordinator.objects.notifyExternalSelectionActive();
             // raw modifiers; machine applies mode-flag override.
             selection.selectColumn(hit.col, e.shiftKey, e.ctrlKey || e.metaKey);
             break;
           }
 
           case 'row-header': {
+            coordinator.objects.notifyExternalSelectionActive();
             // raw modifiers; machine applies mode-flag override.
             selection.selectRow(hit.row, e.shiftKey, e.ctrlKey || e.metaKey);
             break;

@@ -548,7 +548,8 @@ export const BRING_CHART_TO_FRONT: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'front' });
+    deps.workbook.setPendingUndoDescription('Bring chart to front');
+    await ws.objects.bringToFront(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -574,7 +575,8 @@ export const SEND_CHART_TO_BACK: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'back' });
+    deps.workbook.setPendingUndoDescription('Send chart to back');
+    await ws.objects.sendToBack(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -600,7 +602,8 @@ export const BRING_CHART_FORWARD: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'forward' });
+    deps.workbook.setPendingUndoDescription('Bring chart forward');
+    await ws.objects.bringForward(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -626,7 +629,8 @@ export const SEND_CHART_BACKWARD: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'backward' });
+    deps.workbook.setPendingUndoDescription('Send chart backward');
+    await ws.objects.sendBackward(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }

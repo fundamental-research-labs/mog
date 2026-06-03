@@ -1370,6 +1370,15 @@ export class KeyboardCoordinator {
         context,
       );
       if (result.kind === 'pending') {
+        const chordOnly = result.pending.filter(
+          (p) => p.shortcut.sequence && p.shortcut.sequence.length > 0,
+        );
+        if (chordOnly.length === 0) {
+          const defaultMatch = this.matcher.getDefaultMatch(result.pending);
+          if (defaultMatch) {
+            return this.dispatchShortcut(defaultMatch);
+          }
+        }
         this.chordPending = {
           shortcuts: result.pending,
           enteredAt: this.now(),

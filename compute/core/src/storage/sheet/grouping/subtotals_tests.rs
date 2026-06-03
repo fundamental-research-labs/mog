@@ -62,3 +62,71 @@ fn test_display_name() {
     assert_eq!(SubtotalFunction::Sum.display_name(), "Sum");
     assert_eq!(SubtotalFunction::CountNums.display_name(), "Count Numbers");
 }
+
+#[test]
+fn test_create_subtotals_summary_below_groups_only_detail_rows() {
+    let (s, sid) = storage_with_sheet();
+    let mut a = MockCellAccessor::new();
+    a.set(0, 0, "Cat");
+    a.set(0, 1, "Value");
+    a.set(1, 0, "A");
+    a.set(1, 1, "10");
+    a.set(2, 0, "A");
+    a.set(2, 1, "20");
+
+    let result = create_subtotals(
+        s.doc(),
+        &s.sheets_ref(),
+        &mut a,
+        &sid,
+        &CellRange::new(0, 0, 2, 1),
+        &SubtotalOptions {
+            group_by_column: 0,
+            subtotal_columns: vec![1],
+            function: SubtotalFunction::Sum,
+            has_headers: true,
+            replace_existing: false,
+            summary_below_data: true,
+        },
+    );
+
+    assert_eq!(result.groups_created, 1);
+    assert_eq!(a.get_cell_value(&sid, 3, 0), "A Total");
+    let groups = get_groups(s.doc(), &s.sheets_ref(), &sid, GroupAxis::Row);
+    assert_eq!(groups.len(), 1);
+    assert_eq!((groups[0].start, groups[0].end), (1, 2));
+}
+
+#[test]
+fn test_create_subtotals_summary_above_groups_only_detail_rows() {
+    let (s, sid) = storage_with_sheet();
+    let mut a = MockCellAccessor::new();
+    a.set(0, 0, "Cat");
+    a.set(0, 1, "Value");
+    a.set(1, 0, "A");
+    a.set(1, 1, "10");
+    a.set(2, 0, "A");
+    a.set(2, 1, "20");
+
+    let result = create_subtotals(
+        s.doc(),
+        &s.sheets_ref(),
+        &mut a,
+        &sid,
+        &CellRange::new(0, 0, 2, 1),
+        &SubtotalOptions {
+            group_by_column: 0,
+            subtotal_columns: vec![1],
+            function: SubtotalFunction::Sum,
+            has_headers: true,
+            replace_existing: false,
+            summary_below_data: false,
+        },
+    );
+
+    assert_eq!(result.groups_created, 1);
+    assert_eq!(a.get_cell_value(&sid, 1, 0), "A Total");
+    let groups = get_groups(s.doc(), &s.sheets_ref(), &sid, GroupAxis::Row);
+    assert_eq!(groups.len(), 1);
+    assert_eq!((groups[0].start, groups[0].end), (2, 3));
+}

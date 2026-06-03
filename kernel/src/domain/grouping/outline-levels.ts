@@ -21,6 +21,7 @@ import type { DocumentContext } from '../../context/types';
 
 import { resolveGroupRange } from './helpers';
 import { getGroups } from './queries';
+import { getAdjacentSummaryIndex } from './shared';
 
 // =============================================================================
 // Query Functions
@@ -78,32 +79,31 @@ export async function getRowOutlineLevels(
   const result: OutlineLevel[] = [];
 
   for (let row = startRow; row <= endRow; row++) {
-    // Find all groups containing this row (using resolved positions)
-    const containingGroups = resolvedGroups.filter(
+    // Find all groups containing this row as a detail row.
+    const detailGroups = resolvedGroups.filter(
       ({ range }) => row >= range.start && row <= range.end,
     );
+    const summaryGroups = resolvedGroups.filter(({ range }) => {
+      return getAdjacentSummaryIndex(range.start, range.end, summaryRowsBelow) === row;
+    });
 
-    // Calculate level (max level of containing groups)
+    // Calculate level (max level of detail or adjacent summary groups)
     const level =
-      containingGroups.length > 0
-        ? Math.max(...containingGroups.map(({ group }) => group.level))
+      detailGroups.length + summaryGroups.length > 0
+        ? Math.max(
+            ...detailGroups.map(({ group }) => group.level),
+            ...summaryGroups.map(({ group }) => group.level),
+          )
         : 0;
 
     // Check if row is visible (not hidden by any collapsed group)
-    const visible = !containingGroups.some(({ group, range }) => {
-      if (!group.collapsed) return false;
-      // Summary row is always visible
-      const isSummaryRow = summaryRowsBelow ? row === range.end : row === range.start;
-      return !isSummaryRow;
-    });
+    const visible = !detailGroups.some(({ group }) => group.collapsed);
 
     // Check if this is a summary row
-    const isSummary = containingGroups.some(({ range }) => {
-      return summaryRowsBelow ? row === range.end : row === range.start;
-    });
+    const isSummary = summaryGroups.length > 0;
 
     // Get group IDs (innermost to outermost)
-    const groupIds = containingGroups
+    const groupIds = [...detailGroups, ...summaryGroups]
       .sort((a, b) => b.group.level - a.group.level)
       .map(({ group }) => group.id);
 
@@ -152,32 +152,31 @@ export async function getColumnOutlineLevels(
   const result: OutlineLevel[] = [];
 
   for (let col = startCol; col <= endCol; col++) {
-    // Find all groups containing this column (using resolved positions)
-    const containingGroups = resolvedGroups.filter(
+    // Find all groups containing this column as a detail column.
+    const detailGroups = resolvedGroups.filter(
       ({ range }) => col >= range.start && col <= range.end,
     );
+    const summaryGroups = resolvedGroups.filter(({ range }) => {
+      return getAdjacentSummaryIndex(range.start, range.end, summaryColumnsRight) === col;
+    });
 
-    // Calculate level (max level of containing groups)
+    // Calculate level (max level of detail or adjacent summary groups)
     const level =
-      containingGroups.length > 0
-        ? Math.max(...containingGroups.map(({ group }) => group.level))
+      detailGroups.length + summaryGroups.length > 0
+        ? Math.max(
+            ...detailGroups.map(({ group }) => group.level),
+            ...summaryGroups.map(({ group }) => group.level),
+          )
         : 0;
 
     // Check if column is visible (not hidden by any collapsed group)
-    const visible = !containingGroups.some(({ group, range }) => {
-      if (!group.collapsed) return false;
-      // Summary column is always visible
-      const isSummaryCol = summaryColumnsRight ? col === range.end : col === range.start;
-      return !isSummaryCol;
-    });
+    const visible = !detailGroups.some(({ group }) => group.collapsed);
 
     // Check if this is a summary column
-    const isSummary = containingGroups.some(({ range }) => {
-      return summaryColumnsRight ? col === range.end : col === range.start;
-    });
+    const isSummary = summaryGroups.length > 0;
 
     // Get group IDs (innermost to outermost)
-    const groupIds = containingGroups
+    const groupIds = [...detailGroups, ...summaryGroups]
       .sort((a, b) => b.group.level - a.group.level)
       .map(({ group }) => group.id);
 

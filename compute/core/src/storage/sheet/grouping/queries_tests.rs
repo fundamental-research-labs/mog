@@ -59,7 +59,7 @@ fn test_affected_rows() {
     let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
     assert_eq!(
         get_affected_rows_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![2, 3, 4]
+        vec![2, 3, 4, 5]
     );
 }
 
@@ -78,7 +78,7 @@ fn test_affected_rows_summary_above() {
     let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
     assert_eq!(
         get_affected_rows_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![3, 4, 5]
+        vec![2, 3, 4, 5]
     );
 }
 
@@ -88,6 +88,30 @@ fn test_affected_columns() {
     let g = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 4).unwrap();
     assert_eq!(
         get_affected_columns_by_group(s.doc(), &s.sheets_ref(), &id, &g.id),
-        vec![1, 2, 3]
+        vec![1, 2, 3, 4]
+    );
+}
+
+#[test]
+fn test_collapsed_row_group_hides_full_detail_span() {
+    let (s, id) = storage_with_sheet();
+    let g = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
+    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
+
+    assert_eq!(
+        get_rows_hidden_by_collapsed_groups(s.doc(), &s.sheets_ref(), &id),
+        vec![2, 3, 4, 5]
+    );
+}
+
+#[test]
+fn test_collapsed_column_group_hides_full_detail_span() {
+    let (s, id) = storage_with_sheet();
+    let g = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 4).unwrap();
+    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
+
+    assert_eq!(
+        get_columns_hidden_by_collapsed_groups(s.doc(), &s.sheets_ref(), &id),
+        vec![1, 2, 3, 4]
     );
 }

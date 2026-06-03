@@ -13,28 +13,59 @@ fn test_outline_symbols() {
     };
     let sy = get_outline_symbols(s.doc(), &s.sheets_ref(), &id, &vp);
     assert_eq!(sy.len(), 1);
-    assert_eq!(sy[0].index, 5);
+    assert_eq!(sy[0].index, 6);
     assert_eq!(sy[0].group_id, g.id);
+}
+
+#[test]
+fn test_outline_symbols_summary_above() {
+    let (s, id) = storage_with_sheet();
+    set_outline_settings(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        &OutlineSettingsUpdate {
+            summary_rows_below: Some(false),
+            summary_columns_right: Some(false),
+            ..Default::default()
+        },
+    );
+    let rg = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
+    let cg = group_columns(s.doc(), &s.sheets_ref(), &id, 3, 6).unwrap();
+    let sy = get_outline_symbols(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        &Viewport {
+            start_row: 0,
+            end_row: 10,
+            start_col: 0,
+            end_col: 10,
+        },
+    );
+
+    let row_symbol = sy.iter().find(|s| s.group_id == rg.id).unwrap();
+    let col_symbol = sy.iter().find(|s| s.group_id == cg.id).unwrap();
+    assert_eq!(row_symbol.index, 1);
+    assert_eq!(col_symbol.index, 2);
 }
 
 #[test]
 fn test_symbols_outside_viewport() {
     let (s, id) = storage_with_sheet();
     group_rows(s.doc(), &s.sheets_ref(), &id, 20, 30).unwrap();
-    assert!(
-        get_outline_symbols(
-            s.doc(),
-            &s.sheets_ref(),
-            &id,
-            &Viewport {
-                start_row: 0,
-                end_row: 10,
-                start_col: 0,
-                end_col: 10
-            }
-        )
-        .is_empty()
-    );
+    assert!(get_outline_symbols(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        &Viewport {
+            start_row: 0,
+            end_row: 10,
+            start_col: 0,
+            end_col: 10
+        }
+    )
+    .is_empty());
 }
 
 #[test]

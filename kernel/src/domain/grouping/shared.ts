@@ -108,7 +108,7 @@ export function resolveGroupRange(group: GroupDefinition): { start: number; end:
 
 /**
  * Compute rows that would be affected by collapsing/expanding a group.
- * For row groups, returns rows that are hidden/shown (excludes summary row).
+ * For row groups, start..=end is the full detail span; the summary row is adjacent.
  *
  * Pure computation on a GroupDefinition — no CRDT or ComputeBridge needed.
  *
@@ -118,23 +118,20 @@ export function resolveGroupRange(group: GroupDefinition): { start: number; end:
  */
 export function computeAffectedRows(
   group: GroupDefinition,
-  summaryRowsBelow: boolean = true,
+  _summaryRowsBelow: boolean = true,
 ): number[] {
   if (group.axis !== 'row') return [];
 
   const rows: number[] = [];
   for (let row = group.start; row <= group.end; row++) {
-    const isSummaryRow = summaryRowsBelow ? row === group.end : row === group.start;
-    if (!isSummaryRow) {
-      rows.push(row);
-    }
+    rows.push(row);
   }
   return rows;
 }
 
 /**
  * Compute columns that would be affected by collapsing/expanding a group.
- * For column groups, returns columns that are hidden/shown (excludes summary column).
+ * For column groups, start..=end is the full detail span; the summary column is adjacent.
  *
  * Pure computation on a GroupDefinition — no CRDT or ComputeBridge needed.
  *
@@ -144,16 +141,22 @@ export function computeAffectedRows(
  */
 export function computeAffectedColumns(
   group: GroupDefinition,
-  summaryColumnsRight: boolean = true,
+  _summaryColumnsRight: boolean = true,
 ): number[] {
   if (group.axis !== 'column') return [];
 
   const cols: number[] = [];
   for (let col = group.start; col <= group.end; col++) {
-    const isSummaryCol = summaryColumnsRight ? col === group.end : col === group.start;
-    if (!isSummaryCol) {
-      cols.push(col);
-    }
+    cols.push(col);
   }
   return cols;
+}
+
+export function getAdjacentSummaryIndex(
+  start: number,
+  end: number,
+  summaryAfter: boolean,
+): number | null {
+  if (summaryAfter) return end + 1;
+  return start > 0 ? start - 1 : null;
 }

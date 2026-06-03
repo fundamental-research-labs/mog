@@ -32,6 +32,7 @@ import type { DocumentContext } from '../../context/types';
 import { resolveGroupRange } from './helpers';
 import { getColumnOutlineLevels, getMaxOutlineLevel, getRowOutlineLevels } from './outline-levels';
 import { getGroups } from './queries';
+import { getAdjacentSummaryIndex } from './shared';
 
 // =============================================================================
 // Types
@@ -135,8 +136,9 @@ export async function getOutlineSymbols(
   for (const group of rowGroups) {
     const resolved = resolveGroupRange(group);
 
-    // Button appears at summary row position
-    const buttonIndex = summaryRowsBelow ? resolved.end : resolved.start;
+    // Button appears at adjacent summary row position
+    const buttonIndex = getAdjacentSummaryIndex(resolved.start, resolved.end, summaryRowsBelow);
+    if (buttonIndex === null) continue;
 
     // Only include if button is in viewport
     if (buttonIndex >= viewport.startRow && buttonIndex <= viewport.endRow) {
@@ -157,8 +159,9 @@ export async function getOutlineSymbols(
   for (const group of columnGroups) {
     const resolved = resolveGroupRange(group);
 
-    // Button appears at summary column position
-    const buttonIndex = summaryColumnsRight ? resolved.end : resolved.start;
+    // Button appears at adjacent summary column position
+    const buttonIndex = getAdjacentSummaryIndex(resolved.start, resolved.end, summaryColumnsRight);
+    if (buttonIndex === null) continue;
 
     // Only include if button is in viewport
     if (buttonIndex >= viewport.startCol && buttonIndex <= viewport.endCol) {

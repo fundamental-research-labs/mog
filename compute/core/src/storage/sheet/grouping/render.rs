@@ -3,7 +3,10 @@ use yrs::{Doc, MapRef};
 
 use super::outline::{get_column_outline_levels, get_row_outline_levels};
 use super::queries::{get_groups, get_max_outline_level};
-use super::types::{GroupAxis, OutlineLevelButton, OutlineRenderData, OutlineSymbol, Viewport};
+use super::types::{
+    column_summary_index, row_summary_index, GroupAxis, OutlineLevelButton, OutlineRenderData,
+    OutlineSymbol, Viewport,
+};
 use super::yrs_io::get_sheet_grouping_config;
 
 pub fn get_outline_symbols(
@@ -15,10 +18,8 @@ pub fn get_outline_symbols(
     let config = get_sheet_grouping_config(doc, sheets, sheet_id);
     let mut symbols = Vec::new();
     for group in &get_groups(doc, sheets, sheet_id, GroupAxis::Row) {
-        let idx = if config.summary_rows_below {
-            group.end
-        } else {
-            group.start
+        let Some(idx) = row_summary_index(group, config.summary_rows_below) else {
+            continue;
         };
         if idx >= viewport.start_row && idx <= viewport.end_row {
             symbols.push(OutlineSymbol {
@@ -32,10 +33,8 @@ pub fn get_outline_symbols(
         }
     }
     for group in &get_groups(doc, sheets, sheet_id, GroupAxis::Column) {
-        let idx = if config.summary_columns_right {
-            group.end
-        } else {
-            group.start
+        let Some(idx) = column_summary_index(group, config.summary_columns_right) else {
+            continue;
         };
         if idx >= viewport.start_col && idx <= viewport.end_col {
             symbols.push(OutlineSymbol {

@@ -1,4 +1,4 @@
-use cell_types::{SheetId, col_to_letter};
+use cell_types::{col_to_letter, SheetId};
 use yrs::{Doc, MapRef};
 
 use super::crud::{clear_row_grouping, group_rows};
@@ -138,8 +138,8 @@ pub fn create_subtotals(
                 &build_subtotal_formula(options.function, col, fs, fe),
             );
         }
-        let gs = if sb { as_ } else { srp };
-        let ge = if sb { srp } else { ae + 1 };
+        let gs = if sb { as_ } else { as_ + 1 };
+        let ge = if sb { ae } else { ae + 1 };
         if group_rows(doc, sheets, sheet_id, gs, ge).is_ok() {
             gc += 1;
         }

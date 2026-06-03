@@ -220,20 +220,27 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
         .filter((g) => g.range !== null);
       const result: OutlineLevel[] = [];
       for (let row = startRow; row <= endRow; row++) {
-        const containing = resolvedGroups.filter(
+        const detailGroups = resolvedGroups.filter(
           ({ range }) => row >= range.start && row <= range.end,
         );
-        const level =
-          containing.length > 0 ? Math.max(...containing.map(({ group }) => group.level)) : 0;
-        const visible = !containing.some(({ group, range }) => {
-          if (!group.collapsed) return false;
-          const isSummaryRow = summaryRowsBelow ? row === range.end : row === range.start;
-          return !isSummaryRow;
+        const summaryGroups = resolvedGroups.filter(({ range }) => {
+          const summaryRow = summaryRowsBelow
+            ? range.end + 1
+            : range.start > 0
+              ? range.start - 1
+              : null;
+          return summaryRow === row;
         });
-        const isSummary = containing.some(({ range }) =>
-          summaryRowsBelow ? row === range.end : row === range.start,
-        );
-        const groupIds = containing
+        const level =
+          detailGroups.length + summaryGroups.length > 0
+            ? Math.max(
+                ...detailGroups.map(({ group }) => group.level),
+                ...summaryGroups.map(({ group }) => group.level),
+              )
+            : 0;
+        const visible = !detailGroups.some(({ group }) => group.collapsed);
+        const isSummary = summaryGroups.length > 0;
+        const groupIds = [...detailGroups, ...summaryGroups]
           .sort((a, b) => b.group.level - a.group.level)
           .map(({ group }) => group.id);
         result.push({ index: row, level, visible, isSummary, groupIds });
@@ -253,20 +260,27 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
         .filter((g) => g.range !== null);
       const result: OutlineLevel[] = [];
       for (let col = startCol; col <= endCol; col++) {
-        const containing = resolvedGroups.filter(
+        const detailGroups = resolvedGroups.filter(
           ({ range }) => col >= range.start && col <= range.end,
         );
-        const level =
-          containing.length > 0 ? Math.max(...containing.map(({ group }) => group.level)) : 0;
-        const visible = !containing.some(({ group, range }) => {
-          if (!group.collapsed) return false;
-          const isSummaryCol = summaryColumnsRight ? col === range.end : col === range.start;
-          return !isSummaryCol;
+        const summaryGroups = resolvedGroups.filter(({ range }) => {
+          const summaryCol = summaryColumnsRight
+            ? range.end + 1
+            : range.start > 0
+              ? range.start - 1
+              : null;
+          return summaryCol === col;
         });
-        const isSummary = containing.some(({ range }) =>
-          summaryColumnsRight ? col === range.end : col === range.start,
-        );
-        const groupIds = containing
+        const level =
+          detailGroups.length + summaryGroups.length > 0
+            ? Math.max(
+                ...detailGroups.map(({ group }) => group.level),
+                ...summaryGroups.map(({ group }) => group.level),
+              )
+            : 0;
+        const visible = !detailGroups.some(({ group }) => group.collapsed);
+        const isSummary = summaryGroups.length > 0;
+        const groupIds = [...detailGroups, ...summaryGroups]
           .sort((a, b) => b.group.level - a.group.level)
           .map(({ group }) => group.id);
         result.push({ index: col, level, visible, isSummary, groupIds });

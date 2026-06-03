@@ -128,7 +128,7 @@ export function clearColumnGrouping(
 
 /**
  * Get columns that would be affected by collapsing/expanding a group.
- * For column groups, returns columns that are hidden/shown (excludes summary column).
+ * For column groups, returns every detail column in start..=end; the summary column is adjacent.
  *
  * Fetches group data from ComputeBridge and computes affected columns locally.
  *
@@ -142,7 +142,7 @@ export async function getAffectedColumnsByGroup(
   ctx: DocumentContext,
   sheetId: SheetId,
   groupId: string,
-  summaryColumnsRight: boolean = true,
+  _summaryColumnsRight: boolean = true,
 ): Promise<number[]> {
   const groups = await ctx.computeBridge.getGroups(sheetId, 'column');
   const group = groups.find((g: any) => g.id === groupId);
@@ -150,10 +150,7 @@ export async function getAffectedColumnsByGroup(
 
   const cols: number[] = [];
   for (let col = group.start; col <= group.end; col++) {
-    const isSummaryCol = summaryColumnsRight ? col === group.end : col === group.start;
-    if (!isSummaryCol) {
-      cols.push(col);
-    }
+    cols.push(col);
   }
 
   return cols;

@@ -8,8 +8,10 @@ fn test_row_outline_levels() {
     let l = get_row_outline_levels(s.doc(), &s.sheets_ref(), &id, 0, 7);
     assert_eq!(l[0].level, 0);
     assert_eq!(l[2].level, 1);
-    assert!(l[5].is_summary);
-    assert_eq!(l[6].level, 0);
+    assert!(!l[5].is_summary);
+    assert!(l[6].is_summary);
+    assert_eq!(l[6].level, 1);
+    assert_eq!(l[7].level, 0);
 }
 
 #[test]
@@ -20,7 +22,10 @@ fn test_row_visibility_collapsed() {
     let l = get_row_outline_levels(s.doc(), &s.sheets_ref(), &id, 2, 5);
     assert!(!l[0].visible);
     assert!(!l[1].visible);
-    assert!(l[3].visible);
+    assert!(!l[3].visible);
+    let summary = get_row_outline_levels(s.doc(), &s.sheets_ref(), &id, 6, 6);
+    assert!(summary[0].visible);
+    assert!(summary[0].is_summary);
 }
 
 #[test]
@@ -30,7 +35,9 @@ fn test_column_outline_levels() {
     let l = get_column_outline_levels(s.doc(), &s.sheets_ref(), &id, 0, 4);
     assert_eq!(l[0].level, 0);
     assert_eq!(l[1].level, 1);
-    assert!(l[3].is_summary);
+    assert!(!l[3].is_summary);
+    assert!(l[4].is_summary);
+    assert_eq!(l[4].level, 1);
 }
 
 #[test]
@@ -40,7 +47,8 @@ fn test_is_row_visible() {
     assert!(is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
     set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &g.id, true);
     assert!(!is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
-    assert!(is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 5));
+    assert!(!is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 5));
+    assert!(is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 6));
 }
 
 #[test]
@@ -54,10 +62,16 @@ fn test_is_col_visible() {
         &id,
         2
     ));
-    assert!(is_column_visible_by_groups(
+    assert!(!is_column_visible_by_groups(
         s.doc(),
         &s.sheets_ref(),
         &id,
         3
+    ));
+    assert!(is_column_visible_by_groups(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        4
     ));
 }

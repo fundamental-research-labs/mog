@@ -498,8 +498,9 @@ function buildRowGroupMap(
   const map = new Map<number, GroupDefinition[]>();
 
   for (const group of groups) {
-    // The button appears at the summary row position
-    const buttonRow = config.summaryRowsBelow ? group.end : group.start;
+    // The button appears at the adjacent summary row position.
+    const buttonRow = getAdjacentSummaryIndex(group.start, group.end, config.summaryRowsBelow);
+    if (buttonRow === null) continue;
 
     if (buttonRow >= startRow && buttonRow <= endRow) {
       if (!map.has(buttonRow)) {
@@ -524,7 +525,8 @@ function buildColGroupMap(
   const map = new Map<number, GroupDefinition[]>();
 
   for (const group of groups) {
-    const buttonCol = config.summaryColumnsRight ? group.end : group.start;
+    const buttonCol = getAdjacentSummaryIndex(group.start, group.end, config.summaryColumnsRight);
+    if (buttonCol === null) continue;
 
     if (buttonCol >= startCol && buttonCol <= endCol) {
       if (!map.has(buttonCol)) {
@@ -637,7 +639,11 @@ function hitTestRowCollapseButtons(
 
     // Check if any group has a button at this row
     for (const group of rowGroups) {
-      const buttonRow = groupingConfig.summaryRowsBelow ? group.end : group.start;
+      const buttonRow = getAdjacentSummaryIndex(
+        group.start,
+        group.end,
+        groupingConfig.summaryRowsBelow,
+      );
 
       if (buttonRow === row) {
         const buttonX = (group.level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
@@ -682,7 +688,11 @@ function hitTestColumnCollapseButtons(
 
     // Check if any group has a button at this column
     for (const group of columnGroups) {
-      const buttonCol = groupingConfig.summaryColumnsRight ? group.end : group.start;
+      const buttonCol = getAdjacentSummaryIndex(
+        group.start,
+        group.end,
+        groupingConfig.summaryColumnsRight,
+      );
 
       if (buttonCol === col) {
         const buttonX = colX + colWidth / 2;
@@ -708,6 +718,11 @@ function hitTestColumnCollapseButtons(
 function isPointInButton(px: number, py: number, bx: number, by: number): boolean {
   const halfSize = OUTLINE_BUTTON_SIZE / 2 + 2; // Small margin for easier clicking
   return Math.abs(px - bx) <= halfSize && Math.abs(py - by) <= halfSize;
+}
+
+function getAdjacentSummaryIndex(start: number, end: number, summaryAfter: boolean): number | null {
+  if (summaryAfter) return end + 1;
+  return start > 0 ? start - 1 : null;
 }
 
 // =============================================================================

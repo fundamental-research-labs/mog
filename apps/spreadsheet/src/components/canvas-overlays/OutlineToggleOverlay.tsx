@@ -45,7 +45,7 @@
  * client-side from the same constants and helpers the renderer uses
  * (`OUTLINE_LEVEL_WIDTH`, `OUTLINE_LEVEL_HEIGHT`, `OUTLINE_BUTTON_SIZE`,
  * `getEffectiveHeaderDimensions`) and from `coords.cellToViewport()` for
- * group-end row/col positions.
+ * adjacent summary row/col positions.
  *
  * ## Why a separate overlay container
  *
@@ -341,9 +341,10 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
   // ── Row collapse buttons ────────────────────────────────────────────────
   // Mirrors hitTestRowCollapseButtons / renderRowOutlineGutter. The button
   // sits at row Y (center) and gutter X = (level-1)*W + W/2. Only groups
-  // whose summary row is currently visible get a button.
+  // whose adjacent summary row is currently visible get a button.
   for (const group of rowGroups) {
-    const buttonRow = summaryRowsBelow ? group.end : group.start;
+    const buttonRow = getAdjacentSummaryIndex(group.start, group.end, summaryRowsBelow);
+    if (buttonRow === null) continue;
     const cellRect = geometry.getCellRect({ row: buttonRow, col: 0 });
     if (!cellRect) continue;
     const buttonX = (group.level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
@@ -361,7 +362,8 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
 
   // ── Column collapse buttons ─────────────────────────────────────────────
   for (const group of columnGroups) {
-    const buttonCol = summaryColumnsRight ? group.end : group.start;
+    const buttonCol = getAdjacentSummaryIndex(group.start, group.end, summaryColumnsRight);
+    if (buttonCol === null) continue;
     const cellRect = geometry.getCellRect({ row: 0, col: buttonCol });
     if (!cellRect) continue;
     const buttonX = cellRect.x + cellRect.width / 2;
@@ -378,4 +380,9 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
   }
 
   return { toggles, levelButtons };
+}
+
+function getAdjacentSummaryIndex(start: number, end: number, summaryAfter: boolean): number | null {
+  if (summaryAfter) return end + 1;
+  return start > 0 ? start - 1 : null;
 }

@@ -137,16 +137,16 @@ fn build_measure_descriptors(config: &ResolvedPivotConfig) -> Vec<PivotMeasureDe
         .value_placements()
         .iter()
         .map(|placement| {
-            let name = placement
-                .display_name()
-                .map(str::to_string)
-                .unwrap_or_else(|| {
+            let name = placement.display_name().map_or_else(
+                || {
                     format!(
                         "{} of {}",
                         aggregate_caption(placement.aggregate_function()),
                         placement.source_field_name()
                     )
-                });
+                },
+                str::to_string,
+            );
             PivotMeasureDescriptor {
                 placement_id: placement.placement_id().clone(),
                 source: placement.source().clone(),
@@ -172,16 +172,16 @@ fn effective_measure_number_format(
 }
 
 fn is_percent_show_values_as(calculation_type: &ShowValuesAs) -> bool {
-    match calculation_type {
+    matches!(
+        calculation_type,
         ShowValuesAs::PercentOfGrandTotal
-        | ShowValuesAs::PercentOfColumnTotal
-        | ShowValuesAs::PercentOfRowTotal
-        | ShowValuesAs::PercentOfParentRowTotal
-        | ShowValuesAs::PercentOfParentColumnTotal
-        | ShowValuesAs::PercentDifference
-        | ShowValuesAs::PercentRunningTotal => true,
-        _ => false,
-    }
+            | ShowValuesAs::PercentOfColumnTotal
+            | ShowValuesAs::PercentOfRowTotal
+            | ShowValuesAs::PercentOfParentRowTotal
+            | ShowValuesAs::PercentOfParentColumnTotal
+            | ShowValuesAs::PercentDifference
+            | ShowValuesAs::PercentRunningTotal
+    )
 }
 
 fn aggregate_caption(aggregate: AggregateFunction) -> &'static str {

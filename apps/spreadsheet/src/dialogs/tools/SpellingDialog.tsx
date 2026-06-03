@@ -129,7 +129,9 @@ export function SpellingDialog() {
         dialogId="spelling-dialog"
         width="sm"
       >
-        <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+        <DialogHeader onClose={handleClose} closeLabel="Close spelling dialog">
+          Spelling
+        </DialogHeader>
         <DialogBody>
           <div className="flex flex-col items-center gap-4 py-4 text-center">
             <div className="text-4xl">
@@ -164,7 +166,9 @@ export function SpellingDialog() {
         dialogId="spelling-dialog"
         width="sm"
       >
-        <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+        <DialogHeader onClose={handleClose} closeLabel="Close spelling dialog">
+          Spelling
+        </DialogHeader>
         <DialogBody>
           <div className="flex flex-col items-center gap-4 py-4">
             <div className="w-6 h-6 border-2 border-ss-primary border-t-transparent rounded-full animate-ss-spin" />
@@ -194,20 +198,22 @@ export function SpellingDialog() {
         if (currentError) handleChange();
       }}
     >
-      <DialogHeader onClose={handleClose}>Spelling</DialogHeader>
+      <DialogHeader onClose={handleClose} closeLabel="Close spelling dialog">
+        Spelling
+      </DialogHeader>
 
       <DialogBody>
         <div className="flex flex-col gap-4">
           {/* Progress indicator */}
           {errorProgress && (
-            <div className="text-body-sm text-ss-text-secondary">Error {errorProgress}</div>
+            <div className="text-body-sm text-ss-text-secondary">Error {errorProgress} </div>
           )}
 
           {/* Not in Dictionary */}
           <div className="flex flex-col gap-1">
-            <label className="text-body-sm text-ss-text-secondary">Not in Dictionary:</label>
+            <label className="text-body-sm text-ss-text-secondary">Not in Dictionary: </label>
             <div className="bg-ss-error/10 text-ss-error px-3 py-2 rounded font-medium">
-              {currentError?.word ?? ''}
+              {currentError?.word ?? ''}{' '}
             </div>
           </div>
 
@@ -215,14 +221,14 @@ export function SpellingDialog() {
           {currentError && (
             <div className="text-caption text-ss-text-tertiary">
               Found in: {currentError.sheetId} at row {currentError.row + 1}, column{' '}
-              {currentError.col + 1}
+              {currentError.col + 1}{' '}
             </div>
           )}
 
           {/* Change to */}
           <div className="flex flex-col gap-1">
             <label htmlFor="spelling-replacement" className="text-body-sm text-ss-text-secondary">
-              Change to:
+              Change to:{' '}
             </label>
             <Input
               id="spelling-replacement"
@@ -237,7 +243,7 @@ export function SpellingDialog() {
           {/* Suggestions */}
           <div className="flex flex-col gap-1">
             <label htmlFor="spelling-suggestions" className="text-body-sm text-ss-text-secondary">
-              Suggestions:
+              Suggestions:{' '}
             </label>
             <select
               ref={suggestionsListRef}

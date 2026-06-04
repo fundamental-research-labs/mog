@@ -13,40 +13,33 @@ worksheet API.
 
 This skill teaches the agent how to use the Mog CLI. Install both:
 
-- the `mog` standalone CLI bundle
+- the `@mog/cli` npm package
 - this skill folder
 
 ### Install The Mog CLI
 
-Preferred Co-work setup is the standalone CLI bundle. It includes the Mog CLI
-JavaScript and the platform native SDK addon, and requires Node.js 18+ on
-`PATH`. Install from the raw GitHub release artifacts:
+Preferred Co-work setup is the npm package. It installs the `mog` command and
+downloads the platform native SDK package through npm. It requires Node.js 18+
+and npm on `PATH`.
+
+Use a user-local npm prefix when global installs are not writable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0/install-mog-cli.sh | sh
+mkdir -p "$HOME/.mog/npm"
+npm install --prefix "$HOME/.mog/npm" @mog/cli@0.8.0
+export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
+mog --help
 ```
 
-Use the `raw.githubusercontent.com` URL exactly as written when installing in
-Claude Co-work. Some sandboxes allow `raw.githubusercontent.com` but block
-GitHub Release asset redirects and `r2.dev` URLs.
-
-If the release URL is different, pass it explicitly:
+If global npm installs are supported, this is also valid:
 
 ```bash
-curl -fsSL <release-download-base-url>/install-mog-cli.sh | MOG_CLI_BASE_URL=<release-download-base-url> sh
+npm install -g @mog/cli@0.8.0
+mog --help
 ```
 
-`MOG_CLI_BASE_URL` should be the directory containing `install-mog-cli.sh`,
-`mog-cli-linux-x64-gnu.tar.gz`, `mog-cli-darwin-arm64.tar.gz`, and
-`SHA256SUMS`, for example:
-
-```bash
-MOG_CLI_BASE_URL=https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0
-```
-
-The installer downloads `mog-cli-<platform>.tar.gz`, installs it under
-`~/.mog/cli`, and links `mog` into `~/.local/bin`. Make sure `~/.local/bin` is
-on `PATH`.
+Do not install the Mog CLI from raw GitHub, GitHub Release, R2, or curl-based
+standalone artifacts. The skill expects npm-installed `mog`.
 
 For local development only, the CLI can also be run from a Mog repo checkout:
 
@@ -76,12 +69,14 @@ pnpm --filter @mog/cli package:skill
 
 The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
 
-Release maintainers publish the CLI bundle and skill zip to the versioned
-raw GitHub artifact branch with:
+Release maintainers build the CLI npm package candidate and skill zip with:
 
 ```bash
-pnpm --filter @mog/cli publish:raw
+pnpm --filter @mog/cli package:release
 ```
+
+The `Publish Mog CLI` GitHub workflow publishes the generated `@mog/cli`
+package to npm.
 
 This repository stores the unpacked skill source at:
 
@@ -114,7 +109,16 @@ enabled. For Claude Agent SDK tests, use `settingSources: ['project']` and
 
 ## CLI Contract
 
-Use the standalone `mog` binary when it is installed:
+Before using the CLI, check whether `mog` is available:
+
+```bash
+command -v mog
+```
+
+If it is missing, install `@mog/cli` from npm using the user-local npm prefix
+commands above. Do not substitute a raw artifact installer.
+
+Use the npm-installed `mog` command when it is installed:
 
 ```bash
 mog create --name <workbook-name> --path <directory>
@@ -136,7 +140,7 @@ local Mog daemon:
 pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
-Standalone equivalent:
+Installed command equivalent:
 
 ```bash
 mog create --name <workbook-name> --path <directory>

@@ -9,11 +9,8 @@
   "scripts": {
     "build": "pnpm -w run build:public-artifacts -- --through @mog-sdk/node --skip-native-build --skip-host-native-artifact --skip-wasm-build && tsup",
     "package:npm": "pnpm run build && node scripts/package-npm.mjs",
-    "package:release": "pnpm run package:standalone && pnpm run package:skill",
-    "package:installer": "node scripts/package-installer.mjs",
-    "package:standalone": "node scripts/package-standalone.mjs",
+    "package:release": "pnpm run package:npm && pnpm run package:skill",
     "package:skill": "node scripts/package-skill.mjs",
-    "publish:raw": "pnpm run package:release && node scripts/publish-raw-release.mjs",
     "test:npm-local": "pnpm run package:npm && node testing/npm-local-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:e2e",

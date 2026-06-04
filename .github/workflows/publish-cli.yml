@@ -13,52 +13,16 @@ on:
           - 'false'
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write
 
 jobs:
-  package:
-    name: Package Mog CLI (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    concurrency:
-      group: mog-cli-package-${{ matrix.os }}
-      cancel-in-progress: false
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.18.3
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.14.0
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm -C compute/napi build:release
-
-      - run: pnpm --filter @mog/cli package:standalone
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mog-cli-${{ matrix.os }}
-          path: artifacts/mog-cli-*.tar.gz
-          if-no-files-found: error
-
   publish:
-    name: Publish Mog CLI release
+    name: Publish @mog/cli to npm
     runs-on: ubuntu-latest
-    needs: package
+    environment: npm-production
     concurrency:
-      group: mog-cli-release
+      group: npm-production
       cancel-in-progress: false
 
     steps:
@@ -71,19 +35,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
           cache: pnpm
 
+      - run: npm install -g npm@^11.5.1
+
       - run: pnpm install --frozen-lockfile
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: mog-cli-*
-          path: artifacts
-          merge-multiple: true
-
-      - run: pnpm --filter @mog/cli package:skill
-
-      - run: pnpm --filter @mog/cli package:installer
 
       - name: Check CLI version contract
         run: |
@@ -94,7 +51,21 @@ jobs:
             exit 1
           fi
 
-      - name: Publish CLI raw GitHub release
-        env:
-          MOG_CLI_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
-        run: node cli/scripts/publish-raw-release.mjs
+      - run: pnpm --filter @mog/cli test:npm-local
+
+      - run: pnpm --filter @mog/cli package:skill
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mog-cli-kernel-skill
+          path: artifacts/mog-cli-kernel.skill.zip
+          if-no-files-found: error
+
+      - name: Publish CLI package
+        run: |
+          TARBALL=$(ls artifacts/npm/mog-cli-*.tgz)
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish "$TARBALL" --access public --dry-run
+          else
+            npm publish "$TARBALL" --access public
+          fi

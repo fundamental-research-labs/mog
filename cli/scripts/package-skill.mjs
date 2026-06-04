@@ -43,6 +43,10 @@ function fileData(name, path) {
       .replace(
         /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
         `mog-cli-v${packageVersion}`,
+      )
+      .replace(
+        /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+        `@mog/cli@${packageVersion}`,
       ),
     'utf8',
   );

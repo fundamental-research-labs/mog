@@ -20,7 +20,7 @@ const version = releasePackageVersion();
 const distFile = resolve(cliRoot, 'dist', 'mog.cjs');
 const distMapFile = resolve(cliRoot, 'dist', 'mog.cjs.map');
 if (!existsSync(distFile)) {
-  throw new Error(`Missing built CLI at ${distFile}. Run pnpm --filter @mog/cli build first.`);
+  throw new Error(`Missing built CLI at ${distFile}. Run pnpm --filter @mog-sdk/cli build first.`);
 }
 
 rmSync(packageDir, { recursive: true, force: true });
@@ -41,7 +41,7 @@ writeFileSync(
     'Minimal command-line interface for operating Mog workbooks with the headless SDK.',
     '',
     '```bash',
-    'npm install -g @mog/cli',
+    'npm install -g @mog-sdk/cli',
     'mog create --name model --path .',
     '```',
     '',
@@ -71,7 +71,7 @@ console.log(
 
 function npmManifest(packageVersion) {
   return {
-    name: '@mog/cli',
+    name: '@mog-sdk/cli',
     version: packageVersion,
     description: 'Minimal command-line interface for operating Mog workbooks with the headless SDK',
     license: 'MIT',
@@ -102,7 +102,7 @@ function releasePackageVersion() {
   const sdkPackageJson = readJson(resolve(repoRoot, 'runtime', 'sdk', 'package.json'));
   if (packageJson.version !== sdkPackageJson.version) {
     throw new Error(
-      `@mog/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
     );
   }
   return packageJson.version;

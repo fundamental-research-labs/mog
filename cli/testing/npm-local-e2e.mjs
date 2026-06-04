@@ -65,7 +65,7 @@ try {
 
 function latestCliTarball() {
   const { version } = JSON.parse(readFileSync(resolve(cliRoot, 'package.json'), 'utf8'));
-  const tarball = resolve(npmArtifactsDir, `mog-cli-${version}.tgz`);
-  if (!existsSync(tarball)) throw new Error(`No @mog/cli npm tarball found at ${tarball}`);
+  const tarball = resolve(npmArtifactsDir, `mog-sdk-cli-${version}.tgz`);
+  if (!existsSync(tarball)) throw new Error(`No @mog-sdk/cli npm tarball found at ${tarball}`);
   return tarball;
 }

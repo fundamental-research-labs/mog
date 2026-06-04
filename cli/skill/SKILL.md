@@ -13,7 +13,7 @@ worksheet API.
 
 This skill teaches the agent how to use the Mog CLI. Install both:
 
-- the `@mog/cli` npm package
+- the `@mog-sdk/cli` npm package
 - this skill folder
 
 ### Install The Mog CLI
@@ -26,7 +26,7 @@ Use a user-local npm prefix when global installs are not writable:
 
 ```bash
 mkdir -p "$HOME/.mog/npm"
-npm install --prefix "$HOME/.mog/npm" @mog/cli@0.8.0
+npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli@0.8.0
 export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
 mog --help
 ```
@@ -34,7 +34,7 @@ mog --help
 If global npm installs are supported, this is also valid:
 
 ```bash
-npm install -g @mog/cli@0.8.0
+npm install -g @mog-sdk/cli@0.8.0
 mog --help
 ```
 
@@ -46,8 +46,8 @@ For local development only, the CLI can also be run from a Mog repo checkout:
 ```bash
 corepack enable
 pnpm install
-pnpm --filter @mog/cli build
-pnpm --filter @mog/cli exec mog --help
+pnpm --filter @mog-sdk/cli build
+pnpm --filter @mog-sdk/cli exec mog --help
 ```
 
 ### Install The Skill
@@ -64,7 +64,7 @@ Upload that zip directly in the Co-work skill UI.
 To build the skill zip from a repo checkout:
 
 ```bash
-pnpm --filter @mog/cli package:skill
+pnpm --filter @mog-sdk/cli package:skill
 ```
 
 The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
@@ -72,10 +72,10 @@ The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
 Release maintainers build the CLI npm package candidate and skill zip with:
 
 ```bash
-pnpm --filter @mog/cli package:release
+pnpm --filter @mog-sdk/cli package:release
 ```
 
-The `Publish Mog CLI` GitHub workflow publishes the generated `@mog/cli`
+The `Publish Mog CLI` GitHub workflow publishes the generated `@mog-sdk/cli`
 package to npm.
 
 This repository stores the unpacked skill source at:
@@ -115,7 +115,7 @@ Before using the CLI, check whether `mog` is available:
 command -v mog
 ```
 
-If it is missing, install `@mog/cli` from npm using the user-local npm prefix
+If it is missing, install `@mog-sdk/cli` from npm using the user-local npm prefix
 commands above. Do not substitute a raw artifact installer.
 
 Use the npm-installed `mog` command when it is installed:
@@ -127,7 +127,7 @@ mog create --name <workbook-name> --path <directory>
 In a development checkout, use the workspace command form:
 
 ```bash
-pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
+pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
 The examples below use the workspace command so they also work while developing
@@ -137,7 +137,7 @@ Create a new blank workbook by name inside a directory and keep it alive in the
 local Mog daemon:
 
 ```bash
-pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
+pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
 Installed command equivalent:
@@ -152,13 +152,13 @@ refuses to overwrite an existing workbook.
 You can also create at an exact workbook file path:
 
 ```bash
-pnpm --filter @mog/cli exec mog create <path-to-new-workbook.xlsx>
+pnpm --filter @mog-sdk/cli exec mog create <path-to-new-workbook.xlsx>
 ```
 
 Load an existing workbook and keep it alive in the local Mog daemon:
 
 ```bash
-pnpm --filter @mog/cli exec mog load <path-to-workbook.xlsx>
+pnpm --filter @mog-sdk/cli exec mog load <path-to-workbook.xlsx>
 ```
 
 Both commands return JSON containing an `id`. Use that id for later commands.
@@ -166,13 +166,13 @@ Both commands return JSON containing an `id`. Use that id for later commands.
 Execute code against the loaded workbook:
 
 ```bash
-pnpm --filter @mog/cli exec mog execute --id <workbook-id> --code '<code>'
+pnpm --filter @mog-sdk/cli exec mog execute --id <workbook-id> --code '<code>'
 ```
 
 For larger code snippets, write a temporary script and use:
 
 ```bash
-pnpm --filter @mog/cli exec mog execute --id <workbook-id> --code-file <script.js>
+pnpm --filter @mog-sdk/cli exec mog execute --id <workbook-id> --code-file <script.js>
 ```
 
 The code runs in an async function with these bindings:
@@ -266,25 +266,25 @@ await wb.calculate({ iterative: { maxIterations: 100, maxChange: 0.001 } });
 Save changes back to the workbook's original path:
 
 ```bash
-pnpm --filter @mog/cli exec mog commit --id <workbook-id>
+pnpm --filter @mog-sdk/cli exec mog commit --id <workbook-id>
 ```
 
 Save to a different path:
 
 ```bash
-pnpm --filter @mog/cli exec mog commit --id <workbook-id> --path <output.xlsx>
+pnpm --filter @mog-sdk/cli exec mog commit --id <workbook-id> --path <output.xlsx>
 ```
 
 Dispose the workbook handle:
 
 ```bash
-pnpm --filter @mog/cli exec mog unload --id <workbook-id>
+pnpm --filter @mog-sdk/cli exec mog unload --id <workbook-id>
 ```
 
 List active handles:
 
 ```bash
-pnpm --filter @mog/cli exec mog list
+pnpm --filter @mog-sdk/cli exec mog list
 ```
 
 ## API Discovery
@@ -363,16 +363,16 @@ Common workbook namespaces: `sheets`, `history`, `names`, `scenarios`,
 - Always `commit` before reporting a workbook edit as saved.
 - Always `unload` when the task is complete.
 - For code changes to the CLI or SDK, verify with the relevant
-  `@mog/cli` and `@mog-sdk/node` tests and typecheck.
+  `@mog-sdk/cli` and `@mog-sdk/node` tests and typecheck.
 - For CLI behavior changes, run:
   ```bash
-  pnpm --filter @mog/cli typecheck
-  pnpm --filter @mog/cli test:e2e
+  pnpm --filter @mog-sdk/cli typecheck
+  pnpm --filter @mog-sdk/cli test:e2e
   ```
 - Provider-backed agent E2E tests are opt-in because they run real Codex or
   Claude agent sessions:
   ```bash
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog-sdk/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog-sdk/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog-sdk/cli test:agent-e2e
   ```

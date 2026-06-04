@@ -46,7 +46,7 @@ function fileData(name, path) {
       )
       .replace(
         /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-        `@mog/cli@${packageVersion}`,
+        `@mog-sdk/cli@${packageVersion}`,
       ),
     'utf8',
   );
@@ -59,7 +59,7 @@ function releasePackageVersion() {
   );
   if (packageJson.version !== sdkPackageJson.version) {
     throw new Error(
-      `@mog/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
     );
   }
   return packageJson.version;

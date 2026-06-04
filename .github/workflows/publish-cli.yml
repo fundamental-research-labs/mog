@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish @mog/cli to npm
+    name: Publish @mog-sdk/cli to npm
     runs-on: ubuntu-latest
     environment: npm-production
     concurrency:
@@ -47,13 +47,13 @@ jobs:
           CLI_VERSION=$(node -p "require('./cli/package.json').version")
           SDK_VERSION=$(node -p "require('./runtime/sdk/package.json').version")
           if [ "$CLI_VERSION" != "$SDK_VERSION" ]; then
-            echo "@mog/cli version ${CLI_VERSION} does not match @mog-sdk/node ${SDK_VERSION}."
+            echo "@mog-sdk/cli version ${CLI_VERSION} does not match @mog-sdk/node ${SDK_VERSION}."
             exit 1
           fi
 
-      - run: pnpm --filter @mog/cli test:npm-local
+      - run: pnpm --filter @mog-sdk/cli test:npm-local
 
-      - run: pnpm --filter @mog/cli package:skill
+      - run: pnpm --filter @mog-sdk/cli package:skill
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,7 +63,7 @@ jobs:
 
       - name: Publish CLI package
         run: |
-          TARBALL=$(ls artifacts/npm/mog-cli-*.tgz)
+          TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             npm publish "$TARBALL" --access public --dry-run
           else

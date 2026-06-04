@@ -1,0 +1,45 @@
+Rating: 8/10
+
+Summary judgment
+
+This is a strong, source-grounded plan for `compute-fill`. It correctly treats autofill as a contract problem across pure Rust computation, compute-core mutation application, bridge summaries, kernel request shaping, and app Flash Fill behavior. The plan identifies real architectural issues in the current implementation: pattern detection is value-only despite `SourceCell` carrying formats, lane planning can depend on caller-provided `source_cells` order, the public result exposes only one headline pattern for potentially mixed lanes, date weekday logic is split and inconsistent, rect-range formula refs are not first-class in adjustment, full row/column positions are placeholders in storage resolution, and Rust Flash Fill can drift from the TypeScript preview/apply path.
+
+The rating is not higher because the plan is closer to an umbrella roadmap than an executable implementation spec. It enumerates the right surface area and many correct invariants, but it does not yet pin down several hard product contracts that implementers would need before coding: exact Excel-compatible date-vs-number inference rules, exact month-end semantics, exact mixed-lane summary shape, typed validation behavior, formula mismatch diagnostics, and the chosen Flash Fill ownership/migration path. It also groups drag-fill contract work, formula identity ref repair, bridge/schema evolution, and a substantial Flash Fill engine rewrite into one plan without clear cut lines for independent landing.
+
+Major strengths
+
+- The plan accurately describes the production path: kernel builds the request, compute-core gathers values/formats/formula ref positions/hidden dimensions/merges, `compute_fill::engine::compute_fill` returns pure updates, and storage applies those updates through standard mutation paths.
+- It preserves the right architecture boundary. The pure crate remains storage-free and side-effect-free; ID allocation, mirror registration, undo, recalc, UI preview state, and mutation application stay outside `compute-fill`.
+- It is grounded in real current code behavior. For example, `group_value_cells_by_lane` currently collects only `CellValue`s from non-formula source cells in vector order; `FillResult` and `FillResultSummary` expose one detected pattern; `formula_adjust::RefPosition` lacks a rect-range variant; `resolve_identity_ref_to_fill_position` maps rect ranges to `Range` and uses zero placeholders for full row/column refs; and app Flash Fill uses a separate TypeScript detector while compute-core also exposes Rust `flash_fill`.
+- The plan thinks systematically instead of fixing one bug. The contract matrix, lane anchoring model, complete formula-ref shape list, all-mode include-flag coverage, hidden/merge consumption rules, and shared Flash Fill fixtures are the right way to prevent whack-a-mole regressions.
+- Verification is mostly production-path relevant. It calls for `cargo test -p compute-fill`, compute-core autofill mutation tests, clippy gates, bridge freshness/type gates when public contracts change, and real UI/E2E coverage for fill handle and Flash Fill workflows.
+- The parallelization notes are useful. The proposed split between contract matrix, lane/anchor work, cell-aware/date work, formula adjustment, Flash Fill, and bridge/kernel/app integration is directionally correct.
+
+Major gaps or risks
+
+- The plan does not make enough final contract decisions. It says to "decide" date-vs-number fallback, month-end anchoring, mixed-lane headline behavior, filled-cell counting, validation error behavior, and Flash Fill ownership. Those are the most important specification questions and should be resolved in the plan before implementation starts.
+- Scope is very large for one improvement plan. It combines core drag-fill determinism, date/time semantics, formula ref identity support, bridge summary/schema changes, app-level Flash Fill unification, and a ranked Flash Fill synthesizer. Those are related, but they have different risks and acceptance gates. Without explicit phase boundaries, agents could land interdependent partial changes that make behavior harder to verify.
+- The Flash Fill section is the least bounded. "Make Rust canonical" may be the right direction, but the plan does not specify a migration contract for passive preview versus explicit Ctrl+E, latency expectations, confidence semantics, multi-column source support, or how the TypeScript engine is retired or kept as a conformance implementation.
+- Formula diagnostics are underspecified. The current warning model only has merged cells, formula out-of-bounds, and source empty. The plan asks for mismatch/unresolved/external diagnostics, but it does not define the public warning kinds, whether they are bridge-visible, or which conditions should fail closed by preserving refs versus warning and continuing.
+- Validation behavior is not pinned down. The plan mentions either empty result plus warning or typed compute error for invalid geometry. That needs to be a contract because kernel and bridge callers will observe the difference.
+- The plan does not define compatibility or migration expectations for contract changes. Per-lane summaries, new warning kinds, and richer Flash Fill outputs may require updates in `contracts/src/fill`, generated bridge files, and kernel/app callers, but the plan does not state whether old fields remain stable or how TypeScript callers degrade.
+- Performance verification is directionally right but not measurable. It calls for bounded large-fill tests after replacing scans with maps, but does not set input sizes, expected asymptotics, or any regression threshold for production mutation paths.
+- Some verification commands are named as if specific filters already exist. That is fine as intent, but the plan should distinguish required existing gates from tests that must be created by the implementation.
+
+Contract and verification assessment
+
+The contract coverage is above average. The plan names the core invariants that matter for this crate: pure computation, coordinate-driven source/target semantics, lane independence, hidden rows/cols not consuming series values, merge-origin handling, explicit mode precedence, include-flag semantics, formula absolute/relative preservation, cross-sheet/external ref behavior, and native/WASM determinism.
+
+The biggest contract weakness is that many invariants are stated as questions instead of decisions. A follow-on implementer could satisfy the wording while choosing incompatible behaviors for date serial inference, format-only filled counts, mixed-lane summaries, invalid range handling, or Flash Fill partial success. The plan would be much stronger if the contract matrix were partially specified in the plan itself, not only listed as the first implementation step.
+
+Verification gates are mostly aligned with production behavior. The plan correctly requires crate-local tests for pure logic, compute-core mutation tests for storage integration, bridge/type gates for public contract changes, and UI/E2E tests through real input paths for app fill workflows. It also correctly avoids optimizing test-only paths. The remaining gap is acceptance precision: the plan should define the exact required fixtures, expected summaries/warnings, and filters to run per phase so agents can prove a slice is complete without running unrelated work.
+
+Concrete changes that would raise the rating
+
+- Resolve the open contract choices in the plan before implementation: date-vs-number inference fallback, month/year month-end semantics, filled-cell count definition, mixed-lane summary selection or schema, invalid geometry behavior, and Flash Fill partial-success semantics.
+- Split the work into explicit landing phases with independent acceptance criteria. A good sequence would be: contract matrix and current-behavior tests; coordinate-stable lanes and anchoring; date/time and format-aware inference; formula ref shape/diagnostics; summary/schema changes; Flash Fill unification.
+- Add exact public schema changes for per-lane summaries and new warning kinds, including backward compatibility expectations for existing `patternType`, `filledCellCount`, `warnings`, and `changes`.
+- Define formula adjustment outcomes as a table by ref shape and condition: local cell/range, rect range, full row/column, row/column range, cross-sheet, external, unresolved, mismatched positions, out of bounds, and absolute/mixed-absolute components.
+- Turn the Flash Fill proposal into a separate spec or add a concrete migration decision. State whether Rust is canonical for both preview and commit, what bridge endpoint returns for preview, whether TypeScript remains as a local predictor, and what shared fixtures prove conformance.
+- Add measurable performance acceptance for production paths, such as source/target sizes, sparse source layout, maximum repeated scans allowed, and the exact mutation path to measure.
+- Replace generic verification bullets with phase-specific gates and fixture names, marking which tests already exist and which must be added.

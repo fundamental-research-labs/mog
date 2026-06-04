@@ -1,0 +1,47 @@
+Rating: 8/10
+
+# Review — 086 What-If Scenario Manager (`mog/compute/core/src/what_if`)
+
+## Summary judgment
+
+This is a strong, evidence-backed plan. Every factual claim I spot-checked against the source holds up at line level, the scope boundary (Scenario Manager only; Goal Seek/Solver/Data Tables explicitly out) matches `mod.rs`, and the objectives are ordered by genuine production impact rather than ease. It correctly separates the durable Yrs definition layer from the session-scoped apply/restore layer, identifies a real correctness bug (O1), a real CRDT collaboration hazard (O4), a real data-loss gap (O6), and lower-impact hygiene (O3/O5/O7). Verification gates are concrete, tied to named tests, and honor the "no code, no build" worker constraint. The plan loses points for one contract-vocabulary error that contradicts its own preservation promise, an under-specified telemetry hook (O5), and the fact that its highest-impact item (O6) is deferred to a design step rather than planned.
+
+## Major strengths
+
+- **Accurate, citable evidence.** I confirmed each appendix claim:
+  - `query.rs:29-38` — `get_active_scenario_id` returns `None` unconditionally; `get_active_scenario` chains off it. A whole-repo grep (excluding `what_if`) for `get_active_scenario`/`get_active_scenario_id` returns **zero** Rust callers, so O2's "dead/misleading API" framing is correct, and its conditional (delete unless a binding consumes it) is appropriately hedged.
+  - `apply_restore.rs:97-108` — `active_state` recomputes only `definition_status` and clones whatever `cell_mutation_status` apply set. Confirms O1.
+  - `mutation_dispatch.rs:229` — `cell_mutation_status: Some("clean")` is set once at apply, never refreshed.
+  - `validation.rs:23,40` — `name.len()`/`comment.len()` are byte comparisons against char-documented 255 limits. Confirms O3.
+  - `crud.rs:103-104,168-172` — index from a prior read txn (`get_all`), then `remove(index)` + `insert(index, prelim)` in a separate write txn. Confirms O4's stale-index and whole-map-clobber hazards.
+  - `storage.rs:129-130` — `read_json(...).unwrap_or_default()` for `changingCells`/`values`, silent-empty on corrupt. Confirms O5.
+  - `types.rs:12,15` — literal "Excel limit" comments. Confirms O7 (and matches the house rule in memory: no product name in source).
+  - `tests.rs` — 47 `fn test_*`, and a `cell-set` grep for apply/restore/baseline/`active_state`/`prepare_` returns 0. Confirms the "zero apply/restore coverage" claim and the backfill being the highest-leverage test gap.
+- **Contract section is genuinely load-bearing.** It enumerates the wire-visible result shapes, the session-scoped invariant (`SCENARIO_ACTIVE_STATE_READ_ONLY`, legacy-key scrubbing), the two-phase read-only-planner contract, the guard rails (CSE/data-table rejection, `skipped_cells` vs `errors`), and baseline accumulation across switches. The note that O1 must compare against the *currently applied scenario's values*, not the merged baseline's originals, is a subtle and correct insight given `prepare_apply` accumulates originals across switches (`apply_restore.rs:155-165`).
+- **Honest sequencing and coupling.** O7/O3/O5 flagged as folder-local and parallelizable; O1/O2 correctly identified as rippling into *both* `scenarios_bindings.rs` delegation copies (`storage/engine/delegations/` and `storage/engine/services/delegations/`) plus `mutation.rs`. I confirmed both copies call `scenarios::active_state(...)`, so the signature-ripple risk is real and well-scoped.
+- **O6 is correctly characterized** as the largest item and explicitly design-gated, with a hard guard against regressing the deliberately-removed CRDT "active scenario" concept — it commits to persisting the restore *baseline*, not an active flag. This is the right instinct.
+
+## Major gaps or risks
+
+- **O1 uses the wrong status vocabulary, contradicting the plan's own wire-contract promise.** The plan repeatedly instructs setting `cell_mutation_status` to `"dirty"` (objectives §1, plan step 3, risks §edge-case). But the cross-language contract — `mog/contracts/src/api/types.ts`, `mog/runtime/sdk/.../api-spec.json`, and `mog-website/.../api-spec.json` — types this field as `'clean' | 'conflicted'`, and `mog/kernel/.../scenario-operations.ts` passes the raw string through. Emitting `"dirty"` would push a value outside the documented union to TS consumers typed against `'clean' | 'conflicted'`. The plan elsewhere insists O1 "only fills an existing optional field with a more accurate value" and that these strings are wire-visible — so this is a self-inconsistency, not a stylistic nit. The plan should specify `"conflicted"`.
+- **`definition_status` has an unmentioned third state.** The same contract defines `definition_status` as `'current' | 'stale' | 'deleted'`, but the Rust (`apply_restore.rs:102-106`, `mutation_dispatch.rs:228`) only ever produces `"current"`/`"deleted"` — `"stale"` is never emitted. O1 touches exactly this function and even cites a round-67 contract note about a `'conflicted'`/`'stale'` typed state gating Restore. The plan should at least acknowledge whether `"stale"` is intended to be produced (definition changed since apply) or is dead contract surface; ignoring it leaves the field half-implemented right where the plan is editing.
+- **O5's diagnostic hook is hand-waved.** "Emit a diagnostic via the crate's existing logging/telemetry path" — but the plan never verifies such a path exists in compute-core (no `tracing`/`log` reference is cited from `what_if` or `storage`). A reviewer can't tell whether the test gate ("assert via a captured log/telemetry sink") is even achievable. O5 should name the concrete mechanism (or downgrade to "return a typed parse error / surface count" if no sink exists).
+- **O6, the highest-impact correctness item, is not actually planned — only scoped.** It reduces to "add a design note" plus "verify whether apply participates in undo." That verification (does `mutation_set_cells_raw` with the apply edits land in undo history?) is answerable now from the source and would materially change O6's size; deferring it leaves the silent-permanent-write hole open with no committed fix. Acceptable for a worker that writes no code, but it caps completeness.
+- **O1 equality semantics deferred.** The Null-vs-blank and value-vs-formula equality cases are flagged (good) but left to the implementer. The formula case is the trickier one: a changing cell now holding a formula that *evaluates* to the scenario value would read "clean" under a value-only compare yet has clearly diverged. Worth a committed rule, not just a flag.
+
+## Contract and verification assessment
+
+The preservation list is thorough and mostly correct: limit values unchanged (only the unit of measure changes in O3), session-scoped invariant, two-phase planner, guard rails, baseline accumulation, insertion-order-as-display-order, timestamp no-panic property. All verified against source. The one defect is the `cell_mutation_status` value vocabulary above — the plan claims wire-shape preservation while prescribing an out-of-union value, which a wire-surface diff *would* catch but the plan doesn't anticipate.
+
+Verification gates are above average: per-objective tests are specific (CJK 255/256 boundary for O3; simulated concurrent insert for O4; corrupt-bridge-string + sink assertion for O5; codegen no-diff for O2; engine-level reload test for O6), and the plan correctly relocates O1/O6 tests to an engine harness since `active_state` will read the mirror. The cross-cutting backfill (apply happy path, guard rejection, unresolvable→`skipped_cells`, switch accumulation, restore, missing-baseline error) is exactly the right list given current coverage is zero. Missing: a gate asserting the emitted status strings are members of the TS union (which would have caught the "dirty" bug), and a gate on the O4 "clears a field → empty bridge string, not stale" risk it raises in §Risks.
+
+## Concrete changes that would raise the rating
+
+1. **Fix the status vocabulary:** specify `cell_mutation_status = "conflicted"` (not `"dirty"`) throughout O1, and add a verification gate asserting emitted values are within the `'clean' | 'conflicted'` union (and `definition_status` within `'current' | 'stale' | 'deleted'`).
+2. **Resolve `definition_status: "stale"`:** state whether O1 should also emit `"stale"` when the definition changed since apply, or document it as intentional dead surface.
+3. **Make O5 concrete:** name the actual logging/telemetry mechanism in compute-core (or change the approach if none exists), so the "captured sink" test gate is realizable.
+4. **Pull the O6 undo-participation finding forward:** answer "does the apply mutation land in undo history?" from source now; it determines whether O6 is documentation-only or a real persistence task.
+5. **Commit O1 equality rules:** define Null/blank equivalence and the value-vs-formula divergence case so dirty detection is deterministic rather than implementer's choice.
+6. **Add the O4 field-clear gate:** a test that updating a scenario to an empty `changingCells`/`values` produces an empty bridge string rather than leaving the prior serialized array.
+
+With items 1–3 addressed the plan would be a 9; the `"dirty"`/`"conflicted"` mismatch is the most consequential because the plan stakes its low-risk framing on wire-shape preservation it would itself violate.

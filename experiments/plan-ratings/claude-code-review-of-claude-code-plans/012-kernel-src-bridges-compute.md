@@ -1,0 +1,47 @@
+Rating: 8/10
+
+# Review of Plan 012 — Harden the Kernel→Compute Bridge
+
+
+## Summary judgment
+
+This is a strong, unusually well-grounded plan. Every concrete claim I spot-checked against the actual source holds up: `_forceRecomputeRefErrorCells` exists as a string-matching `removeSheet` workaround (`compute-bridge.ts:1094,1114,1132`); `copySheet` really fires a second non-atomic `compute_full_recalc` + `forceRefreshAllViewports` (`compute-bridge.ts:1017,1036,1041`); the security surface is genuinely `Promise<any[]>` / `Promise<any>` / `target: unknown` (`compute-bridge.ts:1620,1627,1638`); the `as unknown as MutationResult` fabricated returns and manual `normalizeBytesTuple` sites are real (`compute-bridge.ts:921,926,1108,1165,1218`); the dormant `sheetsWithCfRules` map is declared and barely used (`compute-core.ts:270`); the four separate refresh blocks in `mutateCore` are exactly as described (`compute-core.ts` ~848–920); the mapper `(d as any).lockAspectRatio` / `(d as any).colorType` casts are at the cited lines (`floating-object-mapper.ts:758,772`); and the referenced contract file (`contracts/src/events/security-events.ts`) and every named `__tests__/` file exist. The plan reads like it was written by someone who actually traced the code, not skimmed it.
+
+The objectives are real production-path fixes (correctness, atomicity, performance, type-safety, drift detection), explicitly framed as surgical and invariant-preserving rather than rewrites — appropriate for a load-bearing integration boundary. The C1–C8 contract list is the standout: it names the precise behaviors any change must keep green and ties each objective back to them.
+
+The principal weakness is one of *deliverable shape*, not correctness: the highest-value objectives (O1, O2, O3, O7) all depend on cross-folder changes (the Rust compute core and the `@mog/bridge-ts` generator) that the plan itself places out of scope. What can actually land *in this folder* without upstream PRs is Phase 1 — O4, O5, the mapper casts, and the O6 audit — which is the lower-value tier. The plan is honest about this sequencing, but a reader should understand that the marquee fixes are gated on work this plan can only request, not author.
+
+## Major strengths
+
+- **Evidence-grounded to the line.** Claims carry file/line citations that check out. This makes the plan auditable and lowers the risk of an implementer discovering the premise was wrong.
+- **Explicit invariant contract (C1–C8).** Single mutation pipeline, atomicity/single-undo, trap short-circuit, phase guards, bootstrap-vs-user provenance, Rust-as-source-of-truth, branded formula invariant, update_v1 semantics. Each is mapped to the objectives that risk it. This is exactly the right scaffolding for a module where a defect "corrupts data, breaks undo, or crashes the document."
+- **Honest scope boundary.** Generated files (`.gen.ts`) are correctly fenced off as generator output; changes to their shape are routed to the generator + Rust annotations, with R5 as the no-hand-edit backstop.
+- **Concrete, falsifiable test specs.** The new-test list is specific (e.g., O5: "exactly one `forceRefreshSheetViewports` for that sheet, assert via fetch-manager spy call count"; O1 negative: "a cell whose literal text is `#REF!` is NOT rewritten"). These are real assertions, not "add tests."
+- **Sequencing and blast radius are spelled out.** Phase 1 parallelizable now; Phase 2 after engine PRs; Phase 3 after generator PR; adjacent consumers (`trap-recovery`, `RustDocument`, update_v1 subscribers) named as review blast radius.
+- **Risks carry mitigations**, and each maps to a contract (R1→C2, R2→C5, R3→C3, R4→O5).
+
+## Major gaps or risks
+
+- **Value concentration is upstream.** O1/O2 require `compute/core` changes; O3/O7 require `@mog/bridge-ts` changes. Stripped to what is purely in-folder, the plan delivers O4 (typing), O5 (refresh coalescing), mapper-cast cleanup, and an audit. That is worthwhile but modest. The plan should foreground that the in-folder PR is mostly a *follow-on* to upstream work, and that without the engine/generator PRs the TS deletions cannot land (it says this for O1/O2 but understates how much of the headline value is deferred).
+- **O6 may be chasing a non-existent leak.** The plan hedges ("add the missing delete *if* a CREATED-but-never-started core can leak an entry"). But `activeInstancePerDocId.set(...)` happens only *after* `engineCreated = true` (`compute-core.ts:589→590`, `618→619`), and `destroy()` deletes inside `if (this.engineCreated)` (`compute-core.ts:692,706`). A CREATED-but-never-started core has `engineCreated === false` and was never inserted, so there is likely nothing to leak. O6 is the weakest objective: a genuine audit is fine, but it should state the current invariant it found rather than presuppose a bug.
+- **O5 over-refresh nuance unaddressed.** The dimension/visibility block today calls `forceRefreshAllViewports()` (all viewports), not a per-sheet refresh (`compute-core.ts` ~909). The plan's `collectRefreshPlan` correctly models this with an `allViewports` flag, but it does not ask whether the current all-viewports refresh on a single-sheet dimension change is itself over-broad and could be narrowed to the changed sheet. Coalescing that preserves a too-wide refresh is safe but leaves performance on the table; the plan frames O5 purely as dedup.
+- **O7 contract is thin.** "A schema hash/version" is named but not specified: what does the hash cover (full generated type set, method signatures, wire-struct layout)? How is it computed and where does the Rust RPC source it? Without that, "assert it equals a constant in `manifest.gen.ts`" is under-defined — and `manifest.gen.ts` currently has no such constant (confirmed: it only exports `BRIDGE_METHOD_KIND`), so this is net-new generator + Rust surface, not a tweak.
+- **O3 generator blast radius is under-specified.** Extending `@mog/bridge-ts` to model multi-value tuples and `bridge::skip(ts_bridge)` regenerates `compute-bridge.gen.ts`/`compute-types.gen.ts`/`manifest.gen.ts` and potentially affects *every* bridge consumer, not just this folder. "Coordinate so no other consumer is mid-regeneration" acknowledges timing but not the correctness blast radius across other bridges. The codegen gate ("no diff beyond intended new method shapes") is good but assumes the generator change is surgically scoped, which is the hard part and is left to the upstream PR.
+
+## Contract and verification assessment
+
+The contract layer is the best part of the plan and is accurate. C1 (single mutation pipeline), C3 (trap short-circuit via the `transport` getter as the sole guard point), C5 (ORIGIN_BOOTSTRAP `createDefaultSheet` never entering undo — confirmed at `compute-bridge.ts:1062,1070`), and C8 (update_v1 dispatch) are correctly described and each is tied to the objective most likely to perturb it.
+
+Verification gates are appropriately layered: existing unit tests (all named files exist), targeted new unit tests per objective, a codegen gate for Phase 3, api-eval/app-eval integration gates, a full-kernel typecheck note that correctly invokes the `@mog-sdk/contracts` declaration-rollup ordering, and a performance check for O1. The gates are falsifiable and mapped to contracts. The one soft spot: gates for O7 ("drift guard throws on mismatch") and O3 (codegen no-diff) test the *mechanism* but the plan can't demonstrate the upstream pieces exist yet, so those gates are aspirational until the generator/Rust work lands. The plan is explicit that this worker does not run builds/tests, which is the correct framing given constraints.
+
+## Concrete changes that would raise the rating
+
+1. **Re-tier the objectives by what lands in-folder vs. what is gated upstream.** Make explicit that Phase 1 (O4/O5/mapper/audit) is the only independently-shippable slice, and that O1/O2/O3/O7 are blocked on engine/generator PRs that this plan requests but does not own. Consider splitting into a "this-folder PR" and a set of "upstream prerequisite" tickets.
+2. **Resolve O6 before proposing a fix.** State the current insertion/deletion invariant (map populated only after `engineCreated`; deleted on non-superseded `destroy`). If no leak path exists, downgrade O6 to a documented invariant + a regression test, or drop it.
+3. **Specify the O7 schema hash precisely:** what bytes it covers, how the Rust side computes it, what RPC returns it, and what `manifest.gen.ts` constant the generator emits. Add a note that this is net-new manifest surface.
+4. **Extend O5 to ask whether dimension/visibility refresh can be narrowed to the changed sheet(s)**, not just coalesced — or explicitly justify keeping the all-viewports behavior (e.g., frozen-pane/cross-sheet position coupling) so the conservatism is a decision, not an accident.
+5. **Bound the O3 generator change's blast radius:** enumerate the other bridge consumers regenerated, and require the codegen gate to assert zero diff in *their* generated output, not just this folder's.
+6. **Add a rollback/feature-flag note for O1/O2:** since the TS deletions must merge strictly after the engine emits correct patches, state how a partial/mismatched deploy is detected and reverted (the drift guard O7 helps here — link them).
+
+---
+*Verification note: I inspected the in-scope source read-only (rg/sed/ls) and confirmed the cited symbols, line numbers, contract behaviors, referenced contract file, and `__tests__/` filenames. The only file created by this review is this one.*

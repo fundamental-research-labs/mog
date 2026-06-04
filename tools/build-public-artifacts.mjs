@@ -24,6 +24,16 @@ const checkOnly = process.argv.includes('--check-only');
 const skipTsBuild = process.argv.includes('--skip-ts-build') || checkOnly;
 const skipNativeBuild = process.argv.includes('--skip-native-build') || checkOnly;
 const skipWasmBuild = process.argv.includes('--skip-wasm-build') || checkOnly;
+const skipHostNativeArtifact = process.argv.includes('--skip-host-native-artifact') || checkOnly;
+const throughPackage = argValue('--through');
+
+function argValue(name) {
+  const index = process.argv.indexOf(name);
+  if (index >= 0) return process.argv[index + 1] ?? null;
+  const prefix = `${name}=`;
+  const arg = process.argv.find((value) => value.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : null;
+}
 
 function loadJsonc(filePath) {
   const raw = readFileSync(filePath, 'utf-8');
@@ -408,6 +418,13 @@ console.log('=== TS public facade artifacts ===');
 let shipPublicNames = [];
 try {
   shipPublicNames = orderedShipPublicPackages(inventory, workspacePackages);
+  if (throughPackage) {
+    const throughIndex = shipPublicNames.indexOf(throughPackage);
+    if (throughIndex === -1) {
+      throw new Error(`${throughPackage}: --through package is not a ship-public package`);
+    }
+    shipPublicNames = shipPublicNames.slice(0, throughIndex + 1);
+  }
   console.log(`  build order: ${shipPublicNames.join(' -> ')}`);
 } catch (error) {
   errors.push(error.message);
@@ -453,7 +470,14 @@ for (const name of generatedAssetPrerequisites) {
 
 buildDeclarationPrerequisites(workspacePackages, errors);
 
-const wasmPkg = buildWasmArtifact(workspacePackages, errors);
+const needsWasmArtifact = shipPublicNames.some((name) =>
+  ['@mog-sdk/embed', '@mog-sdk/spreadsheet-app'].includes(name),
+);
+const wasmPkg = needsWasmArtifact ? buildWasmArtifact(workspacePackages, errors) : null;
+if (!needsWasmArtifact) {
+  console.log('\n=== WASM asset artifact ===');
+  console.log(`  SKIP WASM build (not required by selected ship-public packages)`);
+}
 let kernelArtifactBuilt = false;
 
 for (const name of shipPublicNames) {
@@ -498,7 +522,11 @@ if (shipPublicNames.includes('@mog-sdk/contracts') && !skipTsBuild) {
 
 console.log('\n=== Host native artifact ===');
 const hostNative = hostNativePackageName();
-if (!hostNative) {
+if (skipHostNativeArtifact) {
+  console.log(
+    `  SKIP host native artifact (${checkOnly ? 'check-only' : 'skip-host-native-artifact'})`,
+  );
+} else if (!hostNative) {
   errors.push(`unsupported host native platform: ${process.platform}/${process.arch}`);
 } else if (!inventory[hostNative]) {
   errors.push(`${hostNative}: host native package missing from inventory`);

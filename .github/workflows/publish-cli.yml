@@ -17,13 +17,9 @@ permissions:
   id-token: write
 
 jobs:
-  publish:
-    name: Publish @mog-sdk/cli to npm
+  package:
+    name: Package @mog-sdk/cli and skill
     runs-on: ubuntu-latest
-    environment: npm-production
-    concurrency:
-      group: npm-production
-      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v4
@@ -61,11 +57,60 @@ jobs:
           path: artifacts/mog-cli-kernel.skill.zip
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm/mog-sdk-cli-*.tgz
+          if-no-files-found: error
+
+  publish-dry-run:
+    name: Dry-run publish @mog-sdk/cli to npm
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ inputs.dry_run == 'true' }}
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@^11.5.1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm
+
       - name: Publish CLI package
         run: |
           TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish "$TARBALL" --access public --dry-run
-          else
-            npm publish "$TARBALL" --access public
-          fi
+          npm publish "$TARBALL" --access public --dry-run
+
+  publish:
+    name: Publish @mog-sdk/cli to npm
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ inputs.dry_run == 'false' }}
+    environment: npm-production
+    concurrency:
+      group: npm-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@^11.5.1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm
+
+      - name: Publish CLI package
+        run: |
+          TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
+          npm publish "$TARBALL" --access public

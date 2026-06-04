@@ -1,0 +1,44 @@
+Rating: 8/10
+
+## Summary judgment
+
+This is a strong plan for `kernel/src/api`. It correctly treats the folder as the production behavior gateway rather than a convenience wrapper, and it ties the work to the actual public/friend routes: `createWorkbook()`, `DocumentHandle.workbook()`, `WorkbookImpl`, `WorksheetImpl`, namespace APIs, app capability gating, SDK metadata generation, and shell/runtime consumers. The plan is unusually good at naming invariants that must survive broad refactors: sync metadata reads, sub-API referential stability, thrown public errors, read-only/write gates, disposal ownership, timezone semantics, app absent-interface gating, and production-only performance work.
+
+The main reason it is not a 9 or 10 is that the plan is very broad and still leaves a few key contracts underspecified. It describes the right architectural direction, but several workstreams need sharper acceptance criteria before parallel agents could implement them without interpretation drift. The highest-risk gaps are the API inventory ownership model, the execution envelope contract, and the sequencing boundary between "normalize the whole category" and "do not destabilize every API surface at once."
+
+## Major strengths
+
+- The plan is grounded in the current source. The API README is stale around `sheet/` and `unwrap.ts`; `app/README.md` says "No active consumers" while shell/runtime paths construct gated app APIs; several operation modules still return `OperationResult`; `WorksheetImpl.ensureRangeEditable` still does per-cell checks; and `WorkbookConfig.writeFile` is documented but `WorkbookImpl.save(path)` imports `node:fs/promises` directly.
+- It defines production-path scope correctly. It includes `types/api/src/api`, `contracts/src/api` shims, `runtime/sdk/scripts/generate-api-spec.ts`, SDK declaration/snapshot gates, and shell/runtime/spreadsheet callers where API shape or generated metadata changes.
+- It preserves the right dependency direction. The plan keeps implementation in public `mog`, generated/public docs last, and internal planning in `mog-internal`.
+- It explicitly protects important behavioral contracts: cached `DocumentHandle.workbook()` behavior, workbook/worksheet object identity, sync metadata accessors, A1/numeric overloads, metadata cache invalidation, read-only failures, disposed failures, namespace backdoor prevention, and app capability absent-interface behavior.
+- It has a credible parallelization model. The proposed workstreams are mostly separable: contract inventory, execution envelope, operation normalization, coordinator extraction, app capability gating, bridge/performance work, and verification.
+- The verification section is much stronger than average. It names package gates, targeted Jest paths, generated API snapshot/declaration gates, SDK/runtime gates, UI smoke paths, and Rust gates only when bridge/core changes are introduced.
+
+## Major gaps or risks
+
+- The contract inventory gate is directionally right but underspecified. The existing API spec generator already uses AST discovery from `types/api/src/api` and follows contract re-export shims, while retaining explicit exclusion sets. The plan should say whether to extend that generator, create a separate kernel test, or create a shared discovery library. Without a single ownership schema, "implementation file" matching will be noisy for overloads, aliases, internal members, `WorkbookInternal`, lazy accessors, nested collection handles, and public-looking helper methods.
+- The execution envelope needs a more precise contract. `runRead`, `runMutation`, `runWorkbookMutation`, `runWorksheetMutation`, and `runAppMutation` are named, but their required inputs, return behavior, error-code mapping, sync-vs-async support, undo grouping boundaries, protection preflight semantics, cache invalidation lifecycle, and bridge-wire exception policy need to be specified before broad refactors start.
+- The operation-normalization scope is large enough to break many callers at once. "Convert the complete legacy `OperationResult` set in one systematic pass" is the correct category-level objective, but the plan should define a mechanical migration recipe and a compatibility boundary for bridge result decoding. Otherwise different workers may convert operation modules differently.
+- App capability batch semantics are called out correctly, but the target contract is not complete. Current `createGatedUndoGroup` delegates to the full API and scoped APIs validate as calls execute, so partial side effects are possible. The plan should define what can be statically preflighted, what cannot, how failures are reported, and whether a capability-aware transaction/rollback model is required.
+- Lifecycle ownership is important but still broad. The plan asks for workbook-owned resource registry coverage across handles, managers, subscriptions, worksheet instances, caches, and app APIs, but does not define the owner graph or disposal order as an executable contract. That is risky because disposal currently spans workbook, worksheet, document handle, bridge transport, viewport handles, and lazily created sub-APIs.
+- Timezone enforcement may be a breaking semantic change. The plan notes the drift, but it should require an inventory of all production host paths before enforcing "missing headless timezone rejects." Current tests and comments still encode UTC default behavior in places, while type docs say missing headless timezone should throw.
+- The performance work needs acceptance criteria. Vectorized protection checks and bulk cross-workbook copy are correctly scoped to production paths, but the plan should define size thresholds, exact preserved metadata/formula contracts, unsupported-case errors, and benchmark/eval gates so agents do not create a broad bridge API without proving the bottleneck.
+
+## Contract and verification assessment
+
+The plan has strong contract instincts. It treats `types/api/src/api` as the source contract, recognizes `contracts/src/api` as re-export shims, and correctly demands generated metadata/snapshot/declaration gates when public surfaces move. It also correctly identifies that public/friend facades should throw typed errors while internal `OperationResult` leakage should be blocked by a gate.
+
+The missing piece is a formal visibility/ownership model. The inventory should not rely on name heuristics alone. It needs explicit metadata for public, friend, internal, deprecated, test-only, bridge-wire decoding, and handle-factory members, plus a stable way to map each contract member to an implementation owner. Without that, the gate could either miss real drift or produce enough false positives that future workers route around it.
+
+The verification gates are mostly appropriate and production-relevant. The plan correctly includes kernel tests/typecheck, SDK generated metadata checks, declaration identity checks, shell/runtime/spreadsheet gates when callers change, UI smoke testing for real UI paths, and Rust gates only when bridge/core methods are added. I would add a required "contract inventory diff" artifact to each major workstream so parallel workers can see exactly which API paths changed, which implementation owners moved, and which exceptions remain intentional.
+
+## Concrete changes that would raise the rating
+
+- Define the inventory schema completely, including visibility values, owner mapping rules, exception annotations, bridge-wire `OperationResult` allowance, and how the gate distinguishes contract members from `WorkbookInternal`/implementation-only methods.
+- Specify whether the inventory extends `runtime/sdk/scripts/generate-api-spec.ts`, factors out shared AST discovery, or creates a separate kernel-only checker. Prefer one shared discovery source to avoid two drifting contract parsers.
+- Write the execution envelope API contract before implementation: exact function signatures, sync/async behavior, error normalization table, undo grouping rules, protection preflight rules, invalidation hook timing, and examples for workbook, worksheet, namespace, and app calls.
+- Split the plan into explicit phases with stop/go gates: inventory first, envelope second, operation normalization third, then coordinator/lifecycle refactors, then app capability and bridge/performance changes, then docs/generated metadata.
+- Add an owner graph for disposal and cache invalidation, with tests that assert disposal order and use-after-dispose behavior across workbook, worksheet, sub-APIs, handles, app APIs, and owned document handles.
+- Add a production-host timezone inventory and migration step before changing headless creation semantics.
+- Define measurable performance acceptance criteria for vectorized protection and bulk range copy, including preserved formula/format/table/spill/data-table semantics and explicit unsupported-case errors.

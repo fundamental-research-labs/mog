@@ -9,6 +9,37 @@ Use this skill when a user wants Claude/Cowork to load a workbook, run code
 against the Mog kernel API, save it, or inspect the available workbook and
 worksheet API.
 
+## Skill Installation
+
+This repository stores the skill source at:
+
+```text
+cli/skill
+```
+
+For Claude Code / Claude Co-work project-scope loading, expose it under
+`.claude/skills` from the Mog repo root:
+
+```bash
+mkdir -p .claude/skills
+ln -s ../../cli/skill .claude/skills/mog-cli-kernel
+```
+
+If symlinks are not supported in the host environment, copy the folder instead:
+
+```bash
+mkdir -p .claude/skills
+rm -rf .claude/skills/mog-cli-kernel
+cp -R cli/skill .claude/skills/mog-cli-kernel
+```
+
+For Codex or another agent host, install the same `cli/skill` folder into that
+host's configured skill root under the directory name `mog-cli-kernel`.
+
+After installing, make sure the agent session is started with project skills
+enabled. For Claude Agent SDK tests, use `settingSources: ['project']` and
+`skills: ['mog-cli-kernel']` or `skills: 'all'`.
+
 ## CLI Contract
 
 Run commands from the public Mog repo root unless the user specifies another

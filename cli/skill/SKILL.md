@@ -23,7 +23,7 @@ JavaScript and the platform native SDK addon, and requires Node.js 18+ on
 `PATH`. Install from the CLI release:
 
 ```bash
-curl -fsSL https://github.com/fundamental-research-labs/mog/releases/download/mog-cli-v0.1.0/install-mog-cli.sh | sh
+curl -fsSL https://github.com/fundamental-research-labs/mog/releases/download/mog-cli-v0.6.0/install-mog-cli.sh | sh
 ```
 
 If the release URL is different, pass it explicitly:

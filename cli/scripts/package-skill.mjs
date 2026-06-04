@@ -9,13 +9,14 @@ const skillRoot = resolve(cliRoot, 'skill');
 const artifactsDir = resolve(repoRoot, 'artifacts');
 const zipPath = resolve(artifactsDir, 'mog-cli-kernel.skill.zip');
 const crcTable = makeCrc32Table();
+const packageVersion = releasePackageVersion();
 
 mkdirSync(artifactsDir, { recursive: true });
 rmSync(zipPath, { force: true });
 
 const entries = collectFiles(skillRoot).map((path) => {
   const name = relative(skillRoot, path).split(sep).join('/');
-  return { name, data: readFileSync(path) };
+  return { name, data: fileData(name, path) };
 });
 
 writeFileSync(zipPath, makeZip(entries));
@@ -31,6 +32,33 @@ function collectFiles(dir) {
     if (entry.isFile()) return [path];
     return [];
   });
+}
+
+function fileData(name, path) {
+  const data = readFileSync(path);
+  if (name !== 'SKILL.md') return data;
+  return Buffer.from(
+    data
+      .toString('utf8')
+      .replace(
+        /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+        `mog-cli-v${packageVersion}`,
+      ),
+    'utf8',
+  );
+}
+
+function releasePackageVersion() {
+  const packageJson = JSON.parse(readFileSync(resolve(cliRoot, 'package.json'), 'utf8'));
+  const sdkPackageJson = JSON.parse(
+    readFileSync(resolve(repoRoot, 'runtime', 'sdk', 'package.json'), 'utf8'),
+  );
+  if (packageJson.version !== sdkPackageJson.version) {
+    throw new Error(
+      `@mog/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+    );
+  }
+  return packageJson.version;
 }
 
 function makeZip(files) {

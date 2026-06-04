@@ -1,6 +1,6 @@
 {
   "name": "@mog/cli",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "scripts": {
     "build": "pnpm --filter @mog-sdk/node build && tsup",
     "package:release": "pnpm run package:standalone && pnpm run package:skill",
+    "package:installer": "node scripts/package-installer.mjs",
     "package:standalone": "node scripts/package-standalone.mjs",
     "package:skill": "node scripts/package-skill.mjs",
     "publish:github": "pnpm run package:release && node scripts/publish-github-release.mjs",

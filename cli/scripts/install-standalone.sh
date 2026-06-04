@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-BASE_URL="${MOG_CLI_BASE_URL:-https://github.com/fundamental-research-labs/mog/releases/download/mog-cli-v0.1.0}"
+MOG_CLI_VERSION="${MOG_CLI_VERSION:-0.6.0}"
+BASE_URL="${MOG_CLI_BASE_URL:-https://github.com/fundamental-research-labs/mog/releases/download/mog-cli-v$MOG_CLI_VERSION}"
 INSTALL_DIR="${MOG_CLI_INSTALL_DIR:-$HOME/.mog/cli}"
 BIN_DIR="${MOG_CLI_BIN_DIR:-$HOME/.local/bin}"
 

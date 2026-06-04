@@ -18,6 +18,7 @@ const nativeSource = resolve(repoRoot, 'compute', 'napi', 'compute-core-napi.nod
 const nativePackageName = platformPackageName(platform);
 const nativePackageInstallDir = resolve(stageRoot, 'node_modules', '@mog-sdk', platform);
 const nativePackageSourceDir = resolve(repoRoot, 'compute', 'napi', 'npm', platform);
+const version = await releasePackageVersion();
 
 if (!existsSync(nativeSource)) {
   throw new Error(
@@ -52,7 +53,7 @@ writeFileSync(
   `${JSON.stringify(
     {
       name: '@mog/cli-standalone',
-      version: await packageVersion(),
+      version,
       private: true,
       type: 'commonjs',
       bin: {
@@ -71,7 +72,7 @@ writeFileSync(
 
 rmSync(tarballPath, { force: true });
 run('tar', ['-czf', tarballPath, '-C', artifactsDir, packageName], repoRoot);
-cpSync(resolve(cliRoot, 'scripts', 'install-standalone.sh'), installerPath);
+run('node', ['scripts/package-installer.mjs'], cliRoot);
 
 await smokeTestTarball();
 
@@ -81,8 +82,16 @@ function run(command, args, cwd, env = process.env) {
   execFileSync(command, args, { cwd, env, stdio: 'inherit' });
 }
 
-async function packageVersion() {
+async function releasePackageVersion() {
   const packageJson = JSON.parse(await readFile(resolve(cliRoot, 'package.json'), 'utf8'));
+  const sdkPackageJson = JSON.parse(
+    await readFile(resolve(repoRoot, 'runtime', 'sdk', 'package.json'), 'utf8'),
+  );
+  if (packageJson.version !== sdkPackageJson.version) {
+    throw new Error(
+      `@mog/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+    );
+  }
   return packageJson.version;
 }
 

@@ -7,8 +7,24 @@ import { fileURLToPath } from 'node:url';
 const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(cliRoot, '..');
 const artifactsDir = resolve(repoRoot, 'artifacts');
-const tag = process.env.MOG_CLI_RELEASE_TAG || 'mog-cli-v0.1.0';
-const title = process.env.MOG_CLI_RELEASE_TITLE || `Mog CLI ${tag.replace(/^mog-cli-/, '')}`;
+const packageVersion = releasePackageVersion();
+const releaseVersion = process.env.MOG_CLI_RELEASE_VERSION || packageVersion;
+const expectedTag = `mog-cli-v${releaseVersion}`;
+const tag = process.env.MOG_CLI_RELEASE_TAG || expectedTag;
+const title = process.env.MOG_CLI_RELEASE_TITLE || `Mog CLI v${releaseVersion}`;
+const releaseTarget = process.env.MOG_CLI_RELEASE_TARGET || currentGitHead();
+const dryRun = ['1', 'true'].includes(
+  String(process.env.MOG_CLI_RELEASE_DRY_RUN || '').toLowerCase(),
+);
+
+if (releaseVersion !== packageVersion) {
+  throw new Error(
+    `MOG_CLI_RELEASE_VERSION ${releaseVersion} must match @mog/cli ${packageVersion}`,
+  );
+}
+if (tag !== expectedTag) {
+  throw new Error(`MOG_CLI_RELEASE_TAG ${tag} must match ${expectedTag}`);
+}
 
 const assets = [
   asset('install-mog-cli.sh'),
@@ -19,10 +35,12 @@ const assets = [
     .map(asset),
 ];
 
+validateInstallerVersion(assets[0]);
+
 writeChecksums(assets);
 assets.push(asset('SHA256SUMS'));
 
-if (!releaseExists(tag)) {
+if (!dryRun && !releaseExists(tag)) {
   run('gh', [
     'release',
     'create',
@@ -31,18 +49,25 @@ if (!releaseExists(tag)) {
     title,
     '--notes',
     'Standalone Mog CLI bundles for Claude Co-work and local agent workflows.',
+    '--target',
+    releaseTarget,
     '--latest=false',
   ]);
 }
 
-run('gh', ['release', 'upload', tag, '--clobber', ...assets.map((entry) => entry.path)]);
+if (!dryRun) {
+  run('gh', ['release', 'upload', tag, '--clobber', ...assets.map((entry) => entry.path)]);
+}
 
 const releaseBaseUrl = `https://github.com/fundamental-research-labs/mog/releases/download/${tag}`;
 console.log(
   JSON.stringify(
     {
       ok: true,
+      dryRun,
+      version: releaseVersion,
       tag,
+      releaseTarget,
       releaseBaseUrl,
       installCommand: `curl -fsSL ${releaseBaseUrl}/install-mog-cli.sh | sh`,
       assets: assets.map((entry) => ({
@@ -66,6 +91,29 @@ function asset(name) {
   return { name, path };
 }
 
+function validateInstallerVersion(entry) {
+  const text = readFileSync(entry.path, 'utf8');
+  const expected = `MOG_CLI_VERSION="\${MOG_CLI_VERSION:-${packageVersion}}"`;
+  if (!text.includes(expected)) {
+    throw new Error(`${entry.name} must default to @mog/cli version ${packageVersion}`);
+  }
+}
+
+function releasePackageVersion() {
+  const packageJson = readJson(resolve(cliRoot, 'package.json'));
+  const sdkPackageJson = readJson(resolve(repoRoot, 'runtime', 'sdk', 'package.json'));
+  if (packageJson.version !== sdkPackageJson.version) {
+    throw new Error(
+      `@mog/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+    );
+  }
+  return packageJson.version;
+}
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
 function writeChecksums(entries) {
   const lines = entries
     .map((entry) => `${sha256(readFileSync(entry.path))}  ${entry.name}`)
@@ -81,6 +129,13 @@ function releaseExists(releaseTag) {
   } catch {
     return false;
   }
+}
+
+function currentGitHead() {
+  return execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  }).trim();
 }
 
 function run(command, args) {

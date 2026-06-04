@@ -94,7 +94,7 @@ jobs:
             exit 1
           fi
 
-      - name: Publish CLI GitHub release
+      - name: Publish CLI raw GitHub release
         env:
           MOG_CLI_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
-        run: node cli/scripts/publish-github-release.mjs
+        run: node cli/scripts/publish-raw-release.mjs

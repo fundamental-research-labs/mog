@@ -17,7 +17,7 @@ const platformAddon = resolve(
 );
 
 if (!existsSync(cliPath)) {
-  throw new Error(`Built CLI not found: ${cliPath}. Run pnpm --filter @mog/cli build first.`);
+  throw new Error(`Built CLI not found: ${cliPath}. Run pnpm --filter @mog-sdk/cli build first.`);
 }
 
 let temporaryPlatformAddon = false;

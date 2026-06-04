@@ -1,32 +1,25 @@
 {
-  "name": "@mog/cli",
-  "version": "0.6.0",
+  "name": "@mog-sdk/cli",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "bin": {
     "mog": "./dist/mog.cjs"
   },
   "scripts": {
-    "build": "pnpm --filter @mog-sdk/node build && tsup",
+    "build": "pnpm -w run build:public-artifacts -- --through @mog-sdk/node --skip-native-build --skip-host-native-artifact --skip-wasm-build && tsup",
     "package:npm": "pnpm run build && node scripts/package-npm.mjs",
-    "package:release": "pnpm run package:standalone && pnpm run package:skill",
-    "package:installer": "node scripts/package-installer.mjs",
-    "package:standalone": "node scripts/package-standalone.mjs",
+    "package:release": "pnpm run package:npm && pnpm run package:skill",
     "package:skill": "node scripts/package-skill.mjs",
-    "publish:github-release": "pnpm run package:release && node scripts/publish-github-release.mjs",
-    "publish:raw": "pnpm run package:release && node scripts/publish-raw-release.mjs",
     "test:npm-local": "pnpm run package:npm && node testing/npm-local-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:e2e",
-    "test:e2e": "pnpm build && node testing/e2e.mjs",
-    "test:agent-e2e": "pnpm build && node testing/agent-e2e.mjs"
+    "test:e2e": "pnpm build && node testing/e2e.mjs"
   },
   "dependencies": {
     "@mog-sdk/node": "workspace:*"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.161",
-    "@openai/codex-sdk": "^0.136.0",
     "@types/node": "^25.5.0",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"

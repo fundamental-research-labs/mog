@@ -13,48 +13,41 @@ worksheet API.
 
 This skill teaches the agent how to use the Mog CLI. Install both:
 
-- the `mog` standalone CLI bundle
+- the `@mog-sdk/cli` npm package
 - this skill folder
 
 ### Install The Mog CLI
 
-Preferred Co-work setup is the standalone CLI bundle. It includes the Mog CLI
-JavaScript and the platform native SDK addon, and requires Node.js 18+ on
-`PATH`. Install from the raw GitHub release artifacts:
+Preferred Co-work setup is the published npm package. It installs the `mog`
+command and downloads the `@mog-sdk/node` package plus the platform native SDK
+package through npm. It requires Node.js 18+ and npm on `PATH`.
+
+Use a user-local npm prefix when global installs are not writable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0/install-mog-cli.sh | sh
+mkdir -p "$HOME/.mog/npm"
+npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli@0.8.0
+export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
+mog --help
 ```
 
-Use the `raw.githubusercontent.com` URL exactly as written when installing in
-Claude Co-work. Some sandboxes allow `raw.githubusercontent.com` but block
-GitHub Release asset redirects and `r2.dev` URLs.
-
-If the release URL is different, pass it explicitly:
+If global npm installs are supported, this is also valid:
 
 ```bash
-curl -fsSL <release-download-base-url>/install-mog-cli.sh | MOG_CLI_BASE_URL=<release-download-base-url> sh
+npm install -g @mog-sdk/cli@0.8.0
+mog --help
 ```
 
-`MOG_CLI_BASE_URL` should be the directory containing `install-mog-cli.sh`,
-`mog-cli-linux-x64-gnu.tar.gz`, `mog-cli-darwin-arm64.tar.gz`, and
-`SHA256SUMS`, for example:
-
-```bash
-MOG_CLI_BASE_URL=https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0
-```
-
-The installer downloads `mog-cli-<platform>.tar.gz`, installs it under
-`~/.mog/cli`, and links `mog` into `~/.local/bin`. Make sure `~/.local/bin` is
-on `PATH`.
+Do not install the Mog CLI from raw GitHub, GitHub Release, R2, or curl-based
+standalone artifacts. The skill expects npm-installed `mog`.
 
 For local development only, the CLI can also be run from a Mog repo checkout:
 
 ```bash
 corepack enable
 pnpm install
-pnpm --filter @mog/cli build
-pnpm --filter @mog/cli exec mog --help
+pnpm --filter @mog-sdk/cli build
+pnpm --filter @mog-sdk/cli exec mog --help
 ```
 
 ### Install The Skill
@@ -71,17 +64,19 @@ Upload that zip directly in the Co-work skill UI.
 To build the skill zip from a repo checkout:
 
 ```bash
-pnpm --filter @mog/cli package:skill
+pnpm --filter @mog-sdk/cli package:skill
 ```
 
 The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
 
-Release maintainers publish the CLI bundle and skill zip to the versioned
-raw GitHub artifact branch with:
+Release maintainers build the CLI npm package candidate and skill zip with:
 
 ```bash
-pnpm --filter @mog/cli publish:raw
+pnpm --filter @mog-sdk/cli package:release
 ```
+
+The `Publish Mog CLI` GitHub workflow publishes the generated `@mog-sdk/cli`
+package to npm.
 
 This repository stores the unpacked skill source at:
 
@@ -114,29 +109,33 @@ enabled. For Claude Agent SDK tests, use `settingSources: ['project']` and
 
 ## CLI Contract
 
-Use the standalone `mog` binary when it is installed:
+Before using the CLI, check whether `mog` is available:
+
+```bash
+command -v mog
+```
+
+If it is missing, install `@mog-sdk/cli` from npm using the user-local npm prefix
+commands above. Do not substitute a raw artifact installer.
+
+Use the npm-installed `mog` command when it is installed:
 
 ```bash
 mog create --name <workbook-name> --path <directory>
 ```
 
-In a development checkout, use the workspace command form:
+In a Mog repo development checkout only, use the workspace command form:
 
 ```bash
-pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
+pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
-The examples below use the workspace command so they also work while developing
-Mog. If `mog` is on `PATH`, use `mog ...` directly.
+The examples below use the npm-installed `mog` command. Only use the workspace
+`pnpm --filter @mog-sdk/cli exec mog ...` form while developing inside a Mog
+repo checkout.
 
 Create a new blank workbook by name inside a directory and keep it alive in the
 local Mog daemon:
-
-```bash
-pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
-```
-
-Standalone equivalent:
 
 ```bash
 mog create --name <workbook-name> --path <directory>
@@ -148,13 +147,13 @@ refuses to overwrite an existing workbook.
 You can also create at an exact workbook file path:
 
 ```bash
-pnpm --filter @mog/cli exec mog create <path-to-new-workbook.xlsx>
+mog create <path-to-new-workbook.xlsx>
 ```
 
 Load an existing workbook and keep it alive in the local Mog daemon:
 
 ```bash
-pnpm --filter @mog/cli exec mog load <path-to-workbook.xlsx>
+mog load <path-to-workbook.xlsx>
 ```
 
 Both commands return JSON containing an `id`. Use that id for later commands.
@@ -162,13 +161,13 @@ Both commands return JSON containing an `id`. Use that id for later commands.
 Execute code against the loaded workbook:
 
 ```bash
-pnpm --filter @mog/cli exec mog execute --id <workbook-id> --code '<code>'
+mog execute --id <workbook-id> --code '<code>'
 ```
 
 For larger code snippets, write a temporary script and use:
 
 ```bash
-pnpm --filter @mog/cli exec mog execute --id <workbook-id> --code-file <script.js>
+mog execute --id <workbook-id> --code-file <script.js>
 ```
 
 The code runs in an async function with these bindings:
@@ -262,25 +261,25 @@ await wb.calculate({ iterative: { maxIterations: 100, maxChange: 0.001 } });
 Save changes back to the workbook's original path:
 
 ```bash
-pnpm --filter @mog/cli exec mog commit --id <workbook-id>
+mog commit --id <workbook-id>
 ```
 
 Save to a different path:
 
 ```bash
-pnpm --filter @mog/cli exec mog commit --id <workbook-id> --path <output.xlsx>
+mog commit --id <workbook-id> --path <output.xlsx>
 ```
 
 Dispose the workbook handle:
 
 ```bash
-pnpm --filter @mog/cli exec mog unload --id <workbook-id>
+mog unload --id <workbook-id>
 ```
 
 List active handles:
 
 ```bash
-pnpm --filter @mog/cli exec mog list
+mog list
 ```
 
 ## API Discovery
@@ -302,7 +301,11 @@ Use `rg` or `jq` over that file before guessing method names. Preferred search
 patterns:
 
 ```bash
-API_REF=cli/skill/references/api-spec.json
+# Uploaded skill bundle:
+API_REF=references/api-spec.json
+
+# Mog repo checkout:
+# API_REF=cli/skill/references/api-spec.json
 
 # Top-level structure and namespace maps
 jq 'keys' "$API_REF"
@@ -359,16 +362,16 @@ Common workbook namespaces: `sheets`, `history`, `names`, `scenarios`,
 - Always `commit` before reporting a workbook edit as saved.
 - Always `unload` when the task is complete.
 - For code changes to the CLI or SDK, verify with the relevant
-  `@mog/cli` and `@mog-sdk/node` tests and typecheck.
+  `@mog-sdk/cli` and `@mog-sdk/node` tests and typecheck.
 - For CLI behavior changes, run:
   ```bash
-  pnpm --filter @mog/cli typecheck
-  pnpm --filter @mog/cli test:e2e
+  pnpm --filter @mog-sdk/cli typecheck
+  pnpm --filter @mog-sdk/cli test:e2e
   ```
 - Provider-backed agent E2E tests are opt-in because they run real Codex or
   Claude agent sessions:
   ```bash
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog-sdk/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog-sdk/cli test:agent-e2e
+  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog-sdk/cli test:agent-e2e
   ```

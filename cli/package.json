@@ -8,6 +8,9 @@
   },
   "scripts": {
     "build": "pnpm --filter @mog-sdk/node build && tsup",
+    "package:release": "pnpm run package:standalone && pnpm run package:skill",
+    "package:standalone": "node scripts/package-standalone.mjs",
+    "package:skill": "node scripts/package-skill.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:e2e",
     "test:e2e": "pnpm build && node testing/e2e.mjs",

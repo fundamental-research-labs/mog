@@ -11,7 +11,60 @@ worksheet API.
 
 ## Skill Installation
 
-This repository stores the skill source at:
+This skill teaches the agent how to use the Mog CLI. Install both:
+
+- the `mog` standalone CLI bundle
+- this skill folder
+
+### Install The Mog CLI
+
+Preferred Co-work setup is the standalone CLI bundle. It includes the Mog CLI
+JavaScript and the platform native SDK addon, and requires Node.js 18+ on
+`PATH`. Install from the latest release:
+
+```bash
+curl -fsSL https://github.com/fundamental-research-labs/mog/releases/latest/download/install-mog-cli.sh | sh
+```
+
+If the release URL is different, pass it explicitly:
+
+```bash
+curl -fsSL <release-download-base-url>/install-mog-cli.sh | MOG_CLI_BASE_URL=<release-download-base-url> sh
+```
+
+The installer downloads `mog-cli-<platform>.tar.gz`, installs it under
+`~/.mog/cli`, and links `mog` into `~/.local/bin`. Make sure `~/.local/bin` is
+on `PATH`.
+
+For local development only, the CLI can also be run from a Mog repo checkout:
+
+```bash
+corepack enable
+pnpm install
+pnpm --filter @mog/cli build
+pnpm --filter @mog/cli exec mog --help
+```
+
+### Install The Skill
+
+The release bundle for Co-work upload is:
+
+```text
+mog-cli-kernel.skill.zip
+```
+
+That zip contains `SKILL.md` at the archive root plus `references/api-spec.json`.
+Upload that zip directly in the Co-work skill UI.
+
+To build the skill zip from a repo checkout:
+
+```bash
+pnpm --filter @mog/cli package:skill
+```
+
+The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
+
+This repository stores the unpacked skill source at:
 
 ```text
 cli/skill
@@ -42,31 +95,32 @@ enabled. For Claude Agent SDK tests, use `settingSources: ['project']` and
 
 ## CLI Contract
 
-Run commands from the public Mog repo root unless the user specifies another
-checkout:
+Use the standalone `mog` binary when it is installed:
 
 ```bash
-cd ../mog
+mog create --name <workbook-name> --path <directory>
 ```
 
-For a fresh checkout or Co-work environment, prepare the workspace before using
-the CLI:
+In a development checkout, use the workspace command form:
 
 ```bash
-corepack enable
-pnpm install
-pnpm --filter @mog/cli build
+pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
-Do not install a separate global `mog` binary unless the host environment
-explicitly packages one. Prefer the workspace command form below so the CLI and
-SDK versions match the checked-out repo.
+The examples below use the workspace command so they also work while developing
+Mog. If `mog` is on `PATH`, use `mog ...` directly.
 
 Create a new blank workbook by name inside a directory and keep it alive in the
 local Mog daemon:
 
 ```bash
 pnpm --filter @mog/cli exec mog create --name <workbook-name> --path <directory>
+```
+
+Standalone equivalent:
+
+```bash
+mog create --name <workbook-name> --path <directory>
 ```
 
 The CLI appends `.xlsx` to the name when needed, creates parent directories, and

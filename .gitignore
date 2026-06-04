@@ -17,6 +17,7 @@ target-native/
 target-wasm/
 target/
 dist/
+dist-standalone/
 build/
 .next/
 pkg/

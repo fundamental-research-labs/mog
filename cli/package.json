@@ -11,6 +11,8 @@
     "package:npm": "pnpm run build && node scripts/package-npm.mjs",
     "package:release": "pnpm run package:npm && pnpm run package:skill",
     "package:skill": "node scripts/package-skill.mjs",
+    "test:codex-binary-e2e": "pnpm run package:npm && node testing/codex-binary-e2e.mjs",
+    "test:npm-docker": "pnpm run package:npm && node testing/npm-docker-e2e.mjs",
     "test:npm-local": "pnpm run package:npm && node testing/npm-local-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:e2e",
@@ -20,6 +22,7 @@
     "@mog-sdk/node": "workspace:*"
   },
   "devDependencies": {
+    "@openai/codex-sdk": "^0.136.0",
     "@types/node": "^25.5.0",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"

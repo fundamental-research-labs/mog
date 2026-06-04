@@ -23,7 +23,7 @@ JavaScript and the platform native SDK addon, and requires Node.js 18+ on
 `PATH`. Install from the latest release:
 
 ```bash
-curl -fsSL https://github.com/fundamental-research-labs/mog/releases/latest/download/install-mog-cli.sh | sh
+curl -fsSL https://pub-57fa7de9ac794c569d75d53d07f9550a.r2.dev/latest/install-mog-cli.sh | sh
 ```
 
 If the release URL is different, pass it explicitly:
@@ -63,6 +63,13 @@ pnpm --filter @mog/cli package:skill
 ```
 
 The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
+
+Release maintainers publish the CLI bundle and skill zip to the public R2
+release bucket with:
+
+```bash
+pnpm --filter @mog/cli publish:r2
+```
 
 This repository stores the unpacked skill source at:
 

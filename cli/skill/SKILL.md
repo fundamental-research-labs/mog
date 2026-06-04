@@ -20,16 +20,28 @@ This skill teaches the agent how to use the Mog CLI. Install both:
 
 Preferred Co-work setup is the standalone CLI bundle. It includes the Mog CLI
 JavaScript and the platform native SDK addon, and requires Node.js 18+ on
-`PATH`. Install from the CLI release:
+`PATH`. Install from the raw GitHub release artifacts:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0/install-mog-cli.sh | sh
 ```
 
+Use the `raw.githubusercontent.com` URL exactly as written when installing in
+Claude Co-work. Some sandboxes allow `raw.githubusercontent.com` but block
+GitHub Release asset redirects and `r2.dev` URLs.
+
 If the release URL is different, pass it explicitly:
 
 ```bash
 curl -fsSL <release-download-base-url>/install-mog-cli.sh | MOG_CLI_BASE_URL=<release-download-base-url> sh
+```
+
+`MOG_CLI_BASE_URL` should be the directory containing `install-mog-cli.sh`,
+`mog-cli-linux-x64-gnu.tar.gz`, `mog-cli-darwin-arm64.tar.gz`, and
+`SHA256SUMS`, for example:
+
+```bash
+MOG_CLI_BASE_URL=https://raw.githubusercontent.com/fundamental-research-labs/mog/cli-releases/mog-cli-v0.6.0
 ```
 
 The installer downloads `mog-cli-<platform>.tar.gz`, installs it under

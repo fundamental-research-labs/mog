@@ -18,9 +18,9 @@ This skill teaches the agent how to use the Mog CLI. Install both:
 
 ### Install The Mog CLI
 
-Preferred Co-work setup is the npm package. It installs the `mog` command and
-downloads the platform native SDK package through npm. It requires Node.js 18+
-and npm on `PATH`.
+Preferred Co-work setup is the published npm package. It installs the `mog`
+command and downloads the `@mog-sdk/node` package plus the platform native SDK
+package through npm. It requires Node.js 18+ and npm on `PATH`.
 
 Use a user-local npm prefix when global installs are not writable:
 
@@ -124,23 +124,18 @@ Use the npm-installed `mog` command when it is installed:
 mog create --name <workbook-name> --path <directory>
 ```
 
-In a development checkout, use the workspace command form:
+In a Mog repo development checkout only, use the workspace command form:
 
 ```bash
 pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
 ```
 
-The examples below use the workspace command so they also work while developing
-Mog. If `mog` is on `PATH`, use `mog ...` directly.
+The examples below use the npm-installed `mog` command. Only use the workspace
+`pnpm --filter @mog-sdk/cli exec mog ...` form while developing inside a Mog
+repo checkout.
 
 Create a new blank workbook by name inside a directory and keep it alive in the
 local Mog daemon:
-
-```bash
-pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
-```
-
-Installed command equivalent:
 
 ```bash
 mog create --name <workbook-name> --path <directory>
@@ -152,13 +147,13 @@ refuses to overwrite an existing workbook.
 You can also create at an exact workbook file path:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog create <path-to-new-workbook.xlsx>
+mog create <path-to-new-workbook.xlsx>
 ```
 
 Load an existing workbook and keep it alive in the local Mog daemon:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog load <path-to-workbook.xlsx>
+mog load <path-to-workbook.xlsx>
 ```
 
 Both commands return JSON containing an `id`. Use that id for later commands.
@@ -166,13 +161,13 @@ Both commands return JSON containing an `id`. Use that id for later commands.
 Execute code against the loaded workbook:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog execute --id <workbook-id> --code '<code>'
+mog execute --id <workbook-id> --code '<code>'
 ```
 
 For larger code snippets, write a temporary script and use:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog execute --id <workbook-id> --code-file <script.js>
+mog execute --id <workbook-id> --code-file <script.js>
 ```
 
 The code runs in an async function with these bindings:
@@ -266,25 +261,25 @@ await wb.calculate({ iterative: { maxIterations: 100, maxChange: 0.001 } });
 Save changes back to the workbook's original path:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog commit --id <workbook-id>
+mog commit --id <workbook-id>
 ```
 
 Save to a different path:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog commit --id <workbook-id> --path <output.xlsx>
+mog commit --id <workbook-id> --path <output.xlsx>
 ```
 
 Dispose the workbook handle:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog unload --id <workbook-id>
+mog unload --id <workbook-id>
 ```
 
 List active handles:
 
 ```bash
-pnpm --filter @mog-sdk/cli exec mog list
+mog list
 ```
 
 ## API Discovery
@@ -306,7 +301,11 @@ Use `rg` or `jq` over that file before guessing method names. Preferred search
 patterns:
 
 ```bash
-API_REF=cli/skill/references/api-spec.json
+# Uploaded skill bundle:
+API_REF=references/api-spec.json
+
+# Mog repo checkout:
+# API_REF=cli/skill/references/api-spec.json
 
 # Top-level structure and namespace maps
 jq 'keys' "$API_REF"

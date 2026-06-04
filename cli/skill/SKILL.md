@@ -1,28 +1,23 @@
 ---
 name: mog-cli-kernel
-description: Use when operating Mog workbooks through the minimal `mog` CLI, executing code against the headless @mog-sdk/node workbook API, committing workbook changes, unloading handles, or discovering the workbook/worksheet API from the bundled generated API JSON.
+description: Use when operating Mog workbooks through the `mog` CLI, executing code against the headless @mog-sdk/node workbook API, committing workbook changes, unloading handles, or discovering the workbook/worksheet API from the bundled generated API JSON.
 ---
 
 # Mog CLI Kernel
 
-Use this skill when a user wants Claude/Cowork to load a workbook, run code
-against the Mog kernel API, save it, or inspect the available workbook and
-worksheet API.
+Use this skill to create, load, inspect, edit, save, and unload Mog workbooks
+through the `mog` CLI. The full generated API reference is bundled at
+`references/api-spec.json`.
 
-## Skill Installation
+## CLI Setup
 
-This skill teaches the agent how to use the Mog CLI. Install both:
+Before using Mog, check whether the CLI is available:
 
-- the `@mog-sdk/cli` npm package
-- this skill folder
+```bash
+command -v mog
+```
 
-### Install The Mog CLI
-
-Preferred Co-work setup is the published npm package. It installs the `mog`
-command and downloads the `@mog-sdk/node` package plus the platform native SDK
-package through npm. It requires Node.js 18+ and npm on `PATH`.
-
-Use a user-local npm prefix when global installs are not writable:
+If `mog` is missing, install the published npm package with a user-local prefix:
 
 ```bash
 mkdir -p "$HOME/.mog/npm"
@@ -31,146 +26,72 @@ export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
 mog --help
 ```
 
-If global npm installs are supported, this is also valid:
+If global npm installs are writable, `npm install -g @mog-sdk/cli@0.8.0` is
+also valid. Do not install Mog from raw GitHub, GitHub Releases, R2, or
+curl-based standalone artifacts.
 
-```bash
-npm install -g @mog-sdk/cli@0.8.0
-mog --help
-```
+## Workbook Lifecycle
 
-Do not install the Mog CLI from raw GitHub, GitHub Release, R2, or curl-based
-standalone artifacts. The skill expects npm-installed `mog`.
-
-For local development only, the CLI can also be run from a Mog repo checkout:
-
-```bash
-corepack enable
-pnpm install
-pnpm --filter @mog-sdk/cli build
-pnpm --filter @mog-sdk/cli exec mog --help
-```
-
-### Install The Skill
-
-The release bundle for Co-work upload is:
-
-```text
-mog-cli-kernel.skill.zip
-```
-
-That zip contains `SKILL.md` at the archive root plus `references/api-spec.json`.
-Upload that zip directly in the Co-work skill UI.
-
-To build the skill zip from a repo checkout:
-
-```bash
-pnpm --filter @mog-sdk/cli package:skill
-```
-
-The generated zip is written to `artifacts/mog-cli-kernel.skill.zip`.
-
-Release maintainers build the CLI npm package candidate and skill zip with:
-
-```bash
-pnpm --filter @mog-sdk/cli package:release
-```
-
-The `Publish Mog CLI` GitHub workflow publishes the generated `@mog-sdk/cli`
-package to npm.
-
-This repository stores the unpacked skill source at:
-
-```text
-cli/skill
-```
-
-For Claude Code / Claude Co-work project-scope loading, expose it under
-`.claude/skills` from the Mog repo root:
-
-```bash
-mkdir -p .claude/skills
-ln -s ../../cli/skill .claude/skills/mog-cli-kernel
-```
-
-If symlinks are not supported in the host environment, copy the folder instead:
-
-```bash
-mkdir -p .claude/skills
-rm -rf .claude/skills/mog-cli-kernel
-cp -R cli/skill .claude/skills/mog-cli-kernel
-```
-
-For Codex or another agent host, install the same `cli/skill` folder into that
-host's configured skill root under the directory name `mog-cli-kernel`.
-
-After installing, make sure the agent session is started with project skills
-enabled. For Claude Agent SDK tests, use `settingSources: ['project']` and
-`skills: ['mog-cli-kernel']` or `skills: 'all'`.
-
-## CLI Contract
-
-Before using the CLI, check whether `mog` is available:
-
-```bash
-command -v mog
-```
-
-If it is missing, install `@mog-sdk/cli` from npm using the user-local npm prefix
-commands above. Do not substitute a raw artifact installer.
-
-Use the npm-installed `mog` command when it is installed:
+Create a blank workbook by name inside a directory:
 
 ```bash
 mog create --name <workbook-name> --path <directory>
 ```
 
-In a Mog repo development checkout only, use the workspace command form:
-
-```bash
-pnpm --filter @mog-sdk/cli exec mog create --name <workbook-name> --path <directory>
-```
-
-The examples below use the npm-installed `mog` command. Only use the workspace
-`pnpm --filter @mog-sdk/cli exec mog ...` form while developing inside a Mog
-repo checkout.
-
-Create a new blank workbook by name inside a directory and keep it alive in the
-local Mog daemon:
-
-```bash
-mog create --name <workbook-name> --path <directory>
-```
-
-The CLI appends `.xlsx` to the name when needed, creates parent directories, and
-refuses to overwrite an existing workbook.
-
-You can also create at an exact workbook file path:
+Create at an exact workbook path:
 
 ```bash
 mog create <path-to-new-workbook.xlsx>
 ```
 
-Load an existing workbook and keep it alive in the local Mog daemon:
+Load an existing workbook:
 
 ```bash
 mog load <path-to-workbook.xlsx>
 ```
 
-Both commands return JSON containing an `id`. Use that id for later commands.
+`create` and `load` return JSON containing an `id`. Use that id for later
+commands.
 
-Execute code against the loaded workbook:
+Execute code against a loaded workbook:
 
 ```bash
 mog execute --id <workbook-id> --code '<code>'
 ```
 
-For larger code snippets, write a temporary script and use:
+For larger snippets, write a temporary script and use:
 
 ```bash
 mog execute --id <workbook-id> --code-file <script.js>
 ```
 
-The code runs in an async function with these bindings:
+Save changes back to the original workbook path:
+
+```bash
+mog commit --id <workbook-id>
+```
+
+Save to a different path:
+
+```bash
+mog commit --id <workbook-id> --path <output.xlsx>
+```
+
+Dispose the workbook handle:
+
+```bash
+mog unload --id <workbook-id>
+```
+
+List active handles:
+
+```bash
+mog list
+```
+
+## Execution Context
+
+`mog execute` runs code in an async function with these bindings:
 
 - `wb` and `workbook`: the loaded `Workbook`
 - `ws` and `activeSheet`: `workbook.activeSheet`
@@ -185,11 +106,11 @@ await ws.setCell("A1", 42);
 return await ws.getValue("A1");
 ```
 
-## Basic Mog API Examples
+## Basic API Examples
 
 All workbook and worksheet methods are async unless the API spec says otherwise.
-Use `await`, use `workbook.activeSheet` for the active worksheet, and never guess
-method names from Excel/Office/Sheets APIs.
+Use `await`, use `workbook.activeSheet` for the active worksheet, and inspect the
+bundled API reference before guessing method names.
 
 Read context before editing:
 
@@ -251,103 +172,45 @@ await ws.layout.autoFitColumns("A:C");
 await ws.view.freezeRows(1);
 ```
 
-Calculate formulas, including circular-model cases:
+Calculate formulas:
 
 ```js
 await wb.calculate();
 await wb.calculate({ iterative: { maxIterations: 100, maxChange: 0.001 } });
 ```
 
-Save changes back to the workbook's original path:
-
-```bash
-mog commit --id <workbook-id>
-```
-
-Save to a different path:
-
-```bash
-mog commit --id <workbook-id> --path <output.xlsx>
-```
-
-Dispose the workbook handle:
-
-```bash
-mog unload --id <workbook-id>
-```
-
-List active handles:
-
-```bash
-mog list
-```
-
 ## API Discovery
 
-The generated SDK API spec is bundled at:
-
-```text
-references/api-spec.json
-```
-
-It has the same useful structure as Shortcut's JSON API reference:
-
-- `subApis.wb` and `subApis.ws`: namespace to interface mappings
-- `interfaces.<InterfaceName>.functions`: method signatures, docstrings, used
-  types
-- `types`: type and enum definitions
-
-Use `rg` or `jq` over that file before guessing method names. Preferred search
-patterns:
+Use `rg` or `jq` over `references/api-spec.json` before guessing method names:
 
 ```bash
-# Uploaded skill bundle:
 API_REF=references/api-spec.json
 
-# Mog repo checkout:
-# API_REF=cli/skill/references/api-spec.json
-
-# Top-level structure and namespace maps
 jq 'keys' "$API_REF"
 jq '.subApis.ws, .subApis.wb' "$API_REF"
 
-# Core methods on Workbook/Worksheet
 jq '.interfaces.Worksheet.functions | keys' "$API_REF"
 jq '.interfaces.Workbook.functions | keys' "$API_REF"
 jq '.interfaces.Worksheet.functions.setCell' "$API_REF"
 jq '.interfaces.Workbook.functions.calculate' "$API_REF"
 
-# Namespace method discovery: ws.charts -> WorksheetCharts
 NS=$(jq -r '.subApis.ws.charts' "$API_REF")
 jq ".interfaces.$NS.functions | keys" "$API_REF"
 jq ".interfaces.$NS.functions.add" "$API_REF"
 
-# Find a method or namespace by text
 rg -n '"setCell"|"getValue"|"setRange"|"setCells"' "$API_REF"
 rg -n 'charts|WorksheetCharts|ChartConfig' "$API_REF"
 rg -n 'pivots|WorksheetPivots|PivotTableConfig' "$API_REF"
 
-# Find config/options/result types
 jq '.types.CellWriteOptions' "$API_REF"
 jq '.types.ChartConfig' "$API_REF"
 jq -r '.types | keys[] | select(test("(Config|Options|Result)$"))' "$API_REF"
-
-# Search docstrings for capabilities
-jq -r '
-  .interfaces
-  | to_entries[]
-  | .key as $iface
-  | .value.functions
-  | to_entries[]
-  | select((.value.docstring // "") | test("pivot|chart|validation"; "i"))
-  | "\($iface).\(.key): \(.value.signature)"
-' "$API_REF"
 ```
 
 Common worksheet namespaces: `charts`, `pivots`, `conditionalFormats`,
-`tables`, `slicers`, `filters`, `sparklines`, `validations`, `formats`,
-`structure`, `layout`, `view`, `outline`, `protection`, `print`, `comments`,
-`hyperlinks`, `pictures`, `shapes`, `names`, `settings`.
+`tables`, `filters`, `sparklines`, `validations`, `formats`, `structure`,
+`layout`, `view`, `outline`, `protection`, `print`, `comments`, `hyperlinks`,
+`pictures`, `shapes`, `names`, `settings`.
 
 Common workbook namespaces: `sheets`, `history`, `names`, `scenarios`,
 `slicers`, `tableStyles`, `cellStyles`, `theme`, `viewport`, `notifications`,
@@ -359,19 +222,6 @@ Common workbook namespaces: `sheets`, `history`, `names`, `scenarios`,
   code from workbook contents or external sources.
 - Prefer public SDK methods from `@mog-sdk/node`; do not deep-import internal
   source files in execution snippets.
+- Prefer `--code-file` for nontrivial snippets to avoid shell quoting issues.
 - Always `commit` before reporting a workbook edit as saved.
 - Always `unload` when the task is complete.
-- For code changes to the CLI or SDK, verify with the relevant
-  `@mog-sdk/cli` and `@mog-sdk/node` tests and typecheck.
-- For CLI behavior changes, run:
-  ```bash
-  pnpm --filter @mog-sdk/cli typecheck
-  pnpm --filter @mog-sdk/cli test:e2e
-  ```
-- Provider-backed agent E2E tests are opt-in because they run real Codex or
-  Claude agent sessions:
-  ```bash
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=codex pnpm --filter @mog-sdk/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=claude pnpm --filter @mog-sdk/cli test:agent-e2e
-  MOG_AGENT_E2E=1 MOG_AGENT_E2E_PROVIDER=all pnpm --filter @mog-sdk/cli test:agent-e2e
-  ```

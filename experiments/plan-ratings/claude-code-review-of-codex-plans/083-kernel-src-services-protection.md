@@ -1,0 +1,42 @@
+Rating: 8/10
+
+# Review: 083 - Kernel Services Protection Improvement Plan
+
+## Summary judgment
+
+This is a strong, unusually well-grounded plan. Nearly every concrete code reference I spot-checked is accurate: `can_edit_cell` and `can_do_structure_op` exist in `mog/compute/core/src/storage/engine/atomics.rs`; the compute alias pairs (`filter`/`autoFilter`, `editObject`/`editObjects`, `pivotTables`/`usePivotTableReports`) are exactly as the plan describes them; `VALID_PROTECTION_OPS` lives in `api/worksheet/protection.ts`; `canPauseProtection` really does return `!this._isPaused` (so it reports `true` for an unprotected sheet, precisely the defect the plan flags); `protectedWorkbook()` / `API_PROTECTED_SHEET` exist as named; the legacy XOR helper is duplicated between the kernel folder and `mog/spreadsheet-utils/src/protection.ts`; and the in-memory `allowEditRanges` map is real. The plan correctly identifies that this 83-line `index.ts` is *not* the real enforcement surface and that compute-core is the production authority. That architectural framing — compute owns persisted state and editability, this folder owns typed TS policy adapters, UI must not bypass the APIs — is exactly right and is the plan's biggest asset.
+
+The principal weakness is scope. For a folder that today holds two factory helpers and a password hash, the plan proposes a cross-cutting protection-subsystem rewrite spanning five packages (kernel TS, public types, compute Rust, file-io XLSX, app E2E) and a brand-new persisted feature (allow-edit ranges with session-scoped unlock state and XLSX roundtrip). It honestly acknowledges this and splits into tracks, but it stops short of decomposing the work into independently landable increments with per-increment acceptance criteria, and it defers a couple of genuine contract decisions rather than making them.
+
+## Major strengths
+
+- **Accurate code grounding.** The plan reflects the real codebase, not a guess. This dramatically lowers implementation risk and is rare among folder-improvement plans.
+- **Correct production-path stance.** It repeatedly insists the decision stays on `ctx.computeBridge.canEditCell` and that protection must not collapse into React handler checks. The non-goals ("bypassing compute-core by enforcing protection only in action handlers", "no test-only bypasses", "not cryptographic security") are well chosen and protect against the obvious failure modes.
+- **Invariants section is the best part.** Empty-cells-default-locked, selection flags default-allowed, OOXML attribute polarity vs. intuitive "allowed" booleans, formula-hidden only when protected + `hidden:true`, structure-protection operation set — these are specific, testable, and match Excel semantics.
+- **Exhaustiveness discipline.** Using `satisfies` for the operation matrix and adding compile-time tests that every `SheetProtectionOptions` permission field maps to an operation (or is intentionally non-operation) is the right mechanism to prevent the alias drift the plan itself warns about.
+- **Verification gates are concrete and per-package** (both `pnpm --filter` and `cargo test -p`), and the behavioral gate "blocked before the bridge mutation it would otherwise call" is a meaningful, falsifiable assertion rather than a vague "add tests."
+- **Risk and parallelization sections are thoughtful.** The track dependencies are correct — notably that Track C (compute) must land before Track A can make `allowEditRanges` production-backed, and that Track D must agree with Track C on the protected-range domain model.
+
+## Major gaps or risks
+
+- **Unbounded scope / no landable increments.** The plan reads as a subsystem epic, not a folder improvement. There is no "smallest shippable slice first" sequencing within tracks and no definition-of-done per track. A reviewer cannot tell what "phase 1" looks like or when it is safe to stop. The refactor (dedup, operation matrix, guard facade) is low-risk and high-value and should be explicitly separated from the high-risk allow-edit-ranges feature; bundling them invites an all-or-nothing change.
+- **Deferred contract decisions.** Two of the most consequential decisions are left open: (a) whether `insertHyperlinks`/`pivotTables`/`editScenarios` become public `ProtectionOperation` members, and (b) the package-ownership direction for password/`MutationResult` helpers. (b) is reasonable to scope as "decide first" since it blocks downstream imports, but (a) is a public-API surface decision the plan could and should resolve, not punt.
+- **Allow-edit-ranges under-specified for its risk.** This is the riskiest item (new domain/snapshot model, new compute bridge methods, `can_edit_cell` integration, XLSX hydrate/export, session-scoped password-unlock state). The plan gives a field list but no schema, no statement of how unlock state is keyed/scoped beyond "document/session scoped", and no collaboration/undo semantics for an unlock. For something that can grant write access to otherwise-locked cells, this needs more rigor.
+- **No back-compat handling for the existing public API.** `allowEditRanges` is exposed today via an in-memory map. Moving to persisted/async storage likely changes the public method signatures and could break existing callers. The plan says "replace the in-memory map" but never addresses migration or API compatibility. Same concern applies to changing `canPauseProtection` semantics on a documented OfficeJS-parity property.
+- **Path references drop the `mog/` prefix.** The body cites `compute/core/src/storage/engine/atomics.rs`, `file-io/xlsx/parser`, etc., which do not resolve from the repo root (real paths are `mog/compute/...`, `mog/file-io/...`). Minor, but an implementer copy-pasting paths will get misses.
+- **Canonical type sources unstated.** The plan references `SheetProtectionOptions` / `WorkbookProtectionOptions` and "the canonical config" but never names the file/package they live in. Exhaustiveness claims can't be checked against the plan alone.
+
+## Contract and verification assessment
+
+Contract clarity is good on invariants and error shapes (stable `KernelError('API_PROTECTED_SHEET')` / `protectedWorkbook()` payloads, no ad-hoc `Error` strings) and weak on the two deferred decisions above and on the allow-edit-range data contract. The "decide whether" phrasing should be converted to a concrete recommendation with rationale.
+
+Verification is a clear strength. The gates are real commands, split correctly between TS and Rust, conditioned on which surfaces change, and supplemented by roundtrip and E2E coverage through real input paths. What's missing is acceptance criteria per track and an explicit statement that the new behavioral tests must fail against `main` before the change (to prove they actually guard the mutation). The plan also can't run any of these gates itself in this run, which is fine, but the implementer should treat the "blocked before bridge mutation" test as the keystone gate.
+
+## Concrete changes that would raise the rating
+
+1. **Split into landable increments.** Make Increment 1 the pure refactor (dedup password/`MutationResult` ownership, build the `satisfies`-checked operation matrix, collapse `protection-guards` into a thin facade, fix `canPauseProtection`) with no behavior change and full green gates. Defer allow-edit-ranges and modern-hash work to later increments with their own acceptance criteria.
+2. **Resolve, don't defer, the public-op decision.** State whether `insertHyperlinks`/`pivotTables`/`editScenarios` become public `ProtectionOperation` members, with rationale and the `@mog/types-api` impact.
+3. **Specify the allow-edit-range contract.** Give the concrete snapshot schema, the unlock-state key and lifetime, and the collaboration/undo behavior of an unlock. State explicitly whether an unlocked range survives reload (it should not) and how it interacts with mirror state.
+4. **Add a back-compat note** for the existing in-memory `allowEditRanges` public API and for any `canPauseProtection` semantic change — call out breaking vs. non-breaking and any shim/deprecation path (consistent with the non-goal of avoiding indefinite shims).
+5. **Fix path prefixes** to `mog/...` and name the canonical files for `SheetProtectionOptions`/`WorkbookProtectionOptions` and the config projection so exhaustiveness tests are anchored.
+6. **Add per-track definition-of-done and require new behavioral tests to fail on `main` first**, making the keystone "blocked-before-mutation" assertion verifiably load-bearing.

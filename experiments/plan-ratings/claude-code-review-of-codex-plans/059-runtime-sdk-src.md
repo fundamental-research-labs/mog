@@ -1,0 +1,55 @@
+Rating: 8/10
+
+# Review of 059-runtime-sdk-src
+
+
+## Summary judgment
+
+This is a strong, evidence-grounded plan for the `@mog-sdk/node` public source surface. Nearly every concrete claim it makes is verifiable against the actual code, and the diagnoses are correct rather than speculative. It correctly identifies the single most important defect in this folder — `@internal`-marked raw helpers leaking from the stable package root — and builds a coherent program of work around tightening the public contract, hardening the trusted host adapter, and making the generated API-introspection artifact a first-class, validated contract. The main thing holding it back from a 9–10 is scope: 20 implementation steps across 8 parallel agents is a large, multi-week program presented as one plan, and a few mechanical details (the internal-entrypoint packaging mechanism, the `schemaVersion` type) are underspecified relative to the plan's otherwise high precision.
+
+I verified the plan's central factual claims directly:
+
+- `index.ts` does export `createHeadlessEngine`, `createHeadlessEngineFromYrsState`, `HeadlessEngine`, `HeadlessCodeExecutorFactory`, `NapiAddonModule`, `CollaborativeEngine`, and `createCollaborativeGroup` from the stable root (`index.ts:34-51`), and `boot.ts` marks those very symbols `@internal` (`boot.ts:97,108,383,420,455,...`). The leaked-internal-surface premise is real, not invented.
+- `api-spec.json` already carries the rich metadata the plan wants surfaced — `stableId`, `canonicalPath`, `asyncModel`, `parameters`, `returns`, `ownership`, `ownerPackage`, `alias`, `deprecation`, `source`, `visibility`, `kind` — while `api-describe.ts`'s local `ApiSpecFunctionEntry` exposes only `signature`/`docstring`/`usedTypes`/`targetInterface`. The metadata-loss claim is accurate.
+- `apiSpec = rawApiSpec as unknown as ApiSpec` with no runtime validation (`api-describe.ts:40`), and `schemaVersion` is present in the artifact. The "don't rely on the cast as the only guard" objective is well-founded.
+- The reserved-name collisions are silently skipped via `continue` with no conflict report (`api-describe.ts:420,449`), matching the plan's claim exactly.
+- `WorkbookConfig` is `@internal`, bypasses the host adapter (`boot.ts:123-130,235-236`), yet README still documents `createWorkbook({ ctx, eventBus })` (README:54). The "unadvertised bypass" risk is real.
+- `llms.txt` shows `tags: ['action']` on methods (llms.txt:19,23), a field absent from the actual generated entries — the stale-docs example the plan calls out is genuine.
+
+This level of corroboration is the plan's biggest asset: a reviewer or implementer can trust its problem statement.
+
+## Major strengths
+
+- **Accurate, falsifiable diagnosis.** The plan reads like it was written from the code, not from a summary. Each objective maps to an observable defect I was able to reproduce by reading the source.
+- **Production-path discipline.** It repeatedly insists the work go through the real host-backed `createWorkbook`, the real `IChartBridge.getMarksAtSize`, and the built/packed package rather than test mocks (objectives, non-goals, release-readiness gates). This is exactly right for an SDK boundary folder.
+- **Fail-closed security framing is preserved, not relaxed.** The host-adapter invariants (single-use source handles, replay rejection, `rawProviderBytesMayReachUntrustedClient: false`, management-op denial, silent-by-default diagnostics) are stated as invariants to *preserve*, and a non-goal explicitly forbids weakening them for ergonomics. Good instinct for a trusted local adapter.
+- **The export-surface fix is sequenced correctly.** Define manifest → split entrypoints → migrate internal test consumers off the root → enforce with API Extractor + dual ESM/CJS export-set test. That is the right order; flipping it would break the monorepo before the replacement path exists.
+- **Verification gates are concrete and tool-anchored.** Named `pnpm --filter @mog-sdk/node` scripts (test/typecheck/build/api-report/verify-build/smoke-test/verify-publish) plus a tarball-install smoke and out-of-workspace ESM/CJS runtime smoke. These are real gates, not "add tests."
+- **Exhaustiveness made type-level.** Asking for `serializeMark` and `SUPPORTED_SYMBOL_SHAPES` to become an exhaustive type-level contract over `ChartMark['type']` is the correct way to prevent silent drift when new mark types are added.
+
+## Major gaps or risks
+
+- **Scope is a program, not a plan.** 20 steps, 8 agents, touching exports, generator, runtime introspection, lifecycle, host adapter, native loader, chart export, and collaboration. There is no phasing or MVP cut. If only one slice ships, the plan doesn't say which is highest-value. (Step 1–4, the export-surface cleanup, is clearly the keystone and should be flagged as the must-land milestone.)
+- **The internal/unstable entrypoint mechanism is underspecified.** Steps 2–3 say to add "a deliberate internal or unstable source entrypoint" exported "in package metadata only with an explicit release-level contract," but never pin down the actual mechanism: a `package.json` `exports` subpath (e.g. `@mog-sdk/node/unstable`), a separate `private` workspace package, or a `tsup` second entry. This is the riskiest change (it can break `tsup.config.ts`, `api-extractor.json`, and every internal consumer at once) and deserves the most precision, yet gets the least.
+- **`schemaVersion` type ambiguity.** The artifact stores `schemaVersion: "1"` (a string). The plan's validation step (6) and the runtime types (5) say to add `schemaVersion` but never state whether it is a string or number, nor whether the validator must accept the current string form. A naive `=== 1` check would reject the real artifact. Small, but it is exactly the kind of detail this otherwise-precise plan should nail.
+- **Inter-agent contention is acknowledged loosely.** Agents A (manifest/index split), C (api-describe types), and E (`createWorkbook` phases) all touch overlapping files (`index.ts`, `boot.ts`, `api-describe.ts`). The parallelization section reads as independent, but the merge order matters (A must land the export manifest before C/E reshuffle exports). A short dependency note among A/C/E would prevent thrash.
+- **No migration/back-compat statement for external consumers.** Removing raw helpers from the stable root is a breaking change for any *external* user who imported them (the plan only discusses internal monorepo tests). Even if the answer is "they were `@internal`, no compat owed," the plan should say so explicitly and note the semver implication, since step 20 touches publish verification.
+- **Object-tree laziness vs. JSON-serializability tension is noted but not resolved.** The plan asks for both metadata-rich nodes *and* JSON-serializable, deterministic output, while the current implementation uses lazy non-enumerable-free getters that `JSON.stringify` *will* traverse (so a deep `JSON.stringify(api)` already resolves everything). Step 7 should state the intended serialization contract (does `JSON.stringify(api.ws)` fully expand? is there a `toJSON`?) rather than leaving "stay lazy where that preserves startup cost" and "JSON-serializable" to be reconciled by the implementer.
+
+## Contract and verification assessment
+
+Contract clarity is the plan's strongest dimension. The "Production-path contracts and invariants" section is essentially a test specification: each bullet is independently checkable (timezone defaults to UTC, import durability before resolve, idempotent dispose across `dispose`/`close('save')`/`close('skipSave')`/`asyncDispose`, single-use handle rejection on session/issuer/expiry/principal/resource/content/replay mismatch). These translate almost directly into the enumerated tests in the "Tests and verification gates" section, and the mapping is tight — I can trace most invariants to a corresponding test bullet.
+
+Verification gates are credible because they name existing scripts (`api-report`, `verify-build`, `verify-publish`, `smoke-test`) rather than inventing process. The API Extractor gate (convert `@internal`-leak and incompatible-release-tag warnings into failures, regenerate `etc/node.api.md` as the expected contract) is the right enforcement mechanism and is grounded in files that exist (`api-extractor.json`, `etc/node.api.md` both present). The freshness gate (run generator in check mode, validate JSON against checked-in schema, assert counts) is the correct defense for the drift the plan documents.
+
+Two soft spots in the verification story: (1) the plan asserts "documented counts or a generated summary match the artifact" but the current artifact has no `generated`/summary block, so the count source is unspecified — it should say where the canonical counts live or that the generator emits them; (2) `pnpm typecheck` (whole-repo) is gated "after SDK export/type changes" with an escape hatch, which is reasonable but the escape hatch ("narrower package-wide type contract … documented") is vague enough to be skipped under time pressure. Given the contracts-declaration-rollup dependency (consumers need `@mog-sdk/contracts` built before they typecheck), a whole-repo typecheck is genuinely warranted here and the escape hatch slightly undercuts that.
+
+## Concrete changes that would raise the rating
+
+1. **Add an explicit phasing/MVP cut.** Mark steps 1–4 (export-surface manifest, entrypoint split, internal-consumer migration, API Extractor gate) as Milestone 1 / must-land, and label the rest as follow-on. State what ships if only Milestone 1 lands.
+2. **Pin the internal-entrypoint mechanism.** Specify the exact approach (recommend a `package.json` `exports` subpath like `@mog-sdk/node/internal` plus a second `tsup` entry, with `api-extractor.json` configured to treat it as a separate report), and list the files that change in lockstep (`index.ts`, new entry file, `tsup.config.ts`, `package.json#exports`, `api-extractor.json`).
+3. **Resolve `schemaVersion` typing.** State that it is the string `"1"` today, define the accepted set, and specify whether step 5/6 normalize to a number or validate the string as-is — so the runtime guard cannot reject the real artifact.
+4. **Add an A/C/E merge-order note.** One sentence: the export manifest (A) lands before api-describe type changes (C) and `createWorkbook` phase split (E) re-touch the same files.
+5. **State the external-consumer back-compat decision.** Explicitly declare whether removing `@internal` raw helpers from the root is a breaking change owed a major bump, or a no-compat-owed cleanup, and tie that to step 20's publish verification.
+6. **Make the object-tree serialization contract explicit** in step 7 (e.g., "`JSON.stringify(api.ws)` fully expands sub-API/method/type metadata deterministically; per-node `toJSON` is the contract; lazy getters are an internal optimization that must not change serialized output").
+7. **Name the canonical source of the freshness counts** (generator-emitted summary vs. hardcoded test expectations) so step 9's count assertion is unambiguous.

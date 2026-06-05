@@ -7,7 +7,7 @@
  * 3. refreshAll — refreshes all pivots on the sheet
  * 4. rename — renames a pivot table
  * 5. resetField — resets placement to defaults and removes filter
- * 6. PivotTableHandle.setShowValuesAs — fire-and-forget handle method
+ * 6. PivotTableHandle.setShowValuesAs — awaited handle method
  */
 
 import { jest } from '@jest/globals';
@@ -335,13 +335,13 @@ describe('WorksheetPivotsImpl', () => {
         type: 'percentOfGrandTotal',
       });
 
-      expect(ctx.pivot.setShowValuesAs).toHaveBeenCalledWith('SalesPivot', 'value:Amount:1', {
+      expect(ctx.pivot.setShowValuesAs).toHaveBeenCalledWith('pivot-1', 'value:Amount:1', {
         type: 'percentOfGrandTotal',
       });
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
       expect(receipt).toEqual(
         expect.objectContaining({
-          pivotId: 'SalesPivot',
+          pivotId: 'pivot-1',
           status: 'applied',
           effects: expect.arrayContaining([
             expect.objectContaining({
@@ -375,6 +375,32 @@ describe('WorksheetPivotsImpl', () => {
       });
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
     });
+
+    it('resolves public string references by pivot name, not raw pivot ID', async () => {
+      const idMatch = makePivotConfig({ id: 'pivot-1', name: 'SalesPivot' });
+      const nameMatch = makePivotConfig({ id: 'pivot-2', name: 'pivot-1' });
+      ctx.pivot.getAllPivots.mockResolvedValue([idMatch, nameMatch]);
+      ctx.pivot.getPivot.mockImplementation(async (_sheetId: string, pivotId: string) =>
+        pivotId === 'pivot-1' ? idMatch : null,
+      );
+
+      await ws.pivots.setShowValuesAs('pivot-1', 'Amount', { type: 'percentOfGrandTotal' });
+
+      expect(ctx.pivot.setShowValuesAs).not.toHaveBeenCalled();
+      expect(ctx.pivot.updatePivot).toHaveBeenCalledWith(
+        expect.anything(),
+        'pivot-2',
+        expect.objectContaining({
+          placements: expect.arrayContaining([
+            expect.objectContaining({
+              fieldId: 'Amount',
+              showValuesAs: { type: 'percentOfGrandTotal' },
+            }),
+          ]),
+        }),
+        { reason: 'showValuesAsChanged', refreshPolicy: 'refreshAndMaterialize' },
+      );
+    });
   });
 
   describe('setAggregateFunction', () => {
@@ -392,14 +418,14 @@ describe('WorksheetPivotsImpl', () => {
       const receipt = await ws.pivots.setAggregateFunction('SalesPivot', 'value:Amount:1', 'max');
 
       expect(ctx.pivot.setAggregateFunction).toHaveBeenCalledWith(
-        'SalesPivot',
+        'pivot-1',
         'value:Amount:1',
         'max',
       );
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
       expect(receipt).toEqual(
         expect.objectContaining({
-          pivotId: 'SalesPivot',
+          pivotId: 'pivot-1',
           status: 'applied',
           effects: expect.arrayContaining([
             expect.objectContaining({
@@ -451,7 +477,7 @@ describe('WorksheetPivotsImpl', () => {
       await ws.pivots.setAggregateFunction('SalesPivot', 'value:OrderId:0', 'counta');
 
       expect(ctx.pivot.setAggregateFunction).toHaveBeenCalledWith(
-        'SalesPivot',
+        'pivot-1',
         'value:OrderId:0',
         'counta',
       );
@@ -864,6 +890,34 @@ describe('WorksheetPivotsImpl', () => {
         { reason: 'sourceRangeChanged', refreshPolicy: 'dirtyOnly' },
       );
     });
+
+    it('handle.setDataSource keeps targeting the captured pivot id when names collide later', async () => {
+      const target = makePivotConfig({ id: 'pivot-1', name: 'SalesPivot' });
+      ctx.pivot.getAllPivots.mockResolvedValue([target]);
+      const handle = await ws.pivots.get('SalesPivot');
+      expect(handle?.id).toBe('pivot-1');
+
+      const duplicateName = makePivotConfig({ id: 'pivot-2', name: 'SalesPivot' });
+      ctx.pivot.getAllPivots.mockResolvedValue([duplicateName, target]);
+      ctx.pivot.getPivot.mockImplementation(async (_sheetId: string, pivotId: string) =>
+        pivotId === 'pivot-1' ? target : duplicateName,
+      );
+
+      await handle!.setDataSource('Sheet1!A1:B5');
+
+      expect(ctx.pivot.updatePivot).toHaveBeenCalledWith(
+        SHEET_ID,
+        'pivot-1',
+        expect.objectContaining({ sourceSheetName: 'Sheet1' }),
+        { reason: 'sourceRangeChanged', refreshPolicy: 'dirtyOnly' },
+      );
+      expect(ctx.pivot.updatePivot).not.toHaveBeenCalledWith(
+        SHEET_ID,
+        'pivot-2',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 
   // =========================================================================
@@ -918,14 +972,11 @@ describe('WorksheetPivotsImpl', () => {
   // =========================================================================
 
   describe('PivotTableHandle.setShowValuesAs', () => {
-    it('sets ShowValuesAs via the fire-and-forget handle method', async () => {
+    it('sets ShowValuesAs via the awaited handle method', async () => {
       const handle = await ws.pivots.get('SalesPivot');
       expect(handle).not.toBeNull();
 
-      handle!.setShowValuesAs('Amount', { type: 'percentOfRowTotal' });
-
-      // Flush microtasks so the fire-and-forget async runs
-      await new Promise((r) => setImmediate(r));
+      await handle!.setShowValuesAs('Amount', { type: 'percentOfRowTotal' });
 
       expect(ctx.pivot.updatePivot).toHaveBeenCalledWith(
         SHEET_ID,
@@ -947,9 +998,7 @@ describe('WorksheetPivotsImpl', () => {
       const handle = await ws.pivots.get('SalesPivot');
       expect(handle).not.toBeNull();
 
-      handle!.setShowValuesAs('Sum of Amount', { type: 'percentOfGrandTotal' });
-
-      await new Promise((r) => setImmediate(r));
+      await handle!.setShowValuesAs('Sum of Amount', { type: 'percentOfGrandTotal' });
 
       // Should match the placement with displayName 'Sum of Amount'
       const call = ctx.pivot.updatePivot.mock.calls[0];

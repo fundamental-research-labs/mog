@@ -89,6 +89,7 @@ export type {
   WorksheetNames,
   WorksheetObjects,
   WorksheetOutline,
+  ImportedPivotViewRecord,
   PivotCalculatedFieldSpec,
   PivotCreateConfig,
   PivotPlacementPatch,

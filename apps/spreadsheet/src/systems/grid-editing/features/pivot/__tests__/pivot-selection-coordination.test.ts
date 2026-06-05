@@ -90,28 +90,39 @@ function createMockUIStore(initialSheetId = 'sheet1') {
 function createMockWorkbook(options: {
   editablePivots?: Array<{ id: string; name: string; refRange?: string }>;
   editableThrows?: boolean;
-  importedHit?: { id: string } | null | ((row: number, col: number) => { id: string } | null);
+  importedRecords?: Array<{
+    sourceKind: 'unsupportedImport' | 'promotedImport';
+    importIdentity?: string;
+    nativePivotId?: string;
+    config: { id: string; outputLocation: { row: number; col: number }; refRange?: string };
+    renderedRange?: { startRow: number; startCol: number; endRow: number; endCol: number };
+  }>;
+  sidecarPivot?: {
+    id: string;
+    importIdentity: string;
+    range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  } | null;
 }) {
-  const getAllPivots = jest.fn(async () => {
+  const getAll = jest.fn(async () => {
     if (options.editableThrows) {
-      throw new Error('editable pivot bridge unavailable');
+      throw new Error('editable pivot API unavailable');
     }
     return options.editablePivots ?? [];
   });
-  const getRange = jest.fn(async () => null);
-  const findRenderedImportedPivotAt = jest.fn(async (_sheetId: string, row: number, col: number) =>
-    typeof options.importedHit === 'function'
-      ? options.importedHit(row, col)
-      : (options.importedHit ?? null),
-  );
+  const get = jest.fn(async () => ({
+    getRange: jest.fn(async () => null),
+  }));
+  const getImportedViewRecords = jest.fn(async () => options.importedRecords ?? []);
 
   return {
-    pivot: { getAllPivots },
-    getSheetById: jest.fn(() => ({ pivots: { getRange } })),
-    importedPivots: { findRenderedImportedPivotAt },
-    getAllPivots,
-    getRange,
-    findRenderedImportedPivotAt,
+    getSheetById: jest.fn(() => ({ pivots: { getAll, get, getImportedViewRecords } })),
+    importedPivots: {
+      findRenderedImportedPivotAt: jest.fn(async () => options.sidecarPivot ?? null),
+    },
+    pivot: { getImportedPivotViewRecords: getImportedViewRecords },
+    getAll,
+    get,
+    getImportedViewRecords,
   };
 }
 
@@ -122,9 +133,9 @@ function createCleanupManager() {
 }
 
 async function flushAsyncRefreshes() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
 }
 
 describe('Pivot Selection Coordination', () => {
@@ -133,8 +144,17 @@ describe('Pivot Selection Coordination', () => {
     const uiStore = createMockUIStore('sheet1');
     const workbook = createMockWorkbook({
       editableThrows: true,
-      importedHit: (row, col) =>
-        row === 1 && col === 1 ? { id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml' } : null,
+      importedRecords: [
+        {
+          sourceKind: 'unsupportedImport',
+          importIdentity: 'identity-1',
+          config: {
+            id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+            outputLocation: { row: 1, col: 1 },
+          },
+          renderedRange: { startRow: 1, startCol: 1, endRow: 1, endCol: 1 },
+        },
+      ],
     });
 
     setupPivotSelectionCoordination(
@@ -154,7 +174,7 @@ describe('Pivot Selection Coordination', () => {
     selection.emit(idleState(1, 1));
     await flushAsyncRefreshes();
 
-    expect(workbook.findRenderedImportedPivotAt).toHaveBeenCalledWith('sheet1', 1, 1);
+    expect(workbook.getImportedViewRecords).toHaveBeenCalled();
     expect(uiStore.getState().startEditingPivot).toHaveBeenCalledWith(
       'imported:Pivot:xl/pivotTables/pivotTable1.xml',
     );
@@ -169,7 +189,17 @@ describe('Pivot Selection Coordination', () => {
     const uiStore = createMockUIStore('sheet1');
     const workbook = createMockWorkbook({
       editablePivots: [{ id: 'pivot-1', name: 'PivotTable1', refRange: 'A1:D4' }],
-      importedHit: { id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml' },
+      importedRecords: [
+        {
+          sourceKind: 'unsupportedImport',
+          importIdentity: 'identity-1',
+          config: {
+            id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+            outputLocation: { row: 1, col: 1 },
+          },
+          renderedRange: { startRow: 1, startCol: 1, endRow: 1, endCol: 1 },
+        },
+      ],
     });
 
     setupPivotSelectionCoordination(
@@ -186,7 +216,7 @@ describe('Pivot Selection Coordination', () => {
     await flushAsyncRefreshes();
 
     expect(uiStore.getState().startEditingPivot).toHaveBeenCalledWith('pivot-1');
-    expect(workbook.findRenderedImportedPivotAt).not.toHaveBeenCalledWith('sheet1', 1, 1);
+    expect(workbook.getImportedViewRecords).not.toHaveBeenCalled();
   });
 
   it('clears selected and editing pivot state when the active cell leaves all pivots', async () => {
@@ -210,6 +240,48 @@ describe('Pivot Selection Coordination', () => {
 
     expect(uiStore.getState().selectPivot).toHaveBeenCalledWith(null);
     expect(uiStore.getState().stopEditingPivot).toHaveBeenCalled();
+    expect(uiStore.getState().pivot).toEqual({
+      selectedPivotId: null,
+      editingPivotId: null,
+    });
+  });
+
+  it('does not let stale raw sidecar metadata steal selection from persisted imports', async () => {
+    const selection = createMockSelectionActor(idleState(0, 0));
+    const uiStore = createMockUIStore('sheet1');
+    const workbook = createMockWorkbook({
+      importedRecords: [
+        {
+          sourceKind: 'unsupportedImport',
+          importIdentity: 'identity-1',
+          config: {
+            id: 'imported:persisted',
+            outputLocation: { row: 1, col: 1 },
+          },
+          renderedRange: { startRow: 1, startCol: 1, endRow: 1, endCol: 1 },
+        },
+      ],
+      sidecarPivot: {
+        id: 'imported:stale-sidecar',
+        importIdentity: 'identity-1',
+        range: { startRow: 5, startCol: 5, endRow: 5, endCol: 5 },
+      },
+    });
+
+    setupPivotSelectionCoordination(
+      {
+        actors: { selection } as any,
+        uiStoreApi: uiStore as any,
+        getActiveSheetId: () => uiStore.getState().activeSheetId,
+        workbook: workbook as any,
+      },
+      createCleanupManager() as any,
+    );
+
+    selection.emit(idleState(5, 5));
+    await flushAsyncRefreshes();
+
+    expect(uiStore.getState().startEditingPivot).not.toHaveBeenCalled();
     expect(uiStore.getState().pivot).toEqual({
       selectedPivotId: null,
       editingPivotId: null,

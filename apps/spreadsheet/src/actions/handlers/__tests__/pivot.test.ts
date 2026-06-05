@@ -23,13 +23,30 @@ function isPivotHandlerRegistered(action: string): boolean {
 
 function createMockDeps(): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
-  const pivots = {
+  const pivotConfig = {
+    id: 'pivot-1',
+    name: 'Duplicated Display Name',
+    placements: [
+      {
+        placementId: 'value:Amount:0',
+        fieldId: 'Amount',
+        area: 'value',
+        position: 0,
+      },
+    ],
+  };
+  const handle = {
     setShowValuesAs: jest.fn().mockResolvedValue(undefined),
     setLayout: jest.fn().mockResolvedValue(undefined),
     setDataSource: jest.fn().mockResolvedValue(undefined),
     setFilter: jest.fn().mockResolvedValue(undefined),
     addCalculatedField: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
+  };
+  const pivots = {
+    getAll: jest.fn().mockResolvedValue([pivotConfig]),
+    get: jest.fn().mockResolvedValue(handle),
+    handle,
   };
   const worksheet = { pivots };
   const workbook = {
@@ -46,67 +63,91 @@ function getPivotApi(deps: ActionDependencies) {
   return (deps.workbook.getSheetById(deps.getActiveSheetId()) as any).pivots;
 }
 
+function getPivotHandle(deps: ActionDependencies) {
+  return getPivotApi(deps).handle;
+}
+
 describe('Pivot action handlers', () => {
-  test('PIVOT_SET_SHOW_VALUES_AS calls WorksheetPivots.setShowValuesAs and refresh', async () => {
-    const deps = createMockDeps();
+  test.each([
+    [
+      'PIVOT_SET_SHOW_VALUES_AS',
+      PivotHandlers.PIVOT_SET_SHOW_VALUES_AS,
+      { fieldId: 'Amount', showValuesAs: null },
+    ],
+    [
+      'PIVOT_SET_GRAND_TOTALS',
+      PivotHandlers.PIVOT_SET_GRAND_TOTALS,
+      { showRowGrandTotals: true, showColumnGrandTotals: true },
+    ],
+    ['PIVOT_SET_DATA_SOURCE', PivotHandlers.PIVOT_SET_DATA_SOURCE, { dataSource: 'Data!A1:B5' }],
+    [
+      'PIVOT_SET_FILTER',
+      PivotHandlers.PIVOT_SET_FILTER,
+      { fieldId: 'Year', filter: { includeValues: ['2024'] } },
+    ],
+    [
+      'PIVOT_ADD_CALCULATED_FIELD',
+      PivotHandlers.PIVOT_ADD_CALCULATED_FIELD,
+      { field: { fieldId: 'Profit', name: 'Profit', formula: '=Revenue - Cost' } },
+    ],
+  ])('%s rejects payloads without stable pivotId', async (actionName, handler, payload) => {
+    const result = await handler(createMockDeps(), payload);
 
-    const result = await PivotHandlers.PIVOT_SET_SHOW_VALUES_AS(deps, {
-      pivotName: 'SalesPivot',
-      fieldId: 'Amount',
-      showValuesAs: { type: 'percentOfGrandTotal' },
+    expect(result).toEqual({
+      handled: false,
+      reason: 'wrong_context',
+      error: `${actionName} pivotId must be a non-empty string`,
     });
-
-    const pivots = getPivotApi(deps);
-    expect(result).toEqual({ handled: true });
-    expect(pivots.setShowValuesAs).toHaveBeenCalledWith('SalesPivot', 'Amount', {
-      type: 'percentOfGrandTotal',
-    });
-    expect(pivots.refresh).toHaveBeenCalledWith('SalesPivot');
-    expect(pivots.setShowValuesAs.mock.invocationCallOrder[0]).toBeLessThan(
-      pivots.refresh.mock.invocationCallOrder[0],
-    );
   });
 
-  test('PIVOT_SET_SHOW_VALUES_AS passes null to clear the calculation', async () => {
-    const deps = createMockDeps();
-
-    await PivotHandlers.PIVOT_SET_SHOW_VALUES_AS(deps, {
-      pivotName: 'SalesPivot',
-      fieldId: 'Amount',
-      showValuesAs: null,
-    });
-
-    expect(getPivotApi(deps).setShowValuesAs).toHaveBeenCalledWith('SalesPivot', 'Amount', null);
-  });
-
-  test('PIVOT_SET_SHOW_VALUES_AS prefers placementId and propagates receipts', async () => {
+  test('PIVOT_SET_SHOW_VALUES_AS routes through the resolved pivot handle', async () => {
     const deps = createMockDeps();
     const pivotReceipt = {
       kind: 'pivotKernelMutation',
       pivotId: 'pivot-1',
-      pivotName: 'SalesPivot',
       action: 'setShowValuesAs',
-      placementId: 'value:Amount:1',
+      placementId: 'value:Amount:0',
     };
     const refreshReceipt = { kind: 'pivotRefresh', pivotId: 'pivot-1' };
     const pivots = getPivotApi(deps);
-    pivots.setShowValuesAs.mockResolvedValueOnce(pivotReceipt);
-    pivots.refresh.mockResolvedValueOnce(refreshReceipt);
+    const handle = getPivotHandle(deps);
+    handle.setShowValuesAs.mockResolvedValueOnce(pivotReceipt);
+    handle.refresh.mockResolvedValueOnce(refreshReceipt);
 
     const result = await PivotHandlers.PIVOT_SET_SHOW_VALUES_AS(deps, {
-      pivotName: 'SalesPivot',
+      pivotId: 'pivot-1',
       fieldId: 'Amount',
-      placementId: 'value:Amount:1',
       showValuesAs: { type: 'percentOfGrandTotal' },
     });
 
-    expect(pivots.setShowValuesAs).toHaveBeenCalledWith('SalesPivot', 'value:Amount:1', {
+    expect(pivots.getAll).toHaveBeenCalled();
+    expect(pivots.get).toHaveBeenCalledWith(expect.objectContaining({ id: 'pivot-1' }));
+    expect(handle.setShowValuesAs).toHaveBeenCalledWith('Amount', {
       type: 'percentOfGrandTotal',
     });
+    expect(handle.refresh).toHaveBeenCalled();
+    expect(pivots).not.toHaveProperty('getById');
+    expect(pivots).not.toHaveProperty('refreshById');
     expect(result).toEqual({ handled: true, receipts: [pivotReceipt, refreshReceipt] });
   });
 
-  test('PIVOT_SET_GRAND_TOTALS calls WorksheetPivots.setLayout and refresh', async () => {
+  test('PIVOT_SET_SHOW_VALUES_AS accepts placementId directly', async () => {
+    const deps = createMockDeps();
+
+    await PivotHandlers.PIVOT_SET_SHOW_VALUES_AS(deps, {
+      pivotId: 'pivot-1',
+      placementId: 'value:Amount:0',
+      showValuesAs: null,
+    });
+
+    const pivots = getPivotApi(deps);
+    const handle = getPivotHandle(deps);
+    expect(handle.setShowValuesAs).toHaveBeenCalledWith('value:Amount:0', null);
+    expect(handle.refresh).toHaveBeenCalled();
+    expect(pivots).not.toHaveProperty('setShowValuesAsById');
+  });
+
+  test('PIVOT_SET_GRAND_TOTALS routes through the resolved pivot handle', async () => {
     const deps = createMockDeps();
     const layoutReceipt = {
       kernelReceiptId: 'pivot-1:setLayout:1',
@@ -114,7 +155,6 @@ describe('Pivot action handlers', () => {
       effects: [],
       mutationResult: {
         action: 'setLayout',
-        pivotName: 'SalesPivot',
         layout: { showRowGrandTotals: false, showColumnGrandTotals: true },
       },
       updateReason: 'layoutChanged',
@@ -125,76 +165,84 @@ describe('Pivot action handlers', () => {
     };
     const refreshReceipt = { kind: 'pivotRefresh', pivotId: 'pivot-1' };
     const pivots = getPivotApi(deps);
-    pivots.setLayout.mockResolvedValueOnce(layoutReceipt);
-    pivots.refresh.mockResolvedValueOnce(refreshReceipt);
+    const handle = getPivotHandle(deps);
+    handle.setLayout.mockResolvedValueOnce(layoutReceipt);
+    handle.refresh.mockResolvedValueOnce(refreshReceipt);
 
     const result = await PivotHandlers.PIVOT_SET_GRAND_TOTALS(deps, {
-      pivotName: 'SalesPivot',
+      pivotId: 'pivot-1',
       showRowGrandTotals: false,
       showColumnGrandTotals: true,
     });
 
     expect(result).toEqual({ handled: true, receipts: [layoutReceipt, refreshReceipt] });
-    expect(pivots.setLayout).toHaveBeenCalledWith('SalesPivot', {
+    expect(handle.setLayout).toHaveBeenCalledWith({
       showRowGrandTotals: false,
       showColumnGrandTotals: true,
     });
-    expect(pivots.refresh).toHaveBeenCalledWith('SalesPivot');
-    expect(pivots.setLayout.mock.invocationCallOrder[0]).toBeLessThan(
-      pivots.refresh.mock.invocationCallOrder[0],
-    );
+    expect(handle.refresh).toHaveBeenCalled();
+    expect(pivots).not.toHaveProperty('setLayoutById');
   });
 
-  test('PIVOT_SET_DATA_SOURCE calls WorksheetPivots.setDataSource without refresh', async () => {
+  test('PIVOT_SET_DATA_SOURCE routes through the resolved pivot handle', async () => {
     const deps = createMockDeps();
 
     const result = await PivotHandlers.PIVOT_SET_DATA_SOURCE(deps, {
-      pivotName: 'SalesPivot',
+      pivotId: 'pivot-1',
       dataSource: "'Bob''s Data'!A1:B5",
     });
 
     const pivots = getPivotApi(deps);
+    const handle = getPivotHandle(deps);
     expect(result).toEqual({ handled: true });
-    expect(pivots.setDataSource).toHaveBeenCalledWith('SalesPivot', "'Bob''s Data'!A1:B5");
-    expect(pivots.refresh).not.toHaveBeenCalled();
+    expect(handle.setDataSource).toHaveBeenCalledWith("'Bob''s Data'!A1:B5");
+    expect(pivots).not.toHaveProperty('setDataSourceById');
   });
 
-  test('PIVOT_SET_FILTER calls WorksheetPivots.setFilter without refresh', async () => {
+  test('PIVOT_SET_FILTER routes through the resolved pivot handle', async () => {
     const deps = createMockDeps();
 
     const result = await PivotHandlers.PIVOT_SET_FILTER(deps, {
-      pivotName: 'SalesPivot',
+      pivotId: 'pivot-1',
       fieldId: 'Year',
       filter: { includeValues: ['2024'] },
     });
 
     const pivots = getPivotApi(deps);
+    const handle = getPivotHandle(deps);
     expect(result).toEqual({ handled: true });
-    expect(pivots.setFilter).toHaveBeenCalledWith('SalesPivot', 'Year', {
+    expect(handle.setFilter).toHaveBeenCalledWith('Year', {
       includeValues: ['2024'],
     });
-    expect(pivots.refresh).not.toHaveBeenCalled();
+    expect(pivots).not.toHaveProperty('setFilterById');
   });
 
-  test('PIVOT_ADD_CALCULATED_FIELD calls WorksheetPivots.addCalculatedField and refresh', async () => {
+  test('PIVOT_ADD_CALCULATED_FIELD routes through the resolved pivot handle', async () => {
     const deps = createMockDeps();
+    const addReceipt = {
+      kind: 'pivotKernelMutation',
+      pivotId: 'pivot-1',
+      action: 'addCalculatedField',
+    };
+    const refreshReceipt = { kind: 'pivotRefresh', pivotId: 'pivot-1' };
+    const pivots = getPivotApi(deps);
+    const handle = getPivotHandle(deps);
+    handle.addCalculatedField.mockResolvedValueOnce(addReceipt);
+    handle.refresh.mockResolvedValueOnce(refreshReceipt);
 
     const result = await PivotHandlers.PIVOT_ADD_CALCULATED_FIELD(deps, {
-      pivotName: 'SalesPivot',
+      pivotId: 'pivot-1',
       field: { fieldId: 'Profit', name: 'Profit', formula: '=Revenue - Cost' },
     });
 
-    const pivots = getPivotApi(deps);
-    expect(result).toEqual({ handled: true });
-    expect(pivots.addCalculatedField).toHaveBeenCalledWith('SalesPivot', {
+    expect(result).toEqual({ handled: true, receipts: [addReceipt, refreshReceipt] });
+    expect(handle.addCalculatedField).toHaveBeenCalledWith({
       fieldId: 'Profit',
       name: 'Profit',
       formula: '=Revenue - Cost',
     });
-    expect(pivots.refresh).toHaveBeenCalledWith('SalesPivot');
-    expect(pivots.addCalculatedField.mock.invocationCallOrder[0]).toBeLessThan(
-      pivots.refresh.mock.invocationCallOrder[0],
-    );
+    expect(handle.refresh).toHaveBeenCalled();
+    expect(pivots).not.toHaveProperty('refreshById');
   });
 
   test('PIVOT actions are registered in HANDLER_MAP', () => {

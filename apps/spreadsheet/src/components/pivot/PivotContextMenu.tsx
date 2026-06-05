@@ -259,7 +259,7 @@ export function PivotContextMenu({
 
     dispatchAction('PIVOT_SET_DATA_SOURCE', {
       sheetId: activeSheetId,
-      pivotName: config.name,
+      pivotId: config.id,
       dataSource,
     });
     setIsChangeSourceOpen(false);
@@ -322,7 +322,7 @@ export function PivotContextMenu({
 
     dispatchAction('PIVOT_ADD_CALCULATED_FIELD', {
       sheetId: activeSheetId,
-      pivotName: config.name,
+      pivotId: config.id,
       field: {
         fieldId: makeCalculatedFieldId(name),
         name,

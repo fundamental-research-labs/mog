@@ -21,6 +21,7 @@ import type {
   Workbook,
   WorkbookInternal,
   WorksheetPivots,
+  ImportedPivotViewRecord,
 } from '@mog-sdk/contracts/api';
 import { type CellRange, type CellValue, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
@@ -28,10 +29,8 @@ import type {
   CalculatedField,
   CalculatedFieldId,
   DataSourceType,
-  DetectedDataType,
   PivotDataHierarchyInfo,
   PivotExpansionState,
-  PivotField,
   PivotFieldArea,
   PivotFieldItems,
   PivotFieldPlacementFlat,
@@ -52,18 +51,18 @@ import type { DocumentContext } from '../../context';
 import {
   KernelError,
   createPivotAmbiguousPlacementError,
-  createPivotInvalidDataSourceError,
-  createPivotUnresolvedFieldReferencesError,
-  type PivotInvalidReference,
 } from '../../errors';
-import { parseCellRange, toA1 } from '../internal/utils';
+import { toA1 } from '../internal/utils';
 import { pivotStyleIdForCompute } from '../../domain/pivots/style-normalization';
+import { buildPivotTableHandle } from './pivot-handle';
+import {
+  convertSimpleToDataConfig,
+  isSimplePivotConfig,
+  updatePivotDataSource,
+  type PivotCreateDataConfig,
+} from './pivot-data-source';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
-type PivotCreateDataConfig = Omit<
-  DataPivotTableConfig,
-  'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'
->;
 type PivotSortDirection = Exclude<SortOrder, 'none'>;
 
 const PIVOT_CONFIG_SCHEMA_VERSION = 2;
@@ -128,6 +127,7 @@ function dataConfigToApiConfig(
   const rowFields: string[] = [];
   const columnFields: string[] = [];
   const valueFields: {
+    placementId?: PlacementId;
     field: string;
     aggregation: 'sum' | 'count' | 'average' | 'max' | 'min';
     label?: string;
@@ -144,6 +144,7 @@ function dataConfigToApiConfig(
         break;
       case 'value':
         valueFields.push({
+          placementId: p.placementId ?? makePlacementId('value', p.fieldId, p.position),
           field: p.fieldId,
           aggregation: (p.aggregateFunction ?? 'sum') as
             | 'sum'
@@ -170,308 +171,6 @@ function dataConfigToApiConfig(
     allowMultipleFiltersPerField: dataConfig.allowMultipleFiltersPerField ?? undefined,
     autoFormat: dataConfig.autoFormat ?? undefined,
     preserveFormatting: dataConfig.preserveFormatting ?? undefined,
-  };
-}
-
-// =============================================================================
-// Simple Config → Data Config Conversion
-// =============================================================================
-
-/**
- * Check if a config object is the simple/ergonomic format (has `dataSource` field)
- * vs. the complex/wire format (has `sourceSheetName` field).
- */
-function isSimpleConfig(config: Record<string, any>): boolean {
-  return typeof config.dataSource === 'string' && !('sourceSheetName' in config);
-}
-
-/**
- * Parse a dataSource string like "Sheet1!A1:D100" or "'My Sheet'!A1:D100"
- * into separate sheet name and range components.
- */
-function parseDataSource(dataSource: string): {
-  sheetName: string;
-  range: { startRow: number; startCol: number; endRow: number; endCol: number };
-} {
-  const parsed = parseCellRange(dataSource);
-  if (!parsed) {
-    throw new KernelError(
-      'API_INVALID_ADDRESS',
-      `Invalid dataSource: "${dataSource}". Expected format: "SheetName!A1:D100"`,
-    );
-  }
-  const sheetName = parsed.sheetName;
-  if (!sheetName) {
-    throw new KernelError(
-      'API_INVALID_ADDRESS',
-      `dataSource must include a sheet reference: "${dataSource}". Expected format: "SheetName!A1:D100"`,
-    );
-  }
-  return {
-    sheetName,
-    range: {
-      startRow: parsed.startRow,
-      startCol: parsed.startCol,
-      endRow: parsed.endRow,
-      endCol: parsed.endCol,
-    },
-  };
-}
-
-async function resolveSourceSheetId(
-  ctx: DocumentContext,
-  pivotName: string,
-  dataSource: string,
-  sheetName: string,
-): Promise<SheetId> {
-  const sheetIds = await ctx.computeBridge.getAllSheetIds();
-  for (const id of sheetIds) {
-    const sid = toSheetId(id as string);
-    const name = await ctx.computeBridge.getSheetName(sid);
-    if (name === sheetName) {
-      return sid;
-    }
-  }
-  throw createPivotInvalidDataSourceError({
-    pivotName,
-    dataSource,
-    reason: 'sourceSheetNotFound',
-    sheetName,
-  });
-}
-
-/**
- * Detect the data type of a cell value for field metadata.
- */
-function detectCellDataType(value: CellValue): DetectedDataType {
-  if (value == null || value === '') return 'empty';
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  return 'string';
-}
-
-async function detectPivotFieldsForRange(
-  ctx: DocumentContext,
-  sourceSheetId: SheetId,
-  sourceRange: DataPivotTableConfig['sourceRange'],
-): Promise<PivotField[]> {
-  const headerRange = await ctx.computeBridge.queryRange(
-    sourceSheetId,
-    sourceRange.startRow,
-    sourceRange.startCol,
-    sourceRange.startRow,
-    sourceRange.endCol,
-  );
-
-  const dataRowRange =
-    sourceRange.endRow > sourceRange.startRow
-      ? await ctx.computeBridge.queryRange(
-          sourceSheetId,
-          sourceRange.startRow + 1,
-          sourceRange.startCol,
-          sourceRange.startRow + 1,
-          sourceRange.endCol,
-        )
-      : { cells: [] };
-
-  const headerCells = new Map<number, string>();
-  for (const cell of headerRange.cells) {
-    const name = cell.value != null ? String(cell.value) : `Column${cell.col + 1}`;
-    headerCells.set(cell.col, name);
-  }
-
-  const dataTypes = new Map<number, DetectedDataType>();
-  for (const cell of dataRowRange.cells) {
-    dataTypes.set(cell.col, detectCellDataType(cell.value));
-  }
-
-  const fields: PivotField[] = [];
-  for (let col = sourceRange.startCol; col <= sourceRange.endCol; col++) {
-    fields.push({
-      id: `col${col}`,
-      name: headerCells.get(col) ?? `Column${col + 1}`,
-      sourceColumn: col - sourceRange.startCol,
-      dataType: dataTypes.get(col) ?? 'string',
-    });
-  }
-  return fields;
-}
-
-function fieldsByName(fields: PivotField[]): Map<string, PivotField[]> {
-  const byName = new Map<string, PivotField[]>();
-  for (const field of fields) {
-    const existing = byName.get(field.name);
-    if (existing) {
-      existing.push(field);
-    } else {
-      byName.set(field.name, [field]);
-    }
-  }
-  return byName;
-}
-
-async function resolveExistingPivotSourceSheetId(
-  ctx: DocumentContext,
-  config: DataPivotTableConfig,
-): Promise<SheetId | null> {
-  if (config.sourceSheetId) {
-    return toSheetId(config.sourceSheetId);
-  }
-
-  if (!config.sourceSheetName) {
-    return null;
-  }
-
-  const sheetIds = await ctx.computeBridge.getAllSheetIds();
-  for (const id of sheetIds) {
-    const sid = toSheetId(id as string);
-    const name = await ctx.computeBridge.getSheetName(sid);
-    if (name === config.sourceSheetName) {
-      return sid;
-    }
-  }
-  return null;
-}
-
-async function effectivePivotFieldsForConfig(
-  ctx: DocumentContext,
-  config: DataPivotTableConfig,
-): Promise<PivotField[]> {
-  if (config.fields.length > 0) {
-    return config.fields;
-  }
-
-  const sourceSheetId = await resolveExistingPivotSourceSheetId(ctx, config);
-  if (!sourceSheetId) {
-    return [];
-  }
-
-  return detectPivotFieldsForRange(ctx, sourceSheetId, config.sourceRange);
-}
-
-/**
- * Convert a simple/ergonomic PivotTableConfig (with dataSource, rowFields, etc.)
- * into the full DataPivotTableConfig that the Rust bridge expects.
- *
- * This resolves the type mismatch between the agent-friendly API types and the
- * internal wire format. The conversion:
- * 1. Parses dataSource ("Sheet1!A1:D100") → sourceSheetName + sourceRange
- * 2. Reads source headers to build field metadata (id, name, sourceColumn, dataType)
- * 3. Converts rowFields/columnFields/valueFields/filterFields → placements array
- */
-async function convertSimpleToDataConfig(
-  ctx: DocumentContext,
-  simpleConfig: ApiPivotTableConfig,
-  outputSheetName: string,
-): Promise<PivotCreateDataConfig> {
-  const { sheetName: sourceSheetName, range: sourceRange } = parseDataSource(
-    simpleConfig.dataSource,
-  );
-
-  const sourceSheetId = await resolveSourceSheetId(
-    ctx,
-    simpleConfig.name,
-    simpleConfig.dataSource,
-    sourceSheetName,
-  );
-  const fields = await detectPivotFieldsForRange(ctx, sourceSheetId, sourceRange);
-  const fieldByName = new Map(fields.map((field) => [field.name, field]));
-
-  // Build placements from simple field arrays
-  const placements: PivotFieldPlacement[] = [];
-
-  // Helper to resolve a field name to its ID
-  const resolveFieldId = (fieldName: string): string => {
-    const field = fieldByName.get(fieldName);
-    if (!field) {
-      throw new KernelError(
-        'COMPUTE_ERROR',
-        `Field "${fieldName}" not found in source data headers. Available: ${[...fieldByName.keys()].join(', ')}`,
-      );
-    }
-    return field.id;
-  };
-
-  // Row fields
-  if (simpleConfig.rowFields) {
-    for (let i = 0; i < simpleConfig.rowFields.length; i++) {
-      const fieldId = resolveFieldId(simpleConfig.rowFields[i]);
-      placements.push({
-        placementId: makePlacementId('row', fieldId, i),
-        fieldId,
-        area: 'row',
-        position: i,
-      });
-    }
-  }
-
-  // Column fields
-  if (simpleConfig.columnFields) {
-    for (let i = 0; i < simpleConfig.columnFields.length; i++) {
-      const fieldId = resolveFieldId(simpleConfig.columnFields[i]);
-      placements.push({
-        placementId: makePlacementId('column', fieldId, i),
-        fieldId,
-        area: 'column',
-        position: i,
-      });
-    }
-  }
-
-  // Value fields
-  if (simpleConfig.valueFields) {
-    for (let i = 0; i < simpleConfig.valueFields.length; i++) {
-      const vf = simpleConfig.valueFields[i];
-      const fieldId = resolveFieldId(vf.field);
-      placements.push({
-        placementId: makePlacementId('value', fieldId, i),
-        fieldId,
-        area: 'value',
-        position: i,
-        aggregateFunction: vf.aggregation as AggregateFunction,
-        displayName: vf.label ?? undefined,
-      });
-    }
-  }
-
-  // Filter fields
-  if (simpleConfig.filterFields) {
-    for (let i = 0; i < simpleConfig.filterFields.length; i++) {
-      const fieldId = resolveFieldId(simpleConfig.filterFields[i]);
-      placements.push({
-        placementId: makePlacementId('filter', fieldId, i),
-        fieldId,
-        area: 'filter',
-        position: i,
-      });
-    }
-  }
-
-  // Parse target address if provided
-  let outputLocation = { row: 0, col: 0 };
-  if (simpleConfig.targetAddress) {
-    const addr = parseCellRange(simpleConfig.targetAddress);
-    if (addr) {
-      outputLocation = { row: addr.startRow, col: addr.startCol };
-    }
-  }
-
-  return {
-    name: simpleConfig.name,
-    sourceSheetName,
-    sourceRange,
-    outputSheetName: simpleConfig.targetSheet ?? outputSheetName,
-    outputLocation,
-    fields,
-    placements,
-    filters: [],
-    ...(simpleConfig.allowMultipleFiltersPerField != null && {
-      allowMultipleFiltersPerField: simpleConfig.allowMultipleFiltersPerField,
-    }),
-    ...(simpleConfig.autoFormat != null && { autoFormat: simpleConfig.autoFormat }),
-    ...(simpleConfig.preserveFormatting != null && {
-      preserveFormatting: simpleConfig.preserveFormatting,
-    }),
   };
 }
 
@@ -529,13 +228,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     this._ensureWritable('pivots.add');
     let dataConfig: PivotCreateDataConfig;
 
-    if (isSimpleConfig(config as Record<string, any>)) {
+    if (isSimplePivotConfig(config as Record<string, unknown>)) {
       // Convert simple/ergonomic config to wire format
       const sheetName = await this.ctx.computeBridge.getSheetName(this.sheetId);
       dataConfig = await convertSimpleToDataConfig(
         this.ctx,
         config as ApiPivotTableConfig,
         sheetName ?? '',
+        makePlacementId,
       );
     } else {
       // Rust-side validation (in pivot_create/pivot_create_with_sheet) catches
@@ -557,13 +257,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   ): Promise<{ sheetId: SheetId; config: DataPivotTableConfig }> {
     let dataConfig: PivotCreateDataConfig;
 
-    if (isSimpleConfig(config as Record<string, any>)) {
+    if (isSimplePivotConfig(config as Record<string, unknown>)) {
       // Convert simple/ergonomic config to wire format
       // For addWithSheet, the output sheet will be created with the given name
       dataConfig = await convertSimpleToDataConfig(
         this.ctx,
         config as ApiPivotTableConfig,
         sheetName,
+        makePlacementId,
       );
     } else {
       // Rust-side validation (in pivot_create_with_sheet) catches
@@ -581,6 +282,22 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       await (this.workbook as WorkbookInternal).refreshSheetMetadata();
     }
     return { sheetId: toSheetId(result.sheetId), config: result.config };
+  }
+
+  async getAll(): Promise<DataPivotTableConfig[]> {
+    try {
+      return await this.ctx.pivot.getAllPivots(this.sheetId);
+    } catch {
+      return [];
+    }
+  }
+
+  async getImportedViewRecords(): Promise<ImportedPivotViewRecord[]> {
+    try {
+      return await this.ctx.pivot.getImportedPivotViewRecords(this.sheetId);
+    } catch {
+      return [];
+    }
   }
 
   async rename(name: string, newName: string): Promise<void> {
@@ -637,8 +354,11 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async get(name: string): Promise<PivotTableHandle | null> {
-    const pivot = await this.findPivotByName(name);
+  async get(pivotRef: string | DataPivotTableConfig): Promise<PivotTableHandle | null> {
+    const pivot =
+      typeof pivotRef === 'string'
+        ? await this.findPivotByName(pivotRef)
+        : await this.ctx.pivot.getPivot(this.sheetId, pivotRef.id);
     if (!pivot) {
       return null;
     }
@@ -906,38 +626,32 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   // ===========================================================================
 
   setAggregateFunction(
-    pivotId: string,
-    placementId: PlacementId,
+    pivot: string,
+    fieldOrPlacement: string,
     aggregateFunction: AggregateFunction,
   ): Promise<PivotKernelMutationReceipt>;
-  setAggregateFunction(
-    name: string,
-    fieldId: string,
-    aggregateFunction: AggregateFunction,
-  ): Promise<void>;
   async setAggregateFunction(
     pivotOrName: string,
     placementOrFieldId: string,
     aggregateFunction: AggregateFunction,
-  ): Promise<PivotKernelMutationReceipt | void> {
-    const directConfig = await this.ctx.pivot.getPivot(this.sheetId, pivotOrName);
-    if (
-      directConfig?.placements.some(
-        (placement) => this.placementId(placement) === placementOrFieldId,
-      )
-    ) {
+  ): Promise<PivotKernelMutationReceipt> {
+    const { pivotId, config } = await this.resolvePivotName(
+      pivotOrName,
+      'setAggregateFunction',
+    );
+    const target = this.resolvePlacement(
+      config,
+      placementOrFieldId,
+      'value',
+      'setAggregateFunction',
+    );
+    if (this.placementId(target) === placementOrFieldId) {
       return this.ctx.pivot.setAggregateFunction(
-        pivotOrName,
+        pivotId,
         pivotPlacementId(placementOrFieldId),
         aggregateFunction,
       );
     }
-
-    const name = pivotOrName;
-    const fieldId = placementOrFieldId;
-    const pivotId = await this.resolveNameToId(name, 'setAggregateFunction');
-    const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setAggregateFunction');
-    const target = this.resolvePlacement(config, fieldId, 'value', 'setAggregateFunction');
 
     const placements = config.placements.map((p) =>
       p === target ? { ...p, aggregateFunction } : p,
@@ -959,38 +673,25 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   }
 
   setShowValuesAs(
-    pivotId: string,
-    placementId: PlacementId,
+    pivot: string,
+    fieldOrPlacement: string,
     showValuesAs: ShowValuesAsConfig | null,
   ): Promise<PivotKernelMutationReceipt>;
-  setShowValuesAs(
-    name: string,
-    fieldId: string,
-    showValuesAs: ShowValuesAsConfig | null,
-  ): Promise<void>;
   async setShowValuesAs(
     pivotOrName: string,
     placementOrFieldId: string,
     showValuesAs: ShowValuesAsConfig | null,
-  ): Promise<PivotKernelMutationReceipt | void> {
-    const directConfig = await this.ctx.pivot.getPivot(this.sheetId, pivotOrName);
-    if (
-      directConfig?.placements.some(
-        (placement) => this.placementId(placement) === placementOrFieldId,
-      )
-    ) {
+  ): Promise<PivotKernelMutationReceipt> {
+    const { pivotId, config } = await this.resolvePivotName(pivotOrName, 'setShowValuesAs');
+    const target = this.resolvePlacement(config, placementOrFieldId, 'value', 'setShowValuesAs');
+    if (this.placementId(target) === placementOrFieldId) {
       return this.ctx.pivot.setShowValuesAs(
-        pivotOrName,
+        pivotId,
         pivotPlacementId(placementOrFieldId),
         showValuesAs,
       );
     }
 
-    const name = pivotOrName;
-    const fieldId = placementOrFieldId;
-    const pivotId = await this.resolveNameToId(name, 'setShowValuesAs');
-    const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setShowValuesAs');
-    const target = this.resolvePlacement(config, fieldId, 'value', 'setShowValuesAs');
     const placements = config.placements.map((p) =>
       p === target ? { ...p, showValuesAs: showValuesAs ?? undefined } : p,
     );
@@ -1011,47 +712,45 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   }
 
   setSortOrder(
-    pivotId: string,
-    placementId: PlacementId,
+    pivot: string,
+    fieldOrPlacement: string,
     sortOrder: SortOrder | null,
   ): Promise<PivotKernelMutationReceipt>;
-  setSortOrder(name: string, fieldId: string, sortOrder: SortOrder): Promise<void>;
   async setSortOrder(
     pivotOrName: string,
     placementOrFieldId: string,
     sortOrder: SortOrder | null,
-  ): Promise<PivotKernelMutationReceipt | void> {
-    const directConfig = await this.ctx.pivot.getPivot(this.sheetId, pivotOrName);
-    if (
-      directConfig?.placements.some(
-        (placement) => this.placementId(placement) === placementOrFieldId,
-      )
-    ) {
-      return this.ctx.pivot.setSortOrder(
-        pivotOrName,
-        pivotPlacementId(placementOrFieldId),
-        sortOrder,
+  ): Promise<PivotKernelMutationReceipt> {
+    const { pivotId, config } = await this.resolvePivotName(pivotOrName, 'setSortOrder');
+    const target = this.resolvePlacement(config, placementOrFieldId, null, 'setSortOrder');
+    if (target.area !== 'row' && target.area !== 'column') {
+      throw new KernelError(
+        'COMPUTE_ERROR',
+        'setSortOrder: Pivot placement must be in the row or column area',
       );
     }
-
-    const name = pivotOrName;
-    const fieldId = placementOrFieldId;
-    const pivotId = await this.resolveNameToId(name, 'setSortOrder');
-    const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setSortOrder');
+    if (this.placementId(target) === placementOrFieldId) {
+      return this.ctx.pivot.setSortOrder(pivotId, pivotPlacementId(placementOrFieldId), sortOrder);
+    }
 
     const sortDirection: PivotSortDirection | undefined =
       !sortOrder || sortOrder === 'none' ? undefined : sortOrder;
     const placements = config.placements.map((p) =>
-      p.fieldId === fieldId && (p.area === 'row' || p.area === 'column')
-        ? { ...p, sortOrder: sortDirection }
-        : p,
+      p === target ? { ...p, sortOrder: sortDirection } : p,
     );
 
-    await this.ctx.pivot.updatePivot(
+    const result = await this.ctx.pivot.updatePivot(
       this.sheetId,
       pivotId,
       { placements },
       { reason: 'sortOrderChanged', refreshPolicy: 'refreshAndMaterialize' },
+    );
+    return this.createPlacementReceipt(
+      pivotId,
+      this.placementId(target),
+      'sortOrderChanged',
+      'refreshAndMaterialize',
+      result,
     );
   }
 
@@ -1061,6 +760,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     filter: Omit<PivotFilter, 'fieldId'>,
   ): Promise<void> {
     const pivotId = await this.resolveNameToId(name, 'setFilter');
+    await this.setFilterForPivotId(pivotId, fieldId, filter);
+  }
+
+  private async setFilterForPivotId(
+    pivotId: string,
+    fieldId: string,
+    filter: Omit<PivotFilter, 'fieldId'>,
+  ): Promise<void> {
     const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setFilter');
 
     // Replace existing filter for this field, or add new one
@@ -1124,6 +831,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
 
   async setLayout(name: string, layout: Partial<PivotTableLayout>): Promise<any> {
     const pivotId = await this.resolveNameToId(name, 'setLayout');
+    return this._setLayoutByPivotId(pivotId, name, layout);
+  }
+
+  private async _setLayoutByPivotId(
+    pivotId: string,
+    pivotName: string,
+    layout: Partial<PivotTableLayout>,
+  ): Promise<PivotKernelMutationReceipt> {
     const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setLayout');
 
     const mergedLayout = { ...config.layout, ...layout };
@@ -1137,8 +852,8 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return {
       kernelReceiptId: `${pivotId}:layoutChanged:${Date.now()}`,
       pivotId,
-      effects: [{ type: 'layoutChanged' }],
-      mutationResult: { action: 'setLayout', pivotName: name, layout },
+      effects: [],
+      mutationResult: { action: 'setLayout', pivotName, layout },
       updateReason: 'layoutChanged',
       refreshPolicy: 'refreshAndMaterialize',
       materialized: true,
@@ -1178,7 +893,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return await this.ctx.pivot.detectFields(sourceSheetId, range);
   }
 
-  async compute(name: string, forceRefresh?: boolean): Promise<any> {
+  async compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null> {
     const pivotId = await this.resolveNameToId(name, 'compute');
     return await this.ctx.pivot.compute(this.sheetId, pivotId, forceRefresh);
   }
@@ -1203,7 +918,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return { kind: 'pivotRefresh', pivotId };
   }
 
-  async getDrillDownData(name: string, rowKey: string, columnKey: string): Promise<any[][]> {
+  async getDrillDownData(name: string, rowKey: string, columnKey: string): Promise<CellValue[][]> {
     const pivotId = await this.resolveNameToId(name, 'getDrillDownData');
     return await this.ctx.pivot.getDrillDownData(this.sheetId, pivotId, rowKey, columnKey);
   }
@@ -1439,236 +1154,28 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     const config =
       (await this.findPivotByName(name)) ??
       (await requirePivot(this.ctx, this.sheetId, pivotId, 'setDataSource'));
-    const { sheetName: sourceSheetName, range: sourceRange } = parseDataSource(dataSource);
-    const sourceSheetId = await resolveSourceSheetId(this.ctx, name, dataSource, sourceSheetName);
-    const fields = await detectPivotFieldsForRange(this.ctx, sourceSheetId, sourceRange);
-    const newFieldsByName = fieldsByName(fields);
-    const oldFields = await effectivePivotFieldsForConfig(this.ctx, config);
-    const oldFieldsById = new Map(oldFields.map((field) => [field.id, field]));
-    const calculatedFields = config.calculatedFields ?? [];
-    const calculatedFieldKeys = (field: CalculatedField): string[] =>
-      [field.fieldId, field.calculatedFieldId].filter(
-        (id): id is string => typeof id === 'string' && id.length > 0,
-      );
-    const calculatedFieldById = new Map<string, CalculatedField>();
-    for (const field of calculatedFields) {
-      for (const id of calculatedFieldKeys(field)) {
-        calculatedFieldById.set(id, field);
-      }
-    }
-    const calculatedFieldIds = new Set(calculatedFieldById.keys());
-    const invalidReferences: PivotInvalidReference[] = [];
+    await this._setDataSourceByPivotId(pivotId, config, dataSource, name);
+  }
 
-    const describeCandidates = (candidates: PivotField[]): string[] =>
-      candidates.map((field) => `${field.id}:${field.name}@${field.sourceColumn ?? 0}`);
+  private async setDataSourceForHandle(pivotId: string, dataSource: string): Promise<void> {
+    const config = await requirePivot(this.ctx, this.sheetId, pivotId, 'setDataSource');
+    await this._setDataSourceByPivotId(pivotId, config, dataSource, config.name ?? pivotId);
+  }
 
-    const oldFieldName = (fieldId: string): string =>
-      oldFieldsById.get(fieldId)?.name ?? calculatedFieldById.get(fieldId)?.name ?? fieldId;
-
-    const resolveFieldId = (
-      fieldId: string,
-      kind: Exclude<
-        PivotInvalidReference['kind'],
-        'ambiguousDuplicateHeader' | 'calculatedFieldFormula'
-      >,
-      path: string,
-      source: string,
-      area?: string,
-      identifier = oldFieldName(fieldId),
-    ): string | null => {
-      if (calculatedFieldIds.has(fieldId)) {
-        return fieldId;
-      }
-      const fieldName = oldFieldName(fieldId);
-      const candidates = newFieldsByName.get(fieldName) ?? [];
-      if (candidates.length === 1) {
-        return candidates[0].id;
-      }
-      if (candidates.length > 1) {
-        invalidReferences.push({
-          kind: 'ambiguousDuplicateHeader',
-          path,
-          source,
-          identifier,
-          fieldName,
-          area,
-          oldResolution: oldFieldsById.get(fieldId),
-          newResolution: candidates,
-          candidates: describeCandidates(candidates),
-        });
-      } else {
-        invalidReferences.push({
-          kind,
-          path,
-          source,
-          fieldId,
-          fieldName,
-          area,
-          identifier,
-          oldResolution: oldFieldsById.get(fieldId),
-        });
-      }
-      return null;
-    };
-
-    const invalidCalculatedFieldIds = new Set<string>();
-    for (const calculatedField of calculatedFields) {
-      for (const oldField of oldFields) {
-        const escaped = oldField.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (!new RegExp(`\\b${escaped}\\b`).test(calculatedField.formula)) continue;
-        const candidates = newFieldsByName.get(oldField.name) ?? [];
-        if (candidates.length !== 1) {
-          for (const id of calculatedFieldKeys(calculatedField)) {
-            invalidCalculatedFieldIds.add(id);
-          }
-          invalidReferences.push({
-            kind: 'calculatedFieldFormula',
-            path: `calculatedFields.${calculatedField.calculatedFieldId ?? calculatedField.fieldId}`,
-            source: 'calculatedFieldFormula',
-            identifier: calculatedField.formula,
-            fieldName: oldField.name,
-            candidates: describeCandidates(candidates),
-          });
-        }
-      }
-    }
-
-    const placements: PivotFieldPlacement[] = [];
-    for (let index = 0; index < config.placements.length; index++) {
-      const placement = config.placements[index];
-      const path = `placements[${index}]`;
-      const sortByValue = placement.sortByValue;
-      const placementFieldId = placement.fieldId;
-      const placementCalculatedFieldId = placement.calculatedFieldId;
-      if (sortByValue?.valueFieldId) {
-        resolveFieldId(
-          sortByValue.valueFieldId,
-          'sortByValueField',
-          `${path}.sortByValue.valueFieldId`,
-          'sortByValue',
-          placement.area,
-        );
-      }
-      const baseField = placement.showValuesAs?.baseField;
-      if (baseField) {
-        resolveFieldId(
-          baseField,
-          'showValuesAsBaseField',
-          `${path}.showValuesAs.baseField`,
-          'showValuesAs',
-          placement.area,
-        );
-      }
-      const invalidCalculatedFieldId =
-        [placementFieldId, placementCalculatedFieldId].find(
-          (id) => typeof id === 'string' && invalidCalculatedFieldIds.has(id),
-        ) ?? null;
-      if (invalidCalculatedFieldId) {
-        invalidReferences.push({
-          kind: 'calculatedField',
-          path,
-          source: 'placement',
-          fieldId: invalidCalculatedFieldId,
-          fieldName: oldFieldName(invalidCalculatedFieldId),
-          area: placement.area,
-          identifier:
-            calculatedFieldById.get(invalidCalculatedFieldId)?.formula ??
-            oldFieldName(invalidCalculatedFieldId),
-        });
-        continue;
-      }
-
-      const validCalculatedFieldId = [placementFieldId, placementCalculatedFieldId].find(
-        (id) => typeof id === 'string' && calculatedFieldIds.has(id),
-      );
-      if (validCalculatedFieldId) {
-        placements.push(placement);
-        continue;
-      }
-
-      const mappedFieldId = resolveFieldId(
-        placementFieldId,
-        'placement',
-        path,
-        'placement',
-        placement.area,
-      );
-      if (!mappedFieldId) continue;
-      const mappedPlacement: PivotFieldPlacement = {
-        ...placement,
-        fieldId: mappedFieldId,
-      };
-      if (sortByValue?.valueFieldId) {
-        const mappedValueFieldId = resolveFieldId(
-          sortByValue.valueFieldId,
-          'sortByValueField',
-          `${path}.sortByValue.valueFieldId`,
-          'sortByValue',
-          placement.area,
-        );
-        if (mappedValueFieldId) {
-          mappedPlacement.sortByValue = { ...sortByValue, valueFieldId: mappedValueFieldId };
-        }
-      }
-      if (baseField && placement.showValuesAs) {
-        const mappedBaseField = resolveFieldId(
-          baseField,
-          'showValuesAsBaseField',
-          `${path}.showValuesAs.baseField`,
-          'showValuesAs',
-          placement.area,
-        );
-        if (mappedBaseField) {
-          mappedPlacement.showValuesAs = { ...placement.showValuesAs, baseField: mappedBaseField };
-        }
-      }
-      placements.push(mappedPlacement);
-    }
-
-    const filters: PivotFilter[] = [];
-    for (let index = 0; index < config.filters.length; index++) {
-      const filter = config.filters[index];
-      const path = `filters[${index}]`;
-      const topBottom = filter.topBottom;
-      if (topBottom?.valueFieldId) {
-        resolveFieldId(
-          topBottom.valueFieldId,
-          'topBottomValueField',
-          `${path}.topBottom.valueFieldId`,
-          'filter',
-        );
-      }
-      const mappedFieldId = resolveFieldId(filter.fieldId, 'filterField', path, 'filter');
-      if (!mappedFieldId) continue;
-      const mappedFilter: PivotFilter = { ...filter, fieldId: mappedFieldId };
-      if (topBottom?.valueFieldId) {
-        const mappedValueFieldId = resolveFieldId(
-          topBottom.valueFieldId,
-          'topBottomValueField',
-          `${path}.topBottom.valueFieldId`,
-          'filter',
-        );
-        if (mappedValueFieldId) {
-          mappedFilter.topBottom = { ...topBottom, valueFieldId: mappedValueFieldId };
-        }
-      }
-      filters.push(mappedFilter);
-    }
-
-    if (invalidReferences.length > 0) {
-      throw createPivotUnresolvedFieldReferencesError({
-        pivotName: name,
-        dataSource,
-        invalidReferences,
-      });
-    }
-
-    await this.ctx.pivot.updatePivot(
-      this.sheetId,
+  private async _setDataSourceByPivotId(
+    pivotId: string,
+    config: DataPivotTableConfig,
+    dataSource: string,
+    pivotName: string,
+  ): Promise<void> {
+    await updatePivotDataSource({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
       pivotId,
-      { sourceSheetName, sourceRange, fields, placements, filters },
-      { reason: 'sourceRangeChanged', refreshPolicy: 'dirtyOnly' },
-    );
+      config,
+      dataSource,
+      pivotName,
+    });
   }
 
   // ===========================================================================
@@ -2099,48 +1606,16 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     );
   }
 
-  async setAggregateFunctionLegacy(
-    name: string,
-    fieldId: string,
-    aggregateFunction: AggregateFunction,
-  ): Promise<void> {
-    await this.setAggregateFunction(name, fieldId, aggregateFunction);
-  }
-
-  async setShowValuesAsLegacy(
-    name: string,
-    fieldId: string,
-    showValuesAs: ShowValuesAsConfig | null,
-  ): Promise<void> {
-    await this.setShowValuesAs(name, fieldId, showValuesAs);
-  }
-
-  async setSortOrderLegacy(name: string, fieldId: string, sortOrder: SortOrder): Promise<void> {
-    await this.setSortOrder(name, fieldId, sortOrder);
-  }
-
-  async addCalculatedFieldLegacy(name: string, field: CalculatedField): Promise<void> {
-    await this.addCalculatedField(name, field);
-  }
-
-  async removeCalculatedFieldLegacy(name: string, fieldId: string): Promise<void> {
-    await this.removeCalculatedField(name, fieldId);
-  }
-
-  async updateCalculatedFieldLegacy(
-    name: string,
-    fieldId: string,
-    updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
-  ): Promise<void> {
-    await this.updateCalculatedField(name, fieldId, updates);
-  }
-
   // ===========================================================================
   // Sub-Range Access
   // ===========================================================================
 
   async getRange(name: string): Promise<CellRange | null> {
     const pivotId = await this.resolveNameToId(name, 'getRange');
+    return this.getRangeForPivotId(pivotId);
+  }
+
+  private async getRangeForPivotId(pivotId: string): Promise<CellRange | null> {
     const bounds = await this.computeBounds(pivotId);
     if (!bounds) return null;
     const { config, totalRows, totalCols } = bounds;
@@ -2275,14 +1750,38 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return { config, totalRows, totalCols, firstDataRow, firstDataCol };
   }
 
-  private async findPivotByName(name: string): Promise<DataPivotTableConfig | undefined> {
+  private async findPivotsByName(name: string): Promise<DataPivotTableConfig[]> {
     let pivots: DataPivotTableConfig[];
     try {
       pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
     } catch {
-      return undefined;
+      return [];
     }
-    return pivots.find((p) => (p.name ?? p.id) === name);
+    return pivots.filter((p) => (p.name ?? p.id) === name);
+  }
+
+  private async findPivotByName(name: string): Promise<DataPivotTableConfig | undefined> {
+    const matches = await this.findPivotsByName(name);
+    if (matches.length > 1) {
+      throw new KernelError(
+        'COMPUTE_ERROR',
+        `Pivot table name "${name}" is ambiguous; matching pivot IDs: ${matches
+          .map((pivot) => pivot.id)
+          .join(', ')}`,
+      );
+    }
+    return matches[0];
+  }
+
+  private async resolvePivotName(
+    name: string,
+    operation: string,
+  ): Promise<{ pivotId: string; config: DataPivotTableConfig }> {
+    const config = await this.findPivotByName(name);
+    if (!config) {
+      throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot table "${name}" not found`);
+    }
+    return { pivotId: config.id, config };
   }
 
   private placementId(placement: PivotFieldPlacement): string {
@@ -2388,246 +1887,23 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     pivotConfig: DataPivotTableConfig,
     sourceSheetName: string | null,
   ): PivotTableHandle {
-    const ctx = this.ctx;
-    const sheetId = this.sheetId;
-    const pivotId = pivotConfig.id ?? pivotConfig.name;
-    const self = this;
-
-    // Cache the last-known config for synchronous getConfig().
-    // The contract requires getConfig() to be sync, but our bridge is async.
-    // We use the config snapshot we already have, and update it on mutations.
-    let cachedConfig: DataPivotTableConfig = pivotConfig;
-
-    return {
-      // Expose the internal pivot ID so callers can pass it to addField, etc.
-      id: pivotId,
-
-      getName(): string {
-        return pivotConfig.name ?? pivotId;
-      },
-
-      getConfig(): ApiPivotTableConfig {
-        return dataConfigToApiConfig(cachedConfig, sourceSheetName);
-      },
-
-      addField(field: string, area: 'row' | 'column' | 'filter', position?: number): void {
-        // Fire-and-forget: contract is sync, bridge is async
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          // Work with placements array (data contract type)
-          const areaPlacements = current.placements.filter((p) => p.area === area);
-          const otherPlacements = current.placements.filter((p) => p.area !== area);
-          const newPlacement: PivotFieldPlacement = {
-            placementId: makePlacementId(area, field, position ?? areaPlacements.length),
-            fieldId: field,
-            area,
-            position: position ?? areaPlacements.length,
-          };
-          if (position !== undefined) {
-            areaPlacements.splice(position, 0, newPlacement);
-            // Reindex positions
-            areaPlacements.forEach((p, i) => {
-              p.position = i;
-            });
-          } else {
-            areaPlacements.push(newPlacement);
-          }
-          const placements = [...otherPlacements, ...areaPlacements];
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      addValueField(
-        field: string,
-        aggregation: 'sum' | 'count' | 'average' | 'max' | 'min',
-        label?: string,
-      ): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          const valuePlacements = current.placements.filter((p) => p.area === 'value');
-          const newPlacement: PivotFieldPlacement = {
-            placementId: makePlacementId('value', field, valuePlacements.length),
-            fieldId: field,
-            area: 'value',
-            position: valuePlacements.length,
-            aggregateFunction: aggregation,
-            displayName: label ?? undefined,
-          };
-          const placements = [...current.placements, newPlacement];
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      removeField(fieldName: string): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          // Remove all placements matching this field
-          const placements = current.placements.filter((p) => p.fieldId !== fieldName);
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      changeAggregation(
-        valueFieldLabel: string,
-        newAggregation: 'sum' | 'count' | 'average' | 'max' | 'min',
-      ): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          const valuePlacements = current.placements.filter((p) => p.area === 'value');
-          if (valuePlacements.length === 0) return;
-          // Match by fieldId (valueFieldLabel maps to the field name)
-          const placements = current.placements.map((p) => {
-            if (p.area === 'value' && p.fieldId === valueFieldLabel) {
-              return { ...p, aggregateFunction: newAggregation as AggregateFunction };
-            }
-            return p;
-          });
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'aggregateFunctionChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      renameValueField(currentLabel: string, newLabel: string): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          const valuePlacements = current.placements.filter(
-            (p: PivotFieldPlacement) => p.area === 'value',
-          );
-          if (valuePlacements.length === 0) return;
-
-          // Match by displayName first, then by generated label ("Sum of FieldName"),
-          // then by fieldId as fallback
-          const matchPlacement = (p: PivotFieldPlacement): boolean => {
-            if (p.displayName === currentLabel) return true;
-            // Generate the default label: "Agg of FieldName"
-            const field = current.fields.find(
-              (f: { id: string; name: string }) => f.id === p.fieldId,
-            );
-            const fieldName = field?.name ?? p.fieldId;
-            const agg = p.aggregateFunction ?? 'sum';
-            const aggLabel = agg.charAt(0).toUpperCase() + agg.slice(1);
-            const defaultLabel = `${aggLabel} of ${fieldName}`;
-            if (defaultLabel === currentLabel) return true;
-            // Fallback: match by fieldId
-            return p.fieldId === currentLabel;
-          };
-
-          const placements = current.placements.map((p: PivotFieldPlacement) => {
-            if (p.area === 'value' && matchPlacement(p)) {
-              return { ...p, displayName: newLabel };
-            }
-            return p;
-          });
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'aggregateFunctionChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      async refresh(): Promise<void> {
-        await ctx.pivot.refresh(sheetId, pivotId);
-      },
-
-      async getAllItems(): Promise<PivotFieldItems[]> {
-        return ctx.pivot.getAllPivotItems(sheetId, pivotId);
-      },
-
-      setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-          const placements = current.placements.map((p: PivotFieldPlacement) => {
-            if (
-              p.area === 'value' &&
-              (p.displayName === valueFieldLabel || p.fieldId === valueFieldLabel)
-            ) {
-              return { ...p, showValuesAs: showValuesAs ?? undefined };
-            }
-            return p;
-          });
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { placements },
-            { reason: 'showValuesAsChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-
-      getDataSourceType(): DataSourceType {
-        // Currently all pivot tables are backed by cell ranges.
-        return 'range';
-      },
-
-      async setDataSource(dataSource: string): Promise<void> {
-        await self.setDataSource(cachedConfig.name ?? cachedConfig.id, dataSource);
-        const updated = await ctx.pivot.getPivot(sheetId, pivotId);
-        if (updated) cachedConfig = updated;
-      },
-
-      setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): void {
-        void (async () => {
-          const current = await ctx.pivot.getPivot(sheetId, pivotId);
-          if (!current) return;
-
-          const visibleKeys = Object.entries(visibleItems)
-            .filter(([, v]) => v)
-            .map(([k]) => k);
-          const hiddenKeys = Object.entries(visibleItems)
-            .filter(([, v]) => !v)
-            .map(([k]) => k);
-
-          const filters = current.filters.filter((f: PivotFilter) => f.fieldId !== fieldId);
-          if (hiddenKeys.length > 0) {
-            if (hiddenKeys.length <= visibleKeys.length) {
-              filters.push({ fieldId, excludeValues: hiddenKeys } as PivotFilter);
-            } else {
-              filters.push({ fieldId, includeValues: visibleKeys } as PivotFilter);
-            }
-          }
-
-          const result = await ctx.pivot.updatePivot(
-            sheetId,
-            pivotId,
-            { filters },
-            { reason: 'filterChanged', refreshPolicy: 'refreshAndMaterialize' },
-          );
-          if (result) cachedConfig = result;
-        })();
-      },
-    };
+    return buildPivotTableHandle({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotConfig,
+      sourceSheetName,
+      toApiConfig: dataConfigToApiConfig,
+      makePlacementId,
+      pivotPlacementId,
+      resolvePlacement: (config, identifier, area, operation) =>
+        this.resolvePlacement(config, identifier, area, operation),
+      placementId: (placement) => this.placementId(placement),
+      getRange: (pivotId) => this.getRangeForPivotId(pivotId),
+      addCalculatedField: (pivotId, field) =>
+        this.addCalculatedField(pivotId, field) as Promise<
+          PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }
+        >,
+      setDataSource: (pivotId, dataSource) => this.setDataSourceForHandle(pivotId, dataSource),
+    });
   }
 }

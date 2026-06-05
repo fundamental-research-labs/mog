@@ -3,7 +3,7 @@
  *
  * Provides action handlers for the pivot table context menu.
  * Routes actions through appropriate channels:
- * - Pivot operations: ws.pivots.* (unified API -> bridge -> Rust)
+ * - Pivot operations: PivotTableHandle methods from the worksheet API
  * - Dialog state: UIStore
  *
  * Architecture notes:
@@ -26,7 +26,7 @@ import type {
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
 
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
+import { useActiveSheetId, useUIStore } from '../../infra/context';
 import type { PivotCapabilities } from '../../pivot/pivot-capabilities';
 
 import { usePivotTables } from './use-pivot-tables';
@@ -165,11 +165,6 @@ export function usePivotContextMenuActions(
     removeFieldFromArea,
   } = usePivotTables({ sheetId: activeSheetId });
 
-  // Get worksheet for expansion state queries via ws.pivots
-  const wb = useWorkbook();
-  const ws = useMemo(() => wb.getSheetById(activeSheetId), [wb, activeSheetId]);
-  const pivotBridge = wb.pivot;
-
   // ==========================================================================
   // Computed Values
   // ==========================================================================
@@ -196,22 +191,20 @@ export function usePivotContextMenuActions(
     return pivotConfig?.placements.find((p) => p.area === 'value')?.fieldId;
   }, [fieldId, pivotConfig]);
 
-  // Get expansion state for the header
-  // ws.pivots.getExpansionState is async, so we use local state
+  // Get expansion state for the header through the selected pivot handle.
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [pivotItems, setPivotItems] = useState<PivotFieldItems[]>([]);
   useEffect(() => {
-    if (!pivotId || !headerKey || !canEditFields) {
+    if (!pivotConfig || !headerKey || !canEditFields) {
       setIsHeaderExpanded(false);
       return;
     }
-    const name = pivotConfig?.name ?? pivotId;
-    void ws.pivots.getExpansionState(name).then((expansionState) => {
+    void pivot?.handle?.getExpansionState().then((expansionState) => {
       const expanded =
         expansionState.expandedRows[headerKey] ?? expansionState.expandedColumns[headerKey] ?? true;
       setIsHeaderExpanded(expanded);
     });
-  }, [pivotId, pivotConfig, headerKey, canEditFields, ws]);
+  }, [pivot, pivotConfig, headerKey, canEditFields]);
 
   useEffect(() => {
     let cancelled = false;
@@ -220,8 +213,8 @@ export function usePivotContextMenuActions(
       return;
     }
 
-    void pivotBridge
-      .getAllPivotItems(activeSheetId, pivotConfig.id)
+    void pivot?.handle
+      ?.getAllItems()
       .then((items) => {
         if (!cancelled) setPivotItems(items);
       })
@@ -232,7 +225,7 @@ export function usePivotContextMenuActions(
     return () => {
       cancelled = true;
     };
-  }, [activeSheetId, pivotConfig, canEditFields, pivotBridge]);
+  }, [pivot, pivotConfig, canEditFields]);
 
   // Get current sort order for the field
   const currentSortOrder = useMemo(() => {

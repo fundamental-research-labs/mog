@@ -39,6 +39,7 @@ export type { WorksheetNames } from './names';
 export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
 export type {
+  ImportedPivotViewRecord,
   PivotCalculatedFieldSpec,
   PivotCreateConfig,
   PivotPlacementPatch,

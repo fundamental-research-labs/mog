@@ -1,3 +1,4 @@
+import type { PivotTableHandle } from '@mog-sdk/contracts/api';
 import type { PivotTableWithResult } from '@mog-sdk/contracts/pivot';
 
 export type PivotSourceKind = 'native' | 'promotedImport' | 'unsupportedImport';
@@ -17,10 +18,11 @@ export interface PivotViewModel extends PivotTableWithResult {
   sourceKind: PivotSourceKind;
   importIdentity?: string;
   capabilities: PivotCapabilities;
+  handle?: PivotTableHandle;
 }
 
 export const UNSUPPORTED_IMPORTED_PIVOT_REASON =
-  'Imported PivotTables are preserved from the source workbook and are read-only until native hydration support is available.';
+  'This imported PivotTable uses workbook features that are preserved for export but are not editable in Mog yet.';
 
 export function createNativePivotCapabilities(): PivotCapabilities {
   return {

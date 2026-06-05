@@ -20,12 +20,24 @@ import type { CFResult } from '@mog/types-formatting/conditional-format/rules';
 import type { SlicerSource, SlicerStyle, TimelineLevel } from '@mog/types-data/data/slicers';
 import type { ColumnFilterCriteria, FilterHeaderInfo } from '@mog/types-data/data/filter';
 import type {
+  AggregateFunction,
+  CalculatedField,
+  CalculatedFieldId,
   DataSourceType,
   PlacementId,
+  PivotExpansionState,
+  PivotFieldArea,
   PivotFieldItems,
+  PivotFilter,
+  PivotKernelMutationReceipt,
   PivotMemberRef,
+  PivotTableConfig as DataPivotTableConfig,
+  PivotTableLayout,
+  PivotTableResult,
+  PivotTableStyle,
   PivotValueRecord,
   ShowValuesAsConfig,
+  SortOrder,
 } from '@mog/types-data/data/pivot';
 import type { TotalFunction } from '@mog/types-data/data/tables';
 import type { SpreadsheetEvent as InternalSpreadsheetEvent } from '@mog/types-events/events';
@@ -843,6 +855,18 @@ export interface PivotTableHandle {
   getName(): string;
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
+  /** Update the pivot table data configuration. */
+  update(updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>): Promise<void>;
+  /** Delete the pivot table. */
+  delete(): Promise<boolean>;
+  /** Subscribe to computed result updates for this pivot. */
+  subscribeResult(
+    callback: (pivotId: string, result: PivotTableResult | null, error?: string) => void,
+  ): () => void;
+  /** Compute this pivot table result. */
+  compute(forceRefresh?: boolean): Promise<PivotTableResult | null>;
+  /** Get the full range occupied by the rendered pivot table. */
+  getRange(): Promise<CellRange | null>;
   /** Add a field to the row, column, or filter area */
   addField(field: string, area: 'row' | 'column' | 'filter', position?: number): Promise<void>;
   /** Add a value field with aggregation */
@@ -852,7 +876,14 @@ export interface PivotTableHandle {
     label?: string,
   ): Promise<void>;
   /** Remove a field by name */
-  removeField(fieldName: string): Promise<void>;
+  removeField(fieldName: string, area?: PivotFieldArea): Promise<void>;
+  /** Move a field to a different area or position. */
+  moveField(
+    fieldName: string,
+    fromArea: PivotFieldArea,
+    toArea: PivotFieldArea,
+    toPosition: number,
+  ): Promise<void>;
   /** Change the aggregation function of a value field */
   changeAggregation(
     valueFieldLabel: string,
@@ -866,6 +897,28 @@ export interface PivotTableHandle {
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */
   setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
+  /** Set the sort order for a row or column field. */
+  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;
+  /** Set a filter on a field. */
+  setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
+  /** Remove a filter from a field. */
+  removeFilter(fieldId: string): Promise<void>;
+  /** Set layout options. */
+  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;
+  /** Set style options. */
+  setStyle(style: Partial<PivotTableStyle>): Promise<void>;
+  /** Toggle expansion state for a header. */
+  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;
+  /** Set expansion state for all headers. */
+  setAllExpanded(expanded: boolean): Promise<void>;
+  /** Read expansion state. */
+  getExpansionState(): Promise<PivotExpansionState>;
+  /** Get drill-down data for a pivot cell. */
+  getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;
+  /** Add a calculated field to this pivot. */
+  addCalculatedField(
+    field: CalculatedField,
+  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
   /** Set item visibility by value string -> boolean map */
   setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;
   /** Get the data source type (range, table, or external). */

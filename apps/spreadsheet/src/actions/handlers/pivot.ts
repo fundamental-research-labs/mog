@@ -1,11 +1,16 @@
 import type { AsyncActionHandler, ActionResult } from '@mog-sdk/contracts/actions';
-import type { MutationReceipt } from '@mog-sdk/contracts/api';
+import type { MutationReceipt, PivotTableHandle } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { CalculatedField, PivotFilter, ShowValuesAsConfig } from '@mog-sdk/contracts/pivot';
+import type {
+  CalculatedField,
+  PivotFilter,
+  PivotFieldPlacementFlat,
+  ShowValuesAsConfig,
+} from '@mog-sdk/contracts/pivot';
 
 interface PivotActionBasePayload {
   sheetId?: SheetId;
-  pivotName: string;
+  pivotId: string;
 }
 
 interface PivotSetShowValuesAsPayload extends PivotActionBasePayload {
@@ -18,7 +23,6 @@ interface PivotSetShowValuesAsPayload extends PivotActionBasePayload {
 interface PivotKernelMutationReceipt {
   kind: 'pivotKernelMutation';
   pivotId: string;
-  pivotName: string;
   action: string;
   placementId?: string;
 }
@@ -55,18 +59,42 @@ function getWorksheet(deps: Parameters<AsyncActionHandler>[0], sheetId?: SheetId
     : deps.workbook.getSheetById(deps.getActiveSheetId());
 }
 
+function parsePivotTarget(
+  payload: Record<string, unknown>,
+  actionName: string,
+): PivotActionBasePayload | ActionResult {
+  const { sheetId, pivotId } = payload;
+  if (sheetId !== undefined && typeof sheetId !== 'string') {
+    return invalidPayload(`${actionName} sheetId must be a string`);
+  }
+  if (typeof pivotId !== 'string' || pivotId.length === 0) {
+    return invalidPayload(`${actionName} pivotId must be a non-empty string`);
+  }
+
+  return {
+    sheetId: sheetId as SheetId | undefined,
+    pivotId,
+  };
+}
+
+async function resolvePivotHandle(
+  ws: ReturnType<typeof getWorksheet>,
+  pivotId: string,
+): Promise<{ handle: PivotTableHandle; config: { placements: PivotFieldPlacementFlat[] } } | null> {
+  const config = (await ws.pivots.getAll()).find((candidate) => candidate.id === pivotId);
+  if (!config) return null;
+  const handle = await ws.pivots.get(config);
+  return handle ? { handle, config } : null;
+}
+
 function parseShowValuesAsPayload(payload: unknown): PivotSetShowValuesAsPayload | ActionResult {
   if (!isObjectPayload(payload)) {
     return invalidPayload('PIVOT_SET_SHOW_VALUES_AS requires a payload');
   }
 
-  const { sheetId, pivotName, fieldId, placementId, showValuesAs } = payload;
-  if (sheetId !== undefined && typeof sheetId !== 'string') {
-    return invalidPayload('PIVOT_SET_SHOW_VALUES_AS sheetId must be a string');
-  }
-  if (typeof pivotName !== 'string' || pivotName.length === 0) {
-    return invalidPayload('PIVOT_SET_SHOW_VALUES_AS pivotName must be a non-empty string');
-  }
+  const target = parsePivotTarget(payload, 'PIVOT_SET_SHOW_VALUES_AS');
+  if ('handled' in target) return target;
+  const { fieldId, placementId, showValuesAs } = payload;
   if (fieldId !== undefined && (typeof fieldId !== 'string' || fieldId.length === 0)) {
     return invalidPayload('PIVOT_SET_SHOW_VALUES_AS fieldId must be a non-empty string');
   }
@@ -81,8 +109,7 @@ function parseShowValuesAsPayload(payload: unknown): PivotSetShowValuesAsPayload
   }
 
   return {
-    sheetId: sheetId as SheetId | undefined,
-    pivotName,
+    ...target,
     fieldId: fieldId as string | undefined,
     placementId: placementId as string | undefined,
     showValuesAs: showValuesAs as ShowValuesAsConfig | null,
@@ -94,13 +121,9 @@ function parseGrandTotalsPayload(payload: unknown): PivotSetGrandTotalsPayload |
     return invalidPayload('PIVOT_SET_GRAND_TOTALS requires a payload');
   }
 
-  const { sheetId, pivotName, showRowGrandTotals, showColumnGrandTotals } = payload;
-  if (sheetId !== undefined && typeof sheetId !== 'string') {
-    return invalidPayload('PIVOT_SET_GRAND_TOTALS sheetId must be a string');
-  }
-  if (typeof pivotName !== 'string' || pivotName.length === 0) {
-    return invalidPayload('PIVOT_SET_GRAND_TOTALS pivotName must be a non-empty string');
-  }
+  const target = parsePivotTarget(payload, 'PIVOT_SET_GRAND_TOTALS');
+  if ('handled' in target) return target;
+  const { showRowGrandTotals, showColumnGrandTotals } = payload;
   if (typeof showRowGrandTotals !== 'boolean') {
     return invalidPayload('PIVOT_SET_GRAND_TOTALS showRowGrandTotals must be a boolean');
   }
@@ -109,8 +132,7 @@ function parseGrandTotalsPayload(payload: unknown): PivotSetGrandTotalsPayload |
   }
 
   return {
-    sheetId: sheetId as SheetId | undefined,
-    pivotName,
+    ...target,
     showRowGrandTotals,
     showColumnGrandTotals,
   };
@@ -121,20 +143,15 @@ function parseDataSourcePayload(payload: unknown): PivotSetDataSourcePayload | A
     return invalidPayload('PIVOT_SET_DATA_SOURCE requires a payload');
   }
 
-  const { sheetId, pivotName, dataSource } = payload;
-  if (sheetId !== undefined && typeof sheetId !== 'string') {
-    return invalidPayload('PIVOT_SET_DATA_SOURCE sheetId must be a string');
-  }
-  if (typeof pivotName !== 'string' || pivotName.length === 0) {
-    return invalidPayload('PIVOT_SET_DATA_SOURCE pivotName must be a non-empty string');
-  }
+  const target = parsePivotTarget(payload, 'PIVOT_SET_DATA_SOURCE');
+  if ('handled' in target) return target;
+  const { dataSource } = payload;
   if (typeof dataSource !== 'string' || dataSource.length === 0) {
     return invalidPayload('PIVOT_SET_DATA_SOURCE dataSource must be a non-empty string');
   }
 
   return {
-    sheetId: sheetId as SheetId | undefined,
-    pivotName,
+    ...target,
     dataSource,
   };
 }
@@ -144,13 +161,9 @@ function parseFilterPayload(payload: unknown): PivotSetFilterPayload | ActionRes
     return invalidPayload('PIVOT_SET_FILTER requires a payload');
   }
 
-  const { sheetId, pivotName, fieldId, filter } = payload;
-  if (sheetId !== undefined && typeof sheetId !== 'string') {
-    return invalidPayload('PIVOT_SET_FILTER sheetId must be a string');
-  }
-  if (typeof pivotName !== 'string' || pivotName.length === 0) {
-    return invalidPayload('PIVOT_SET_FILTER pivotName must be a non-empty string');
-  }
+  const target = parsePivotTarget(payload, 'PIVOT_SET_FILTER');
+  if ('handled' in target) return target;
+  const { fieldId, filter } = payload;
   if (typeof fieldId !== 'string' || fieldId.length === 0) {
     return invalidPayload('PIVOT_SET_FILTER fieldId must be a non-empty string');
   }
@@ -159,8 +172,7 @@ function parseFilterPayload(payload: unknown): PivotSetFilterPayload | ActionRes
   }
 
   return {
-    sheetId: sheetId as SheetId | undefined,
-    pivotName,
+    ...target,
     fieldId,
     filter: filter as Omit<PivotFilter, 'fieldId'>,
   };
@@ -173,13 +185,9 @@ function parseAddCalculatedFieldPayload(
     return invalidPayload('PIVOT_ADD_CALCULATED_FIELD requires a payload');
   }
 
-  const { sheetId, pivotName, field } = payload;
-  if (sheetId !== undefined && typeof sheetId !== 'string') {
-    return invalidPayload('PIVOT_ADD_CALCULATED_FIELD sheetId must be a string');
-  }
-  if (typeof pivotName !== 'string' || pivotName.length === 0) {
-    return invalidPayload('PIVOT_ADD_CALCULATED_FIELD pivotName must be a non-empty string');
-  }
+  const target = parsePivotTarget(payload, 'PIVOT_ADD_CALCULATED_FIELD');
+  if ('handled' in target) return target;
+  const { field } = payload;
   if (!isObjectPayload(field)) {
     return invalidPayload('PIVOT_ADD_CALCULATED_FIELD field must be an object');
   }
@@ -194,8 +202,7 @@ function parseAddCalculatedFieldPayload(
   }
 
   return {
-    sheetId: sheetId as SheetId | undefined,
-    pivotName,
+    ...target,
     field: field as unknown as CalculatedField,
   };
 }
@@ -205,13 +212,14 @@ export const PIVOT_SET_SHOW_VALUES_AS: AsyncActionHandler = async (deps, payload
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
+  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  if (!target) return invalidPayload('PIVOT_SET_SHOW_VALUES_AS pivot not found');
   const placementReference = parsed.placementId ?? parsed.fieldId!;
-  const mutationReceipt = (await ws.pivots.setShowValuesAs(
-    parsed.pivotName,
+  const mutationReceipt = (await target.handle.setShowValuesAs(
     placementReference,
     parsed.showValuesAs,
   )) as unknown as PivotKernelMutationReceipt | undefined;
-  const refreshReceipt = await ws.pivots.refresh(parsed.pivotName);
+  const refreshReceipt = await target.handle.refresh();
   const receipts = [mutationReceipt, refreshReceipt].filter(
     Boolean,
   ) as unknown as MutationReceipt[];
@@ -223,11 +231,16 @@ export const PIVOT_SET_GRAND_TOTALS: AsyncActionHandler = async (deps, payload) 
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const mutationReceipt = (await ws.pivots.setLayout(parsed.pivotName, {
+  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  if (!target) return invalidPayload('PIVOT_SET_GRAND_TOTALS pivot not found');
+  const layout = {
     showRowGrandTotals: parsed.showRowGrandTotals,
     showColumnGrandTotals: parsed.showColumnGrandTotals,
-  })) as unknown as PivotKernelMutationReceipt | undefined;
-  const refreshReceipt = await ws.pivots.refresh(parsed.pivotName);
+  };
+  const mutationReceipt = (await target.handle.setLayout(layout)) as unknown as
+    | PivotKernelMutationReceipt
+    | undefined;
+  const refreshReceipt = await target.handle.refresh();
   const receipts = [mutationReceipt, refreshReceipt].filter(
     Boolean,
   ) as unknown as MutationReceipt[];
@@ -239,7 +252,9 @@ export const PIVOT_SET_DATA_SOURCE: AsyncActionHandler = async (deps, payload) =
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  await ws.pivots.setDataSource(parsed.pivotName, parsed.dataSource);
+  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  if (!target) return invalidPayload('PIVOT_SET_DATA_SOURCE pivot not found');
+  await target.handle.setDataSource(parsed.dataSource);
   return { handled: true };
 };
 
@@ -248,7 +263,9 @@ export const PIVOT_SET_FILTER: AsyncActionHandler = async (deps, payload) => {
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  await ws.pivots.setFilter(parsed.pivotName, parsed.fieldId, parsed.filter);
+  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  if (!target) return invalidPayload('PIVOT_SET_FILTER pivot not found');
+  await target.handle.setFilter(parsed.fieldId, parsed.filter);
   return { handled: true };
 };
 
@@ -257,7 +274,12 @@ export const PIVOT_ADD_CALCULATED_FIELD: AsyncActionHandler = async (deps, paylo
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  await ws.pivots.addCalculatedField(parsed.pivotName, parsed.field);
-  await ws.pivots.refresh(parsed.pivotName);
-  return { handled: true };
+  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  if (!target) return invalidPayload('PIVOT_ADD_CALCULATED_FIELD pivot not found');
+  const mutationReceipt = await target.handle.addCalculatedField(parsed.field);
+  const refreshReceipt = await target.handle.refresh();
+  const receipts = [mutationReceipt, refreshReceipt].filter(
+    Boolean,
+  ) as unknown as MutationReceipt[];
+  return receipts.length > 0 ? { handled: true, receipts } : { handled: true };
 };

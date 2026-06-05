@@ -9,6 +9,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use std::sync::Mutex;
 use std::time::Duration;
+use yrs::Transact;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,6 +40,17 @@ fn lock_scope_to_json(scope: &LockScope) -> serde_json::Value {
 pub fn yrs_state_to_snapshot_json(state: Buffer) -> Result<String> {
     let storage = compute_core::storage::YrsStorage::from_yrs_state(&state)
         .map_err(|e| Error::from_reason(format!("from_yrs_state: {e}")))?;
+    {
+        let txn = storage.doc().transact();
+        compute_document::schema::guard_schema_version(&txn, storage.workbook_map())
+            .map_err(|e| Error::from_reason(format!("schema version: {e}")))?;
+    }
+    compute_core::storage::workbook::imported_pivots::normalize_imported_pivot_associations(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+    )
+    .map_err(|e| Error::from_reason(format!("normalize imported pivots: {e}")))?;
     let snapshot =
         compute_core::storage::engine::construction::build_workbook_snapshot_from_yrs(&storage)
             .map_err(|e| Error::from_reason(format!("build snapshot: {e}")))?;

@@ -26,7 +26,7 @@ pub(super) fn build_layout(pivot: &PivotTable) -> PivotTableLayout {
         grand_total_caption: pivot.grand_total_caption.clone(),
         row_header_caption: pivot.row_header_caption.clone(),
         col_header_caption: pivot.col_header_caption.clone(),
-        data_caption: None,
+        data_caption: pivot.data_caption.clone(),
         grid_drop_zones: if pivot.grid_drop_zones {
             Some(true)
         } else {

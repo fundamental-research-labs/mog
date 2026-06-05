@@ -632,6 +632,7 @@ dependencies = [
  "compute-collab",
  "compute-coordinator",
  "compute-core",
+ "compute-document",
  "compute-formats",
  "compute-parser",
  "compute-schema",
@@ -648,6 +649,7 @@ dependencies = [
  "uuid",
  "value-types",
  "xlsx-api",
+ "yrs",
 ]
 
 [[package]]

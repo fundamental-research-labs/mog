@@ -65,35 +65,6 @@ fn worksheet_sort_state_parse_output(include_nested_auto_filter_sort: bool) -> P
     }
 }
 
-fn assemble_engine_from_parse_output_storage(
-    storage: crate::storage::YrsStorage,
-    workbook_snap: crate::snapshot::WorkbookSnapshot,
-) -> YrsComputeEngine {
-    let mut mirror =
-        crate::mirror::CellMirror::from_snapshot(workbook_snap.clone()).expect("mirror");
-    let mut compute = crate::scheduler::ComputeCore::new();
-    compute
-        .init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())
-        .expect("compute init");
-    super::super::construction::assemble_engine(storage, mirror, compute, &workbook_snap)
-        .expect("assemble engine")
-}
-
-fn engine_from_parse_output_normal(output: &ParseOutput) -> YrsComputeEngine {
-    let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
-    let mut storage = crate::storage::YrsStorage::new();
-    let id_map = storage
-        .hydrate_from_parse_output(output, &mut allocator)
-        .expect("hydrate parse output");
-    let workbook_snap = crate::import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-        output,
-        Some(&id_map),
-        &mut allocator,
-    );
-
-    assemble_engine_from_parse_output_storage(storage, workbook_snap)
-}
-
 fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
     xlsx_parser::zip::XlsxArchive::new(bytes)
         .expect("exported XLSX should be readable")
@@ -101,15 +72,6 @@ fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|entry| entry.name.clone())
         .collect()
-}
-
-fn archive_text(bytes: &[u8], path: &str) -> Option<String> {
-    let archive =
-        xlsx_parser::zip::XlsxArchive::new(bytes).expect("exported XLSX should be readable");
-    archive
-        .read_file(path)
-        .ok()
-        .map(|bytes| String::from_utf8(bytes).expect("XML part should be UTF-8"))
 }
 
 fn assert_substrings_in_order(haystack: &str, needles: &[&str]) {

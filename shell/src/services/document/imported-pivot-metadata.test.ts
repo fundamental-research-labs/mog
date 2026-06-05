@@ -62,6 +62,8 @@ describe('extractImportedPivotMetadata', () => {
     expect(metadata.pivots).toHaveLength(1);
     expect(metadata.pivots[0]).toMatchObject({
       id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+      importIdentity:
+        'ooxml:outputWorksheetPartPath=xl/worksheets/sheet2.xml;worksheetRelationshipId=rIdPT1;definitionPartPath=xl/pivotTables/pivotTable1.xml;pivotCacheRelationshipId=;cacheId=1',
       name: 'PivotTable1',
       sheetName: 'Pivot',
       definitionPath: 'xl/pivotTables/pivotTable1.xml',

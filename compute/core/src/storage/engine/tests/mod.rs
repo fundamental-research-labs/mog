@@ -44,3 +44,4 @@ mod test_undo_redo_sort;
 mod test_viewport;
 mod test_workbook_settings;
 mod test_xlsx_export;
+mod test_xlsx_export_imported_pivots;

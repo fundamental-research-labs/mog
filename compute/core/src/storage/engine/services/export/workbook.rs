@@ -13,6 +13,7 @@ use compute_document::workbook_metadata::{
 use domain_types::{
     CellFormat, DocumentFormat, NamedRange, PersonInfo,
     domain::external_link::ExternalLink,
+    domain::pivot::ParsedPivotTable,
     domain::theme::ThemeData,
     domain::workbook::{
         CalculationProperties, RefMode, WorkbookProtection, WorkbookView, WorkbookWebPublishing,
@@ -27,6 +28,10 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
 use crate::storage::workbook::{
     named_ranges as workbook_named_ranges, settings as workbook_settings,
+};
+
+use super::pivot_cache_reconciliation::{
+    read_pivot_cache_sources, reconcile_promoted_import_cache_for_export,
 };
 
 const KEY_STYLE_REGISTRY_NUMBER_FORMATS: &str = "numberFormats";
@@ -462,44 +467,6 @@ pub(super) fn export_workbook_table_styles(
     styles.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
     (styles, default_table_style, default_pivot_style)
-}
-
-pub(super) fn export_pivot_cache_records(
-    stores: &EngineStores,
-) -> domain_types::yrs_schema::pivot_cache_records::PivotCacheRecords {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let records_map = match workbook.get(&txn, KEY_PIVOT_CACHE_RECORDS) {
-        Some(Out::YMap(m)) => m,
-        _ => return Default::default(),
-    };
-
-    let mut records = yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn);
-    if let Some(surviving) = surviving_pivot_cache_ids(stores) {
-        records.retain(|cache_id, _| surviving.contains(cache_id));
-    }
-    records
-}
-
-pub(super) fn export_pivot_cache_sources(
-    stores: &EngineStores,
-) -> Vec<domain_types::domain::pivot::PivotCacheSourceDef> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let sources_map = match workbook.get(&txn, KEY_PIVOT_CACHE_SOURCES) {
-        Some(Out::YMap(m)) => m,
-        _ => return Default::default(),
-    };
-
-    let mut sources = yrs_schema::pivot_cache_records::sources_from_yrs_map(&sources_map, &txn);
-    if let Some(surviving) = surviving_pivot_cache_ids(stores) {
-        sources.retain(|source| surviving.contains(&source.cache_id));
-    }
-    sources
 }
 
 pub(super) fn export_extended_document_properties(
@@ -953,14 +920,16 @@ pub(in crate::storage::engine) fn export_workbook_timeline_caches(
 pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     stores: &EngineStores,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
-    use domain_types::domain::pivot::ParsedPivotTable;
-
     let doc = stores.storage.doc();
     let sheets_ref = stores.storage.sheets();
     let workbook = stores.storage.workbook_map();
 
     let specs = read_workbook_pivot_specs(stores);
     let associations = crate::storage::workbook::imported_pivots::read_all(doc, workbook);
+    let cache_sources_by_id = read_pivot_cache_sources(stores)
+        .into_iter()
+        .map(|source| (source.cache_id, source))
+        .collect::<std::collections::HashMap<_, _>>();
 
     if associations.is_empty() {
         return export_workbook_parsed_pivot_tables_legacy_name_dedup(stores);
@@ -1022,10 +991,17 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
                     );
                     continue;
                 };
+                let (live_config, ooxml_preservation) =
+                    reconcile_promoted_import_cache_for_export(
+                        association,
+                        original,
+                        live_config,
+                        &cache_sources_by_id,
+                    );
                 result.push(ParsedPivotTable {
                     config: live_config,
                     initial_expansion_state: original.initial_expansion_state.clone(),
-                    ooxml_preservation: original.ooxml_preservation.clone(),
+                    ooxml_preservation,
                 });
             }
         }
@@ -1053,8 +1029,6 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
 fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
     stores: &EngineStores,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
-    use domain_types::domain::pivot::ParsedPivotTable;
-
     let doc = stores.storage.doc();
     let sheets_ref = stores.storage.sheets();
 
@@ -1117,25 +1091,6 @@ fn read_workbook_pivot_specs(
             }
         })
         .collect()
-}
-
-fn surviving_pivot_cache_ids(stores: &EngineStores) -> Option<std::collections::HashSet<u32>> {
-    let pivots = export_workbook_parsed_pivot_tables(stores);
-    if pivots.is_empty() {
-        let associations = crate::storage::workbook::imported_pivots::read_all(
-            stores.storage.doc(),
-            stores.storage.workbook_map(),
-        );
-        if associations.is_empty() {
-            return None;
-        }
-    }
-    Some(
-        pivots
-            .into_iter()
-            .filter_map(|pivot| pivot.config.cache_id)
-            .collect(),
-    )
 }
 
 fn pivot_spec_order_key(key: &str) -> (u32, &str) {

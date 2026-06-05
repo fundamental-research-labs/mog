@@ -71,7 +71,7 @@ function DataTypeIcon({ dataType }: { dataType: string }) {
     date: 'D',
     boolean: '?',
   };
-  return <span className="text-hint text-ss-text-disabled">{icons[dataType] || '?'}</span>;
+  return <span className="shrink-0 text-hint text-ss-text-disabled">{icons[dataType] || '?'}</span>;
 }
 
 function AggregateSelector({
@@ -97,7 +97,7 @@ function AggregateSelector({
 
   return (
     <select
-      className="px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
+      className="w-20 shrink-0 px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
       value={value}
       onChange={(e) => onChange(e.target.value as AggregateFunction)}
       onClick={(e) => e.stopPropagation()}
@@ -273,11 +273,9 @@ export function PivotFieldList({
     const canDrag = canDragFromArea(area);
     const canSelect = canDrag;
 
-    const chipClass = `flex items-center gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
+    const chipClass = `flex min-w-0 max-w-full items-center gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
       canDrag ? 'cursor-grab' : 'cursor-default'
-    } ${
-      isDragging ? 'opacity-50' : ''
-    } ${isSelected ? 'ring-2 ring-ss-primary' : ''} ${
+    } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} ${
       isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
     }`;
 
@@ -300,7 +298,7 @@ export function PivotFieldList({
         data-pivot-selected={isSelected ? 'true' : 'false'}
       >
         <DataTypeIcon dataType={field.dataType} />
-        <span>{placement?.displayName || field.name}</span>
+        <span className="min-w-0 flex-1 truncate">{placement?.displayName || field.name}</span>
 
         {isValueField && placement?.aggregateFunction && onAggregateChange && (
           <AggregateSelector
@@ -313,7 +311,7 @@ export function PivotFieldList({
         {area !== 'available' && !disabled && canRemoveFields && (
           <button
             type="button"
-            className="flex items-center justify-center w-5 h-5 p-0 border-none rounded-full bg-transparent cursor-pointer text-ss-text-secondary text-caption leading-none hover:bg-ss-surface-active"
+            className="flex shrink-0 items-center justify-center w-5 h-5 p-0 border-none rounded-full bg-transparent cursor-pointer text-ss-text-secondary text-caption leading-none hover:bg-ss-surface-active"
             onClick={() => onRemoveField(field.id, area)}
             title="Remove field"
             data-pivot-target="remove-field"

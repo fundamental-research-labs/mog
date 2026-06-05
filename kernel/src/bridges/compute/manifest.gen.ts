@@ -599,6 +599,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   pivotDelete: 'write',
   pivotGet: 'read',
   pivotGetAll: 'read',
+  pivotGetImportedViewRecords: 'read',
   pivotComputeFromSource: 'read',
   pivotGetAllItems: 'read',
   pivotRegisterDef: 'write',

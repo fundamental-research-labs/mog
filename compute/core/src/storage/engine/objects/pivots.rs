@@ -10,6 +10,8 @@ use compute_pivot::types::{PivotExpansionState, PivotFieldItems, PivotTableResul
 use domain_types::domain::pivot::PivotTableConfig;
 use value_types::{CellValue, ComputeError};
 
+use crate::storage::workbook::imported_pivots::ImportedPivotViewRecord;
+
 impl YrsComputeEngine {
     fn resolve_pivot_source_identity(
         &self,
@@ -387,6 +389,24 @@ impl YrsComputeEngine {
             .collect()
     }
 
+    /// Get imported PivotTable view records rendered on an output sheet.
+    ///
+    /// This is the persisted import read model used by app surfaces. Promoted
+    /// imports include their live native config; unsupported imports include a
+    /// preserved read-only config from the original OOXML pivot spec.
+    #[bridge::read(scope = "sheet")]
+    pub fn pivot_get_imported_view_records(
+        &self,
+        sheet_id: &SheetId,
+    ) -> Vec<ImportedPivotViewRecord> {
+        crate::storage::workbook::imported_pivots::read_view_records_for_output_sheet(
+            self.stores.storage.doc(),
+            self.stores.storage.workbook_map(),
+            self.stores.storage.sheets(),
+            sheet_id,
+        )
+    }
+
     /// Compute a pivot table from its stored config, reading source data directly
     /// from the engine. This avoids the TS→Rust→TS data round-trip that the
     /// stateless `pivot_compute` free function requires.
@@ -516,12 +536,25 @@ impl YrsComputeEngine {
             })?;
 
         // 2. Resolve output sheet
-        let output_sheet_id = self
-            .mirror
-            .sheet_by_name(&config.output_sheet_name)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: config.output_sheet_name.clone(),
+        let output_sheet_id = if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
+            let output_id = SheetId::from_uuid_str(output_sheet_id).map_err(|e| {
+                ComputeError::InvalidInput {
+                    message: format!("Invalid pivot outputSheetId '{output_sheet_id}': {e}"),
+                }
             })?;
+            if self.mirror.get_sheet(&output_id).is_none() {
+                return Err(ComputeError::SheetNotFound {
+                    sheet_id: output_sheet_id.to_string(),
+                });
+            }
+            output_id
+        } else {
+            self.mirror
+                .sheet_by_name(&config.output_sheet_name)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: config.output_sheet_name.clone(),
+                })?
+        };
 
         // 3. Clear old cells if previously materialized
         {

@@ -14,6 +14,7 @@ pub(crate) const ROOT_TYPED_ATTRS: &[&str] = &[
     "name",
     "cacheId",
     "dataOnRows",
+    "dataCaption",
     "grandTotalCaption",
     "rowHeaderCaption",
     "colHeaderCaption",

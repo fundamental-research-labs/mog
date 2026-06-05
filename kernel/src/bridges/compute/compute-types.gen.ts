@@ -2717,7 +2717,7 @@ export interface ImportedPivotRenderedRange {
   ref?: string;
 }
 
-export type ImportedPivotUnsupportedReason = "missingImportIdentity" | "unresolvedOutputSheet" | "unresolvedSourceSheet" | "fallbackSourceSheet" | "externalSource" | "cacheOnlySource" | "invalidOutputRange" | "fieldCacheMismatch" | "lossyOoxml";
+export type ImportedPivotUnsupportedReason = "missingImportIdentity" | "unresolvedOutputSheet" | "unresolvedSourceSheet" | "fallbackSourceSheet" | "externalSource" | "cacheOnlySource" | "invalidOutputRange" | "fieldCacheMismatch" | "lossyOoxml" | "nativePivotIdCollision";
 
 export interface ImportedPivotViewRecord {
   sourceKind: string;

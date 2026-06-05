@@ -184,7 +184,7 @@ pub fn filter_state_to_auto_filter(
     for (cell_id, cf) in &state.column_filters {
         if let Some((_, col)) = pos_resolver(cell_id) {
             let col_index = col.saturating_sub(start_col);
-            let filter_type = Some(column_filter_to_ooxml(cf));
+            let filter_type = Some(column_filter_to_ooxml_filter_type(cf));
             columns.push(FilterColumn {
                 col_index,
                 filter_type,
@@ -204,7 +204,7 @@ pub fn filter_state_to_auto_filter(
 }
 
 /// Convert a `ColumnFilter` back to an `OoxmlFilterType`.
-fn column_filter_to_ooxml(cf: &ColumnFilter) -> OoxmlFilterType {
+pub fn column_filter_to_ooxml_filter_type(cf: &ColumnFilter) -> OoxmlFilterType {
     match cf {
         ColumnFilter::Values {
             values,

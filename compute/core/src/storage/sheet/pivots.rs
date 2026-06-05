@@ -366,11 +366,20 @@ pub fn get_pivot(
     sheet_id: &SheetId,
     pivot_id: &str,
 ) -> Option<PivotTableConfig> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
     let txn = doc.transact();
-    let pivots_map = get_pivots_map(&txn, sheets, &sheet_hex)?;
-    let out = pivots_map.get(&txn, pivot_id)?;
-    read_pivot_from_out(&out, &txn)
+    get_pivot_in_txn(&txn, sheets, sheet_id, pivot_id)
+}
+
+pub(crate) fn get_pivot_in_txn<T: yrs::ReadTxn>(
+    txn: &T,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    pivot_id: &str,
+) -> Option<PivotTableConfig> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let pivots_map = get_pivots_map(txn, sheets, &sheet_hex)?;
+    let out = pivots_map.get(txn, pivot_id)?;
+    read_pivot_from_out(&out, txn)
 }
 
 /// Get all pivot tables in a sheet (unordered).
@@ -433,16 +442,25 @@ pub(crate) fn insert_existing_pivot_if_absent_in_txn(
 
 /// Delete a pivot table by ID. Returns `true` if the pivot existed and was removed.
 pub fn delete_pivot(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, pivot_id: &str) -> bool {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let pivots_map = match get_pivots_map(&txn, sheets, &sheet_hex) {
+    delete_pivot_in_txn(&mut txn, sheets, sheet_id, pivot_id)
+}
+
+pub(crate) fn delete_pivot_in_txn(
+    txn: &mut yrs::TransactionMut<'_>,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    pivot_id: &str,
+) -> bool {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let pivots_map = match get_pivots_map(txn, sheets, &sheet_hex) {
         Some(m) => m,
         None => return false,
     };
-    if pivots_map.get(&txn, pivot_id).is_none() {
+    if pivots_map.get(txn, pivot_id).is_none() {
         return false;
     }
-    pivots_map.remove(&mut txn, pivot_id);
+    pivots_map.remove(txn, pivot_id);
     true
 }
 

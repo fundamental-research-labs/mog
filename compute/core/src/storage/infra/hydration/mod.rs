@@ -35,6 +35,7 @@ mod data_tables;
 mod features;
 mod helpers;
 mod import;
+mod imported_pivot_classification;
 mod sheet;
 mod snapshot;
 mod styles;

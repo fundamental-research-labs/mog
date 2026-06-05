@@ -1152,6 +1152,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
  "value-types",
  "yrs",
 ]

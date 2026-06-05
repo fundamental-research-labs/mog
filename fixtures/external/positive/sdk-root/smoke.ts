@@ -1,4 +1,4 @@
-import { createWorkbook, Workbook, Worksheet, CreateWorkbookOptions, api } from '@mog-sdk/node';
+import { createWorkbook, Workbook, Worksheet, CreateWorkbookOptions, api } from '@mog-sdk/sdk';
 
 async function main(): Promise<void> {
   // 1. Create a workbook
@@ -25,11 +25,11 @@ async function main(): Promise<void> {
   // 6. Dispose
   await wb.dispose();
 
-  console.log('PASS: node-sdk fixture');
+  console.log('PASS: sdk-root fixture');
 }
 
 main().catch((e) => {
-  console.error('FAIL: node-sdk fixture');
+  console.error('FAIL: sdk-root fixture');
   console.error(e);
   process.exit(1);
 });

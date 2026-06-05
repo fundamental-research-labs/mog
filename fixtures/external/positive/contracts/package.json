@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@mog-sdk/contracts": "TARBALL_PATH",
-    "@mog-sdk/node": "TARBALL_PATH",
+    "@mog-sdk/sdk": "TARBALL_PATH",
     "@mog-sdk/spreadsheet-app": "TARBALL_PATH",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

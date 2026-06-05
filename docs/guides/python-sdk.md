@@ -169,4 +169,4 @@ Python API.
 
 ## Related Docs
 
-See [Node SDK](node-sdk.md) for the equivalent Node.js guide.
+See [SDK](sdk.md) for the equivalent Node.js guide.

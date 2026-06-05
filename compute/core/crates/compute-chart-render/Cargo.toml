@@ -6,7 +6,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Headless chart mark rasterizer for Node SDK chart image export"
+description = "Headless chart mark rasterizer for SDK Node chart image export"
 
 [dependencies]
 compute-text-measurement = { path = "../compute-text-measurement" }

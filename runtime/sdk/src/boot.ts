@@ -208,18 +208,6 @@ interface WorkbookConfig {
 
 export interface CreateWorkbookOptions {
   documentId?: string;
-  /**
-   * Runtime binding for the headless workbook. Defaults to native N-API.
-   *
-   * `runtime: 'wasm'` routes compute through the package WASM transport or a
-   * host-provided `wasmModule`, and never registers the native chart raster
-   * backend.
-   */
-  runtime?: 'native' | 'wasm';
-  /**
-   * Host-provided compute WASM module for `runtime: 'wasm'`.
-   */
-  wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
   /** XLSX data shorthand — equivalent to `source: { type: 'bytes', data: xlsx }`. */
   xlsx?: Uint8Array;
   /** Full source descriptor (for Tauri path variant). */
@@ -268,7 +256,7 @@ export interface CreateWorkbookOptions {
    */
   security?: DocumentSecurityConfig;
   /**
-   * Optional diagnostics logger for SDK host/kernel events. The Node SDK is
+   * Optional diagnostics logger for SDK host/kernel events. The SDK is
    * silent by default so embedding CLIs and TUIs keep stdout/stderr under
    * their own control.
    */
@@ -351,10 +339,16 @@ export async function createWorkbook(
     opts = {};
   }
 
-  const runtime = opts.runtime ?? 'native';
-
-  if (opts.wasmModule && runtime !== 'wasm') {
-    throw new Error('[createWorkbook] wasmModule is only valid when runtime is "wasm"');
+  const runtimeOption = (opts as { readonly runtime?: unknown }).runtime;
+  if (runtimeOption !== undefined) {
+    throw new Error(
+      '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
+    );
+  }
+  if ((opts as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
+    throw new Error(
+      '[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry',
+    );
   }
 
   // Normalize the `principal` shorthand into `security.resolvePrincipal` so
@@ -386,9 +380,8 @@ export async function createWorkbook(
   const hostResult: NodeHeadlessHostResult = createNodeHeadlessHost({
     documentId,
     operation: xlsxBytes ? 'import' : 'create',
-    runtime,
-    wasmModule: opts.wasmModule,
-    loadNapiAddon: runtime === 'native' ? loadNodeSdkNapiAddon : undefined,
+    runtime: 'native',
+    loadNapiAddon: loadNodeSdkNapiAddon,
     importBytes: xlsxBytes,
     timezone,
     locale: undefined, // use adapter default (en-US)
@@ -414,7 +407,7 @@ export async function createWorkbook(
   }
   const readyHandle = handle;
 
-  // Node SDK callers expect imported workbooks to be fully queryable when
+  // SDK callers expect imported workbooks to be fully queryable when
   // createWorkbook resolves. Browser hosts may defer this after first paint,
   // but headless imports need charts, objects, and other projections before
   // the caller starts enumerating workbook state.
@@ -425,7 +418,7 @@ export async function createWorkbook(
   installNodeChartImageExporter(
     readyHandle,
     loadNodeSdkNapiAddon,
-    chartRenderingForRuntime(runtime, opts.chartRendering),
+    opts.chartRendering,
   );
 
   // Create a Workbook from the handle — uses the cached workbook() path
@@ -890,14 +883,6 @@ function createSdkChartImageExporterFactory(
   }
 
   return createChartImageExporterFactory();
-}
-
-function chartRenderingForRuntime(
-  runtime: CreateWorkbookOptions['runtime'],
-  chartRendering: ChartRenderingConfig | undefined,
-): ChartRenderingConfig | undefined {
-  if (runtime !== 'wasm') return chartRendering;
-  return chartRendering === undefined || chartRendering === 'auto' ? {} : chartRendering;
 }
 
 // =============================================================================

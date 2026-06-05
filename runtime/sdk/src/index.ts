@@ -1,5 +1,5 @@
 /**
- * @mog-sdk/node - Shortcut Data OS SDK
+ * @mog-sdk/sdk - Shortcut Data OS SDK
  *
  * Headless spreadsheet engine for Node.js. Runs the full spreadsheet engine
  * (Rust compute-core + kernel bridges) without a browser. Uses the same
@@ -12,7 +12,7 @@
  *
  * @example
  * ```typescript
- * import { createWorkbook } from '@mog-sdk/node';
+ * import { createWorkbook } from '@mog-sdk/sdk';
  *
  * const wb = await createWorkbook();
  * const ws = wb.activeSheet;

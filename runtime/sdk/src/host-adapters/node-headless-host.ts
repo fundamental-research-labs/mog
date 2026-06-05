@@ -12,7 +12,7 @@
  * here — this is a trusted adapter factory module. No other production code
  * should construct the branded context directly.
  *
- * NOT exported from @mog-sdk/node public surface.
+ * NOT exported from @mog-sdk/sdk public surface.
  */
 
 import type { TrustedDocumentHostContext } from '@mog-sdk/types-host/trusted';
@@ -267,7 +267,7 @@ function getProcessPid(): number | undefined {
 function resolveNativeAddon(config: NodeHeadlessHostConfig): Record<string, (...args: unknown[]) => unknown> {
   if (!config.loadNapiAddon) {
     throw new Error(
-      '@mog-sdk/node native runtime requires a native N-API addon resolver; use the WASM entry for non-Node runtimes',
+      '@mog-sdk/sdk native runtime requires a native N-API addon resolver; use the WASM entry for non-Node runtimes',
     );
   }
   return config.loadNapiAddon();
@@ -740,7 +740,7 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
   const context = {
     hostSurface: 'document-host',
     hostId: HOST_ID,
-    kind: 'node-sdk',
+    kind: 'sdk',
     trust: trustProfile,
     diagnostics: diagnosticsSink,
     kernel: kernelHostContext,

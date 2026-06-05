@@ -147,7 +147,7 @@ const PACKAGE_LAYER_MAP = {
 
   // runtime (layer 6)
   '@mog/test-host': 'test-host',
-  '@mog-sdk/node': 'runtime',
+  '@mog-sdk/sdk': 'runtime',
   '@mog-sdk/embed': 'runtime',
   '@mog/collaboration-server': 'runtime',
   '@mog/os-headless-server': 'dev',

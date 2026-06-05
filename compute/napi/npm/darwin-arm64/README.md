@@ -1,1 +1,1 @@
-This is a platform-specific binary for @mog-sdk/node. Install @mog-sdk/node instead.
+This is a platform-specific binary consumed by @mog-sdk/sdk/node. Install @mog-sdk/sdk instead.

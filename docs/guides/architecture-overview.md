@@ -22,7 +22,7 @@ from kernel or engine packages directly:
 
 | Package | Current status | Use |
 | --- | --- | --- |
-| `@mog-sdk/node` | shipped public | Headless Node.js SDK; exposes async `createWorkbook()` and loads native N-API platform packages. |
+| `@mog-sdk/sdk` | shipped public | Headless Node.js SDK; exposes async `createWorkbook()` and loads native N-API platform packages. |
 | `@mog-sdk/embed` | shipped public root, public-experimental React/web-component/config subpaths | Read-only browser embed package. |
 | `@mog-sdk/spreadsheet-app` | shipped public | Full spreadsheet app embed for trusted same-origin hosts. |
 | `@mog-sdk/contracts` | shipped public, with many public-experimental subpaths | Public TypeScript contracts and small runtime values. |
@@ -35,7 +35,7 @@ from kernel or engine packages directly:
 The copy-paste public Node path is:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -115,7 +115,7 @@ manifests. It implements document lifecycle, `createWorkbook()`,
 storage/provider integration, and services such as undo, clipboard,
 notifications, and security plumbing.
 
-Public consumers should use `@mog-sdk/node`, `@mog-sdk/embed`, or
+Public consumers should use `@mog-sdk/sdk`, `@mog-sdk/embed`, or
 `@mog-sdk/spreadsheet-app`. Direct kernel imports are monorepo integration
 points or advanced document-first paths, not the primary shipped public setup
 path. Persistent spreadsheet state and CRDT internals live in Rust
@@ -153,7 +153,7 @@ SheetView, and lower-level engines where app-level integration needs them.
 Runtime packages expose public SDK and embed entry points, choose host/runtime
 adapters, and pass explicit transport configuration into the kernel.
 
-- `runtime/sdk` publishes `@mog-sdk/node` for headless Node.js and loads N-API
+- `runtime/sdk` publishes `@mog-sdk/sdk` for headless Node.js and loads N-API
   optional platform packages.
 - `runtime/embed` publishes `@mog-sdk/embed` for read-only browser embeds. Its
   React, web-component, and config subpaths are public-experimental.

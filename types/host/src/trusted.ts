@@ -14,7 +14,7 @@ export type TrustedHostKind =
   | 'react-embed'
   | 'web-component-embed'
   | 'iframe-child'
-  | 'node-sdk'
+  | 'sdk-node'
   | 'http-service'
   | 'tauri-desktop'
   | 'test';

@@ -1,7 +1,7 @@
 {
-  "name": "@mog-sdk/node",
+  "name": "@mog-sdk/sdk",
   "version": "0.8.0",
-  "description": "Headless spreadsheet engine for Node.js with formula compute and XLSX file I/O",
+  "description": "Headless spreadsheet engine with native Node and WASM runtime bindings",
   "type": "module",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -11,6 +11,18 @@
       "workerd": {
         "types": "./dist/workerd.d.ts",
         "default": "./dist/workerd.js"
+      },
+      "node-addons": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs",
+        "default": "./dist/index.js"
+      },
+      "node": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs",
+        "default": "./dist/index.js"
       },
       "browser": {
         "types": "./dist/wasm.d.ts",
@@ -24,6 +36,10 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      },
+      "default": {
+        "types": "./dist/wasm.d.ts",
+        "default": "./dist/wasm.js"
       }
     },
     "./node": {
@@ -91,6 +107,18 @@
           "types": "./dist/workerd.d.ts",
           "default": "./dist/workerd.js"
         },
+        "node-addons": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "require": "./dist/index.cjs",
+          "default": "./dist/index.js"
+        },
+        "node": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "require": "./dist/index.cjs",
+          "default": "./dist/index.js"
+        },
         "browser": {
           "types": "./dist/wasm.d.ts",
           "default": "./dist/wasm.js"
@@ -102,6 +130,10 @@
         "require": {
           "types": "./dist/index.d.cts",
           "default": "./dist/index.cjs"
+        },
+        "default": {
+          "types": "./dist/wasm.d.ts",
+          "default": "./dist/wasm.js"
         }
       },
       "./node": {

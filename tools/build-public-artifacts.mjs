@@ -468,7 +468,7 @@ for (const name of shipPublicNames) {
     continue;
   }
 
-  if (name === '@mog-sdk/node' && !kernelArtifactBuilt) {
+  if (name === '@mog-sdk/sdk' && !kernelArtifactBuilt) {
     buildKernelArtifact(errors);
     kernelArtifactBuilt = true;
   }
@@ -476,7 +476,7 @@ for (const name of shipPublicNames) {
   if (!skipTsBuild) {
     try {
       run('pnpm', ['--filter', name, 'build']);
-      if (name === '@mog-sdk/node') {
+      if (name === '@mog-sdk/sdk') {
         run('pnpm', ['--filter', name, 'verify-build']);
       }
     } catch (error) {

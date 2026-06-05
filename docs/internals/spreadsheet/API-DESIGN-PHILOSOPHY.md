@@ -6,7 +6,7 @@ Workbook/Worksheet APIs use three main shapes. This document defines the categor
 
 This is an internal design guide for maintaining the public API surface. The shipped public contract package is `@mog-sdk/contracts`; Workbook and Worksheet types are exported from `@mog-sdk/contracts/api` and related subpaths. Their source definitions currently live in workspace-internal type shards such as `types/api/src/api/*` and are re-exported by `contracts/src/api/*` shims.
 
-Implementation examples below come from workspace-internal packages such as `@mog-sdk/kernel`, `@mog/types-*`, and `@mog/spreadsheet-utils`. Do not document those packages as public setup paths. Public runtime users should enter through shipped public packages such as `@mog-sdk/node`, `@mog-sdk/sheet-view`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`.
+Implementation examples below come from workspace-internal packages such as `@mog-sdk/kernel`, `@mog/types-*`, and `@mog/spreadsheet-utils`. Do not document those packages as public setup paths. Public runtime users should enter through shipped public packages such as `@mog-sdk/sdk`, `@mog-sdk/sheet-view`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`.
 
 ---
 
@@ -232,7 +232,7 @@ This is especially useful in test code and short-lived scopes where manual `disp
 
 ## Real Examples from the Codebase
 
-Public consumers import these contracts from `@mog-sdk/contracts/api` or through SDK package re-exports such as `@mog-sdk/node`. The source paths below are workspace-internal files that back those public exports.
+Public consumers import these contracts from `@mog-sdk/contracts/api` or through SDK package re-exports such as `@mog-sdk/sdk`. The source paths below are workspace-internal files that back those public exports.
 
 ### Stateless: Workbook methods
 

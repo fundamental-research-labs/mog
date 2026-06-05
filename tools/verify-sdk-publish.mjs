@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Pre-publish verification for @mog-sdk/node, @mog-sdk/contracts, and
+ * Pre-publish verification for @mog-sdk/sdk, @mog-sdk/contracts, and
  * SDK-owned public runtime dependencies.
  *
  * Composable check runner — run all checks or pick/skip individual ones.
@@ -163,7 +163,7 @@ function ensureConsumerProject() {
         version: '1.0.0',
         type: 'module',
         dependencies: {
-          '@mog-sdk/node': `file:${sdkTarPath}`,
+          '@mog-sdk/sdk': `file:${sdkTarPath}`,
           '@mog-sdk/contracts': `file:${contractsTarPath}`,
           '@mog-sdk/wasm': `file:${computeWasmTarPath}`,
           '@mog-sdk/chart-raster-wasm': `file:${chartRasterWasmTarPath}`,
@@ -352,9 +352,9 @@ defineCheck('prechecks', {
   description: 'Verify both packages are built (dist/ exists)',
   fn() {
     section('Pre-checks');
-    assert(existsSync(resolve(SDK_DIR, 'dist/index.d.ts')), '@mog-sdk/node dist/index.d.ts exists');
-    assert(existsSync(resolve(SDK_DIR, 'dist/index.js')), '@mog-sdk/node dist/index.js exists');
-    assert(existsSync(resolve(SDK_DIR, 'dist/index.cjs')), '@mog-sdk/node dist/index.cjs exists');
+    assert(existsSync(resolve(SDK_DIR, 'dist/index.d.ts')), '@mog-sdk/sdk dist/index.d.ts exists');
+    assert(existsSync(resolve(SDK_DIR, 'dist/index.js')), '@mog-sdk/sdk dist/index.js exists');
+    assert(existsSync(resolve(SDK_DIR, 'dist/index.cjs')), '@mog-sdk/sdk dist/index.cjs exists');
     assert(existsSync(resolve(CONTRACTS_DIR, 'dist')), '@mog-sdk/contracts dist/ exists');
     assert(
       existsSync(resolve(CONTRACTS_DIR, 'dist/index.d.ts')),
@@ -525,9 +525,9 @@ defineCheck('typecheck', {
     writeFileSync(
       join(dir, 'consumer.ts'),
       `
-import { createWorkbook } from '@mog-sdk/node';
-import type { Workbook, Worksheet } from '@mog-sdk/node';
-import type { DocumentSource, ImportOptions } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
+import type { Workbook, Worksheet } from '@mog-sdk/sdk';
+import type { DocumentSource, ImportOptions } from '@mog-sdk/sdk';
 
 async function test(): Promise<void> {
   const wb: Workbook = await createWorkbook();
@@ -667,7 +667,7 @@ defineCheck('runtime', {
       join(dir, 'test-import.mjs'),
       `
 try {
-  const sdk = await import('@mog-sdk/node');
+  const sdk = await import('@mog-sdk/sdk');
   const required = ['createWorkbook', 'HeadlessEngine', 'createHeadlessEngine'];
   const missing = required.filter(k => !(k in sdk));
   if (missing.length > 0) { console.error('MISSING:' + missing.join(',')); process.exit(2); }
@@ -697,7 +697,7 @@ try {
       join(dir, 'test-require.cjs'),
       `
 try {
-  const sdk = require('@mog-sdk/node');
+  const sdk = require('@mog-sdk/sdk');
   const required = ['createWorkbook', 'HeadlessEngine', 'createHeadlessEngine'];
   const missing = required.filter(k => !(k in sdk));
   if (missing.length > 0) { console.error('MISSING:' + missing.join(',')); process.exit(2); }
@@ -727,7 +727,7 @@ try {
       `
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { createWorkbook } from '@mog-sdk/node/wasm';
+import { createWorkbook } from '@mog-sdk/sdk/wasm';
 
 const require = createRequire(import.meta.url);
 const computeWasmPath = require.resolve('@mog-sdk/wasm/wasm');
@@ -827,7 +827,7 @@ defineCheck('worker-runtime', {
     writeFileSync(
       join(fixtureDir, 'worker-entry.mjs'),
       `
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 import computeWasmModule from './compute_core_wasm_bg.wasm';
 import chartRasterWasmModule from './compute_chart_render_wasm_bg.wasm';
 
@@ -873,7 +873,6 @@ export default {
       }
       console.log('WORKER_STAGE:createWorkbook:start');
       wb = await createWorkbook({
-        runtime: 'wasm',
         wasmModule: computeWasmModule,
         chartRendering: {
           rasterModule: chartRasterWasmModule,

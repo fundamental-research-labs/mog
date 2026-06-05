@@ -1,5 +1,5 @@
 /**
- * Smoke test: simulate end-user installation of @mog-sdk/node.
+ * Smoke test: simulate end-user installation of @mog-sdk/sdk.
  *
  * Packs the SDK into a tarball, extracts it into an isolated temp directory,
  * and attempts to import the ESM and CJS bundles. This catches packaging bugs

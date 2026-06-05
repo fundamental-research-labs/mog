@@ -16,7 +16,7 @@ function getPlatformPackageName(): string {
     return `@mog-sdk/linux-${arch}-${libc}`;
   }
   throw new Error(
-    `Unsupported platform for @mog-sdk/node native runtime: ${process.platform}/${process.arch}`,
+    `Unsupported platform for @mog-sdk/sdk native runtime: ${process.platform}/${process.arch}`,
   );
 }
 

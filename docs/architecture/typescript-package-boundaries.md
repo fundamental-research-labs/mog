@@ -20,7 +20,7 @@ Current TypeScript package status:
 
 | Status | Current examples |
 | --- | --- |
-| public package targets | `@mog-sdk/node`, `@mog-sdk/contracts`, `@mog-sdk/sheet-view`, `@mog-sdk/spreadsheet-app`, and `@mog-sdk/embed` are inventory `ship-public` packages; `@mog-sdk/embed` currently exposes public-experimental entrypoints |
+| public package targets | `@mog-sdk/sdk`, `@mog-sdk/contracts`, `@mog-sdk/sheet-view`, `@mog-sdk/spreadsheet-app`, and `@mog-sdk/embed` are inventory `ship-public` packages; `@mog-sdk/embed` currently exposes public-experimental entrypoints |
 | shipped binary wrappers | `@mog-sdk/wasm`, `@mog-sdk/darwin-arm64`, `@mog-sdk/darwin-x64`, `@mog-sdk/linux-arm64-gnu`, `@mog-sdk/linux-arm64-musl`, `@mog-sdk/linux-x64-gnu`, `@mog-sdk/linux-x64-musl`, `@mog-sdk/win32-x64-msvc` |
 | public-experimental subpaths | `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, `@mog-sdk/embed/config`, many `@mog-sdk/contracts/*` subpaths, `@mog-sdk/spreadsheet-app/styles.css`, `@mog-sdk/spreadsheet-app/mog-embed.css` |
 | workspace-internal packages | `@mog-sdk/kernel`, `@mog/kernel-host-internal`, `@mog/types-*`, `@mog-sdk/types-*`, `@mog/transport`, `@mog/charts`, `@mog/table-engine`, `@mog/spreadsheet-utils`, `@rust-bridge/client` |
@@ -31,7 +31,7 @@ Current TypeScript package status:
 `@mog-sdk/kernel` is the canonical TypeScript implementation package, but its
 manifest is currently `private: true` and its inventory disposition is
 `workspace-internal`. Public examples should use the shipped facades, especially
-`@mog-sdk/node`, `@mog-sdk/contracts`, `@mog-sdk/sheet-view`,
+`@mog-sdk/sdk`, `@mog-sdk/contracts`, `@mog-sdk/sheet-view`,
 `@mog-sdk/spreadsheet-app`, and `@mog-sdk/embed`.
 
 ## Core Rule
@@ -128,7 +128,7 @@ public, public-experimental, workspace-internal, reserved, or private.
 Good public imports:
 
 ```ts
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 import type { Workbook } from '@mog-sdk/contracts/api';
 import { createSheetView } from '@mog-sdk/sheet-view';
 import { createSpreadsheetRuntime } from '@mog-sdk/spreadsheet-app';

@@ -11,7 +11,7 @@
   "files": [
     "compute-core-napi.node"
   ],
-  "description": "Native binary for @mog-sdk/node (Windows x64, MSVC)",
+  "description": "Native binary for @mog-sdk/sdk Node runtime (Windows x64, MSVC)",
   "license": "MIT",
   "engines": {
     "node": ">= 18"

@@ -1,6 +1,6 @@
 # Mog: A Spreadsheet Engine Built for Correctness
 
-Mog is an open-source spreadsheet engine, app runtime, and SDK stack with a Rust compute/storage core and TypeScript kernel, rendering, and SDK layers. The same Rust bridge surfaces target web (WASM), desktop (Tauri), and server/headless use (N-API through `@mog-sdk/node`).
+Mog is an open-source spreadsheet engine, app runtime, and SDK stack with a Rust compute/storage core and TypeScript kernel, rendering, and SDK layers. The same Rust bridge surfaces target web (WASM), desktop (Tauri), and server/headless use (N-API through `@mog-sdk/sdk`).
 
 This report covers what the public repository implements today, how the implementation is structured, and where the current evidence is. It does not publish roadmap claims or fixed benchmark numbers.
 
@@ -69,10 +69,10 @@ The bridge stack also includes TypeScript type generation through `bridge-ts`, w
 
 ## SDK
 
-`@mog-sdk/node` is the headless Node SDK. It publishes optional native binary packages for seven platform triples: macOS arm64/x64, Linux x64/arm64 glibc/musl, and Windows x64.
+`@mog-sdk/sdk` is the headless SDK. It publishes optional native binary packages for seven platform triples: macOS arm64/x64, Linux x64/arm64 glibc/musl, and Windows x64.
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook('financial-model.xlsx');
 const ws = wb.activeSheet;

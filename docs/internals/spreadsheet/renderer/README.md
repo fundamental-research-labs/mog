@@ -4,7 +4,7 @@
 
 The spreadsheet renderer path combines **XState actors** for interaction state, a **SheetCoordinator/system boundary** for cross-system wiring, `@mog-sdk/sheet-view` for the rendering substrate, and Rust compute viewport buffers for live document data.
 
-**Status and public surface:** this is an internal architecture page for the workspace spreadsheet app. The shipped public low-level view package is `@mog-sdk/sheet-view`. The app package (`@mog/app-spreadsheet`), `@mog/shell`, `@mog-sdk/kernel`, and the `@mog/*` canvas packages referenced below are workspace-internal implementation packages; public integrations should use the public package guides for `@mog-sdk/sheet-view`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, or `@mog-sdk/node`.
+**Status and public surface:** this is an internal architecture page for the workspace spreadsheet app. The shipped public low-level view package is `@mog-sdk/sheet-view`. The app package (`@mog/app-spreadsheet`), `@mog/shell`, `@mog-sdk/kernel`, and the `@mog/*` canvas packages referenced below are workspace-internal implementation packages; public integrations should use the public package guides for `@mog-sdk/sheet-view`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, or `@mog-sdk/sdk`.
 
 **Related docs:**
 

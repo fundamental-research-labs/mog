@@ -42,7 +42,7 @@ export {
 } from './memory-provider';
 export type { MemoryProviderOptions, MemoryProviderStorage } from './memory-provider';
 
-// Filesystem provider (the storage provider lifecycle — durable local storage for Node SDK).
+// Filesystem provider (the storage provider lifecycle — durable local storage for the SDK Node entry).
 export { FilesystemProvider, createFilesystemProviderFactory } from './filesystem-provider';
 export type { FilesystemProviderOptions } from './filesystem-provider';
 

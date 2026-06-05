@@ -69,11 +69,11 @@ function resolveNativeChartRasterBackend(
 function createNativeChartRasterBackend(addon: NativeChartRasterAddon): ChartRasterBackend {
   const render = addon.render_chart_marks_image;
   if (typeof render !== 'function') {
-    throw new Error('render_chart_marks_image is missing from the @mog-sdk/node native addon');
+    throw new Error('render_chart_marks_image is missing from the @mog-sdk/sdk native addon');
   }
 
   return {
-    id: '@mog-sdk/node:native-chart-raster',
+    id: '@mog-sdk/sdk:native-chart-raster',
     runtime: 'native-node',
     supportedFormats: ['png', 'jpeg'],
     render(request: ChartRasterRequest): ChartRasterResult {

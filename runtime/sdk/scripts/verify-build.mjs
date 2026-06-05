@@ -97,7 +97,7 @@ function checkTypeScriptConsumerCompiles() {
     writeFileSync(
       consumerFile,
       `
-import { createWorkbook, type Workbook, type Worksheet } from '@mog-sdk/node';
+import { createWorkbook, type Workbook, type Worksheet } from '@mog-sdk/sdk';
 
 async function main() {
   const wb: Workbook = await createWorkbook();
@@ -123,7 +123,7 @@ void main;
       esModuleInterop: true,
       baseUrl: tempDir,
       paths: {
-        '@mog-sdk/node': [resolve(DIST, 'index.d.ts')],
+        '@mog-sdk/sdk': [resolve(DIST, 'index.d.ts')],
         '@mog-sdk/contracts': [resolve(REPO_ROOT, 'contracts', 'dist', 'index.d.ts')],
         '@mog-sdk/contracts/*': [
           resolve(REPO_ROOT, 'contracts', 'dist', '*.d.ts'),
@@ -276,7 +276,7 @@ const dts = readFileSync(resolve(DIST, 'index.d.ts'), 'utf-8');
 const bootDts = readFileSync(resolve(DIST, 'boot.d.ts'), 'utf-8');
 
 // Check no unresolvable imports remain (imports from @mog/* or @rust-bridge/*)
-// (JSDoc comments with @mog-sdk/node are OK)
+// (JSDoc comments with @mog-sdk/sdk are OK)
 const privateImportPattern =
   /\b(?:import|export)\b[\s\S]*?\bfrom\s+['"](@mog\/|@rust-bridge\/|@mog-sdk\/types-|@mog-sdk\/spreadsheet-contracts)[^'"]*['"]/g;
 const privateImports = [...dts.matchAll(privateImportPattern)].map((match) =>
@@ -327,7 +327,7 @@ console.log('\n--- 5. Package.json ---');
 
 const pkg = JSON.parse(readFileSync(resolve(SDK_ROOT, 'package.json'), 'utf-8'));
 
-assert(pkg.name === '@mog-sdk/node', `name is @mog-sdk/node`);
+assert(pkg.name === '@mog-sdk/sdk', `name is @mog-sdk/sdk`);
 assert(!pkg.private, 'not marked private');
 assert(pkg.main === 'dist/index.cjs', 'main points to CJS');
 assert(pkg.module === 'dist/index.mjs' || pkg.module === 'dist/index.js', 'module points to ESM');

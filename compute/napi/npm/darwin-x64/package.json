@@ -11,7 +11,7 @@
   "files": [
     "compute-core-napi.node"
   ],
-  "description": "Native binary for @mog-sdk/node (macOS x64)",
+  "description": "Native binary for @mog-sdk/sdk Node runtime (macOS x64)",
   "license": "MIT",
   "engines": {
     "node": ">= 18"

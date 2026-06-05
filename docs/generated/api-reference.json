@@ -1635,7 +1635,7 @@
         },
         "charts.exportImage": {
           "signature": "charts.exportImage(chartId: string, options?: ImageExportOptions | undefined): Promise<string>",
-          "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; Node SDK exports\nrender through the native headless raster backend.",
+          "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; SDK exports\nrender through the native headless raster backend.",
           "usedTypes": []
         },
         "charts.setDataRange": {

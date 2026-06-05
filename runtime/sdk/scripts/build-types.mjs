@@ -278,7 +278,7 @@ copyFileSync(esmDeclaration, cjsDeclaration);
 
 for (const filepath of [esmDeclaration, cjsDeclaration]) {
   const source = readFileSync(filepath, 'utf-8');
-  const normalized = canonicalizeSharedContracts(source.replace(/@mog\/sdk/g, '@mog-sdk/node'));
+  const normalized = canonicalizeSharedContracts(source.replace(/@mog\/sdk/g, '@mog-sdk/sdk'));
   if (normalized !== source) {
     writeFileSync(filepath, normalized);
   }

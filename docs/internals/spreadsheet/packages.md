@@ -26,7 +26,7 @@ Source import direction is enforced by
 
 ```text
 Shipped public facades
-  @mog-sdk/node
+  @mog-sdk/sdk
   @mog-sdk/embed
   @mog-sdk/spreadsheet-app
   @mog-sdk/contracts
@@ -64,7 +64,7 @@ packages, `infra/transport`, and the Rust bridge crates listed below.
 | --- | --- | --- | --- |
 | Contracts and types | `@mog-sdk/contracts` is shipped public; type shards and runtime-service contracts are workspace-internal. | `@mog-sdk/contracts`, `@mog-sdk/runtime-service-contracts`, `@mog/types-*`, `@mog-sdk/types-*` | Public contract barrel plus private split type packages used by contracts, kernel, views, and runtimes. |
 | Kernel and views | `@mog-sdk/kernel` and `@mog/kernel-host-internal` are workspace-internal; `@mog-sdk/sheet-view` is shipped public. | `@mog-sdk/kernel`, `@mog/kernel-host-internal`, `@mog-sdk/sheet-view` | Kernel implementation, trusted host adapter internals, and the public sheet-view substrate. |
-| Runtime SDKs | `@mog-sdk/node`, `@mog-sdk/embed`, and `@mog-sdk/spreadsheet-app` are shipped public; embed subpaths are public-experimental; WASM/native binaries are public binary wrappers; `@mog/compute-core-napi` is private. | `@mog-sdk/node`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/wasm`, `@mog/compute-core-napi`, platform packages under `compute/napi/npm/` | Headless SDK, browser embed packages, browser WASM, private N-API binding package, and public platform binary wrappers. |
+| Runtime SDKs | `@mog-sdk/sdk`, `@mog-sdk/embed`, and `@mog-sdk/spreadsheet-app` are shipped public; embed subpaths are public-experimental; WASM/native binaries are public binary wrappers; `@mog/compute-core-napi` is private. | `@mog-sdk/sdk`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/wasm`, `@mog/compute-core-napi`, platform packages under `compute/napi/npm/` | Headless SDK, browser embed packages, browser WASM, private N-API binding package, and public platform binary wrappers. |
 | App and shell | Private app, reserved shell/UI, and workspace-internal test helpers. | `@mog/app-spreadsheet`, `@mog/shell`, `@mog/ui`, `@mog/spreadsheet-testing`, `@mog/test-host` | Spreadsheet application composition, shell/UI code, test helpers, and deterministic test host wiring. |
 | Rendering and drawing | Private/bundle-only or workspace-internal. | `@mog/canvas-engine`, `@mog/grid-renderer`, `@mog/drawing-canvas`, `@mog/canvas-overlay`, `@mog/grid-canvas`, `@mog/spatial`, `@mog/charts`, `@mog/drawing-engine`, `@mog/shape-engine`, `@mog/ink-engine`, `@mog/diagram-engine`, `@mog/text-effects-engine`, `@mog/geometry`, `@mog/math-engine`, `@mog/icons` | Canvas layers, grid rendering, floating-object rendering, charting, shape/ink/diagram/text-effect engines, equation layout, and generated icons. |
 | File I/O | Workspace-internal, generated-asset, or dev-eval. | `@mog/xlsx-parser-wasm`, `@mog/xlsx-parser`, `@mog/xlsx-tooling`, `@mog/print-export`, `@mog/pdf-graphics`, `@mog/pdf-layout` | XLSX parser package scaffold and bridge, XLSX tooling, print/PDF export, and PDF layout/graphics helpers. |
@@ -97,7 +97,7 @@ types. It is not a public setup path.
 | `@mog/transport` | `infra/transport/` | workspace-internal; `private: true` | Runtime transport selection for N-API, Tauri IPC, or WASM. | `createTransport`, transport-specific factories, N-API/WASM loaders, bridge errors, and transport helpers. |
 | `@mog-sdk/wasm` | `compute/wasm/npm/` | public binary-wrapper | Browser package for the `compute-core-wasm` Rust crate. | `.`, `./wasm`. |
 | `@mog/compute-core-napi` | `compute/napi/` | private; `private: true` | Local native binding package for `compute-core-napi`. It is not the public package users install. | Native addon entry point; N-API build metadata maps platform triples to public `@mog-sdk/*` packages. |
-| `@mog-sdk/*` platform binaries | `compute/napi/npm/` | public binary-wrapper | Optional native platform packages used by `@mog-sdk/node`. | macOS arm64/x64, Linux arm64/x64 glibc/musl, and Windows x64 MSVC packages. |
+| `@mog-sdk/*` platform binaries | `compute/napi/npm/` | public binary-wrapper | Optional native platform packages used by `@mog-sdk/sdk`. | macOS arm64/x64, Linux arm64/x64 glibc/musl, and Windows x64 MSVC packages. |
 | Python source (`mog-sdk`, import `mog`) | `compute/pyo3/` | public-experimental source; alpha in `pyproject.toml` | PyO3 binding layer over the compute engine. | `compute-core-pyo3` crate and Python package source under `compute/pyo3/python/mog`. |
 
 `@mog/transport` treats compute and XLSX commands as a single runtime module per
@@ -175,7 +175,7 @@ public setup paths.
 | `@mog-sdk/sheet-view` | `views/sheet-view/` | shipped public | Public view-layer substrate for sheet rendering with a data-source boundary. | `createSheetView`, `createSheetViewDataSourceFromWorkbook`, skin helpers, public view/event/capability types. |
 | `@mog-sdk/embed` | `runtime/embed/` | shipped public package; root/react/web-component/config are public-experimental | Read-only same-page embeddable component. | `MogSheetElement`, `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, config types, and config validators. |
 | `@mog-sdk/spreadsheet-app` | `runtime/spreadsheet-app/` | shipped public | Full spreadsheet app embed for trusted same-origin hosts. | `createSpreadsheetRuntime`, `MogSpreadsheetApp`, `mountSpreadsheetApp`, `./styles.css`, `./mog-embed.css`. |
-| `@mog-sdk/node` | `runtime/sdk/` | shipped public | Headless Node.js SDK with formula compute, optional native platform packages, and XLSX file I/O. | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection. |
+| `@mog-sdk/sdk` | `runtime/sdk/` | shipped public | Headless Node.js SDK with formula compute, optional native platform packages, and XLSX file I/O. | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection. |
 | `@mog/spreadsheet-testing` | `runtime/spreadsheet-testing/` | workspace-internal; `private: true` | Spreadsheet testing utilities. | `.`, `./fixtures`. |
 | `@mog/test-host` | `runtime/test-host/` | workspace-internal; `private: true` | Deterministic trusted test host. | `.` |
 

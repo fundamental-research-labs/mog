@@ -5,5 +5,5 @@
 import { EmbedRenderOrchestrator } from '@mog-sdk/embed/renderer';
 import { FormulaBar } from '@mog-sdk/embed/renderer/formula-bar';
 
-// Deep imports into @mog-sdk/node internal paths must fail
-import { boot } from '@mog-sdk/node/boot';
+// Deep imports into @mog-sdk/sdk internal paths must fail
+import { boot } from '@mog-sdk/sdk/boot';

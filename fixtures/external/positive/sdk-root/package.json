@@ -1,0 +1,17 @@
+{
+  "name": "fixture-sdk-root",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --loader ts-node/esm smoke.ts"
+  },
+  "dependencies": {
+    "@mog-sdk/sdk": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
+  }
+}

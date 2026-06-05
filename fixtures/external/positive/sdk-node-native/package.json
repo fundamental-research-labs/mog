@@ -1,5 +1,5 @@
 {
-  "name": "fixture-node-sdk",
+  "name": "fixture-sdk-node-native",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "test": "node --loader ts-node/esm smoke.ts"
   },
   "dependencies": {
-    "@mog-sdk/node": "TARBALL_PATH"
+    "@mog-sdk/sdk": "TARBALL_PATH"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

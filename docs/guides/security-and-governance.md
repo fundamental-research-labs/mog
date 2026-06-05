@@ -25,7 +25,7 @@ Reserved. The repository contains source-internal iframe/postMessage plumbing, b
 
 ### Server and Self-Hosted
 
-Reserved / not shipped. The current self-hosting and HTTP service guides describe intended service shapes, not shipped authentication, authorization, rate-limit, tenant-isolation, webhook, or OpenAPI contracts. `@mog-sdk/node` is a shipped public same-process SDK; server-side SDK use is trusted automation unless a deployment adds its own service boundary.
+Reserved / not shipped. The current self-hosting and HTTP service guides describe intended service shapes, not shipped authentication, authorization, rate-limit, tenant-isolation, webhook, or OpenAPI contracts. `@mog-sdk/sdk` is a shipped public same-process SDK; server-side SDK use is trusted automation unless a deployment adds its own service boundary.
 
 ### Desktop and Tauri Hosts
 

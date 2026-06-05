@@ -5,13 +5,13 @@
 > OpenAPI specification.
 
 The current public setup paths are package APIs, not an HTTP boundary. For
-server-side workbook automation, use the shipped public [Node SDK](node-sdk.md).
+server-side workbook automation, use the shipped public [SDK](sdk.md).
 For browser integration, use the public embed guides and keep any file loading,
 saving, authentication, and tenant policy in your own trusted host service.
 
 ## What Exists Today
 
-- `@mog-sdk/node` is the shipped public headless Node package. It exposes
+- `@mog-sdk/sdk` is the shipped public headless Node package. It exposes
   same-process workbook APIs such as `createWorkbook`; it does not start or
   document an HTTP server.
 - `contracts/runtime-services` (`@mog-sdk/runtime-service-contracts`) is
@@ -20,7 +20,7 @@ saving, authentication, and tenant policy in your own trusted host service.
   protocol handshakes, health/readiness diagnostics, room grants, and
   import/export/raw-byte handoff records.
 - `runtime/sdk/src/generated/api-spec.json` is generated SDK API metadata used
-  by `@mog-sdk/node` API introspection. It is not an OpenAPI document.
+  by `@mog-sdk/sdk` API introspection. It is not an OpenAPI document.
 - Collaboration code includes in-process and WebSocket-sidecar pieces, but this
   repository does not publish a supported collaboration service distribution or
   HTTP/WebSocket route contract.

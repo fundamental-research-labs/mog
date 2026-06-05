@@ -14769,7 +14769,7 @@
     {
       "api_path": "ws.charts.exportImage",
       "deprecated": false,
-      "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; Node SDK exports\nrender through the native headless raster backend.",
+      "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; @mog-sdk/sdk/node exports\nrender through the native headless raster backend.",
       "interface": "WorksheetCharts",
       "member_kind": "method",
       "member_name": "exportImage",

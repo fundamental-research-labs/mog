@@ -14,7 +14,7 @@ rendering, file I/O, transport, and supporting engines.
 ## Layer Overview
 
 ```
-Runtime facades     Shipped public: @mog-sdk/node, @mog-sdk/embed,
+Runtime facades     Shipped public: @mog-sdk/sdk, @mog-sdk/embed,
                     @mog-sdk/spreadsheet-app. Browser compute is exposed
                     through the @mog-sdk/wasm binary wrapper.
         |
@@ -49,12 +49,12 @@ host/test packages have explicit boundary checks for their special cases.
 ### 1. Public APIs by Consumer
 
 External JavaScript and TypeScript consumers should enter through the shipped
-runtime packages, especially `@mog-sdk/node` for headless workbook automation.
+runtime packages, especially `@mog-sdk/sdk` for headless workbook automation.
 The `@mog-sdk/kernel` root package exists in the monorepo but is marked
 workspace-internal and `private: true`.
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 
@@ -204,7 +204,7 @@ User action: keyboard, pointer, host command, or SDK call
                   diffs with the room coordinator.
 ```
 
-Headless Node SDK workbooks use the same Workbook/Worksheet API and compute
+Headless SDK workbooks use the same Workbook/Worksheet API and compute
 bridge, but the default headless path attaches no browser storage provider.
 
 ## Abstraction Levels

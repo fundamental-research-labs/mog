@@ -10,7 +10,7 @@ type DecodedPng = {
   readonly rgba: Uint8Array;
 };
 
-describe('Node SDK chart image export', () => {
+describe('SDK chart image export', () => {
   let wb: Workbook | undefined;
   let importedWb: Workbook | undefined;
 
@@ -21,10 +21,9 @@ describe('Node SDK chart image export', () => {
     importedWb = undefined;
   });
 
-  it('exports charts in explicit WASM runtime with a host compute module and custom raster backend', async () => {
+  it('exports charts through the public WASM entry with a host compute module and custom raster backend', async () => {
     const rasterRequests: unknown[] = [];
-    wb = await createWorkbook({
-      runtime: 'wasm',
+    wb = await createWasmWorkbook({
       wasmModule: await computeWasmModule(),
       userTimezone: 'UTC',
       chartRendering: {

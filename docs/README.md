@@ -10,16 +10,16 @@ file formats are nominative and governed by [TRADEMARKS.md](../TRADEMARKS.md).
 
 ## Start Here
 
-For a runnable path, use the public Node SDK:
+For a runnable path, use the public SDK:
 
 ```bash
 mkdir mog-quickstart
 cd mog-quickstart
 npm init -y
 npm pkg set type=module
-npm install @mog-sdk/node
+npm install @mog-sdk/sdk
 cat > index.mjs <<'JS'
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 
@@ -43,14 +43,14 @@ Expected output:
 84
 ```
 
-`@mog-sdk/node` requires Node.js 18 or newer and loads native N-API platform
+`@mog-sdk/sdk` requires Node.js 18 or newer and loads native N-API platform
 packages through optional `@mog-sdk/*` binary wrapper packages.
 
 ## Public Paths
 
 | Goal | Status | Package or guide |
 | --- | --- | --- |
-| Run workbook automation in Node.js | public | [`@mog-sdk/node`](guides/node-sdk.md) |
+| Run workbook automation in Node.js | public | [`@mog-sdk/sdk`](guides/sdk.md) |
 | Use Python bindings from source or a published wheel when available | public-experimental | [`compute/pyo3`](guides/python-sdk.md) |
 | Embed a sheet in React | public-experimental | [`@mog-sdk/embed/react`](guides/embed-react.md) |
 | Embed a sheet as a web component | public-experimental | [`@mog-sdk/embed`](guides/embed-web-component.md) |

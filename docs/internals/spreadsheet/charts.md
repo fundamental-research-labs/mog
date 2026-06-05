@@ -45,7 +45,7 @@ Keeping these contracts separate is intentional. Public consumers should use wor
 | `@mog/charts` | workspace-internal package | Pure chart engine plus DOM helper, grammar compiler, primitives, export helpers, interactions, math, and tests. `charts/package.json` is private. |
 | `@mog-sdk/kernel` chart bridge | workspace-internal package | Owns data resolution, render cache, event subscriptions, and chart bridge lifecycle. |
 | `compute-charts` | workspace-internal Rust crate | Optional WASM-backed transform/statistics path for chart grammar transforms. `publish = false`. |
-| `compute-chart-render` | workspace-internal Rust crate | Native headless rasterizer for Node SDK image export. `publish = false`. |
+| `compute-chart-render` | workspace-internal Rust crate | Native headless rasterizer for SDK image export. `publish = false`. |
 | XLSX chart parser/writer | workspace-internal file I/O | Parses standard `c:chartSpace`, ChartEx `cx:chartSpace`, drawing anchors, auxiliary parts, and package ownership metadata. |
 | Spreadsheet chart UI | app-internal | Dialogs, ribbons, chart machine, hooks, action handlers, and preview components in `apps/spreadsheet`. |
 
@@ -289,7 +289,7 @@ Write-side responsibilities:
 There are two image export paths with the same semantic source:
 
 - Browser/app export: `ChartImageExporterImpl` asks `IChartBridge.getMarksAtSize()`, creates an off-screen canvas, renders marks with `@mog/charts`, and returns a data URL.
-- Node SDK export: `NodeChartImageExporter` asks `getMarksAtSize()`, serializes a versioned subset of `ChartMark`, calls the native `compute-chart-render` N-API rasterizer, and returns a data URL.
+- SDK export: `NodeChartImageExporter` asks `getMarksAtSize()`, serializes a versioned subset of `ChartMark`, calls the native `compute-chart-render` N-API rasterizer, and returns a data URL.
 
 Both paths compile at requested export dimensions rather than reusing UI cache marks. The native rasterizer is deliberately semantic-light: chart semantics stay in TypeScript; Rust only rasterizes the already-compiled mark IR.
 

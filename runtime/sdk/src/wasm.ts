@@ -13,7 +13,11 @@ import {
 } from './chart-export/node-chart-image-exporter';
 import { createNodeHeadlessHost } from './host-adapters/node-headless-host';
 import { createPortableRandomUUID } from './host-adapters/portable-host-crypto';
-import type { ChartRenderingConfig, CreateWorkbookOptions as NodeCreateWorkbookOptions, MogSdkLogger } from './boot';
+import type {
+  ChartRenderingConfig,
+  CreateWorkbookOptions as NativeCreateWorkbookOptions,
+  MogSdkLogger,
+} from './boot';
 import * as chartRasterWasmGlue from '@mog-sdk/chart-raster-wasm';
 
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
@@ -47,7 +51,7 @@ export interface CreateWorkbookOptions {
   documentId?: string;
   wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
   xlsx?: Uint8Array;
-  source?: Extract<NodeCreateWorkbookOptions['source'], { readonly type: 'bytes' }>;
+  source?: Extract<NativeCreateWorkbookOptions['source'], { readonly type: 'bytes' }>;
   importOptions?: DocumentImportOptions;
   userTimezone?: string;
   principal?: { tags: string[] };
@@ -90,9 +94,9 @@ export async function createWorkbook(
     opts = {};
   }
 
-  if ((opts as NodeCreateWorkbookOptions).runtime === 'native') {
+  if ((opts as { readonly runtime?: unknown }).runtime !== undefined) {
     throw new Error(
-      '[createWorkbook] the WASM SDK entry cannot use runtime "native"; import @mog-sdk/node or @mog-sdk/node/node for native Node',
+      '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; remove runtime or import @mog-sdk/sdk/node for native Node',
     );
   }
 

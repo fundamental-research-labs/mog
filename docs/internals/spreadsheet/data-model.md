@@ -6,7 +6,7 @@ Persistent spreadsheet state lives in the Rust compute/document storage layer. W
 
 The spreadsheet uses the **Identity Model** for cells, rows, and columns. Cells are keyed by stable `CellId` values, while row and column order is tracked separately by stable `RowId` and `ColId` values. Structural edits update identity/order indexes instead of rewriting cell keys.
 
-This page documents the internal storage contract. Public consumers should use shipped public packages such as `@mog-sdk/node`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/sheet-view`, and `@mog-sdk/contracts`; `@mog-sdk/kernel` and direct `ComputeBridge` access are workspace-internal integration surfaces.
+This page documents the internal storage contract. Public consumers should use shipped public packages such as `@mog-sdk/sdk`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/sheet-view`, and `@mog-sdk/contracts`; `@mog-sdk/kernel` and direct `ComputeBridge` access are workspace-internal integration surfaces.
 
 ```
 Yrs document
@@ -394,7 +394,7 @@ The generated bridge surface also exposes lower-level calls such as `getCellIdAt
 
 ## Accessing Data
 
-Public consumers should use the workbook/worksheet APIs from shipped public packages such as `@mog-sdk/node`. Inside the workspace, use `ComputeBridge` methods or kernel domain helpers. Direct Yrs access is storage-internal and must preserve the identity invariants described above.
+Public consumers should use the workbook/worksheet APIs from shipped public packages such as `@mog-sdk/sdk`. Inside the workspace, use `ComputeBridge` methods or kernel domain helpers. Direct Yrs access is storage-internal and must preserve the identity invariants described above.
 
 Common internal access patterns:
 

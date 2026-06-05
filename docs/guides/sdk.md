@@ -1,12 +1,12 @@
-# Node SDK
+# SDK
 
-> **Status: shipped public package:** `@mog-sdk/node`
+> **Status: shipped public package:** `@mog-sdk/sdk`
 
 Use Mog programmatically in Node.js for trusted same-process workbook
 automation, data pipelines, and server-side file processing. The stable public
-entry point is async `createWorkbook()` from `@mog-sdk/node`.
+entry point is async `createWorkbook()` from `@mog-sdk/sdk`.
 
-The Node SDK is not a hostile-client security boundary. Do not run untrusted
+The SDK is not a hostile-client security boundary. Do not run untrusted
 agent or user code in the same process and treat the package as an automation
 SDK owned by the host application.
 
@@ -14,10 +14,10 @@ SDK owned by the host application.
 
 - Node.js 18+
 - npm, pnpm, or yarn
-- A supported native platform package installed through `@mog-sdk/node` optional
+- A supported native platform package installed through `@mog-sdk/sdk` optional
   dependencies
 
-The Node SDK uses native N-API platform packages. There is no WASM fallback in
+The SDK uses native N-API platform packages. There is no WASM fallback in
 the Node runtime path. Supported public binary wrappers are:
 
 - `@mog-sdk/darwin-arm64`
@@ -34,13 +34,13 @@ creation fails when the SDK tries to load the native package.
 ## Runnable Quickstart
 
 ```bash
-mkdir mog-node-sdk
-cd mog-node-sdk
+mkdir mog-sdk
+cd mog-sdk
 npm init -y
 npm pkg set type=module
-npm install @mog-sdk/node
+npm install @mog-sdk/sdk
 cat > index.mjs <<'JS'
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: 'UTC' });
 
@@ -72,7 +72,7 @@ default to `UTC`.
 
 ```typescript
 import { readFile } from 'node:fs/promises';
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const blank = await createWorkbook();
 const fromPath = await createWorkbook('model.xlsx');
@@ -202,7 +202,7 @@ error handling. Catch errors, normalize unknown values with `MogSdkError.from`,
 and inspect `code`.
 
 ```typescript
-import { MogSdkError, type MogSdkErrorCode } from '@mog-sdk/node';
+import { MogSdkError, type MogSdkErrorCode } from '@mog-sdk/sdk';
 
 try {
   await wb.getSheet('MissingSheet');
@@ -219,7 +219,7 @@ The package includes generated SDK introspection metadata. Use `api.describe`
 to inspect root methods, sub-APIs, or a specific method signature.
 
 ```typescript
-import { api } from '@mog-sdk/node';
+import { api } from '@mog-sdk/sdk';
 
 console.log(api.describe());
 console.log(api.describe('ws.tables.add'));
@@ -228,7 +228,7 @@ console.log(api.describe('type:TableOptions'));
 
 ## Public Surface Notes
 
-Use `createWorkbook()` for normal Node SDK integrations. The package root also
+Use `createWorkbook()` for normal SDK integrations. The package root also
 exports public contract types, `MogDocumentFactory`, `MogSdkError`, event
 facades, utility functions, and API introspection data.
 

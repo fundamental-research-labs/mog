@@ -1,11 +1,11 @@
-# @mog-sdk/node
+# @mog-sdk/sdk
 
 Shortcut Data OS SDK — headless spreadsheet engine for Node.js. Runs the real kernel + Rust compute-core without a browser.
 
 ## Quick Start
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -24,7 +24,7 @@ Three lines to a running spreadsheet engine. No addon injection, no context thre
 
 ```bash
 # Monorepo — already available as workspace dependency
-pnpm add @mog-sdk/node
+pnpm add @mog-sdk/sdk
 
 # The native Rust addon must be built first
 cd compute-core-napi && pnpm build
@@ -225,7 +225,7 @@ export default async function (wb: Workbook) {
 
 ## Public Surface
 
-`@mog-sdk/node` exposes the workbook/document facade from its package root.
+`@mog-sdk/sdk` exposes the workbook/document facade from its package root.
 Raw NAPI boot helpers, Yrs boot paths, and collaboration coordinator wrappers
 are internal implementation surfaces; package consumers should use
 `createWorkbook()` or `MogDocumentFactory`.
@@ -236,7 +236,7 @@ are internal implementation surfaces; package consumers should use
 createWorkbook()
   └─ DocumentFactory.create({ environment: 'headless' })
        └─ DocumentLifecycleSystem (XState machine)
-            ├─ createTransport() → NAPI by default, WASM when requested
+            ├─ createTransport() → package-selected native N-API or WASM
             │    ├─ LazyNapiTransport → compute-core-napi.node (Rust)
             │    └─ WasmTransport → @mog-sdk/wasm or host WebAssembly.Module
             ├─ ComputeBridge (async cell ops, recalc)
@@ -248,9 +248,10 @@ createWorkbook()
 The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no IPC, full native speed. Chart image export is supported through `sheet.charts.exportImage(...)`: SVG uses the shared portable vector renderer, while PNG/JPEG compile chart marks in TypeScript via the shared chart bridge and rasterize through a runtime backend. By default, Node uses the native raster backend lazily. Advanced callers can pass `chartRendering: { rasterBackend }` to provide their own backend or `chartRendering: { rasterModule }` to initialize `@mog-sdk/chart-raster-wasm` from a host-provided `WebAssembly.Module`. The raster backend is required only when exporting PNG/JPEG chart images; ordinary workbook creation, cell operations, formula evaluation, SVG chart export, and non-image exports do not validate that raster function.
 
 ```ts
-const wb = await createWorkbook({
+import { createWorkbook as createWasmWorkbook } from '@mog-sdk/sdk/wasm';
+
+const wb = await createWasmWorkbook({
   userTimezone: 'UTC',
-  runtime: 'wasm',
   wasmModule: computeWasmModule,
   chartRendering: {
     rasterModule: chartRasterWasmModule,
@@ -258,7 +259,7 @@ const wb = await createWorkbook({
 });
 ```
 
-Use `runtime: 'wasm'` to route compute through the WASM transport instead of the native N-API addon. Hosts that disallow package-side WASM compilation can precompile the compute module themselves and pass it as `wasmModule`; PNG/JPEG chart export can do the same with `chartRendering.rasterModule`.
+Use `@mog-sdk/sdk/wasm` to route compute through the WASM transport explicitly. Hosts that disallow package-side WASM compilation can precompile the compute module themselves and pass it as `wasmModule`; PNG/JPEG chart export can do the same with `chartRendering.rasterModule`.
 
 ## Prerequisites
 

@@ -114,7 +114,7 @@ shipped public setup paths.
 | `@mog-sdk/kernel` (`kernel`) | workspace-internal package (`private: true`) | Core runtime, domain modules, unified Workbook/Worksheet implementation | `kernel/src/api/workbook/workbook-impl.ts` |
 | `@mog/shell` (`shell`) | reserved private package | Shell host, app launcher, platform services, and React integration | `shell/src/` |
 | `@mog/app-spreadsheet` (`apps/spreadsheet`) | private workspace app | Spreadsheet app coordination, actions, systems, and UI store | `apps/spreadsheet/src/coordinator/sheet-coordinator.ts` |
-| `@mog-sdk/node` (`runtime/sdk`) | shipped public package | Node/headless SDK entry points and boot lifecycle | `runtime/sdk/src/boot.ts` |
+| `@mog-sdk/sdk` (`runtime/sdk`) | shipped public package | Node/headless SDK entry points and boot lifecycle | `runtime/sdk/src/boot.ts` |
 | `@mog-sdk/embed` (`runtime/embed`) | shipped public package; React/Web Component exports public-experimental | Embed package | `runtime/embed/src/index.ts` |
 | `@mog-sdk/spreadsheet-app` (`runtime/spreadsheet-app`) | shipped public package | Full spreadsheet app embed for trusted same-origin hosts; bundle-composition facade over private app/shell/kernel code | `runtime/spreadsheet-app/src/index.tsx` |
 
@@ -227,7 +227,7 @@ domain bridges may call `ComputeBridge` directly.
 
 The primary consumer-facing programming model is the unified
 `Workbook`/`Worksheet` API. Shipped public callers reach it through
-`@mog-sdk/node`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`. The
+`@mog-sdk/sdk`, `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`. The
 implementation lives in workspace-internal `@mog-sdk/kernel`; infrastructure
 exceptions are listed below.
 
@@ -270,10 +270,10 @@ kernel/src/api/
 
 **Factory surfaces**:
 
-Shipped public Node/headless code imports from `@mog-sdk/node`:
+Shipped public Node/headless code imports from `@mog-sdk/sdk`:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: "UTC" });
 const ws = wb.activeSheet;
@@ -397,7 +397,7 @@ await deps.workbook.undoGroup(async (wb) => {
 **In headless Node contexts**:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: "UTC" });
 const ws = wb.activeSheet;

@@ -9,7 +9,7 @@ The compute bridge is the workspace-internal communication boundary between the 
 
 The binary data plane exists because the viewport (visible cell grid) is repainted every frame and mutation results (recalc deltas) arrive on every edit. JSON parsing at these frequencies would be too slow.
 
-**Status:** shipped, workspace-internal. The implementation lives in private workspace packages such as `@mog-sdk/kernel`, `@mog/transport`, and `@rust-bridge/client`. Public consumers should use public SDK packages such as `@mog-sdk/node` and `@mog-sdk/contracts` rather than importing the bridge, wire readers, or transport package directly.
+**Status:** shipped, workspace-internal. The implementation lives in private workspace packages such as `@mog-sdk/kernel`, `@mog/transport`, and `@rust-bridge/client`. Public consumers should use public SDK packages such as `@mog-sdk/sdk` and `@mog-sdk/contracts` rather than importing the bridge, wire readers, or transport package directly.
 
 ## Architecture Diagram
 

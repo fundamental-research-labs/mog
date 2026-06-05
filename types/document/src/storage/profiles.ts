@@ -20,7 +20,7 @@ export type StorageRuntimeProfile =
   | 'browser-published-readonly'
   | 'browser-local-first-sync'
   | 'headless-ephemeral'
-  | 'node-sdk-durable'
+  | 'sdk-node-durable'
   | 'server-remote-backed'
   | 'tauri-desktop'
   | 'test';

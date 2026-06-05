@@ -158,7 +158,7 @@ export interface MogDocumentOpenResult {
 /**
  * Zero-ceremony contract:
  *
- *   import { createWorkbook } from '@mog-sdk/node';
+ *   import { createWorkbook } from '@mog-sdk/sdk';
  *   const workbook = await createWorkbook();
  *   const sheet = workbook.activeSheet;
  *   await sheet.setCell('A1', 42);

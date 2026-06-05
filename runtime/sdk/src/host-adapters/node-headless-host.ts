@@ -59,7 +59,10 @@ import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints'
 
 const HOST_ID = 'node-headless-sdk-host' as const;
 const HANDOFF_TTL_MS = 3_600_000; // 1 hour
-const requireFromHere = createRequire(import.meta.url);
+
+function getRequireFromHere(): NodeRequire {
+  return createRequire(import.meta.url);
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -252,7 +255,7 @@ function getPlatformPackageName(): string {
 }
 
 export function loadNodeSdkNapiAddon(): Record<string, (...args: unknown[]) => unknown> {
-  return requireFromHere(getPlatformPackageName()) as Record<
+  return getRequireFromHere()(getPlatformPackageName()) as Record<
     string,
     (...args: unknown[]) => unknown
   >;

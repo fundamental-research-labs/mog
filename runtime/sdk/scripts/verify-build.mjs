@@ -9,9 +9,17 @@
  * 5. Package.json is correctly configured for publishing
  * 6. Integration test: create a workbook and set/get a cell value
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 
@@ -138,6 +146,32 @@ void main;
   }
 }
 
+async function checkBundledEdgeImportMetaUrlUndefinedImport() {
+  const tempDir = mkdtempSync(resolve(tmpdir(), 'mog-sdk-edge-import-'));
+
+  try {
+    writeFileSync(resolve(tempDir, 'package.json'), '{ "type": "module" }\n');
+
+    for (const entry of readdirSync(DIST, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+
+      const sourcePath = resolve(DIST, entry.name);
+      const source = readFileSync(sourcePath, 'utf-8');
+      writeFileSync(resolve(tempDir, entry.name), source.replaceAll('import.meta.url', 'undefined'));
+    }
+
+    const esm = await import(pathToFileURL(resolve(tempDir, 'index.js')).href);
+    assert(
+      typeof esm.createWorkbook === 'function',
+      'ESM import succeeds when bundled import.meta.url is undefined',
+    );
+  } catch (e) {
+    assert(false, `ESM import with undefined import.meta.url failed: ${e.message}`);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 // =========================================================================
 // 1. Dist files exist
 // =========================================================================
@@ -173,6 +207,8 @@ try {
 } catch (e) {
   assert(false, `ESM import failed: ${e.message}`);
 }
+
+await checkBundledEdgeImportMetaUrlUndefinedImport();
 
 // =========================================================================
 // 3. CJS bundle exports expected symbols

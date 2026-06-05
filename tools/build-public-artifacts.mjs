@@ -476,6 +476,9 @@ for (const name of shipPublicNames) {
   if (!skipTsBuild) {
     try {
       run('pnpm', ['--filter', name, 'build']);
+      if (name === '@mog-sdk/node') {
+        run('pnpm', ['--filter', name, 'verify-build']);
+      }
     } catch (error) {
       errors.push(`${name}: ${error.message}`);
       continue;

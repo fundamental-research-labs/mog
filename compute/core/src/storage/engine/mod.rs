@@ -38,6 +38,7 @@ mod data_table_formula;
 mod delegations;
 mod export;
 mod features;
+mod filter_import_diagnostics;
 mod format_inference;
 mod formatting;
 mod grid_indexing;

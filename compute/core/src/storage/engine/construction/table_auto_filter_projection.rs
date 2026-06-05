@@ -1,3 +1,10 @@
+//! Projects preserved table AutoFilter metadata into canonical runtime
+//! `TableFilter` records during engine construction/import.
+//!
+//! After this pass, compute code should treat the result as an ordinary
+//! `FilterKind::TableFilter`; import provenance only matters for diagnostics
+//! and preservation metadata.
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use cell_types::{SheetId, SheetPos};
@@ -10,17 +17,20 @@ use value_types::CellValue;
 use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
+use crate::storage::engine::filter_import_diagnostics::{
+    resolve_filter_cell_pos, unsupported_filter_import_diagnostic, upsert_import_diagnostic_phase,
+};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{filters, properties};
 
-pub(in crate::storage::engine) fn materialize_imported_table_auto_filters(
+pub(in crate::storage::engine) fn materialize_table_auto_filters_from_preserved_specs(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
-    let imported_tables = read_imported_table_specs(stores);
-    for table_spec in imported_tables {
+    let table_specs = read_preserved_table_specs(stores);
+    for table_spec in table_specs {
         if table_spec.auto_filter_ref.is_none() && table_spec.filter_columns.is_empty() {
             continue;
         }
@@ -35,7 +45,7 @@ pub(in crate::storage::engine) fn materialize_imported_table_auto_filters(
             continue;
         }
 
-        materialize_imported_table_auto_filter(
+        materialize_table_auto_filter_from_preserved_spec(
             stores,
             mirror,
             &sheet_id,
@@ -47,7 +57,7 @@ pub(in crate::storage::engine) fn materialize_imported_table_auto_filters(
     }
 }
 
-fn read_imported_table_specs(stores: &EngineStores) -> Vec<TableSpec> {
+fn read_preserved_table_specs(stores: &EngineStores) -> Vec<TableSpec> {
     let txn = stores.storage.doc().transact();
     let Some(Out::YMap(tables_map)) = stores.storage.workbook_map().get(&txn, KEY_TABLES) else {
         return Vec::new();
@@ -62,7 +72,7 @@ fn read_imported_table_specs(stores: &EngineStores) -> Vec<TableSpec> {
         .collect()
 }
 
-fn materialize_imported_table_auto_filter(
+fn materialize_table_auto_filter_from_preserved_spec(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
@@ -285,7 +295,7 @@ fn record_unsupported_table_filter_import_diagnostics(
     let source_key = serde_json::to_string(&binding.source_key).ok();
 
     if table_spec.auto_filter_ext_lst_raw.is_some() {
-        let diagnostic = super::imported_filters::unsupported_filter_import_diagnostic(
+        let diagnostic = unsupported_filter_import_diagnostic(
             binding,
             sheet_index,
             sheet_name.clone(),
@@ -293,17 +303,12 @@ fn record_unsupported_table_filter_import_diagnostics(
             Some(table.id.clone()),
             None,
             None,
-            super::imported_filters::resolve_filter_cell_pos(
-                stores,
-                mirror,
-                sheet_id,
-                &binding.header_start_cell_id,
-            ),
+            resolve_filter_cell_pos(stores, mirror, sheet_id, &binding.header_start_cell_id),
             vec![filters::ImportFilterUnsupportedReason::UnknownExtension],
             "tableFilter".to_string(),
             domain_types::ImportFeatureKind::Table,
         );
-        super::imported_filters::upsert_import_diagnostic_phase(report, diagnostic, import_phase);
+        upsert_import_diagnostic_phase(report, diagnostic, import_phase);
     }
 
     for column in &table_spec.filter_columns {
@@ -326,14 +331,9 @@ fn record_unsupported_table_filter_import_diagnostics(
             .col_id_to_header_cell_id
             .get(&column.col_id)
             .and_then(|header_cell_id| {
-                super::imported_filters::resolve_filter_cell_pos(
-                    stores,
-                    mirror,
-                    sheet_id,
-                    header_cell_id,
-                )
+                resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
             });
-        let diagnostic = super::imported_filters::unsupported_filter_import_diagnostic(
+        let diagnostic = unsupported_filter_import_diagnostic(
             binding,
             sheet_index,
             sheet_name.clone(),
@@ -346,7 +346,7 @@ fn record_unsupported_table_filter_import_diagnostics(
             "tableFilter".to_string(),
             domain_types::ImportFeatureKind::Table,
         );
-        super::imported_filters::upsert_import_diagnostic_phase(report, diagnostic, import_phase);
+        upsert_import_diagnostic_phase(report, diagnostic, import_phase);
     }
 }
 

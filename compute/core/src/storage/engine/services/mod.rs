@@ -18,7 +18,6 @@ pub(super) mod filters;
 pub(super) mod formatting;
 pub(super) mod imported_filter_shell;
 pub(super) mod imported_filters;
-pub(super) mod imported_table_filters;
 pub(super) mod metadata_shift;
 pub(super) mod mutation;
 pub(super) mod mutation_handlers;

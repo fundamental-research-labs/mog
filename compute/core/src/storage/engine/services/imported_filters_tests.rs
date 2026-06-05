@@ -5,6 +5,10 @@ use domain_types::domain::filter::{
     DateGroupItem, FilterColumn, OoxmlFilterCondition, OoxmlFilterType,
 };
 
+use crate::storage::engine::filter_import_diagnostics::{
+    unsupported_filter_import_diagnostic, upsert_import_diagnostic_phase,
+};
+
 use super::super::imported_filter_shell::build_filter_shell_metadata;
 use super::*;
 

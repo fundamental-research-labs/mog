@@ -270,6 +270,12 @@ pub struct PivotTableConfig {
     pub source_sheet_name: String,
     /// Range of cells in the source sheet that provide data.
     pub source_range: CellRange,
+    /// Stable ID of the sheet where the pivot table is rendered.
+    ///
+    /// Authoritative when present. `output_sheet_name` is retained as derived
+    /// display metadata and as a legacy migration key for older configs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_sheet_id: Option<String>,
     /// Name of the sheet where the pivot table is rendered.
     pub output_sheet_name: String,
     /// Top-left cell of the pivot table output.
@@ -458,6 +464,15 @@ pub fn validate_pivot_config_json(value: &serde_json::Value) -> Result<(), Strin
             ));
         }
         _ => {}
+    }
+
+    if let Some(val) = obj.get("outputSheetId")
+        && !val.is_string()
+    {
+        wrong_type.push(format!(
+            "  - outputSheetId: expected string, got {}",
+            json_type_for_error(val)
+        ));
     }
 
     for &(field, expected_type, description) in REQUIRED_FIELDS {

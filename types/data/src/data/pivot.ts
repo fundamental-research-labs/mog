@@ -352,6 +352,11 @@ export interface PivotTableConfig {
   /** Display name of the source sheet. Legacy configs may provide only this. */
   sourceSheetName: string;
   sourceRange: SheetRange;
+  /**
+   * Stable identifier for the sheet where the pivot output is rendered.
+   * Authoritative when present; outputSheetName is derived/display metadata.
+   */
+  outputSheetId?: string;
   outputSheetName: string;
   outputLocation: OutputLocation;
   fields: PivotField[];

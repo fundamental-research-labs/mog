@@ -3356,6 +3356,7 @@ export interface PivotTableConfig {
   sourceSheetId?: string;
   sourceSheetName: string;
   sourceRange: SheetRange;
+  outputSheetId?: string;
   outputSheetName: string;
   outputLocation: OutputLocation;
   fields: PivotField[];

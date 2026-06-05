@@ -17,6 +17,12 @@ use workbook_types::{LinkId, WorkbookId};
 use value_types::ComputeError;
 
 use crate::storage::YrsStorage;
+use crate::storage::sheet::pivots::insert_existing_pivot_if_absent_in_txn;
+use crate::storage::workbook::imported_pivots::{
+    ImportedPivotAssociationStatus, ImportedPivotUnsupportedReason, association_from_parsed_pivot,
+    import_identity_for_parsed_pivot, native_imported_pivot_id,
+    write as write_imported_pivot_association,
+};
 
 use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
@@ -230,8 +236,15 @@ impl YrsStorage {
             &mut txn,
         );
 
-        // Hydrate pivot tables at workbook level (serialized as ParsedPivotTable JSON).
-        // TODO: Remove workbook-level pivot hydration — pivots are stored per-sheet.
+        hydrate_imported_pivots_as_native(
+            &self.workbook,
+            &self.sheets,
+            &output.pivot_tables,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &mut txn,
+        )?;
+        // Hydrate pivot tables at workbook level as an OOXML preservation sidecar.
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
         hydrate_workbook_pivot_cache_sources(&self.workbook, &output.pivot_cache_sources, &mut txn);
         hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
@@ -469,6 +482,14 @@ impl YrsStorage {
             &output.timeline_caches,
             &mut txn,
         );
+        hydrate_imported_pivots_as_native(
+            &self.workbook,
+            &self.sheets,
+            &output.pivot_tables,
+            &output.sheets,
+            &id_map.sheet_ids,
+            &mut txn,
+        )?;
         hydrate_workbook_parsed_pivot_tables(&self.workbook, &output.pivot_tables, &mut txn);
         hydrate_workbook_pivot_cache_sources(&self.workbook, &output.pivot_cache_sources, &mut txn);
         hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
@@ -509,6 +530,138 @@ impl YrsStorage {
 
         Ok(id_map)
     }
+}
+
+fn hydrate_imported_pivots_as_native(
+    workbook: &MapRef,
+    sheets: &MapRef,
+    pivot_tables: &[domain_types::domain::pivot::ParsedPivotTable],
+    sheet_data: &[domain_types::SheetData],
+    sheet_ids: &[cell_types::SheetId],
+    txn: &mut yrs::TransactionMut<'_>,
+) -> Result<(), ComputeError> {
+    if pivot_tables.is_empty() {
+        return Ok(());
+    }
+
+    let sheet_id_by_name: std::collections::HashMap<&str, cell_types::SheetId> = sheet_data
+        .iter()
+        .zip(sheet_ids.iter())
+        .map(|(sheet, sheet_id)| (sheet.name.as_str(), *sheet_id))
+        .collect();
+
+    for (index, parsed) in pivot_tables.iter().enumerate() {
+        let pivot_spec_key = pivot_spec_key(parsed, index);
+        let import_identity = import_identity_for_parsed_pivot(&pivot_spec_key, parsed);
+        let source_sheet_name = parsed.config.source_sheet_name.as_str();
+        let output_sheet_name = parsed.config.output_sheet_name.as_str();
+
+        let classification = classify_imported_pivot(
+            parsed,
+            &sheet_id_by_name,
+            source_sheet_name,
+            output_sheet_name,
+        );
+
+        match classification {
+            ImportedPivotClassification::Promotable {
+                source_sheet_id,
+                output_sheet_id,
+            } => {
+                let native_pivot_id = native_imported_pivot_id(&import_identity);
+                let mut config = parsed.config.clone();
+                config.id = native_pivot_id.clone();
+                config.source_sheet_id = Some(source_sheet_id.to_uuid_string());
+                config.output_sheet_id = Some(output_sheet_id.to_uuid_string());
+                config.source_sheet_name = source_sheet_name.to_string();
+                config.output_sheet_name = output_sheet_name.to_string();
+
+                insert_existing_pivot_if_absent_in_txn(txn, sheets, &output_sheet_id, config)?;
+
+                let association = association_from_parsed_pivot(
+                    pivot_spec_key,
+                    index as u32,
+                    parsed,
+                    import_identity,
+                    ImportedPivotAssociationStatus::Promoted,
+                    Some(native_pivot_id),
+                    Some(output_sheet_id.to_uuid_string()),
+                    Some(source_sheet_id.to_uuid_string()),
+                    None,
+                );
+                write_imported_pivot_association(txn, workbook, &association);
+            }
+            ImportedPivotClassification::Unsupported(reason) => {
+                let association = association_from_parsed_pivot(
+                    pivot_spec_key,
+                    index as u32,
+                    parsed,
+                    import_identity,
+                    ImportedPivotAssociationStatus::Unsupported,
+                    None,
+                    sheet_id_by_name
+                        .get(output_sheet_name)
+                        .map(cell_types::SheetId::to_uuid_string),
+                    sheet_id_by_name
+                        .get(source_sheet_name)
+                        .map(cell_types::SheetId::to_uuid_string),
+                    Some(reason),
+                );
+                write_imported_pivot_association(txn, workbook, &association);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+enum ImportedPivotClassification {
+    Promotable {
+        source_sheet_id: cell_types::SheetId,
+        output_sheet_id: cell_types::SheetId,
+    },
+    Unsupported(ImportedPivotUnsupportedReason),
+}
+
+fn classify_imported_pivot(
+    parsed: &domain_types::domain::pivot::ParsedPivotTable,
+    sheet_id_by_name: &std::collections::HashMap<&str, cell_types::SheetId>,
+    source_sheet_name: &str,
+    output_sheet_name: &str,
+) -> ImportedPivotClassification {
+    if parsed.config.source_range.end_row() < parsed.config.source_range.start_row()
+        || parsed.config.source_range.end_col() < parsed.config.source_range.start_col()
+    {
+        return ImportedPivotClassification::Unsupported(
+            ImportedPivotUnsupportedReason::InvalidOutputRange,
+        );
+    }
+
+    if source_sheet_name.is_empty() || source_sheet_name == "xlsx-source-sheet" {
+        return ImportedPivotClassification::Unsupported(
+            ImportedPivotUnsupportedReason::FallbackSourceSheet,
+        );
+    }
+
+    let Some(source_sheet_id) = sheet_id_by_name.get(source_sheet_name).copied() else {
+        return ImportedPivotClassification::Unsupported(
+            ImportedPivotUnsupportedReason::UnresolvedSourceSheet,
+        );
+    };
+    let Some(output_sheet_id) = sheet_id_by_name.get(output_sheet_name).copied() else {
+        return ImportedPivotClassification::Unsupported(
+            ImportedPivotUnsupportedReason::UnresolvedOutputSheet,
+        );
+    };
+
+    ImportedPivotClassification::Promotable {
+        source_sheet_id,
+        output_sheet_id,
+    }
+}
+
+fn pivot_spec_key(parsed: &domain_types::domain::pivot::ParsedPivotTable, index: usize) -> String {
+    format!("{}_{}", parsed.config.name, index)
 }
 
 const WORKBOOK_LINK_NAMESPACE: uuid::Uuid =

@@ -69,7 +69,7 @@ export function PivotFieldPanelContainer({
         onRefresh={handlePivotRefresh}
         onDelete={handlePivotDelete}
         onClose={stopEditingPivot}
-        readOnly={editingPivot.config.id.startsWith('imported:')}
+        capabilities={editingPivot.capabilities}
       />
     </div>
   );

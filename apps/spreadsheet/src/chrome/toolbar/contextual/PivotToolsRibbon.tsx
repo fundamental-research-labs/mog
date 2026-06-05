@@ -1,22 +1,29 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Button } from '@mog/shell/components/ui';
 
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../../infra/context';
+import { useActiveSheetId, useUIStore } from '../../../infra/context';
+import { usePivotTables } from '../../../hooks/data/use-pivot-tables';
 
 export function PivotAnalyzeRibbon() {
-  const workbook = useWorkbook();
   const activeSheetId = useActiveSheetId();
-  const selectedPivotId = useUIStore((s) => s.pivot.selectedPivotId);
+  const { pivotTables, selectedPivotId, refreshPivotTable } = usePivotTables({
+    sheetId: activeSheetId,
+  });
   const startEditingPivot = useUIStore((s) => s.startEditingPivot);
+  const selectedPivot = useMemo(
+    () => pivotTables.find((pivot) => pivot.config.id === selectedPivotId) ?? null,
+    [pivotTables, selectedPivotId],
+  );
+  const canRefreshSelectedPivot = selectedPivot?.capabilities.canRefresh ?? false;
 
   const openFields = useCallback(() => {
     if (selectedPivotId) startEditingPivot(selectedPivotId);
   }, [selectedPivotId, startEditingPivot]);
 
   const refresh = useCallback(() => {
-    if (!selectedPivotId || selectedPivotId.startsWith('imported:')) return;
-    void workbook.getSheetById(activeSheetId).pivots.refresh(selectedPivotId);
-  }, [activeSheetId, selectedPivotId, workbook]);
+    if (!selectedPivot || !canRefreshSelectedPivot) return;
+    refreshPivotTable(selectedPivot.config.id);
+  }, [selectedPivot, canRefreshSelectedPivot, refreshPivotTable]);
 
   return (
     <div className="flex items-center gap-2">
@@ -26,7 +33,7 @@ export function PivotAnalyzeRibbon() {
       <Button
         variant="secondary"
         onClick={refresh}
-        disabled={!selectedPivotId || selectedPivotId.startsWith('imported:')}
+        disabled={!selectedPivotId || !canRefreshSelectedPivot}
       >
         Refresh
       </Button>

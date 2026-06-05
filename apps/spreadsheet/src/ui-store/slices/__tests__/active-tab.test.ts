@@ -1,14 +1,14 @@
 /**
  * Active Ribbon Tab Slice Tests (visible-tabs ownership)
  *
- * Two contracts:
+ * Core contracts:
  * 1. `setActiveRibbonTab(tabId)` is a no-op when `tabId`'s gate is
  * false (and emits a `__dt` breadcrumb on rejection); a normal
  * write when ungated.
- * 2. `setContextualTabIds([])` while `activeRibbonTab` is a
- * contextual id atomically resets `activeRibbonTab` to `'home'`
- * in a single `set` call — assert with a subscriber that
- * counts emissions (expect 1, not 2).
+ * 2. contextual tabs auto-promote only on initial contextual entry
+ * from Home or active-tab invalid repair.
+ * 3. `setContextualTabIds([])` while `activeRibbonTab` is a
+ * contextual id atomically repairs `activeRibbonTab` to `'home'`.
  */
 
 import { jest } from '@jest/globals';
@@ -61,8 +61,9 @@ describe('ActiveRibbonTabSlice', () => {
       const store = createTestStore();
       // Default gates (no overrides) ⇒ all base tabs visible.
       expect(store.getState().visibleBaseTabs).toContain('page');
-      store.getState().setActiveRibbonTab('page');
+      store.getState().setActiveRibbonTab('page', { source: 'user' });
       expect(store.getState().activeRibbonTab).toBe('page');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('user');
     });
 
     it('accepts a contextual tab id when it is in contextualTabIds', () => {
@@ -83,12 +84,70 @@ describe('ActiveRibbonTabSlice', () => {
   });
 
   describe('setContextualTabIds — atomic two-field transition', () => {
-    it('resets activeRibbonTab to "home" in a SINGLE emission when the active contextual tab disappears', () => {
+    it('auto-promotes from Home on initial pivot contextual entry', () => {
       const store = createTestStore();
-      // Make 'table-design' the active tab via the validating path.
+
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+
+      expect(store.getState().contextualTabIds).toEqual(['pivot-analyze', 'pivot-design']);
+      expect(store.getState().activeRibbonTab).toBe('pivot-analyze');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('system');
+    });
+
+    it('does not auto-promote on initial contextual entry when a non-Home base tab is active', () => {
+      const store = createTestStore();
+      store.getState().setActiveRibbonTab('insert', { source: 'user' });
+
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+
+      expect(store.getState().activeRibbonTab).toBe('insert');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('user');
+    });
+
+    it('keeps user-selected Home while the pivot contextual set remains stable', () => {
+      const store = createTestStore();
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+      expect(store.getState().activeRibbonTab).toBe('pivot-analyze');
+
+      store.getState().setActiveRibbonTab('home', { source: 'user' });
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+
+      expect(store.getState().activeRibbonTab).toBe('home');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('user');
+      expect(store.getState().activeRibbonTabUserSelectionContextualKey).toBe(
+        'pivot-analyze\u001fpivot-design',
+      );
+    });
+
+    it('expires a user-selected Home override when the contextual set changes', () => {
+      const store = createTestStore();
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+      store.getState().setActiveRibbonTab('home', { source: 'user' });
+
       store.getState().setContextualTabIds(['table-design']);
-      store.getState().setActiveRibbonTab('table-design');
+
       expect(store.getState().activeRibbonTab).toBe('table-design');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('system');
+      expect(store.getState().activeRibbonTabUserSelectionContextualKey).toBeNull();
+    });
+
+    it('repairs an invalid active tab to the first contextual tab when another contextual class replaces it', () => {
+      const store = createTestStore();
+      store.getState().setContextualTabIds(['table-design']);
+      store.getState().setActiveRibbonTab('table-design', { source: 'user' });
+
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+
+      expect(store.getState().activeRibbonTab).toBe('pivot-analyze');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('system');
+    });
+
+    it('resets activeRibbonTab to "home" in a SINGLE emission when the active pivot contextual tab disappears', () => {
+      const store = createTestStore();
+      // Make 'pivot-design' the active tab via the validating path.
+      store.getState().setContextualTabIds(['pivot-analyze', 'pivot-design']);
+      store.getState().setActiveRibbonTab('pivot-design', { source: 'user' });
+      expect(store.getState().activeRibbonTab).toBe('pivot-design');
 
       // Subscribe AFTER activation so the test only counts emissions
       // produced by the next call. Zustand's plain `subscribe` fires
@@ -117,24 +176,12 @@ describe('ActiveRibbonTabSlice', () => {
       expect(emissions[0].contextualTabIds).toEqual([]);
     });
 
-    it('only updates contextualTabIds when the active tab is still in the visible set', () => {
+    it('applies the same initial-entry policy to non-pivot contextual tabs', () => {
       const store = createTestStore();
-      // Active tab stays at 'home' (a base tab); contextual ids
-      // changing should not move it.
-      const emissions: Array<{ activeRibbonTab: string }> = [];
-      const unsub = store.subscribe((s) => {
-        emissions.push({ activeRibbonTab: s.activeRibbonTab });
-      });
-      try {
-        store.getState().setContextualTabIds(['table-design']);
-        store.getState().setContextualTabIds([]);
-      } finally {
-        unsub();
-      }
-      // Two `set()` calls ⇒ two emissions, neither of which mutated
-      // activeRibbonTab.
-      expect(emissions).toHaveLength(2);
-      for (const e of emissions) expect(e.activeRibbonTab).toBe('home');
+      store.getState().setContextualTabIds(['table-design']);
+
+      expect(store.getState().activeRibbonTab).toBe('table-design');
+      expect(store.getState().activeRibbonTabSelectionSource).toBe('system');
     });
 
     it('does not emit when called with the SAME ids (shallow-equal guard)', () => {

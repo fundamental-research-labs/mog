@@ -18,7 +18,7 @@
 import type { RibbonTabId } from '@mog-sdk/contracts/actions';
 import type { BorderStyle } from '@mog-sdk/contracts/core';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { dispatch, useDocumentContext } from '../../../internal-api';
@@ -323,7 +323,10 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
   // setter validates against `selectVisibleRibbonTabs` and rejects
   // gated/unknown ids (visible-tabs ownership).
   const activeTab = useStore(uiStore, (s) => s.activeRibbonTab) as TabId;
-  const setActiveTab = useStore(uiStore, (s) => s.setActiveRibbonTab) as (tabId: TabId) => void;
+  const setActiveTab = useStore(uiStore, (s) => s.setActiveRibbonTab) as (
+    tabId: TabId,
+    options?: { source?: 'system' | 'user' },
+  ) => void;
 
   // Read ribbon collapsed state from UIStore
   const ribbonCollapsed = useStore(uiStore, (s) => s.ribbonCollapsed);
@@ -394,32 +397,18 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
     });
   }, [visibleRibbonTabs, contextualTabConfigs]);
 
-  // Auto-promote: when a contextual tab appears and the user is on
-  // Home, switch to the new contextual tab — Excel behavior for Table
-  // Design / Chart Design / etc. This is UX policy, not an invariant
-  // fixup, so it stays as a `useEffect`.
-  //
-  // BOUNDED-CASCADE NOTE (visible-tabs ownership): when contextual tabs
-  // change, the slice's atomic `setContextualTabIds` runs first and
-  // may reset `activeRibbonTab` to `'home'` if the active tab
-  // disappeared (single `set()`, single emission). This auto-promote
-  // effect then runs on the next render and may promote `'home'` to a
-  // newly-appeared contextual tab. That is at most TWO slice writes
-  // across two renders — each terminal in its own concern (one
-  // invariant repair, one UX promotion). It is NOT the cascade
-  // pattern — the original cascade fired SIX writes
-  // from a single user action, each write triggering the next via
-  // chained useEffects observing each other's outputs. If you grep
-  // for "useEffect that writes activeRibbonTab" and land here, this
-  // is the only one that survived; any other would be a regression.
-  useEffect(() => {
-    if (contextualTabConfigs.length > 0 && activeTab === 'home') {
-      const firstContextualTab = contextualTabConfigs[0];
-      if (firstContextualTab) {
-        setActiveTab(firstContextualTab.id as TabId);
-      }
-    }
-  }, [contextualTabConfigs, activeTab, setActiveTab]);
+  // Contextual auto-promotion is owned by the active-tab slice during
+  // `setContextualTabIds`: initial contextual entry from Home may select
+  // the first contextual tab, and invalid active-tab repair may do the
+  // same. TabbedToolbar must not repeat-promote every render where Home
+  // and contextual tabs coexist, because explicit user Home selection wins
+  // while the contextual set remains stable.
+  const handleUserTabChange = useCallback(
+    (tabId: TabId) => {
+      setActiveTab(tabId, { source: 'user' });
+    },
+    [setActiveTab],
+  );
 
   // tab activation from keytip chords flows through the typed
   // `SWITCH_RIBBON_TAB` action (handler at
@@ -435,7 +424,7 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
         <TabBar
           tabs={tabs}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleUserTabChange}
           onFileClick={handleFileClick}
           canUndo={canUndo}
           canRedo={canRedo}

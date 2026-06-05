@@ -41,6 +41,14 @@ export interface PivotFieldListProps {
   onAggregateChange?: (placementId: string, aggregate: AggregateFunction) => void;
   /** Whether the component is disabled */
   disabled?: boolean;
+  /** Whether available fields can be added to layout wells. */
+  canAddFields?: boolean;
+  /** Whether placed fields can be reordered or moved between wells. */
+  canReorderFields?: boolean;
+  /** Whether placed fields can be removed from wells. */
+  canRemoveFields?: boolean;
+  /** Whether value-field aggregate functions can be changed. */
+  canChangeAggregate?: boolean;
 }
 
 interface DragState {
@@ -117,6 +125,10 @@ export function PivotFieldList({
   onMoveField,
   onAggregateChange,
   disabled = false,
+  canAddFields = !disabled,
+  canReorderFields = !disabled,
+  canRemoveFields = !disabled,
+  canChangeAggregate = !disabled,
 }: PivotFieldListProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOverArea, setDragOverArea] = useState<PivotFieldArea | null>(null);
@@ -141,14 +153,20 @@ export function PivotFieldList({
   const availableFields = fields;
 
   // Drag handlers
+  const canDragFromArea = useCallback(
+    (area: PivotFieldArea | 'available') =>
+      !disabled && (area === 'available' ? canAddFields : canReorderFields),
+    [canAddFields, canReorderFields, disabled],
+  );
+
   const handleDragStart = useCallback(
     (e: DragEvent, fieldId: string, fromArea: PivotFieldArea | 'available') => {
-      if (disabled) return;
+      if (!canDragFromArea(fromArea)) return;
       setDragState({ fieldId, fromArea });
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', fieldId);
     },
-    [disabled],
+    [canDragFromArea],
   );
 
   const handleDragEnd = useCallback(() => {
@@ -159,12 +177,13 @@ export function PivotFieldList({
   const handleDragOver = useCallback(
     (e: DragEvent, area: PivotFieldArea) => {
       if (disabled) return;
+      if (!canAddFields && !canReorderFields) return;
       if (!dragState && !e.dataTransfer.types.includes('text/plain')) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       setDragOverArea(area);
     },
-    [disabled, dragState],
+    [canAddFields, canReorderFields, disabled, dragState],
   );
 
   const handleDragLeave = useCallback(() => {
@@ -181,12 +200,14 @@ export function PivotFieldList({
       if (!fieldId) return;
 
       if (fromArea === 'available') {
+        if (!canAddFields) return;
         // Adding new field to area
         const field = fields.find((f) => f.id === fieldId);
         const defaultAggregate: AggregateFunction =
           toArea === 'value' && field?.dataType === 'number' ? 'sum' : 'count';
         onAddField(fieldId, toArea, { aggregateFunction: defaultAggregate });
       } else if (fromArea !== toArea) {
+        if (!canReorderFields) return;
         // Moving field between areas
         const position = getFieldsInArea(toArea).length;
         onMoveField(fieldId, fromArea, toArea, position);
@@ -196,7 +217,16 @@ export function PivotFieldList({
       setDragOverArea(null);
       setSelectedField(null);
     },
-    [disabled, dragState, fields, onAddField, onMoveField, getFieldsInArea],
+    [
+      canAddFields,
+      canReorderFields,
+      disabled,
+      dragState,
+      fields,
+      onAddField,
+      onMoveField,
+      getFieldsInArea,
+    ],
   );
 
   const handleZoneClick = useCallback(
@@ -205,18 +235,29 @@ export function PivotFieldList({
 
       const { fieldId, fromArea } = selectedField;
       if (fromArea === 'available') {
+        if (!canAddFields) return;
         const field = fields.find((f) => f.id === fieldId);
         const defaultAggregate: AggregateFunction =
           toArea === 'value' && field?.dataType === 'number' ? 'sum' : 'count';
         onAddField(fieldId, toArea, { aggregateFunction: defaultAggregate });
       } else if (fromArea !== toArea) {
+        if (!canReorderFields) return;
         const position = getFieldsInArea(toArea).length;
         onMoveField(fieldId, fromArea, toArea, position);
       }
 
       setSelectedField(null);
     },
-    [disabled, fields, getFieldsInArea, onAddField, onMoveField, selectedField],
+    [
+      canAddFields,
+      canReorderFields,
+      disabled,
+      fields,
+      getFieldsInArea,
+      onAddField,
+      onMoveField,
+      selectedField,
+    ],
   );
 
   // Render a field chip
@@ -229,8 +270,12 @@ export function PivotFieldList({
     const isSelected = selectedField?.fieldId === field.id && selectedField.fromArea === area;
     const isValueField = area === 'value';
     const placementId = area === 'available' ? field.id : getPlacementId(field, area, placement);
+    const canDrag = canDragFromArea(area);
+    const canSelect = canDrag;
 
-    const chipClass = `flex items-center gap-1.5 px-2 py-1.5 rounded cursor-grab text-body-sm select-none transition-colors ${
+    const chipClass = `flex items-center gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
+      canDrag ? 'cursor-grab' : 'cursor-default'
+    } ${
       isDragging ? 'opacity-50' : ''
     } ${isSelected ? 'ring-2 ring-ss-primary' : ''} ${
       isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
@@ -240,11 +285,11 @@ export function PivotFieldList({
       <div
         key={`${placementId}-${area}-${placement?.position ?? 'available'}`}
         className={chipClass}
-        draggable={!disabled}
+        draggable={canDrag}
         onDragStart={(e) => handleDragStart(e, field.id, area)}
         onDragEnd={handleDragEnd}
         onClick={() => {
-          if (!disabled) setSelectedField({ fieldId: field.id, fromArea: area });
+          if (canSelect) setSelectedField({ fieldId: field.id, fromArea: area });
         }}
         data-pivot-target="field-chip"
         data-pivot-field-id={field.id}
@@ -261,11 +306,11 @@ export function PivotFieldList({
           <AggregateSelector
             value={placement.aggregateFunction}
             onChange={(agg) => onAggregateChange(placementId, agg)}
-            disabled={disabled}
+            disabled={disabled || !canChangeAggregate}
           />
         )}
 
-        {area !== 'available' && !disabled && (
+        {area !== 'available' && !disabled && canRemoveFields && (
           <button
             type="button"
             className="flex items-center justify-center w-5 h-5 p-0 border-none rounded-full bg-transparent cursor-pointer text-ss-text-secondary text-caption leading-none hover:bg-ss-surface-active"

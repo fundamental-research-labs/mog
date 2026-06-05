@@ -20,9 +20,9 @@ pub const KEY_SCHEMA_VERSION: &str = "schemaVersion";
 /// Current schema version written by `init_canonical_schema` and the snapshot/
 /// import hydration paths. Readers that encounter a version higher than
 /// `MAX_SUPPORTED_SCHEMA_VERSION` must refuse to load the document.
-pub const CURRENT_SCHEMA_VERSION: u32 = 16;
+pub const CURRENT_SCHEMA_VERSION: u32 = 17;
 /// Maximum schema version this binary can safely operate on.
-pub const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 16;
+pub const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 17;
 
 /// Per-sheet map keys
 pub const KEY_CELLS: &str = "cells";
@@ -104,6 +104,7 @@ pub const KEY_DATA_TABLE_REGIONS: &str = "dataTableRegions";
 pub const KEY_SLICERS: &str = "slicers";
 pub const KEY_TIMELINES: &str = "timelines";
 pub const KEY_PIVOT_SPECS: &str = "pivotSpecs";
+pub const KEY_IMPORTED_PIVOT_ASSOCIATIONS: &str = "importedPivotAssociations";
 pub const KEY_PIVOT_CACHE_SOURCES: &str = "pivotCacheSources";
 pub const KEY_PIVOT_CACHE_RECORDS: &str = "pivotCacheRecords";
 pub const KEY_POWER_QUERY: &str = "powerQuery";
@@ -299,6 +300,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_POWER_QUERY, empty());
     workbook.insert(&mut txn, KEY_SCENARIOS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_SPECS, empty());
+    workbook.insert(&mut txn, KEY_IMPORTED_PIVOT_ASSOCIATIONS, empty());
     workbook.insert(&mut txn, KEY_PIVOT_CACHE_SOURCES, empty());
     workbook.insert(&mut txn, KEY_PIVOT_CACHE_RECORDS, empty());
     workbook.insert(&mut txn, KEY_THEME, empty());
@@ -502,6 +504,7 @@ mod tests {
             KEY_TIMELINES,
             KEY_POWER_QUERY,
             KEY_SCENARIOS,
+            KEY_IMPORTED_PIVOT_ASSOCIATIONS,
             KEY_PIVOT_CACHE_SOURCES,
             KEY_PIVOT_CACHE_RECORDS,
             KEY_RANGE_BINDINGS,

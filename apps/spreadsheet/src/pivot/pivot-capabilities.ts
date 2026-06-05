@@ -1,0 +1,59 @@
+import type { PivotTableWithResult } from '@mog-sdk/contracts/pivot';
+
+export type PivotSourceKind = 'native' | 'promotedImport' | 'unsupportedImport';
+
+export interface PivotCapabilities {
+  canEditFields: boolean;
+  canReorderFields: boolean;
+  canRemoveFields: boolean;
+  canChangeAggregate: boolean;
+  canRefresh: boolean;
+  canDelete: boolean;
+  canExport: boolean;
+  unsupportedReason?: string;
+}
+
+export interface PivotViewModel extends PivotTableWithResult {
+  sourceKind: PivotSourceKind;
+  importIdentity?: string;
+  capabilities: PivotCapabilities;
+}
+
+export const UNSUPPORTED_IMPORTED_PIVOT_REASON =
+  'Imported PivotTables are preserved from the source workbook and are read-only until native hydration support is available.';
+
+export function createNativePivotCapabilities(): PivotCapabilities {
+  return {
+    canEditFields: true,
+    canReorderFields: true,
+    canRemoveFields: true,
+    canChangeAggregate: true,
+    canRefresh: true,
+    canDelete: true,
+    canExport: true,
+  };
+}
+
+export function createUnsupportedImportPivotCapabilities(
+  unsupportedReason = UNSUPPORTED_IMPORTED_PIVOT_REASON,
+): PivotCapabilities {
+  return {
+    canEditFields: false,
+    canReorderFields: false,
+    canRemoveFields: false,
+    canChangeAggregate: false,
+    canRefresh: false,
+    canDelete: false,
+    canExport: true,
+    unsupportedReason,
+  };
+}
+
+export function createPivotCapabilitiesForSource(
+  sourceKind: PivotSourceKind,
+  unsupportedReason?: string,
+): PivotCapabilities {
+  return sourceKind === 'unsupportedImport'
+    ? createUnsupportedImportPivotCapabilities(unsupportedReason)
+    : createNativePivotCapabilities();
+}

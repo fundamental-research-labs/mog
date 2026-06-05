@@ -187,6 +187,18 @@ pub(in crate::storage::engine) fn mutation_delete_sheet(
     );
     let sheet_id_str = sheet_id.to_uuid_string();
 
+    crate::storage::workbook::imported_pivots::mark_output_sheet_deleted(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+        sheet_id,
+    );
+    crate::storage::workbook::imported_pivots::mark_source_sheet_deleted(
+        stores.storage.doc(),
+        stores.storage.workbook_map(),
+        stores.storage.sheets(),
+        sheet_id,
+    );
+
     // 1. Remove from ComputeCore first — needs mirror data to find external dependents.
     //    This also calls mirror.remove_sheet internally.
     let recalc = stores.compute.remove_sheet(mirror, sheet_id)?;
@@ -272,6 +284,18 @@ pub(in crate::storage::engine) fn mutation_rename_sheet(
 
     // 2. Rename in ComputeCore, which updates the mirror and authored formula text.
     stores.compute.rename_sheet(mirror, sheet_id, name);
+    crate::storage::workbook::imported_pivots::update_output_sheet_name_for_sheet(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        name,
+    );
+    crate::storage::workbook::imported_pivots::update_source_sheet_name_for_sheet(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        name,
+    );
 
     let mut result = MutationResult::empty();
     result.sheet_changes.push(SheetChange {

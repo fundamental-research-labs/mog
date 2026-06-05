@@ -20,10 +20,10 @@ import type {
   PivotField,
   PivotFieldArea,
   PivotTableConfig,
-  PivotTableWithResult,
 } from '@mog-sdk/contracts/pivot';
 
 import { useActiveSheetId } from '../../infra/context';
+import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 
 import type { PivotOutputLocation } from './use-pivot-tables';
 import { usePivotTables } from './use-pivot-tables';
@@ -39,9 +39,9 @@ export interface UsePivotEditorActionsOptions {
 
 export interface UsePivotEditorActionsReturn {
   // Pivot state
-  pivotTables: PivotTableWithResult[];
+  pivotTables: PivotViewModel[];
   editingPivotId: string | null;
-  editingPivot: PivotTableWithResult | null;
+  editingPivot: PivotViewModel | null;
 
   // Field panel handlers
   handlePivotAddField: (
@@ -120,7 +120,7 @@ export function usePivotEditorActions(
     () => pivotTables.find((p) => p.config.id === editingPivotId) ?? null,
     [pivotTables, editingPivotId],
   );
-  const editingPivotReadOnly = editingPivot?.config.id.startsWith('imported:') ?? false;
+  const editingPivotCapabilities = editingPivot?.capabilities;
 
   // ==========================================================================
   // Field Panel Handlers
@@ -135,11 +135,11 @@ export function usePivotEditorActions(
       area: PivotFieldArea,
       options?: { aggregateFunction?: AggregateFunction },
     ) => {
-      if (editingPivotId && !editingPivotReadOnly) {
+      if (editingPivotId && editingPivotCapabilities?.canEditFields) {
         addFieldToArea(editingPivotId, fieldId, area, options);
       }
     },
-    [editingPivotId, editingPivotReadOnly, addFieldToArea],
+    [editingPivotId, editingPivotCapabilities, addFieldToArea],
   );
 
   /**
@@ -147,11 +147,11 @@ export function usePivotEditorActions(
    */
   const handlePivotRemoveField = useCallback(
     (fieldId: string, area: PivotFieldArea) => {
-      if (editingPivotId && !editingPivotReadOnly) {
+      if (editingPivotId && editingPivotCapabilities?.canRemoveFields) {
         removeFieldFromArea(editingPivotId, fieldId, area);
       }
     },
-    [editingPivotId, editingPivotReadOnly, removeFieldFromArea],
+    [editingPivotId, editingPivotCapabilities, removeFieldFromArea],
   );
 
   /**
@@ -159,11 +159,11 @@ export function usePivotEditorActions(
    */
   const handlePivotMoveField = useCallback(
     (fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, position: number) => {
-      if (editingPivotId && !editingPivotReadOnly) {
+      if (editingPivotId && editingPivotCapabilities?.canReorderFields) {
         moveField(editingPivotId, fieldId, fromArea, toArea, position);
       }
     },
-    [editingPivotId, editingPivotReadOnly, moveField],
+    [editingPivotId, editingPivotCapabilities, moveField],
   );
 
   /**
@@ -171,31 +171,31 @@ export function usePivotEditorActions(
    */
   const handlePivotAggregateChange = useCallback(
     (fieldId: string, aggregate: AggregateFunction) => {
-      if (editingPivotId && !editingPivotReadOnly) {
+      if (editingPivotId && editingPivotCapabilities?.canChangeAggregate) {
         setAggregateFunction(editingPivotId, fieldId, aggregate);
       }
     },
-    [editingPivotId, editingPivotReadOnly, setAggregateFunction],
+    [editingPivotId, editingPivotCapabilities, setAggregateFunction],
   );
 
   /**
    * Refresh the pivot table data from source.
    */
   const handlePivotRefresh = useCallback(() => {
-    if (editingPivotId && !editingPivotReadOnly) {
+    if (editingPivotId && editingPivotCapabilities?.canRefresh) {
       refreshPivotTable(editingPivotId);
     }
-  }, [editingPivotId, editingPivotReadOnly, refreshPivotTable]);
+  }, [editingPivotId, editingPivotCapabilities, refreshPivotTable]);
 
   /**
    * Delete the currently editing pivot table and close the editor.
    */
   const handlePivotDelete = useCallback(() => {
-    if (editingPivotId && !editingPivotReadOnly) {
+    if (editingPivotId && editingPivotCapabilities?.canDelete) {
       deletePivotTable(editingPivotId);
       stopEditingPivot();
     }
-  }, [editingPivotId, editingPivotReadOnly, deletePivotTable, stopEditingPivot]);
+  }, [editingPivotId, editingPivotCapabilities, deletePivotTable, stopEditingPivot]);
 
   // ==========================================================================
   // Return

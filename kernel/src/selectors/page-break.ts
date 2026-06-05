@@ -11,7 +11,21 @@ import type { PageBreakState } from '@mog-sdk/contracts/actors/page-break';
 
 export { type PageBreakState } from '@mog-sdk/contracts/actors/page-break';
 
-export const pageBreakSelectors = {
+type PageBreakContext = PageBreakState['context'];
+
+export interface PageBreakSelectors {
+  pageBreak: (state: PageBreakState) => PageBreakContext['pageBreak'];
+  startPosition: (state: PageBreakState) => PageBreakContext['startPosition'];
+  currentPosition: (state: PageBreakState) => PageBreakContext['currentPosition'];
+  targetPosition: (state: PageBreakState) => PageBreakContext['targetPosition'];
+  isIdle: (state: PageBreakState) => boolean;
+  isDragging: (state: PageBreakState) => boolean;
+  hasMoved: (state: PageBreakState) => boolean;
+  hasPageBreak: (state: PageBreakState) => boolean;
+  machineState: (state: PageBreakState) => string;
+}
+
+export const pageBreakSelectors: PageBreakSelectors = {
   // ---------------------------------------------------------------------------
   // Value selectors
   // ---------------------------------------------------------------------------

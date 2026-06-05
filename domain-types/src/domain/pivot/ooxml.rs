@@ -224,6 +224,17 @@ pub struct PivotTableRelationshipPreservation {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotTableOoxmlPreservation {
+    /// Worksheet part that owns the pivot table relationship, e.g.
+    /// `xl/worksheets/sheet2.xml`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_worksheet_part_path: Option<String>,
+    /// Relationship ID on the output worksheet that points at this pivot table
+    /// definition part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_worksheet_relationship_id: Option<String>,
+    /// Pivot table definition part path, e.g. `xl/pivotTables/pivotTable1.xml`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_part_path: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub root_namespace_declarations: Vec<PivotRawXmlAttribute>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -252,7 +263,10 @@ pub struct PivotTableOoxmlPreservation {
 
 impl PivotTableOoxmlPreservation {
     pub fn is_empty(&self) -> bool {
-        self.root_namespace_declarations.is_empty()
+        self.output_worksheet_part_path.is_none()
+            && self.output_worksheet_relationship_id.is_none()
+            && self.definition_part_path.is_none()
+            && self.root_namespace_declarations.is_empty()
             && self.root_attributes.is_empty()
             && self.children.is_empty()
             && self

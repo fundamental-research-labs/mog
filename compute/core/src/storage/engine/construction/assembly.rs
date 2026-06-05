@@ -48,6 +48,12 @@ pub(in crate::storage::engine) fn from_yrs_state(
         compute_document::schema::guard_schema_version(&txn, storage.workbook_map())?;
     }
 
+    crate::storage::workbook::imported_pivots::normalize_imported_pivot_associations(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+    )?;
+
     // Use the Doc's unique client_id to partition the ID space.
     // Each collaborative engine gets a non-overlapping region of the u128 space:
     //   IDs = (client_id << 64) | counter

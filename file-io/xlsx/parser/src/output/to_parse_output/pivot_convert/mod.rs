@@ -74,7 +74,7 @@ pub(crate) fn parsed_pivot_to_config(
     });
 
     // -- IDs and names --
-    let id = format!("xlsx-pivot-{}", pivot.name);
+    let id = stable_imported_pivot_id(pivot);
     let source_sheet_name = cache
         .source_sheet
         .clone()
@@ -135,6 +135,7 @@ pub(crate) fn parsed_pivot_to_config(
         source_sheet_id: None,
         source_sheet_name,
         source_range,
+        output_sheet_id: None,
         output_sheet_name: sheet_name.to_string(),
         output_location: OutputLocation {
             row: anchor_row,
@@ -190,4 +191,43 @@ pub(crate) fn parsed_pivot_to_config(
         initial_expansion_state,
         ooxml_preservation,
     })
+}
+
+fn stable_imported_pivot_id(pivot: &PivotTable) -> String {
+    let preservation = &pivot.ooxml_preservation;
+    let relationship = preservation.relationship.as_ref();
+    let identity = format!(
+        "outputWorksheetPartPath={};worksheetRelationshipId={};definitionPartPath={};pivotCacheRelationshipId={};cacheId={}",
+        preservation
+            .output_worksheet_part_path
+            .as_deref()
+            .unwrap_or(""),
+        preservation
+            .output_worksheet_relationship_id
+            .as_deref()
+            .unwrap_or(""),
+        preservation
+            .definition_part_path
+            .as_deref()
+            .or_else(|| relationship.and_then(|rel| rel.part_path.as_deref()))
+            .unwrap_or(""),
+        relationship
+            .and_then(|rel| rel.relationship_id.as_deref())
+            .unwrap_or(""),
+        pivot.cache_id,
+    );
+
+    let has_package_identity = preservation.output_worksheet_part_path.is_some()
+        && preservation.output_worksheet_relationship_id.is_some()
+        && (preservation.definition_part_path.is_some()
+            || relationship
+                .and_then(|rel| rel.part_path.as_ref())
+                .is_some());
+
+    if has_package_identity {
+        let hash = crc32fast::hash(identity.as_bytes());
+        format!("pivot-imported-{hash:08x}")
+    } else {
+        format!("xlsx-pivot-{}", pivot.name)
+    }
 }

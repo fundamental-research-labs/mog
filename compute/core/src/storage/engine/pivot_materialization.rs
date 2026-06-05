@@ -110,6 +110,18 @@ impl YrsComputeEngine {
             ))
         }
 
+        fn output_sheet_id(
+            mirror: &CellMirror,
+            config: &domain_types::domain::pivot::PivotTableConfig,
+        ) -> Option<SheetId> {
+            config
+                .output_sheet_id
+                .as_deref()
+                .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
+                .filter(|sheet_id| mirror.get_sheet(sheet_id).is_some())
+                .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
+        }
+
         let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
         let mut pivot_pairs: Vec<(
             SheetId,
@@ -124,7 +136,7 @@ impl YrsComputeEngine {
         }
 
         for (sheet_id, pivot_id, config) in &pivot_pairs {
-            let output_sheet_id = match mirror.sheet_by_name(&config.output_sheet_name) {
+            let output_sheet_id = match output_sheet_id(mirror, config) {
                 Some(id) => id,
                 None => continue,
             };
@@ -216,7 +228,13 @@ impl YrsComputeEngine {
         }
         for (sheet_id, pivot_id, config) in &pivot_pairs {
             // Resolve output sheet
-            let output_sheet_id = match self.mirror.sheet_by_name(&config.output_sheet_name) {
+            let output_sheet_id = match config
+                .output_sheet_id
+                .as_deref()
+                .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
+                .filter(|sheet_id| self.mirror.get_sheet(sheet_id).is_some())
+                .or_else(|| self.mirror.sheet_by_name(&config.output_sheet_name))
+            {
                 Some(id) => id,
                 None => continue,
             };

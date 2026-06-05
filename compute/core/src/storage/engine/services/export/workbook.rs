@@ -476,7 +476,11 @@ pub(super) fn export_pivot_cache_records(
         _ => return Default::default(),
     };
 
-    yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn)
+    let mut records = yrs_schema::pivot_cache_records::from_yrs_map(&records_map, &txn);
+    if let Some(surviving) = surviving_pivot_cache_ids(stores) {
+        records.retain(|cache_id, _| surviving.contains(cache_id));
+    }
+    records
 }
 
 pub(super) fn export_pivot_cache_sources(
@@ -491,7 +495,11 @@ pub(super) fn export_pivot_cache_sources(
         _ => return Default::default(),
     };
 
-    yrs_schema::pivot_cache_records::sources_from_yrs_map(&sources_map, &txn)
+    let mut sources = yrs_schema::pivot_cache_records::sources_from_yrs_map(&sources_map, &txn);
+    if let Some(surviving) = surviving_pivot_cache_ids(stores) {
+        sources.retain(|source| surviving.contains(&source.cache_id));
+    }
+    sources
 }
 
 pub(super) fn export_extended_document_properties(
@@ -940,14 +948,109 @@ pub(in crate::storage::engine) fn export_workbook_timeline_caches(
     caches
 }
 
-/// Export parsed pivot tables from workbook-level pivotSpecs map AND sheet-level
-/// pivotTables maps.
-///
-/// Workbook-level specs (from XLSX import) take priority: if a pivot name already
-/// exists in the workbook-level set, the sheet-level entry is skipped. This
-/// preserves OOXML-specific metadata (styles, custom sorts, number formats) for
-/// imported pivots that would be lost in a round-trip through `PivotTableConfig`.
+/// Export parsed pivot tables from workbook-level pivotSpecs map and sheet-level
+/// pivotTables maps using imported-pivot associations as the authority.
 pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
+    stores: &EngineStores,
+) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
+    use domain_types::domain::pivot::ParsedPivotTable;
+
+    let doc = stores.storage.doc();
+    let sheets_ref = stores.storage.sheets();
+    let workbook = stores.storage.workbook_map();
+
+    let specs = read_workbook_pivot_specs(stores);
+    let associations = crate::storage::workbook::imported_pivots::read_all(doc, workbook);
+
+    if associations.is_empty() {
+        return export_workbook_parsed_pivot_tables_legacy_name_dedup(stores);
+    }
+
+    let specs_by_key: std::collections::HashMap<String, ParsedPivotTable> = specs
+        .into_iter()
+        .map(|(key, _, parsed)| (key, parsed))
+        .collect();
+
+    let mut result = Vec::new();
+    let mut associated_native_ids = std::collections::HashSet::new();
+    for association in &associations {
+        if let Some(native_pivot_id) = association.native_pivot_id.as_ref() {
+            associated_native_ids.insert(native_pivot_id.clone());
+        }
+
+        match association.status {
+            crate::storage::workbook::imported_pivots::ImportedPivotAssociationStatus::Deleted => {
+                continue;
+            }
+            crate::storage::workbook::imported_pivots::ImportedPivotAssociationStatus::Unsupported => {
+                if let Some(original) = specs_by_key.get(&association.pivot_spec_key) {
+                    result.push(original.clone());
+                }
+            }
+            crate::storage::workbook::imported_pivots::ImportedPivotAssociationStatus::Promoted => {
+                let Some(original) = specs_by_key.get(&association.pivot_spec_key) else {
+                    tracing::warn!(
+                        import_identity = %association.import_identity,
+                        pivot_spec_key = %association.pivot_spec_key,
+                        "Promoted imported pivot association has no preservation spec; skipping export"
+                    );
+                    continue;
+                };
+                let Some(native_pivot_id) = association.native_pivot_id.as_deref() else {
+                    tracing::warn!(
+                        import_identity = %association.import_identity,
+                        "Promoted imported pivot association has no nativePivotId; skipping export"
+                    );
+                    continue;
+                };
+                let Some(output_sheet_id) = association
+                    .output_sheet_id
+                    .as_deref()
+                    .and_then(|value| SheetId::from_uuid_str(value).ok())
+                else {
+                    tracing::warn!(
+                        import_identity = %association.import_identity,
+                        "Promoted imported pivot association has no valid outputSheetId; skipping export"
+                    );
+                    continue;
+                };
+                let Some(live_config) = pivots::get_pivot(doc, sheets_ref, &output_sheet_id, native_pivot_id) else {
+                    tracing::warn!(
+                        import_identity = %association.import_identity,
+                        native_pivot_id = %native_pivot_id,
+                        "Promoted imported pivot native config is missing; not resurrecting from preservation"
+                    );
+                    continue;
+                };
+                result.push(ParsedPivotTable {
+                    config: live_config,
+                    initial_expansion_state: original.initial_expansion_state.clone(),
+                    ooxml_preservation: original.ooxml_preservation.clone(),
+                });
+            }
+        }
+    }
+
+    let sheet_ids = stores.storage.sheet_order();
+    for sheet_id in &sheet_ids {
+        let mut sheet_pivots = pivots::get_all_pivots(doc, sheets_ref, sheet_id);
+        sheet_pivots.sort_by(|left, right| left.id.cmp(&right.id));
+        for config in sheet_pivots {
+            if associated_native_ids.contains(&config.id) {
+                continue;
+            }
+            result.push(ParsedPivotTable {
+                config,
+                initial_expansion_state: None,
+                ooxml_preservation: Default::default(),
+            });
+        }
+    }
+
+    result
+}
+
+fn export_workbook_parsed_pivot_tables_legacy_name_dedup(
     stores: &EngineStores,
 ) -> Vec<domain_types::domain::pivot::ParsedPivotTable> {
     use domain_types::domain::pivot::ParsedPivotTable;
@@ -956,30 +1059,10 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     let sheets_ref = stores.storage.sheets();
 
     // 1. Collect workbook-level parsed pivot tables (from XLSX import hydration).
-    let mut result: Vec<ParsedPivotTable> = Vec::new();
-    {
-        let txn = doc.transact();
-        let workbook = stores.storage.workbook_map();
-        if let Some(Out::YMap(pivot_map)) = workbook.get(&txn, KEY_PIVOT_SPECS) {
-            let mut entries: Vec<_> = pivot_map.iter(&txn).collect();
-            entries.sort_by(|(left, _), (right, _)| {
-                pivot_spec_order_key(left.as_ref()).cmp(&pivot_spec_order_key(right.as_ref()))
-            });
-            for (_, value) in entries {
-                if let Out::Any(Any::String(json_str)) = value {
-                    match serde_json::from_str::<ParsedPivotTable>(&json_str) {
-                        Ok(pt) => result.push(pt),
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                "Failed to deserialize ParsedPivotTable during export, skipping entry"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let mut result: Vec<ParsedPivotTable> = read_workbook_pivot_specs(stores)
+        .into_iter()
+        .map(|(_, _, parsed)| parsed)
+        .collect();
 
     // 2. Collect sheet-level pivots (API-created) and merge with dedup.
     let existing_names: std::collections::HashSet<String> =
@@ -1001,6 +1084,58 @@ pub(in crate::storage::engine) fn export_workbook_parsed_pivot_tables(
     }
 
     result
+}
+
+fn read_workbook_pivot_specs(
+    stores: &EngineStores,
+) -> Vec<(String, u32, domain_types::domain::pivot::ParsedPivotTable)> {
+    let doc = stores.storage.doc();
+    let txn = doc.transact();
+    let workbook = stores.storage.workbook_map();
+    let Some(Out::YMap(pivot_map)) = workbook.get(&txn, KEY_PIVOT_SPECS) else {
+        return Vec::new();
+    };
+    let mut entries: Vec<_> = pivot_map.iter(&txn).collect();
+    entries.sort_by(|(left, _), (right, _)| {
+        pivot_spec_order_key(left.as_ref()).cmp(&pivot_spec_order_key(right.as_ref()))
+    });
+    entries
+        .into_iter()
+        .filter_map(|(key, value)| {
+            let Out::Any(Any::String(json_str)) = value else {
+                return None;
+            };
+            match serde_json::from_str::<domain_types::domain::pivot::ParsedPivotTable>(&json_str) {
+                Ok(pt) => Some((key.to_string(), pivot_spec_order_key(key.as_ref()).0, pt)),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to deserialize ParsedPivotTable during export, skipping entry"
+                    );
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
+fn surviving_pivot_cache_ids(stores: &EngineStores) -> Option<std::collections::HashSet<u32>> {
+    let pivots = export_workbook_parsed_pivot_tables(stores);
+    if pivots.is_empty() {
+        let associations = crate::storage::workbook::imported_pivots::read_all(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+        );
+        if associations.is_empty() {
+            return None;
+        }
+    }
+    Some(
+        pivots
+            .into_iter()
+            .filter_map(|pivot| pivot.config.cache_id)
+            .collect(),
+    )
 }
 
 fn pivot_spec_order_key(key: &str) -> (u32, &str) {

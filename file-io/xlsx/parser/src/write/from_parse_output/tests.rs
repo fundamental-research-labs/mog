@@ -518,6 +518,7 @@ fn make_pivot_config(
         source_sheet_id: None,
         source_sheet_name: source_sheet_name.to_string(),
         source_range,
+        output_sheet_id: None,
         output_sheet_name: output_sheet_name.to_string(),
         output_location: pivot_types::OutputLocation { row: 0, col: 0 },
         fields: Vec::new(),

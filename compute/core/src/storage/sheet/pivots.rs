@@ -60,6 +60,7 @@ mod pivot_keys {
     pub const SOURCE_SHEET_ID: &str = "sourceSheetId";
     pub const SOURCE_SHEET_NAME: &str = "sourceSheetName";
     pub const SOURCE_RANGE: &str = "sourceRange";
+    pub const OUTPUT_SHEET_ID: &str = "outputSheetId";
     pub const OUTPUT_SHEET_NAME: &str = "outputSheetName";
     pub const OUTPUT_LOCATION: &str = "outputLocation";
     pub const FIELDS: &str = "fields";
@@ -140,6 +141,7 @@ fn pivot_from_yrs_map<T: yrs::ReadTxn>(map: &MapRef, txn: &T) -> Option<PivotTab
         source_sheet_id: read_str(map, txn, SOURCE_SHEET_ID),
         source_sheet_name: read_str(map, txn, SOURCE_SHEET_NAME).unwrap_or_default(),
         source_range: read_json_field(map, txn, SOURCE_RANGE).unwrap_or(CellRange::new(0, 0, 0, 0)),
+        output_sheet_id: read_str(map, txn, OUTPUT_SHEET_ID),
         output_sheet_name: read_str(map, txn, OUTPUT_SHEET_NAME).unwrap_or_default(),
         output_location: read_json_field(map, txn, OUTPUT_LOCATION)
             .unwrap_or(OutputLocation { row: 0, col: 0 }),
@@ -200,6 +202,13 @@ fn write_pivot(parent: &MapRef, txn: &mut yrs::TransactionMut, key: &str, p: &Pi
         OUTPUT_SHEET_NAME,
         Any::String(Arc::from(p.output_sheet_name.as_str())),
     );
+    if let Some(ref output_sheet_id) = p.output_sheet_id {
+        map.insert(
+            txn,
+            OUTPUT_SHEET_ID,
+            Any::String(Arc::from(output_sheet_id.as_str())),
+        );
+    }
 
     // Complex sub-objects as JSON strings
     fn json_any<V: serde::Serialize>(v: &V) -> Any {
@@ -332,8 +341,10 @@ pub fn create_pivot(
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let pivot_id = generate_pivot_id(id_alloc);
     let now = now_millis();
+    let sheet_uuid = sheet_id.to_uuid_string();
 
     config.id = pivot_id.clone();
+    config.output_sheet_id = Some(sheet_uuid);
     config.created_at = Some(now);
     config.updated_at = Some(now);
 
@@ -380,6 +391,7 @@ pub fn update_pivot(
     mut config: PivotTableConfig,
 ) -> Option<PivotTableConfig> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let sheet_uuid = sheet_id.to_uuid_string();
 
     // Verify the pivot exists
     {
@@ -388,6 +400,8 @@ pub fn update_pivot(
         pivots_map.get(&txn, pivot_id)?;
     }
 
+    config.id = pivot_id.to_string();
+    config.output_sheet_id = Some(sheet_uuid);
     config.updated_at = Some(now_millis());
 
     // Write as structured Y.Map
@@ -396,6 +410,25 @@ pub fn update_pivot(
     write_pivot(&pivots_map, &mut txn, pivot_id, &config);
 
     Some(config)
+}
+
+pub(crate) fn insert_existing_pivot_if_absent_in_txn(
+    txn: &mut yrs::TransactionMut<'_>,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    mut config: PivotTableConfig,
+) -> Result<bool, ComputeError> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let pivots_map =
+        get_pivots_map(txn, sheets, &sheet_hex).ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_hex.to_string(),
+        })?;
+    if pivots_map.get(txn, config.id.as_str()).is_some() {
+        return Ok(false);
+    }
+    config.output_sheet_id = Some(sheet_id.to_uuid_string());
+    write_pivot(&pivots_map, txn, config.id.as_str(), &config);
+    Ok(true)
 }
 
 /// Delete a pivot table by ID. Returns `true` if the pivot existed and was removed.
@@ -428,6 +461,7 @@ mod tests {
             source_sheet_id: Some("00000000000000000000000000000001".to_string()),
             source_sheet_name: "Sheet1".to_string(),
             source_range: CellRange::new(0, 0, 2, 1),
+            output_sheet_id: None,
             output_sheet_name: "Sheet1".to_string(),
             output_location: OutputLocation {
                 row: 0,

@@ -16,6 +16,10 @@ import type {
   PivotTableWithResult,
 } from '@mog-sdk/contracts/pivot';
 import { Button } from '@mog/shell/components/ui';
+import {
+  createPivotCapabilitiesForSource,
+  type PivotCapabilities,
+} from '../../pivot/pivot-capabilities';
 import { PivotFieldList } from './PivotFieldList';
 
 // =============================================================================
@@ -24,7 +28,7 @@ import { PivotFieldList } from './PivotFieldList';
 
 export interface PivotFieldPanelProps {
   /** Currently editing pivot table (with computed result) */
-  pivot: PivotTableWithResult;
+  pivot: PivotTableWithResult & { capabilities?: PivotCapabilities };
   /** Callbacks for field operations */
   onAddField: (
     fieldId: string,
@@ -45,6 +49,8 @@ export interface PivotFieldPanelProps {
   onDelete?: () => void;
   /** Close panel */
   onClose: () => void;
+  /** Operation capabilities for the selected pivot. */
+  capabilities?: PivotCapabilities;
   /** Render imported cached pivots as inspect-only. */
   readOnly?: boolean;
   /** Custom style */
@@ -64,10 +70,15 @@ export function PivotFieldPanel({
   onRefresh,
   onDelete,
   onClose,
+  capabilities,
   readOnly = false,
   style,
 }: PivotFieldPanelProps) {
   const { config, result, error } = pivot;
+  const effectiveCapabilities =
+    capabilities ??
+    pivot.capabilities ??
+    createPivotCapabilitiesForSource(readOnly ? 'unsupportedImport' : 'native');
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -156,7 +167,17 @@ export function PivotFieldPanel({
           onMoveField={handleMoveField}
           onAggregateChange={handleAggregateChange}
           disabled={readOnly}
+          canAddFields={effectiveCapabilities.canEditFields}
+          canReorderFields={effectiveCapabilities.canReorderFields}
+          canRemoveFields={effectiveCapabilities.canRemoveFields}
+          canChangeAggregate={effectiveCapabilities.canChangeAggregate}
         />
+
+        {effectiveCapabilities.unsupportedReason && (
+          <div className="px-3 py-2 bg-ss-surface-secondary rounded mt-4 text-caption text-ss-text-secondary">
+            {effectiveCapabilities.unsupportedReason}
+          </div>
+        )}
 
         {/* Stats section */}
         {result && (
@@ -175,7 +196,7 @@ export function PivotFieldPanel({
 
       {/* Footer with actions */}
       <div className="flex gap-3 px-4 py-4 border-t border-ss-border-light bg-ss-surface-secondary">
-        {!readOnly && onRefresh && (
+        {effectiveCapabilities.canRefresh && onRefresh && (
           <Button
             variant="secondary"
             className="flex-1"
@@ -185,7 +206,7 @@ export function PivotFieldPanel({
             Refresh
           </Button>
         )}
-        {!readOnly && onDelete && (
+        {effectiveCapabilities.canDelete && onDelete && (
           <Button variant="danger" className="flex-1" onClick={onDelete} title="Delete pivot table">
             Delete
           </Button>

@@ -79,7 +79,7 @@ export const SWITCH_RIBBON_TAB: ActionHandler = (deps, payload): ActionResult =>
     state.setContextualTabIds([...state.contextualTabIds, arg.tabId]);
   }
 
-  state.setActiveRibbonTab(arg.tabId);
+  state.setActiveRibbonTab(arg.tabId, { source: 'user' });
   return handled();
 };
 

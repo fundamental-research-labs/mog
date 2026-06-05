@@ -849,8 +849,6 @@ export interface PivotValueField {
  * and modify the pivot table's field configuration.
  */
 export interface PivotTableHandle {
-  /** Unique pivot table identifier (readonly) */
-  readonly id: string;
   /** Get the pivot table name */
   getName(): string;
   /** Get the current configuration including all fields */
@@ -861,7 +859,7 @@ export interface PivotTableHandle {
   delete(): Promise<boolean>;
   /** Subscribe to computed result updates for this pivot. */
   subscribeResult(
-    callback: (pivotId: string, result: PivotTableResult | null, error?: string) => void,
+    callback: (result: PivotTableResult | null, error?: string) => void,
   ): () => void;
   /** Compute this pivot table result. */
   compute(forceRefresh?: boolean): Promise<PivotTableResult | null>;

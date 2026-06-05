@@ -1,5 +1,4 @@
 import type {
-  PivotCalculatedFieldSpec,
   PivotTableConfig as ApiPivotTableConfig,
   PivotTableHandle,
   SheetId,
@@ -7,6 +6,7 @@ import type {
 import type { CellRange, CellValue } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
+  CalculatedField,
   CalculatedFieldId,
   DataSourceType,
   PivotExpansionState,
@@ -52,7 +52,7 @@ export interface PivotHandleBuilderOptions {
   getRange: (pivotId: string) => Promise<CellRange | null>;
   addCalculatedField: (
     pivotId: string,
-    field: PivotCalculatedFieldSpec,
+    field: CalculatedField,
   ) => Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
   setDataSource: (pivotId: string, dataSource: string) => Promise<void>;
 }
@@ -99,8 +99,6 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
   };
 
   return {
-    id: pivotId,
-
     getName(): string {
       return cachedConfig.name ?? pivotId;
     },
@@ -118,9 +116,9 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     },
 
     subscribeResult(
-      callback: (pivotId: string, result: PivotTableResult | null, error?: string) => void,
+      callback: (result: PivotTableResult | null, error?: string) => void,
     ): () => void {
-      return ctx.pivot.subscribe(pivotId, callback);
+      return ctx.pivot.subscribe(pivotId, (_pivotId, result, error) => callback(result, error));
     },
 
     compute(forceRefresh?: boolean): Promise<PivotTableResult | null> {
@@ -338,7 +336,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     },
 
     addCalculatedField(
-      field: PivotCalculatedFieldSpec,
+      field: CalculatedField,
     ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }> {
       return addCalculatedField(pivotId, field);
     },

@@ -4,27 +4,18 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   CalculatedField,
   PivotFilter,
-  PivotFieldPlacementFlat,
   ShowValuesAsConfig,
 } from '@mog-sdk/contracts/pivot';
 
 interface PivotActionBasePayload {
   sheetId?: SheetId;
-  pivotId: string;
+  pivotName: string;
 }
 
 interface PivotSetShowValuesAsPayload extends PivotActionBasePayload {
   fieldId?: string;
   placementId?: string;
   showValuesAs: ShowValuesAsConfig | null;
-}
-
-// Local until the public API contracts expose pivot placement mutation receipts.
-interface PivotKernelMutationReceipt {
-  kind: 'pivotKernelMutation';
-  pivotId: string;
-  action: string;
-  placementId?: string;
 }
 
 interface PivotSetGrandTotalsPayload extends PivotActionBasePayload {
@@ -63,28 +54,25 @@ function parsePivotTarget(
   payload: Record<string, unknown>,
   actionName: string,
 ): PivotActionBasePayload | ActionResult {
-  const { sheetId, pivotId } = payload;
+  const { sheetId, pivotName } = payload;
   if (sheetId !== undefined && typeof sheetId !== 'string') {
     return invalidPayload(`${actionName} sheetId must be a string`);
   }
-  if (typeof pivotId !== 'string' || pivotId.length === 0) {
-    return invalidPayload(`${actionName} pivotId must be a non-empty string`);
+  if (typeof pivotName !== 'string' || pivotName.length === 0) {
+    return invalidPayload(`${actionName} pivotName must be a non-empty string`);
   }
 
   return {
     sheetId: sheetId as SheetId | undefined,
-    pivotId,
+    pivotName,
   };
 }
 
 async function resolvePivotHandle(
   ws: ReturnType<typeof getWorksheet>,
-  pivotId: string,
-): Promise<{ handle: PivotTableHandle; config: { placements: PivotFieldPlacementFlat[] } } | null> {
-  const config = (await ws.pivots.getAll()).find((candidate) => candidate.id === pivotId);
-  if (!config) return null;
-  const handle = await ws.pivots.get(config);
-  return handle ? { handle, config } : null;
+  pivotName: string,
+): Promise<PivotTableHandle | null> {
+  return ws.pivots.get(pivotName);
 }
 
 function parseShowValuesAsPayload(payload: unknown): PivotSetShowValuesAsPayload | ActionResult {
@@ -212,18 +200,12 @@ export const PIVOT_SET_SHOW_VALUES_AS: AsyncActionHandler = async (deps, payload
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  const target = await resolvePivotHandle(ws, parsed.pivotName);
   if (!target) return invalidPayload('PIVOT_SET_SHOW_VALUES_AS pivot not found');
   const placementReference = parsed.placementId ?? parsed.fieldId!;
-  const mutationReceipt = (await target.handle.setShowValuesAs(
-    placementReference,
-    parsed.showValuesAs,
-  )) as unknown as PivotKernelMutationReceipt | undefined;
-  const refreshReceipt = await target.handle.refresh();
-  const receipts = [mutationReceipt, refreshReceipt].filter(
-    Boolean,
-  ) as unknown as MutationReceipt[];
-  return receipts.length > 0 ? { handled: true, receipts } : { handled: true };
+  await target.setShowValuesAs(placementReference, parsed.showValuesAs);
+  await target.refresh();
+  return { handled: true };
 };
 
 export const PIVOT_SET_GRAND_TOTALS: AsyncActionHandler = async (deps, payload) => {
@@ -231,20 +213,15 @@ export const PIVOT_SET_GRAND_TOTALS: AsyncActionHandler = async (deps, payload) 
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  const target = await resolvePivotHandle(ws, parsed.pivotName);
   if (!target) return invalidPayload('PIVOT_SET_GRAND_TOTALS pivot not found');
   const layout = {
     showRowGrandTotals: parsed.showRowGrandTotals,
     showColumnGrandTotals: parsed.showColumnGrandTotals,
   };
-  const mutationReceipt = (await target.handle.setLayout(layout)) as unknown as
-    | PivotKernelMutationReceipt
-    | undefined;
-  const refreshReceipt = await target.handle.refresh();
-  const receipts = [mutationReceipt, refreshReceipt].filter(
-    Boolean,
-  ) as unknown as MutationReceipt[];
-  return receipts.length > 0 ? { handled: true, receipts } : { handled: true };
+  await target.setLayout(layout);
+  await target.refresh();
+  return { handled: true };
 };
 
 export const PIVOT_SET_DATA_SOURCE: AsyncActionHandler = async (deps, payload) => {
@@ -252,9 +229,9 @@ export const PIVOT_SET_DATA_SOURCE: AsyncActionHandler = async (deps, payload) =
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  const target = await resolvePivotHandle(ws, parsed.pivotName);
   if (!target) return invalidPayload('PIVOT_SET_DATA_SOURCE pivot not found');
-  await target.handle.setDataSource(parsed.dataSource);
+  await target.setDataSource(parsed.dataSource);
   return { handled: true };
 };
 
@@ -263,9 +240,9 @@ export const PIVOT_SET_FILTER: AsyncActionHandler = async (deps, payload) => {
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  const target = await resolvePivotHandle(ws, parsed.pivotName);
   if (!target) return invalidPayload('PIVOT_SET_FILTER pivot not found');
-  await target.handle.setFilter(parsed.fieldId, parsed.filter);
+  await target.setFilter(parsed.fieldId, parsed.filter);
   return { handled: true };
 };
 
@@ -274,12 +251,10 @@ export const PIVOT_ADD_CALCULATED_FIELD: AsyncActionHandler = async (deps, paylo
   if ('handled' in parsed) return parsed;
 
   const ws = getWorksheet(deps, parsed.sheetId);
-  const target = await resolvePivotHandle(ws, parsed.pivotId);
+  const target = await resolvePivotHandle(ws, parsed.pivotName);
   if (!target) return invalidPayload('PIVOT_ADD_CALCULATED_FIELD pivot not found');
-  const mutationReceipt = await target.handle.addCalculatedField(parsed.field);
-  const refreshReceipt = await target.handle.refresh();
-  const receipts = [mutationReceipt, refreshReceipt].filter(
-    Boolean,
-  ) as unknown as MutationReceipt[];
+  const mutationReceipt = await target.addCalculatedField(parsed.field);
+  await target.refresh();
+  const receipts = [mutationReceipt].filter(Boolean) as unknown as MutationReceipt[];
   return receipts.length > 0 ? { handled: true, receipts } : { handled: true };
 };

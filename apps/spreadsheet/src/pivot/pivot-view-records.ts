@@ -35,7 +35,7 @@ export async function loadPivotConfigEntries(
   const promotedRecordsByPivotId = new Map(
     importedViewRecords
       .filter((record) => record.sourceKind === 'promotedImport')
-      .map((record) => [record.nativePivotId ?? record.config.id, record]),
+      .map((record) => [record.config.id, record]),
   );
 
   const nativeEntries: PivotConfigEntry[] = await Promise.all(
@@ -74,9 +74,7 @@ export async function loadPivotConfigEntries(
 
   const nativeIds = new Set(nativeEntries.map((entry) => entry.config.id));
   const persistedConfigIds = new Set(
-    importedViewRecords.flatMap((record) =>
-      [record.config.id, record.nativePivotId].filter((id): id is string => Boolean(id)),
-    ),
+    importedViewRecords.map((record) => record.config.id),
   );
   const persistedImportIdentities = new Set(
     importedViewRecords.map((record) => record.importIdentity),
@@ -167,14 +165,11 @@ export async function findImportedPivotAtCell(
     const persistedRecords = await worksheet.pivots.getImportedViewRecords();
     for (const record of persistedRecords) {
       knownPivotIds.add(record.config.id);
-      if (record.nativePivotId) knownPivotIds.add(record.nativePivotId);
       knownImportIdentities.add(record.importIdentity);
       const bounds = pivotBoundsForImportedRecord(record);
       knownRanges.push(bounds);
       if (pivotBoundsContain(bounds, row, col)) {
-        return record.sourceKind === 'promotedImport'
-          ? (record.nativePivotId ?? record.config.id)
-          : record.config.id;
+        return record.config.id;
       }
     }
 

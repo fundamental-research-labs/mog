@@ -895,7 +895,7 @@ describe('WorksheetPivotsImpl', () => {
       const target = makePivotConfig({ id: 'pivot-1', name: 'SalesPivot' });
       ctx.pivot.getAllPivots.mockResolvedValue([target]);
       const handle = await ws.pivots.get('SalesPivot');
-      expect(handle?.id).toBe('pivot-1');
+      expect(handle?.getName()).toBe('SalesPivot');
 
       const duplicateName = makePivotConfig({ id: 'pivot-2', name: 'SalesPivot' });
       ctx.pivot.getAllPivots.mockResolvedValue([duplicateName, target]);

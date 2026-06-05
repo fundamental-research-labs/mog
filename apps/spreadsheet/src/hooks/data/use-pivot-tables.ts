@@ -353,10 +353,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         }
 
         if (!entry.handle) continue;
-        const unsubscribe = entry.handle.subscribeResult((pivotId, result, error) => {
+        const unsubscribe = entry.handle.subscribeResult((result, error) => {
           setResults((prev) => {
             const next = new Map(prev);
-            next.set(pivotId, { result, error });
+            next.set(config.id, { result, error });
             return next;
           });
         });

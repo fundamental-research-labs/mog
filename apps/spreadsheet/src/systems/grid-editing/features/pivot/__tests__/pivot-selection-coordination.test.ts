@@ -93,7 +93,6 @@ function createMockWorkbook(options: {
   importedRecords?: Array<{
     sourceKind: 'unsupportedImport' | 'promotedImport';
     importIdentity?: string;
-    nativePivotId?: string;
     config: { id: string; outputLocation: { row: number; col: number }; refRange?: string };
     renderedRange?: { startRow: number; startCol: number; endRow: number; endCol: number };
   }>;

@@ -10,7 +10,6 @@
 import type {
   PivotCommandReceipt,
   PivotKernelMutationReceipt,
-  PivotPlacementMutationReceipt,
   PivotReadbackRevision,
   PivotRefreshReceipt,
 } from '../mutation-receipt';
@@ -81,18 +80,8 @@ export interface PivotPlacementSpec {
   numberFormat?: string;
 }
 
-export type PivotPlacementPatch = Partial<
-  Omit<PivotPlacementSpec, 'placementId' | 'area' | 'source'>
->;
-
-export interface PivotCalculatedFieldSpec {
-  calculatedFieldId?: CalculatedFieldId;
-  name: string;
-  formula: string;
-}
-
 export interface PivotSemanticTargetBase {
-  pivotId: string;
+  pivotName: string;
 }
 
 export type PivotSemanticTarget =
@@ -176,8 +165,8 @@ export interface PivotSurfaceReadback {
 
 export interface PivotUiStateReadback {
   revision: PivotReadbackRevision;
-  selectedPivotId?: string;
-  editingPivotId?: string;
+  selectedPivotName?: string;
+  editingPivotName?: string;
   openDialogs: string[];
   fieldPanelZones: Record<string, unknown>;
   filterMenuOptions: Record<string, unknown>;
@@ -213,7 +202,6 @@ export interface ImportedPivotViewRecord {
   sourceKind: ImportedPivotSourceKind;
   status: ImportedPivotAssociationStatus;
   importIdentity: string;
-  nativePivotId?: string;
   outputSheetId: string;
   sourceSheetId?: string;
   config: PivotTableConfig;
@@ -333,46 +321,6 @@ export interface WorksheetPivots {
    */
   getCount(): Promise<number>;
 
-  // ===========================================================================
-  // Field Placement
-  // ===========================================================================
-
-  /**
-   * Add a placement using exact pivot and placement semantics.
-   *
-   * This is intended for callers that already operate on a known placement.
-   * Ergonomic field methods and pivot handles remain first-class public API.
-   */
-  addPlacement(pivotId: string, spec: PivotPlacementSpec): Promise<PivotPlacementMutationReceipt>;
-
-  updatePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    patch: PivotPlacementPatch,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  removePlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
-
-  movePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    toArea: PivotFieldArea,
-    toPosition: number,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  renameValuePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    displayName: string | null,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  setSortByValue(
-    pivotId: string,
-    axisPlacementId: PlacementId,
-    valuePlacementId: PlacementId,
-    config: { order: SortOrder; columnKey?: string } | null,
-  ): Promise<PivotKernelMutationReceipt>;
-
   /**
    * Add a field to a pivot table area, resolved by pivot name.
    *
@@ -462,8 +410,6 @@ export interface WorksheetPivots {
     fieldOrPlacement: string,
     sortOrder: SortOrder | null,
   ): Promise<PivotKernelMutationReceipt>;
-
-  resetPlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
 
   /**
    * Set (add or update) a filter on a field, resolved by pivot name.
@@ -574,35 +520,14 @@ export interface WorksheetPivots {
   // Calculated Fields
   // ===========================================================================
 
-  addCalculatedField(
-    pivotId: string,
-    field: PivotCalculatedFieldSpec,
-  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
   addCalculatedField(name: string, field: CalculatedField): Promise<void>;
 
-  addCalculatedFieldAndPlace(
-    pivotId: string,
-    field: PivotCalculatedFieldSpec,
-    placement: Omit<PivotPlacementSpec, 'source' | 'fieldId'>,
-  ): Promise<
-    PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; placementId: PlacementId }
-  >;
-
-  updateCalculatedField(
-    pivotId: string,
-    calculatedFieldId: CalculatedFieldId,
-    updates: Partial<Pick<PivotCalculatedFieldSpec, 'name' | 'formula'>>,
-  ): Promise<PivotKernelMutationReceipt>;
   updateCalculatedField(
     name: string,
     fieldId: string,
     updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
   ): Promise<void>;
 
-  removeCalculatedField(
-    pivotId: string,
-    calculatedFieldId: CalculatedFieldId,
-  ): Promise<PivotKernelMutationReceipt>;
   removeCalculatedField(name: string, fieldId: string): Promise<void>;
 
   // ===========================================================================

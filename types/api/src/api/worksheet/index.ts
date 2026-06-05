@@ -40,10 +40,7 @@ export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
 export type {
   ImportedPivotViewRecord,
-  PivotCalculatedFieldSpec,
   PivotCreateConfig,
-  PivotPlacementPatch,
-  PivotPlacementSpec,
   WorksheetPivots,
 } from './pivots';
 export type { WorksheetPrint } from './print';

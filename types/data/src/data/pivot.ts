@@ -375,9 +375,13 @@ export interface PivotTableConfig {
   /** Controls whether custom formatting is preserved on refresh. */
   preserveFormatting?: boolean;
   cacheId?: number;
+  dataOnRows?: boolean;
   refRange?: string;
   firstDataRow?: number;
+  firstHeaderRow?: number;
   firstDataCol?: number;
+  rowsPerPage?: number;
+  colsPerPage?: number;
   rowItems?: PivotRowColItem[];
   colItems?: PivotRowColItem[];
 }

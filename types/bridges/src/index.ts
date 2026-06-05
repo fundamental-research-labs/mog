@@ -19,6 +19,11 @@ export type {
   // Interface
   IPivotBridge,
   // Types
+  ImportedPivotAssociationStatus,
+  ImportedPivotCapabilities,
+  ImportedPivotRenderedRange,
+  ImportedPivotSourceKind,
+  ImportedPivotViewRecord,
   PivotCacheStats,
   PivotResultCallback,
 } from './pivot-bridge';

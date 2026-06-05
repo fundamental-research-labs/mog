@@ -14,13 +14,18 @@
  * All config state lives in Rust — the former PivotStore has been deleted.
  */
 
-import type { IPivotBridge, PivotCacheStats } from '@mog-sdk/contracts/bridges';
+import type {
+  ImportedPivotViewRecord,
+  IPivotBridge,
+  PivotCacheStats,
+} from '@mog-sdk/contracts/bridges';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { PivotEvent, PivotUpdateOptions } from '@mog-sdk/contracts/events';
 import type {
   AggregateFunction as ApiAggregateFunction,
   CalculatedFieldId,
   PivotFieldArea as ApiPivotFieldArea,
+  PivotExpansionState,
   PivotField,
   PivotFieldItems,
   PivotKernelMutationReceipt,
@@ -40,6 +45,7 @@ import type {
   PivotFieldItems as ComputePivotFieldItems,
   PivotFieldPlacementFlat as ComputePivotFieldPlacementFlat,
   PivotHeader as ComputePivotHeader,
+  ImportedPivotViewRecord as ComputeImportedPivotViewRecord,
   PivotItemInfo as ComputePivotItemInfo,
   PivotMeasureDescriptor as ComputePivotMeasureDescriptor,
   PivotMemberKey as ComputePivotMemberKey,
@@ -380,9 +386,13 @@ function toComputePivotConfig(config: PivotTableConfig): ComputePivotTableConfig
     autoFormat: config.autoFormat,
     preserveFormatting: config.preserveFormatting,
     cacheId: config.cacheId,
+    dataOnRows: config.dataOnRows,
     refRange: config.refRange,
     firstDataRow: config.firstDataRow,
+    firstHeaderRow: config.firstHeaderRow,
     firstDataCol: config.firstDataCol,
+    rowsPerPage: config.rowsPerPage,
+    colsPerPage: config.colsPerPage,
     rowItems: config.rowItems ?? [],
     colItems: config.colItems ?? [],
   };
@@ -412,9 +422,13 @@ function toPublicPivotConfig(config: ComputePivotTableConfig): PivotTableConfig 
     autoFormat: config.autoFormat,
     preserveFormatting: config.preserveFormatting,
     cacheId: config.cacheId,
+    dataOnRows: config.dataOnRows,
     refRange: config.refRange,
     firstDataRow: config.firstDataRow,
+    firstHeaderRow: config.firstHeaderRow,
     firstDataCol: config.firstDataCol,
+    rowsPerPage: config.rowsPerPage,
+    colsPerPage: config.colsPerPage,
     rowItems: config.rowItems,
     colItems: config.colItems,
   };
@@ -637,6 +651,25 @@ function toPublicPivotTableResult(result: ComputePivotTableResult): PivotTableRe
   };
 }
 
+function toPublicImportedPivotViewRecord(
+  record: ComputeImportedPivotViewRecord,
+): ImportedPivotViewRecord {
+  const sourceKind =
+    record.sourceKind === 'promotedImport' ? 'promotedImport' : 'unsupportedImport';
+  return {
+    sourceKind,
+    status: record.status,
+    importIdentity: record.importIdentity,
+    outputSheetId: record.outputSheetId,
+    sourceSheetId: record.sourceSheetId,
+    config: toPublicPivotConfig(record.config),
+    result: record.result ? toPublicPivotTableResult(record.result) : undefined,
+    capabilities: record.capabilities,
+    unsupportedReason: record.unsupportedReason,
+    renderedRange: record.renderedRange,
+  };
+}
+
 function toPublicPivotItem(item: ComputePivotItemInfo): PublicPivotItem | null {
   if (item.area === 'value') {
     return null;
@@ -801,6 +834,11 @@ export class PivotBridge implements IPivotBridge {
   async getAllPivots(sheetId: SheetId): Promise<PivotTableConfig[]> {
     const configs = await this.ctx.computeBridge.pivotGetAll(sheetId);
     return configs.map(toPublicPivotConfig);
+  }
+
+  async getImportedPivotViewRecords(sheetId: SheetId): Promise<ImportedPivotViewRecord[]> {
+    const records = await this.ctx.computeBridge.pivotGetImportedViewRecords(sheetId);
+    return records.map(toPublicImportedPivotViewRecord);
   }
 
   /**
@@ -1072,6 +1110,30 @@ export class PivotBridge implements IPivotBridge {
       ...buildPivotBridgeReceipt(pivotId, 'setExpansion', axisPlacementId),
       mutationResult: { action: 'setExpansion', expanded },
     };
+  }
+
+  async toggleExpanded(
+    sheetId: SheetId,
+    pivotId: string,
+    headerKey: string,
+    isRow: boolean,
+  ): Promise<boolean> {
+    const provider = this.ctx.pivotExpansionProvider;
+    if (!provider) return true;
+    return provider.toggleExpanded(pivotId, headerKey, isRow, sheetId);
+  }
+
+  async setAllExpanded(pivotId: string, expanded: boolean): Promise<void> {
+    this.ctx.pivotExpansionProvider?.setAllExpanded(pivotId, expanded);
+  }
+
+  async getExpansionState(pivotId: string): Promise<PivotExpansionState> {
+    return (
+      this.ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
+        expandedRows: {},
+        expandedColumns: {},
+      }
+    );
   }
 
   /**

@@ -250,6 +250,7 @@ export function PivotContextMenu({
   const applyChangeDataSource = useCallback(() => {
     const config = actions.pivotConfig;
     if (!config || !canEditFields) return;
+    if (!config.name) return;
 
     const dataSource = normalizeQualifiedDataSource(sourceDraft, config.sourceSheetName);
     if (!dataSource.includes('!')) {
@@ -259,7 +260,7 @@ export function PivotContextMenu({
 
     dispatchAction('PIVOT_SET_DATA_SOURCE', {
       sheetId: activeSheetId,
-      pivotId: config.id,
+      pivotName: config.name,
       dataSource,
     });
     setIsChangeSourceOpen(false);
@@ -308,6 +309,7 @@ export function PivotContextMenu({
   const applyCalculatedField = useCallback(() => {
     const config = actions.pivotConfig;
     if (!config || !canEditFields) return;
+    if (!config.name) return;
 
     const name = calculatedFieldName.trim();
     const formula = calculatedFieldFormula.trim();
@@ -322,7 +324,7 @@ export function PivotContextMenu({
 
     dispatchAction('PIVOT_ADD_CALCULATED_FIELD', {
       sheetId: activeSheetId,
-      pivotId: config.id,
+      pivotName: config.name,
       field: {
         fieldId: makeCalculatedFieldId(name),
         name,

@@ -78,6 +78,13 @@ interface NativeHandledCellDoubleClick {
   time: number;
 }
 
+interface NativeHandledSelectionBorderDoubleClick {
+  sheetId: string;
+  clientX: number;
+  clientY: number;
+  time: number;
+}
+
 type PendingTableClickSelection =
   | {
       kind: 'column';
@@ -130,14 +137,22 @@ function getSelectionBorderEdge(
   return 'down';
 }
 
-function dispatchMoveToSelectionEdge(
-  dispatch: ReturnType<typeof useDispatch>,
+function getSelectionBorderDoubleClickTarget(
   edge: SelectionBorderEdge,
-): void {
-  if (edge === 'right') dispatch('MOVE_TO_EDGE_RIGHT');
-  else if (edge === 'left') dispatch('MOVE_TO_EDGE_LEFT');
-  else if (edge === 'up') dispatch('MOVE_TO_EDGE_UP');
-  else dispatch('MOVE_TO_EDGE_DOWN');
+  activeCell: { row: number; col: number },
+): { row: number; col: number } | null {
+  if (edge === 'left') return { row: activeCell.row, col: 0 };
+  if (edge === 'up') return { row: 0, col: activeCell.col };
+  return null;
+}
+
+function singleCellRange(cell: { row: number; col: number }): CellRange {
+  return {
+    startRow: cell.row,
+    startCol: cell.col,
+    endRow: cell.row,
+    endCol: cell.col,
+  };
 }
 
 function isObjectDragOperationLive(coordinator: UseGridMouseOptions['coordinator']): boolean {
@@ -225,6 +240,23 @@ function isMatchingNativeCellDoubleClick(
     handled.sheetId === sheetId &&
     handled.row === cell.row &&
     handled.col === cell.col &&
+    Math.abs(handled.clientX - event.clientX) <= coordinateTolerancePx &&
+    Math.abs(handled.clientY - event.clientY) <= coordinateTolerancePx
+  );
+}
+
+function isMatchingNativeSelectionBorderDoubleClick(
+  handled: NativeHandledSelectionBorderDoubleClick | null,
+  sheetId: string,
+  event: GridMouseEvent,
+): boolean {
+  if (!handled) return false;
+  const maxAgeMs = 1000;
+  const coordinateTolerancePx = 2;
+
+  return (
+    Date.now() - handled.time <= maxAgeMs &&
+    handled.sheetId === sheetId &&
     Math.abs(handled.clientX - event.clientX) <= coordinateTolerancePx &&
     Math.abs(handled.clientY - event.clientY) <= coordinateTolerancePx
   );
@@ -448,6 +480,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     time: number;
   } | null>(null);
   const nativeHandledCellDoubleClickRef = useRef<NativeHandledCellDoubleClick | null>(null);
+  const nativeHandledSelectionBorderDoubleClickRef =
+    useRef<NativeHandledSelectionBorderDoubleClick | null>(null);
   const pendingFormatPainterTargetRef = useRef(false);
   const pendingTableClickSelectionRef = useRef<PendingTableClickSelection | null>(null);
   const pendingTableClickStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -621,6 +655,20 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       return true;
     },
     [activeSheetId, wb, cellInteraction],
+  );
+
+  const handleSelectionBorderDoubleClick = useCallback(
+    (edge: SelectionBorderEdge): void => {
+      const activeCell = selection.snapshot.activeCell;
+      const targetCell = getSelectionBorderDoubleClickTarget(edge, activeCell);
+
+      if (!targetCell) {
+        return;
+      }
+
+      selection.setSelection([singleCellRange(targetCell)], targetCell);
+    },
+    [selection],
   );
 
   const applyPendingFormatPainterTarget = useCallback(() => {
@@ -869,6 +917,69 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           return;
         }
 
+        const now = Date.now();
+        const clickWindow = 500;
+        const formatPainterTargeting = formatPainter.isActive && formatPainter.sourceFormat;
+
+        // Selected-cell borders have their own gesture contract and must not
+        // inherit the renderer hit-test cell at the boundary. A right/bottom
+        // border pixel can classify as the adjacent cell; if we let that pass
+        // through normal cell routing, a click moves the active cell and a
+        // double-click dispatches Ctrl+Arrow data-edge navigation.
+        if (
+          selection.ranges.length > 0 &&
+          !formatPainterTargeting &&
+          !e.shiftKey &&
+          !e.ctrlKey &&
+          !e.metaKey
+        ) {
+          const firstRange = selection.ranges[0];
+          const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
+          const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
+
+          if (
+            selectionViewportRect &&
+            !isOnFillHandle({ x, y }, selectionViewportRect) &&
+            isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
+          ) {
+            const activeCell = selection.snapshot.activeCell;
+            const edge = getSelectionBorderEdge({ x, y }, selectionViewportRect);
+            const lastBorderClick = lastSelectionBorderClickRef.current;
+            const isDoubleClick =
+              lastBorderClick !== null &&
+              lastBorderClick.row === activeCell.row &&
+              lastBorderClick.col === activeCell.col &&
+              lastBorderClick.sheetId === activeSheetId &&
+              lastBorderClick.edge === edge &&
+              now - lastBorderClick.time < clickWindow;
+
+            lastSelectionBorderClickRef.current = {
+              row: activeCell.row,
+              col: activeCell.col,
+              sheetId: activeSheetId,
+              edge,
+              time: now,
+            };
+
+            if (isDoubleClick) {
+              lastSelectionBorderClickRef.current = null;
+              nativeHandledSelectionBorderDoubleClickRef.current = {
+                sheetId: activeSheetId,
+                clientX: e.clientX,
+                clientY: e.clientY,
+                time: now,
+              };
+              handleSelectionBorderDoubleClick(edge);
+              return;
+            }
+
+            coordinator.grid.handleStartDragCells(activeCell, false);
+            return;
+          }
+        }
+
+        lastSelectionBorderClickRef.current = null;
+
         // 6. Handle grid hit test results
         // Note: We already have `hit` from renderer.hitTest() above - no need for classifyPoint()
         switch (hit.type) {
@@ -880,8 +991,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             // Sheet2 within 500ms must NOT escalate to a triple-click, otherwise the
             // selectAllText branch swallows the click and prevents formula range
             // insertion across sheets.
-            const now = Date.now();
-            const clickWindow = 500;
             const lastCell = lastClickCellRef.current;
             const sameCell =
               lastCell &&
@@ -941,51 +1050,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             };
             const containerRect = container.getBoundingClientRect();
             const screenPosition = { x: e.clientX, y: e.clientY };
-
-            // Native pointerdown owns the grid's primary input path. A click
-            // on a selected-cell border starts cell drag-drop before the
-            // browser can synthesize a reliable React dblclick; the second
-            // press may target the inline editor overlay instead of the
-            // canvas. Detect the second border press here so Excel's
-            // double-click-border data-edge jump stays on the real input path.
-            if (selection.ranges.length > 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const firstRange = selection.ranges[0];
-              const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
-              const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
-
-              if (
-                selectionViewportRect &&
-                isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
-              ) {
-                const edge = getSelectionBorderEdge({ x, y }, selectionViewportRect);
-                const lastBorderClick = lastSelectionBorderClickRef.current;
-                const isDoubleClick =
-                  lastBorderClick !== null &&
-                  lastBorderClick.row === cell.row &&
-                  lastBorderClick.col === cell.col &&
-                  lastBorderClick.sheetId === activeSheetId &&
-                  lastBorderClick.edge === edge &&
-                  now - lastBorderClick.time < clickWindow;
-
-                lastSelectionBorderClickRef.current = {
-                  row: cell.row,
-                  col: cell.col,
-                  sheetId: activeSheetId,
-                  edge,
-                  time: now,
-                };
-
-                if (isDoubleClick) {
-                  lastSelectionBorderClickRef.current = null;
-                  dispatchMoveToSelectionEdge(dispatch, edge);
-                  return;
-                }
-              } else {
-                lastSelectionBorderClickRef.current = null;
-              }
-            } else {
-              lastSelectionBorderClickRef.current = null;
-            }
 
             // Editing interception - MUST run synchronously before any await.
             // The async table hit region check below yields to the event loop,
@@ -1102,32 +1166,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
               if (selectionViewportRect && isOnFillHandle({ x, y }, selectionViewportRect)) {
                 selection.startFillHandleDrag();
-                return;
-              }
-            }
-
-            // Selection border check for cell drag-drop.
-            //
-            // Tolerance is pointer-type aware: mouse/pen get 3px (matches
-            // Excel's ~2-3px border zone). Touch keeps 5px because finger
-            // targets are imprecise. Pointer events without a pointerType
-            // (legacy callers, synthetic events) default to the mouse path.
-            // The same tolerance is shared with the cursor-feedback path
-            // (mouse-move below) so the cursor affordance and click action
-            // agree — no dead zone where the cursor shows `move` but the
-            // click still selects the cell.
-            if (selection.ranges.length > 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const firstRange = selection.ranges[0];
-              const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
-              const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
-
-              if (
-                selectionViewportRect &&
-                isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
-              ) {
-                const effectiveCtrlKey = e.ctrlKey || e.metaKey;
-                // Use coordinator method instead of direct actor access
-                coordinator.grid.handleStartDragCells(cell, effectiveCtrlKey);
                 return;
               }
             }
@@ -1279,6 +1317,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       pageBreakPreviewMode,
       formatPainter.isActive,
       formatPainter.sourceFormat,
+      handleSelectionBorderDoubleClick,
     ],
   );
 
@@ -1711,6 +1750,17 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       const hit = hitTest.atViewportPoint({ x, y });
 
+      if (
+        isMatchingNativeSelectionBorderDoubleClick(
+          nativeHandledSelectionBorderDoubleClickRef.current,
+          activeSheetId,
+          e,
+        )
+      ) {
+        nativeHandledSelectionBorderDoubleClickRef.current = null;
+        return;
+      }
+
       // 1. Check floating objects FIRST
       if (hit.type === 'floating-object') {
         const dblClickObj = await ws.objects.getInfo(hit.objectId);
@@ -1827,13 +1877,14 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         }
       }
 
-      // Double-click selection border → jump to data edge (Excel: dblclick cell border)
+      // Double-click selection border uses the mouse-border contract: left/top
+      // jump to sheet start on the same row/column; right/bottom are no-ops.
       if (selection.ranges.length > 0 && geometry) {
         const firstRange = selection.ranges[0];
         const selRect = geometry.getRangeRects(firstRange)[0];
 
         if (selRect && isOnSelectionBorder({ x, y }, selRect, 2)) {
-          dispatchMoveToSelectionEdge(dispatch, getSelectionBorderEdge({ x, y }, selRect));
+          handleSelectionBorderDoubleClick(getSelectionBorderEdge({ x, y }, selRect));
           return;
         }
       }
@@ -1879,6 +1930,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       wb,
       dispatch,
       handleCellDoubleClickAtViewportPoint,
+      handleSelectionBorderDoubleClick,
     ],
   );
 

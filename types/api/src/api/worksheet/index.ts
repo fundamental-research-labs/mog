@@ -40,11 +40,7 @@ export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
-export type {
-  ImportedPivotViewRecord,
-  PivotCreateConfig,
-  WorksheetPivots,
-} from './pivots';
+export type { ImportedPivotViewRecord, PivotCreateConfig, WorksheetPivots } from './pivots';
 export type { WorksheetPrint } from './print';
 export type {
   AllowEditRange,

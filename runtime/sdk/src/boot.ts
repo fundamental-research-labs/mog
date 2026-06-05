@@ -324,9 +324,7 @@ export async function createWorkbook(
       );
     }
     if ((arg as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
-      throw new Error(
-        '[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry',
-      );
+      throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
     }
   }
 
@@ -360,9 +358,7 @@ export async function createWorkbook(
     );
   }
   if ((opts as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
-    throw new Error(
-      '[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry',
-    );
+    throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
   }
 
   // Normalize the `principal` shorthand into `security.resolvePrincipal` so
@@ -432,11 +428,7 @@ export async function createWorkbook(
     await readyHandle.awaitImportDurability();
   }
 
-  installNodeChartImageExporter(
-    readyHandle,
-    loadNodeSdkNapiAddon,
-    opts.chartRendering,
-  );
+  installNodeChartImageExporter(readyHandle, loadNodeSdkNapiAddon, opts.chartRendering);
 
   // Create a Workbook from the handle — uses the cached workbook() path
   // which wires context, event bus, and sheet metadata internally.
@@ -871,7 +863,9 @@ export function installNodeChartImageExporter(
   resolveAddon: () => NativeChartRasterAddonCandidate,
   chartRendering?: ChartRenderingConfig,
 ): void {
-  handle.registerChartImageExporter(createSdkChartImageExporterFactory(resolveAddon, chartRendering));
+  handle.registerChartImageExporter(
+    createSdkChartImageExporterFactory(resolveAddon, chartRendering),
+  );
 }
 
 function createSdkChartImageExporterFactory(

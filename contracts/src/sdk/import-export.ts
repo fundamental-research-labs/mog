@@ -4,6 +4,14 @@
  * Canonical versioned types for document sources, sinks, and results.
  */
 
+import type {
+  ImportDiagnosticDetails,
+  ImportDiagnosticDto,
+  ImportDiagnosticLocation,
+  ImportDiagnosticRecoverability,
+  ImportDiagnosticSeverity,
+} from '@mog/types-data/data/diagnostics';
+
 // ---------------------------------------------------------------------------
 // Document source (input)
 // ---------------------------------------------------------------------------
@@ -82,9 +90,16 @@ export interface MogImportResult {
 }
 
 export interface MogImportWarning {
+  readonly id?: string;
   readonly type: MogImportWarningType;
   readonly message: string;
-  readonly location?: { readonly sheet?: string; readonly cell?: string };
+  readonly severity?: ImportDiagnosticSeverity;
+  readonly recoverability?: ImportDiagnosticRecoverability | string;
+  readonly feature?: string;
+  readonly reason?: string;
+  readonly details?: ImportDiagnosticDetails;
+  readonly diagnostic?: ImportDiagnosticDto;
+  readonly location?: ImportDiagnosticLocation;
 }
 
 export type MogImportWarningType =

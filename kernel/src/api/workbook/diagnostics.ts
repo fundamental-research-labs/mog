@@ -2,6 +2,7 @@ import type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,
+  ImportDiagnosticDto,
   ResolvedChartSpecDiagnosticsOptions,
   RuntimeDiagnosticsOptions,
   RuntimeDiagnosticsPage,
@@ -22,6 +23,7 @@ import type {
 } from '../../bridges/compute/compute-types.gen';
 import { chartNotFound, operationFailed } from '../../errors/api';
 import type { MaterializationState } from '@mog-sdk/contracts/api';
+import { projectImportDiagnostic } from '../document/import-diagnostics';
 
 export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   constructor(private readonly ctx: DocumentContext) {}
@@ -68,6 +70,11 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
 
   async materialization(): Promise<MaterializationState> {
     return this.ctx.getMaterializationState();
+  }
+
+  async import(): Promise<readonly ImportDiagnosticDto[]> {
+    const diagnostics = await this.ctx.computeBridge.getImportDiagnostics();
+    return diagnostics.map(projectImportDiagnostic);
   }
 
   async runtime(options: RuntimeDiagnosticsOptions = {}): Promise<RuntimeDiagnosticsPage> {

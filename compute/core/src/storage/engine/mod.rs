@@ -115,6 +115,12 @@ pub struct YrsComputeEngine {
     /// poll this buffer.
     pub(crate) security_events: std::sync::Arc<security_events::SecurityEventBuffer>,
 
+    /// Last canonical import report for this engine instance.
+    ///
+    /// This is runtime-only diagnostic state: it is replaced on workbook import,
+    /// not persisted in Yrs, and not exported back to XLSX.
+    pub(crate) import_report: domain_types::ImportReport,
+
     /// Yrs `update_v1` buffer.
     ///
     /// One observer is installed at engine construction; every committed

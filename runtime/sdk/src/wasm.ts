@@ -127,11 +127,14 @@ export async function createWorkbook(
 
   let handle: HostBackedDocumentHandle | undefined;
   try {
-    handle = xlsxBytes
-      ? await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
-          importOptions: opts.importOptions ?? importOptions,
-        })
-      : await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    if (xlsxBytes) {
+      const result = await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
+        importOptions: opts.importOptions ?? importOptions,
+      });
+      handle = result.handle;
+    } else {
+      handle = await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    }
   } catch (error) {
     hostResult.dispose();
     throw error;

@@ -181,7 +181,8 @@
   },
   "description": "Document lifecycle, comments, search, storage, filesystem, security, platform, and app types. Tier 1; depends only on @mog/types-core.",
   "dependencies": {
-    "@mog/types-core": "workspace:*"
+    "@mog/types-core": "workspace:*",
+    "@mog/types-data": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

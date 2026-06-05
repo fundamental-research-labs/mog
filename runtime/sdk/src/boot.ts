@@ -406,11 +406,14 @@ export async function createWorkbook(
 
   let handle: HostBackedDocumentHandle | undefined;
   try {
-    handle = xlsxBytes
-      ? await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
-          importOptions,
-        })
-      : await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    if (xlsxBytes) {
+      const result = await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
+        importOptions,
+      });
+      handle = result.handle;
+    } else {
+      handle = await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    }
   } catch (error) {
     hostResult.dispose();
     throw error;
@@ -647,6 +650,7 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this._importWarnings = this.handle.importWarnings;
     this.registerChartImageExporter();
   }
 

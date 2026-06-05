@@ -15,6 +15,7 @@ import type {
 } from '@mog-sdk/contracts/sdk';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentFactory } from './document-factory';
+import { mapDocumentImportWarningToMogImportWarning } from './import-diagnostics';
 import { createMogDocument } from './mog-document-impl';
 
 // ---------------------------------------------------------------------------
@@ -159,10 +160,7 @@ export const MogDocumentFactory: IMogDocumentFactory = {
           importResult: {
             success: false,
             sheetIds: result.sheetIds,
-            warnings: result.warnings.map((w) => ({
-              type: w.type as MogImportResult['warnings'][number]['type'],
-              message: w.message,
-            })),
+            warnings: result.warnings.map(mapDocumentImportWarningToMogImportWarning),
             error: result.error
               ? { code: 'IMPORT_FAILED', message: result.error.message }
               : undefined,
@@ -176,10 +174,7 @@ export const MogDocumentFactory: IMogDocumentFactory = {
         importResult: {
           success: true,
           sheetIds: result.sheetIds,
-          warnings: result.warnings.map((w) => ({
-            type: w.type as MogImportResult['warnings'][number]['type'],
-            message: w.message,
-          })),
+          warnings: result.warnings.map(mapDocumentImportWarningToMogImportWarning),
         },
       };
     }
@@ -193,10 +188,7 @@ export const MogDocumentFactory: IMogDocumentFactory = {
         importResult: {
           success: false,
           sheetIds: result.sheetIds,
-          warnings: result.warnings.map((w) => ({
-            type: w.type as MogImportResult['warnings'][number]['type'],
-            message: w.message,
-          })),
+          warnings: result.warnings.map(mapDocumentImportWarningToMogImportWarning),
           error: result.error
             ? { code: 'IMPORT_FAILED', message: result.error.message }
             : undefined,
@@ -210,10 +202,7 @@ export const MogDocumentFactory: IMogDocumentFactory = {
       importResult: {
         success: true,
         sheetIds: result.sheetIds,
-        warnings: result.warnings.map((w) => ({
-          type: w.type as MogImportResult['warnings'][number]['type'],
-          message: w.message,
-        })),
+        warnings: result.warnings.map(mapDocumentImportWarningToMogImportWarning),
       },
     };
   },

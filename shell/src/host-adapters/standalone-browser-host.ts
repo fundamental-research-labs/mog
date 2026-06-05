@@ -1058,5 +1058,6 @@ export async function importStandaloneBrowserHostBackedDocument(
   hostResult: StandaloneBrowserShellResult,
 ): Promise<DocumentHandle> {
   const { importHostBackedDocument } = await import('@mog/kernel-host-internal');
-  return importHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+  const result = await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+  return result.handle;
 }

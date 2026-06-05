@@ -49,6 +49,10 @@ import type { IUndoService } from '@mog-sdk/contracts/services';
 import type { TrapError } from '@mog/transport';
 import { DocumentLifecycleSystem } from '../../document';
 import { slog } from '../../lib/slog';
+import {
+  documentImportWarningsFromDiagnostics,
+  projectImportDiagnostic,
+} from './import-diagnostics';
 import type {
   PresenceState as CollaborationPresenceState,
   RoomSnapshot as CollaborationRoomSnapshot,
@@ -271,6 +275,9 @@ export interface DocumentHandle {
 
   /** The first sheet ID, available synchronously after creation */
   readonly initialSheetId: SheetId;
+
+  /** Warnings produced by the import that created this handle. */
+  readonly importWarnings: readonly DocumentImportWarning[];
 
   /** Whether this handle has been disposed. */
   readonly isDisposed: boolean;
@@ -752,13 +759,17 @@ export const DocumentFactory = {
 
       const context = lifecycle.documentContext as ISpreadsheetKernelContext;
 
-      const handle = createDocumentHandle(documentId, lifecycle, context);
+      const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+        projectImportDiagnostic,
+      );
+      const warnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+      const handle = createDocumentHandle(documentId, lifecycle, context, undefined, warnings);
 
       return {
         success: true,
         sheetIds,
         handle,
-        warnings: [],
+        warnings,
       };
     } catch (error) {
       if (lifecycle) {
@@ -974,6 +985,7 @@ function createDocumentHandle(
   lifecycle: DocumentLifecycleSystem,
   context: ISpreadsheetKernelContext,
   collaborationBootstrap?: CollaborationRoomSnapshot,
+  importWarnings: readonly DocumentImportWarning[] = [],
 ): DocumentHandleInternal {
   let disposed = false;
   let cachedWorkbook: Workbook | undefined;
@@ -1006,6 +1018,7 @@ function createDocumentHandle(
     documentId,
     context,
     initialSheetId: lifecycle.initialSheetId,
+    importWarnings,
     get isDisposed() {
       return disposed;
     },
@@ -1194,7 +1207,7 @@ function createDocumentHandle(
           readOnly: config.readOnly,
           onSave: config.onSave,
           writeFile: config.writeFile,
-          importWarnings: config.importWarnings,
+          importWarnings: config.importWarnings ?? importWarnings,
         });
       }
 
@@ -1205,6 +1218,7 @@ function createDocumentHandle(
       const wb = await createWorkbookFromConfig({
         ctx: context,
         eventBus: context.eventBus,
+        importWarnings,
       });
 
       // Chain disposal: production close/async-dispose awaits the handle;

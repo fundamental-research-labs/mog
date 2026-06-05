@@ -11,12 +11,14 @@
 
 import type { KernelHostContext } from '@mog-sdk/types-host/kernel';
 import type { HostKernelAdapterBindings } from '@mog-sdk/types-host/bindings';
-import type { DocumentImportOptions } from '@mog-sdk/contracts/document';
+import type { DocumentImportOptions, DocumentImportWarning } from '@mog-sdk/contracts/document';
 import {
   DocumentLifecycleSystem,
   _createDocumentHandleInternal,
   attachHostBootstrapCollaborationSidecar,
+  documentImportWarningsFromDiagnostics,
   fetchRoomSnapshotForHostBootstrap,
+  projectImportDiagnostic,
   validateAndResolveImportSource,
   type AuthorizedRoomBootstrap,
   type DocumentByteSyncPort,
@@ -78,6 +80,11 @@ export interface HostBackedCollaborationDocumentResult {
 
 export interface ImportHostBackedDocumentOptions {
   readonly importOptions?: DocumentImportOptions;
+}
+
+export interface ImportHostBackedDocumentResult {
+  readonly handle: DocumentHandle;
+  readonly importWarnings: readonly DocumentImportWarning[];
 }
 
 export interface DocumentSyncCapableHandle extends DocumentHandle {
@@ -261,7 +268,7 @@ export async function importHostBackedDocument(
   host: KernelHostContext,
   bindings: HostKernelAdapterBindings,
   options: ImportHostBackedDocumentOptions = {},
-): Promise<DocumentHandle> {
+): Promise<ImportHostBackedDocumentResult> {
   const lifecycleInput = prepareHostBackedDocument(host, bindings);
   if (!lifecycleInput.documentRef) {
     throw new Error('Host-backed XLSX import requires an authorized source-handle documentRef');
@@ -291,7 +298,18 @@ export async function importHostBackedDocument(
   await lifecycle.waitForReady();
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(lifecycleInput.documentId, lifecycle, context);
+  const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+    projectImportDiagnostic,
+  );
+  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+  const handle = _createDocumentHandleInternal(
+    lifecycleInput.documentId,
+    lifecycle,
+    context,
+    undefined,
+    importWarnings,
+  );
+  return { handle, importWarnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +363,17 @@ export async function importHeadlessDocumentFromXlsx(
   await lifecycle.awaitImportDurability();
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(options.documentId, lifecycle, context);
+  const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+    projectImportDiagnostic,
+  );
+  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+  return _createDocumentHandleInternal(
+    options.documentId,
+    lifecycle,
+    context,
+    undefined,
+    importWarnings,
+  );
 }
 
 function assertEphemeralCollaborationStorage(storage: {

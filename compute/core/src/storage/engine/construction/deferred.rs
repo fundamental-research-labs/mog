@@ -27,6 +27,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         );
         parsed
     };
+    let import_report = parsed.import_report;
     let parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
@@ -43,6 +44,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     // sheet order and stale workbook maps.
     engine.update_buffer.clear();
     engine.stores.storage = YrsStorage::new();
+    engine.import_report = import_report;
 
     // Pass 2: Allocate IDs for ALL sheets (fast — only ~4ms for 28 sheets).
     // Cell/Row/Col IDs are only allocated for sheets with cells (first sheet).
@@ -381,16 +383,16 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let full_parse_output = {
+        let (full_parse_output, import_report) = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
-            let parsed = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
+            let (parsed, report) = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
                 let parsed = xlsx_api::parse(raw_bytes).map_err(|e| ComputeError::Deserialize {
                     message: format!("XLSX full re-parse error: {}", e),
                 })?;
-                parsed.output
+                (parsed.output, parsed.import_report)
             } else {
-                data.parse_output.clone()
+                (data.parse_output.clone(), engine.import_report.clone())
             };
             profile.counter("sheets", parsed.sheets.len() as u64);
             profile.counter(
@@ -401,7 +403,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                     .map(|sheet| sheet.cells.len() as u64)
                     .sum::<u64>(),
             );
-            parsed
+            (parsed, report)
         };
         dh_log!("phase 0 done");
 
@@ -633,6 +635,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             stores,
             mirror: new_mirror,
             settings,
+            import_report,
             phantom_cells: id_map.phantom_cells,
             calculation,
         }
@@ -659,6 +662,7 @@ pub(in crate::storage::engine) fn commit_deferred_hydration(
 
     let (observer, undo_manager) = create_observer_and_undo(&engine.stores.storage);
     engine.mutation.observer = observer;
+    engine.import_report = completion.import_report;
     engine.mutation.undo_manager = undo_manager;
     engine.settings = completion.settings;
     engine.viewport.clear();

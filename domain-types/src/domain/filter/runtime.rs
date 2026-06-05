@@ -228,7 +228,7 @@ pub enum FilterCapability {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImportFilterUnsupportedReason {
     UnknownDynamicType,

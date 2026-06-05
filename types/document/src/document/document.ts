@@ -15,6 +15,14 @@
  *
  */
 
+import type {
+  ImportDiagnosticDetails,
+  ImportDiagnosticDto,
+  ImportDiagnosticLocation,
+  ImportDiagnosticRecoverability,
+  ImportDiagnosticSeverity,
+} from '@mog/types-data/data/diagnostics';
+
 // =============================================================================
 // DocumentSource — Where document data comes from
 // =============================================================================
@@ -309,15 +317,33 @@ export interface DocumentImportResult {
  * Warning generated during import.
  */
 export interface DocumentImportWarning {
+  /** Stable diagnostic identity when the warning originates from an import diagnostic. */
+  id?: string;
+
   /** Type of warning */
   type: 'cell_limit' | 'format_loss' | 'formula_error' | 'import_error' | 'unsupported_feature';
 
   /** Human-readable warning message */
   message: string;
 
+  /** Diagnostic severity, when available from the importer. */
+  severity?: ImportDiagnosticSeverity;
+
+  /** Whether the imported feature was preserved, repaired, dropped, etc. */
+  recoverability?: ImportDiagnosticRecoverability | string;
+
+  /** Imported feature family that produced this warning. */
+  feature?: string;
+
+  /** Deterministic primary reason for the warning, when the importer provides details. */
+  reason?: string;
+
+  /** Structured diagnostic details. */
+  details?: ImportDiagnosticDetails;
+
+  /** Full canonical diagnostic DTO that produced this warning. */
+  diagnostic?: ImportDiagnosticDto;
+
   /** Location where the warning occurred */
-  location?: {
-    sheet?: string;
-    cell?: string;
-  };
+  location?: ImportDiagnosticLocation;
 }

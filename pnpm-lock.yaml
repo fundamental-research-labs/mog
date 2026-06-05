@@ -1732,6 +1732,9 @@ importers:
       '@mog/types-core':
         specifier: workspace:*
         version: link:../core
+      '@mog/types-data':
+        specifier: workspace:*
+        version: link:../data
     devDependencies:
       typescript:
         specifier: ^5.0.0

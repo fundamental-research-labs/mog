@@ -78,6 +78,7 @@ import type {
   FloatingObjectChange,
   GroupDefinition,
   GroupingChange,
+  ImportDiagnostic as WireImportDiagnostic,
   MergeChange,
   MutationResult,
   RustWorkbookSettingsPatch,
@@ -1565,6 +1566,15 @@ export class ComputeBridge extends GeneratedBridgeBase {
   async patchWorkbookSettings(settings: RustWorkbookSettingsPatch): Promise<MutationResult> {
     this.core.ensureInitialized();
     return super.patchWorkbookSettings(settings);
+  }
+
+  getImportDiagnostics(): Promise<WireImportDiagnostic[]> {
+    this.core.ensureInitialized();
+    return this.core.query(
+      this.core.transport.call<WireImportDiagnostic[]>('compute_get_import_diagnostics', {
+        docId: this.core.docId,
+      }),
+    );
   }
 
   // resetWorkbookSettings, renameTableColumn, setCalculatedColumnFormula,

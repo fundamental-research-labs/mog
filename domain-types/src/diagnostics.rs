@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::filter::ImportFilterUnsupportedReason;
+
 /// Canonical diagnostics report for spreadsheet import.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +73,12 @@ pub struct ImportDiagnostic {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<ImportDiagnosticRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<ImportDiagnosticDetails>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub import_phases: Vec<ImportPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_import_phase: Option<ImportPhase>,
 }
 
 /// A stable reference to the imported source object that produced a diagnostic.
@@ -107,8 +115,61 @@ pub struct ImportDiagnosticRef {
     pub object_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub object_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_col_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_column_ordinal: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unresolved_filter_col_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unresolved_table_column_ordinal: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_parts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportPhase {
+    Parser,
+    CriticalSheet,
+    FullHydration,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ImportDiagnosticDetails {
+    UnsupportedFilter {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        reasons: Vec<ImportFilterUnsupportedReason>,
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "filterId")]
+        filter_id: Option<String>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "filterKind"
+        )]
+        filter_kind: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "sourceKey")]
+        source_key: Option<String>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "filterColId"
+        )]
+        filter_col_id: Option<u32>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "tableColumnOrdinal"
+        )]
+        table_column_ordinal: Option<u32>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "resolvedCol"
+        )]
+        resolved_col: Option<u32>,
+    },
 }
 
 /// Aggregate statistics from an import run.
@@ -383,6 +444,9 @@ impl From<ParseError> for ImportDiagnostic {
                 col: error.col,
                 ..ImportDiagnosticRef::default()
             }),
+            details: None,
+            import_phases: Vec::new(),
+            first_import_phase: None,
         }
     }
 }
@@ -525,8 +589,15 @@ mod tests {
                     feature_kind: Some(ImportFeatureKind::Chart),
                     object_id: Some("chart-1".to_string()),
                     object_name: None,
+                    filter_col_id: None,
+                    table_column_ordinal: None,
+                    unresolved_filter_col_id: None,
+                    unresolved_table_column_ordinal: None,
                     related_parts: Vec::new(),
                 }),
+                details: None,
+                import_phases: Vec::new(),
+                first_import_phase: None,
             }],
             stats: ImportStats {
                 total_cells: 12,
@@ -595,6 +666,9 @@ mod tests {
             recoverability: ImportRecoverability::Repaired,
             message: "Formula cache is stale".to_string(),
             reference: None,
+            details: None,
+            import_phases: Vec::new(),
+            first_import_phase: None,
         };
         let earlier = ImportDiagnostic {
             message: "Earlier diagnostic".to_string(),

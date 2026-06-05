@@ -29,7 +29,7 @@ use cell_types::{CellId, SheetId, SheetPos};
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
-use domain_types::{DefinedName, NameValidationResult};
+use domain_types::{DefinedName, ImportDiagnostic, NameValidationResult};
 use value_types::{CellValue, ComputeError};
 
 #[bridge::api(
@@ -51,6 +51,11 @@ impl YrsComputeEngine {
         options: FormulaReferenceDiagnosticsOptions,
     ) -> Result<FormulaReferenceDiagnosticsPage, ComputeError> {
         workbook_settings::get_formula_reference_diagnostics(self, options)
+    }
+
+    #[bridge::read(scope = "workbook")]
+    pub fn get_import_diagnostics(&self) -> Vec<ImportDiagnostic> {
+        self.import_report.diagnostics.clone()
     }
 
     #[bridge::write(scope = "workbook")]

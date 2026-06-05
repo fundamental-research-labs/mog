@@ -3,6 +3,8 @@ import type {
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,
   ResolvedChartSpecDiagnosticsOptions,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
   WorkbookDiagnostics,
 } from '@mog-sdk/contracts/api';
 import { normalizeImageExportOptions } from '@mog/charts/export';
@@ -19,6 +21,7 @@ import type {
   ExternalLinkStatusSnapshot,
 } from '../../bridges/compute/compute-types.gen';
 import { chartNotFound, operationFailed } from '../../errors/api';
+import type { MaterializationState } from '@mog-sdk/contracts/api';
 
 export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   constructor(private readonly ctx: DocumentContext) {}
@@ -61,6 +64,20 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
     }
 
     return snapshot.resolvedChartSpec;
+  }
+
+  async materialization(): Promise<MaterializationState> {
+    return this.ctx.getMaterializationState();
+  }
+
+  async runtime(options: RuntimeDiagnosticsOptions = {}): Promise<RuntimeDiagnosticsPage> {
+    const mutationHandler = this.ctx.computeBridge.getMutationHandler?.();
+    return (
+      mutationHandler?.getRuntimeDiagnostics(options) ?? {
+        diagnostics: [],
+        truncated: false,
+      }
+    );
   }
 
   private externalLinkSnapshot(): ExternalLinkStatusSnapshot {

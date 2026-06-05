@@ -1,5 +1,5 @@
 use crate::mirror::CellMirror;
-use crate::snapshot::{ChangeKind, FilterChange, MutationResult};
+use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
 use crate::storage::engine::services::imported_filters;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
@@ -81,6 +81,7 @@ pub(in crate::storage::engine) fn create_filter(
         unsupported_reasons: metadata.unsupported_reasons,
         has_active_filter: metadata.has_active_filter,
         clearable: metadata.clearable,
+        diagnostics: Vec::new(),
         action: Some("created".to_string()),
         hidden_row_count: None,
         visible_row_count: None,
@@ -191,6 +192,36 @@ fn unsupported_reason_wire(reason: filters::ImportFilterUnsupportedReason) -> &'
     }
 }
 
+fn unsupported_filter_apply_diagnostic(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    filter_kind: Option<String>,
+    metadata: &FilterChangeMetadata,
+) -> RuntimeOperationDiagnostic {
+    let sequence = stores.id_alloc.next_u128().to_string();
+    RuntimeOperationDiagnostic {
+        id: format!("runtime-diagnostic-{sequence}"),
+        sequence,
+        code: "unsupported_filter_reapply".to_string(),
+        severity: "warning".to_string(),
+        recoverability: "unsupported_preserved".to_string(),
+        operation: "applyFilter".to_string(),
+        sheet_id: sheet_id.to_uuid_string(),
+        filter_id: Some(filter_id.to_string()),
+        filter_kind,
+        table_id: metadata.table_id.clone(),
+        reason: metadata.unsupported_reasons.first().cloned(),
+        reasons: metadata.unsupported_reasons.clone(),
+        details: Some(serde_json::json!({
+            "capability": metadata.capability.clone(),
+            "hasActiveFilter": metadata.has_active_filter,
+            "clearable": metadata.clearable,
+        })),
+        location: None,
+    }
+}
+
 fn resolve_filter_cell_pos(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -259,6 +290,7 @@ pub(in crate::storage::engine) fn delete_filter(
         unsupported_reasons: metadata.unsupported_reasons,
         has_active_filter: metadata.has_active_filter,
         clearable: metadata.clearable,
+        diagnostics: Vec::new(),
         action: Some("deleted".to_string()),
         hidden_row_count: None,
         visible_row_count: None,
@@ -685,7 +717,19 @@ fn apply_filter_with_action(
         .map(|filter| filter_kind_wire(&filter.filter_kind).to_string());
     let metadata = filter_change_metadata_for_id(stores, sheet_id, filter_id, filter.as_ref());
     if imported_shell_disallows_filter_ownership(stores, sheet_id, filter_id) {
+        let diagnostics = if action == "applied" {
+            vec![unsupported_filter_apply_diagnostic(
+                stores,
+                sheet_id,
+                filter_id,
+                filter_kind.clone(),
+                &metadata,
+            )]
+        } else {
+            Vec::new()
+        };
         let mut result = MutationResult::empty();
+        result.diagnostics = diagnostics.clone();
         result.filter_changes.push(FilterChange {
             sheet_id: sheet_id.to_uuid_string(),
             filter_id: filter_id.to_string(),
@@ -695,6 +739,7 @@ fn apply_filter_with_action(
             unsupported_reasons: metadata.unsupported_reasons,
             has_active_filter: metadata.has_active_filter,
             clearable: metadata.clearable,
+            diagnostics,
             action: Some(action.to_string()),
             hidden_row_count: None,
             visible_row_count: None,
@@ -779,6 +824,7 @@ fn apply_filter_with_action(
         unsupported_reasons: metadata.unsupported_reasons,
         has_active_filter: metadata.has_active_filter,
         clearable: metadata.clearable,
+        diagnostics: Vec::new(),
         action: Some(action.to_string()),
         hidden_row_count: Some(rows_to_hide.len() as u32),
         visible_row_count: Some(rows_to_unhide.len() as u32),

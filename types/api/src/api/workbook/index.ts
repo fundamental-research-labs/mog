@@ -13,7 +13,12 @@ export type {
   FormulaReferenceEdgeDiagnosticRow,
   FormulaReferenceLocation,
   FormulaReferenceParseDiagnosticRow,
+  MaterializationPhase,
+  MaterializationState,
   ResolvedChartSpecDiagnosticsOptions,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
   WorkbookDiagnostics,
 } from './diagnostics';
 export type { WorkbookNames } from './names';

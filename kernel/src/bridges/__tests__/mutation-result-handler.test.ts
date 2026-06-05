@@ -191,6 +191,22 @@ describe('MutationResultHandler.applyAndNotify', () => {
 
     handler.applyAndNotify(
       buildMutationResult({
+        diagnostics: [
+          {
+            id: 'runtime-diagnostic-1',
+            sequence: '1',
+            code: 'unsupported_filter_reapply',
+            severity: 'warning',
+            recoverability: 'unsupported_preserved',
+            operation: 'applyFilter',
+            sheetId: 'sheet-1',
+            filterId: 'filter-1',
+            filterKind: 'autoFilter',
+            tableId: 'table-1',
+            reason: 'iconFilterUnsupported',
+            reasons: ['iconFilterUnsupported'],
+          },
+        ],
         filterChanges: [
           {
             sheetId: 'sheet-1',
@@ -201,6 +217,22 @@ describe('MutationResultHandler.applyAndNotify', () => {
             unsupportedReasons: ['iconFilterUnsupported'],
             hasActiveFilter: true,
             clearable: true,
+            diagnostics: [
+              {
+                id: 'runtime-diagnostic-1',
+                sequence: '1',
+                code: 'unsupported_filter_reapply',
+                severity: 'warning',
+                recoverability: 'unsupported_preserved',
+                operation: 'applyFilter',
+                sheetId: 'sheet-1',
+                filterId: 'filter-1',
+                filterKind: 'autoFilter',
+                tableId: 'table-1',
+                reason: 'iconFilterUnsupported',
+                reasons: ['iconFilterUnsupported'],
+              },
+            ],
             action: 'applied',
             hiddenRowCount: 0,
             visibleRowCount: 10,
@@ -221,8 +253,67 @@ describe('MutationResultHandler.applyAndNotify', () => {
         unsupportedReasons: ['iconFilterUnsupported'],
         hasActiveFilter: true,
         clearable: true,
+        diagnostics: [
+          expect.objectContaining({
+            code: 'unsupported_filter_reapply',
+            operation: 'applyFilter',
+            reason: 'iconFilterUnsupported',
+          }),
+        ],
       }),
     );
+  });
+
+  it('retains runtime diagnostics for workbook diagnostics queries', () => {
+    const eventBus = createMockEventBus();
+    const handler = new MutationResultHandler(eventBus);
+
+    handler.applyAndNotify(
+      buildMutationResult({
+        diagnostics: [
+          {
+            id: 'runtime-diagnostic-1',
+            sequence: '1',
+            code: 'unsupported_filter_reapply',
+            severity: 'warning',
+            recoverability: 'unsupported_preserved',
+            operation: 'applyFilter',
+            sheetId: 'sheet-1',
+            filterId: 'filter-1',
+            filterKind: 'autoFilter',
+            reason: 'iconFilterUnsupported',
+            reasons: ['iconFilterUnsupported'],
+          },
+          {
+            id: 'runtime-diagnostic-2',
+            sequence: '2',
+            code: 'unsupported_filter_reapply',
+            severity: 'warning',
+            recoverability: 'unsupported_preserved',
+            operation: 'applyFilter',
+            sheetId: 'sheet-1',
+            filterId: 'filter-1',
+            filterKind: 'autoFilter',
+            reason: 'unknownExtension',
+            reasons: ['unknownExtension'],
+          },
+        ],
+      }),
+    );
+
+    expect(handler.getRuntimeDiagnostics()).toEqual({
+      diagnostics: [
+        expect.objectContaining({ sequence: '1', reason: 'iconFilterUnsupported' }),
+        expect.objectContaining({ sequence: '2', reason: 'unknownExtension' }),
+      ],
+      nextSequence: '2',
+      truncated: false,
+    });
+    expect(handler.getRuntimeDiagnostics({ sinceSequence: '1' })).toEqual({
+      diagnostics: [expect.objectContaining({ sequence: '2', reason: 'unknownExtension' })],
+      nextSequence: '2',
+      truncated: false,
+    });
   });
 
   it('performs both state updates and event emission together', () => {

@@ -41,10 +41,10 @@ pub use mutation::{
     GroupingChange, MergeChange, MutationResult, NamedRangeChange, PageBreakChange,
     PivotTableChange, PolicyPreservedParseOutcome, PolicyPreservedParseSummary, PrintAreaChange,
     PrintSettingsChange, PrintTitlesChange, PropertyChange, RangeChange, RangeChangeKind,
-    ScrollPositionChange, SheetChange, SheetChangeField, SheetLifecycleRuntimeHint,
-    SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType, SortingChange,
-    SparklineChange, SplitConfigChange, StructureChangeResult, StructureChangeType, TableChange,
-    UndoState, VisibilityChange, WorkbookSettingsChange,
+    RuntimeOperationDiagnostic, ScrollPositionChange, SheetChange, SheetChangeField,
+    SheetLifecycleRuntimeHint, SheetSettingsChange, SlicerChange, SlicerChangeKind,
+    SlicerSourceType, SortingChange, SparklineChange, SplitConfigChange, StructureChangeResult,
+    StructureChangeType, TableChange, UndoState, VisibilityChange, WorkbookSettingsChange,
 };
 pub use recalc::{
     CellChange, CellEdit, CellErrorInfo, ParseResult, ProjectionCellData, ProjectionChange,

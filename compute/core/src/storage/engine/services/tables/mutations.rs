@@ -138,6 +138,7 @@ pub(in crate::storage::engine) fn create_table(
         unsupported_reasons: Vec::new(),
         has_active_filter: Some(!filter_state.column_filters.is_empty()),
         clearable: Some(true),
+        diagnostics: Vec::new(),
         action: Some("created".to_string()),
         hidden_row_count: None,
         visible_row_count: None,

@@ -1,4 +1,13 @@
 import type { ImageExportOptions, LinkId, ResolvedChartSpecSnapshot, SheetId } from '../types';
+import type {
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+} from '@mog/types-data/data/diagnostics';
+export type {
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
+} from '@mog/types-data/data/diagnostics';
 
 export type CellId = string;
 
@@ -15,6 +24,33 @@ export interface WorkbookDiagnostics {
   getResolvedChartSpec(
     options: ResolvedChartSpecDiagnosticsOptions,
   ): Promise<ResolvedChartSpecSnapshot>;
+
+  /** Current deferred-import materialization state. */
+  materialization(): Promise<MaterializationState>;
+
+  /** Runtime operation diagnostics emitted by recent workbook commands. */
+  runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;
+}
+
+export type MaterializationPhase =
+  | 'MetadataParsed'
+  | 'CriticalSheetHydrating'
+  | 'CriticalSheetReady'
+  | 'AllSheetsHydrating'
+  | 'AllSheetsReady'
+  | 'MaterializationFailed';
+
+export interface MaterializationState {
+  readonly phase: MaterializationPhase;
+  readonly isDeferred: boolean;
+  readonly isMaterialized: boolean;
+  readonly pendingScope?: SheetId | 'allSheets';
+  readonly initialActiveSheetId?: SheetId;
+  readonly error?: {
+    readonly code: string;
+    readonly message: string;
+    readonly scope?: SheetId | 'allSheets';
+  };
 }
 
 export interface ResolvedChartSpecDiagnosticsOptions {

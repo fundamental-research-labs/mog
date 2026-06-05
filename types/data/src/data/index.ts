@@ -4,6 +4,7 @@ export * from './charts';
 // commit). Re-exported here so `@mog/types-data/data` keeps the same
 // surface that contracts/src/data/index.ts advertises.
 export * from '@mog/types-formatting/conditional-format/rules';
+export * from './diagnostics';
 export * from './filter';
 export * from './grouping';
 export * from './named-ranges';

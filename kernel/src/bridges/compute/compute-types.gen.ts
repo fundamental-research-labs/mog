@@ -1977,10 +1977,28 @@ export interface FilterChange {
   unsupportedReasons?: ImportFilterUnsupportedReason[];
   hasActiveFilter?: boolean;
   clearable?: boolean;
+  diagnostics?: RuntimeOperationDiagnostic[];
   action?: string;
   hiddenRowCount?: number;
   visibleRowCount?: number;
   kind: ChangeKind;
+}
+
+export interface RuntimeOperationDiagnostic {
+  id: string;
+  sequence: string;
+  code: string;
+  severity: string;
+  recoverability: string;
+  operation: string;
+  sheetId: string;
+  filterId?: string;
+  filterKind?: string;
+  tableId?: string;
+  reason?: string;
+  reasons?: string[];
+  details?: unknown;
+  location?: unknown;
 }
 
 export interface FilterColumn {
@@ -2900,6 +2918,7 @@ export interface MutationResult {
   rangeChanges?: RangeChange[];
   policyPreservedParseOutcomes?: PolicyPreservedParseOutcome[];
   policyPreservedParseSummary?: PolicyPreservedParseSummary;
+  diagnostics?: RuntimeOperationDiagnostic[];
   undoDescription?: string;
   data?: unknown;
   oldValues?: Record<string, CellValue>;

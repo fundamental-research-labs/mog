@@ -303,6 +303,7 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
             unsupported_reasons: Vec::new(),
             has_active_filter: None,
             clearable: None,
+            diagnostics: Vec::new(),
             action: Some(
                 match observer_kind_to_change_kind(fch.kind) {
                     ChangeKind::Set => "updated",

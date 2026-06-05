@@ -6,6 +6,7 @@
 
 import type { CellRange } from '@mog/types-core';
 import type { BaseEvent, StructureChangeSource } from '@mog/types-commands/event-base';
+import type { RuntimeOperationDiagnostic } from '@mog/types-data/data/diagnostics';
 
 export type FilterKind = 'autoFilter' | 'tableFilter' | 'advancedFilter';
 
@@ -29,6 +30,7 @@ export interface FilterEventMetadata {
   unsupportedReasons?: readonly ImportFilterUnsupportedReason[];
   hasActiveFilter?: boolean;
   clearable?: boolean;
+  diagnostics?: readonly RuntimeOperationDiagnostic[];
 }
 
 export interface FilterCreatedEvent extends BaseEvent, FilterEventMetadata {

@@ -1,5 +1,6 @@
 export * from './charts';
 export * from './conditional-format';
+export * from './diagnostics';
 export * from './filter';
 export * from './grouping';
 export * from './named-ranges';

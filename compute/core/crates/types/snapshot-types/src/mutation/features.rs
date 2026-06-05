@@ -5,6 +5,34 @@ use cell_types::RangeId;
 use domain_types::domain::slicer::{SlicerSelectionChangeType, StoredSlicer};
 use value_types::CellValue;
 
+/// Runtime operation diagnostic emitted by mutation commands that preserved
+/// workbook state but could not apply the operation exactly.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeOperationDiagnostic {
+    pub id: String,
+    pub sequence: String,
+    pub code: String,
+    pub severity: String,
+    pub recoverability: String,
+    pub operation: String,
+    pub sheet_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<serde_json::Value>,
+}
+
 /// A filter change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +60,9 @@ pub struct FilterChange {
     /// Whether the filter can be cleared through the public filter command path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clearable: Option<bool>,
+    /// Runtime diagnostics associated with this filter operation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<RuntimeOperationDiagnostic>,
     /// Semantic action (`created`, `updated`, `applied`, `cleared`, `deleted`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,

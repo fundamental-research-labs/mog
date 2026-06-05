@@ -7,7 +7,7 @@ use super::cell_grid::{
 };
 use super::features::{
     CfChange, FilterChange, GroupingChange, NamedRangeChange, PivotTableChange, RangeChange,
-    SlicerChange, SortingChange, StructureChangeResult, TableChange,
+    RuntimeOperationDiagnostic, SlicerChange, SortingChange, StructureChangeResult, TableChange,
 };
 use super::floating_objects::FloatingObjectChange;
 use super::policy_parse::{PolicyPreservedParseOutcome, PolicyPreservedParseSummary};
@@ -116,6 +116,9 @@ pub struct MutationResult {
     /// Summary for policy-preserved parse outcomes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_preserved_parse_summary: Option<PolicyPreservedParseSummary>,
+    /// Runtime operation diagnostics emitted by this mutation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<RuntimeOperationDiagnostic>,
     /// Undo description for this mutation (displayed as "Undo: {description}").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub undo_description: Option<String>,
@@ -168,6 +171,7 @@ impl MutationResult {
             range_changes: Vec::new(),
             policy_preserved_parse_outcomes: Vec::new(),
             policy_preserved_parse_summary: None,
+            diagnostics: Vec::new(),
             undo_description: None,
             data: None,
             old_values: HashMap::new(),
@@ -258,6 +262,7 @@ mod tests {
         assert!(mr.floating_object_group_changes.is_empty());
         assert!(mr.pivot_changes.is_empty());
         assert!(mr.range_changes.is_empty());
+        assert!(mr.diagnostics.is_empty());
         assert!(mr.undo_description.is_none());
         assert!(mr.data.is_none());
     }
@@ -391,6 +396,7 @@ mod tests {
             range_changes: vec![],
             policy_preserved_parse_outcomes: vec![],
             policy_preserved_parse_summary: None,
+            diagnostics: vec![],
             undo_description: Some("Set cell format".into()),
             data: None,
             old_values: HashMap::new(),
@@ -474,6 +480,7 @@ mod tests {
         assert!(mr.floating_object_group_changes.is_empty());
         assert!(mr.pivot_changes.is_empty());
         assert!(mr.range_changes.is_empty());
+        assert!(mr.diagnostics.is_empty());
         assert!(mr.undo_description.is_none());
     }
 
@@ -502,6 +509,7 @@ mod tests {
             unsupported_reasons: Vec::new(),
             has_active_filter: None,
             clearable: None,
+            diagnostics: Vec::new(),
             action: Some("updated".into()),
             hidden_row_count: None,
             visible_row_count: None,
@@ -524,6 +532,7 @@ mod tests {
             unsupported_reasons: Vec::new(),
             has_active_filter: None,
             clearable: None,
+            diagnostics: Vec::new(),
             action: Some("deleted".into()),
             hidden_row_count: None,
             visible_row_count: None,

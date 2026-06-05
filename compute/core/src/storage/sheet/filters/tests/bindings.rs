@@ -3,10 +3,12 @@ use std::collections::BTreeMap;
 use super::super::{
     FilterButtonMetadata, FilterCapability, FilterKind, FilterMetadataBinding,
     FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterShellMetadata,
-    clear_filter_metadata_bindings, delete_filter_metadata_binding, get_filter_metadata_binding,
+    clear_filter_metadata_bindings, delete_filter_metadata_binding,
+    delete_stale_filter_metadata_bindings_for_source_key_with_origin, get_filter_metadata_binding,
     get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
 };
 use super::helpers::storage_with_sheet;
+use compute_document::undo::ORIGIN_BOOTSTRAP;
 
 fn binding(filter_id: &str) -> FilterMetadataBinding {
     let mut col_id_to_header_cell_id = BTreeMap::new();
@@ -102,5 +104,44 @@ fn clear_filter_metadata_bindings_only_removes_binding_entries() {
     assert!(
         get_filter_metadata_bindings_in_sheet(storage.doc(), storage.sheets(), &sheet_id)
             .is_empty()
+    );
+}
+
+#[test]
+fn stale_filter_metadata_bindings_are_reconciled_by_source_key() {
+    let (storage, sheet_id) = storage_with_sheet();
+    let stale = binding("filter-old");
+    let replacement = binding("filter-new");
+    let mut unrelated = binding("filter-unrelated");
+    unrelated.source_key = FilterMetadataSourceKey::SheetAutoFilter {
+        sheet_id: "sheet-1".to_string(),
+        range_ref: "F1:H10".to_string(),
+    };
+    unrelated.range_ref = "F1:H10".to_string();
+
+    upsert_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, &stale);
+    upsert_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, &unrelated);
+
+    let deleted = delete_stale_filter_metadata_bindings_for_source_key_with_origin(
+        storage.doc(),
+        storage.sheets(),
+        &sheet_id,
+        &replacement,
+        ORIGIN_BOOTSTRAP,
+    );
+
+    assert_eq!(deleted, 1);
+    assert!(
+        get_filter_metadata_binding(storage.doc(), storage.sheets(), &sheet_id, "filter-old")
+            .is_none()
+    );
+    assert!(
+        get_filter_metadata_binding(
+            storage.doc(),
+            storage.sheets(),
+            &sheet_id,
+            "filter-unrelated"
+        )
+        .is_some()
     );
 }

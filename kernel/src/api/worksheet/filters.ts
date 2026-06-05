@@ -115,7 +115,9 @@ async function toFilterSummary(
     filter.advancedFilter?.criteriaRange || filter.advancedFilter?.uniqueRecordsOnly,
   );
   const hasActiveFilter = activeColumnCount > 0 || hasAdvancedFilter || headerHasActiveFilter;
-  const capability = headerEntries.find((entry) => entry.capability)?.capability ?? 'supported';
+  const capability = headerEntries.some((entry) => entry.capability === 'unsupported')
+    ? 'unsupported'
+    : (headerEntries.find((entry) => entry.capability)?.capability ?? 'supported');
   const unsupportedReasons = Array.from(
     new Set(headerEntries.flatMap((entry) => entry.unsupportedReasons ?? [])),
   );
@@ -301,6 +303,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
    * row using the resolved effective format.
    */
   async byColor(col: number, opts: FilterByColorOptions): Promise<void> {
+    await this.awaitAllMaterialized();
     const resolvedId = await this.resolveFilterId(opts.filterId);
     const criteria: ColumnFilterCriteria = {
       type: 'color',
@@ -695,8 +698,11 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async isDataFiltered(): Promise<boolean> {
-    const filters = await this.list();
-    return filters.some((f) => Object.keys(f.columnFilters ?? {}).length > 0);
+    const filters = await this.listSummaries();
+    return filters.some((filter) => {
+      const activeColumnCount = filter.activeColumnCount ?? 0;
+      return filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
+    });
   }
 
   /** @deprecated Use list() instead. */

@@ -9,7 +9,7 @@ use super::yrs_access::{
 use crate::identity::GridIndex;
 use cell_types::SheetId;
 use compute_document::schema::{KEY_FILTER_HIDDEN_ROWS, KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS};
-use compute_document::undo::ORIGIN_USER_EDIT;
+use compute_document::undo::{ORIGIN_BOOTSTRAP, ORIGIN_USER_EDIT};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowVisibilityOwnership {
@@ -120,7 +120,7 @@ pub fn set_filter_hidden_rows(
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
     let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
         None => return transitions,
@@ -240,7 +240,18 @@ pub fn normalize_imported_filter_hidden_rows(
 
     for &row in rows_included_by_filter {
         if let Some(row_id) = row_id_key(grid_index, row) {
+            let cache_hidden = map_has_true(&hidden_rows_map, &txn, &row.to_string());
+            let structural =
+                !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+            let has_filter_owner = any_filter_hides_row(&filter_hidden_rows_map, &txn, &row_id);
             owner_map.remove(&mut txn, &row_id);
+            if cache_hidden
+                && !structural
+                && !has_filter_owner
+                && let Some(manual_map) = &manual_hidden_rows_map
+            {
+                manual_map.insert(&mut txn, &*row_id, Any::Bool(true));
+            }
         }
     }
 
@@ -250,6 +261,80 @@ pub fn normalize_imported_filter_hidden_rows(
             effective_hidden_by_row_id(
                 manual_hidden_rows_map.as_ref(),
                 Some(&filter_hidden_rows_map),
+                &txn,
+                &row_id,
+            )
+        });
+        write_effective_hidden_cache(&hidden_rows_map, &mut txn, row, effective);
+        if before != effective {
+            transitions.push((row, effective));
+        }
+    }
+
+    transitions
+}
+
+/// Assign remaining imported hidden-row cache entries to manual ownership.
+///
+/// Sheet AutoFilter import defers row-hidden provenance until the filter can be
+/// evaluated. After supported criteria have claimed their excluded rows, any
+/// remaining cache-hidden row without a filter or structural owner is a manual
+/// hidden row. Structural-only rows are removed from the manual/filter cache;
+/// grouping remains their rendered visibility source of truth.
+pub fn finalize_imported_hidden_row_cache(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    grid_index: Option<&GridIndex>,
+) -> Vec<(u32, bool)> {
+    let mut transitions = Vec::new();
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
+    let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
+        Some(m) => m,
+        None => return transitions,
+    };
+    let Some(manual_hidden_rows_map) =
+        get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS)
+    else {
+        return transitions;
+    };
+    let filter_hidden_rows_map = get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS);
+
+    let rows: Vec<u32> = hidden_rows_map
+        .iter(&txn)
+        .filter_map(|(key, value)| {
+            if matches!(value, Out::Any(Any::Bool(true))) {
+                key.parse::<u32>().ok()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for row in rows {
+        let before = map_has_true(&hidden_rows_map, &txn, &row.to_string());
+        let Some(row_id) = row_id_key(grid_index, row) else {
+            continue;
+        };
+        let manual = map_has_true(&manual_hidden_rows_map, &txn, &row_id);
+        let filter = filter_hidden_rows_map
+            .as_ref()
+            .is_some_and(|m| any_filter_hides_row(m, &txn, &row_id));
+        let structural =
+            !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+
+        if !manual && !filter {
+            if structural {
+                write_effective_hidden_cache(&hidden_rows_map, &mut txn, row, false);
+            } else {
+                manual_hidden_rows_map.insert(&mut txn, &*row_id, Any::Bool(true));
+            }
+        }
+
+        let effective = row_id_key(grid_index, row).is_some_and(|row_id| {
+            effective_hidden_by_row_id(
+                Some(&manual_hidden_rows_map),
+                filter_hidden_rows_map.as_ref(),
                 &txn,
                 &row_id,
             )

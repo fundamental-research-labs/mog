@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use compute_document::hex::SmallHex;
@@ -196,7 +197,23 @@ pub(crate) fn hydrate_dimensions(
         row_id_hexes,
         &sheet.dimensions.row_heights,
         &sheet.dimensions.col_widths,
+        sheet.auto_filter.is_some(),
+        &imported_structural_hidden_rows(sheet),
     );
+}
+
+fn imported_structural_hidden_rows(sheet: &SheetData) -> BTreeSet<u32> {
+    let mut rows = BTreeSet::new();
+    for group in sheet
+        .outline_groups
+        .iter()
+        .filter(|group| group.is_row && (group.collapsed || group.hidden))
+    {
+        for row in group.start..=group.end {
+            rows.insert(row);
+        }
+    }
+    rows
 }
 
 fn hydrate_row_metadata(txn: &mut yrs::TransactionMut, meta_map: &MapRef, sheet: &SheetData) {

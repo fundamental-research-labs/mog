@@ -4,9 +4,9 @@
  * Provides filter state for toolbar button enable/disable logic.
  * Follows the same pattern as useGroupingActions.
  *
- * Reads filter state via ws.filters.list() (async, unified Worksheet API).
- * Active filter counts derived from returned filter objects' columnFilters and
- * advanced filter state.
+ * Reads filter state via ws.filters.listSummaries() (async, unified Worksheet API).
+ * Active filter counts derive from summary activity fields, including imported
+ * shell/header activity when detailed criteria are not materialized as supported.
  *
  * DESIGN NOTE: This hook is optimized for toolbar/low-frequency UI contexts.
  * It subscribes to filter events and updates state reactively, which is appropriate
@@ -57,8 +57,10 @@ function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo
 
   for (const filter of allFilters) {
     const activeColumnCount = filter.activeColumnCount ?? 0;
-    const hasActiveFilter = filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
-    const clearable = filter.clearable ?? (filter.filterKind !== 'advancedFilter' && hasActiveFilter);
+    const hasActiveFilter =
+      filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
+    const clearable =
+      filter.clearable ?? (filter.filterKind !== 'advancedFilter' && hasActiveFilter);
     if (clearable) {
       hasActiveFilters = true;
       activeFilterCount += activeColumnCount > 0 ? activeColumnCount : 1;

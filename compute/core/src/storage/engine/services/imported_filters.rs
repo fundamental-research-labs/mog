@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::KEY_PROPERTIES;
-use compute_document::undo::ORIGIN_USER_EDIT;
+use compute_document::undo::{ORIGIN_BOOTSTRAP, ORIGIN_USER_EDIT};
 use domain_types::domain::filter::{
     AutoFilter, FilterColumn, OoxmlFilterType, column_filter_to_ooxml_filter_type,
 };
@@ -117,9 +117,64 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             stores.grid_indexes.get(sheet_id),
         );
         apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+        remove_filter_only_rows_from_explicit_hidden_metadata(
+            stores,
+            sheet_id,
+            rows_excluded.iter().copied(),
+        );
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_excluded);
         sync_mirror_rows_from_effective_hidden(stores, mirror, sheet_id, &rows_included);
     }
+
+    let transitions = dimensions::finalize_imported_hidden_row_cache(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        stores.grid_indexes.get(sheet_id),
+    );
+    apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+}
+
+fn remove_filter_only_rows_from_explicit_hidden_metadata(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    rows: impl IntoIterator<Item = u32>,
+) {
+    let rows_to_remove: BTreeSet<u32> = rows
+        .into_iter()
+        .filter(|row| {
+            let ownership = dimensions::get_row_visibility_ownership(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                sheet_id,
+                *row,
+                stores.grid_indexes.get(sheet_id),
+            );
+            !ownership.manual && !ownership.structural && !ownership.filter_owner_ids.is_empty()
+        })
+        .collect();
+    if rows_to_remove.is_empty() {
+        return;
+    }
+
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
+    let Some(Out::YMap(sheet_map)) = stores.storage.sheets().get(&txn, &sheet_hex) else {
+        return;
+    };
+    let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES) else {
+        return;
+    };
+    let explicit_hidden: Vec<u32> =
+        yrs_schema::helpers::read_json_vec(&meta_map, &txn, "rowExplicitHidden");
+    let retained = explicit_hidden
+        .into_iter()
+        .filter(|row| !rows_to_remove.contains(row))
+        .collect::<Vec<_>>();
+    yrs_schema::helpers::write_json_vec(&meta_map, &mut txn, "rowExplicitHidden", &retained);
 }
 
 pub(in crate::storage::engine) fn sync_imported_auto_filter_metadata_from_runtime(
@@ -435,6 +490,18 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
         source_fingerprint: fingerprint,
     };
 
+    let origin = if import_origin {
+        ORIGIN_BOOTSTRAP
+    } else {
+        ORIGIN_USER_EDIT
+    };
+    filters::delete_stale_filter_metadata_bindings_for_source_key_with_origin(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        &binding,
+        origin,
+    );
     if import_origin {
         filters::upsert_import_filter_metadata_binding(
             stores.storage.doc(),

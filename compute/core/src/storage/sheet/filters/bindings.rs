@@ -141,20 +141,59 @@ pub fn get_filter_metadata_bindings_in_sheet(
         .collect()
 }
 
-pub fn delete_filter_metadata_binding(
+pub fn delete_filter_metadata_binding_with_origin(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
     filter_id: &str,
+    origin: &'static [u8],
 ) -> bool {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
     let Some(bindings_map) = get_bindings_map(&txn, sheets, &sheet_hex) else {
         return false;
     };
     let existed = bindings_map.get(&txn, filter_id).is_some();
     bindings_map.remove(&mut txn, filter_id);
     existed
+}
+
+pub fn delete_filter_metadata_binding(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    filter_id: &str,
+) -> bool {
+    delete_filter_metadata_binding_with_origin(doc, sheets, sheet_id, filter_id, ORIGIN_USER_EDIT)
+}
+
+pub fn delete_stale_filter_metadata_bindings_for_source_key_with_origin(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    binding: &FilterMetadataBinding,
+    origin: &'static [u8],
+) -> usize {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
+    let Some(bindings_map) = get_bindings_map(&txn, sheets, &sheet_hex) else {
+        return 0;
+    };
+    let stale_keys: Vec<String> = bindings_map
+        .iter(&txn)
+        .filter_map(|(key, out)| {
+            read_binding_entry(&out, &txn)
+                .filter(|existing| {
+                    existing.filter_id != binding.filter_id
+                        && existing.source_key == binding.source_key
+                })
+                .map(|_| key.to_string())
+        })
+        .collect();
+    for key in &stale_keys {
+        bindings_map.remove(&mut txn, key.as_str());
+    }
+    stale_keys.len()
 }
 
 pub fn clear_filter_metadata_bindings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) {

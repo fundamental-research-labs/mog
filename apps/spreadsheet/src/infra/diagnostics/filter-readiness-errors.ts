@@ -1,6 +1,10 @@
 import { isDev, isTest } from '@mog/env';
 
-export type FilterReadinessErrorSource = 'headerCache' | 'filterActions' | 'dataTabClear';
+export type FilterReadinessErrorSource =
+  | 'headerCache'
+  | 'filterActions'
+  | 'dataTabClear'
+  | 'dataTabReapply';
 
 export interface FilterReadinessErrorInput {
   source: FilterReadinessErrorSource;

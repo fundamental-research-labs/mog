@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use yrs::{Any, Array, Map, MapPrelim, MapRef};
@@ -391,12 +391,20 @@ pub(super) fn hydrate_hidden_rows_cols(
     row_id_hexes: &[SmallHex],
     row_heights: &[RowDimension],
     col_widths: &[ColDimension],
+    defer_hidden_row_ownership: bool,
+    structural_hidden_rows: &BTreeSet<u32>,
 ) {
     for rh in row_heights {
         if rh.hidden {
-            let key = rh.row.to_string();
-            hidden_rows_map.insert(txn, &*key, Any::Bool(true));
-            if let Some(row_id) = row_id_hexes.get(rh.row as usize) {
+            let structurally_hidden = structural_hidden_rows.contains(&rh.row);
+            if !structurally_hidden {
+                let key = rh.row.to_string();
+                hidden_rows_map.insert(txn, &*key, Any::Bool(true));
+            }
+            if !defer_hidden_row_ownership
+                && !structurally_hidden
+                && let Some(row_id) = row_id_hexes.get(rh.row as usize)
+            {
                 manual_hidden_rows_map.insert(txn, row_id.as_str(), Any::Bool(true));
             }
         }

@@ -842,6 +842,7 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
   const sheetId = deps.getActiveSheetId();
+  let operation = 'filters.listSummaries';
 
   try {
     const allFilters = await ws.filters.listSummaries();
@@ -854,6 +855,7 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
       return handled(); // No filters to clear
     }
 
+    operation = 'filters.clearAllCriteria';
     for (const filter of clearableFilters) {
       await ws.filters.clearAllCriteria(filter.id);
     }
@@ -863,7 +865,7 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
     recordFilterReadinessError({
       source: 'dataTabClear',
       sheetId,
-      operation: 'filters.clearAllCriteria',
+      operation,
       error,
     });
     throw error;
@@ -882,29 +884,42 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
+  const sheetId = deps.getActiveSheetId();
+  let operation = 'filters.list';
 
-  const allFilters = await ws.filters.list();
+  try {
+    const allFilters = await ws.filters.list();
 
-  if (!allFilters || allFilters.length === 0) {
-    return handled(); // No filters to reapply
-  }
-
-  for (const filter of allFilters) {
-    if (filter.filterKind === 'advancedFilter') {
-      if (!filter.advancedFilter?.active) continue;
-      await ws.filters.applyAdvanced({
-        listRange: rangeToA1Notation(filter.range),
-        criteriaRange: filter.advancedFilter.criteriaRange
-          ? rangeToA1Notation(filter.advancedFilter.criteriaRange)
-          : undefined,
-        mode: 'inPlace',
-        uniqueRecordsOnly: filter.advancedFilter.uniqueRecordsOnly,
-        filterId: filter.id,
-      });
-    } else {
-      await ws.filters.apply(filter.id);
+    if (!allFilters || allFilters.length === 0) {
+      return handled(); // No filters to reapply
     }
-  }
 
-  return handled();
+    operation = 'filters.apply';
+    for (const filter of allFilters) {
+      if (filter.filterKind === 'advancedFilter') {
+        if (!filter.advancedFilter?.active) continue;
+        await ws.filters.applyAdvanced({
+          listRange: rangeToA1Notation(filter.range),
+          criteriaRange: filter.advancedFilter.criteriaRange
+            ? rangeToA1Notation(filter.advancedFilter.criteriaRange)
+            : undefined,
+          mode: 'inPlace',
+          uniqueRecordsOnly: filter.advancedFilter.uniqueRecordsOnly,
+          filterId: filter.id,
+        });
+      } else {
+        await ws.filters.apply(filter.id);
+      }
+    }
+
+    return handled();
+  } catch (error) {
+    recordFilterReadinessError({
+      source: 'dataTabReapply',
+      sheetId,
+      operation,
+      error,
+    });
+    throw error;
+  }
 };

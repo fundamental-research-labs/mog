@@ -51,7 +51,9 @@ pub use domain_types::domain::filter::{
 };
 
 pub use bindings::{
-    clear_filter_metadata_bindings, delete_filter_metadata_binding, get_filter_metadata_binding,
+    clear_filter_metadata_bindings, delete_filter_metadata_binding,
+    delete_filter_metadata_binding_with_origin,
+    delete_stale_filter_metadata_bindings_for_source_key_with_origin, get_filter_metadata_binding,
     get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
     upsert_filter_metadata_binding_with_origin, upsert_import_filter_metadata_binding,
 };

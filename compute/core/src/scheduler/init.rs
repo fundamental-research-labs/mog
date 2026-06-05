@@ -244,8 +244,8 @@ impl ComputeCore {
 
     /// Ultra-minimal init for deferred-hydration XLSX import.
     /// Seeds formula text for materialized cells but defers graph construction.
-    /// Builds CellMirror from only the first sheet (viewport-visible),
-    /// deferring the remaining sheets to complete_deferred_hydration.
+    /// Builds CellMirror from the sparse first-paint snapshot, which includes
+    /// all sheet headers but only the critical sheet's materialized cells.
     pub fn init_from_snapshot_viewport_only(
         &mut self,
         mirror: &mut CellMirror,
@@ -268,37 +268,19 @@ impl ComputeCore {
         self.rebuild_ordered_sheets_cache();
         let deferred_snapshot = snapshot.clone();
 
-        // Build CellMirror from only the first sheet to minimize critical path.
-        // Named ranges, tables, pivot tables still come from the full snapshot.
-        let first_sheet_snapshot = WorkbookSnapshot {
-            sheets: if snapshot.sheets.is_empty() {
-                vec![]
-            } else {
-                vec![snapshot.sheets[0].clone()]
-            },
-            named_ranges: snapshot.named_ranges,
-            tables: snapshot.tables,
-            pivot_tables: snapshot.pivot_tables,
-            data_table_regions: snapshot.data_table_regions,
-            iterative_calc: snapshot.iterative_calc,
-            max_iterations: snapshot.max_iterations,
-            max_change: snapshot.max_change,
-            calculation_settings: snapshot.calculation_settings,
-        };
-        let first_sheet_formula_cells =
-            Self::extract_formula_cells_from_snapshot(&first_sheet_snapshot);
+        let materialized_formula_cells = Self::extract_formula_cells_from_snapshot(&snapshot);
         self.cell_formula_text = FxHashMap::with_capacity_and_hasher(
-            first_sheet_formula_cells.len(),
+            materialized_formula_cells.len(),
             Default::default(),
         );
-        self.seed_cell_formula_text(&first_sheet_formula_cells);
+        self.seed_cell_formula_text(&materialized_formula_cells);
 
         // Store the viewport-only marker so graph/recalc callers can reject
         // partial workbook graph construction until full hydration completes.
         // Readback does not depend on this marker.
         self.deferred_snapshot = Some(deferred_snapshot);
 
-        *mirror = CellMirror::from_snapshot(first_sheet_snapshot)?;
+        *mirror = CellMirror::from_snapshot(snapshot)?;
 
         Ok(RecalcResult::empty())
     }

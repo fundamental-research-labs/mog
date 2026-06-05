@@ -33,7 +33,9 @@ pub use cols::{
 };
 pub use row_visibility::{
     clear_filter_hidden_rows, get_hidden_rows, get_row_visibility_ownership, hide_manual_rows,
-    is_row_hidden, set_filter_hidden_rows, unhide_manual_rows,
+    is_row_hidden, is_row_hidden_by_any_filter, is_row_hidden_by_filter,
+    is_row_hidden_only_by_filter, is_row_manually_hidden, normalize_imported_filter_hidden_rows,
+    set_filter_hidden_rows, unhide_manual_rows,
 };
 #[cfg(test)]
 pub use row_visibility::{hide_rows, unhide_rows};

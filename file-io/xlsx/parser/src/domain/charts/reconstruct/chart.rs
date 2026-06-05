@@ -42,13 +42,10 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         plot_area: build_plot_area(spec),
         legend: spec.legend.as_ref().and_then(build_legend),
         plot_vis_only: spec.plot_visible_only,
-        disp_blanks_as: spec
-            .display_blanks_as
-            .as_deref()
-            .and_then(|value| {
-                normalize_explicit_display_blanks_as(value)
-                    .map(|normalized| DisplayBlanksAs::from_ooxml(&normalized))
-            }),
+        disp_blanks_as: spec.display_blanks_as.as_deref().and_then(|value| {
+            normalize_explicit_display_blanks_as(value)
+                .map(|normalized| DisplayBlanksAs::from_ooxml(&normalized))
+        }),
         show_d_lbls_over_max: spec.show_data_labels_over_max,
         show_all_field_buttons: spec
             .show_all_field_buttons

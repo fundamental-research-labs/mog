@@ -955,6 +955,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let output = ParseOutput {
         sheets: output_sheets,
         workbook_sheet_inventory: Vec::new(),
+        parsed_workbook_sheet_indices: Default::default(),
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
         workbook_conformance: None,
         style_palette,

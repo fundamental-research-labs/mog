@@ -50,6 +50,7 @@ const resolvedRanges: ResolvedChartRangeReferences = {
 };
 
 const exportOptions: ChartExportOptionsSnapshot = {
+  kind: 'raster',
   format: 'png',
   width: 640,
   height: 360,
@@ -57,6 +58,15 @@ const exportOptions: ChartExportOptionsSnapshot = {
   physicalHeight: 360,
   pixelRatio: 1,
   backgroundColor: '#ffffff',
+  fittingMode: 'fill',
+  frame: {
+    exportWidth: 640,
+    exportHeight: 360,
+    contentX: 0,
+    contentY: 0,
+    contentWidth: 640,
+    contentHeight: 360,
+  },
 };
 
 const cachedMarks = [{ type: 'group', children: [] }] as unknown as ChartMark[];

@@ -16,6 +16,18 @@ export type {
 } from './workbook';
 export type { Worksheet, WorksheetWithInternals } from './worksheet';
 export type * from '@mog/types-api/api';
+export type {
+  ImportDiagnosticDetails,
+  ImportDiagnosticDto,
+  ImportDiagnosticLocation,
+  ImportDiagnosticPhase,
+  ImportDiagnosticRecoverability,
+  ImportDiagnosticSeverity,
+  ImportFilterUnsupportedReason,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
+} from '@mog/types-api/api/workbook/diagnostics';
 export { CellType, CellValueType, NumberFormatCategory, RangeValueType } from './types';
 export {
   isFloatingObjectMutationReceipt,

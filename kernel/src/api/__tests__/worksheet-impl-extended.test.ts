@@ -659,6 +659,62 @@ describe('WorksheetImpl Extended Methods', () => {
           range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
           activeColumnCount: 1,
           hasActiveCriteria: true,
+          hasActiveFilter: true,
+          clearable: true,
+          detailsReady: true,
+          capability: 'supported',
+          unsupportedReasons: [],
+        },
+      ]);
+    });
+
+    it('listSummaries treats unsupported imported shell header state as active and clearable', async () => {
+      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+        {
+          id: 'f1',
+          type: 'autoFilter',
+          headerStartCellId: 'c-start',
+          headerEndCellId: 'c-end',
+          dataEndCellId: 'c-data-end',
+          columnFilters: {},
+        },
+      ]);
+      ctx.computeBridge.getFilterHeaderInfo.mockResolvedValue([
+        {
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
+          row: 0,
+          col: 2,
+          headerCellId: 'c-vendor',
+          hasActiveFilter: true,
+          sourceType: 'sheetAutoFilter',
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
+        },
+      ]);
+      ctx.computeBridge.getCellPosition
+        .mockResolvedValueOnce({ row: 0, col: 0 })
+        .mockResolvedValueOnce({ row: 0, col: 3 })
+        .mockResolvedValueOnce({ row: 11, col: 3 });
+
+      const result = await ws.filters.listSummaries();
+
+      expect(result).toEqual([
+        {
+          id: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
+          activeColumnCount: 0,
+          hasActiveCriteria: true,
+          hasActiveFilter: true,
+          clearable: true,
+          detailsReady: true,
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
         },
       ]);
     });

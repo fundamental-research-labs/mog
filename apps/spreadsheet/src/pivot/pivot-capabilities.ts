@@ -5,9 +5,15 @@ export type PivotSourceKind = 'native' | 'promotedImport' | 'unsupportedImport';
 
 export interface PivotCapabilities {
   canEditFields: boolean;
+  canMove: boolean;
   canReorderFields: boolean;
+  canRemove: boolean;
   canRemoveFields: boolean;
   canChangeAggregate: boolean;
+  canSortLabels: boolean;
+  canSortByValue: boolean;
+  canRename: boolean;
+  canShowValuesAs: boolean;
   canRefresh: boolean;
   canDelete: boolean;
   canExport: boolean;
@@ -27,9 +33,15 @@ export const UNSUPPORTED_IMPORTED_PIVOT_REASON =
 export function createNativePivotCapabilities(): PivotCapabilities {
   return {
     canEditFields: true,
+    canMove: true,
     canReorderFields: true,
+    canRemove: true,
     canRemoveFields: true,
     canChangeAggregate: true,
+    canSortLabels: true,
+    canSortByValue: true,
+    canRename: true,
+    canShowValuesAs: true,
     canRefresh: true,
     canDelete: true,
     canExport: true,
@@ -41,9 +53,15 @@ export function createUnsupportedImportPivotCapabilities(
 ): PivotCapabilities {
   return {
     canEditFields: false,
+    canMove: false,
     canReorderFields: false,
+    canRemove: false,
     canRemoveFields: false,
     canChangeAggregate: false,
+    canSortLabels: false,
+    canSortByValue: false,
+    canRename: false,
+    canShowValuesAs: false,
     canRefresh: false,
     canDelete: false,
     canExport: true,

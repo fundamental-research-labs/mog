@@ -10,6 +10,7 @@ import {
 describe('resolved spec snapshot helpers', () => {
   it('builds default export options from requested dimensions', () => {
     expect(defaultExportOptionsForSize(320.4, 179.6)).toEqual({
+      kind: 'raster',
       format: 'png',
       width: 320.4,
       height: 179.6,
@@ -17,6 +18,15 @@ describe('resolved spec snapshot helpers', () => {
       physicalWidth: 320,
       physicalHeight: 180,
       backgroundColor: '#ffffff',
+      fittingMode: 'fill',
+      frame: {
+        exportWidth: 320.4,
+        exportHeight: 179.6,
+        contentX: 0,
+        contentY: 0,
+        contentWidth: 320.4,
+        contentHeight: 179.6,
+      },
     });
     expect(defaultExportOptionsForSize(0, -5)).toMatchObject({
       physicalWidth: 1,
@@ -140,6 +150,7 @@ describe('resolved spec snapshot helpers', () => {
         ],
       },
       exportOptions: {
+        kind: 'raster',
         format: 'png',
         width: 320,
         height: 180,
@@ -147,6 +158,15 @@ describe('resolved spec snapshot helpers', () => {
         physicalWidth: 320,
         physicalHeight: 180,
         backgroundColor: '#ffffff',
+        fittingMode: 'fill',
+        frame: {
+          exportWidth: 320,
+          exportHeight: 180,
+          contentX: 0,
+          contentY: 0,
+          contentWidth: 320,
+          contentHeight: 180,
+        },
       },
       compilerPathId: 'ts-grammar',
       compilerInputHash: 'input-hash',

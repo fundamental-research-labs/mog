@@ -11,9 +11,13 @@ import type {
   CellValue,
   ColumnFilter,
   FilterDetailInfo,
+  FilterHeaderInfoEntry,
   FilterSortState,
   FilterState,
+  FilterSummaryInfo,
 } from '../types';
+
+export type { FilterHeaderInfoEntry, FilterSummaryInfo } from '../types';
 
 export type AdvancedFilterMode = 'inPlace' | 'copyTo';
 
@@ -324,6 +328,20 @@ export interface WorksheetFilters {
    * @returns Array of detailed filter info objects
    */
   list(): Promise<FilterDetailInfo[]>;
+
+  /**
+   * List compact filter summaries without per-column criteria conversion.
+   *
+   * @returns Array of filter summary objects
+   */
+  listSummaries(): Promise<FilterSummaryInfo[]>;
+
+  /**
+   * List renderer-ready filter header entries for the sheet.
+   *
+   * @returns Array of header entries keyed by row/column
+   */
+  listHeaderInfo(): Promise<FilterHeaderInfoEntry[]>;
 
   /**
    * Whether any auto-filter exists on the sheet.

@@ -41,9 +41,11 @@ export function PivotFieldPanelContainer({
   const {
     editingPivot,
     handlePivotAddField,
-    handlePivotRemoveField,
-    handlePivotMoveField,
-    handlePivotAggregateChange,
+    handlePivotRemovePlacement,
+    handlePivotMovePlacement,
+    handlePivotPlacementAggregateChange,
+    handlePivotPlacementSortOrderChange,
+    handlePivotValueSortChange,
     handlePivotRefresh,
     handlePivotDelete,
     stopEditingPivot,
@@ -63,9 +65,11 @@ export function PivotFieldPanelContainer({
       <PivotFieldPanel
         pivot={editingPivot}
         onAddField={handlePivotAddField}
-        onRemoveField={handlePivotRemoveField}
-        onMoveField={handlePivotMoveField}
-        onSetAggregateFunction={handlePivotAggregateChange}
+        onRemovePlacement={handlePivotRemovePlacement}
+        onMovePlacement={handlePivotMovePlacement}
+        onSetAggregateFunction={handlePivotPlacementAggregateChange}
+        onSetSortOrder={handlePivotPlacementSortOrderChange}
+        onSetValueSortOrder={handlePivotValueSortChange}
         onRefresh={handlePivotRefresh}
         onDelete={handlePivotDelete}
         onClose={stopEditingPivot}

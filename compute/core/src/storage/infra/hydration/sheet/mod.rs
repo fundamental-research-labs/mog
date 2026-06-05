@@ -18,7 +18,10 @@ mod grid_index;
 mod identity;
 mod view_meta;
 
-pub(crate) use allocation::{allocate_sheet_ids, allocate_sheet_ids_with_sheet_id};
+pub(crate) use allocation::{
+    allocate_sheet_ids, allocate_sheet_ids_with_previous_allocation,
+    allocate_sheet_ids_with_sheet_id,
+};
 pub(crate) use identity::SheetIdAllocation;
 
 use super::IdAllocator;

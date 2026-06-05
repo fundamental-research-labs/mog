@@ -6,6 +6,15 @@ use crate::storage::sheet::filters;
 use cell_types::SheetId;
 use value_types::{CellValue, ComputeError};
 
+fn finish_filter_mutation(
+    engine: &mut YrsComputeEngine,
+    patches: Vec<u8>,
+    result: MutationResult,
+) -> (Vec<u8>, MutationResult) {
+    engine.record_runtime_diagnostics(&result.diagnostics);
+    (patches, result)
+}
+
 pub(super) fn create_filter(
     engine: &mut YrsComputeEngine,
     sheet_id: &SheetId,
@@ -20,7 +29,7 @@ pub(super) fn create_filter(
     let result =
         filter_svc::create_filter(&mut engine.stores, &mut engine.mirror, sheet_id, config)?;
     let patches = engine.produce_cf_viewport_patches(sheet_id);
-    Ok((patches, result))
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn delete_filter(
@@ -34,7 +43,8 @@ pub(super) fn delete_filter(
     engine.prepare_recalc_for_flush(&mut recalc);
     result.recalc = recalc;
     engine.mutation.pending_recalc = None;
-    Ok((engine.produce_full_viewport_patches(sheet_id), result))
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn set_column_filter(
@@ -57,7 +67,8 @@ pub(super) fn set_column_filter(
     engine.prepare_recalc_for_flush(&mut recalc);
     result.recalc = recalc;
     engine.mutation.pending_recalc = None;
-    Ok((engine.produce_full_viewport_patches(sheet_id), result))
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn clear_column_filter(
@@ -78,7 +89,8 @@ pub(super) fn clear_column_filter(
     engine.prepare_recalc_for_flush(&mut recalc);
     result.recalc = recalc;
     engine.mutation.pending_recalc = None;
-    Ok((engine.produce_full_viewport_patches(sheet_id), result))
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn clear_all_column_filters(
@@ -97,7 +109,8 @@ pub(super) fn clear_all_column_filters(
     engine.prepare_recalc_for_flush(&mut recalc);
     result.recalc = recalc;
     engine.mutation.pending_recalc = None;
-    Ok((engine.produce_full_viewport_patches(sheet_id), result))
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn get_filters_in_sheet(
@@ -105,6 +118,13 @@ pub(super) fn get_filters_in_sheet(
     sheet_id: &SheetId,
 ) -> Vec<filters::FilterState> {
     filter_svc::get_filters_in_sheet(&engine.stores, &engine.mirror, sheet_id)
+}
+
+pub(super) fn get_filter_header_info(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Vec<filters::FilterHeaderInfo> {
+    filter_svc::get_filter_header_info(&engine.stores, &engine.mirror, sheet_id)
 }
 
 pub(super) fn apply_advanced_filter(
@@ -126,11 +146,13 @@ pub(super) fn apply_advanced_filter(
             engine.prepare_recalc_for_flush(&mut recalc);
             result.recalc = recalc;
             engine.mutation.pending_recalc = None;
-            Ok((engine.produce_full_viewport_patches(sheet_id), result))
+            let patches = engine.produce_full_viewport_patches(sheet_id);
+            Ok(finish_filter_mutation(engine, patches, result))
         }
         filters::AdvancedFilterMode::CopyTo => {
             engine.prepare_recalc_for_flush(&mut result.recalc);
-            Ok((engine.flush_viewport_patches(), result))
+            let patches = engine.flush_viewport_patches();
+            Ok(finish_filter_mutation(engine, patches, result))
         }
     }
 }
@@ -155,7 +177,7 @@ pub(super) fn apply_filter(
     result.recalc = recalc;
     engine.mutation.pending_recalc = None;
     let patches = engine.produce_cf_viewport_patches(sheet_id);
-    Ok((patches, result))
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn get_unique_column_values(
@@ -220,14 +242,13 @@ pub(super) fn set_filter_sort_state(
     filter_id: &str,
     sort_state: Option<filters::FilterSortState>,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    filter_svc::set_filter_sort_state(&mut engine.stores, sheet_id, filter_id, sort_state).map(
-        |r| {
-            (
-                compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-                r,
-            )
-        },
-    )
+    let result =
+        filter_svc::set_filter_sort_state(&mut engine.stores, sheet_id, filter_id, sort_state)?;
+    Ok(finish_filter_mutation(
+        engine,
+        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+        result,
+    ))
 }
 
 pub(super) fn get_filter_sort_state(
@@ -242,12 +263,14 @@ pub(super) fn clear_all_filters(
     engine: &mut YrsComputeEngine,
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    filter_svc::clear_all_filters(&mut engine.stores, sheet_id).map(|r| {
-        (
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            r,
-        )
-    })
+    let mut result =
+        filter_svc::clear_all_filters(&mut engine.stores, &mut engine.mirror, sheet_id)?;
+    let mut recalc = engine.stores.compute.full_recalc(&mut engine.mirror)?;
+    engine.prepare_recalc_for_flush(&mut recalc);
+    result.recalc = recalc;
+    engine.mutation.pending_recalc = None;
+    let patches = engine.produce_full_viewport_patches(sheet_id);
+    Ok(finish_filter_mutation(engine, patches, result))
 }
 
 pub(super) fn get_filtered_record_count(

@@ -14,12 +14,16 @@
 
 import { useCallback, useMemo } from 'react';
 
+import type { PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
+  PlacementId,
   PivotField,
   PivotFieldArea,
+  PivotFieldPlacementFlat,
   PivotTableConfig,
+  SortOrder,
 } from '@mog-sdk/contracts/pivot';
 
 import { useActiveSheetId } from '../../infra/context';
@@ -47,7 +51,7 @@ export interface UsePivotEditorActionsReturn {
   handlePivotAddField: (
     fieldId: string,
     area: PivotFieldArea,
-    options?: { aggregateFunction?: AggregateFunction },
+    options?: { position?: number; aggregateFunction?: AggregateFunction },
   ) => void;
   handlePivotRemoveField: (fieldId: string, area: PivotFieldArea) => void;
   handlePivotMoveField: (
@@ -57,6 +61,27 @@ export interface UsePivotEditorActionsReturn {
     position: number,
   ) => void;
   handlePivotAggregateChange: (fieldId: string, aggregate: AggregateFunction) => void;
+  handlePivotAddPlacement: (
+    fieldId: string,
+    area: PivotFieldArea,
+    position: number,
+    options?: { aggregateFunction?: AggregateFunction },
+  ) => void;
+  handlePivotRemovePlacement: (placementId: PlacementId) => void;
+  handlePivotMovePlacement: (
+    placementId: PlacementId,
+    toArea: PivotFieldArea,
+    position: number,
+  ) => void;
+  handlePivotPlacementAggregateChange: (
+    placementId: PlacementId,
+    aggregate: AggregateFunction,
+  ) => void;
+  handlePivotPlacementSortOrderChange: (
+    placementId: PlacementId,
+    sortOrder: SortOrder | null,
+  ) => void;
+  handlePivotValueSortChange: (valuePlacementId: PlacementId, sortOrder: SortOrder | null) => void;
   handlePivotRefresh: () => void;
   handlePivotDelete: () => void;
 
@@ -81,6 +106,38 @@ export interface UsePivotEditorActionsReturn {
   stopEditingPivot: () => void;
 }
 
+function getPlacementId(placement: PivotFieldPlacementFlat): PlacementId {
+  return placement.placementId as PlacementId;
+}
+
+function orderedPlacements(
+  config: PivotTableConfig,
+  area: PivotFieldArea,
+): PivotFieldPlacementFlat[] {
+  return config.placements
+    .filter((placement) => placement.area === area)
+    .sort((left, right) => left.position - right.position);
+}
+
+export function getDefaultValueSortAxisPlacement(
+  config: PivotTableConfig,
+): PivotFieldPlacementFlat | null {
+  return orderedPlacements(config, 'row')[0] ?? orderedPlacements(config, 'column')[0] ?? null;
+}
+
+export function axisSortTargetsValuePlacement(
+  axisPlacement: PivotFieldPlacementFlat | null | undefined,
+  valuePlacementId: PlacementId,
+  valueFieldId?: string,
+): boolean {
+  if (!axisPlacement?.sortByValue) return false;
+  return (
+    axisPlacement.sortByValue.valuePlacementId === valuePlacementId ||
+    axisPlacement.sortByValue.valueFieldId === valuePlacementId ||
+    (valueFieldId !== undefined && axisPlacement.sortByValue.valueFieldId === valueFieldId)
+  );
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -100,10 +157,15 @@ export function usePivotEditorActions(
     createPivotTable,
     detectFields,
     deletePivotTable,
-    addFieldToArea,
+    addPlacement,
     removeFieldFromArea,
+    removePlacement,
     moveField,
+    movePlacement,
     setAggregateFunction,
+    setPlacementAggregateFunction,
+    setPlacementSortOrder,
+    setSortByValue,
     refreshPivotTable,
     startEditingPivot,
     stopEditingPivot,
@@ -133,13 +195,18 @@ export function usePivotEditorActions(
     (
       fieldId: string,
       area: PivotFieldArea,
-      options?: { aggregateFunction?: AggregateFunction },
+      options?: { position?: number; aggregateFunction?: AggregateFunction },
     ) => {
       if (editingPivotId && editingPivotCapabilities?.canEditFields) {
-        addFieldToArea(editingPivotId, fieldId, area, options);
+        addPlacement(editingPivotId, {
+          fieldId,
+          area,
+          position: options?.position,
+          aggregateFunction: options?.aggregateFunction,
+        });
       }
     },
-    [editingPivotId, editingPivotCapabilities, addFieldToArea],
+    [editingPivotId, editingPivotCapabilities, addPlacement],
   );
 
   /**
@@ -178,6 +245,93 @@ export function usePivotEditorActions(
     [editingPivotId, editingPivotCapabilities, setAggregateFunction],
   );
 
+  const handlePivotAddPlacement = useCallback(
+    (
+      fieldId: string,
+      area: PivotFieldArea,
+      position: number,
+      options?: { aggregateFunction?: AggregateFunction },
+    ) => {
+      if (!editingPivotId || !editingPivotCapabilities?.canEditFields) return;
+      const spec: Parameters<typeof addPlacement>[1] = {
+        fieldId,
+        area,
+        position,
+      };
+      if (options?.aggregateFunction) {
+        spec.aggregateFunction = options.aggregateFunction;
+      }
+      addPlacement(editingPivotId, spec);
+    },
+    [addPlacement, editingPivotCapabilities, editingPivotId],
+  );
+
+  const handlePivotRemovePlacement = useCallback(
+    (placementId: PlacementId) => {
+      const canRemove =
+        (editingPivotCapabilities?.canRemove ?? editingPivotCapabilities?.canRemoveFields) === true;
+      if (editingPivotId && canRemove) {
+        removePlacement(editingPivotId, placementId);
+      }
+    },
+    [editingPivotId, editingPivotCapabilities, removePlacement],
+  );
+
+  const handlePivotMovePlacement = useCallback(
+    (placementId: PlacementId, toArea: PivotFieldArea, position: number) => {
+      const canMove =
+        (editingPivotCapabilities?.canMove ?? editingPivotCapabilities?.canReorderFields) === true;
+      if (editingPivotId && canMove) {
+        movePlacement(editingPivotId, placementId, toArea, position);
+      }
+    },
+    [editingPivotId, editingPivotCapabilities, movePlacement],
+  );
+
+  const handlePivotPlacementAggregateChange = useCallback(
+    (placementId: PlacementId, aggregate: AggregateFunction) => {
+      if (editingPivotId && editingPivotCapabilities?.canChangeAggregate) {
+        setPlacementAggregateFunction(editingPivotId, placementId, aggregate);
+      }
+    },
+    [editingPivotId, editingPivotCapabilities, setPlacementAggregateFunction],
+  );
+
+  const handlePivotPlacementSortOrderChange = useCallback(
+    (placementId: PlacementId, sortOrder: SortOrder | null) => {
+      if (editingPivotId && editingPivotCapabilities?.canSortLabels) {
+        setPlacementSortOrder(editingPivotId, placementId, sortOrder);
+      }
+    },
+    [editingPivotId, editingPivotCapabilities, setPlacementSortOrder],
+  );
+
+  const handlePivotValueSortChange = useCallback(
+    (valuePlacementId: PlacementId, sortOrder: SortOrder | null) => {
+      if (!editingPivotId || !editingPivot || !editingPivotCapabilities?.canSortByValue) return;
+      const axisPlacement = getDefaultValueSortAxisPlacement(editingPivot.config);
+      if (!axisPlacement) return;
+      const valuePlacement = editingPivot.config.placements.find(
+        (placement) => placement.placementId === valuePlacementId,
+      );
+      const axisPlacementId = getPlacementId(axisPlacement);
+      const config: PivotValueSortConfig | null =
+        !sortOrder || sortOrder === 'none'
+          ? null
+          : {
+              order: sortOrder,
+            };
+      if (
+        config === null &&
+        !axisSortTargetsValuePlacement(axisPlacement, valuePlacementId, valuePlacement?.fieldId)
+      ) {
+        return;
+      }
+      setSortByValue(editingPivotId, axisPlacementId, valuePlacementId, config);
+    },
+    [editingPivot, editingPivotCapabilities, editingPivotId, setSortByValue],
+  );
+
   /**
    * Refresh the pivot table data from source.
    */
@@ -212,6 +366,12 @@ export function usePivotEditorActions(
     handlePivotRemoveField,
     handlePivotMoveField,
     handlePivotAggregateChange,
+    handlePivotAddPlacement,
+    handlePivotRemovePlacement,
+    handlePivotMovePlacement,
+    handlePivotPlacementAggregateChange,
+    handlePivotPlacementSortOrderChange,
+    handlePivotValueSortChange,
     handlePivotRefresh,
     handlePivotDelete,
 

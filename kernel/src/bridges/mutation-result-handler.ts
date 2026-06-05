@@ -28,8 +28,10 @@ import type {
   CellChangedEvent,
   CellFormatChangedEvent,
   CellsBatchChangedEvent,
+  FilterCapability,
   FilterKind,
   IEventBus,
+  ImportFilterUnsupportedReason,
   PivotUpdateOptions,
 } from '@mog-sdk/contracts/events';
 import type {
@@ -99,6 +101,36 @@ function toEventFilterKind(value: string | undefined): FilterKind | undefined {
     return value;
   }
   return undefined;
+}
+
+function toEventFilterCapability(value: string | undefined): FilterCapability | undefined {
+  if (value === 'supported' || value === 'unsupported') {
+    return value;
+  }
+  return undefined;
+}
+
+const IMPORT_FILTER_UNSUPPORTED_REASONS = new Set<string>([
+  'unknownDynamicType',
+  'unknownCustomOperator',
+  'dateGroupUnsupported',
+  'dynamicTemporalContextUnsupported',
+  'valueTokenUnresolved',
+  'valueTypeUnsupported',
+  'colorDxfUnresolved',
+  'iconFilterUnsupported',
+  'unknownExtension',
+  'tableFilterShapeUnsupported',
+]);
+
+function toEventUnsupportedReasons(
+  values: string[] | undefined,
+): ImportFilterUnsupportedReason[] | undefined {
+  if (!values?.length) return undefined;
+  const reasons = values.filter((value): value is ImportFilterUnsupportedReason =>
+    IMPORT_FILTER_UNSUPPORTED_REASONS.has(value),
+  );
+  return reasons.length > 0 ? reasons : undefined;
 }
 
 function toPublicRuntimeDiagnostic(
@@ -361,7 +393,9 @@ export class MutationResultHandler {
     };
   }
 
-  private recordRuntimeDiagnostics(diagnostics: WireRuntimeOperationDiagnostic[] | undefined): void {
+  private recordRuntimeDiagnostics(
+    diagnostics: WireRuntimeOperationDiagnostic[] | undefined,
+  ): void {
     if (!diagnostics?.length) return;
     this.runtimeDiagnostics.push(...diagnostics.map(toPublicRuntimeDiagnostic));
     if (this.runtimeDiagnostics.length > RUNTIME_DIAGNOSTIC_RETENTION) {
@@ -1020,8 +1054,8 @@ export class MutationResultHandler {
         filterId: change.filterId ?? '',
         filterKind: toEventFilterKind(change.filterKind),
         tableId: change.tableId,
-        capability: change.capability,
-        unsupportedReasons: change.unsupportedReasons,
+        capability: toEventFilterCapability(change.capability),
+        unsupportedReasons: toEventUnsupportedReasons(change.unsupportedReasons),
         hasActiveFilter: change.hasActiveFilter,
         clearable: change.clearable,
         diagnostics: change.diagnostics?.map(toPublicRuntimeDiagnostic),

@@ -93,49 +93,12 @@ export async function movePivotField(options: {
 }): Promise<void> {
   const { ctx, sheetId, pivotName, fieldId, fromArea, toArea, toPosition } = options;
   const { pivotId, config } = await resolvePivotName(ctx, sheetId, pivotName, 'moveField');
-  const sourceIndex = config.placements.findIndex(
-    (placement) => placement.fieldId === fieldId && placement.area === fromArea,
-  );
-  if (sourceIndex === -1) {
-    throw new KernelError(
-      'COMPUTE_ERROR',
-      'moveFieldPlacement: Field placement not found in source area',
-    );
-  }
-
-  const placements = [...config.placements];
-  const [moved] = placements.splice(sourceIndex, 1);
-  moved.area = toArea;
-  moved.position = toPosition;
-
-  const targetAreaItems = placements.filter((placement) => placement.area === toArea);
-  if (toPosition >= targetAreaItems.length) {
-    placements.push(moved);
-  } else {
-    let count = 0;
-    let insertAt = placements.length;
-    for (let i = 0; i < placements.length; i++) {
-      if (placements[i].area === toArea) {
-        if (count === toPosition) {
-          insertAt = i;
-          break;
-        }
-        count++;
-      }
-    }
-    placements.splice(insertAt, 0, moved);
-  }
-
-  renumberArea(placements, fromArea);
-  if (fromArea !== toArea) {
-    renumberArea(placements, toArea);
-  }
-
-  await ctx.pivot.updatePivot(
-    sheetId,
+  const target = resolvePlacement(config, fieldId, fromArea, 'moveField');
+  await ctx.pivot.movePlacement(
     pivotId,
-    { placements },
-    { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
+    pivotPlacementId(placementId(target)),
+    toArea,
+    toPosition,
   );
 }
 

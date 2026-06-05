@@ -18,6 +18,7 @@ import type {
 } from '@mog-sdk/contracts/actions';
 import type { ColumnFilterCriteria, FilterCondition } from '@mog-sdk/contracts/filter';
 
+import { recordFilterReadinessError } from '../../infra/diagnostics/filter-readiness-errors';
 import { guardBridgeMutation } from './bridge-error-guard';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
@@ -840,18 +841,33 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
+  const sheetId = deps.getActiveSheetId();
 
-  const allFilters = await ws.filters.list();
+  try {
+    const allFilters = await ws.filters.listSummaries();
+    const clearableFilters = allFilters.filter((filter) => {
+      const hasActiveFilter = filter.hasActiveFilter ?? filter.hasActiveCriteria;
+      return filter.clearable ?? (filter.filterKind !== 'advancedFilter' && hasActiveFilter);
+    });
 
-  if (!allFilters || allFilters.length === 0) {
-    return handled(); // No filters to clear
+    if (clearableFilters.length === 0) {
+      return handled(); // No filters to clear
+    }
+
+    for (const filter of clearableFilters) {
+      await ws.filters.clearAllCriteria(filter.id);
+    }
+
+    return handled();
+  } catch (error) {
+    recordFilterReadinessError({
+      source: 'dataTabClear',
+      sheetId,
+      operation: 'filters.clearAllCriteria',
+      error,
+    });
+    throw error;
   }
-
-  for (const filter of allFilters) {
-    await ws.filters.clearAllCriteria(filter.id);
-  }
-
-  return handled();
 };
 
 /**

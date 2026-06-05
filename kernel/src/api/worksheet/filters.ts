@@ -29,6 +29,7 @@ import { isDateFormat } from '@mog/spreadsheet-utils/number-formats';
 
 import type {
   ColumnFilter as ComputeColumnFilter,
+  FilterHeaderInfo as ComputeFilterHeaderInfo,
   FilterState as ComputeFilterState,
 } from '../../bridges/compute/compute-types.gen';
 import {
@@ -105,17 +106,30 @@ async function toFilterSummary(
   ctx: DocumentContext,
   sheetId: SheetId,
   filter: ComputeFilterState,
+  headerEntries: ComputeFilterHeaderInfo[] = [],
 ): Promise<FilterSummaryInfo> {
   const range = await resolveFilterRange(ctx, sheetId, filter);
   const activeColumnCount = Object.keys(filter.columnFilters ?? {}).length;
+  const headerHasActiveFilter = headerEntries.some((entry) => entry.hasActiveFilter);
+  const hasAdvancedFilter = Boolean(
+    filter.advancedFilter?.criteriaRange || filter.advancedFilter?.uniqueRecordsOnly,
+  );
+  const hasActiveFilter = activeColumnCount > 0 || hasAdvancedFilter || headerHasActiveFilter;
+  const capability = headerEntries.find((entry) => entry.capability)?.capability ?? 'supported';
+  const unsupportedReasons = Array.from(
+    new Set(headerEntries.flatMap((entry) => entry.unsupportedReasons ?? [])),
+  );
   const summary: FilterSummaryInfo = {
     id: filter.id,
     filterKind: filter.type,
     range,
     activeColumnCount,
-    hasActiveCriteria:
-      activeColumnCount > 0 ||
-      Boolean(filter.advancedFilter?.criteriaRange || filter.advancedFilter?.uniqueRecordsOnly),
+    hasActiveCriteria: hasActiveFilter,
+    hasActiveFilter,
+    clearable: filter.type !== 'advancedFilter' && hasActiveFilter,
+    detailsReady: true,
+    capability,
+    unsupportedReasons,
   };
   if (filter.tableId) summary.tableId = filter.tableId;
   return summary;
@@ -634,8 +648,21 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   async listSummaries(): Promise<FilterSummaryInfo[]> {
     await this.awaitSheetMaterialized();
-    const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-    return Promise.all(filters.map((filter) => toFilterSummary(this.ctx, this.sheetId, filter)));
+    const [filters, headerEntries] = await Promise.all([
+      this.ctx.computeBridge.getFiltersInSheet(this.sheetId),
+      this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId),
+    ]);
+    const headerEntriesByFilterId = new Map<string, ComputeFilterHeaderInfo[]>();
+    for (const entry of headerEntries) {
+      const entries = headerEntriesByFilterId.get(entry.filterId) ?? [];
+      entries.push(entry);
+      headerEntriesByFilterId.set(entry.filterId, entries);
+    }
+    return Promise.all(
+      filters.map((filter) =>
+        toFilterSummary(this.ctx, this.sheetId, filter, headerEntriesByFilterId.get(filter.id)),
+      ),
+    );
   }
 
   async listHeaderInfo(): Promise<FilterHeaderInfoEntry[]> {

@@ -20,7 +20,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     options: &csv_parser::CsvImportOptions,
 ) -> Result<XlsxHydrateResult, ComputeError> {
     use crate::import;
-    use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
+    use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
 
     let t0 = crate::time_compat::WasmSafeInstant::now();
     let parsed = csv_parser::parse_csv_to_parse_output(csv_data, options.clone()).map_err(|e| {

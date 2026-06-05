@@ -2756,18 +2756,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setAggregateFunctionLegacy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setShowValuesAsLegacy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setSortOrderLegacy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
     setFilter: {
       decision: 'allow',
       capability: 'workbook:write',
@@ -2825,18 +2813,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
     removeCalculatedField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addCalculatedFieldLegacy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeCalculatedFieldLegacy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateCalculatedFieldLegacy: {
       decision: 'allow',
       capability: 'workbook:write',
     },

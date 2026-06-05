@@ -830,7 +830,10 @@ fn marker_point_owner_key(
     if series.idx == 0 && series_position != 0 {
         format!("markerPoint(series={series_position},point={point_index})")
     } else {
-        format!("markerPoint(seriesIdx={},pointIdx={point_index})", series.idx)
+        format!(
+            "markerPoint(seriesIdx={},pointIdx={point_index})",
+            series.idx
+        )
     }
 }
 
@@ -841,7 +844,10 @@ fn raw_series_source_path(
     if series.idx == 0 && series_position != 0 {
         format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[{series_position}]")
     } else {
-        format!("c:chartSpace/c:chart/c:plotArea/*/c:ser[c:idx={}]", series.idx)
+        format!(
+            "c:chartSpace/c:chart/c:plotArea/*/c:ser[c:idx={}]",
+            series.idx
+        )
     }
 }
 

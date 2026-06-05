@@ -34,7 +34,7 @@ pub fn get_row_outline_levels(
             .filter(|g| summary_index(g.start, g.end, sb) == Some(row))
             .collect();
         let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
-        let visible = !containing.iter().any(|g| g.collapsed);
+        let visible = !containing.iter().any(|g| g.collapsed || g.hidden);
         let is_summary = !summary_groups.is_empty();
         let mut sc = containing;
         sc.extend(summary_groups);
@@ -72,7 +72,7 @@ pub fn get_column_outline_levels(
             .filter(|g| summary_index(g.start, g.end, sr) == Some(col))
             .collect();
         let level = containing.iter().map(|g| g.level).max().unwrap_or(0);
-        let visible = !containing.iter().any(|g| g.collapsed);
+        let visible = !containing.iter().any(|g| g.collapsed || g.hidden);
         let is_summary = !summary_groups.is_empty();
         let mut sc = containing;
         sc.extend(summary_groups);

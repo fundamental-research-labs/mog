@@ -27,6 +27,8 @@ export type {
   FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
+  FilterHeaderInfoEntry,
+  FilterSummaryInfo,
   WorksheetFilters,
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';

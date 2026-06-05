@@ -244,6 +244,7 @@ fn assemble_engine_inner(
         security,
         security_events,
         import_report: domain_types::ImportReport::default(),
+        runtime_diagnostics: Default::default(),
         update_buffer,
         _update_subscription: update_subscription,
         scenario_session: crate::what_if::scenarios::ScenarioSessionState::default(),

@@ -468,29 +468,13 @@ pub(in crate::storage::engine) fn clear_all_filters(
 ) -> Result<MutationResult, ComputeError> {
     let existing =
         filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    for filter in &existing {
-        let transitions = dimensions::clear_filter_hidden_rows(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &filter.id,
-            stores.grid_indexes.get(sheet_id),
-        );
-        imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
+    let mut result = MutationResult::empty();
+    for filter in existing {
+        let mut deleted = delete_filter(stores, mirror, sheet_id, &filter.id)?;
+        result.filter_changes.append(&mut deleted.filter_changes);
+        result.diagnostics.append(&mut deleted.diagnostics);
     }
-    filters::clear_all_filters(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    filters::clear_filter_metadata_bindings(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-    );
-    if existing
-        .iter()
-        .any(|filter| filter.filter_kind == filters::FilterKind::AutoFilter)
-    {
-        imported_filters::delete_imported_auto_filter_metadata(stores, sheet_id);
-    }
-    Ok(MutationResult::empty())
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn get_filters_in_sheet(

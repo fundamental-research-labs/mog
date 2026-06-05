@@ -710,6 +710,9 @@ pub struct FullParseResult {
     /// worksheet parsing.
     #[serde(skip)]
     pub workbook_sheet_inventory: Vec<domain_types::WorkbookSheetPackageInfo>,
+    /// Workbook-order indices selected for materialized worksheet parsing.
+    #[serde(skip)]
+    pub parsed_workbook_sheet_indices: std::collections::BTreeSet<u32>,
     /// Imported `xl/media/*` bytes used only to hydrate current picture and
     /// OLE-preview owners before parser state is dropped.
     #[serde(skip)]

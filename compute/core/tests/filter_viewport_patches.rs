@@ -60,10 +60,15 @@ fn snapshot_with_filter_data() -> WorkbookSnapshot {
             cols: 26,
             cells: vec![
                 text_cell(100, 0, 0, "Amount"),
+                text_cell(101, 0, 1, "Bucket"),
                 number_cell(110, 1, 0, 10.0),
+                text_cell(120, 1, 1, "Keep"),
                 number_cell(111, 2, 0, 20.0),
+                text_cell(121, 2, 1, "Drop"),
                 number_cell(112, 3, 0, 30.0),
+                text_cell(122, 3, 1, "Keep"),
                 number_cell(113, 4, 0, 40.0),
+                text_cell(123, 4, 1, "Drop"),
             ],
             ranges: vec![],
         }],
@@ -300,4 +305,61 @@ fn apply_filter_no_registered_viewport_returns_zero_viewport_blob() {
         !engine.is_row_hidden_query(&sid, 1),
         "row 10 visible (matches the values filter)"
     );
+}
+
+#[test]
+fn clear_all_filters_emits_deleted_changes_for_each_filter() {
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let _vp = register_viewport(&mut engine, &sid);
+
+    engine
+        .create_filter(
+            &sid,
+            json!({
+                "startRow": 0u32,
+                "startCol": 0u32,
+                "endRow": 4u32,
+                "endCol": 0u32,
+            }),
+        )
+        .expect("create amount filter");
+    engine
+        .create_filter(
+            &sid,
+            json!({
+                "startRow": 0u32,
+                "startCol": 1u32,
+                "endRow": 4u32,
+                "endCol": 1u32,
+            }),
+        )
+        .expect("create bucket filter");
+    let filter_ids: Vec<_> = engine
+        .get_filters_in_sheet(&sid)
+        .into_iter()
+        .map(|filter| filter.id)
+        .collect();
+    assert_eq!(filter_ids.len(), 2, "test setup should create two filters");
+
+    let (patches, result) = engine.clear_all_filters(&sid).expect("clear_all_filters");
+
+    assert!(engine.get_filters_in_sheet(&sid).is_empty());
+    assert_eq!(viewport_count(&patches), 1);
+    assert!(
+        first_viewport_payload_size(&patches) > 32,
+        "full viewport rebuild expected after clear_all_filters"
+    );
+    assert_eq!(result.filter_changes.len(), 2);
+    for filter_id in filter_ids {
+        let change = result
+            .filter_changes
+            .iter()
+            .find(|change| change.filter_id == filter_id)
+            .unwrap_or_else(|| panic!("missing deleted change for {filter_id}"));
+        assert_eq!(change.action.as_deref(), Some("deleted"));
+        assert_eq!(change.kind, snapshot_types::ChangeKind::Removed);
+        assert_eq!(change.filter_kind.as_deref(), Some("autoFilter"));
+    }
 }

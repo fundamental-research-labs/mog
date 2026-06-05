@@ -18,7 +18,12 @@ import type {
 } from '@mog/types-core/core';
 import type { CFResult } from '@mog/types-formatting/conditional-format/rules';
 import type { SlicerSource, SlicerStyle, TimelineLevel } from '@mog/types-data/data/slicers';
-import type { ColumnFilterCriteria, FilterHeaderInfo } from '@mog/types-data/data/filter';
+import type {
+  ColumnFilterCriteria,
+  FilterCapability,
+  FilterHeaderInfo,
+  ImportFilterUnsupportedReason,
+} from '@mog/types-data/data/filter';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -30,6 +35,7 @@ import type {
   PivotFieldItems,
   PivotFilter,
   PivotKernelMutationReceipt,
+  PivotPlacementMutationReceipt,
   PivotMemberRef,
   PivotTableConfig as DataPivotTableConfig,
   PivotTableLayout,
@@ -854,6 +860,28 @@ export interface PivotValueField {
   label?: string;
 }
 
+/** Placement-first field insertion spec for a pivot table handle. */
+export interface PivotHandlePlacementSpec {
+  placementId?: PlacementId;
+  fieldId?: string;
+  area: PivotFieldArea;
+  position?: number;
+  source?:
+    | { type: 'field'; fieldId: string }
+    | { type: 'calculatedField'; calculatedFieldId: CalculatedFieldId };
+  aggregateFunction?: AggregateFunction;
+  sortOrder?: SortOrder;
+  displayName?: string;
+  showValuesAs?: ShowValuesAsConfig;
+  numberFormat?: string;
+}
+
+/** Sort a row/column axis by a value placement. */
+export interface PivotValueSortConfig {
+  order: SortOrder;
+  columnKey?: string;
+}
+
 /**
  * Handle for interacting with an existing pivot table.
  *
@@ -885,8 +913,12 @@ export interface PivotTableHandle {
     aggregation: PivotValueField['aggregation'],
     label?: string,
   ): Promise<void>;
+  /** Add a placement to a row, column, value, or filter area. */
+  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotPlacementMutationReceipt>;
   /** Remove a field by name */
   removeField(fieldName: string, area?: PivotFieldArea): Promise<void>;
+  /** Remove a specific placement by stable placement ID. */
+  removePlacement(placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
   /** Move a field to a different area or position. */
   moveField(
     fieldName: string,
@@ -894,13 +926,29 @@ export interface PivotTableHandle {
     toArea: PivotFieldArea,
     toPosition: number,
   ): Promise<void>;
+  /** Move a specific placement to a different area or ordered position. */
+  movePlacement(
+    placementId: PlacementId,
+    toArea: PivotFieldArea,
+    toPosition: number,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Change the aggregation function of a value field */
   changeAggregation(
     valueFieldLabel: string,
     newAggregation: PivotValueField['aggregation'],
   ): Promise<void>;
+  /** Change the aggregation function of a specific value placement. */
+  setPlacementAggregateFunction(
+    placementId: PlacementId,
+    aggregateFunction: AggregateFunction,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Rename a value field's display label */
   renameValueField(currentLabel: string, newLabel: string): Promise<void>;
+  /** Rename a value placement by stable placement ID. */
+  renameValuePlacement(
+    placementId: PlacementId,
+    displayName: string | null,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Refresh the pivot table from its data source */
   refresh(): Promise<void>;
   /** Get all items for all non-value fields */
@@ -909,6 +957,17 @@ export interface PivotTableHandle {
   setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
   /** Set the sort order for a row or column field. */
   setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;
+  /** Set the sort order for a row or column placement. */
+  setPlacementSortOrder(
+    placementId: PlacementId,
+    sortOrder: SortOrder | null,
+  ): Promise<PivotKernelMutationReceipt>;
+  /** Set or clear value sorting on a row or column axis placement. */
+  setSortByValue(
+    axisPlacementId: PlacementId,
+    valuePlacementId: PlacementId,
+    config: PivotValueSortConfig | null,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Set a filter on a field. */
   setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
   /** Remove a filter from a field. */
@@ -1769,6 +1828,16 @@ export interface FilterSummaryInfo {
   activeColumnCount: number;
   /** Whether this filter has any active criteria. */
   hasActiveCriteria: boolean;
+  /** Whether this filter has active runtime or preserved lossless criteria. */
+  hasActiveFilter?: boolean;
+  /** Whether the active criteria can be cleared through the worksheet filter API. */
+  clearable?: boolean;
+  /** Whether complete filter details are ready without all-sheet materialization. */
+  detailsReady?: boolean;
+  /** Whether the filter is fully owned by the production evaluator. */
+  capability?: FilterCapability;
+  /** Unsupported imported features preserved in lossless metadata. */
+  unsupportedReasons?: readonly ImportFilterUnsupportedReason[];
 }
 
 /** Renderer-ready filter-header entry keyed by sheet row/column. */

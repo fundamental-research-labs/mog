@@ -21,8 +21,8 @@ use crate::engine_types::{
 use crate::range_manager::{A1CellRef, A1RangeRef};
 use crate::snapshot::{
     BatchRangeRequest, BatchRangeResponse, CalculationSettings, IdentityCell, MutationResult,
-    ProtectedWorkbookOperation, RangeQueryResult, RustWorkbookSettingsPatch,
-    WorkbookProtectionOptions, WorkbookSettings,
+    ProtectedWorkbookOperation, RangeQueryResult, RuntimeDiagnosticsOptions,
+    RuntimeDiagnosticsPage, RustWorkbookSettingsPatch, WorkbookProtectionOptions, WorkbookSettings,
 };
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId, SheetPos};
@@ -56,6 +56,14 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "workbook")]
     pub fn get_import_diagnostics(&self) -> Vec<ImportDiagnostic> {
         self.import_report.diagnostics.clone()
+    }
+
+    #[bridge::read(scope = "workbook")]
+    pub fn get_runtime_diagnostics(
+        &self,
+        options: RuntimeDiagnosticsOptions,
+    ) -> RuntimeDiagnosticsPage {
+        self.runtime_diagnostics.page(options)
     }
 
     #[bridge::write(scope = "workbook")]

@@ -252,6 +252,7 @@ pub(super) fn threading_result(
         workbook_relationships: Vec::new(),
         sheet_workbook_r_ids: Vec::new(),
         workbook_sheet_inventory: Vec::new(),
+        parsed_workbook_sheet_indices: Default::default(),
         imported_media_parts: Vec::new(),
         imported_ole_parts: Vec::new(),
         extensions: None,

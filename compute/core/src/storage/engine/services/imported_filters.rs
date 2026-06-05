@@ -5,7 +5,7 @@ use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::KEY_PROPERTIES;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::filter::{
-    column_filter_to_ooxml_filter_type, AutoFilter, FilterColumn, OoxmlFilterType,
+    AutoFilter, FilterColumn, OoxmlFilterType, column_filter_to_ooxml_filter_type,
 };
 use domain_types::yrs_schema;
 use value_types::CellValue;

@@ -2,7 +2,7 @@
 
 import type { BridgeTransport } from '@rust-bridge/client';
 import type { ComputeCore } from './compute-core';
-import type { A1CellRef, A1RangeRef, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, IdentityCell, MergeRegion, MoveTarget, MutationResult, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
+import type { A1CellRef, A1RangeRef, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
 import type { IdentityFormulaWire as IdentityFormula, ColumnSchemaWire as ColumnSchema, SchemaTypeWire as SchemaType, ValidationResultWire as ValidationResult, EditorTypeResolutionInputWire as EditorTypeResolutionInput, EditorTypeResolutionResultWire as EditorTypeResolutionResult, InferredSchemaWire as InferredSchema, NamedRangeDef, DataRow, Point, RegressionMethod, RegressionOptions, RegressionOutput, DensityResult, HistogramBin, StackInput, StackMode, StackOutput, FormatEntry, DateValueResult, ParsedDateInput, FormulaCircularReferenceValidation, CFRuleWire, CfPresets, GoalSeekParams, GoalSeekResult, CreateDataTableInput, DataTableParams, DataTableResult, SchemaMapEntryWire, PageBreaks, TableRange, SlicerSortOrder, CFCellRange } from './types';
 import type { Table, FilterCriteria, Slicer, SlicerCache, SortSpec, RowVisibility, TableCellFormat, TableStyleDef, StructuredRef, DynamicFilter, FilterDropdownData, TableStructureChange } from '@mog/table-engine';
 import type { CellFormat, CellValue, SheetId } from '@mog-sdk/contracts/core';
@@ -201,6 +201,8 @@ export interface GeneratedBridgeMethods {
   resetViewportState(sheetId: SheetId): Promise<MutationResult>;
   getWorkbookSettings(): Promise<WorkbookSettings>;
   getFormulaReferenceDiagnostics(options: FormulaReferenceDiagnosticsOptions): Promise<FormulaReferenceDiagnosticsPage>;
+  getImportDiagnostics(): Promise<ImportDiagnostic[]>;
+  getRuntimeDiagnostics(options: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;
   setWorkbookSettings(settings: WorkbookSettings): Promise<MutationResult>;
   patchWorkbookSettings(patch: RustWorkbookSettingsPatch): Promise<MutationResult>;
   getDocumentProperties(): Promise<DocumentProperties>;
@@ -443,6 +445,7 @@ export interface GeneratedBridgeMethods {
   clearColumnFilter(sheetId: SheetId, filterId: string, headerCol: number): Promise<MutationResult>;
   clearAllColumnFilters(sheetId: SheetId, filterId: string): Promise<MutationResult>;
   getFiltersInSheet(sheetId: SheetId): Promise<FilterState[]>;
+  getFilterHeaderInfo(sheetId: SheetId): Promise<FilterHeaderInfo[]>;
   applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest): Promise<MutationResult>;
   applyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
   getUniqueColumnValues(sheetId: SheetId, filterId: string, headerCol: number): Promise<CellValue[]>;
@@ -1405,6 +1408,14 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   getFormulaReferenceDiagnostics(options: FormulaReferenceDiagnosticsOptions): Promise<FormulaReferenceDiagnosticsPage> {
     return this.core.query(this.core.transport.call<FormulaReferenceDiagnosticsPage>('compute_get_formula_reference_diagnostics', { docId: this.core.docId, options }));
+  }
+
+  getImportDiagnostics(): Promise<ImportDiagnostic[]> {
+    return this.core.query(this.core.transport.call<ImportDiagnostic[]>('compute_get_import_diagnostics', { docId: this.core.docId }));
+  }
+
+  getRuntimeDiagnostics(options: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage> {
+    return this.core.query(this.core.transport.call<RuntimeDiagnosticsPage>('compute_get_runtime_diagnostics', { docId: this.core.docId, options }));
   }
 
   setWorkbookSettings(settings: WorkbookSettings): Promise<MutationResult> {
@@ -2373,6 +2384,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   getFiltersInSheet(sheetId: SheetId): Promise<FilterState[]> {
     return this.core.query(this.core.transport.call<FilterState[]>('compute_get_filters_in_sheet', { docId: this.core.docId, sheetId }));
+  }
+
+  getFilterHeaderInfo(sheetId: SheetId): Promise<FilterHeaderInfo[]> {
+    return this.core.query(this.core.transport.call<FilterHeaderInfo[]>('compute_get_filter_header_info', { docId: this.core.docId, sheetId }));
   }
 
   applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest): Promise<MutationResult> {

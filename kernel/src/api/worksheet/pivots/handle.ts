@@ -1,4 +1,6 @@
 import type {
+  PivotHandlePlacementSpec,
+  PivotValueSortConfig,
   PivotTableConfig as ApiPivotTableConfig,
   PivotTableHandle,
   SheetId,
@@ -184,6 +186,12 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       );
     },
 
+    async addPlacement(spec: PivotHandlePlacementSpec) {
+      const receipt = await ctx.pivot.addPlacement(pivotId, spec);
+      await refreshCachedConfig();
+      return receipt;
+    },
+
     async removeField(fieldName: string, area?: PivotFieldArea): Promise<void> {
       const current = await ctx.pivot.getPivot(sheetId, pivotId);
       if (!current) return;
@@ -195,6 +203,15 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         },
         'fieldPlacementChanged',
       );
+    },
+
+    async removePlacement(placementIdToRemove) {
+      const receipt = await ctx.pivot.removePlacement(
+        pivotId,
+        pivotPlacementId(placementIdToRemove),
+      );
+      await refreshCachedConfig();
+      return receipt;
     },
 
     async moveField(
@@ -213,6 +230,17 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         toPosition,
       );
       await refreshCachedConfig();
+    },
+
+    async movePlacement(placementIdToMove, toArea, toPosition) {
+      const receipt = await ctx.pivot.movePlacement(
+        pivotId,
+        pivotPlacementId(placementIdToMove),
+        toArea,
+        toPosition,
+      );
+      await refreshCachedConfig();
+      return receipt;
     },
 
     async changeAggregation(
@@ -234,6 +262,16 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       );
     },
 
+    async setPlacementAggregateFunction(placementIdToUpdate, aggregateFunction) {
+      const receipt = await ctx.pivot.setAggregateFunction(
+        pivotId,
+        pivotPlacementId(placementIdToUpdate),
+        aggregateFunction,
+      );
+      await refreshCachedConfig();
+      return receipt;
+    },
+
     async renameValueField(currentLabel: string, newLabel: string): Promise<void> {
       const current = await ctx.pivot.getPivot(sheetId, pivotId);
       if (!current) return;
@@ -246,6 +284,16 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         },
         'aggregateFunctionChanged',
       );
+    },
+
+    async renameValuePlacement(placementIdToRename, displayName) {
+      const receipt = await ctx.pivot.renameValuePlacement(
+        pivotId,
+        pivotPlacementId(placementIdToRename),
+        displayName,
+      );
+      await refreshCachedConfig();
+      return receipt;
     },
 
     async refresh(): Promise<void> {
@@ -281,6 +329,31 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       const target = resolvePlacement(current, fieldOrPlacement, null, 'setSortOrder');
       await ctx.pivot.setSortOrder(pivotId, pivotPlacementId(placementId(target)), sortOrder);
       await refreshCachedConfig();
+    },
+
+    async setPlacementSortOrder(placementIdToSort, sortOrder) {
+      const receipt = await ctx.pivot.setSortOrder(
+        pivotId,
+        pivotPlacementId(placementIdToSort),
+        sortOrder,
+      );
+      await refreshCachedConfig();
+      return receipt;
+    },
+
+    async setSortByValue(
+      axisPlacementId,
+      valuePlacementId,
+      config: PivotValueSortConfig | null,
+    ) {
+      const receipt = await ctx.pivot.setSortByValue(
+        pivotId,
+        pivotPlacementId(axisPlacementId),
+        pivotPlacementId(valuePlacementId),
+        config,
+      );
+      await refreshCachedConfig();
+      return receipt;
     },
 
     async setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void> {

@@ -1514,6 +1514,7 @@ export class WorksheetImpl implements Worksheet {
     col: number,
     direction: 'up' | 'down' | 'left' | 'right',
   ): Promise<{ row: number; col: number }> {
+    await this.ctx.awaitMaterialized?.(this.sheetId);
     return this.ctx.computeBridge.findDataEdge(this.sheetId, row, col, direction);
   }
 

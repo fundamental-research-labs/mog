@@ -175,6 +175,10 @@ pub struct ParseOutput {
     /// `sheets`, linked by `editable_sheet_index`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_sheet_inventory: Vec<WorkbookSheetPackageInfo>,
+    /// Workbook-order sheet indices whose editable worksheet payloads are
+    /// present in `sheets` for a selected/deferred parse.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub parsed_workbook_sheet_indices: std::collections::BTreeSet<u32>,
     /// Workbook-owned root XML namespace declarations captured from
     /// `xl/workbook.xml`.
     #[serde(default, skip_serializing_if = "XmlNamespaceDeclarations::is_empty")]

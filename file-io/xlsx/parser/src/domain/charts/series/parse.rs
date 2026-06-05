@@ -266,7 +266,9 @@ fn find_direct_child_tag(xml: &[u8], parent: &[u8], child: &[u8]) -> Option<usiz
         }
         let marker = xml[lt + 1];
         if marker == b'!' || marker == b'?' {
-            pos = find_gt_simd(xml, lt).map(|gt| gt + 1).unwrap_or(parent_close);
+            pos = find_gt_simd(xml, lt)
+                .map(|gt| gt + 1)
+                .unwrap_or(parent_close);
             continue;
         }
         let closing = marker == b'/';
@@ -321,9 +323,11 @@ fn local_tag_name_eq(tag_name: &[u8], expected: &[u8]) -> bool {
 }
 
 fn is_self_closing_tag(xml: &[u8], lt: usize, gt: usize) -> bool {
-    xml.get(lt..gt)
-        .and_then(|tag| tag.iter().rev().find(|byte| !(**byte).is_ascii_whitespace()))
-        == Some(&b'/')
+    xml.get(lt..gt).and_then(|tag| {
+        tag.iter()
+            .rev()
+            .find(|byte| !(**byte).is_ascii_whitespace())
+    }) == Some(&b'/')
 }
 
 // =============================================================================

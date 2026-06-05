@@ -32,8 +32,9 @@ pub use outline::{
 };
 pub use queries::{
     get_affected_columns_by_group, get_affected_rows_by_group,
-    get_columns_hidden_by_collapsed_groups, get_group, get_group_in_sheet, get_groups,
-    get_max_outline_level, get_rows_hidden_by_collapsed_groups,
+    get_columns_hidden_by_collapsed_groups, get_columns_hidden_by_structural_groups, get_group,
+    get_group_in_sheet, get_groups, get_max_outline_level, get_rows_hidden_by_collapsed_groups,
+    get_rows_hidden_by_structural_groups,
 };
 pub use render::{
     get_outline_gutter_dimensions, get_outline_level_buttons, get_outline_render_data,

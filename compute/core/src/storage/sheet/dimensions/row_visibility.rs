@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 
 use super::yrs_access::{
-    effective_hidden_by_row_id, get_sheet_submap, map_has_true, row_id_key,
-    write_effective_hidden_cache,
+    any_filter_hides_row, effective_hidden_by_row_id, filter_hides_row, get_sheet_submap,
+    map_has_true, row_id_key, write_effective_hidden_cache,
 };
 use crate::identity::GridIndex;
 use cell_types::SheetId;
@@ -16,6 +16,7 @@ pub struct RowVisibilityOwnership {
     pub effective_hidden: bool,
     pub manual: bool,
     pub structural: bool,
+    pub cache_hidden_without_owner: bool,
     pub filter_owner_ids: BTreeSet<String>,
 }
 
@@ -180,6 +181,88 @@ pub fn set_filter_hidden_rows(
     transitions
 }
 
+/// Normalize filter-owned visibility for an imported active AutoFilter.
+///
+/// XLSX row `hidden="1"` is ambiguous. During raw hydration those rows may
+/// already be in the effective/manual maps. Once the runtime filter can be
+/// evaluated, rows excluded by the criteria become filter-owned and are removed
+/// from manual ownership; rows included by the criteria keep any existing
+/// manual ownership.
+pub fn normalize_imported_filter_hidden_rows(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    rows_excluded_by_filter: &[u32],
+    rows_included_by_filter: &[u32],
+    grid_index: Option<&GridIndex>,
+) -> Vec<(u32, bool)> {
+    let mut transitions = Vec::new();
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
+        Some(m) => m,
+        None => return transitions,
+    };
+    let manual_hidden_rows_map = get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS);
+    let filter_hidden_rows_map =
+        match get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS) {
+            Some(m) => m,
+            None => return transitions,
+        };
+    if filter_hidden_rows_map.get(&txn, filter_id).is_none() {
+        filter_hidden_rows_map.insert(
+            &mut txn,
+            filter_id,
+            yrs::MapPrelim::from([] as [(&str, Any); 0]),
+        );
+    }
+    let owner_map = match filter_hidden_rows_map.get(&txn, filter_id) {
+        Some(Out::YMap(m)) => m,
+        _ => return transitions,
+    };
+
+    let mut affected: Vec<u32> = rows_excluded_by_filter
+        .iter()
+        .chain(rows_included_by_filter.iter())
+        .copied()
+        .collect();
+    affected.sort_unstable();
+    affected.dedup();
+
+    for &row in rows_excluded_by_filter {
+        if let Some(row_id) = row_id_key(grid_index, row) {
+            if let Some(manual_map) = &manual_hidden_rows_map {
+                manual_map.remove(&mut txn, &row_id);
+            }
+            owner_map.insert(&mut txn, &*row_id, Any::Bool(true));
+        }
+    }
+
+    for &row in rows_included_by_filter {
+        if let Some(row_id) = row_id_key(grid_index, row) {
+            owner_map.remove(&mut txn, &row_id);
+        }
+    }
+
+    for row in affected {
+        let before = map_has_true(&hidden_rows_map, &txn, &row.to_string());
+        let effective = row_id_key(grid_index, row).is_some_and(|row_id| {
+            effective_hidden_by_row_id(
+                manual_hidden_rows_map.as_ref(),
+                Some(&filter_hidden_rows_map),
+                &txn,
+                &row_id,
+            )
+        });
+        write_effective_hidden_cache(&hidden_rows_map, &mut txn, row, effective);
+        if before != effective {
+            transitions.push((row, effective));
+        }
+    }
+
+    transitions
+}
+
 /// Clear a filter's row-hidden ownership and recompute affected effective rows.
 pub fn clear_filter_hidden_rows(
     doc: &Doc,
@@ -236,6 +319,82 @@ pub fn clear_filter_hidden_rows(
     transitions
 }
 
+pub fn is_row_manually_hidden(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    grid_index: Option<&GridIndex>,
+) -> bool {
+    let txn = doc.transact();
+    let Some(row_id) = row_id_key(grid_index, row) else {
+        return false;
+    };
+    get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS)
+        .is_some_and(|m| map_has_true(&m, &txn, &row_id))
+}
+
+pub fn is_row_hidden_by_filter(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    filter_id: &str,
+    grid_index: Option<&GridIndex>,
+) -> bool {
+    let txn = doc.transact();
+    let Some(row_id) = row_id_key(grid_index, row) else {
+        return false;
+    };
+    get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS)
+        .is_some_and(|m| filter_hides_row(&m, &txn, filter_id, &row_id))
+}
+
+pub fn is_row_hidden_by_any_filter(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    grid_index: Option<&GridIndex>,
+) -> bool {
+    let txn = doc.transact();
+    let Some(row_id) = row_id_key(grid_index, row) else {
+        return false;
+    };
+    get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS)
+        .is_some_and(|m| any_filter_hides_row(&m, &txn, &row_id))
+}
+
+pub fn is_row_hidden_only_by_filter(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    filter_id: &str,
+    grid_index: Option<&GridIndex>,
+) -> bool {
+    let txn = doc.transact();
+    let Some(row_id) = row_id_key(grid_index, row) else {
+        return false;
+    };
+    let manual_hidden = get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS)
+        .is_some_and(|m| map_has_true(&m, &txn, &row_id));
+    if manual_hidden {
+        return false;
+    }
+    let Some(filter_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS) else {
+        return false;
+    };
+    if !filter_hides_row(&filter_map, &txn, filter_id, &row_id) {
+        return false;
+    }
+    !filter_map.iter(&txn).any(|(other_filter_id, owner)| {
+        let other_filter_id: &str = other_filter_id.as_ref();
+        other_filter_id != filter_id
+            && matches!(owner, Out::YMap(owner_map) if map_has_true(&owner_map, &txn, &row_id))
+    })
+}
+
 pub fn get_row_visibility_ownership(
     doc: &Doc,
     sheets: &MapRef,
@@ -245,15 +404,19 @@ pub fn get_row_visibility_ownership(
 ) -> RowVisibilityOwnership {
     let structural = !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
     let Some(row_id) = row_id_key(grid_index, row) else {
+        let cache_hidden_without_owner = is_row_hidden(doc, sheets, sheet_id, row) && !structural;
         return RowVisibilityOwnership {
-            effective_hidden: structural,
+            effective_hidden: structural || cache_hidden_without_owner,
             manual: false,
             structural,
+            cache_hidden_without_owner,
             filter_owner_ids: BTreeSet::new(),
         };
     };
 
     let txn = doc.transact();
+    let cache_hidden = get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS)
+        .is_some_and(|m| map_has_true(&m, &txn, &row.to_string()));
     let manual = get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS)
         .is_some_and(|m| map_has_true(&m, &txn, &row_id));
     let mut filter_owner_ids = BTreeSet::new();
@@ -265,10 +428,17 @@ pub fn get_row_visibility_ownership(
         }
     }
 
+    let cache_hidden_without_owner =
+        cache_hidden && !manual && !structural && filter_owner_ids.is_empty();
+
     RowVisibilityOwnership {
-        effective_hidden: manual || structural || !filter_owner_ids.is_empty(),
+        effective_hidden: manual
+            || structural
+            || cache_hidden_without_owner
+            || !filter_owner_ids.is_empty(),
         manual,
         structural,
+        cache_hidden_without_owner,
         filter_owner_ids,
     }
 }

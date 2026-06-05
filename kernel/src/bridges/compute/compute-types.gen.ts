@@ -1968,13 +1968,23 @@ export interface ExternalLinkStatusSnapshotRecord {
 
 export type FillType = "solid" | "gradient" | "pattern" | "pictureAndTexture" | "none";
 
+export interface FilterButtonMetadata {
+  headerCellId: string;
+  colId: number;
+  hiddenButton: boolean;
+  showButton?: boolean;
+  buttonVisible: boolean;
+}
+
+export type FilterCapability = "supported" | "unsupported";
+
 export interface FilterChange {
   sheetId: string;
   filterId?: string;
   filterKind?: string;
   tableId?: string;
-  capability?: FilterCapability;
-  unsupportedReasons?: ImportFilterUnsupportedReason[];
+  capability?: string;
+  unsupportedReasons?: string[];
   hasActiveFilter?: boolean;
   clearable?: boolean;
   diagnostics?: RuntimeOperationDiagnostic[];
@@ -1982,23 +1992,6 @@ export interface FilterChange {
   hiddenRowCount?: number;
   visibleRowCount?: number;
   kind: ChangeKind;
-}
-
-export interface RuntimeOperationDiagnostic {
-  id: string;
-  sequence: string;
-  code: string;
-  severity: string;
-  recoverability: string;
-  operation: string;
-  sheetId: string;
-  filterId?: string;
-  filterKind?: string;
-  tableId?: string;
-  reason?: string;
-  reasons?: string[];
-  details?: unknown;
-  location?: unknown;
 }
 
 export interface FilterColumn {
@@ -2046,42 +2039,6 @@ export interface FilterDropdownItem {
   selected: boolean;
 }
 
-export type FilterInput = string | FilterSpec;
-
-export type FilterKind = "autoFilter" | "tableFilter" | "advancedFilter";
-
-export type FilterLogic = "and" | "or";
-
-export type FilterOperator = "equals" | "notEquals" | "contains" | "notContains" | "startsWith" | "endsWith" | "greaterThan" | "greaterThanOrEqual" | "lessThan" | "lessThanOrEqual" | "between" | "notBetween" | "isBlank" | "isNotBlank" | "aboveAverage" | "belowAverage";
-
-export interface FilterRecordCount {
-  visible: number;
-  total: number;
-}
-
-export interface FilterHeaderRange {
-  startRow: number;
-  startCol: number;
-  endRow: number;
-  endCol: number;
-}
-
-export type FilterCapability = 'supported' | 'unsupported';
-
-export type ImportFilterUnsupportedReason =
-  | 'unknownDynamicType'
-  | 'unknownCustomOperator'
-  | 'dateGroupUnsupported'
-  | 'dynamicTemporalContextUnsupported'
-  | 'valueTokenUnresolved'
-  | 'valueTypeUnsupported'
-  | 'colorDxfUnresolved'
-  | 'iconFilterUnsupported'
-  | 'unknownExtension'
-  | 'tableFilterShapeUnsupported';
-
-export type FilterHeaderSourceType = 'sheetAutoFilter' | 'tableAutoFilter';
-
 export interface FilterHeaderInfo {
   filterId: string;
   headerCellId: string;
@@ -2097,6 +2054,81 @@ export interface FilterHeaderInfo {
   buttonVisible: boolean;
   hiddenButton: boolean;
   showButton: boolean;
+}
+
+export interface FilterHeaderRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
+export type FilterHeaderSourceType = "sheetAutoFilter" | "tableAutoFilter";
+
+export type FilterInput = string | FilterSpec;
+
+export type FilterKind = "autoFilter" | "tableFilter" | "advancedFilter";
+
+export type FilterLogic = "and" | "or";
+
+export interface FilterMetadataBinding {
+  filterId: string;
+  filterKind: FilterKind;
+  sheetId: string;
+  tableId?: string;
+  ownerPath: FilterMetadataOwnerPath;
+  sourceKey: FilterMetadataSourceKey;
+  rangeRef: string;
+  headerStartCellId: string;
+  headerEndCellId: string;
+  dataEndCellId: string;
+  colIdToHeaderCellId?: Record<number, string>;
+  shell: FilterShellMetadata;
+  sourceFingerprint: string;
+}
+
+export type FilterMetadataOwnerPath =
+  | { kind: "sheetAutoFilter" } & FilterMetadataOwnerPath_sheetAutoFilter
+  | { kind: "tableAutoFilter" } & FilterMetadataOwnerPath_tableAutoFilter;
+
+export interface FilterMetadataOwnerPath_sheetAutoFilter {
+  sheetId: string;
+}
+
+export interface FilterMetadataOwnerPath_tableAutoFilter {
+  sheetId: string;
+  tableId: string;
+}
+
+export type FilterMetadataSourceKey =
+  | { kind: "sheetAutoFilter" } & FilterMetadataSourceKey_sheetAutoFilter
+  | { kind: "tableAutoFilter" } & FilterMetadataSourceKey_tableAutoFilter;
+
+export interface FilterMetadataSourceKey_sheetAutoFilter {
+  sheetId: string;
+  rangeRef: string;
+}
+
+export interface FilterMetadataSourceKey_tableAutoFilter {
+  sheetId: string;
+  tableId: string;
+  tableName: string;
+  rangeRef: string;
+}
+
+export type FilterOperator = "equals" | "notEquals" | "contains" | "notContains" | "startsWith" | "endsWith" | "greaterThan" | "greaterThanOrEqual" | "lessThan" | "lessThanOrEqual" | "between" | "notBetween" | "isBlank" | "isNotBlank" | "aboveAverage" | "belowAverage";
+
+export interface FilterRecordCount {
+  visible: number;
+  total: number;
+}
+
+export interface FilterShellMetadata {
+  capability: FilterCapability;
+  unsupportedReasons?: ImportFilterUnsupportedReason[];
+  hasActiveLosslessCriteria: boolean;
+  buttonMetadata?: Record<string, FilterButtonMetadata>;
+  losslessCriteria?: LosslessCriterionDescriptor[];
 }
 
 export interface FilterSortState {
@@ -2580,6 +2612,9 @@ export interface ImportDiagnostic {
   recoverability: ImportRecoverability;
   message: string;
   reference?: ImportDiagnosticRef;
+  details?: ImportDiagnosticDetails;
+  importPhases?: ImportPhase[];
+  firstImportPhase?: ImportPhase;
 }
 
 export type ImportDiagnosticCode =
@@ -2615,6 +2650,19 @@ export type ImportDiagnosticCode =
   | { internalInvariant: null }
   | { legacyParseCode: number };
 
+export type ImportDiagnosticDetails =
+  | { kind: "unsupportedFilter" } & ImportDiagnosticDetails_unsupportedFilter;
+
+export interface ImportDiagnosticDetails_unsupportedFilter {
+  reasons: ImportFilterUnsupportedReason[];
+  filterId?: string;
+  filterKind?: string;
+  sourceKey?: string;
+  filterColId?: number;
+  tableColumnOrdinal?: number;
+  resolvedCol?: number;
+}
+
 export interface ImportDiagnosticRef {
   id?: string;
   code?: ImportDiagnosticCode;
@@ -2631,12 +2679,18 @@ export interface ImportDiagnosticRef {
   featureKind?: ImportFeatureKind;
   objectId?: string;
   objectName?: string;
+  filterColId?: number;
+  tableColumnOrdinal?: number;
+  unresolvedFilterColId?: number;
+  unresolvedTableColumnOrdinal?: number;
   relatedParts?: string[];
 }
 
 export type ImportEditability = "editable" | "partiallyEditable" | "notEditable";
 
 export type ImportFeatureKind = "workbook" | "worksheet" | "cell" | "formula" | "style" | "theme" | "chart" | "diagram" | "textEffects" | "drawing" | "image" | "table" | "pivotTable" | "slicer" | "conditionalFormat" | "dataValidation" | "comment" | "formControl" | "oleObject" | "activeX" | "hyperlink" | "protection" | "printSettings" | "externalLink" | "macro" | "metadata" | "unknown";
+
+export type ImportFilterUnsupportedReason = "unknownDynamicType" | "unknownCustomOperator" | "dateGroupUnsupported" | "dynamicTemporalContextUnsupported" | "valueTokenUnresolved" | "valueTypeUnsupported" | "colorDxfUnresolved" | "iconFilterUnsupported" | "unknownExtension" | "tableFilterShapeUnsupported";
 
 export interface ImportForceRecalcCell {
   sheetIndex: number;
@@ -2653,6 +2707,8 @@ export interface ImportObjectStatus {
   diagnostics?: ImportDiagnosticRef[];
   reference?: ImportDiagnosticRef;
 }
+
+export type ImportPhase = "parser" | "criticalSheet" | "fullHydration";
 
 export type ImportRecoverability = "fullySupported" | "repaired" | "partiallySupported" | "preservedNotRenderable" | "preservedNotEditable" | "unsupportedPreserved" | "unsupportedDropped" | "malformedDropped" | "securityDisabled";
 
@@ -2838,6 +2894,13 @@ export type LineEndSize = "sm" | "med" | "lg";
 export type LineEndType = "none" | "triangle" | "stealth" | "diamond" | "oval" | "arrow";
 
 export type LineJoin = "bevel" | "miter" | "round";
+
+export interface LosslessCriterionDescriptor {
+  filterColId?: number;
+  tableColumnOrdinal?: number;
+  kind: string;
+  preservedJson: unknown;
+}
 
 export interface ManualLayout {
   layoutTarget?: LayoutTarget;
@@ -4132,6 +4195,34 @@ export interface RowVisibility {
   totalCount: number;
   firstVisibleRow: string;
   lastVisibleRow: string;
+}
+
+export interface RuntimeDiagnosticsOptions {
+  sinceSequence?: string;
+  limit?: number;
+}
+
+export interface RuntimeDiagnosticsPage {
+  diagnostics: RuntimeOperationDiagnostic[];
+  nextSequence?: string;
+  truncated: boolean;
+}
+
+export interface RuntimeOperationDiagnostic {
+  id: string;
+  sequence: string;
+  code: string;
+  severity: string;
+  recoverability: string;
+  operation: string;
+  sheetId: string;
+  filterId?: string;
+  filterKind?: string;
+  tableId?: string;
+  reason?: string;
+  reasons?: string[];
+  details?: unknown;
+  location?: unknown;
 }
 
 export interface RustWorkbookSettingsPatch {

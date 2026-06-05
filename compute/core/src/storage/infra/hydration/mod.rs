@@ -44,7 +44,8 @@ mod workbook;
 
 pub(crate) use self::sheet::hydrate_sheet;
 pub(crate) use self::sheet::{
-    SheetIdAllocation, allocate_sheet_ids, allocate_sheet_ids_with_sheet_id,
+    SheetIdAllocation, allocate_sheet_ids, allocate_sheet_ids_with_previous_allocation,
+    allocate_sheet_ids_with_sheet_id,
 };
 pub(crate) use self::styles::{
     ImportedRangeStyle, merge_style_palette_incremental, remap_sheet_style_ids,

@@ -81,6 +81,8 @@ import type {
   ImportDiagnostic as WireImportDiagnostic,
   MergeChange,
   MutationResult,
+  RuntimeDiagnosticsOptions as WireRuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage as WireRuntimeDiagnosticsPage,
   RustWorkbookSettingsPatch,
   NamedRangeChange,
   OutlineLevel,
@@ -106,6 +108,8 @@ import type {
   RecalcValidationAnnotation,
   RecalcValidationError,
   RemoveDuplicatesResult,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
   Scenario,
   ScenarioCreateInput,
   ScenarioCreateResult,
@@ -218,6 +222,8 @@ export type {
   RecalcValidationAnnotation,
   RecalcValidationError,
   RemoveDuplicatesResult,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
   Scenario,
   ScenarioCreateInput,
   ScenarioCreateResult,
@@ -1573,6 +1579,18 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.query(
       this.core.transport.call<WireImportDiagnostic[]>('compute_get_import_diagnostics', {
         docId: this.core.docId,
+      }),
+    );
+  }
+
+  getRuntimeDiagnostics(
+    options: WireRuntimeDiagnosticsOptions = {},
+  ): Promise<WireRuntimeDiagnosticsPage> {
+    this.core.ensureInitialized();
+    return this.core.query(
+      this.core.transport.call<WireRuntimeDiagnosticsPage>('compute_get_runtime_diagnostics', {
+        docId: this.core.docId,
+        options,
       }),
     );
   }

@@ -47,13 +47,13 @@ pub fn find_data_edge(
     // Pre-fetch hidden sets for efficiency
     let hidden_rows: HashSet<u32> = dimensions::get_hidden_rows(doc, sheets, &sheet_id)
         .into_iter()
-        .chain(grouping::get_rows_hidden_by_collapsed_groups(
+        .chain(grouping::get_rows_hidden_by_structural_groups(
             doc, sheets, &sheet_id,
         ))
         .collect();
     let hidden_cols: HashSet<u32> = dimensions::get_hidden_columns(doc, sheets, &sheet_id)
         .into_iter()
-        .chain(grouping::get_columns_hidden_by_collapsed_groups(
+        .chain(grouping::get_columns_hidden_by_structural_groups(
             doc, sheets, &sheet_id,
         ))
         .collect();
@@ -93,6 +93,7 @@ pub fn find_data_edge(
         ownership.effective_hidden
             && !ownership.manual
             && !ownership.structural
+            && !ownership.cache_hidden_without_owner
             && !ownership.filter_owner_ids.is_empty()
             && ownership
                 .filter_owner_ids
@@ -103,11 +104,14 @@ pub fn find_data_edge(
     let is_hidden_boundary =
         |r: u32, c: u32| -> bool { is_hidden(r, c) && !is_filter_skipped_row(r, c) };
 
-    let advance_skipped_rows = |ri: &mut i64, ci: &mut i64| {
+    let advance_skipped_rows = |ri: &mut i64, ci: &mut i64| -> bool {
+        let mut skipped = false;
         while in_bounds(*ri, *ci) && is_filter_skipped_row(*ri as u32, *ci as u32) {
+            skipped = true;
             *ri += dr;
             *ci += dc;
         }
+        skipped
     };
 
     let check_data = |r: u32, c: u32| -> bool { has_data_at(&txn, grid, &cells_map, r, c) };
@@ -167,7 +171,14 @@ pub fn find_data_edge(
 
     // --- algorithm ---
 
-    let current_has_data = cell_has_data(start_row, start_col);
+    if hidden_cols.contains(&start_col) {
+        return start_pos;
+    }
+    let start_filter_skipped = is_filter_skipped_row(start_row, start_col);
+    if is_hidden(start_row, start_col) && !start_filter_skipped {
+        return start_pos;
+    }
+    let current_has_data = !start_filter_skipped && cell_has_data(start_row, start_col);
 
     // Get next position (skip past current merge if applicable)
     let (mut ri, mut ci) = advance_past_merge(start_row, start_col);
@@ -198,19 +209,23 @@ pub fn find_data_edge(
         }
 
         // Case 1: both empty → find first non-empty
+        let mut last_visible_landing = start_pos;
         while in_bounds(ri, ci) {
-            advance_skipped_rows(&mut ri, &mut ci);
+            if advance_skipped_rows(&mut ri, &mut ci) && !in_bounds(ri, ci) {
+                return last_visible_landing;
+            }
             if !in_bounds(ri, ci) {
                 break;
             }
             let rr = ri as u32;
             let cc = ci as u32;
             if is_hidden_boundary(rr, cc) {
-                return to_merge_origin((ri - dr) as u32, (ci - dc) as u32);
+                return last_visible_landing;
             }
             if cell_has_data(rr, cc) {
                 return to_merge_origin(rr, cc);
             }
+            last_visible_landing = to_merge_origin(rr, cc);
             ri += dr;
             ci += dc;
         }
@@ -221,19 +236,23 @@ pub fn find_data_edge(
     // Current has data
     if !next_has_data {
         // Case 3: next empty → jump over empties to next data
+        let mut last_visible_landing = start_pos;
         while in_bounds(ri, ci) {
-            advance_skipped_rows(&mut ri, &mut ci);
+            if advance_skipped_rows(&mut ri, &mut ci) && !in_bounds(ri, ci) {
+                return last_visible_landing;
+            }
             if !in_bounds(ri, ci) {
                 break;
             }
             let rr = ri as u32;
             let cc = ci as u32;
             if is_hidden_boundary(rr, cc) {
-                return to_merge_origin((ri - dr) as u32, (ci - dc) as u32);
+                return last_visible_landing;
             }
             if cell_has_data(rr, cc) {
                 return to_merge_origin(rr, cc);
             }
+            last_visible_landing = to_merge_origin(rr, cc);
             ri += dr;
             ci += dc;
         }

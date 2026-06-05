@@ -270,6 +270,7 @@ pub fn full_parse_result_to_parse_output(
     let mut parse_output = ParseOutput {
         sheets: sheet_data_vec,
         workbook_sheet_inventory: result.workbook_sheet_inventory.clone(),
+        parsed_workbook_sheet_indices: result.parsed_workbook_sheet_indices.clone(),
         workbook_root_namespaces: result
             .extensions
             .as_ref()

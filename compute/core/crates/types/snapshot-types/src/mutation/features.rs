@@ -33,6 +33,26 @@ pub struct RuntimeOperationDiagnostic {
     pub location: Option<serde_json::Value>,
 }
 
+/// Options for querying retained runtime operation diagnostics.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDiagnosticsOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_sequence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Bounded page of runtime operation diagnostics retained by the engine.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDiagnosticsPage {
+    pub diagnostics: Vec<RuntimeOperationDiagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_sequence: Option<String>,
+    pub truncated: bool,
+}
+
 /// A filter change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

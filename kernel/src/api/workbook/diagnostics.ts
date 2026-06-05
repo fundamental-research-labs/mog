@@ -6,6 +6,7 @@ import type {
   ResolvedChartSpecDiagnosticsOptions,
   RuntimeDiagnosticsOptions,
   RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
   WorkbookDiagnostics,
 } from '@mog-sdk/contracts/api';
 import { normalizeImageExportOptions } from '@mog/charts/export';
@@ -20,6 +21,7 @@ import type {
   FormulaReferenceDiagnostic as BridgeFormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions as BridgeFormulaReferenceDiagnosticsOptions,
   ExternalLinkStatusSnapshot,
+  RuntimeOperationDiagnostic as BridgeRuntimeOperationDiagnostic,
 } from '../../bridges/compute/compute-types.gen';
 import { chartNotFound, operationFailed } from '../../errors/api';
 import type { MaterializationState } from '@mog-sdk/contracts/api';
@@ -78,13 +80,20 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   }
 
   async runtime(options: RuntimeDiagnosticsOptions = {}): Promise<RuntimeDiagnosticsPage> {
-    const mutationHandler = this.ctx.computeBridge.getMutationHandler?.();
-    return (
-      mutationHandler?.getRuntimeDiagnostics(options) ?? {
-        diagnostics: [],
-        truncated: false,
-      }
+    const getRuntimeDiagnostics = this.ctx.computeBridge.getRuntimeDiagnostics?.bind(
+      this.ctx.computeBridge,
     );
+    if (getRuntimeDiagnostics) {
+      const page = await getRuntimeDiagnostics(options);
+      return {
+        diagnostics: page.diagnostics.map(projectRuntimeOperationDiagnostic),
+        nextSequence: page.nextSequence,
+        truncated: page.truncated,
+      };
+    }
+
+    const mutationHandler = this.ctx.computeBridge.getMutationHandler?.();
+    return mutationHandler?.getRuntimeDiagnostics(options) ?? { diagnostics: [], truncated: false };
   }
 
   private externalLinkSnapshot(): ExternalLinkStatusSnapshot {
@@ -104,6 +113,25 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
       .join('|');
     return { version: version || 'empty', records };
   }
+}
+
+function projectRuntimeOperationDiagnostic(
+  diagnostic: BridgeRuntimeOperationDiagnostic,
+): RuntimeOperationDiagnostic {
+  return {
+    ...diagnostic,
+    severity: diagnostic.severity === 'error' ? 'error' : 'warning',
+    filterKind: projectRuntimeFilterKind(diagnostic.filterKind),
+  };
+}
+
+function projectRuntimeFilterKind(
+  value: string | undefined,
+): RuntimeOperationDiagnostic['filterKind'] {
+  if (value === 'autoFilter' || value === 'tableFilter' || value === 'advancedFilter') {
+    return value;
+  }
+  return undefined;
 }
 
 function projectDiagnostic(

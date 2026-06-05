@@ -83,7 +83,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
     xlsx_data: &[u8],
 ) -> Result<XlsxHydrateResult, ComputeError> {
     use crate::import;
-    use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
+    use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
 
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "parse");

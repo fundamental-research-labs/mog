@@ -14,9 +14,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
+  PlacementId,
   PivotField,
   PivotFieldArea,
   PivotFieldPlacementFlat as PivotFieldPlacement,
@@ -151,8 +153,14 @@ export interface UsePivotTablesReturn {
     },
   ) => void;
 
+  /** Add a specific placement to an area. */
+  addPlacement: (pivotId: string, spec: PivotHandlePlacementSpec) => void;
+
   /** Remove a field from an area */
   removeFieldFromArea: (pivotId: string, fieldId: string, area: PivotFieldArea) => void;
+
+  /** Remove a specific placement. */
+  removePlacement: (pivotId: string, placementId: PlacementId) => void;
 
   /** Move a field to a different area or position */
   moveField: (
@@ -163,10 +171,25 @@ export interface UsePivotTablesReturn {
     toPosition: number,
   ) => void;
 
+  /** Move a specific placement to a different area or position. */
+  movePlacement: (
+    pivotId: string,
+    placementId: PlacementId,
+    toArea: PivotFieldArea,
+    toPosition: number,
+  ) => void;
+
   /** Set aggregation function for a value field */
   setAggregateFunction: (
     pivotId: string,
     fieldId: string,
+    aggregateFunction: AggregateFunction,
+  ) => void;
+
+  /** Set aggregation function for a specific value placement. */
+  setPlacementAggregateFunction: (
+    pivotId: string,
+    placementId: PlacementId,
     aggregateFunction: AggregateFunction,
   ) => void;
 
@@ -179,6 +202,21 @@ export interface UsePivotTablesReturn {
 
   /** Set sort order for a row/column field */
   setSortOrder: (pivotId: string, fieldId: string, sortOrder: SortOrder) => void;
+
+  /** Set sort order for a specific row/column placement. */
+  setPlacementSortOrder: (
+    pivotId: string,
+    placementId: PlacementId,
+    sortOrder: SortOrder | null,
+  ) => void;
+
+  /** Set value sorting on a specific row/column axis placement. */
+  setSortByValue: (
+    pivotId: string,
+    axisPlacementId: PlacementId,
+    valuePlacementId: PlacementId,
+    config: PivotValueSortConfig | null,
+  ) => void;
 
   /** Set filter for a field */
   setFilter: (pivotId: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>) => void;
@@ -552,6 +590,14 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     [pivotHandleFromId],
   );
 
+  // Add a placement via the placement-first pivot handle API.
+  const addPlacement = useCallback(
+    (pivotId: string, spec: PivotHandlePlacementSpec) => {
+      void pivotHandleFromId(pivotId)?.addPlacement(spec);
+    },
+    [pivotHandleFromId],
+  );
+
   // Remove field from area via the pivot handle.
   const removeFieldFromArea = useCallback(
     (pivotId: string, fieldId: string, area: PivotFieldArea) => {
@@ -560,6 +606,14 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       void pivotHandleFromId(pivotId)?.removeField(fieldId, area);
     },
     [pivotHandleFromId, placementForField],
+  );
+
+  // Remove a placement via the placement-first pivot handle API.
+  const removePlacement = useCallback(
+    (pivotId: string, placementId: PlacementId) => {
+      void pivotHandleFromId(pivotId)?.removePlacement(placementId);
+    },
+    [pivotHandleFromId],
   );
 
   // Move field via the pivot handle.
@@ -578,12 +632,36 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     [pivotHandleFromId, placementForField],
   );
 
+  // Move a placement via the placement-first pivot handle API.
+  const movePlacement = useCallback(
+    (
+      pivotId: string,
+      placementId: PlacementId,
+      toArea: PivotFieldArea,
+      toPosition: number,
+    ) => {
+      void pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition);
+    },
+    [pivotHandleFromId],
+  );
+
   // Set aggregate function via the pivot handle.
   const setAggregateFunction = useCallback(
     (pivotId: string, fieldOrPlacementId: string, aggregateFunction: AggregateFunction) => {
       void pivotHandleFromId(pivotId)?.changeAggregation(
         fieldOrPlacementId,
         aggregateFunction as 'sum' | 'count' | 'average' | 'max' | 'min',
+      );
+    },
+    [pivotHandleFromId],
+  );
+
+  // Set aggregate function via the placement-first pivot handle API.
+  const setPlacementAggregateFunction = useCallback(
+    (pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction) => {
+      void pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(
+        placementId,
+        aggregateFunction,
       );
     },
     [pivotHandleFromId],
@@ -601,6 +679,27 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   const setSortOrder = useCallback(
     (pivotId: string, fieldId: string, sortOrder: SortOrder) => {
       void pivotHandleFromId(pivotId)?.setSortOrder(fieldId, sortOrder);
+    },
+    [pivotHandleFromId],
+  );
+
+  // Set sort order via the placement-first pivot handle API.
+  const setPlacementSortOrder = useCallback(
+    (pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null) => {
+      void pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder);
+    },
+    [pivotHandleFromId],
+  );
+
+  // Set value sorting on an axis placement via the placement-first pivot handle API.
+  const setSortByValue = useCallback(
+    (
+      pivotId: string,
+      axisPlacementId: PlacementId,
+      valuePlacementId: PlacementId,
+      config: PivotValueSortConfig | null,
+    ) => {
+      void pivotHandleFromId(pivotId)?.setSortByValue(axisPlacementId, valuePlacementId, config);
     },
     [pivotHandleFromId],
   );
@@ -721,11 +820,17 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     updatePivotTable,
     deletePivotTable,
     addFieldToArea,
+    addPlacement,
     removeFieldFromArea,
+    removePlacement,
     moveField,
+    movePlacement,
     setAggregateFunction,
+    setPlacementAggregateFunction,
     setShowValuesAs,
     setSortOrder,
+    setPlacementSortOrder,
+    setSortByValue,
     setFilter,
     removeFilter,
     setLayout,

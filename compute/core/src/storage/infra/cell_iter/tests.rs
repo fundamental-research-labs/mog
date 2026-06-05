@@ -7,7 +7,7 @@ use crate::storage::sheet::{dimensions, filters};
 use cell_types::{CellId, IdAllocator, RangePos, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
-use compute_document::schema::{KEY_COL_ORDER, KEY_ROW_ORDER, KEY_VALUE};
+use compute_document::schema::{KEY_COL_ORDER, KEY_HIDDEN_ROWS, KEY_ROW_ORDER, KEY_VALUE};
 use value_types::{CellValue, FiniteF64};
 use yrs::{Any, Array, ArrayPrelim, Map, MapPrelim, Out, Transact};
 
@@ -924,6 +924,17 @@ fn test_find_data_edge_treats_manual_plus_filter_hidden_row_as_boundary() {
 }
 
 #[test]
+fn test_find_data_edge_returns_last_visible_before_skipped_run_boundary() {
+    let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
+    dimensions::hide_manual_rows(storage.doc(), storage.sheets(), &sid, &[3], Some(&grid));
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 1, 1, "down");
+
+    assert_eq!(target.row, 1);
+    assert_eq!(target.col, 1);
+}
+
+#[test]
 fn test_find_data_edge_treats_filter_hidden_row_outside_filter_columns_as_boundary() {
     let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
 
@@ -938,6 +949,35 @@ fn test_find_data_edge_treats_filter_hidden_row_from_header_start_as_boundary() 
     let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
 
     let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 0, 1, "down");
+
+    assert_eq!(target.row, 1);
+    assert_eq!(target.col, 1);
+}
+
+#[test]
+fn test_find_data_edge_treats_cache_hidden_orphan_as_boundary() {
+    let (storage, sid, grid, filter_id) = seeded_filter_navigation_sheet();
+    dimensions::clear_filter_hidden_rows(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        &filter_id,
+        Some(&grid),
+    );
+    let sheet_hex = id_to_hex(sid.as_u128());
+    let mut txn = storage.doc().transact_mut();
+    let sheet_map = match storage.sheets_ref().get(&txn, &*sheet_hex) {
+        Some(Out::YMap(map)) => map,
+        _ => panic!("sheet map missing"),
+    };
+    let hidden_rows_map = match sheet_map.get(&txn, KEY_HIDDEN_ROWS) {
+        Some(Out::YMap(map)) => map,
+        _ => panic!("hiddenRows map missing"),
+    };
+    hidden_rows_map.insert(&mut txn, "2", Any::Bool(true));
+    drop(txn);
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 1, 1, "down");
 
     assert_eq!(target.row, 1);
     assert_eq!(target.col, 1);

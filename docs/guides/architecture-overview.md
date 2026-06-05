@@ -22,7 +22,7 @@ from kernel or engine packages directly:
 
 | Package | Current status | Use |
 | --- | --- | --- |
-| `@mog-sdk/sdk` | shipped public | Headless Node.js SDK; exposes async `createWorkbook()` and loads native N-API platform packages. |
+| `@mog-sdk/sdk` | shipped public | Unified headless SDK; root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes, with explicit `./node`, `./wasm`, and `./workerd` subpaths. |
 | `@mog-sdk/embed` | shipped public root, public-experimental React/web-component/config subpaths | Read-only browser embed package. |
 | `@mog-sdk/spreadsheet-app` | shipped public | Full spreadsheet app embed for trusted same-origin hosts. |
 | `@mog-sdk/contracts` | shipped public, with many public-experimental subpaths | Public TypeScript contracts and small runtime values. |
@@ -32,7 +32,7 @@ from kernel or engine packages directly:
 | `@mog/shell`, `@mog/ui` | reserved | Private workspace packages reserved for possible future public surfaces. |
 | `@mog/*` engines/assets and `@mog/app-spreadsheet` | workspace-internal, bundle-only, generated-asset, or private | Implementation packages used by the public facades and workspace app. |
 
-The copy-paste public Node path is:
+The copy-paste public SDK path is:
 
 ```typescript
 import { createWorkbook } from '@mog-sdk/sdk';
@@ -153,16 +153,18 @@ SheetView, and lower-level engines where app-level integration needs them.
 Runtime packages expose public SDK and embed entry points, choose host/runtime
 adapters, and pass explicit transport configuration into the kernel.
 
-- `runtime/sdk` publishes `@mog-sdk/sdk` for headless Node.js and loads N-API
-  optional platform packages.
+- `runtime/sdk` publishes `@mog-sdk/sdk` for headless automation. Package
+  exports select the native Node entry in Node and WASM entries for
+  Workers/web-standard runtimes; explicit `./node`, `./wasm`, and `./workerd`
+  subpaths are available for hosts that need to force the binding.
 - `runtime/embed` publishes `@mog-sdk/embed` for read-only browser embeds. Its
   React, web-component, and config subpaths are public-experimental.
 - `runtime/spreadsheet-app` publishes `@mog-sdk/spreadsheet-app` for trusted
   same-origin full-app embeds. It is the intentional public wrapper around
   private spreadsheet app and shell implementation code.
 
-Browser paths use WASM, Node/headless paths use N-API, and desktop paths use
-Tauri IPC when running inside a Tauri host.
+Browser and Workers paths use WASM, Node/native paths use N-API, and desktop
+paths use Tauri IPC when running inside a Tauri host.
 
 ## Package Boundaries
 

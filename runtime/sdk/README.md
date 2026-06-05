@@ -1,6 +1,7 @@
 # @mog-sdk/sdk
 
-Shortcut Data OS SDK — headless spreadsheet engine for Node.js. Runs the real kernel + Rust compute-core without a browser.
+Shortcut Data OS SDK — headless spreadsheet engine for Node.js, Workers, and
+WASM-capable hosts. Runs the real kernel + Rust compute-core without a browser.
 
 ## Quick Start
 
@@ -18,7 +19,10 @@ const val = await ws.getValue('A3'); // 100
 await wb.dispose();
 ```
 
-Three lines to a running spreadsheet engine. No addon injection, no context threading, no active-sheet callbacks.
+Three lines to a running spreadsheet engine. No context threading, no
+active-sheet callbacks. In Node, the package root resolves to the native N-API
+entry; in Workers/web-standard runtimes it resolves to a WASM entry through
+package export conditions.
 
 ## Install
 
@@ -26,9 +30,25 @@ Three lines to a running spreadsheet engine. No addon injection, no context thre
 # Monorepo — already available as workspace dependency
 pnpm add @mog-sdk/sdk
 
-# The native Rust addon must be built first
+# Node/native path: the native Rust addon must be built first in source checkouts
 cd compute-core-napi && pnpm build
 ```
+
+## Runtime Entries
+
+```typescript
+import { createWorkbook } from '@mog-sdk/sdk';
+import { createWorkbook as createNodeWorkbook } from '@mog-sdk/sdk/node';
+import { createWorkbook as createWasmWorkbook } from '@mog-sdk/sdk/wasm';
+import { createWorkbook as createWorkerWorkbook } from '@mog-sdk/sdk/workerd';
+```
+
+Use the package root for normal consumers. Use `./node`, `./wasm`, or
+`./workerd` only when a host or test needs to force a binding.
+
+WASM-capable entries accept a host-provided `wasmModule`. Workers/workerd hosts
+should pass a bundler/runtime-provided `WebAssembly.Module`; file-path workbook
+I/O remains Node-only.
 
 ## API Reference
 

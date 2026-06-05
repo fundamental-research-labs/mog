@@ -8,8 +8,8 @@ closes the workbook.
 
 - Node.js 18+
 - npm
-- A supported native platform package for `@mog-sdk/sdk`: macOS arm64/x64,
-  Linux x64/arm64 with glibc or musl, or Windows x64
+- A supported native platform package for the Node-resolved `@mog-sdk/sdk`
+  entry: macOS arm64/x64, Linux x64/arm64 with glibc or musl, or Windows x64
 
 ## Create and Run a Script
 
@@ -62,8 +62,9 @@ A3 formula: =SUM(A1:A2)
 
 ## What This Uses
 
-- `createWorkbook()` from `@mog-sdk/sdk` creates a headless workbook backed by
-  the native N-API engine.
+- In Node, `createWorkbook()` from `@mog-sdk/sdk` creates a headless workbook
+  backed by the native N-API engine. The same package root resolves to WASM in
+  Workers/web-standard runtimes through package export conditions.
 - `wb.activeSheet`, `wb.sheetCount`, and `ws.name` are synchronous cached
   workbook/sheet properties.
 - `ws.setCell()` accepts A1 addresses and zero-based numeric row/column
@@ -75,11 +76,15 @@ A3 formula: =SUM(A1:A2)
 ## Native Package Troubleshooting
 
 `@mog-sdk/sdk` loads the native N-API engine through optional `@mog-sdk/*`
-platform packages. The current Node runtime path does not fall back to WASM. If
-installation or startup fails because a package such as
+platform packages when the Node/native entry is selected. That native entry
+does not fall back to WASM. If installation or startup fails because a package
+such as
 `@mog-sdk/darwin-arm64`, `@mog-sdk/linux-x64-gnu`, or
 `@mog-sdk/win32-x64-msvc` is missing, check that optional dependencies were not
 disabled and that the machine is one of the supported platforms above.
+For explicit WASM or Workers usage, use `@mog-sdk/sdk/wasm` or
+`@mog-sdk/sdk/workerd` and pass a host-provided `wasmModule`; see the SDK deep
+dive.
 
 ## Next Steps
 

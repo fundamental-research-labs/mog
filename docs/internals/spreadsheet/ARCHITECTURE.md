@@ -114,7 +114,7 @@ shipped public setup paths.
 | `@mog-sdk/kernel` (`kernel`) | workspace-internal package (`private: true`) | Core runtime, domain modules, unified Workbook/Worksheet implementation | `kernel/src/api/workbook/workbook-impl.ts` |
 | `@mog/shell` (`shell`) | reserved private package | Shell host, app launcher, platform services, and React integration | `shell/src/` |
 | `@mog/app-spreadsheet` (`apps/spreadsheet`) | private workspace app | Spreadsheet app coordination, actions, systems, and UI store | `apps/spreadsheet/src/coordinator/sheet-coordinator.ts` |
-| `@mog-sdk/sdk` (`runtime/sdk`) | shipped public package | Node/headless SDK entry points and boot lifecycle | `runtime/sdk/src/boot.ts` |
+| `@mog-sdk/sdk` (`runtime/sdk`) | shipped public package | Unified headless SDK entry points and boot lifecycle for Node/native, WASM, and workerd paths | `runtime/sdk/src/boot.ts`, `runtime/sdk/src/wasm.ts`, `runtime/sdk/src/workerd.ts` |
 | `@mog-sdk/embed` (`runtime/embed`) | shipped public package; React/Web Component exports public-experimental | Embed package | `runtime/embed/src/index.ts` |
 | `@mog-sdk/spreadsheet-app` (`runtime/spreadsheet-app`) | shipped public package | Full spreadsheet app embed for trusted same-origin hosts; bundle-composition facade over private app/shell/kernel code | `runtime/spreadsheet-app/src/index.tsx` |
 

@@ -2,9 +2,11 @@
 
 > **Status: shipped public package:** `@mog-sdk/sdk`
 
-Use Mog programmatically in Node.js for trusted same-process workbook
-automation, data pipelines, and server-side file processing. The stable public
-entry point is async `createWorkbook()` from `@mog-sdk/sdk`.
+Use Mog programmatically for trusted same-process workbook automation, data
+pipelines, server-side file processing, and Workers-style runtimes. The stable
+public entry point is async `createWorkbook()` from `@mog-sdk/sdk`; package
+export conditions select the native Node implementation in Node and the WASM
+implementation in Workers/web-standard runtimes.
 
 The SDK is not a hostile-client security boundary. Do not run untrusted
 agent or user code in the same process and treat the package as an automation
@@ -12,13 +14,25 @@ SDK owned by the host application.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 18+ for the Node/native entry
 - npm, pnpm, or yarn
 - A supported native platform package installed through `@mog-sdk/sdk` optional
-  dependencies
+  dependencies when using the Node/native entry
+- A host-provided `WebAssembly.Module` for Workers or hosts that disallow
+  package-side WASM byte loading or compilation
 
-The SDK uses native N-API platform packages. There is no WASM fallback in
-the Node runtime path. Supported public binary wrappers are:
+The root package uses conditional exports:
+
+- `@mog-sdk/sdk` resolves to native N-API in Node and WASM in
+  Workers/web-standard runtimes.
+- `@mog-sdk/sdk/node` forces the native Node entry.
+- `@mog-sdk/sdk/wasm` forces the WASM entry for hosts that can provide or load
+  the compute WASM module.
+- `@mog-sdk/sdk/workerd` is the explicit Workers/workerd entry.
+
+The Node/native entry uses native N-API platform packages. It does not fall back
+to WASM after package resolution has selected the native entry. Supported public
+binary wrappers are:
 
 - `@mog-sdk/darwin-arm64`
 - `@mog-sdk/darwin-x64`
@@ -29,7 +43,9 @@ the Node runtime path. Supported public binary wrappers are:
 - `@mog-sdk/win32-x64-msvc`
 
 If optional dependencies are omitted or the platform is unsupported, workbook
-creation fails when the SDK tries to load the native package.
+creation through `@mog-sdk/sdk/node` or a Node-resolved root import fails when
+the SDK tries to load the native package. Use `@mog-sdk/sdk/wasm` or
+`@mog-sdk/sdk/workerd` for non-native hosts.
 
 ## Runnable Quickstart
 
@@ -68,6 +84,52 @@ Expected output:
 inputs need to be interpreted in a user calendar frame; headless Node sessions
 default to `UTC`.
 
+## Runtime Entries
+
+The normal import is the package root:
+
+```typescript
+import { createWorkbook } from '@mog-sdk/sdk';
+```
+
+Use explicit subpaths only when the host or test needs to force a binding:
+
+```typescript
+import { createWorkbook as createNodeWorkbook } from '@mog-sdk/sdk/node';
+import { createWorkbook as createWasmWorkbook } from '@mog-sdk/sdk/wasm';
+import { createWorkbook as createWorkerWorkbook } from '@mog-sdk/sdk/workerd';
+```
+
+The native Node entry accepts file paths and byte sources. The WASM and workerd
+entries accept bytes or byte sources; file-path I/O is Node-only.
+
+```typescript
+const wb = await createWasmWorkbook({
+  xlsx: xlsxBytes,
+  wasmModule: computeWasmModule,
+  userTimezone: 'UTC',
+});
+```
+
+`wasmModule` is accepted only by WASM-capable entries. Passing `wasmModule` or a
+`runtime` option to the native Node entry is an argument error; runtime
+selection belongs to package exports and subpath imports.
+
+Workers/workerd hosts should provide the compute WASM module as a
+`WebAssembly.Module`, for example through the bundler/runtime WASM module
+import supported by that host. If PNG or JPEG chart export is needed, provide
+the chart raster module separately:
+
+```typescript
+const wb = await createWorkerWorkbook({
+  wasmModule: computeWasmModule,
+  chartRendering: {
+    rasterModule: chartRasterWasmModule,
+  },
+  userTimezone: 'UTC',
+});
+```
+
 ## Create or Open Workbooks
 
 ```typescript
@@ -91,7 +153,8 @@ withOptions.dispose();
 ```
 
 The path and byte overloads also accept XLSX import options as the second
-argument. Import warnings from XLSX open are available on `wb.importWarnings`.
+argument in the Node/native entry. WASM and workerd callers pass bytes. Import
+warnings from XLSX open are available on `wb.importWarnings`.
 
 ## Read and Write Cells
 

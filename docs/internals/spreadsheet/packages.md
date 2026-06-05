@@ -175,7 +175,7 @@ public setup paths.
 | `@mog-sdk/sheet-view` | `views/sheet-view/` | shipped public | Public view-layer substrate for sheet rendering with a data-source boundary. | `createSheetView`, `createSheetViewDataSourceFromWorkbook`, skin helpers, public view/event/capability types. |
 | `@mog-sdk/embed` | `runtime/embed/` | shipped public package; root/react/web-component/config are public-experimental | Read-only same-page embeddable component. | `MogSheetElement`, `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, config types, and config validators. |
 | `@mog-sdk/spreadsheet-app` | `runtime/spreadsheet-app/` | shipped public | Full spreadsheet app embed for trusted same-origin hosts. | `createSpreadsheetRuntime`, `MogSpreadsheetApp`, `mountSpreadsheetApp`, `./styles.css`, `./mog-embed.css`. |
-| `@mog-sdk/sdk` | `runtime/sdk/` | shipped public | Headless Node.js SDK with formula compute, optional native platform packages, and XLSX file I/O. | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection. |
+| `@mog-sdk/sdk` | `runtime/sdk/` | shipped public | Unified headless SDK. Root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes; explicit `./node`, `./wasm`, and `./workerd` entries force a binding when needed. | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection. |
 | `@mog/spreadsheet-testing` | `runtime/spreadsheet-testing/` | workspace-internal; `private: true` | Spreadsheet testing utilities. | `.`, `./fixtures`. |
 | `@mog/test-host` | `runtime/test-host/` | workspace-internal; `private: true` | Deterministic trusted test host. | `.` |
 

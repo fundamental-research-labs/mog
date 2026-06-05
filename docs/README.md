@@ -43,14 +43,17 @@ Expected output:
 84
 ```
 
-`@mog-sdk/sdk` requires Node.js 18 or newer and loads native N-API platform
-packages through optional `@mog-sdk/*` binary wrapper packages.
+In Node.js, `@mog-sdk/sdk` requires Node 18 or newer and resolves to the native
+N-API implementation through optional `@mog-sdk/*` binary wrapper packages. In
+Workers/web-standard runtimes, the package root resolves to a WASM entry when
+the bundler honors the `workerd`, `browser`, or `default` export conditions; see
+the SDK guide for explicit `./node`, `./wasm`, and `./workerd` entries.
 
 ## Public Paths
 
 | Goal | Status | Package or guide |
 | --- | --- | --- |
-| Run workbook automation in Node.js | public | [`@mog-sdk/sdk`](guides/sdk.md) |
+| Run workbook automation in Node.js, Workers, or WASM-capable hosts | public | [`@mog-sdk/sdk`](guides/sdk.md) |
 | Use Python bindings from source or a published wheel when available | public-experimental | [`compute/pyo3`](guides/python-sdk.md) |
 | Embed a sheet in React | public-experimental | [`@mog-sdk/embed/react`](guides/embed-react.md) |
 | Embed a sheet as a web component | public-experimental | [`@mog-sdk/embed`](guides/embed-web-component.md) |

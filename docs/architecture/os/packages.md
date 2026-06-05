@@ -87,7 +87,7 @@ compose those pieces into workspace UI or shipped public runtime facades.
 
 | Package | Status | Purpose | Key exports |
 | --- | --- | --- | --- |
-| `runtime/sdk` (`@mog-sdk/sdk`) | shipped public | Headless Node.js SDK with formula compute, optional native platform packages, and XLSX file I/O | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection |
+| `runtime/sdk` (`@mog-sdk/sdk`) | shipped public | Unified headless SDK. Root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes; explicit `./node`, `./wasm`, and `./workerd` entries are available for host-controlled binding selection. | `createWorkbook`, `createHeadlessEngine`, `MogDocumentFactory`, SDK errors/events, API introspection |
 | `runtime/embed` (`@mog-sdk/embed`) | shipped public; React/web-component/config exports public-experimental | Same-page sheet/view embed package | `<mog-sheet>`, `MogSheetElement`, `@mog-sdk/embed/react`, `@mog-sdk/embed/web-component`, config validators |
 | `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) | shipped public | Full spreadsheet app embed for trusted same-origin hosts. This is a bundle-composition package that uses private app/shell/kernel code internally while keeping those packages out of public declarations and runtime deps. | `createSpreadsheetRuntime`, `MogSpreadsheetApp`, `mountSpreadsheetApp`, `styles.css`, `mog-embed.css` |
 | `compute/wasm/npm` (`@mog-sdk/wasm`) | binary-wrapper | Browser WASM package for the Rust compute engine | Root package and `./wasm` export |

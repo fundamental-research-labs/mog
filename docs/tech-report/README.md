@@ -69,7 +69,7 @@ The bridge stack also includes TypeScript type generation through `bridge-ts`, w
 
 ## SDK
 
-`@mog-sdk/sdk` is the headless SDK. It publishes optional native binary packages for seven platform triples: macOS arm64/x64, Linux x64/arm64 glibc/musl, and Windows x64.
+`@mog-sdk/sdk` is the headless SDK. Its package root resolves to native N-API in Node and WASM in Workers/web-standard runtimes. It publishes optional native binary packages for seven platform triples: macOS arm64/x64, Linux x64/arm64 glibc/musl, and Windows x64, plus explicit `./node`, `./wasm`, and `./workerd` entrypoints for hosts that need to force a binding.
 
 ```typescript
 import { createWorkbook } from '@mog-sdk/sdk';

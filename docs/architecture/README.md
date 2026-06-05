@@ -418,7 +418,7 @@ Details: [Foundations](../internals/spreadsheet/foundations.md)
 
 ### Runtime
 
-- **sdk** (`runtime/sdk/`): Published as `@mog-sdk/sdk` — public Node.js SDK wrapping the headless engine.
+- **sdk** (`runtime/sdk/`): Published as `@mog-sdk/sdk` — unified public headless SDK. The root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes, with explicit `./node`, `./wasm`, and `./workerd` subpaths.
 - **embed** (`runtime/embed/`): Published as `@mog-sdk/embed` — public embed facade with React, web component, and config entry points.
 - **spreadsheet-app** (`runtime/spreadsheet-app/`): Published as `@mog-sdk/spreadsheet-app` — public full-app composition package; its internal use of app/shell/kernel code is declaration-boundary checked.
 - **wasm** (`compute/wasm/npm/`): Published as `@mog-sdk/wasm` — public WebAssembly binary wrapper used by browser transports.

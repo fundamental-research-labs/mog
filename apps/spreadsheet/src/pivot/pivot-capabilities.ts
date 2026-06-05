@@ -23,6 +23,7 @@ export interface PivotCapabilities {
 export interface PivotViewModel extends PivotTableWithResult {
   sourceKind: PivotSourceKind;
   importIdentity?: string;
+  alternateIds?: string[];
   capabilities: PivotCapabilities;
   handle?: PivotTableHandle;
 }

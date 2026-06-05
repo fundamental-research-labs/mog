@@ -115,6 +115,36 @@ describe('PivotFieldList placement editor', () => {
     expect(screen.getByRole('combobox', { name: /Sort values by Amount/i })).toHaveValue('none');
   });
 
+  it('maps row and column sort control changes to the target placement id', () => {
+    const { props } = renderList({
+      placements: [
+        placement({ placementId: 'column:Category:0', fieldId: 'Category', area: 'column', position: 0 }),
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+        placement({ placementId: 'value:Amount:0', fieldId: 'Amount', area: 'value', position: 0, aggregateFunction: 'sum' }),
+      ],
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: /Sort Month/i }), {
+      target: { value: 'desc' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: /Sort Category/i }), {
+      target: { value: 'asc' },
+    });
+
+    expect(props.onSortOrderChange).toHaveBeenNthCalledWith(1, 'row:Month:0', 'desc');
+    expect(props.onSortOrderChange).toHaveBeenNthCalledWith(2, 'column:Category:0', 'asc');
+  });
+
+  it('maps value sort control changes to the value placement id', () => {
+    const { props } = renderList();
+
+    fireEvent.change(screen.getByRole('combobox', { name: /Sort values by Amount/i }), {
+      target: { value: 'desc' },
+    });
+
+    expect(props.onValueSortChange).toHaveBeenCalledWith('value:Amount:0', 'desc');
+  });
+
   it('reorders placements within the same well by placementId', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -153,6 +183,24 @@ describe('PivotFieldList placement editor', () => {
 
     expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
       position: 0,
+      aggregateFunction: 'count',
+    });
+  });
+
+  it('places a selected source field after a clicked placement chip', () => {
+    const { container, props } = renderList();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+
+    fireEvent.click(category);
+    expect(category).toHaveAttribute('data-pivot-selected', 'true');
+
+    fireEvent.click(chip(container, 'row:Month:0'));
+
+    expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
+      position: 1,
       aggregateFunction: 'count',
     });
   });
@@ -202,5 +250,36 @@ describe('PivotFieldList placement editor', () => {
     expect(screen.getByRole('combobox', { name: /Sort values by Amount/i })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: /Aggregate value field/i })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /Remove Month/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps long value-field chips structurally constrained to the pane', () => {
+    const longName =
+      'Extremely Long Revenue Amount Field Name That Should Not Push Past The Pivot Pane';
+    const { container } = renderList({
+      fields: [
+        ...fields,
+        { id: 'LongAmount', name: longName, sourceColumn: 4, dataType: 'number' },
+      ],
+      placements: [
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+        placement({
+          placementId: 'value:LongAmount:0',
+          fieldId: 'LongAmount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+          displayName: longName,
+        }),
+      ],
+    });
+
+    const valueChip = chip(container, 'value:LongAmount:0');
+    const label = valueChip.querySelector('span.truncate');
+    const controls = valueChip.querySelector('[data-pivot-target="placement-controls"]');
+
+    expect(valueChip).toHaveClass('w-full', 'max-w-full', 'min-w-0');
+    expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
+    expect(controls).toHaveClass('w-full', 'min-w-0');
+    expect(screen.getByRole('combobox', { name: /Sort values by/i })).toHaveClass('min-w-0');
   });
 });

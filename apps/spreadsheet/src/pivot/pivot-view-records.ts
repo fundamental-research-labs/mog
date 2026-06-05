@@ -20,9 +20,35 @@ export interface PivotConfigEntry {
   config: PivotTableConfig;
   sourceKind: PivotSourceKind;
   importIdentity?: string;
+  alternateIds?: string[];
   capabilities: PivotCapabilities;
   handle?: PivotTableHandle;
   result?: PivotTableResult | null;
+}
+
+function importedPivotIdentityPart(importIdentity: string, key: string): string | null {
+  const prefix = `${key}=`;
+  const part = importIdentity.split(';').find((candidate) => candidate.startsWith(prefix));
+  const value = part?.slice(prefix.length);
+  return value ? value : null;
+}
+
+function legacyImportedPivotId(record: {
+  importIdentity: string;
+  config: Pick<PivotTableConfig, 'id' | 'outputSheetName'>;
+}): string | null {
+  const definitionPartPath = importedPivotIdentityPart(record.importIdentity, 'definitionPartPath');
+  return definitionPartPath
+    ? `imported:${record.config.outputSheetName}:${definitionPartPath}`
+    : null;
+}
+
+function alternatePivotIds(primaryId: string, ids: Array<string | null | undefined>): string[] | undefined {
+  const alternates = ids.filter(
+    (id, index, all): id is string =>
+      typeof id === 'string' && id.length > 0 && id !== primaryId && all.indexOf(id) === index,
+  );
+  return alternates.length > 0 ? alternates : undefined;
 }
 
 export async function loadPivotConfigEntries(
@@ -37,14 +63,28 @@ export async function loadPivotConfigEntries(
       .filter((record) => record.sourceKind === 'promotedImport')
       .map((record) => [record.config.id, record]),
   );
+  const importedPivotRuntime = (workbook as WorkbookWithImportedPivots).importedPivots;
+  const renderedImportedPivots = importedPivotRuntime
+    ? await importedPivotRuntime.getRenderedImportedPivots(sheetId)
+    : [];
+  const renderedPivotIdByImportIdentity = new Map(
+    renderedImportedPivots.map((pivot) => [pivot.importIdentity, pivot.id]),
+  );
 
   const nativeEntries: PivotConfigEntry[] = await Promise.all(
     allConfigs.map(async (config) => {
       const importedRecord = promotedRecordsByPivotId.get(config.id);
+      const alternateIds = importedRecord
+        ? alternatePivotIds(config.id, [
+            renderedPivotIdByImportIdentity.get(importedRecord.importIdentity),
+            legacyImportedPivotId(importedRecord),
+          ])
+        : undefined;
       return {
         config,
         sourceKind: importedRecord ? 'promotedImport' : 'native',
         importIdentity: importedRecord?.importIdentity,
+        alternateIds,
         capabilities: importedRecord
           ? {
               ...createPivotCapabilitiesForSource(
@@ -61,16 +101,24 @@ export async function loadPivotConfigEntries(
 
   const persistedUnsupportedEntries: PivotConfigEntry[] = importedViewRecords
     .filter((record) => record.sourceKind === 'unsupportedImport')
-    .map((record) => ({
-      config: record.config,
-      sourceKind: record.sourceKind,
-      importIdentity: record.importIdentity,
-      capabilities: {
-        ...createPivotCapabilitiesForSource(record.sourceKind, record.unsupportedReason),
-        ...record.capabilities,
-      },
-      result: record.result ?? null,
-    }));
+    .map((record) => {
+      const renderedPivotId = renderedPivotIdByImportIdentity.get(record.importIdentity);
+      const alternateIds = alternatePivotIds(record.config.id, [
+        renderedPivotId,
+        legacyImportedPivotId(record),
+      ]);
+      return {
+        config: record.config,
+        sourceKind: record.sourceKind,
+        importIdentity: record.importIdentity,
+        alternateIds,
+        capabilities: {
+          ...createPivotCapabilitiesForSource(record.sourceKind, record.unsupportedReason),
+          ...record.capabilities,
+        },
+        result: record.result ?? null,
+      };
+    });
 
   const nativeIds = new Set(nativeEntries.map((entry) => entry.config.id));
   const persistedConfigIds = new Set(
@@ -83,32 +131,29 @@ export async function loadPivotConfigEntries(
     pivotBoundsForConfig(entry.config),
   );
 
-  const importedPivotRuntime = (workbook as WorkbookWithImportedPivots).importedPivots;
   const sidecarEntries: Array<PivotConfigEntry | null> = importedPivotRuntime
     ? await Promise.all(
-        (await importedPivotRuntime.getRenderedImportedPivots(sheetId)).map(
-          async (pivot): Promise<PivotConfigEntry | null> => {
-            const config = await importedPivotRuntime.getRenderedImportedPivotConfig(
-              sheetId,
-              pivot.id,
-            );
-            if (
-              !config ||
-              nativeIds.has(config.id) ||
-              persistedConfigIds.has(config.id) ||
-              persistedImportIdentities.has(pivot.importIdentity) ||
-              persistedRanges.some((range) => pivotBoundsOverlap(range, pivot.range))
-            ) {
-              return null;
-            }
-            return {
-              config,
-              sourceKind: 'unsupportedImport',
-              importIdentity: pivot.importIdentity,
-              capabilities: createPivotCapabilitiesForSource('unsupportedImport'),
-            };
-          },
-        ),
+        renderedImportedPivots.map(async (pivot): Promise<PivotConfigEntry | null> => {
+          const config = await importedPivotRuntime.getRenderedImportedPivotConfig(
+            sheetId,
+            pivot.id,
+          );
+          if (
+            !config ||
+            nativeIds.has(config.id) ||
+            persistedConfigIds.has(config.id) ||
+            persistedImportIdentities.has(pivot.importIdentity) ||
+            persistedRanges.some((range) => pivotBoundsOverlap(range, pivot.range))
+          ) {
+            return null;
+          }
+          return {
+            config,
+            sourceKind: 'unsupportedImport',
+            importIdentity: pivot.importIdentity,
+            capabilities: createPivotCapabilitiesForSource('unsupportedImport'),
+          };
+        }),
       )
     : [];
 

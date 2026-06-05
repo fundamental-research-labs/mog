@@ -14,9 +14,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
+  PlacementId,
   PivotField,
   PivotFieldArea,
   PivotFieldPlacementFlat as PivotFieldPlacement,
@@ -44,16 +46,6 @@ import { getUniqueSheetName } from '../../infra/utils/naming';
 import type { WorkbookWithImportedPivots } from '../../pivot/imported-pivot-runtime';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot-view-records';
-import {
-  addPlacementToConfig,
-  movePlacementInConfig,
-  removePlacementFromConfig,
-  setPlacementAggregateInConfig,
-  setPlacementSortOrderInConfig,
-  setSortByValueInConfig,
-  type PivotPlacementAddSpec,
-  type PivotValueSortOrder,
-} from './pivot-placement-operations';
 
 // =============================================================================
 // Types for Location Selection
@@ -162,13 +154,13 @@ export interface UsePivotTablesReturn {
   ) => void;
 
   /** Add a source field as a placement at a specific position */
-  addPlacement: (pivotId: string, spec: PivotPlacementAddSpec) => void;
+  addPlacement: (pivotId: string, spec: PivotHandlePlacementSpec) => void;
 
   /** Remove a field from an area */
   removeFieldFromArea: (pivotId: string, fieldId: string, area: PivotFieldArea) => void;
 
   /** Remove a specific placement */
-  removePlacement: (pivotId: string, placementId: string) => void;
+  removePlacement: (pivotId: string, placementId: PlacementId) => void;
 
   /** Move a field to a different area or position */
   moveField: (
@@ -182,7 +174,7 @@ export interface UsePivotTablesReturn {
   /** Move a specific placement to a different area or position */
   movePlacement: (
     pivotId: string,
-    placementId: string,
+    placementId: PlacementId,
     toArea: PivotFieldArea,
     toPosition: number,
   ) => void;
@@ -197,7 +189,7 @@ export interface UsePivotTablesReturn {
   /** Set aggregation function for a specific value placement */
   setPlacementAggregateFunction: (
     pivotId: string,
-    placementId: string,
+    placementId: PlacementId,
     aggregateFunction: AggregateFunction,
   ) => void;
 
@@ -212,14 +204,18 @@ export interface UsePivotTablesReturn {
   setSortOrder: (pivotId: string, fieldId: string, sortOrder: SortOrder) => void;
 
   /** Set sort order for a specific row/column placement */
-  setPlacementSortOrder: (pivotId: string, placementId: string, sortOrder: SortOrder) => void;
+  setPlacementSortOrder: (
+    pivotId: string,
+    placementId: PlacementId,
+    sortOrder: SortOrder | null,
+  ) => void;
 
   /** Set value sorting on a specific row/column axis placement */
   setSortByValue: (
     pivotId: string,
-    axisPlacementId: string,
-    valuePlacementId: string,
-    config: { order: PivotValueSortOrder; columnKey?: string } | null,
+    axisPlacementId: PlacementId,
+    valuePlacementId: PlacementId,
+    config: PivotValueSortConfig | null,
   ) => void;
 
   /** Set filter for a field */
@@ -434,6 +430,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         error: resultEntry?.error,
         sourceKind: entry.sourceKind,
         importIdentity: entry.importIdentity,
+        alternateIds: entry.alternateIds,
         capabilities: entry.capabilities,
         handle: entry.handle,
       };
@@ -566,16 +563,6 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     [pivotHandleFromId, selectedPivotId, editingPivotId, selectPivotAction, stopEditingPivotAction],
   );
 
-  const updatePivotPlacements = useCallback(
-    (pivotId: string, update: (config: PivotTableConfig) => PivotFieldPlacement[]) => {
-      const config = pivotConfigFromId(pivotId);
-      const handle = pivotHandleFromId(pivotId);
-      if (!config || !handle) return;
-      void handle.update({ placements: update(config) });
-    },
-    [pivotConfigFromId, pivotHandleFromId],
-  );
-
   // Add field to area via the pivot handle.
   const addFieldToArea = useCallback(
     (
@@ -606,10 +593,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Add a field as a placement at a specific position.
   const addPlacement = useCallback(
-    (pivotId: string, spec: PivotPlacementAddSpec) => {
-      updatePivotPlacements(pivotId, (config) => addPlacementToConfig(config, spec));
+    (pivotId: string, spec: PivotHandlePlacementSpec) => {
+      void pivotHandleFromId(pivotId)?.addPlacement(spec);
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Remove field from area via the pivot handle.
@@ -624,10 +611,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Remove a specific placement by placementId.
   const removePlacement = useCallback(
-    (pivotId: string, placementId: string) => {
-      updatePivotPlacements(pivotId, (config) => removePlacementFromConfig(config, placementId));
+    (pivotId: string, placementId: PlacementId) => {
+      void pivotHandleFromId(pivotId)?.removePlacement(placementId);
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Move field via the pivot handle.
@@ -648,12 +635,15 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Move a specific placement by placementId.
   const movePlacement = useCallback(
-    (pivotId: string, placementId: string, toArea: PivotFieldArea, toPosition: number) => {
-      updatePivotPlacements(pivotId, (config) =>
-        movePlacementInConfig(config, placementId, toArea, toPosition),
-      );
+    (
+      pivotId: string,
+      placementId: PlacementId,
+      toArea: PivotFieldArea,
+      toPosition: number,
+    ) => {
+      void pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition);
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Set aggregate function via the pivot handle.
@@ -669,12 +659,13 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Set aggregate function for a specific value placement.
   const setPlacementAggregateFunction = useCallback(
-    (pivotId: string, placementId: string, aggregateFunction: AggregateFunction) => {
-      updatePivotPlacements(pivotId, (config) =>
-        setPlacementAggregateInConfig(config, placementId, aggregateFunction),
+    (pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction) => {
+      void pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(
+        placementId,
+        aggregateFunction,
       );
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Set show-values-as via the pivot handle.
@@ -695,27 +686,27 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Set row/column label sort for a specific placement.
   const setPlacementSortOrder = useCallback(
-    (pivotId: string, placementId: string, sortOrder: SortOrder) => {
-      updatePivotPlacements(pivotId, (config) =>
-        setPlacementSortOrderInConfig(config, placementId, sortOrder),
-      );
+    (pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null) => {
+      void pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder);
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Set value sorting on a specific axis placement.
   const setSortByValue = useCallback(
     (
       pivotId: string,
-      axisPlacementId: string,
-      valuePlacementId: string,
-      valueSortConfig: { order: PivotValueSortOrder; columnKey?: string } | null,
+      axisPlacementId: PlacementId,
+      valuePlacementId: PlacementId,
+      valueSortConfig: PivotValueSortConfig | null,
     ) => {
-      updatePivotPlacements(pivotId, (config) =>
-        setSortByValueInConfig(config, axisPlacementId, valuePlacementId, valueSortConfig),
+      void pivotHandleFromId(pivotId)?.setSortByValue(
+        axisPlacementId,
+        valuePlacementId,
+        valueSortConfig,
       );
     },
-    [updatePivotPlacements],
+    [pivotHandleFromId],
   );
 
   // Set filter via the pivot handle.

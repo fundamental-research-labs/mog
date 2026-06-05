@@ -401,6 +401,34 @@ export function PivotFieldList({
     [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
   );
 
+  const applySelectedItemAtPosition = useCallback(
+    (toArea: PivotFieldArea, position: number) => {
+      if (!selectedItem || !canDragState(selectedItem)) return false;
+
+      if (selectedItem.kind === 'field') {
+        const field = fieldById.get(selectedItem.fieldId);
+        onAddField(selectedItem.fieldId, toArea, {
+          position: Math.max(0, Math.min(position, placementsByArea[toArea].length)),
+          aggregateFunction: defaultAggregate(toArea, field),
+        });
+        setSelectedItem(null);
+        return true;
+      }
+
+      const maxPosition =
+        selectedItem.fromArea === toArea
+          ? Math.max(0, placementsByArea[toArea].length - 1)
+          : placementsByArea[toArea].length;
+      const finalPosition = Math.max(0, Math.min(position, maxPosition));
+      if (selectedItem.fromArea !== toArea || selectedItem.fromIndex !== finalPosition) {
+        onMovePlacement(selectedItem.placementId, toArea, finalPosition);
+      }
+      setSelectedItem(null);
+      return true;
+    },
+    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
+  );
+
   const renderSourceFieldChip = (field: PivotField) => {
     const state: DragState = { kind: 'field', fieldId: field.id };
     const isDragging = dragState?.kind === 'field' && dragState.fieldId === field.id;
@@ -471,6 +499,19 @@ export function PivotFieldList({
         onDrop={(event) => handleDropOnPlacement(event, item, index)}
         onClick={(event) => {
           event.stopPropagation();
+          if (selectedItem && canDragState(selectedItem)) {
+            if (selectedItem.kind === 'field') {
+              if (applySelectedItemAtPosition(placement.area, index + 1)) return;
+            } else if (selectedItem.placementId !== id) {
+              const insertionBeforeRemoval = index + 1;
+              const adjustedPosition =
+                selectedItem.fromArea === placement.area &&
+                selectedItem.fromIndex < insertionBeforeRemoval
+                  ? insertionBeforeRemoval - 1
+                  : insertionBeforeRemoval;
+              if (applySelectedItemAtPosition(placement.area, adjustedPosition)) return;
+            }
+          }
           if (canDrag) setSelectedItem(state);
         }}
         data-pivot-target="field-chip"

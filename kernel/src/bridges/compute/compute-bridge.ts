@@ -648,6 +648,23 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.setFrozenPanes(sheetId, current.rows, count);
   }
 
+  override completeDeferredHydration(): Promise<MutationResult> {
+    const run = () =>
+      this.core.mutate(
+        this.core.transport.call<[Uint8Array, MutationResult]>(
+          'compute_complete_deferred_hydration',
+          { docId: this.core.docId },
+        ),
+      );
+    const mutationHandler = this.core.getMutationHandler();
+    return mutationHandler
+      ? mutationHandler.withPivotUpdateOptions(
+          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+          run,
+        )
+      : run();
+  }
+
   setCellMetadataCache(cache: CellMetadataCache | null): void {
     this.core.setCellMetadataCache(cache);
   }

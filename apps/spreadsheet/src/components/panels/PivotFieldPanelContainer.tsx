@@ -12,6 +12,7 @@
  * Extract Panel Containers
  */
 
+import type { AggregateFunction, PivotFieldArea } from '@mog-sdk/contracts/pivot';
 import { usePivotEditorActions } from '../../hooks/data/use-pivot-editor-actions';
 import { PivotFieldPanel } from '../pivot';
 
@@ -40,7 +41,7 @@ export function PivotFieldPanelContainer({
   // Pivot editor actions hook provides all pivot manipulation functionality
   const {
     editingPivot,
-    handlePivotAddField,
+    handlePivotAddPlacement,
     handlePivotRemovePlacement,
     handlePivotMovePlacement,
     handlePivotPlacementAggregateChange,
@@ -56,6 +57,19 @@ export function PivotFieldPanelContainer({
     return null;
   }
 
+  const handlePivotPanelAddField = (
+    fieldId: string,
+    area: PivotFieldArea,
+    options?: { position?: number; aggregateFunction?: AggregateFunction },
+  ) => {
+    const position =
+      options?.position ??
+      editingPivot.config.placements.filter((placement) => placement.area === area).length;
+    handlePivotAddPlacement(fieldId, area, position, {
+      aggregateFunction: options?.aggregateFunction,
+    });
+  };
+
   return (
     <div
       className={className ?? 'absolute top-0 right-0 bottom-0 z-ss-sticky'}
@@ -64,7 +78,7 @@ export function PivotFieldPanelContainer({
     >
       <PivotFieldPanel
         pivot={editingPivot}
-        onAddField={handlePivotAddField}
+        onAddField={handlePivotPanelAddField}
         onRemovePlacement={handlePivotRemovePlacement}
         onMovePlacement={handlePivotMovePlacement}
         onSetAggregateFunction={handlePivotPlacementAggregateChange}

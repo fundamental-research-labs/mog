@@ -66,6 +66,8 @@ function config(placements: PivotFieldPlacementFlat[]): PivotTableConfig {
 function setup(options: {
   placements?: PivotFieldPlacementFlat[];
   capabilities?: typeof nativeCapabilities;
+  editingPivotId?: string;
+  alternateIds?: string[];
 } = {}) {
   const fns = {
     createPivotTable: jest.fn(),
@@ -105,11 +107,12 @@ function setup(options: {
         config: pivotConfig,
         result: null,
         sourceKind: 'native',
+        alternateIds: options.alternateIds,
         capabilities: options.capabilities ?? nativeCapabilities,
       },
     ],
-    editingPivotId: 'pivot-1',
-    selectedPivotId: 'pivot-1',
+    editingPivotId: options.editingPivotId ?? 'pivot-1',
+    selectedPivotId: options.editingPivotId ?? 'pivot-1',
     updatePivotTable: jest.fn(),
     setShowValuesAs: jest.fn(),
     setSortOrder: jest.fn(),
@@ -138,15 +141,24 @@ describe('usePivotEditorActions placement mapping', () => {
     const { result } = renderHook(() => usePivotEditorActions());
 
     act(() => {
-      result.current.handlePivotAddField('Vendor', 'row', { position: 1 });
+      result.current.handlePivotAddPlacement('Vendor', 'row', 1);
     });
 
     expect(fns.addPlacement).toHaveBeenCalledWith('pivot-1', {
       fieldId: 'Vendor',
       area: 'row',
       position: 1,
-      aggregateFunction: undefined,
     });
+  });
+
+  it('resolves the editing pivot by imported sidecar alias', () => {
+    setup({
+      editingPivotId: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+      alternateIds: ['imported:Pivot:xl/pivotTables/pivotTable1.xml'],
+    });
+    const { result } = renderHook(() => usePivotEditorActions());
+
+    expect(result.current.editingPivot?.config.id).toBe('pivot-1');
   });
 
   it('maps row and column sort changes to placement-level sort mutations', () => {
@@ -185,6 +197,99 @@ describe('usePivotEditorActions placement mapping', () => {
     });
   });
 
+  it('uses the first column placement for value sort when no row axis exists', () => {
+    const fns = setup({
+      placements: [
+        placement({ placementId: 'column:Vendor:0', fieldId: 'Vendor', area: 'column', position: 0 }),
+        placement({
+          placementId: 'value:Amount:0',
+          fieldId: 'Amount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+        }),
+      ],
+    });
+    const { result } = renderHook(() => usePivotEditorActions());
+
+    act(() => {
+      result.current.handlePivotValueSortChange('value:Amount:0', 'asc');
+    });
+
+    expect(fns.setSortByValue).toHaveBeenCalledWith('pivot-1', 'column:Vendor:0', 'value:Amount:0', {
+      order: 'asc',
+    });
+  });
+
+  it('clears value sort only when the default axis targets that value placement', () => {
+    const fns = setup({
+      placements: [
+        placement({
+          placementId: 'row:Month:0',
+          fieldId: 'Month',
+          area: 'row',
+          position: 0,
+          sortByValue: {
+            valueFieldId: 'Amount',
+            valuePlacementId: pid('value:Amount:0'),
+            order: 'desc',
+          },
+        }),
+        placement({
+          placementId: 'value:Amount:0',
+          fieldId: 'Amount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+        }),
+      ],
+    });
+    const { result } = renderHook(() => usePivotEditorActions());
+
+    act(() => {
+      result.current.handlePivotValueSortChange('value:Amount:0', 'none');
+    });
+
+    expect(fns.setSortByValue).toHaveBeenCalledWith(
+      'pivot-1',
+      'row:Month:0',
+      'value:Amount:0',
+      null,
+    );
+  });
+
+  it('does not clear value sort when the default axis targets another value placement', () => {
+    const fns = setup({
+      placements: [
+        placement({
+          placementId: 'row:Month:0',
+          fieldId: 'Month',
+          area: 'row',
+          position: 0,
+          sortByValue: {
+            valueFieldId: 'Amount',
+            valuePlacementId: pid('value:Amount:1'),
+            order: 'desc',
+          },
+        }),
+        placement({
+          placementId: 'value:Amount:0',
+          fieldId: 'Amount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+        }),
+      ],
+    });
+    const { result } = renderHook(() => usePivotEditorActions());
+
+    act(() => {
+      result.current.handlePivotValueSortChange('value:Amount:0', 'none');
+    });
+
+    expect(fns.setSortByValue).not.toHaveBeenCalled();
+  });
+
   it('respects read-only capabilities for placement mutations', () => {
     const fns = setup({
       capabilities: {
@@ -202,7 +307,7 @@ describe('usePivotEditorActions placement mapping', () => {
     const { result } = renderHook(() => usePivotEditorActions());
 
     act(() => {
-      result.current.handlePivotAddField('Vendor', 'row', { position: 1 });
+      result.current.handlePivotAddPlacement('Vendor', 'row', 1);
       result.current.handlePivotMovePlacement('row:Vendor:1', 'column', 0);
       result.current.handlePivotRemovePlacement('row:Vendor:1');
       result.current.handlePivotPlacementAggregateChange('value:Amount:0', 'max');

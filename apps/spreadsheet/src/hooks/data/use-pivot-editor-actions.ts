@@ -14,9 +14,11 @@
 
 import { useCallback, useMemo } from 'react';
 
+import type { PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
+  PlacementId,
   PivotField,
   PivotFieldArea,
   PivotFieldPlacementFlat,
@@ -100,8 +102,12 @@ export interface UsePivotEditorActionsReturn {
   stopEditingPivot: () => void;
 }
 
-function getPlacementId(placement: PivotFieldPlacementFlat): string {
-  return String(placement.placementId);
+function placementIdFromString(value: string): PlacementId {
+  return value as PlacementId;
+}
+
+function getPlacementId(placement: PivotFieldPlacementFlat): PlacementId {
+  return placement.placementId as PlacementId;
 }
 
 function orderedPlacements(
@@ -125,9 +131,10 @@ export function axisSortTargetsValuePlacement(
   valueFieldId?: string,
 ): boolean {
   if (!axisPlacement?.sortByValue) return false;
+  if (axisPlacement.sortByValue.valuePlacementId) {
+    return axisPlacement.sortByValue.valuePlacementId === valuePlacementId;
+  }
   return (
-    axisPlacement.sortByValue.valuePlacementId === valuePlacementId ||
-    axisPlacement.sortByValue.valueFieldId === valuePlacementId ||
     (valueFieldId !== undefined && axisPlacement.sortByValue.valueFieldId === valueFieldId)
   );
 }
@@ -173,7 +180,10 @@ export function usePivotEditorActions(
    * Get the pivot table currently being edited.
    */
   const editingPivot = useMemo(
-    () => pivotTables.find((p) => p.config.id === editingPivotId) ?? null,
+    () =>
+      pivotTables.find(
+        (p) => p.config.id === editingPivotId || p.alternateIds?.includes(editingPivotId ?? ''),
+      ) ?? null,
     [pivotTables, editingPivotId],
   );
   const editingPivotCapabilities = editingPivot?.capabilities;
@@ -265,7 +275,7 @@ export function usePivotEditorActions(
       const canRemove =
         (editingPivotCapabilities?.canRemove ?? editingPivotCapabilities?.canRemoveFields) === true;
       if (editingPivotId && canRemove) {
-        removePlacement(editingPivotId, placementId);
+        removePlacement(editingPivotId, placementIdFromString(placementId));
       }
     },
     [editingPivotId, editingPivotCapabilities, removePlacement],
@@ -276,7 +286,7 @@ export function usePivotEditorActions(
       const canMove =
         (editingPivotCapabilities?.canMove ?? editingPivotCapabilities?.canReorderFields) === true;
       if (editingPivotId && canMove) {
-        movePlacement(editingPivotId, placementId, toArea, position);
+        movePlacement(editingPivotId, placementIdFromString(placementId), toArea, position);
       }
     },
     [editingPivotId, editingPivotCapabilities, movePlacement],
@@ -285,7 +295,7 @@ export function usePivotEditorActions(
   const handlePivotPlacementAggregateChange = useCallback(
     (placementId: string, aggregate: AggregateFunction) => {
       if (editingPivotId && editingPivotCapabilities?.canChangeAggregate) {
-        setPlacementAggregateFunction(editingPivotId, placementId, aggregate);
+        setPlacementAggregateFunction(editingPivotId, placementIdFromString(placementId), aggregate);
       }
     },
     [editingPivotId, editingPivotCapabilities, setPlacementAggregateFunction],
@@ -294,7 +304,7 @@ export function usePivotEditorActions(
   const handlePivotPlacementSortOrderChange = useCallback(
     (placementId: string, sortOrder: SortOrder) => {
       if (editingPivotId && editingPivotCapabilities?.canSortLabels) {
-        setPlacementSortOrder(editingPivotId, placementId, sortOrder);
+        setPlacementSortOrder(editingPivotId, placementIdFromString(placementId), sortOrder);
       }
     },
     [editingPivotId, editingPivotCapabilities, setPlacementSortOrder],
@@ -309,7 +319,8 @@ export function usePivotEditorActions(
         (placement) => String(placement.placementId) === valuePlacementId,
       );
       const axisPlacementId = getPlacementId(axisPlacement);
-      const config: { order: Exclude<SortOrder, 'none'> } | null =
+      const typedValuePlacementId = placementIdFromString(valuePlacementId);
+      const config: PivotValueSortConfig | null =
         sortOrder === 'none'
           ? null
           : {
@@ -321,7 +332,7 @@ export function usePivotEditorActions(
       ) {
         return;
       }
-      setSortByValue(editingPivotId, axisPlacementId, valuePlacementId, config);
+      setSortByValue(editingPivotId, axisPlacementId, typedValuePlacementId, config);
     },
     [editingPivot, editingPivotCapabilities, editingPivotId, setSortByValue],
   );

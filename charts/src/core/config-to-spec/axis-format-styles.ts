@@ -50,9 +50,7 @@ export function applyAxisLineStyle(
   }
   if (axisLine) {
     const opacity =
-      axisLine.transparency === undefined
-        ? 1
-        : Math.max(0, Math.min(1, 1 - axisLine.transparency));
+      axisLine.transparency === undefined ? 1 : Math.max(0, Math.min(1, 1 - axisLine.transparency));
     spec.domainOpacity = opacity;
     spec.tickOpacity = opacity;
   }

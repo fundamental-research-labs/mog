@@ -22,15 +22,8 @@ import {
   orderedCategoryLevels,
   selectedCategoryLabelLevel,
 } from './data-extractor-cache';
-import {
-  requiredStockPriceRolesForSubtype,
-  stockSubTypeFromRolePresence,
-} from './stock-semantics';
-import {
-  stockRolePlan,
-  type StockRole,
-  type StockRolePlan,
-} from './stock-role-plan';
+import { requiredStockPriceRolesForSubtype, stockSubTypeFromRolePresence } from './stock-semantics';
+import { stockRolePlan, type StockRole, type StockRolePlan } from './stock-role-plan';
 import {
   HIDDEN_CHART_CELL,
   type CellDataAccessor,
@@ -408,10 +401,7 @@ function extractStockChartDataFromSeriesRefs(
   };
 }
 
-function roleDimensionIsEmpty(
-  roleDimensions: StockRoleDimensions,
-  role: StockRole,
-): boolean {
+function roleDimensionIsEmpty(roleDimensions: StockRoleDimensions, role: StockRole): boolean {
   const dimension = roleDimensions[role];
   return !dimension || dimension.values.length === 0;
 }

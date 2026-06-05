@@ -3,10 +3,7 @@ import type {
   PivotFieldPlacementFlat,
   PivotTableConfig as DataPivotTableConfig,
 } from '@mog-sdk/contracts/pivot';
-import {
-  KernelError,
-  createPivotAmbiguousPlacementError,
-} from '../../errors';
+import { KernelError, createPivotAmbiguousPlacementError } from '../../errors';
 import { makePlacementId } from './identifiers';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
@@ -70,8 +67,5 @@ export function resolvePlacement(
       candidates: candidates.map((placement) => placementId(placement)),
     });
   }
-  throw new KernelError(
-    'COMPUTE_ERROR',
-    `${operation}: Pivot placement "${identifier}" not found`,
-  );
+  throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot placement "${identifier}" not found`);
 }

@@ -106,9 +106,7 @@ export function generateArcMarks(
     const midAngle = (paddedStart + paddedEnd) / 2;
     const arcOuterRadius = rowGeometry?.outerRadius ?? outerRadius;
     const arcInnerRadius = Math.min(arcOuterRadius, rowGeometry?.innerRadius ?? innerRadius);
-    const explosionOffset = rowGeometry
-      ? 0
-      : pieDoughnutExplosionOffset(arcOuterRadius, explosion);
+    const explosionOffset = rowGeometry ? 0 : pieDoughnutExplosionOffset(arcOuterRadius, explosion);
     const explosionVector = arcAngleUnitVector(midAngle);
 
     marks.push({

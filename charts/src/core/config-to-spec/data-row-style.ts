@@ -336,9 +336,7 @@ export function excelMarkerShape(
       return 'circle';
     case 'auto':
     default:
-      return isRadarMarkerDefault(config)
-        ? radarAutomaticMarkerShape(sourceSeriesIndex)
-        : 'circle';
+      return isRadarMarkerDefault(config) ? radarAutomaticMarkerShape(sourceSeriesIndex) : 'circle';
   }
 }
 

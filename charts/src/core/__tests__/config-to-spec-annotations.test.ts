@@ -615,7 +615,10 @@ describe('configToSpec annotation layers', () => {
     const centerX = Number(explodedArc.datum?.[PIE_SLICE_CENTER_X_FIELD]);
     const centerY = Number(explodedArc.datum?.[PIE_SLICE_CENTER_Y_FIELD]);
     expect(Math.hypot(centerX - 0.5, centerY - 0.5)).toBeCloseTo(0.06);
-    const frame = pieDoughnutArcFrame(compiled.layout.plotArea, spec.config?.layoutHints?.pieDoughnut);
+    const frame = pieDoughnutArcFrame(
+      compiled.layout.plotArea,
+      spec.config?.layoutHints?.pieDoughnut,
+    );
     expect(explodedArc.x).toBeCloseTo(frame.centerX + (centerX - 0.5) * frame.radius * 2);
     expect(explodedArc.y).toBeCloseTo(frame.centerY + (centerY - 0.5) * frame.radius * 2);
   });

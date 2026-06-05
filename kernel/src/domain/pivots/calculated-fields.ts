@@ -6,11 +6,7 @@ import type {
   PivotKernelMutationReceipt,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../context';
-import {
-  cleanPivotFormula,
-  makePlacementId,
-  pivotCalculatedFieldId,
-} from './identifiers';
+import { cleanPivotFormula, makePlacementId, pivotCalculatedFieldId } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
 import { createMutationReceipt } from './receipts';
 
@@ -77,13 +73,9 @@ export async function addPivotCalculatedFieldToId(options: {
     { reason: 'calculatedFieldChanged', refreshPolicy: 'refreshAndMaterialize' },
   );
   return {
-    ...createMutationReceipt(
-      pivotId,
-      'calculatedFieldChanged',
-      'refreshAndMaterialize',
-      result,
-      [{ type: 'calculatedFieldAdded', calculatedFieldId }],
-    ),
+    ...createMutationReceipt(pivotId, 'calculatedFieldChanged', 'refreshAndMaterialize', result, [
+      { type: 'calculatedFieldAdded', calculatedFieldId },
+    ]),
     calculatedFieldId,
   };
 }

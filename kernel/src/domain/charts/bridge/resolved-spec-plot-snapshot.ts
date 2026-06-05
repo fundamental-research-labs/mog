@@ -54,7 +54,9 @@ type SurfaceApproximationSnapshot = NonNullable<
   ResolvedChartSpecSnapshot['resolved']['plot']['surfaceApproximation']
 >;
 type SurfaceApproximationContractKind = SurfaceApproximationSnapshot['contractKind'];
-type FamilySupportSnapshot = NonNullable<ResolvedChartSpecSnapshot['implementation']['familySupport']>;
+type FamilySupportSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['implementation']['familySupport']
+>;
 type CartesianGeometryAxisRole = NonNullable<
   CartesianGeometrySnapshot['layers']
 >[number]['xAxisRole'];
@@ -97,40 +99,40 @@ export function snapshotBarGeometry(
     const geometry = group.geometry;
     const traceGroup = matchingBarTraceGroup(group, barTrace);
     const hasAvailableTrace = traceGroup?.traceStatus === 'available';
-    const categoryAxisLength =
-      hasAvailableTrace
-        ? traceGroup.categoryAxisLength
-        : geometry.orientation === 'horizontal'
-          ? layout?.plotArea.height
-          : layout?.plotArea.width;
-    const categoryPitch =
-      hasAvailableTrace
-        ? traceGroup.categoryPitch
-        : categoryAxisLength !== undefined
+    const categoryAxisLength = hasAvailableTrace
+      ? traceGroup.categoryAxisLength
+      : geometry.orientation === 'horizontal'
+        ? layout?.plotArea.height
+        : layout?.plotArea.width;
+    const categoryPitch = hasAvailableTrace
+      ? traceGroup.categoryPitch
+      : categoryAxisLength !== undefined
         ? categoryPitchForPolicy(
             categoryAxisLength,
             visibleCategoryCount,
             geometry.categoryPositionPolicy,
           )
         : undefined;
-    const offsets =
-      hasAvailableTrace
-        ? traceGroup.offsets
-        : categoryPitch !== undefined
+    const offsets = hasAvailableTrace
+      ? traceGroup.offsets
+      : categoryPitch !== undefined
         ? group.seriesIndices.map((seriesIndex, sourceSlotIndex) => ({
             seriesIndex,
             offset: excelBarSlotGeometry(
               categoryPitch,
               group.seriesIndices.length,
-              visualSlotIndex(sourceSlotIndex, group.seriesIndices.length, geometry.seriesSlotOrder),
+              visualSlotIndex(
+                sourceSlotIndex,
+                group.seriesIndices.length,
+                geometry.seriesSlotOrder,
+              ),
               geometry,
             ).offset,
           }))
         : undefined;
-    const barSize =
-      hasAvailableTrace
-        ? traceGroup.barSize
-        : categoryPitch !== undefined
+    const barSize = hasAvailableTrace
+      ? traceGroup.barSize
+      : categoryPitch !== undefined
         ? excelBarSlotGeometry(categoryPitch, group.seriesIndices.length, 0, geometry).size
         : undefined;
     const baselinePixel = hasAvailableTrace
@@ -155,14 +157,18 @@ export function snapshotBarGeometry(
       sourceOverlap: geometry.sourceOverlap,
       gapWidth: geometry.gapWidth,
       overlap: geometry.overlap,
-      ...(geometry.gapWidthClamped !== undefined ? { gapWidthClamped: geometry.gapWidthClamped } : {}),
+      ...(geometry.gapWidthClamped !== undefined
+        ? { gapWidthClamped: geometry.gapWidthClamped }
+        : {}),
       ...(geometry.overlapClamped !== undefined ? { overlapClamped: geometry.overlapClamped } : {}),
       seriesIndices: group.seriesIndices,
       ...(group.yAxisIndex !== undefined ? { yAxisIndex: group.yAxisIndex } : {}),
       axisGroup: (group.yAxisIndex ?? 0) === 1 ? 'secondary' : 'primary',
       memberCount: group.seriesIndices.length,
       layerRole: 'bar',
-      ...(geometry.seriesSlotOrder !== undefined ? { seriesSlotOrder: geometry.seriesSlotOrder } : {}),
+      ...(geometry.seriesSlotOrder !== undefined
+        ? { seriesSlotOrder: geometry.seriesSlotOrder }
+        : {}),
       categoryAxisRole: geometry.categoryAxisRole,
       valueAxisRole: geometry.valueAxisRole,
       categoryPositionPolicy: geometry.categoryPositionPolicy,
@@ -300,7 +306,7 @@ function resolvedBarGeometryStatus(
         ? geometry.categoryTickStatusReason
         : geometry.valueAxisScaleStatus === 'approximate'
           ? geometry.valueAxisScaleStatusReason
-          : geometry.geometryStatusReason ?? geometry.axisLayoutStatusReason;
+          : (geometry.geometryStatusReason ?? geometry.axisLayoutStatusReason);
 
   if (
     statusValues.some((status) => status === 'approximate') ||
@@ -318,12 +324,14 @@ function resolvedBarGeometryStatus(
           : {}),
     };
   }
-  if (statusValues.some((status) => status === undefined) || geometry.geometryStatus === undefined) {
+  if (
+    statusValues.some((status) => status === undefined) ||
+    geometry.geometryStatus === undefined
+  ) {
     return {};
   }
   return {
-    geometryStatus:
-      geometry.geometryStatus === 'verifiedDefault' ? 'verifiedDefault' : 'exact',
+    geometryStatus: geometry.geometryStatus === 'verifiedDefault' ? 'verifiedDefault' : 'exact',
   };
 }
 
@@ -555,11 +563,7 @@ function pathPointAuthoritySnapshot(
     'marker',
   ]);
   const diagnostics: string[] = [];
-  const geometryStatus = cartesianCoordinateAuthorityStatus(
-    'path',
-    cartesianGeometry,
-    diagnostics,
-  );
+  const geometryStatus = cartesianCoordinateAuthorityStatus('path', cartesianGeometry, diagnostics);
   const plotFrameStatus = pathPlotFrameAuthorityStatus(cartesianGeometry, diagnostics);
   const xAxisStatus = pathXAxisAuthorityStatus(cartesianGeometry, diagnostics);
   const valueAxisStatus = pathValueAxisAuthorityStatus(
@@ -744,11 +748,7 @@ function standardVisibleCartesianSeriesIndices(
   const seriesConfig = config.series ?? [];
   return cartesianGeometry.series.flatMap((geometrySeries) => {
     const index = geometrySeries.seriesIndex;
-    const configForSeries = seriesConfigForDataSeries(
-      chartData.series[index],
-      seriesConfig,
-      index,
-    );
+    const configForSeries = seriesConfigForDataSeries(chartData.series[index], seriesConfig, index);
     if (isNoFillNoLineSeriesConfig(configForSeries)) return [];
     return predicate(geometrySeries) ? [index] : [];
   });
@@ -1047,7 +1047,13 @@ function pathPointGeometryAuthorityStatus(
           diagnostics,
         ),
       );
-      statuses.push(layerScaleAuthorityStatus(`${series.type} series ${series.seriesIndex}`, layer, diagnostics));
+      statuses.push(
+        layerScaleAuthorityStatus(
+          `${series.type} series ${series.seriesIndex}`,
+          layer,
+          diagnostics,
+        ),
+      );
     }
 
     if (series.sourceShowMarkers || series.markerVisibleInk || series.markerLayer) {
@@ -1058,7 +1064,9 @@ function pathPointGeometryAuthorityStatus(
         series.blankMarkerPolicy,
       );
       const markerLayer = authorityLayerForSeries(cartesianGeometry, series.seriesIndex, 'marker');
-      const rendered = markerLayer ? pointsForAuthorityLayer(series, markerLayer.layerIndex).length : 0;
+      const rendered = markerLayer
+        ? pointsForAuthorityLayer(series, markerLayer.layerIndex).length
+        : 0;
       sourcePointCount += expectedMarkerPoints;
       renderedPointCount += rendered;
       statuses.push(
@@ -1069,7 +1077,13 @@ function pathPointGeometryAuthorityStatus(
           diagnostics,
         ),
       );
-      statuses.push(layerScaleAuthorityStatus(`path series ${series.seriesIndex} marker`, markerLayer, diagnostics));
+      statuses.push(
+        layerScaleAuthorityStatus(
+          `path series ${series.seriesIndex} marker`,
+          markerLayer,
+          diagnostics,
+        ),
+      );
     }
 
     const invalidPoints = (series.pointGeometry ?? []).filter(
@@ -1119,7 +1133,13 @@ function scatterPointGeometryAuthorityStatus(
           diagnostics,
         ),
       );
-      statuses.push(layerScaleAuthorityStatus(`scatter series ${series.seriesIndex} line`, lineLayer, diagnostics));
+      statuses.push(
+        layerScaleAuthorityStatus(
+          `scatter series ${series.seriesIndex} line`,
+          lineLayer,
+          diagnostics,
+        ),
+      );
     }
     if (series.markerVisibleInk) {
       const markerLayer = authorityLayerForSeries(cartesianGeometry, series.seriesIndex, 'marker');
@@ -1134,7 +1154,13 @@ function scatterPointGeometryAuthorityStatus(
       );
       markerStatuses.push(countStatus);
       statuses.push(countStatus);
-      statuses.push(layerScaleAuthorityStatus(`scatter series ${series.seriesIndex} marker`, markerLayer, diagnostics));
+      statuses.push(
+        layerScaleAuthorityStatus(
+          `scatter series ${series.seriesIndex} marker`,
+          markerLayer,
+          diagnostics,
+        ),
+      );
       const invalidSizeCount = markerPoints.filter(
         (point) => !positiveNumber(point.renderedRadius) && !positiveNumber(point.renderedArea),
       ).length;
@@ -1321,14 +1347,19 @@ function scatterMarkerGlyphAuthorityStatus(
   for (const series of targetAuthoritySeries(cartesianGeometry, seriesIndices)) {
     if (!series.markerVisibleInk) continue;
     const markerLayer = authorityLayerForSeries(cartesianGeometry, series.seriesIndex, 'marker');
-    if (markerLayer?.sizeAuthority !== 'markerStyle' && markerLayer?.sizeAuthority !== 'fixedMarkSize') {
+    if (
+      markerLayer?.sizeAuthority !== 'markerStyle' &&
+      markerLayer?.sizeAuthority !== 'fixedMarkSize'
+    ) {
       diagnostics.push(
         `scatter series ${series.seriesIndex} marker size authority is ${markerLayer?.sizeAuthority ?? 'missing'}`,
       );
       statuses.push(markerLayer?.sizeAuthority === undefined ? 'missing' : 'approximate');
     }
     if (!series.markerShape || positiveNumber(series.markerSize) === undefined) {
-      diagnostics.push(`scatter series ${series.seriesIndex} marker glyph/size authority is missing`);
+      diagnostics.push(
+        `scatter series ${series.seriesIndex} marker glyph/size authority is missing`,
+      );
       statuses.push('missing');
     } else {
       statuses.push('exact');
@@ -1434,8 +1465,16 @@ function layerScaleAuthorityStatus(
     return 'missing';
   }
   const statuses = [
-    scaleGeometryAuthorityStatus(`${label} layer ${layer.layerIndex} xScale`, layer.xScale, diagnostics),
-    scaleGeometryAuthorityStatus(`${label} layer ${layer.layerIndex} yScale`, layer.yScale, diagnostics),
+    scaleGeometryAuthorityStatus(
+      `${label} layer ${layer.layerIndex} xScale`,
+      layer.xScale,
+      diagnostics,
+    ),
+    scaleGeometryAuthorityStatus(
+      `${label} layer ${layer.layerIndex} yScale`,
+      layer.yScale,
+      diagnostics,
+    ),
   ];
   return combineAuthorityStatuses(statuses);
 }
@@ -1723,9 +1762,7 @@ export function snapshotPieDoughnutGeometry(input: {
     ...(geometryStatus === 'unavailable' ? { geometryStatusReason: 'layoutUnavailable' } : {}),
     ...geometry,
     legendLayoutStatus: legendFlow.status,
-    ...(legendFlow.statusReason
-      ? { legendLayoutStatusReason: legendFlow.statusReason }
-      : {}),
+    ...(legendFlow.statusReason ? { legendLayoutStatusReason: legendFlow.statusReason } : {}),
     labelLayoutStatus: labelLayout.status,
     ...(labelLayout.statusReason ? { labelLayoutStatusReason: labelLayout.statusReason } : {}),
     explosionLayoutStatus: explosionEnvelope.status,
@@ -1955,12 +1992,7 @@ function pieDoughnutLegendFlowEvidenceGap(input: {
 }
 
 function isCalibratedPieDoughnutLegendPosition(position: string | undefined): boolean {
-  return (
-    position === 'left' ||
-    position === 'right' ||
-    position === 'top' ||
-    position === 'bottom'
-  );
+  return position === 'left' || position === 'right' || position === 'top' || position === 'bottom';
 }
 
 function finiteLegendFlowMetrics(flow: NonNullable<LegendTrace['flow']>): boolean {
@@ -2038,9 +2070,8 @@ function pieDoughnutLabelLayoutSnapshot(input: {
     };
   }
 
-  const leaderLinePolicy = outsideLabelCount > 0 || labels.some((label) => label.leaderVisible)
-    ? 'outsideLabels'
-    : 'none';
+  const leaderLinePolicy =
+    outsideLabelCount > 0 || labels.some((label) => label.leaderVisible) ? 'outsideLabels' : 'none';
   const nonPromotableReason = pieDoughnutNonPromotableLabelReason({
     geometry: input.geometry,
     labelCount,
@@ -2266,9 +2297,7 @@ function isFinitePieDoughnutLabelTraceEntry(
   );
 }
 
-function pieDoughnutLabelCollisionObserved(
-  labels: PieDoughnutLabelLayoutTrace['labels'],
-): boolean {
+function pieDoughnutLabelCollisionObserved(labels: PieDoughnutLabelLayoutTrace['labels']): boolean {
   for (let i = 0; i < labels.length; i += 1) {
     const first = labels[i];
     if (!first) continue;
@@ -2280,10 +2309,7 @@ function pieDoughnutLabelCollisionObserved(
   return false;
 }
 
-function pieDoughnutBoxesOverlap(
-  a: PieDoughnutBoxSnapshot,
-  b: PieDoughnutBoxSnapshot,
-): boolean {
+function pieDoughnutBoxesOverlap(a: PieDoughnutBoxSnapshot, b: PieDoughnutBoxSnapshot): boolean {
   return (
     a.x + a.width > b.x + PIE_DOUGHNUT_LABEL_TOLERANCE_PX &&
     b.x + b.width > a.x + PIE_DOUGHNUT_LABEL_TOLERANCE_PX &&
@@ -2305,10 +2331,7 @@ function pieDoughnutLabelOverflowObserved(
   return labels.some((label) => !pieDoughnutBoxInside(label.bounds, frame));
 }
 
-function pieDoughnutBoxInside(
-  box: PieDoughnutBoxSnapshot,
-  frame: PieDoughnutBoxSnapshot,
-): boolean {
+function pieDoughnutBoxInside(box: PieDoughnutBoxSnapshot, frame: PieDoughnutBoxSnapshot): boolean {
   return (
     box.x >= frame.x - PIE_DOUGHNUT_LABEL_TOLERANCE_PX &&
     box.y >= frame.y - PIE_DOUGHNUT_LABEL_TOLERANCE_PX &&
@@ -2330,9 +2353,7 @@ function isFinitePieDoughnutBox(box: PieDoughnutBoxSnapshot): boolean {
 
 function sameTraceNumber(a: number, b: number): boolean {
   return (
-    Number.isFinite(a) &&
-    Number.isFinite(b) &&
-    Math.abs(a - b) <= PIE_DOUGHNUT_LABEL_TOLERANCE_PX
+    Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= PIE_DOUGHNUT_LABEL_TOLERANCE_PX
   );
 }
 
@@ -2355,14 +2376,8 @@ function pieDoughnutExplosionEnvelopeSnapshot(
     ...(geometry.explosionLayoutStatusReason
       ? { statusReason: geometry.explosionLayoutStatusReason }
       : {}),
-    maxExplosionPercent: slices.reduce(
-      (max, slice) => Math.max(max, slice.explosionPercent),
-      0,
-    ),
-    maxExplosionOffset: slices.reduce(
-      (max, slice) => Math.max(max, slice.explosionOffset),
-      0,
-    ),
+    maxExplosionPercent: slices.reduce((max, slice) => Math.max(max, slice.explosionPercent), 0),
+    maxExplosionOffset: slices.reduce((max, slice) => Math.max(max, slice.explosionOffset), 0),
     effectBleed: geometry.styleReservation.radial,
     reservation: geometry.explosionReservation,
     ...(slices.length > 0
@@ -2389,9 +2404,9 @@ function pieDoughnutStyleFootprintSnapshot(
   ]);
   const sliceEffectFlags = compactStrings([
     typeof config.style === 'number' ? 'builtInChartStyle' : undefined,
-    ...((config.series ?? []).flatMap((series, seriesIndex) =>
+    ...(config.series ?? []).flatMap((series, seriesIndex) =>
       pieDoughnutSeriesStyleFlags(series, seriesIndex),
-    )),
+    ),
   ]);
   return {
     status: geometry.styleFootprintStatus,
@@ -2405,12 +2420,8 @@ function pieDoughnutStyleFootprintSnapshot(
     ...(typeof config.style === 'number' ? { chartStyleId: config.style } : {}),
     hasChartStyleContext: config.chartStyleContext !== undefined,
     styleOwnerCount: config.chartStyleContext?.owners?.length ?? 0,
-    ...(geometry.styleContextStatus
-      ? { styleContextStatus: geometry.styleContextStatus }
-      : {}),
-    ...(geometry.styleContextReason
-      ? { styleContextReason: geometry.styleContextReason }
-      : {}),
+    ...(geometry.styleContextStatus ? { styleContextStatus: geometry.styleContextStatus } : {}),
+    ...(geometry.styleContextReason ? { styleContextReason: geometry.styleContextReason } : {}),
     ...(geometry.styleContextEffectFlags?.length
       ? { styleContextEffectFlags: geometry.styleContextEffectFlags }
       : {}),
@@ -2543,12 +2554,7 @@ export function snapshotStockGlyphGeometry(
 }
 
 function isStockSubType(value: unknown): boolean {
-  return (
-    value === 'hlc' ||
-    value === 'ohlc' ||
-    value === 'volume-hlc' ||
-    value === 'volume-ohlc'
-  );
+  return value === 'hlc' || value === 'ohlc' || value === 'volume-hlc' || value === 'volume-ohlc';
 }
 
 function isPathDepthThreeDConfig(config: ChartConfig): boolean {
@@ -2613,7 +2619,7 @@ export function snapshotThreeDApproximation(input: {
     markFamily: layer?.markFamily,
     sourceFamily: input.familySupport.sourceFamily ?? layer?.sourceFamily,
     renderedMarkType: layer?.renderedMarkType,
-    ...(input.config.view3d ?? layer?.view3d
+    ...((input.config.view3d ?? layer?.view3d)
       ? { view3d: input.config.view3d ?? layer?.view3d }
       : {}),
     ...(gapDepth !== undefined ? { gapDepth } : {}),
@@ -2667,7 +2673,7 @@ export function snapshotSurfaceApproximation(input: {
     topView: contract.topView,
     wireframe: contract.wireframe,
     chartType: String(input.config.type),
-    ...(input.config.view3d ?? trace?.layers[0]?.view3d
+    ...((input.config.view3d ?? trace?.layers[0]?.view3d)
       ? { view3d: input.config.view3d ?? trace?.layers[0]?.view3d }
       : {}),
     grid: trace?.grid ?? surfaceGridSnapshot(input.chartData),
@@ -2714,7 +2720,9 @@ function surfaceApproximationContractKindForReason(
   }
 }
 
-function surfaceApproximationContractFields(contractKind: SurfaceApproximationContractKind): Pick<
+function surfaceApproximationContractFields(
+  contractKind: SurfaceApproximationContractKind,
+): Pick<
   SurfaceApproximationSnapshot,
   'renderer' | 'mode' | 'topView' | 'wireframe' | 'plotAreaPolicy'
 > {
@@ -3066,7 +3074,9 @@ function pathPlotFrameSnapshot(
         layout,
       }),
       ...(planned?.axisLength !== undefined ? { preReconcileAxisLength: planned.axisLength } : {}),
-      ...(rendered?.axisLength !== undefined ? { postReconcileAxisLength: rendered.axisLength } : {}),
+      ...(rendered?.axisLength !== undefined
+        ? { postReconcileAxisLength: rendered.axisLength }
+        : {}),
       ...(planned?.categoryPitch !== undefined
         ? { preReconcileCategoryPitch: planned.categoryPitch }
         : {}),
@@ -3433,9 +3443,7 @@ function layerAxisRoles(
   yAxisRole?: CartesianGeometryValueAxisRole;
 } {
   const xAxisRole =
-    layer.xField === plan.x.quantitative?.field
-      ? ('xValue' as const)
-      : plan.x.category?.axisRole;
+    layer.xField === plan.x.quantitative?.field ? ('xValue' as const) : plan.x.category?.axisRole;
   const yAxisRole = layerValueAxisRole(plan, seriesIndices);
   return {
     ...(xAxisRole ? { xAxisRole } : {}),

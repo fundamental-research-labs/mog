@@ -137,8 +137,7 @@ export function snapshotRadarProjection(input: {
       renderedPointCount: points.length,
       blankPointIndexes,
       closed:
-        points.length >= 2 &&
-        (blankPolicy.blankPolicy !== 'gap' || blankPointIndexes.length === 0),
+        points.length >= 2 && (blankPolicy.blankPolicy !== 'gap' || blankPointIndexes.length === 0),
       filled,
       ...(filled && visual?.fillColor ? { fillColor: visual.fillColor } : {}),
       ...(filled && visual?.fillOpacity !== undefined ? { fillOpacity: visual.fillOpacity } : {}),
@@ -187,9 +186,7 @@ export function snapshotRadarProjection(input: {
     ...(blankPolicy.displayBlanksAs ? { displayBlanksAs: blankPolicy.displayBlanksAs } : {}),
     blankPolicy: blankPolicy.blankPolicy,
     blankPolicyAuthority: blankPolicy.blankPolicyAuthority,
-    ...(renderedBlankProjectionEvidence.length > 0
-      ? { renderedBlankProjectionEvidence }
-      : {}),
+    ...(renderedBlankProjectionEvidence.length > 0 ? { renderedBlankProjectionEvidence } : {}),
     filled,
     ...(filled && radarVisual.fillOpacity !== undefined
       ? { fillOpacity: radarVisual.fillOpacity }
@@ -247,11 +244,7 @@ function radarRenderedBlankProjectionEvidence(input: {
   const evidence: RadarRenderedBlankProjectionEvidence[] = [];
   for (let seriesIndex = 0; seriesIndex < input.chartData.series.length; seriesIndex += 1) {
     const series = input.chartData.series[seriesIndex]!;
-    const configured = seriesConfigForDataSeries(
-      series,
-      input.config.series ?? [],
-      seriesIndex,
-    );
+    const configured = seriesConfigForDataSeries(series, input.config.series ?? [], seriesIndex);
     const valueCacheByIndex = numericValueCacheByPointIndex(configured?.valueCache);
     if (valueCacheByIndex.size === 0) continue;
     const sourceSeriesIndex = seriesSourceIndex(series, seriesIndex);

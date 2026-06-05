@@ -488,8 +488,7 @@ function baselinePixelForValueScale(
   const baselineValue = geometry?.baselineValue ?? 0;
   const scaled = scale(baselineValue);
   if (typeof scaled !== 'number' || !Number.isFinite(scaled)) return undefined;
-  const min =
-    orientation === 'horizontal' ? layout.plotArea.x : layout.plotArea.y;
+  const min = orientation === 'horizontal' ? layout.plotArea.x : layout.plotArea.y;
   const max =
     orientation === 'horizontal'
       ? layout.plotArea.x + layout.plotArea.width
@@ -521,9 +520,7 @@ function stableNumber(values: number[]): number | undefined {
   const finite = values.filter((value) => Number.isFinite(value));
   if (finite.length === 0) return undefined;
   const first = finite[0];
-  return finite.every((value) => Math.abs(value - first) <= TRACE_TOLERANCE_PX)
-    ? first
-    : undefined;
+  return finite.every((value) => Math.abs(value - first) <= TRACE_TOLERANCE_PX) ? first : undefined;
 }
 
 function isFiniteRect(mark: RectMark): boolean {

@@ -43,7 +43,10 @@ function legacyImportedPivotId(record: {
     : null;
 }
 
-function alternatePivotIds(primaryId: string, ids: Array<string | null | undefined>): string[] | undefined {
+function alternatePivotIds(
+  primaryId: string,
+  ids: Array<string | null | undefined>,
+): string[] | undefined {
   const alternates = ids.filter(
     (id, index, all): id is string =>
       typeof id === 'string' && id.length > 0 && id !== primaryId && all.indexOf(id) === index,
@@ -121,9 +124,7 @@ export async function loadPivotConfigEntries(
     });
 
   const nativeIds = new Set(nativeEntries.map((entry) => entry.config.id));
-  const persistedConfigIds = new Set(
-    importedViewRecords.map((record) => record.config.id),
-  );
+  const persistedConfigIds = new Set(importedViewRecords.map((record) => record.config.id));
   const persistedImportIdentities = new Set(
     importedViewRecords.map((record) => record.importIdentity),
   );

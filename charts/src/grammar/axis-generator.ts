@@ -771,14 +771,7 @@ function resolveYAxisCrossingPosition(input: {
     if (side) {
       return result(
         'categoryCenter',
-        categoricalScaleCrossingPosition(
-          peerScale,
-          side,
-          plotLeft,
-          plotRight,
-          'x',
-          defaultX,
-        ),
+        categoricalScaleCrossingPosition(peerScale, side, plotLeft, plotRight, 'x', defaultX),
       );
     }
   }

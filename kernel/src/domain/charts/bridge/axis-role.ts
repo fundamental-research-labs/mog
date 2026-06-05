@@ -52,10 +52,7 @@ export function isCategoryDateAxis(
   return axisModelRole(axis, slot) === 'category';
 }
 
-export function isValueAxis(
-  axis: SingleAxisConfig | undefined,
-  slot?: AxisConfigSlot,
-): boolean {
+export function isValueAxis(axis: SingleAxisConfig | undefined, slot?: AxisConfigSlot): boolean {
   return axisModelRole(axis, slot) === 'value';
 }
 
@@ -125,7 +122,9 @@ function explicitAxisModelRole(axis: SingleAxisConfig | undefined): AxisModelRol
   if (!axis) return undefined;
   const raw = axis.axisType ?? axis.type;
   if (!raw) return undefined;
-  const normalized = String(raw).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = String(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
   switch (normalized) {
     case 'catax':
     case 'category':

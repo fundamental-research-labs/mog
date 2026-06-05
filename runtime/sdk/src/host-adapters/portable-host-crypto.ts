@@ -142,8 +142,6 @@ export function createPortableRandomUUID(): string {
     .join('')}-${hex.slice(8, 10).join('')}-${hex.slice(10).join('')}`;
 }
 
-export function createPortableCanonicalFingerprint(
-  canonical: string,
-): HostCanonicalFingerprint {
+export function createPortableCanonicalFingerprint(canonical: string): HostCanonicalFingerprint {
   return `mog-host-fp:v1:sha256:${sha256Hex(canonical)}` as HostCanonicalFingerprint;
 }

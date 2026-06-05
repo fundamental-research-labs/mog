@@ -448,12 +448,7 @@ function stockSourceRoleVisual(
   stockVisual: StockGlyphVisualSpec | undefined,
   field: string,
 ): StockGlyphSourceRoleVisualSpec | undefined {
-  if (
-    field !== 'open' &&
-    field !== 'high' &&
-    field !== 'low' &&
-    field !== 'close'
-  ) {
+  if (field !== 'open' && field !== 'high' && field !== 'low' && field !== 'close') {
     return undefined;
   }
   return stockVisual?.sourceRoleVisuals?.find((visual) => visual.role === field);
@@ -466,9 +461,7 @@ function generateStockRoleSeriesStyleXML(
       ${generateStockRoleMarkerXML(visual)}`;
 }
 
-function generateStockRoleLineSpPrXML(
-  visual: StockGlyphSourceRoleVisualSpec | undefined,
-): string {
+function generateStockRoleLineSpPrXML(visual: StockGlyphSourceRoleVisualSpec | undefined): string {
   if (!visual?.lineVisible || visual.line.strokeWidth <= 0) {
     return `<c:spPr>
         <a:ln w="28575">
@@ -479,9 +472,7 @@ function generateStockRoleLineSpPrXML(
   return `<c:spPr>${generateSimpleLineXML(visual.line.stroke, visual.line.strokeWidth)}</c:spPr>`;
 }
 
-function generateStockRoleMarkerXML(
-  visual: StockGlyphSourceRoleVisualSpec | undefined,
-): string {
+function generateStockRoleMarkerXML(visual: StockGlyphSourceRoleVisualSpec | undefined): string {
   if (!visual?.markerVisible) return '<c:marker><c:symbol val="none"/></c:marker>';
 
   const marker = visual.marker;

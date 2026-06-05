@@ -16,27 +16,13 @@ export type PieDoughnutLegendPosition =
   | 'custom'
   | 'overlay';
 
-export type PieDoughnutLayoutAuthority =
-  | 'excelLikeAuto'
-  | 'manualLayout'
-  | 'genericFallback';
+export type PieDoughnutLayoutAuthority = 'excelLikeAuto' | 'manualLayout' | 'genericFallback';
 
-export type PieDoughnutLayoutFamily =
-  | 'pie'
-  | 'doughnut'
-  | 'ofPie'
-  | 'pie3dApproximation';
+export type PieDoughnutLayoutFamily = 'pie' | 'doughnut' | 'ofPie' | 'pie3dApproximation';
 
-export type PieDoughnutManualLayoutSource =
-  | 'plotLayout'
-  | 'plotAreaLayout'
-  | 'manualLayout';
+export type PieDoughnutManualLayoutSource = 'plotLayout' | 'plotAreaLayout' | 'manualLayout';
 
-export type PieDoughnutVisualStatus =
-  | 'exact'
-  | 'verifiedDefault'
-  | 'approximate'
-  | 'unknown';
+export type PieDoughnutVisualStatus = 'exact' | 'verifiedDefault' | 'approximate' | 'unknown';
 
 export type PieDoughnutStyleContextStatus =
   | 'none'
@@ -47,9 +33,7 @@ export type PieDoughnutStyleContextStatus =
   | 'unresolvedDrawingMlOrDiagnostics'
   | 'builtInChartStyleEffect';
 
-export type PieDoughnutStyleContextReservationMode =
-  | 'none'
-  | 'modeledEffectBleed';
+export type PieDoughnutStyleContextReservationMode = 'none' | 'modeledEffectBleed';
 
 export interface PieDoughnutLayoutReservation {
   top: number;
@@ -268,9 +252,7 @@ export function computePieDoughnutArcFootprintFrame(
         ? { radiusStatusReason: arcFrameStatus.reason }
         : {}),
     legendLayoutStatus: legendLayoutStatus.status,
-    ...(legendLayoutStatus.reason
-      ? { legendLayoutStatusReason: legendLayoutStatus.reason }
-      : {}),
+    ...(legendLayoutStatus.reason ? { legendLayoutStatusReason: legendLayoutStatus.reason } : {}),
     labelLayoutStatus: labelLayoutStatus.status,
     ...(labelLayoutStatus.reason ? { labelLayoutStatusReason: labelLayoutStatus.reason } : {}),
     explosionLayoutStatus: explosionLayoutStatus.status,
@@ -295,9 +277,7 @@ export function pieDoughnutExplosionOffset(
   return outerRadius * (percent / 100);
 }
 
-export function clampPieDoughnutExplosionPercent(
-  value: number | undefined,
-): number | undefined {
+export function clampPieDoughnutExplosionPercent(value: number | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(400, value))
     : undefined;
@@ -573,8 +553,7 @@ function manualPieDoughnutArcInsetProfile(
   const layoutSource = hints.manualLayoutSource ?? 'manualLayout';
   const styleProfile = manualArcInsetStyleProfile(hints);
   return {
-    profile:
-      `manual-${family}-single-ring-${layoutSource}-${legendProfile}-${labelProfile}-${styleProfile}`,
+    profile: `manual-${family}-single-ring-${layoutSource}-${legendProfile}-${labelProfile}-${styleProfile}`,
     status: 'exact',
     reason: 'manualArcInsetCalibrated',
   };
@@ -588,26 +567,17 @@ function approximateManualArcInsetProfile(profile: string): ManualPieDoughnutArc
   };
 }
 
-function manualArcInsetLegendProfile(
-  hints: PieDoughnutLayoutHints,
-): string | undefined {
+function manualArcInsetLegendProfile(hints: PieDoughnutLayoutHints): string | undefined {
   const entryCount = finiteNonNegative(hints.legendEntryCount) ?? 0;
   const position = hints.legendPosition ?? (entryCount > 0 ? 'right' : 'none');
   if (entryCount <= 0 || position === 'none') return 'no-legend';
-  if (
-    position === 'left' ||
-    position === 'right' ||
-    position === 'top' ||
-    position === 'bottom'
-  ) {
+  if (position === 'left' || position === 'right' || position === 'top' || position === 'bottom') {
     return `${position}-legend`;
   }
   return undefined;
 }
 
-function manualArcInsetLabelProfile(
-  hints: PieDoughnutLayoutHints,
-): string | undefined {
+function manualArcInsetLabelProfile(hints: PieDoughnutLayoutHints): string | undefined {
   const labelCount = finiteNonNegative(hints.labelCount) ?? 0;
   const outsideCount = finiteNonNegative(hints.outsideLabelCount) ?? 0;
   const defaultCount = finiteNonNegative(hints.defaultLabelCount) ?? 0;
@@ -662,9 +632,10 @@ function pieDoughnutArcFrameStatus(
   return { status: 'approximate', reason: 'arcFrameDerivedFromGenericLayout' };
 }
 
-function pieDoughnutLegendLayoutStatus(
-  hints: PieDoughnutLayoutHints | undefined,
-): { status: PieDoughnutVisualStatus; reason?: string } {
+function pieDoughnutLegendLayoutStatus(hints: PieDoughnutLayoutHints | undefined): {
+  status: PieDoughnutVisualStatus;
+  reason?: string;
+} {
   const entryCount = finiteNonNegative(hints?.legendEntryCount) ?? 0;
   if (entryCount <= 0 || hints?.legendPosition === 'none') return { status: 'verifiedDefault' };
   if (hints?.legendPosition === 'overlay') {
@@ -673,9 +644,10 @@ function pieDoughnutLegendLayoutStatus(
   return { status: 'approximate', reason: 'legendFlowEstimated' };
 }
 
-function pieDoughnutLabelLayoutStatus(
-  hints: PieDoughnutLayoutHints | undefined,
-): { status: PieDoughnutVisualStatus; reason?: string } {
+function pieDoughnutLabelLayoutStatus(hints: PieDoughnutLayoutHints | undefined): {
+  status: PieDoughnutVisualStatus;
+  reason?: string;
+} {
   const labelCount = finiteNonNegative(hints?.labelCount) ?? 0;
   const outsideCount = finiteNonNegative(hints?.outsideLabelCount) ?? 0;
   const defaultCount = finiteNonNegative(hints?.defaultLabelCount) ?? 0;
@@ -697,16 +669,18 @@ function pieDoughnutLabelLayoutStatus(
   return { status: 'approximate', reason: 'dataLabelBoundsEstimated' };
 }
 
-function pieDoughnutExplosionLayoutStatus(
-  radialReservation: number,
-): { status: PieDoughnutVisualStatus; reason?: string } {
+function pieDoughnutExplosionLayoutStatus(radialReservation: number): {
+  status: PieDoughnutVisualStatus;
+  reason?: string;
+} {
   if (radialReservation <= 0) return { status: 'verifiedDefault' };
   return { status: 'approximate', reason: 'excelAutoLayoutApproximation' };
 }
 
-function pieDoughnutStyleFootprintStatus(
-  hints: PieDoughnutLayoutHints | undefined,
-): { status: PieDoughnutVisualStatus; reason?: string } {
+function pieDoughnutStyleFootprintStatus(hints: PieDoughnutLayoutHints | undefined): {
+  status: PieDoughnutVisualStatus;
+  reason?: string;
+} {
   if (hints?.hasBuiltInStyleEffect) {
     return { status: 'approximate', reason: 'builtInSliceEffectUnmodeled' };
   }
@@ -751,9 +725,10 @@ function pieDoughnutStyleFootprintStatus(
   return { status: 'verifiedDefault' };
 }
 
-function pieDoughnutSliceStyleStatus(
-  hints: PieDoughnutLayoutHints | undefined,
-): { status: PieDoughnutVisualStatus; reason?: string } {
+function pieDoughnutSliceStyleStatus(hints: PieDoughnutLayoutHints | undefined): {
+  status: PieDoughnutVisualStatus;
+  reason?: string;
+} {
   if (hints?.hasBuiltInStyleEffect) {
     return { status: 'approximate', reason: 'builtInSliceEffectUnmodeled' };
   }

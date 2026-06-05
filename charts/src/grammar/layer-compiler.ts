@@ -125,10 +125,10 @@ export function compileLayered(
   const hasIndependentY = compiledSpec.resolve?.scale?.y === 'independent';
 
   // Merge top-level shared encodings and layer encodings to create shared scales.
-  const mergedEncoding = mergeEncodings([
-    compiledSpec.encoding,
-    ...compiledSpec.layer.map((l) => l.encoding),
-  ], { mergeY: !hasIndependentY });
+  const mergedEncoding = mergeEncodings(
+    [compiledSpec.encoding, ...compiledSpec.layer.map((l) => l.encoding)],
+    { mergeY: !hasIndependentY },
+  );
   const mergedData = compiledSpec.layer.flatMap((layer) => {
     if (layer.data && 'values' in layer.data) {
       return layer.data.values;
@@ -493,7 +493,9 @@ function mergedNumericDomain(
   return [Math.min(existing[0], next[0]), Math.max(existing[1], next[1])];
 }
 
-function numericDomain(domain: unknown[] | 'unaggregated' | undefined): [number, number] | undefined {
+function numericDomain(
+  domain: unknown[] | 'unaggregated' | undefined,
+): [number, number] | undefined {
   if (!Array.isArray(domain) || domain.length < 2) return undefined;
   const first = finiteNumber(domain[0]);
   const last = finiteNumber(domain[domain.length - 1]);

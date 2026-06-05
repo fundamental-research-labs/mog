@@ -151,11 +151,7 @@ function textMaxWidth(
   return raw;
 }
 
-function textLineHeight(
-  datum: DataRow,
-  markSpec: MarkSpec,
-  fontSize: number,
-): number | undefined {
+function textLineHeight(datum: DataRow, markSpec: MarkSpec, fontSize: number): number | undefined {
   const raw = numberField(datum, markSpec.lineHeightField) ?? markSpec.lineHeight;
   if (raw === undefined || raw <= 0) return undefined;
   if (raw <= 3) return raw * fontSize;

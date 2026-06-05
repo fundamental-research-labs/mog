@@ -89,9 +89,10 @@ function withCompositionSemanticEvidence(
   if (!composition?.sourceRoleSemanticStatus) return plan;
   return {
     ...plan,
-    sourceRoleOrder: composition.sourceRoleOrder.length > 0
-      ? [...composition.sourceRoleOrder]
-      : plan.sourceRoleOrder,
+    sourceRoleOrder:
+      composition.sourceRoleOrder.length > 0
+        ? [...composition.sourceRoleOrder]
+        : plan.sourceRoleOrder,
     sourceRoleSemanticStatus: composition.sourceRoleSemanticStatus,
     sourceRoleSemanticSource: composition.sourceRoleSemanticSource ?? plan.sourceRoleSemanticSource,
     ...(composition.sourceRoleSemanticReason !== undefined
@@ -183,9 +184,7 @@ function fallbackStockRolePlan(seriesCount: number): StockRolePlan | null {
   return null;
 }
 
-function completeStockRolePlan(
-  roles: Partial<Record<StockRole, number>>,
-): StockRolePlan | null {
+function completeStockRolePlan(roles: Partial<Record<StockRole, number>>): StockRolePlan | null {
   if (roles.high === undefined || roles.low === undefined || roles.close === undefined) {
     return null;
   }
@@ -202,8 +201,7 @@ function sourceRoleOrderFromPlan(
   roles: StockRolePlan,
   seriesCount: number,
 ): ChartSeriesStockRole[] {
-  return STOCK_ROLE_ORDER
-    .map((role) => ({ role, index: roles[role] }))
+  return STOCK_ROLE_ORDER.map((role) => ({ role, index: roles[role] }))
     .filter(
       (entry): entry is { role: ChartSeriesStockRole; index: number } =>
         entry.index !== undefined && entry.index >= 0 && entry.index < seriesCount,

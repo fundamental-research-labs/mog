@@ -110,12 +110,12 @@ export function snapshotLegend(
     present && stockSourceSeries
       ? stockSourceLegendEntries(config, stockSourceSeries, deletedEntries, visible, decision)
       : present && decision.vocabulary === 'valueBand' && data
-      ? surfaceValueBandLegendEntries(config, data, deletedEntries, visible, decision)
-      : present && decision.useCategoryEntries && data
-      ? categoryLegendEntries(config, data, deletedEntries, visible, decision)
-      : present
-        ? seriesLegendEntries(config, series, deletedEntries, visible, decision)
-        : [];
+        ? surfaceValueBandLegendEntries(config, data, deletedEntries, visible, decision)
+        : present && decision.useCategoryEntries && data
+          ? categoryLegendEntries(config, data, deletedEntries, visible, decision)
+          : present
+            ? seriesLegendEntries(config, series, deletedEntries, visible, decision)
+            : [];
   const visibleEntryItems = entryItems.filter((entry) => entry.visible);
   return {
     present,
@@ -204,9 +204,9 @@ function renderedLegendSnapshot(input: {
   return { rendered };
 }
 
-function normalizedLegendArea(trace: LegendTrace): NonNullable<
-  NonNullable<LegendSnapshot['rendered']>['area']
-> {
+function normalizedLegendArea(
+  trace: LegendTrace,
+): NonNullable<NonNullable<LegendSnapshot['rendered']>['area']> {
   const width = trace.chartWidth || 1;
   const height = trace.chartHeight || 1;
   const area = trace.area!;
@@ -458,10 +458,7 @@ function surfaceValueBandLabels(config: ChartConfig, data: ChartData): string[] 
     const min = domainMin + index * step;
     const max = index === bandCount - 1 ? domainMax : domainMin + (index + 1) * step;
     labels.push(
-      `${formatBandValue(min, labelFractionDigits)}-${formatBandValue(
-        max,
-        labelFractionDigits,
-      )}`,
+      `${formatBandValue(min, labelFractionDigits)}-${formatBandValue(max, labelFractionDigits)}`,
     );
   }
   return labels;

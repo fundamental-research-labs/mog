@@ -2,10 +2,7 @@ import type { ChartConfig, ChartData, ChartDataPoint, SeriesConfig } from '../..
 import { toFiniteNumber } from './category-axis';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { radarBlankPolicyFromDisplayBlanksAs } from '../radar-semantics';
-import {
-  isRenderableStockPoint,
-  stockSubTypeFromConfig,
-} from '../stock-semantics';
+import { isRenderableStockPoint, stockSubTypeFromConfig } from '../stock-semantics';
 
 type BlankPolicy = 'gap' | 'span' | 'zero';
 
@@ -52,10 +49,7 @@ export function shouldIncludePointInRows(
   seriesConfig?: SeriesConfig,
 ): boolean {
   if (point.valueState === 'hidden') return false;
-  if (
-    config?.type === 'stock' &&
-    !isRenderableStockPoint(point, stockSubTypeFromConfig(config))
-  ) {
+  if (config?.type === 'stock' && !isRenderableStockPoint(point, stockSubTypeFromConfig(config))) {
     return false;
   }
   const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);

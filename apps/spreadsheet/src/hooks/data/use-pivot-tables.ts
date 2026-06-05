@@ -635,12 +635,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Move a specific placement by placementId.
   const movePlacement = useCallback(
-    (
-      pivotId: string,
-      placementId: PlacementId,
-      toArea: PivotFieldArea,
-      toPosition: number,
-    ) => {
+    (pivotId: string, placementId: PlacementId, toArea: PivotFieldArea, toPosition: number) => {
       void pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition);
     },
     [pivotHandleFromId],

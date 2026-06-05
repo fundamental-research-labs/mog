@@ -223,8 +223,7 @@ function generatePieSeriesXML(series: PieSeriesData, index: number, sheetName: s
             <c:ptCount val="${catCount}"/>
             ${series.points
               .map(
-                (pt, i) =>
-                  `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(pt.value)}</c:v></c:pt>`,
+                (pt, i) => `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(pt.value)}</c:v></c:pt>`,
               )
               .join('\n            ')}
           </c:numCache>
@@ -363,10 +362,9 @@ function pointExplosionForRows(
   pointIndex: number,
   rows: DataRow[],
 ): number | undefined {
-  const rowExplosion =
-    rows
-      .map((row) => row[POINT_EXPLOSION_FIELD])
-      .find((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const rowExplosion = rows
+    .map((row) => row[POINT_EXPLOSION_FIELD])
+    .find((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const markExplosion = markExplosionForPoint(mark, pointIndex);
   const explosion = rowExplosion ?? markExplosion;
   return explosion > 0 ? explosion : undefined;
@@ -643,8 +641,7 @@ function generateExplodedPieChartContent(
             <c:ptCount val="${catCount}"/>
             ${pieData
               .map(
-                (pt, i) =>
-                  `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(pt.value)}</c:v></c:pt>`,
+                (pt, i) => `<c:pt idx="${i}"><c:v>${sanitizeNumericValue(pt.value)}</c:v></c:pt>`,
               )
               .join('\n            ')}
           </c:numCache>

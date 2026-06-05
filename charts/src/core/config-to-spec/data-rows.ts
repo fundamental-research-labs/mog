@@ -151,11 +151,7 @@ export function chartDataToRows(data: ChartData, config?: ChartConfig): DataRow[
         if (point.valueState === 'blank') {
           row[SOURCE_BLANK_FIELD] = true;
         }
-        if (
-          config?.type === 'radar' &&
-          blankPolicy === 'zero' &&
-          point.valueState === 'blank'
-        ) {
+        if (config?.type === 'radar' && blankPolicy === 'zero' && point.valueState === 'blank') {
           row[BLANK_VALUE_FIELD] = true;
         }
         if (blankPolicy === 'gap') {

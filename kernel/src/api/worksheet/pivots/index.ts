@@ -51,10 +51,7 @@ import {
   makePlacementId,
   pivotPlacementId,
 } from '../../../domain/pivots/identifiers';
-import {
-  findPivotByName,
-  requirePivot,
-} from '../../../domain/pivots/lookup';
+import { findPivotByName, requirePivot } from '../../../domain/pivots/lookup';
 import {
   placementFieldName,
   placementReadout,
@@ -96,10 +93,7 @@ import {
   setPivotEnableMultipleFilterItems,
   setPivotPreserveFormatting,
 } from '../../../domain/pivots/formatting-options';
-import {
-  setPivotLayoutByName,
-  setPivotStyleByName,
-} from '../../../domain/pivots/layout-style';
+import { setPivotLayoutByName, setPivotStyleByName } from '../../../domain/pivots/layout-style';
 import {
   getPivotColumnLabelRangeByName,
   getPivotDataBodyRangeByName,
@@ -757,10 +751,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   // ===========================================================================
 
   addCalculatedField(name: string, field: CalculatedField): Promise<void>;
-  async addCalculatedField(
-    name: string,
-    field: CalculatedField,
-  ): Promise<void> {
+  async addCalculatedField(name: string, field: CalculatedField): Promise<void> {
     await addPivotCalculatedFieldByName({
       ctx: this.ctx,
       sheetId: this.sheetId,
@@ -770,10 +761,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   }
 
   removeCalculatedField(name: string, fieldId: string): Promise<void>;
-  async removeCalculatedField(
-    name: string,
-    fieldId: string,
-  ): Promise<void> {
+  async removeCalculatedField(name: string, fieldId: string): Promise<void> {
     await removePivotCalculatedFieldByName({
       ctx: this.ctx,
       sheetId: this.sheetId,

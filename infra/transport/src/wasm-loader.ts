@@ -151,9 +151,7 @@ function assertCompatibleWasmModuleSource(
 ): void {
   if (!hostModule || !source) return;
   if (source.kind === 'host-module' && source.module === hostModule) return;
-  throw new Error(
-    'WASM module singleton is already initialized with a different module source',
-  );
+  throw new Error('WASM module singleton is already initialized with a different module source');
 }
 
 /**

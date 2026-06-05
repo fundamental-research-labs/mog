@@ -158,24 +158,22 @@ export function buildSurfaceContourEncoding(
 }
 
 export function sourceSurfaceBandFormats(config: ChartConfig): SurfaceBandFormatSpec[] | undefined {
-  const formats = (config.surfaceBandFormats ?? []).flatMap(
-    (format): SurfaceBandFormatSpec[] => {
-      const index = finiteNumber(format.index);
-      if (index === undefined) return [];
-      const fillColor =
-        typeof format.fillColor === 'string' && format.fillColor.length > 0
-          ? format.fillColor
-          : undefined;
-      return [
-        {
-          index,
-          ...(fillColor ? { fillColor } : {}),
-          hasFormatting: format.hasFormatting === true || fillColor !== undefined,
-          ...(format.source === 'ooxmlBandFmt' ? { source: 'ooxmlBandFmt' as const } : {}),
-        },
-      ];
-    },
-  );
+  const formats = (config.surfaceBandFormats ?? []).flatMap((format): SurfaceBandFormatSpec[] => {
+    const index = finiteNumber(format.index);
+    if (index === undefined) return [];
+    const fillColor =
+      typeof format.fillColor === 'string' && format.fillColor.length > 0
+        ? format.fillColor
+        : undefined;
+    return [
+      {
+        index,
+        ...(fillColor ? { fillColor } : {}),
+        hasFormatting: format.hasFormatting === true || fillColor !== undefined,
+        ...(format.source === 'ooxmlBandFmt' ? { source: 'ooxmlBandFmt' as const } : {}),
+      },
+    ];
+  });
   return formats.length > 0 ? formats : undefined;
 }
 

@@ -25,8 +25,12 @@ export function directPosition(
     return axis === 'x' ? table.x + value * table.width : table.y + value * table.height;
   }
   if (coordinateSystem === 'plotRadiusFraction') {
-    const frame = pieDoughnutHints ? pieDoughnutArcFrame(layout.plotArea, pieDoughnutHints) : undefined;
-    const diameter = frame ? frame.radius * 2 : Math.min(layout.plotArea.width, layout.plotArea.height);
+    const frame = pieDoughnutHints
+      ? pieDoughnutArcFrame(layout.plotArea, pieDoughnutHints)
+      : undefined;
+    const diameter = frame
+      ? frame.radius * 2
+      : Math.min(layout.plotArea.width, layout.plotArea.height);
     const center = frame
       ? axis === 'x'
         ? frame.centerX

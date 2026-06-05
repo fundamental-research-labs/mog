@@ -307,11 +307,7 @@ function threeDProjectionTrace(
   const allFaceBounds = projectionBoundsForMarks(faceMarks, layout);
   const frontFaceBounds = projectionBoundsForMarks(frontFaceMarks, layout);
   const depthFaceBounds = projectionBoundsForMarks(depthFaceMarks, layout);
-  const faceFamilyOccupancy = projectionOccupancyForMarks(
-    faceMarks,
-    layout,
-    'generatedMarkBounds',
-  );
+  const faceFamilyOccupancy = projectionOccupancyForMarks(faceMarks, layout, 'generatedMarkBounds');
 
   return {
     projectionAuthority: 'generatedApproximationTrace' as const,
@@ -355,10 +351,7 @@ function surfaceDensityTrace(
     finiteCellRatio: ratio(metrics.finiteValueCount, metrics.totalGridPointCount),
     missingCellRatio: ratio(metrics.missingCellCount, metrics.totalGridPointCount),
     filledPatchesPerCompleteCell: ratio(markCounts.filledPatches, metrics.completeCellCount),
-    isolineSegmentsPerCompleteCell: ratio(
-      markCounts.isolineSegments,
-      metrics.completeCellCount,
-    ),
+    isolineSegmentsPerCompleteCell: ratio(markCounts.isolineSegments, metrics.completeCellCount),
     ...(metrics.validGridEdgeCount > 0
       ? { wireSegmentsPerValidEdge: ratio(markCounts.wireSegments, metrics.validGridEdgeCount) }
       : {}),
@@ -381,11 +374,7 @@ function surfaceProjectionTrace(input: {
     input.mode === 'contour'
       ? normalizePixelBounds(squarePlotArea(input.layout.plotArea), input.layout.plotArea)
       : undefined;
-  const dataOccupancy = projectionOccupancyForMarks(
-    dataMarks,
-    input.layout,
-    'generatedPathBounds',
-  );
+  const dataOccupancy = projectionOccupancyForMarks(dataMarks, input.layout, 'generatedPathBounds');
 
   if (!dataMarkBounds && !frameBounds && !topViewPlotBounds && !dataOccupancy) {
     return undefined;
@@ -402,18 +391,14 @@ function surfaceProjectionTrace(input: {
 function mergeSurfaceProjectionTraces(
   traces: Array<SurfaceApproximationLayerTrace['projection'] | undefined>,
 ): SurfaceApproximationProjectionTrace | undefined {
-  const present = traces.filter(
-    (trace): trace is SurfaceApproximationProjectionTrace => Boolean(trace),
+  const present = traces.filter((trace): trace is SurfaceApproximationProjectionTrace =>
+    Boolean(trace),
   );
   if (present.length === 0) return undefined;
   const dataMarkBounds = mergeProjectionBounds(present.map((trace) => trace.dataMarkBounds));
   const frameBounds = mergeProjectionBounds(present.map((trace) => trace.frameBounds));
-  const topViewPlotBounds = mergeProjectionBounds(
-    present.map((trace) => trace.topViewPlotBounds),
-  );
-  const dataOccupancy = mergeProjectionOccupancies(
-    present.map((trace) => trace.dataOccupancy),
-  );
+  const topViewPlotBounds = mergeProjectionBounds(present.map((trace) => trace.topViewPlotBounds));
+  const dataOccupancy = mergeProjectionOccupancies(present.map((trace) => trace.dataOccupancy));
   return {
     projectionAuthority: 'generatedApproximationTrace',
     ...(dataMarkBounds ? { dataMarkBounds } : {}),
@@ -523,8 +508,8 @@ function mergeProjectionBounds(
 function mergeProjectionOccupancies(
   occupancies: Array<ProjectionOccupancyTrace | undefined>,
 ): ProjectionOccupancyTrace | undefined {
-  const present = occupancies.filter(
-    (occupancy): occupancy is ProjectionOccupancyTrace => Boolean(occupancy),
+  const present = occupancies.filter((occupancy): occupancy is ProjectionOccupancyTrace =>
+    Boolean(occupancy),
   );
   const first = present[0];
   if (!first) return undefined;
@@ -771,13 +756,15 @@ function surfaceValueDomain(data: DataRow[]) {
 
 function surfaceBandsTrace(markSpec: MarkSpec, data: DataRow[]) {
   const entries = markSpec.contourBands?.length
-    ? markSpec.contourBands.map((band, index): SurfaceApproximationBandTrace => ({
-        index,
-        min: band.min,
-        max: band.max,
-        label: band.label,
-        color: band.color,
-      }))
+    ? markSpec.contourBands.map(
+        (band, index): SurfaceApproximationBandTrace => ({
+          index,
+          min: band.min,
+          max: band.max,
+          label: band.label,
+          color: band.color,
+        }),
+      )
     : fallbackSurfaceBands(data);
   const sourceBandFormats = sourceSurfaceBandFormatsTrace(markSpec);
 

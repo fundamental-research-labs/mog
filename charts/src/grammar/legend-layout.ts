@@ -212,9 +212,7 @@ export function estimateVerticalLegendHeight(
     availableWidth: Number.POSITIVE_INFINITY,
   });
   return (
-    legendTitleHeight(legendSpec) +
-    flow.rowHeight +
-    Math.max(0, entries.length - 1) * flow.rowGap
+    legendTitleHeight(legendSpec) + flow.rowHeight + Math.max(0, entries.length - 1) * flow.rowGap
   );
 }
 

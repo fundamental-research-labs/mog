@@ -1,9 +1,12 @@
 import type { AxisSpec, ChannelSpec, EncodingSpec, StackMode } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartType, SeriesConfig, SingleAxisConfig } from '../../types';
-import {
-  resolvePathChartAxisLayout,
-  type PathChartAxisLayout,
-} from '../chart-ir/path-axis-layout';
+import type {
+  ChartConfig,
+  ChartData,
+  ChartType,
+  SeriesConfig,
+  SingleAxisConfig,
+} from '../../types';
+import { resolvePathChartAxisLayout, type PathChartAxisLayout } from '../chart-ir/path-axis-layout';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { resolveAxisConfigForChannel } from './axis';
 import { chartImportSourceDialect } from './bar-geometry';
@@ -60,7 +63,8 @@ export function resolvePathAxisLayoutForMembers(input: {
 }): PathChartAxisLayout {
   const axisIndex = input.axisIndex ?? 0;
   const useDateSerialCategoryAxis =
-    input.useDateSerialCategoryAxis ?? shouldUseDateSerialCategoryAxis(input.config, input.data, false);
+    input.useDateSerialCategoryAxis ??
+    shouldUseDateSerialCategoryAxis(input.config, input.data, false);
   const stackMode =
     input.stackMode ?? pathStackModeForMemberIndices(input.config, input.data, input.memberIndices);
   const widthFromPoints = pointsToCanvasPx(input.config.widthPt);
@@ -144,9 +148,7 @@ export function applyPathValueAxisLayout(
     ...(layout.percentAxisLabelPolicy
       ? { percentAxisLabelPolicy: layout.percentAxisLabelPolicy }
       : {}),
-    ...(layout.valueAxisLayoutStatus
-      ? { axisLayoutStatus: layout.valueAxisLayoutStatus }
-      : {}),
+    ...(layout.valueAxisLayoutStatus ? { axisLayoutStatus: layout.valueAxisLayoutStatus } : {}),
     ...(layout.valueAxisLayoutStatusReason
       ? { axisLayoutStatusReason: layout.valueAxisLayoutStatusReason }
       : {}),
@@ -243,9 +245,7 @@ function withPathCategoryAxisLayout(
     ...(layout.visibleLabelCount !== undefined
       ? { pathVisibleLabelCount: layout.visibleLabelCount }
       : {}),
-    ...(layout.reservationStatus
-      ? { pathAxisReservationStatus: layout.reservationStatus }
-      : {}),
+    ...(layout.reservationStatus ? { pathAxisReservationStatus: layout.reservationStatus } : {}),
     ...(layout.reservationStatusReason
       ? { pathAxisReservationStatusReason: layout.reservationStatusReason }
       : {}),
@@ -289,10 +289,7 @@ function categoryAxisConfig(config: ChartConfig): SingleAxisConfig | undefined {
   return resolveAxisConfigForChannel(config.axis, 'x', false);
 }
 
-function valueAxisConfig(
-  config: ChartConfig,
-  axisIndex: 0 | 1,
-): SingleAxisConfig | undefined {
+function valueAxisConfig(config: ChartConfig, axisIndex: 0 | 1): SingleAxisConfig | undefined {
   if (axisIndex === 1) {
     return config.axis?.secondaryValueAxis ?? config.axis?.secondaryYAxis;
   }

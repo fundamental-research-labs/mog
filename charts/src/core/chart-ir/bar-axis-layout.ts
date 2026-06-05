@@ -53,10 +53,7 @@ export function resolveBarColumnAxisLayout(
 ): BarColumnAxisLayout {
   const skip = resolveCategoryTickSkip(input);
   const value = resolveValueAxisLayout(input);
-  const categoryStatus = resolveCategoryTickStatus(
-    input.sourceDialect,
-    skip.source,
-  );
+  const categoryStatus = resolveCategoryTickStatus(input.sourceDialect, skip.source);
   const valueStatus = {
     status: value.status,
     ...(value.reason ? { reason: value.reason } : {}),
@@ -362,9 +359,7 @@ function percentStackedValueScaleStatus(
   };
 }
 
-function missingValueScaleStatus(
-  sourceDialect: ResolveBarColumnAxisLayoutInput['sourceDialect'],
-): {
+function missingValueScaleStatus(sourceDialect: ResolveBarColumnAxisLayoutInput['sourceDialect']): {
   source: BarValueAxisScaleSource;
   status: BarAxisLayoutStatus;
   reason?: string;

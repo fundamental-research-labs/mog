@@ -81,9 +81,7 @@ describe('createWasmChartRasterBackend', () => {
   });
 });
 
-function request(
-  overrides: Partial<ChartRasterRequest['options']> = {},
-): ChartRasterRequest {
+function request(overrides: Partial<ChartRasterRequest['options']> = {}): ChartRasterRequest {
   return {
     version: 1,
     marks: [],

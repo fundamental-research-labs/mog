@@ -631,8 +631,7 @@ function stackedAreaGroupMemberIndices(input: {
           item.rawSeriesType,
           item.seriesConf,
           item.sourceSeriesIndex,
-        )
-          .geometryBearing &&
+        ).geometryBearing &&
         (item.yAxisIndex ?? 0) === (input.yAxisIndex ?? 0) &&
         item.xRole === input.xRole,
     )
@@ -748,7 +747,11 @@ function buildExcelComboGeometry(input: {
 }): ExcelComboGeometry | undefined {
   if (!usesExcelCartesianGeometry(input.config)) return undefined;
 
-  const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(input.config, input.data, false);
+  const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(
+    input.config,
+    input.data,
+    false,
+  );
   const useStableCategoryKeys = shouldUseStableCategoryKeys(
     input.config,
     input.data,
@@ -797,11 +800,7 @@ function buildExcelComboGeometry(input: {
     }) as NonNullable<EncodingSpec['y']>;
     const pathMemberIndices = pathMembersByAxis.get(axisIndex) ?? [];
     if (pathMemberIndices.length > 0) {
-      const stackMode = pathStackModeForMemberIndices(
-        input.config,
-        input.data,
-        pathMemberIndices,
-      );
+      const stackMode = pathStackModeForMemberIndices(input.config, input.data, pathMemberIndices);
       const stackedAreaMembers = comboStackedAreaMemberIndices(
         input.config,
         input.data,
@@ -828,9 +827,7 @@ function buildExcelComboGeometry(input: {
         hasMixedStackPathMembers ? withoutPathValueScaleLayout(layout) : layout,
       );
     }
-    const barGroup = input.barGeometryGroups.find(
-      (group) => (group.yAxisIndex ?? 0) === axisIndex,
-    );
+    const barGroup = input.barGeometryGroups.find((group) => (group.yAxisIndex ?? 0) === axisIndex);
     if (barGroup?.geometry.grouping === 'percentStacked') {
       applyBarGeometryValueAxisLayout(channel, barGroup.geometry);
     }
@@ -845,11 +842,7 @@ function buildExcelComboGeometry(input: {
   };
 }
 
-function comboAxisValues(
-  config: ChartConfig,
-  data: ChartData,
-  memberIndices: number[],
-): number[] {
+function comboAxisValues(config: ChartConfig, data: ChartData, memberIndices: number[]): number[] {
   const stackMode = pathStackModeForMemberIndices(config, data, memberIndices);
   const stackedAreaMembers = comboStackedAreaMemberIndices(config, data, memberIndices);
   if (stackMode === 'normalize' && stackedAreaMembers.length > 0) {
@@ -861,7 +854,10 @@ function comboAxisValues(
   if (stackMode === 'zero') {
     return [
       ...chartValueValues(data, memberIndices),
-      ...stackedMemberValues(data, stackedAreaMembers.length > 0 ? stackedAreaMembers : memberIndices),
+      ...stackedMemberValues(
+        data,
+        stackedAreaMembers.length > 0 ? stackedAreaMembers : memberIndices,
+      ),
     ];
   }
   return chartValueValues(data, memberIndices);
@@ -893,10 +889,7 @@ function comboStackedAreaMemberIndices(
   });
 }
 
-function nonStackedMemberIndices(
-  memberIndices: number[],
-  stackedAreaMembers: number[],
-): number[] {
+function nonStackedMemberIndices(memberIndices: number[], stackedAreaMembers: number[]): number[] {
   if (stackedAreaMembers.length === 0) return memberIndices;
   const stackedSet = new Set(stackedAreaMembers);
   return memberIndices.filter((index) => !stackedSet.has(index));

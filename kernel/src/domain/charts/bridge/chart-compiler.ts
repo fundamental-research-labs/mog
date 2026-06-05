@@ -323,23 +323,27 @@ function chartTextMeasurementContext(): TextMeasurementContext | undefined {
 }
 
 function createTextMeasurementContext(): TextMeasurementContext | undefined {
-  const offscreenCanvas = (globalThis as {
-    OffscreenCanvas?: new (
-      width: number,
-      height: number,
-    ) => { getContext(type: '2d'): TextMeasurementContext | null };
-  }).OffscreenCanvas;
+  const offscreenCanvas = (
+    globalThis as {
+      OffscreenCanvas?: new (
+        width: number,
+        height: number,
+      ) => { getContext(type: '2d'): TextMeasurementContext | null };
+    }
+  ).OffscreenCanvas;
   if (offscreenCanvas) {
     return new offscreenCanvas(1, 1).getContext('2d') ?? undefined;
   }
 
-  const documentLike = (globalThis as {
-    document?: {
-      createElement(name: 'canvas'): {
-        getContext(type: '2d'): TextMeasurementContext | null;
+  const documentLike = (
+    globalThis as {
+      document?: {
+        createElement(name: 'canvas'): {
+          getContext(type: '2d'): TextMeasurementContext | null;
+        };
       };
-    };
-  }).document;
+    }
+  ).document;
   return documentLike?.createElement('canvas').getContext('2d') ?? undefined;
 }
 

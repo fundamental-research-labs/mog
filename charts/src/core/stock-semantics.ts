@@ -8,10 +8,7 @@ import type {
   StockSubType,
   StockVolumeAxisPolicy,
 } from '../types';
-import {
-  isStockVolumeSeriesType,
-  stockRolePlanWithEvidence,
-} from './stock-role-plan';
+import { isStockVolumeSeriesType, stockRolePlanWithEvidence } from './stock-role-plan';
 
 const STOCK_SUBTYPES = new Set(['hlc', 'ohlc', 'volume-hlc', 'volume-ohlc']);
 const STOCK_ROLE_ORDER: ChartSeriesStockRole[] = ['volume', 'open', 'high', 'low', 'close'];
@@ -127,9 +124,7 @@ export function stockSourceCompositionFromConfig(
       ? config.series?.[volumeIndex]
       : sourceSeriesForRole(config.series ?? [], 'volume');
   const separateVolumeAxis = Boolean(volumeSeries && isStockVolumeSeriesType(volumeSeries.type));
-  const roleSemanticsUsable = isUsableStockRoleSemanticStatus(
-    evidence?.sourceRoleSemanticStatus,
-  );
+  const roleSemanticsUsable = isUsableStockRoleSemanticStatus(evidence?.sourceRoleSemanticStatus);
   const sourceKind =
     hasVolume && separateVolumeAxis
       ? 'comboVolumeBarStockChart'
@@ -186,18 +181,13 @@ export function stockValueAxisRoles(
     : composition.sourceRoleOrder.filter((role) => role !== 'volume');
 }
 
-export function requiredStockPriceRolesForSubtype(
-  subType: StockSubType,
-): ChartSeriesStockRole[] {
+export function requiredStockPriceRolesForSubtype(subType: StockSubType): ChartSeriesStockRole[] {
   return subType === 'ohlc' || subType === 'volume-ohlc'
     ? ['open', 'high', 'low', 'close']
     : ['high', 'low', 'close'];
 }
 
-export function isRenderableStockPoint(
-  point: StockPointValue,
-  subType: StockSubType,
-): boolean {
+export function isRenderableStockPoint(point: StockPointValue, subType: StockSubType): boolean {
   if (!point || point.valueState === 'hidden') return false;
   return requiredStockPriceRolesForSubtype(subType).every(
     (role) => stockFiniteNumber(point[role]) !== undefined,
@@ -262,11 +252,7 @@ export function stockRenderedRoleValueProjectionFromRoleValues(
   subType: StockSubType,
   sourcePointCount = stockSourcePointCount(values, categories),
 ): StockRenderedRoleValueProjection {
-  const projection = stockRenderedPointProjectionFromRoleValues(
-    values,
-    subType,
-    sourcePointCount,
-  );
+  const projection = stockRenderedPointProjectionFromRoleValues(values, subType, sourcePointCount);
   return {
     ...projection,
     renderedRoleValues: {
@@ -301,9 +287,7 @@ function isStockSubType(value: unknown): value is StockSubType {
   return typeof value === 'string' && STOCK_SUBTYPES.has(value);
 }
 
-function normalizedStockSourceComposition(
-  value: unknown,
-): StockSourceComposition | undefined {
+function normalizedStockSourceComposition(value: unknown): StockSourceComposition | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const candidate = value as Partial<StockSourceComposition>;
   const sourceKind =

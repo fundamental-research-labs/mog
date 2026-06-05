@@ -436,7 +436,8 @@ function applyPieDoughnutBaseMargins(
   const labelPressure = pieDoughnutMarginLabelPressure(hints);
   const explosionPressure =
     hints?.explosionPaddingPx ??
-    (((hints?.explosionPaddingPercent ?? 0) > 0 ? hints?.explosionPaddingPercent ?? 0 : 0) / 100) *
+    (((hints?.explosionPaddingPercent ?? 0) > 0 ? (hints?.explosionPaddingPercent ?? 0) : 0) /
+      100) *
       24;
   const base = PIE_BASE_MARGIN + labelPressure + explosionPressure;
   margin.top = Math.min(margin.top, base + paddingSides.top);
@@ -716,9 +717,7 @@ function estimateLegendHeight(
     return Math.max(
       MIN_HORIZONTAL_LEGEND_HEIGHT,
       Math.ceil(
-        legendTitleHeight(legendSpec) +
-          flow.contentHeight +
-          HORIZONTAL_LEGEND_VERTICAL_PADDING,
+        legendTitleHeight(legendSpec) + flow.contentHeight + HORIZONTAL_LEGEND_VERTICAL_PADDING,
       ),
     );
   }

@@ -2,10 +2,7 @@ import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
 import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import type { DocumentImportOptions } from '@mog-sdk/contracts/document';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
-import {
-  createHostBackedDocument,
-  importHostBackedDocument,
-} from '@mog/kernel-host-internal';
+import { createHostBackedDocument, importHostBackedDocument } from '@mog/kernel-host-internal';
 import {
   createChartImageExporterFactory,
   type ChartRasterWasmGlueLoader,

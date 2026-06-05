@@ -54,11 +54,10 @@ export function reconcilePathCartesianSpec<T extends ChartSpec>(
       return { ...layer, encoding: reconciled.encoding };
     });
 
-    const config = reconcilePathLayoutHints(
-      spec.config,
-      changed,
-      [topLevel.encoding, ...layers.map((layer) => layer.encoding)],
-    );
+    const config = reconcilePathLayoutHints(spec.config, changed, [
+      topLevel.encoding,
+      ...layers.map((layer) => layer.encoding),
+    ]);
     if (config !== spec.config) changed = true;
 
     return changed ? ({ ...spec, encoding: topLevel.encoding, layer: layers, config } as T) : spec;
@@ -158,8 +157,7 @@ function reconcileAxis(
             'importedAutoPathCategoryTickSkipHeuristic',
           pathAxisReservationStatus: axis.pathAxisReservationStatus ?? ('approximate' as const),
           pathAxisReservationStatusReason:
-            axis.pathAxisReservationStatusReason ??
-            'importedAutoPathPlotFrameReservationEstimate',
+            axis.pathAxisReservationStatusReason ?? 'importedAutoPathPlotFrameReservationEstimate',
         }
       : pointCount > 0 && positiveInteger(axis.tickLabelSkip) !== undefined
         ? { pathVisibleLabelCount: Math.ceil(pointCount / positiveInteger(axis.tickLabelSkip)!) }
@@ -217,11 +215,7 @@ function importedAutoTickSkip(
 ): number {
   const projectedWidth = positiveNumber(projectedLabelWidth) ?? labelBudget;
   if (projectedWidth <= categoryPitch) return 1;
-  return clamp(
-    Math.ceil(labelBudget / categoryPitch),
-    1,
-    Math.max(1, Math.ceil(pointCount / 2)),
-  );
+  return clamp(Math.ceil(labelBudget / categoryPitch), 1, Math.max(1, Math.ceil(pointCount / 2)));
 }
 
 function labelBudgetFromProjection(axis: AxisSpec): number | undefined {

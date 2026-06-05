@@ -69,14 +69,8 @@ export interface UsePivotEditorActionsReturn {
   ) => void;
   handlePivotRemovePlacement: (placementId: string) => void;
   handlePivotMovePlacement: (placementId: string, toArea: PivotFieldArea, position: number) => void;
-  handlePivotPlacementAggregateChange: (
-    placementId: string,
-    aggregate: AggregateFunction,
-  ) => void;
-  handlePivotPlacementSortOrderChange: (
-    placementId: string,
-    sortOrder: SortOrder,
-  ) => void;
+  handlePivotPlacementAggregateChange: (placementId: string, aggregate: AggregateFunction) => void;
+  handlePivotPlacementSortOrderChange: (placementId: string, sortOrder: SortOrder) => void;
   handlePivotValueSortChange: (valuePlacementId: string, sortOrder: SortOrder) => void;
   handlePivotRefresh: () => void;
   handlePivotDelete: () => void;
@@ -134,9 +128,7 @@ export function axisSortTargetsValuePlacement(
   if (axisPlacement.sortByValue.valuePlacementId) {
     return axisPlacement.sortByValue.valuePlacementId === valuePlacementId;
   }
-  return (
-    (valueFieldId !== undefined && axisPlacement.sortByValue.valueFieldId === valueFieldId)
-  );
+  return valueFieldId !== undefined && axisPlacement.sortByValue.valueFieldId === valueFieldId;
 }
 
 // =============================================================================
@@ -295,7 +287,11 @@ export function usePivotEditorActions(
   const handlePivotPlacementAggregateChange = useCallback(
     (placementId: string, aggregate: AggregateFunction) => {
       if (editingPivotId && editingPivotCapabilities?.canChangeAggregate) {
-        setPlacementAggregateFunction(editingPivotId, placementIdFromString(placementId), aggregate);
+        setPlacementAggregateFunction(
+          editingPivotId,
+          placementIdFromString(placementId),
+          aggregate,
+        );
       }
     },
     [editingPivotId, editingPivotCapabilities, setPlacementAggregateFunction],

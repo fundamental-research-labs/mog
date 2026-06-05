@@ -18,9 +18,7 @@ describe('SDK entry validation', () => {
       createWorkbook({
         source: { type: 'path', path: '/definitely/missing/workbook.xlsx' },
       } as never),
-    ).rejects.toThrow(
-      'File-path workbook sources are not supported by the WASM SDK entry',
-    );
+    ).rejects.toThrow('File-path workbook sources are not supported by the WASM SDK entry');
   });
 });
 

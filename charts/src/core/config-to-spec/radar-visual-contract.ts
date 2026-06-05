@@ -21,10 +21,7 @@ import {
   RADAR_DEFAULT_VALUE_LABEL_COLOR,
   RADAR_DEFAULT_VALUE_LABEL_FONT_SIZE,
 } from '../radar-semantics';
-import {
-  seriesConfigForDataSeries,
-  seriesSourceIndex,
-} from '../series-identity';
+import { seriesConfigForDataSeries, seriesSourceIndex } from '../series-identity';
 import {
   chartStyleOwner,
   mergeChartFormats,
@@ -38,11 +35,7 @@ import { resolveSeriesColorAuthority } from './color-authority';
 import { excelMarkerShape, markerPointSizeToArea } from './data-row-style';
 import { isImportedStandardOoxmlChart } from './bar-geometry';
 import { mapAxisConfigToAxisSpec, resolveAxisConfigForChannel } from './axis';
-import {
-  dashStyleToStrokeDash,
-  hasExplicitNoLine,
-  isNoFillNoLineSeries,
-} from './style';
+import { dashStyleToStrokeDash, hasExplicitNoLine, isNoFillNoLineSeries } from './style';
 import { linePointsToCanvasPx } from './units';
 
 type RadarVisualStatus = 'exact' | 'verifiedDefault' | 'approximate' | 'unknown';
@@ -303,12 +296,19 @@ export function resolveRadarVisualContract(input: {
     ...(categoryAxis ? { categoryAxis } : {}),
     ...(valueAxis ? { valueAxis } : {}),
     ...(input.filled
-      ? { fillOpacity: firstDefined(series.map((item) => item.fillOpacity)) ?? RADAR_DEFAULT_FILLED_OPACITY }
+      ? {
+          fillOpacity:
+            firstDefined(series.map((item) => item.fillOpacity)) ?? RADAR_DEFAULT_FILLED_OPACITY,
+        }
       : {}),
     ...(input.markers
-      ? { markerSize: firstDefined(series.map((item) => item.markerSize)) ?? RADAR_DEFAULT_MARKER_SIZE }
+      ? {
+          markerSize:
+            firstDefined(series.map((item) => item.markerSize)) ?? RADAR_DEFAULT_MARKER_SIZE,
+        }
       : {}),
-    strokeWidth: firstDefined(series.map((item) => item.strokeWidth)) ?? RADAR_DEFAULT_SERIES_STROKE_WIDTH,
+    strokeWidth:
+      firstDefined(series.map((item) => item.strokeWidth)) ?? RADAR_DEFAULT_SERIES_STROKE_WIDTH,
   };
 }
 
@@ -395,7 +395,12 @@ function resolveSeriesFillVisual(input: {
   imported: boolean;
 }): Pick<
   RadarSeriesVisualContract,
-  'fillVisible' | 'fillColor' | 'fillOpacity' | 'fillStatus' | 'fillStatusReason' | 'fillSourceAuthority'
+  | 'fillVisible'
+  | 'fillColor'
+  | 'fillOpacity'
+  | 'fillStatus'
+  | 'fillStatusReason'
+  | 'fillSourceAuthority'
 > {
   if (!input.filled || input.seriesHidden) {
     return {
@@ -425,12 +430,12 @@ function resolveSeriesFillVisual(input: {
   const fillColor =
     paint?.type === 'solid'
       ? paint.color
-      : input.colorAuthority?.fill?.color ?? input.colorAuthority?.color;
+      : (input.colorAuthority?.fill?.color ?? input.colorAuthority?.color);
   const fillOpacity =
     paint?.type === 'solid'
       ? (paint.opacity ?? 1)
-      : resolveFormatFillOpacity(input.format) ??
-        (input.format?.fill?.type === 'solid' ? 1 : RADAR_DEFAULT_FILLED_OPACITY);
+      : (resolveFormatFillOpacity(input.format) ??
+        (input.format?.fill?.type === 'solid' ? 1 : RADAR_DEFAULT_FILLED_OPACITY));
   const hasImportedFillEvidence =
     hasFormatComponent(input.ownerFormat?.fill) ||
     hasFormatComponent(input.seriesConfig?.format?.fill) ||
@@ -447,7 +452,10 @@ function resolveSeriesFillVisual(input: {
     fillOpacity,
     fillStatus: status.status,
     ...(status.reason ? { fillStatusReason: status.reason } : {}),
-    fillSourceAuthority: statusSourceAuthority(status.status, input.imported && hasImportedFillEvidence),
+    fillSourceAuthority: statusSourceAuthority(
+      status.status,
+      input.imported && hasImportedFillEvidence,
+    ),
   };
 }
 
@@ -474,11 +482,11 @@ function resolveSeriesStrokeVisual(input: {
   const lineNoFill = line?.noFill === true || hasExplicitNoLine(input.seriesConfig);
   const lineWidth = lineNoFill
     ? 0
-    : linePointsToCanvasPx(line?.width) ?? linePointsToCanvasPx(input.seriesConfig?.lineWidth);
+    : (linePointsToCanvasPx(line?.width) ?? linePointsToCanvasPx(input.seriesConfig?.lineWidth));
   const lineZeroWidth = line?.width === 0 || input.seriesConfig?.lineWidth === 0;
   const strokeVisible = !input.seriesHidden && !lineNoFill && !lineZeroWidth;
   const strokeColor = strokeVisible
-    ? input.colorAuthority?.stroke?.color ?? input.colorAuthority?.color
+    ? (input.colorAuthority?.stroke?.color ?? input.colorAuthority?.color)
     : undefined;
   const resolvedLine = lineNoFill
     ? undefined
@@ -525,7 +533,10 @@ function resolveSeriesStrokeVisual(input: {
     ...(strokeOpacity !== undefined ? { strokeOpacity } : {}),
     strokeStatus: status.status,
     ...(status.reason ? { strokeStatusReason: status.reason } : {}),
-    strokeSourceAuthority: statusSourceAuthority(status.status, input.imported && hasImportedLineEvidence),
+    strokeSourceAuthority: statusSourceAuthority(
+      status.status,
+      input.imported && hasImportedLineEvidence,
+    ),
   };
 }
 
@@ -562,22 +573,24 @@ function resolveSeriesMarkerVisual(input: {
   const markerShape = markerVisible
     ? excelMarkerShape(input.seriesConfig?.markerStyle, input.sourceSeriesIndex, input.config)
     : undefined;
-  const markerSize = markerVisible ? markerPointSizeToArea(input.seriesConfig?.markerSize) : undefined;
+  const markerSize = markerVisible
+    ? markerPointSizeToArea(input.seriesConfig?.markerSize)
+    : undefined;
   const markerFill = markerVisible
-    ? markerFillColor(markerFormat, markerContext) ??
+    ? (markerFillColor(markerFormat, markerContext) ??
       input.colorAuthority?.markerFill?.color ??
       input.colorAuthority?.fill?.color ??
-      input.colorAuthority?.color
+      input.colorAuthority?.color)
     : undefined;
   const markerStroke = markerVisible
-    ? markerLineColor(markerFormat, markerContext) ??
+    ? (markerLineColor(markerFormat, markerContext) ??
       input.colorAuthority?.markerStroke?.color ??
       input.colorAuthority?.stroke?.color ??
-      input.colorAuthority?.color
+      input.colorAuthority?.color)
     : undefined;
   const markerStrokeWidth = markerVisible ? markerStrokeWidthFromFormat(markerFormat) : undefined;
   const renderedMarkerStrokeWidth =
-    markerVisible && markerStroke ? markerStrokeWidth ?? 1 : markerStrokeWidth;
+    markerVisible && markerStroke ? (markerStrokeWidth ?? 1) : markerStrokeWidth;
   const hasMarkerOwner = chartStyleOwner(input.config, markerOwnerKey)?.format !== undefined;
   const hasMarkerDirectEvidence =
     input.seriesConfig?.markerStyle !== undefined ||
@@ -669,22 +682,22 @@ function resolvePointMarkerVisual(input: {
     ? markerPointSizeToArea(input.point.markerSize ?? input.seriesConfig?.markerSize)
     : undefined;
   const markerFill = markerVisible
-    ? markerFillColor(markerFormat, context) ??
+    ? (markerFillColor(markerFormat, context) ??
       pointAuthority?.markerFill?.color ??
       input.colorAuthority?.markerFill?.color ??
       input.colorAuthority?.fill?.color ??
-      input.colorAuthority?.color
+      input.colorAuthority?.color)
     : undefined;
   const markerStroke = markerVisible
-    ? markerLineColor(markerFormat, context) ??
+    ? (markerLineColor(markerFormat, context) ??
       pointAuthority?.markerStroke?.color ??
       input.colorAuthority?.markerStroke?.color ??
       input.colorAuthority?.stroke?.color ??
-      input.colorAuthority?.color
+      input.colorAuthority?.color)
     : undefined;
   const markerStrokeWidth = markerVisible ? markerStrokeWidthFromFormat(markerFormat) : undefined;
   const renderedMarkerStrokeWidth =
-    markerVisible && markerStroke ? markerStrokeWidth ?? 1 : markerStrokeWidth;
+    markerVisible && markerStroke ? (markerStrokeWidth ?? 1) : markerStrokeWidth;
   const hasPointMarkerOwner = chartStyleOwner(input.config, pointOwnerKey)?.format !== undefined;
   const hasDirectEvidence =
     input.point.markerStyle !== undefined ||
@@ -755,11 +768,14 @@ function axisLineContract(input: {
   rendered: Record<string, ContractValue | undefined>;
 }): ResolvedChartRadarStyleContractEntrySnapshot {
   const visible = Boolean(input.rendered.enabled);
-  const line = input.lineKind === 'grid' ? input.axisConfig?.gridlineFormat : input.axisConfig?.format?.line;
+  const line =
+    input.lineKind === 'grid' ? input.axisConfig?.gridlineFormat : input.axisConfig?.format?.line;
   const hiddenBySource =
     input.lineKind === 'grid'
       ? input.axisConfig?.gridLines === false || line?.noFill === true || input.axis?.grid === false
-      : input.axisConfig?.visible === false || line?.noFill === true || input.axis?.domain === false;
+      : input.axisConfig?.visible === false ||
+        line?.noFill === true ||
+        input.axis?.domain === false;
   if (!visible || hiddenBySource) {
     return contractEntry({
       category: input.category,
@@ -770,8 +786,14 @@ function axisLineContract(input: {
     });
   }
   const hasLineEvidence = input.lineKind === 'grid' ? line !== undefined : line !== undefined;
-  const hasColor = input.lineKind === 'grid' ? input.axis?.gridColor !== undefined : input.axis?.domainColor !== undefined || input.axis?.tickColor !== undefined;
-  const hasWidth = input.lineKind === 'grid' ? input.axis?.gridWidth !== undefined : input.axis?.domainWidth !== undefined || input.axis?.tickWidth !== undefined;
+  const hasColor =
+    input.lineKind === 'grid'
+      ? input.axis?.gridColor !== undefined
+      : input.axis?.domainColor !== undefined || input.axis?.tickColor !== undefined;
+  const hasWidth =
+    input.lineKind === 'grid'
+      ? input.axis?.gridWidth !== undefined
+      : input.axis?.domainWidth !== undefined || input.axis?.tickWidth !== undefined;
   if (input.imported && hasLineEvidence && hasColor && hasWidth && !isUnsupportedLine(line)) {
     return contractEntry({
       category: input.category,
@@ -799,7 +821,9 @@ function axisLineContract(input: {
   return contractEntry({
     category: input.category,
     fidelity: isUnsupportedLine(line) ? 'unknown' : 'deterministicApproximation',
-    sourceAuthority: isUnsupportedLine(line) ? importedAuthority(input.imported) : 'mogDeclaredDefault',
+    sourceAuthority: isUnsupportedLine(line)
+      ? importedAuthority(input.imported)
+      : 'mogDeclaredDefault',
     rendered: input.rendered,
     requiresHumanReview: isUnsupportedLine(line),
     reason: isUnsupportedLine(line)
@@ -850,12 +874,17 @@ function seriesContract(input: {
       rendered: input.rendered,
     });
   }
-  const evidences = input.evidences.length > 0 ? input.evidences : [{
-    visible: true,
-    status: 'approximate' as RadarVisualStatus,
-    sourceAuthority: 'mogDeclaredDefault' as ResolvedChartRadarStyleSourceAuthority,
-    reason: 'radarSeriesVisualEvidenceMissing',
-  }];
+  const evidences =
+    input.evidences.length > 0
+      ? input.evidences
+      : [
+          {
+            visible: true,
+            status: 'approximate' as RadarVisualStatus,
+            sourceAuthority: 'mogDeclaredDefault' as ResolvedChartRadarStyleSourceAuthority,
+            reason: 'radarSeriesVisualEvidenceMissing',
+          },
+        ];
   const unknown = evidences.find((item) => item.status === 'unknown');
   if (unknown) {
     return contractEntry({
@@ -1000,10 +1029,10 @@ function markerStrokeWidthFromFormat(format: ChartFormat | undefined): number | 
 function hasUnsupportedMarkerRenderedStyle(format: ChartFormat | undefined): boolean {
   return Boolean(
     format?.fill?.type === 'gradient' ||
-      format?.fill?.type === 'pattern' ||
-      (format?.fill?.type === 'solid' && format.fill.transparency !== undefined) ||
-      format?.line?.transparency !== undefined ||
-      format?.line?.dashStyle !== undefined,
+    format?.fill?.type === 'pattern' ||
+    (format?.fill?.type === 'solid' && format.fill.transparency !== undefined) ||
+    format?.line?.transparency !== undefined ||
+    format?.line?.dashStyle !== undefined,
   );
 }
 
@@ -1025,16 +1054,16 @@ function isUnsupportedFill(fill: ChartFormat['fill'] | undefined): boolean {
 }
 
 function isUnsupportedLine(line: ChartFormat['line'] | undefined): boolean {
-  return line?.dashStyle === undefined ? false : dashStyleToStrokeDash(line.dashStyle, 1) === undefined;
+  return line?.dashStyle === undefined
+    ? false
+    : dashStyleToStrokeDash(line.dashStyle, 1) === undefined;
 }
 
 function hasFormatComponent(value: unknown): boolean {
   return value !== undefined;
 }
 
-function contractReasons(
-  contracts: ResolvedChartRadarStyleContractEntrySnapshot[],
-): string[] {
+function contractReasons(contracts: ResolvedChartRadarStyleContractEntrySnapshot[]): string[] {
   return contracts
     .filter((contract) => contract.fidelity !== 'exact')
     .map((contract) => `${contractReasonName(contract.category)}:${contract.fidelity}`);
@@ -1060,7 +1089,9 @@ function compactRendered(
   rendered: Record<string, ContractValue | undefined>,
 ): Record<string, ContractValue> {
   return Object.fromEntries(
-    Object.entries(rendered).filter((entry): entry is [string, ContractValue] => entry[1] !== undefined),
+    Object.entries(rendered).filter(
+      (entry): entry is [string, ContractValue] => entry[1] !== undefined,
+    ),
   );
 }
 

@@ -63,11 +63,7 @@ import {
 } from '../series-identity';
 import { mergeChartFormats, resolveChartOwnerFormat } from '../style-resolver';
 
-export type PieDoughnutGeometryFamily =
-  | 'pie'
-  | 'doughnut'
-  | 'ofPie'
-  | 'pie3dApproximation';
+export type PieDoughnutGeometryFamily = 'pie' | 'doughnut' | 'ofPie' | 'pie3dApproximation';
 
 export interface PieDoughnutGeometrySlice {
   seriesIndex: number;
@@ -272,12 +268,8 @@ export function buildPieDoughnutGeometry(
     radius: frame.radius,
     padding: frame.padding,
     layoutAuthority: frame.layoutAuthority,
-    ...(frame.manualArcInsetProfile
-      ? { manualArcInsetProfile: frame.manualArcInsetProfile }
-      : {}),
-    ...(frame.manualArcInsetStatus
-      ? { manualArcInsetStatus: frame.manualArcInsetStatus }
-      : {}),
+    ...(frame.manualArcInsetProfile ? { manualArcInsetProfile: frame.manualArcInsetProfile } : {}),
+    ...(frame.manualArcInsetStatus ? { manualArcInsetStatus: frame.manualArcInsetStatus } : {}),
     ...(frame.manualArcInsetStatusReason
       ? { manualArcInsetStatusReason: frame.manualArcInsetStatusReason }
       : {}),
@@ -371,7 +363,7 @@ export function maxEffectivePieDoughnutExplosionPercent(
   const seriesCount = data?.series.length ?? seriesConfigs.length;
   const pointCount = Math.max(
     data?.categories.length ?? 0,
-    ...((data?.series ?? []).map((series) => series.data.length)),
+    ...(data?.series ?? []).map((series) => series.data.length),
     1,
   );
   for (let seriesIndex = 0; seriesIndex < Math.max(1, seriesCount); seriesIndex += 1) {
@@ -380,8 +372,9 @@ export function maxEffectivePieDoughnutExplosionPercent(
       ? seriesConfigForDataSeries(dataSeries, seriesConfigs, seriesIndex)
       : seriesConfigs[seriesIndex];
     for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
-      const pointExplosion = seriesConfig?.points?.find((point) => point.idx === pointIndex)
-        ?.explosion;
+      const pointExplosion = seriesConfig?.points?.find(
+        (point) => point.idx === pointIndex,
+      )?.explosion;
       const percent =
         effectivePieLikeExplosionPercent({
           seriesExplosion: seriesConfig?.explosion,
@@ -412,9 +405,7 @@ export function pieDoughnutLayoutHintsForConfig(
     family: pieDoughnutFamily(config),
     ringCount,
     ...(isDoughnutLikeChartType(config.type) ? { holeSize: Math.round(holeRatio * 100) } : {}),
-    ...(manualLayoutSource
-      ? { hasManualLayout: true, manualLayoutSource }
-      : {}),
+    ...(manualLayoutSource ? { hasManualLayout: true, manualLayoutSource } : {}),
     ...(outsideLabels ? { outsideLabelPadding: 28, leaderLinePadding: 12 } : {}),
     ...(maxExplosionPercent > 0
       ? { explosionPaddingPercent: maxExplosionPercent, maxExplosionPercent }
@@ -482,21 +473,22 @@ function fallbackSeries(data: ChartData): VisiblePieDoughnutSeries {
   ];
 }
 
-function slicesForRing(input: PieDoughnutGeometryInput & {
-  ringInput: VisiblePieDoughnutSeries[number];
-  ringIndex: number;
-  ringCount: number;
-  band: { innerRadius: number; outerRadius: number };
-  startAngle: number;
-  colors: readonly string[];
-  centerX: number;
-  centerY: number;
-  maxOuterRadius: number;
-}): PieDoughnutGeometrySlice[] {
-  const sliceInputs =
-    isDoughnutLikeChartType(input.config.type)
-      ? sliceInputsForSeries(input, input.ringInput)
-      : sliceInputsForPie(input, input.ringInput);
+function slicesForRing(
+  input: PieDoughnutGeometryInput & {
+    ringInput: VisiblePieDoughnutSeries[number];
+    ringIndex: number;
+    ringCount: number;
+    band: { innerRadius: number; outerRadius: number };
+    startAngle: number;
+    colors: readonly string[];
+    centerX: number;
+    centerY: number;
+    maxOuterRadius: number;
+  },
+): PieDoughnutGeometrySlice[] {
+  const sliceInputs = isDoughnutLikeChartType(input.config.type)
+    ? sliceInputsForSeries(input, input.ringInput)
+    : sliceInputsForPie(input, input.ringInput);
   const geometries = pieLikeSliceGeometries({
     values: sliceInputs.map((slice) => slice.value),
     startAngle: input.startAngle,
@@ -506,8 +498,9 @@ function slicesForRing(input: PieDoughnutGeometryInput & {
   return geometries.map((geometry, sliceIndex) => {
     const slice = sliceInputs[sliceIndex];
     const defaultExplosion = defaultPieLikeExplosionPercent(input.config, slice.pointIndex);
-    const pointExplosion = slice.seriesConfig?.points?.find((point) => point.idx === slice.pointIndex)
-      ?.explosion;
+    const pointExplosion = slice.seriesConfig?.points?.find(
+      (point) => point.idx === slice.pointIndex,
+    )?.explosion;
     const explosionPercent =
       effectivePieLikeExplosionPercent({
         seriesExplosion: slice.seriesConfig?.explosion,
@@ -802,12 +795,8 @@ function pieDoughnutLabelPressure(
     labelCount: pointCount,
     ...(outsideLabelCount > 0 ? { outsideLabelCount } : {}),
     ...(defaultLabelCount > 0 ? { defaultLabelCount } : {}),
-    ...(zeroValueLabelCount > 0
-      ? { zeroValueLabelCount }
-      : {}),
-    ...(nearZeroValueLabelCount > 0
-      ? { nearZeroValueLabelCount }
-      : {}),
+    ...(zeroValueLabelCount > 0 ? { zeroValueLabelCount } : {}),
+    ...(nearZeroValueLabelCount > 0 ? { nearZeroValueLabelCount } : {}),
     ...(maxLabelTextLength > 0 ? { maxLabelTextLength } : {}),
   };
 }
@@ -883,10 +872,7 @@ function manualPieDoughnutLayoutSource(
   return undefined;
 }
 
-function pieDoughnutRingCountForConfig(
-  config: ChartConfig,
-  data: ChartData | undefined,
-): number {
+function pieDoughnutRingCountForConfig(config: ChartConfig, data: ChartData | undefined): number {
   if (!isDoughnutLikeChartType(config.type)) return 1;
   return Math.max(1, data?.series.length ?? config.series?.length ?? 1);
 }
@@ -1034,9 +1020,7 @@ interface PieDoughnutResolvedFrameFormats {
   plotArea?: ChartFormat;
 }
 
-function pieDoughnutResolvedFrameFormats(
-  config: ChartConfig,
-): PieDoughnutResolvedFrameFormats {
+function pieDoughnutResolvedFrameFormats(config: ChartConfig): PieDoughnutResolvedFrameFormats {
   const chartFormat = mergeChartFormats(
     mergeChartFormats(
       config.chartArea?.format,

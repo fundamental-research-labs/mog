@@ -145,9 +145,7 @@ function measuredTextBounds(
 function estimatedTextBounds(mark: TextMark): PieDoughnutLabelLayoutTraceEntry['bounds'] {
   const rawWidth = mark.text.length * mark.fontSize * 0.6;
   const width =
-    mark.maxWidth !== undefined && mark.maxWidth > 0
-      ? Math.min(rawWidth, mark.maxWidth)
-      : rawWidth;
+    mark.maxWidth !== undefined && mark.maxWidth > 0 ? Math.min(rawWidth, mark.maxWidth) : rawWidth;
   const lineCount =
     mark.maxWidth !== undefined && mark.maxWidth > 0 && rawWidth > mark.maxWidth
       ? Math.max(1, Math.ceil(rawWidth / mark.maxWidth))

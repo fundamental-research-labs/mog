@@ -883,9 +883,11 @@ function toChartObject(d: WireChart): ChartObject {
     highLowLines: chart.highLowLines,
     seriesLines: chart.seriesLines,
     upDownBars: chart.upDownBars,
-    stockSourceComposition: (chart as {
-      stockSourceComposition?: ChartConfig['stockSourceComposition'];
-    }).stockSourceComposition,
+    stockSourceComposition: (
+      chart as {
+        stockSourceComposition?: ChartConfig['stockSourceComposition'];
+      }
+    ).stockSourceComposition,
     barShape: chart.barShape,
     view3d: chart.view3d,
     floorFormat: chart.floorFormat,

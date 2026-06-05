@@ -260,7 +260,11 @@ function bubbleVisualContractEvidence(input: {
   if (geometryEvidence) return geometryEvidence;
   if (!input.cartesianGeometry) return undefined;
 
-  const legendEvidence = bubbleLegendVocabularyEvidence(input.config, input.chartData, input.legend);
+  const legendEvidence = bubbleLegendVocabularyEvidence(
+    input.config,
+    input.chartData,
+    input.legend,
+  );
   if (legendEvidence) return legendEvidence;
 
   const axisEvidence = xyAxisEvidence(input.cartesianGeometry, targetIndices);
@@ -332,9 +336,7 @@ function xyCartesianGeometryEvidence(
   return undefined;
 }
 
-function scatterCoordinateTraceDiagnostics(
-  cartesianGeometry: CartesianGeometrySnapshot,
-): string[] {
+function scatterCoordinateTraceDiagnostics(cartesianGeometry: CartesianGeometrySnapshot): string[] {
   const diagnostics: string[] = [];
   if (cartesianGeometry.coordinateSystem !== 'chartPixel') {
     diagnostics.push(
@@ -444,7 +446,9 @@ function scatterSeriesDiagnostics(
     }
     const lineLayer = seriesLayer(cartesianGeometry, series.seriesIndex, 'linePath');
     if (!lineLayer) {
-      diagnostics.push(`scatter series ${series.seriesIndex} is missing a rendered line-path layer`);
+      diagnostics.push(
+        `scatter series ${series.seriesIndex} is missing a rendered line-path layer`,
+      );
     } else {
       if (lineLayer.pathOrder !== 'source') {
         diagnostics.push(
@@ -472,7 +476,10 @@ function scatterSeriesDiagnostics(
     if (!markerLayer) {
       diagnostics.push(`scatter series ${series.seriesIndex} is missing a rendered marker layer`);
     } else {
-      if (markerLayer.sizeAuthority !== 'markerStyle' && markerLayer.sizeAuthority !== 'fixedMarkSize') {
+      if (
+        markerLayer.sizeAuthority !== 'markerStyle' &&
+        markerLayer.sizeAuthority !== 'fixedMarkSize'
+      ) {
         diagnostics.push(
           `scatter series ${series.seriesIndex} marker layer ${markerLayer.layerIndex} size authority is ${markerLayer.sizeAuthority ?? 'missing'}`,
         );

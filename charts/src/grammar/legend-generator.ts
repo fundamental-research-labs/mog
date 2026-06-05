@@ -17,12 +17,7 @@ import {
   resolveLegendEntries,
   resolveLegendEntriesForEncoding,
 } from './legend-layout';
-import type {
-  ChannelSpec,
-  EncodingSpec,
-  Layout,
-  LegendSpec,
-} from './spec';
+import type { ChannelSpec, EncodingSpec, Layout, LegendSpec } from './spec';
 import type { LegendTrace } from './types';
 
 /**

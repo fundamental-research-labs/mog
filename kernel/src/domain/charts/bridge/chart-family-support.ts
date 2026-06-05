@@ -196,8 +196,12 @@ function enforceImportedExactAuthority(input: {
   if (chartImportSourceDialect(input.config) === undefined) return input.support;
   if (input.support.supportLevel !== 'exact') return input.support;
 
-  const exactAuthority = input.support.exactAuthority ?? importedExactAuthorityFor(input.config, input.support);
-  if (exactAuthority && isImportedPathXyExactAuthorityAdmissible(input.config, input.support, exactAuthority)) {
+  const exactAuthority =
+    input.support.exactAuthority ?? importedExactAuthorityFor(input.config, input.support);
+  if (
+    exactAuthority &&
+    isImportedPathXyExactAuthorityAdmissible(input.config, input.support, exactAuthority)
+  ) {
     return {
       ...input.support,
       exactAuthority,
@@ -320,8 +324,14 @@ function isImportedPathXyExactAuthorityAdmissible(
 ): boolean {
   if (support.supportLevel !== 'exact') return false;
   if (exactAuthority.source !== 'importedRendererEvidence') return false;
-  const expectedEvidence = importedPathXyExactAuthorityEvidenceFor(config, support, exactAuthority.family);
-  return expectedEvidence !== undefined && sameEvidenceSet(exactAuthority.evidence, expectedEvidence);
+  const expectedEvidence = importedPathXyExactAuthorityEvidenceFor(
+    config,
+    support,
+    exactAuthority.family,
+  );
+  return (
+    expectedEvidence !== undefined && sameEvidenceSet(exactAuthority.evidence, expectedEvidence)
+  );
 }
 
 function importedPathXyExactAuthorityEvidenceFor(
@@ -598,9 +608,7 @@ function standardPathFamilySupport(input: {
   });
 }
 
-function pathPointAuthorityEvidence(
-  cartesianGeometry: CartesianGeometrySnapshot | undefined,
-):
+function pathPointAuthorityEvidence(cartesianGeometry: CartesianGeometrySnapshot | undefined):
   | {
       reason: Extract<ChartFamilySupportSnapshot['reason'], 'pathPointAuthorityIncomplete'>;
       diagnostics: string[];
@@ -742,9 +750,7 @@ function standardPieDoughnutFamilySupport(input: {
   });
 }
 
-function hasMissingPieDoughnutGeometryEvidence(
-  geometry: PieDoughnutGeometrySnapshot,
-): boolean {
+function hasMissingPieDoughnutGeometryEvidence(geometry: PieDoughnutGeometrySnapshot): boolean {
   if (geometry.geometryStatus !== 'available') return true;
   if (!isFinitePositive(geometry.radius) || !isFiniteNumber(geometry.centerX)) return true;
   if (!isFiniteNumber(geometry.centerY) || !isFinitePositive(geometry.arcBox.width)) return true;
@@ -756,7 +762,9 @@ function hasMissingPieDoughnutGeometryEvidence(
 }
 
 function isApproximatePieDoughnutGeometry(geometry: PieDoughnutGeometrySnapshot): boolean {
-  return PIE_DOUGHNUT_STATUS_FIELDS.some(({ key }) => !isExactOrVerifiedDefaultStatus(geometry[key]));
+  return PIE_DOUGHNUT_STATUS_FIELDS.some(
+    ({ key }) => !isExactOrVerifiedDefaultStatus(geometry[key]),
+  );
 }
 
 function pieDoughnutGeometryEvidenceDiagnostic(
@@ -769,9 +777,7 @@ function pieDoughnutGeometryEvidenceDiagnostic(
   ].join('; ');
 }
 
-function pieDoughnutGeometryApproximationDiagnostic(
-  geometry: PieDoughnutGeometrySnapshot,
-): string {
+function pieDoughnutGeometryApproximationDiagnostic(geometry: PieDoughnutGeometrySnapshot): string {
   return [
     'pie/doughnut visual geometry is approximate',
     pieDoughnutGeometryDiagnosticDetails(geometry).join('; '),
@@ -800,23 +806,17 @@ function pieDoughnutGeometryDiagnosticDetails(geometry: PieDoughnutGeometrySnaps
   if (geometry.styleFootprint?.styleContextStatus) {
     const reason = geometry.styleFootprint.styleContextReason;
     details.push(
-      `style context=${geometry.styleFootprint.styleContextStatus}${
-        reason ? `(${reason})` : ''
-      }`,
+      `style context=${geometry.styleFootprint.styleContextStatus}${reason ? `(${reason})` : ''}`,
     );
   }
   if (geometry.styleFootprint?.unmodeledOwnerKeys?.length) {
-    details.push(
-      `unmodeled style owners=${geometry.styleFootprint.unmodeledOwnerKeys.join(',')}`,
-    );
+    details.push(`unmodeled style owners=${geometry.styleFootprint.unmodeledOwnerKeys.join(',')}`);
   }
   if (geometry.manualArcInsetProfile) {
     const status = geometry.manualArcInsetStatus ?? 'missing';
     const reason = geometry.manualArcInsetStatusReason;
     details.push(
-      `manual arc inset=${status}(${geometry.manualArcInsetProfile}${
-        reason ? `:${reason}` : ''
-      })`,
+      `manual arc inset=${status}(${geometry.manualArcInsetProfile}${reason ? `:${reason}` : ''})`,
     );
   }
   return details;
@@ -1080,9 +1080,7 @@ function barColumnGeometryGroupKey(group: BarGeometrySnapshot): string {
   return group.groupKey ?? `series:${group.seriesIndices.join(',') || 'unknown'}`;
 }
 
-export function familySupportCompilerDiagnostics(
-  support: ChartFamilySupportSnapshot,
-): string[] {
+export function familySupportCompilerDiagnostics(support: ChartFamilySupportSnapshot): string[] {
   if (support.supportLevel === 'exact' || support.supportLevel === 'approximate') return [];
   return support.diagnostics;
 }
@@ -1134,10 +1132,7 @@ function comboFamilySupport(input: {
   if (missingBarEvidence.length > 0) {
     return comboApproximateSupport(input, {
       reason: 'comboLayeredGeometryEvidenceMissing',
-      diagnostics: [
-        ...diagnostics,
-        ...missingBarEvidence.map(barColumnGeometryEvidenceDiagnostic),
-      ],
+      diagnostics: [...diagnostics, ...missingBarEvidence.map(barColumnGeometryEvidenceDiagnostic)],
     });
   }
 
@@ -1200,8 +1195,8 @@ function comboFamilySupport(input: {
 
     const legendEvidence =
       visiblePathSeriesIndices.length > 0
-        ? pathLegendRenderEvidence(input.legend) ??
-          pathLegendOrderEvidence(input.config, input.legend)
+        ? (pathLegendRenderEvidence(input.legend) ??
+          pathLegendOrderEvidence(input.config, input.legend))
         : undefined;
     if (legendEvidence) {
       return comboApproximateSupport(input, {
@@ -1357,7 +1352,11 @@ function radarFamilySupport(input: {
   if (!input.radarProjection) diagnostics.push('radarProjectionMetadata:unknown');
   const incomplete = fidelity.find((item) => item.status !== 'exact');
 
-  if (!incomplete && input.radarProjection && chartImportSourceDialect(input.config) === undefined) {
+  if (
+    !incomplete &&
+    input.radarProjection &&
+    chartImportSourceDialect(input.config) === undefined
+  ) {
     return exactFamilySupport({
       config: input.config,
       family: input.family,
@@ -1533,9 +1532,7 @@ function rectangularSpecialtyFamilySupport(input: {
         family: input.family,
         sourceFamily: input.sourceFamily,
         supportLevel: renderable ? 'approximate' : 'preservedPlaceholder',
-        reason: renderable
-          ? 'funnelProportionalBarApproximation'
-          : 'funnelProjectionIncomplete',
+        reason: renderable ? 'funnelProportionalBarApproximation' : 'funnelProjectionIncomplete',
         diagnostics: renderable
           ? ['funnel chart renders as centered proportional bar layers']
           : ['funnel chart needs at least one positive finite value for proportional geometry'],
@@ -1561,7 +1558,8 @@ function rectangularSpecialtyFamilySupport(input: {
         reason: 'paretoRenderer',
         incompleteReason: 'paretoProjectionIncomplete',
         renderedAs: 'pareto',
-        incompleteDiagnostic: 'pareto chart needs finite values for sorted bars and cumulative line',
+        incompleteDiagnostic:
+          'pareto chart needs finite values for sorted bars and cumulative line',
       });
     case 'boxplot':
       return implementedRectangularSpecialtySupport(input, {
@@ -1911,8 +1909,8 @@ function stockExactEvidenceStatus(
 
   return {
     complete: diagnostics.length === 0,
-    diagnostics: diagnostics.map((diagnostic) =>
-      `stock exact evidence is incomplete (${diagnostic})`,
+    diagnostics: diagnostics.map(
+      (diagnostic) => `stock exact evidence is incomplete (${diagnostic})`,
     ),
   };
 }
@@ -2066,8 +2064,7 @@ function hasCompleteStockSourceRoleVisuals(
     if (!visual) return false;
     if (!isCompleteStockStrokeVisual(visual.line)) return false;
     if (!isCompleteStockMarkerVisual(visual.marker)) return false;
-    const usesPriceOverlay =
-      role !== 'volume' || projection?.volumeAxisPolicy === 'stockValueAxis';
+    const usesPriceOverlay = role !== 'volume' || projection?.volumeAxisPolicy === 'stockValueAxis';
     if (usesPriceOverlay) {
       if (visual.layerMode !== 'overlayLayer') return false;
       if (visual.lineVisible) expectedLineLayerCount += 1;
@@ -2101,8 +2098,9 @@ function isCompleteStockBodyVisual(visual: unknown): visual is {
   border: string;
   borderWidth: number;
 } {
-  const candidate =
-    visual as { fill?: unknown; border?: unknown; borderWidth?: unknown } | undefined;
+  const candidate = visual as
+    | { fill?: unknown; border?: unknown; borderWidth?: unknown }
+    | undefined;
   return (
     typeof candidate?.fill === 'string' &&
     candidate.fill.length > 0 &&
@@ -2121,16 +2119,15 @@ function isCompleteStockMarkerVisual(visual: unknown): visual is {
   shape: string;
   size: number;
 } {
-  const candidate =
-    visual as
-      | {
-          fill?: unknown;
-          stroke?: unknown;
-          strokeWidth?: unknown;
-          shape?: unknown;
-          size?: unknown;
-        }
-      | undefined;
+  const candidate = visual as
+    | {
+        fill?: unknown;
+        stroke?: unknown;
+        strokeWidth?: unknown;
+        shape?: unknown;
+        size?: unknown;
+      }
+    | undefined;
   return (
     typeof candidate?.fill === 'string' &&
     candidate.fill.length > 0 &&
@@ -2233,10 +2230,7 @@ function hasCompleteStockRenderedPointProjection(
     return false;
   }
   const renderedRoleValues = projection.renderedRoleValues;
-  const rolesToValidate = new Set<ChartSeriesStockRole>([
-    ...stockRoleOrder(),
-    ...expectedRoles,
-  ]);
+  const rolesToValidate = new Set<ChartSeriesStockRole>([...stockRoleOrder(), ...expectedRoles]);
   for (const role of rolesToValidate) {
     const roleValues = renderedRoleValues[role];
     if (!Array.isArray(roleValues) || roleValues.length !== renderedPointCount) return false;
@@ -2448,8 +2442,7 @@ function pathCartesianGeometryEvidence(
   const valueAxisEvidence = pathValueAxisVisualContractEvidence(cartesianGeometry, seriesIndices);
   if (valueAxisEvidence) return valueAxisEvidence;
 
-  const categoryStatus =
-    pathAxisLayout.categoryAxisLayoutStatus ?? pathAxisLayout.axisLayoutStatus;
+  const categoryStatus = pathAxisLayout.categoryAxisLayoutStatus ?? pathAxisLayout.axisLayoutStatus;
   if (!isExactOrVerifiedDefaultStatus(categoryStatus)) {
     return {
       reason: 'pathCartesianGeometryApproximation',
@@ -2705,7 +2698,10 @@ function comboSecondaryUnitPercentAxisEvidence(
   cartesianGeometry: CartesianGeometrySnapshot | undefined,
 ):
   | {
-      reason: Extract<ChartFamilySupportSnapshot['reason'], 'comboSecondaryAxisPolicyApproximation'>;
+      reason: Extract<
+        ChartFamilySupportSnapshot['reason'],
+        'comboSecondaryAxisPolicyApproximation'
+      >;
       diagnostics: string[];
     }
   | undefined {
@@ -3043,9 +3039,7 @@ function isPathVisualGeometrySeries(type: string): boolean {
   );
 }
 
-function pathLegendRenderEvidence(
-  legend: LegendSnapshot,
-):
+function pathLegendRenderEvidence(legend: LegendSnapshot):
   | {
       reason: Extract<ChartFamilySupportSnapshot['reason'], 'pathLegendRenderMismatch'>;
       diagnostics: string[];
@@ -3083,7 +3077,10 @@ function pathLegendOrderEvidence(
     : visibleEntries;
   const expected = expectedEntries.map(legendEntryOrderKey);
   const actual = renderedEntries.map(renderedLegendEntryOrderKey);
-  if (expected.length !== actual.length || expected.some((value, index) => value !== actual[index])) {
+  if (
+    expected.length !== actual.length ||
+    expected.some((value, index) => value !== actual[index])
+  ) {
     return {
       reason: 'pathLegendOrderMismatch',
       diagnostics: [
@@ -3103,7 +3100,9 @@ function shouldReversePathLegendOrder(config: ChartConfig): boolean {
   );
 }
 
-function legendEntryOrderKey(entry: NonNullable<LegendSnapshot['visibleEntryItems']>[number]): string {
+function legendEntryOrderKey(
+  entry: NonNullable<LegendSnapshot['visibleEntryItems']>[number],
+): string {
   if (entry.sourceSeriesKey) return `source:${entry.sourceSeriesKey}`;
   if (entry.sourceSeriesIndex !== undefined) return `sourceIndex:${entry.sourceSeriesIndex}`;
   if (entry.pointKey) return `point:${entry.pointKey}`;
@@ -3123,9 +3122,7 @@ function renderedLegendEntryOrderKey(
   return `text:${entry.text}`;
 }
 
-function comboLayerAuthorityEvidence(
-  cartesianGeometry: CartesianGeometrySnapshot | undefined,
-):
+function comboLayerAuthorityEvidence(cartesianGeometry: CartesianGeometrySnapshot | undefined):
   | {
       reason: Extract<
         ChartFamilySupportSnapshot['reason'],
@@ -3148,9 +3145,7 @@ function comboLayerAuthorityEvidence(
   };
 }
 
-function comboLayerAuthorityDiagnostics(
-  authority: CartesianComboAuthoritySnapshot,
-): string[] {
+function comboLayerAuthorityDiagnostics(authority: CartesianComboAuthoritySnapshot): string[] {
   if (authority.diagnostics.length > 0) return authority.diagnostics;
   return [
     `imported combo layer authority is ${authority.status}; reason=${authority.statusReason ?? 'missing'}`,
@@ -3258,9 +3253,13 @@ function isRectangularSpecialtyConfig(config: ChartConfig): boolean {
 function preservedOnlyRectangularDiagnostics(config: ChartConfig): string[] {
   switch (config.type) {
     case 'treemap':
-      return ['treemap rendering requires hierarchy layout semantics and is preserved as a placeholder'];
+      return [
+        'treemap rendering requires hierarchy layout semantics and is preserved as a placeholder',
+      ];
     case 'sunburst':
-      return ['sunburst rendering requires hierarchy layout semantics and is preserved as a placeholder'];
+      return [
+        'sunburst rendering requires hierarchy layout semantics and is preserved as a placeholder',
+      ];
     case 'regionMap':
       return ['region map rendering uses placeholder geometry'];
     default:
@@ -3317,9 +3316,7 @@ function hasFiniteChartValues(data: ChartData): boolean {
   return data.series.some((series) =>
     series.data.some(
       (point) =>
-        point?.valueState !== 'hidden' &&
-        typeof point?.y === 'number' &&
-        Number.isFinite(point.y),
+        point?.valueState !== 'hidden' && typeof point?.y === 'number' && Number.isFinite(point.y),
     ),
   );
 }

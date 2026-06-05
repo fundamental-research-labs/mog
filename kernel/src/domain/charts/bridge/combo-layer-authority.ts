@@ -41,10 +41,7 @@ export function withComboLayerAuthoritySnapshot(input: {
   if (buckets.nonBarSeriesIndices.length === 0) return cartesianGeometry;
 
   const diagnostics: string[] = [];
-  const layerIndices = comboAuthorityLayerIndices(
-    cartesianGeometry,
-    buckets.nonBarSeriesIndices,
-  );
+  const layerIndices = comboAuthorityLayerIndices(cartesianGeometry, buckets.nonBarSeriesIndices);
   const barGroups = comboBarGroups(input.barGeometry, buckets.barSeriesIndices);
   const axisGroups = comboAuthorityAxisGroups(
     cartesianGeometry,
@@ -53,11 +50,7 @@ export function withComboLayerAuthoritySnapshot(input: {
   );
   const statuses = {
     plotFrameStatus: comboPlotFrameStatus(cartesianGeometry, barGroups, diagnostics),
-    barGeometryStatus: comboBarGeometryStatus(
-      barGroups,
-      buckets.barSeriesIndices,
-      diagnostics,
-    ),
+    barGeometryStatus: comboBarGeometryStatus(barGroups, buckets.barSeriesIndices, diagnostics),
     nonBarPointAuthorityStatus: comboNonBarPointAuthorityStatus(
       cartesianGeometry,
       buckets.nonBarSeriesIndices,
@@ -71,12 +64,7 @@ export function withComboLayerAuthoritySnapshot(input: {
       buckets,
       diagnostics,
     ),
-    valueAxisStatus: comboValueAxisStatus(
-      cartesianGeometry,
-      axisGroups,
-      buckets,
-      diagnostics,
-    ),
+    valueAxisStatus: comboValueAxisStatus(cartesianGeometry, axisGroups, buckets, diagnostics),
     scaleConsistencyStatus: comboScaleConsistencyStatus(
       cartesianGeometry,
       axisGroups,
@@ -115,7 +103,10 @@ export function withComboLayerAuthoritySnapshot(input: {
   };
 }
 
-function comboSeriesBuckets(config: ChartConfig, chartData: ChartData): {
+function comboSeriesBuckets(
+  config: ChartConfig,
+  chartData: ChartData,
+): {
   barSeriesIndices: number[];
   nonBarSeriesIndices: number[];
   pathSeriesIndices: number[];
@@ -242,8 +233,7 @@ function comboPlotFrameStatus(
   if (barGroups.length === 0) return combineAuthorityStatuses(statuses);
 
   for (const group of barGroups) {
-    const plotArea =
-      group.rectangleReconciliation?.mogPlotArea ?? group.tracePlotArea ?? undefined;
+    const plotArea = group.rectangleReconciliation?.mogPlotArea ?? group.tracePlotArea ?? undefined;
     if (!finiteRect(plotArea)) {
       diagnostics.push(
         `combo bar geometry group ${barGeometryGroupKey(group)} is missing trace plot area`,
@@ -408,9 +398,10 @@ function comboAxisOwnershipStatus(
       config.series ?? [],
       seriesIndex,
     );
-    const expectedAxisGroup = (seriesConfig?.yAxisIndex ?? chartData.series[seriesIndex]?.yAxisIndex) === 1
-      ? 'secondary'
-      : 'primary';
+    const expectedAxisGroup =
+      (seriesConfig?.yAxisIndex ?? chartData.series[seriesIndex]?.yAxisIndex) === 1
+        ? 'secondary'
+        : 'primary';
     if (series.axisGroup !== expectedAxisGroup) {
       diagnostics.push(
         `combo non-bar series ${seriesIndex} y-axis ownership is ${series.axisGroup}; expected ${expectedAxisGroup}`,
@@ -426,8 +417,7 @@ function comboAxisOwnershipStatus(
       statuses.push('missing');
       continue;
     }
-    const expectedYRole =
-      expectedAxisGroup === 'secondary' ? 'secondaryYValue' : 'primaryYValue';
+    const expectedYRole = expectedAxisGroup === 'secondary' ? 'secondaryYValue' : 'primaryYValue';
     const expectedXRole = series.xRole === 'quantitative' ? 'xValue' : undefined;
     for (const layer of layers) {
       if (layer.yAxisRole !== expectedYRole) {
@@ -467,7 +457,9 @@ function comboValueAxisStatus(
   if (buckets.scatterSeriesIndices.length > 0 || buckets.bubbleSeriesIndices.length > 0) {
     const xAxis = cartesianGeometry.x.quantitative;
     if (!xAxis) {
-      diagnostics.push('combo scatter/bubble layer authority is missing quantitative x-axis evidence');
+      diagnostics.push(
+        'combo scatter/bubble layer authority is missing quantitative x-axis evidence',
+      );
       statuses.push('missing');
     } else {
       statuses.push(
@@ -491,7 +483,9 @@ function comboValueAxisStatus(
         ),
       );
       if (!xAxis.domain || !xAxis.range || !xAxis.plotRange || !xAxis.tickValues) {
-        diagnostics.push('combo quantitative x-axis is missing domain, range, plot range, or tick evidence');
+        diagnostics.push(
+          'combo quantitative x-axis is missing domain, range, plot range, or tick evidence',
+        );
         statuses.push('missing');
       }
     }
@@ -506,9 +500,24 @@ function valueAxisContractStatuses(
   diagnostics: string[],
 ): ComboAuthorityStatus[] {
   return [
-    statusFromExactContract(label + ' visual', axis.axisVisualStatus, axis.axisVisualStatusReason, diagnostics),
-    statusFromExactContract(label + ' crossing', axis.crossingStatus, axis.crossingStatusReason, diagnostics),
-    statusFromExactContract(label + ' reservation', axis.reservationStatus, axis.reservationStatusReason, diagnostics),
+    statusFromExactContract(
+      label + ' visual',
+      axis.axisVisualStatus,
+      axis.axisVisualStatusReason,
+      diagnostics,
+    ),
+    statusFromExactContract(
+      label + ' crossing',
+      axis.crossingStatus,
+      axis.crossingStatusReason,
+      diagnostics,
+    ),
+    statusFromExactContract(
+      label + ' reservation',
+      axis.reservationStatus,
+      axis.reservationStatusReason,
+      diagnostics,
+    ),
     statusFromExactContract(
       label + ' layout',
       axis.valueAxisLayoutStatus ?? axis.axisLayoutStatus,
@@ -619,7 +628,10 @@ function comboLegendOrderStatus(
     return 'missing';
   }
   const actual = rendered.map(renderedLegendEntryOrderKey);
-  if (expected.length !== actual.length || expected.some((value, index) => value !== actual[index])) {
+  if (
+    expected.length !== actual.length ||
+    expected.some((value, index) => value !== actual[index])
+  ) {
     diagnostics.push(
       `combo legend rendered order ${actual.join(' | ')} does not match expected order ${expected.join(' | ')}`,
     );

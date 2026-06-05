@@ -64,15 +64,13 @@ export function with3DMetadata<T extends PathMark>(
 }
 
 function plot3DFace(value: unknown): Plot3DFace | undefined {
-  return (
-    value === 'front' ||
+  return value === 'front' ||
     value === 'back' ||
     value === 'top' ||
     value === 'side' ||
     value === 'connector' ||
     value === 'outer' ||
     value === 'inner'
-  )
     ? value
     : undefined;
 }

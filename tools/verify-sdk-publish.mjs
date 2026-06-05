@@ -152,7 +152,10 @@ function ensureConsumerProject() {
   );
 
   const computeWasmTarPath = packPackage(COMPUTE_WASM_DIR);
-  assert(existsSync(computeWasmTarPath), `Compute WASM packed: ${computeWasmTarPath.split('/').pop()}`);
+  assert(
+    existsSync(computeWasmTarPath),
+    `Compute WASM packed: ${computeWasmTarPath.split('/').pop()}`,
+  );
 
   // Create consumer package.json
   writeFileSync(
@@ -453,7 +456,7 @@ defineCheck('exports-sync', {
     assert(missing.length === 0, `publishConfig.exports covers all ${dev.length} export paths`);
     if (missing.length > 0) {
       for (const k of missing.slice(0, 10)) console.error(`    missing: ${k}`);
-        console.error('    Fix: node contracts/scripts/prepare-publish.mjs');
+      console.error('    Fix: node contracts/scripts/prepare-publish.mjs');
     }
 
     section('SDK runtime export map');
@@ -863,10 +866,7 @@ defineCheck('worker-runtime', {
     mkdirSync(fixtureDirPath, { recursive: true });
     const fixtureDir = realpathSync(fixtureDirPath);
 
-    const computeWasmPath = join(
-      dir,
-      'node_modules/@mog-sdk/wasm/compute_core_wasm_bg.wasm',
-    );
+    const computeWasmPath = join(dir, 'node_modules/@mog-sdk/wasm/compute_core_wasm_bg.wasm');
     const chartRasterWasmPath = join(
       dir,
       'node_modules/@mog-sdk/chart-raster-wasm/compute_chart_render_wasm_bg.wasm',

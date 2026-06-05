@@ -186,7 +186,10 @@ export function serializeChartMark(mark: ChartMark, index: number): Serializable
   }
 }
 
-function serializeClip(clip: ChartMark['clip'], index: number): SerializableChartMarkClip | undefined {
+function serializeClip(
+  clip: ChartMark['clip'],
+  index: number,
+): SerializableChartMarkClip | undefined {
   if (clip === undefined) return undefined;
   return {
     x: finiteNumber(clip.x, 'clip.x', index),
@@ -246,7 +249,9 @@ function serializeStyle(source: ChartMarkStyle, index: number): SerializableChar
     optionalStringInto(
       style,
       'stroke',
-      typeof source.stroke === 'string' ? withPaintOpacity(source.stroke, strokeOpacity) : undefined,
+      typeof source.stroke === 'string'
+        ? withPaintOpacity(source.stroke, strokeOpacity)
+        : undefined,
       index,
     );
   }

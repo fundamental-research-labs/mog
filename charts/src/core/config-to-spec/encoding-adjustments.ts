@@ -252,7 +252,9 @@ function applyAutomaticCrossingToCategoryChannel(
 ): void {
   if (categoryChannel.axis === null || categoryChannel.axis?.crossesAt !== undefined) return;
 
-  const scaleDomain = Array.isArray(valueChannel.scale?.domain) ? valueChannel.scale.domain : undefined;
+  const scaleDomain = Array.isArray(valueChannel.scale?.domain)
+    ? valueChannel.scale.domain
+    : undefined;
   const min = explicitDomainBound(scaleDomain, 0);
   const max = explicitDomainBound(scaleDomain, 1);
   if (min === undefined || max === undefined || min >= 0 || max <= 0) return;

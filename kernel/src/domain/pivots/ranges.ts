@@ -151,9 +151,7 @@ async function computePivotBounds(options: {
   }
 
   const rowFieldCount = config.placements.filter((placement) => placement.area === 'row').length;
-  const colFieldCount = config.placements.filter(
-    (placement) => placement.area === 'column',
-  ).length;
+  const colFieldCount = config.placements.filter((placement) => placement.area === 'column').length;
   const valueFieldCount = config.placements.filter(
     (placement) => placement.area === 'value',
   ).length;

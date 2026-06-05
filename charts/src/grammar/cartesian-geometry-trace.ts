@@ -103,18 +103,8 @@ export function collectCartesianGeometryLayerTrace(
     xField: input.encoding?.x?.field,
     yField: input.encoding?.y?.field,
     sizeField: input.encoding?.size?.field,
-    xScale: scaleTrace(
-      input.scales.x,
-      input.encoding?.x,
-      'bottom',
-      axisCrossingTrace(input, 'x'),
-    ),
-    yScale: scaleTrace(
-      input.scales.y,
-      input.encoding?.y,
-      'left',
-      axisCrossingTrace(input, 'y'),
-    ),
+    xScale: scaleTrace(input.scales.x, input.encoding?.x, 'bottom', axisCrossingTrace(input, 'x')),
+    yScale: scaleTrace(input.scales.y, input.encoding?.y, 'left', axisCrossingTrace(input, 'y')),
     ...(sizeScale ? { sizeScale } : {}),
     points,
     ...(areaGeometry !== undefined
@@ -290,9 +280,7 @@ function collectAreaGeometry(input: CartesianGeometryLayerTraceInput): {
             const totals =
               stackSign === 'negative' ? negativeCategoryTotals : positiveCategoryTotals;
             const cumulative =
-              stackSign === 'negative'
-                ? negativeCategoryCumulative
-                : positiveCategoryCumulative;
+              stackSign === 'negative' ? negativeCategoryCumulative : positiveCategoryCumulative;
             const total = totals.get(cat) || 1;
             const percentValue = total > 0 ? (rawValue / total) * 100 : 0;
             const cumStart = cumulative.get(cat) || 0;
@@ -559,13 +547,7 @@ function areaSurfaceStyleTrace(
   datum: DataRow,
   styleIndex: number,
 ): CartesianAreaSurfaceStyleTrace {
-  const style = areaStyleForDatum(
-    input.markSpec,
-    datum,
-    input.scales,
-    input.encodings,
-    styleIndex,
-  );
+  const style = areaStyleForDatum(input.markSpec, datum, input.scales, input.encodings, styleIndex);
   const fillPaint = style.fillPaint;
   const strokePaint = style.line?.paint ?? style.strokePaint;
   const fillOpacity = paintOpacity(fillPaint);
@@ -587,7 +569,9 @@ function areaSurfaceStyleTrace(
     ...(identity.sourceSeriesIndex !== undefined
       ? { sourceSeriesIndex: identity.sourceSeriesIndex }
       : {}),
-    ...(identity.sourceSeriesKey !== undefined ? { sourceSeriesKey: identity.sourceSeriesKey } : {}),
+    ...(identity.sourceSeriesKey !== undefined
+      ? { sourceSeriesKey: identity.sourceSeriesKey }
+      : {}),
     ...(typeof style.fill === 'string' ? { fill: style.fill } : {}),
     ...(fillPaint ? { fillPaintType: fillPaint.type } : {}),
     ...(fillOpacity !== undefined ? { fillOpacity } : {}),
@@ -623,7 +607,9 @@ function areaSurfaceExtentTrace(
     ...(identity.sourceSeriesIndex !== undefined
       ? { sourceSeriesIndex: identity.sourceSeriesIndex }
       : {}),
-    ...(identity.sourceSeriesKey !== undefined ? { sourceSeriesKey: identity.sourceSeriesKey } : {}),
+    ...(identity.sourceSeriesKey !== undefined
+      ? { sourceSeriesKey: identity.sourceSeriesKey }
+      : {}),
     segmentIndex,
     pointCount: topPoints.length,
     policy: caps.policy,

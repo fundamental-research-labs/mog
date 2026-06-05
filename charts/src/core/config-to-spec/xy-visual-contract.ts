@@ -92,15 +92,12 @@ export function resolveCartesianSeriesVisualContract(input: {
   const seriesHidden = isNoFillNoLineSeries(seriesConfig);
   const ownerKey = `series(${sourceSeriesIndex})`;
   const lineFormat = config
-    ? resolveChartOwnerFormat(
-        config,
-        ownerKey,
-        seriesConfig?.format,
-      )?.line
+    ? resolveChartOwnerFormat(config, ownerKey, seriesConfig?.format)?.line
     : seriesConfig?.format?.line;
   const lineNoFill = lineFormat?.noFill === true || hasExplicitNoLine(seriesConfig);
-  const lineStrokeWidth =
-    lineNoFill ? 0 : linePointsToCanvasPx(lineFormat?.width) ?? seriesConfig?.lineWidth;
+  const lineStrokeWidth = lineNoFill
+    ? 0
+    : (linePointsToCanvasPx(lineFormat?.width) ?? seriesConfig?.lineWidth);
   const lineZeroWidth = lineFormat?.width === 0 || seriesConfig?.lineWidth === 0;
   const isBubbleSeries = seriesType === 'bubble' || seriesType === 'bubble3DEffect';
   const colorAuthority = resolveSeriesColorAuthority({

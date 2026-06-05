@@ -158,9 +158,7 @@ function resolvePointColorAuthority(
   const markerContext = config ? resolverContextFromConfig(config, markerOwnerKey) : {};
   const pointOwnerFormat = config ? chartStyleOwner(config, pointOwnerKey)?.format : undefined;
   const pointFormat = pointChartFormat(point);
-  const format = config
-    ? resolveChartOwnerFormat(config, pointOwnerKey, pointFormat)
-    : pointFormat;
+  const format = config ? resolveChartOwnerFormat(config, pointOwnerKey, pointFormat) : pointFormat;
   const fill =
     paintAuthorityFromColor({
       color: point.fill,
@@ -359,13 +357,7 @@ function resolvePaletteFallbackAuthority(input: {
 
 const EXCEL_STOCK_ROLE_DEFAULT_COLOR_AUTHORITY_SOURCE: ResolvedChartColorAuthoritySource =
   'excelStockRoleDefault';
-const EXCEL_STOCK_ROLE_DEFAULT_COLORS = [
-  '#4472c4',
-  '#ed7d31',
-  '#a5a5a5',
-  '#ffc000',
-  '#5b9bd5',
-];
+const EXCEL_STOCK_ROLE_DEFAULT_COLORS = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5'];
 
 function stockRoleDefaultAuthority(input: {
   fallbackType: ChartType | undefined;
@@ -382,8 +374,7 @@ function stockRoleDefaultAuthority(input: {
     sourceRoleOrder: input.stockSourceRoleOrder,
   });
   if (roleIndex === undefined) return undefined;
-  const color =
-    EXCEL_STOCK_ROLE_DEFAULT_COLORS[roleIndex % EXCEL_STOCK_ROLE_DEFAULT_COLORS.length];
+  const color = EXCEL_STOCK_ROLE_DEFAULT_COLORS[roleIndex % EXCEL_STOCK_ROLE_DEFAULT_COLORS.length];
   if (!color) return undefined;
   return {
     color,

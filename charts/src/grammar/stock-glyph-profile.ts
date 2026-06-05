@@ -52,11 +52,7 @@ export function nativeStockGlyphWidth(
   const minWidth = dense
     ? NATIVE_STOCK_GLYPH_PROFILE.denseMinGlyphWidth
     : NATIVE_STOCK_GLYPH_PROFILE.minGlyphWidth;
-  return clamp(
-    categoryPitch * slotOccupancy,
-    minWidth,
-    NATIVE_STOCK_GLYPH_PROFILE.maxGlyphWidth,
-  );
+  return clamp(categoryPitch * slotOccupancy, minWidth, NATIVE_STOCK_GLYPH_PROFILE.maxGlyphWidth);
 }
 
 export function nativeStockTickLength(categoryPitch: number, glyphWidth: number): number {

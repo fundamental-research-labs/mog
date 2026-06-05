@@ -63,12 +63,14 @@ function config(placements: PivotFieldPlacementFlat[]): PivotTableConfig {
   };
 }
 
-function setup(options: {
-  placements?: PivotFieldPlacementFlat[];
-  capabilities?: typeof nativeCapabilities;
-  editingPivotId?: string;
-  alternateIds?: string[];
-} = {}) {
+function setup(
+  options: {
+    placements?: PivotFieldPlacementFlat[];
+    capabilities?: typeof nativeCapabilities;
+    editingPivotId?: string;
+    alternateIds?: string[];
+  } = {},
+) {
   const fns = {
     createPivotTable: jest.fn(),
     detectFields: jest.fn(),
@@ -175,7 +177,12 @@ describe('usePivotEditorActions placement mapping', () => {
   it('maps value sort to the first row axis placement deterministically', () => {
     const fns = setup({
       placements: [
-        placement({ placementId: 'column:Vendor:0', fieldId: 'Vendor', area: 'column', position: 0 }),
+        placement({
+          placementId: 'column:Vendor:0',
+          fieldId: 'Vendor',
+          area: 'column',
+          position: 0,
+        }),
         placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
         placement({
           placementId: 'value:Amount:0',
@@ -200,7 +207,12 @@ describe('usePivotEditorActions placement mapping', () => {
   it('uses the first column placement for value sort when no row axis exists', () => {
     const fns = setup({
       placements: [
-        placement({ placementId: 'column:Vendor:0', fieldId: 'Vendor', area: 'column', position: 0 }),
+        placement({
+          placementId: 'column:Vendor:0',
+          fieldId: 'Vendor',
+          area: 'column',
+          position: 0,
+        }),
         placement({
           placementId: 'value:Amount:0',
           fieldId: 'Amount',
@@ -216,9 +228,14 @@ describe('usePivotEditorActions placement mapping', () => {
       result.current.handlePivotValueSortChange('value:Amount:0', 'asc');
     });
 
-    expect(fns.setSortByValue).toHaveBeenCalledWith('pivot-1', 'column:Vendor:0', 'value:Amount:0', {
-      order: 'asc',
-    });
+    expect(fns.setSortByValue).toHaveBeenCalledWith(
+      'pivot-1',
+      'column:Vendor:0',
+      'value:Amount:0',
+      {
+        order: 'asc',
+      },
+    );
   });
 
   it('clears value sort only when the default axis targets that value placement', () => {

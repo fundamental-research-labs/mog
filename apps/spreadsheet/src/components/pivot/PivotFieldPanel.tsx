@@ -156,9 +156,7 @@ export function PivotFieldPanel({
           onValueSortChange={onSetValueSortOrder}
           disabled={readOnly}
           canAddFields={effectiveCapabilities.canEditFields}
-          canReorderFields={
-            effectiveCapabilities.canMove ?? effectiveCapabilities.canReorderFields
-          }
+          canReorderFields={effectiveCapabilities.canMove ?? effectiveCapabilities.canReorderFields}
           canRemoveFields={effectiveCapabilities.canRemove ?? effectiveCapabilities.canRemoveFields}
           canChangeAggregate={effectiveCapabilities.canChangeAggregate}
           canSortLabels={effectiveCapabilities.canSortLabels}

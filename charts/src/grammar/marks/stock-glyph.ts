@@ -89,7 +89,9 @@ function pathMark(
   };
 }
 
-function stockGlyphLineStyle(visual: StockGlyphStrokeVisualSpec): StockGlyphStrokeVisualSpec['line'] {
+function stockGlyphLineStyle(
+  visual: StockGlyphStrokeVisualSpec,
+): StockGlyphStrokeVisualSpec['line'] {
   const line = visual.line;
   return {
     ...(line ?? {}),
@@ -98,7 +100,7 @@ function stockGlyphLineStyle(visual: StockGlyphStrokeVisualSpec): StockGlyphStro
       color: visual.stroke,
     },
     width: line?.width ?? visual.strokeWidth,
-    ...(line?.dash ?? visual.strokeDash ? { dash: line?.dash ?? visual.strokeDash } : {}),
+    ...((line?.dash ?? visual.strokeDash) ? { dash: line?.dash ?? visual.strokeDash } : {}),
     cap: line?.cap ?? NATIVE_STOCK_GLYPH_PROFILE.lineCap,
     join: line?.join ?? NATIVE_STOCK_GLYPH_PROFILE.lineJoin,
   };

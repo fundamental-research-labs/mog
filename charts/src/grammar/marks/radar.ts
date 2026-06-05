@@ -71,15 +71,7 @@ export function generateRadarMarks(
   if (!valueDomain) return [];
 
   const marks: Array<PathMark | SymbolMark | TextMark> = [];
-  marks.push(
-    ...generateGridMarks(
-      categories,
-      geometry,
-      valueDomain,
-      scales.y,
-      encoding?.y,
-    ),
-  );
+  marks.push(...generateGridMarks(categories, geometry, valueDomain, scales.y, encoding?.y));
   marks.push(...generateCategoryLabelMarks(categories, geometry, encoding?.x?.radarAxis));
 
   const categoryIndex = new Map(categories.map((category, index) => [String(category), index]));

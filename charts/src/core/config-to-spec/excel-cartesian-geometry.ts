@@ -38,12 +38,7 @@ import {
   toFiniteNumber,
 } from './category-axis';
 import { MARK_TYPE_MAP } from './constants';
-import {
-  BUBBLE_SIZE_FIELD,
-  RAW_BUBBLE_SIZE_FIELD,
-  SCATTER_X_FIELD,
-  VALUE_FIELD,
-} from './fields';
+import { BUBBLE_SIZE_FIELD, RAW_BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
 import { maxRenderableBubbleMagnitude } from './data-point-values';
 import {
   pathStackModeForMemberIndices,
@@ -276,7 +271,11 @@ export function buildExcelCartesianGeometryPlan(
   if (series.length === 0) return undefined;
 
   const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, false);
-  const useStableCategoryKeys = shouldUseStableCategoryKeys(config, data, useDateSerialCategoryAxis);
+  const useStableCategoryKeys = shouldUseStableCategoryKeys(
+    config,
+    data,
+    useDateSerialCategoryAxis,
+  );
   const hasCategoryX = series.some((item) => item.xRole === 'category');
   const hasQuantitativeX = series.some((item) => item.xRole === 'quantitative');
   const quantitativeSeriesIndices = series
@@ -594,10 +593,7 @@ export function withExcelCartesianGeometryMark<T extends MarkType | MarkSpec>(
   options: { yChannel?: ChannelSpec | undefined; data?: ChartData | undefined } = {},
 ): T | MarkSpec {
   return withExcelAreaSurfaceExtentPolicy(
-    withExcelCartesianPathOrder(
-      withExcelAreaBaseline(mark, config, options.yChannel),
-      config,
-    ),
+    withExcelCartesianPathOrder(withExcelAreaBaseline(mark, config, options.yChannel), config),
     config,
     options.data,
   );
@@ -880,7 +876,8 @@ function buildExcelValueAxisGeometry(
       includeZero,
       explicitDomain,
       scaleAuthority: scaleAuthority(explicitDomain),
-      tickStep: effectivePathAxisLayout?.valueAxisTickStep ?? positiveNumber(channel.axis?.tickStep),
+      tickStep:
+        effectivePathAxisLayout?.valueAxisTickStep ?? positiveNumber(channel.axis?.tickStep),
       ...(effectivePathAxisLayout?.percentAxisLabelPolicy
         ? { percentAxisLabelPolicy: effectivePathAxisLayout.percentAxisLabelPolicy }
         : {}),
@@ -1405,9 +1402,9 @@ function isPathGeometrySeriesType(type: string): boolean {
   return markType === 'line' || markType === 'area';
 }
 
-function optionalPathAxisLayout(
-  layout: PathChartAxisLayout | undefined,
-): { pathAxisLayout?: ExcelCartesianPathAxisLayoutGeometry } {
+function optionalPathAxisLayout(layout: PathChartAxisLayout | undefined): {
+  pathAxisLayout?: ExcelCartesianPathAxisLayoutGeometry;
+} {
   if (!layout) return {};
   const pathAxisLayout: ExcelCartesianPathAxisLayoutGeometry = {
     ...(layout.categoryTickLabelSkip !== undefined
@@ -1425,7 +1422,9 @@ function optionalPathAxisLayout(
     ...(layout.projectedLabelWidth !== undefined
       ? { projectedLabelWidth: layout.projectedLabelWidth }
       : {}),
-    ...(layout.visibleLabelCount !== undefined ? { visibleLabelCount: layout.visibleLabelCount } : {}),
+    ...(layout.visibleLabelCount !== undefined
+      ? { visibleLabelCount: layout.visibleLabelCount }
+      : {}),
     ...(layout.categoryAxisLayoutStatus
       ? {
           axisLayoutStatus: layout.categoryAxisLayoutStatus,
@@ -1468,9 +1467,9 @@ function scaleAuthority(explicitDomain: boolean): ExcelCartesianScaleAuthority {
   return explicitDomain ? 'explicitDomain' : 'excelAutoDomain';
 }
 
-function optionalAxisSource(
-  axis: SingleAxisConfig | undefined,
-): { source?: ExcelCartesianAxisSourceGeometry } {
+function optionalAxisSource(axis: SingleAxisConfig | undefined): {
+  source?: ExcelCartesianAxisSourceGeometry;
+} {
   const source = axisSourceGeometry(axis);
   return source ? { source } : {};
 }

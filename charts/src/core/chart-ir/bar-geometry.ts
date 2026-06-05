@@ -6,7 +6,13 @@ import type {
   ConfigSpec,
   StackMode,
 } from '../../grammar/spec';
-import type { ChartConfig, ChartData, ChartType, SeriesConfig, SingleAxisConfig } from '../../types';
+import type {
+  ChartConfig,
+  ChartData,
+  ChartType,
+  SeriesConfig,
+  SingleAxisConfig,
+} from '../../types';
 import { manualLayoutFromValue } from '../config-to-spec/layout-hints-manual';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { resolveBarColumnAxisLayout } from './bar-axis-layout';
@@ -188,7 +194,9 @@ export function hasExcelBarGeometryConfig(config: Pick<ChartConfig, 'type' | 'se
 
   const series = config.series ?? [];
   if (series.length === 0) return true;
-  return series.some((item, index) => isBarLikeChartType(item.type ?? defaultComboSeriesType(index)));
+  return series.some((item, index) =>
+    isBarLikeChartType(item.type ?? defaultComboSeriesType(index)),
+  );
 }
 
 export function effectiveBarGeometry(
@@ -301,14 +309,12 @@ export function resolveBarGeometryGroups(
       continue;
     }
 
-    const yAxisIndex = normalizeBarGeometryYAxisIndex(seriesConfig?.yAxisIndex ?? series.yAxisIndex);
-    const geometry = effectiveBarGeometryForType(
-      config,
-      seriesType,
-      chartData,
-      yAxisIndex,
-      [index],
+    const yAxisIndex = normalizeBarGeometryYAxisIndex(
+      seriesConfig?.yAxisIndex ?? series.yAxisIndex,
     );
+    const geometry = effectiveBarGeometryForType(config, seriesType, chartData, yAxisIndex, [
+      index,
+    ]);
     const key = `bar:${yAxisIndex ?? 0}:${geometry.orientation ?? 'vertical'}:${geometry.grouping}`;
     const existing = groups.get(key);
     if (existing) {
@@ -339,8 +345,7 @@ function comboSeriesTypeForBarGeometry(
   seriesConfig: SeriesConfig | undefined,
   index: number,
 ): string | undefined {
-  const fallbackComboType =
-    config.type === 'combo' ? defaultComboSeriesType(index) : config.type;
+  const fallbackComboType = config.type === 'combo' ? defaultComboSeriesType(index) : config.type;
   return seriesConfig?.type ?? series.type ?? fallbackComboType;
 }
 
@@ -551,9 +556,7 @@ function withBarColumnImportedGeometryContract(
     ...(axisLayout.categoryTickSkipSource
       ? { categoryTickSkipSource: axisLayout.categoryTickSkipSource }
       : {}),
-    ...(axisLayout.categoryTickStatus
-      ? { categoryTickStatus: axisLayout.categoryTickStatus }
-      : {}),
+    ...(axisLayout.categoryTickStatus ? { categoryTickStatus: axisLayout.categoryTickStatus } : {}),
     ...(axisLayout.categoryTickStatusReason
       ? { categoryTickStatusReason: axisLayout.categoryTickStatusReason }
       : {}),
@@ -674,18 +677,18 @@ function geometryStatusForConfig(
   if (dialect === 'ooxml') {
     const autoPlotArea = plotAreaSource === 'auto';
     return {
-      geometryStatus:
-        axisLayoutStatus === 'approximate' || autoPlotArea ? 'approximate' : 'exact',
-      ...(autoPlotArea
-        ? { geometryStatusReason: 'importedAutoPlotAreaCategoryPitch' }
-        : {}),
+      geometryStatus: axisLayoutStatus === 'approximate' || autoPlotArea ? 'approximate' : 'exact',
+      ...(autoPlotArea ? { geometryStatusReason: 'importedAutoPlotAreaCategoryPitch' } : {}),
     };
   }
   if (axisLayoutStatus === 'approximate') return { geometryStatus: 'approximate' };
   return { geometryStatus: 'verifiedDefault' };
 }
 
-function numericDomainBound(domain: readonly unknown[] | undefined, index: number): number | undefined {
+function numericDomainBound(
+  domain: readonly unknown[] | undefined,
+  index: number,
+): number | undefined {
   const value = domain?.[index];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

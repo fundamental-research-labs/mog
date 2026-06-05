@@ -37,10 +37,7 @@ export function stockLayerUsesOpenClose(spec: ChartSpec): boolean | undefined {
   if (stockGlyph) {
     const mark = stockGlyph.mark;
     const markSpec = typeof mark === 'object' ? mark : undefined;
-    if (
-      markSpec?.stockSubType === 'ohlc' ||
-      markSpec?.stockSubType === 'volume-ohlc'
-    ) {
+    if (markSpec?.stockSubType === 'ohlc' || markSpec?.stockSubType === 'volume-ohlc') {
       return true;
     }
     if (markSpec?.stockSubType === 'hlc' || markSpec?.stockSubType === 'volume-hlc') {

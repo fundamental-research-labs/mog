@@ -264,7 +264,9 @@ function getProcessPid(): number | undefined {
   return getAmbientProcess()?.pid;
 }
 
-function resolveNativeAddon(config: NodeHeadlessHostConfig): Record<string, (...args: unknown[]) => unknown> {
+function resolveNativeAddon(
+  config: NodeHeadlessHostConfig,
+): Record<string, (...args: unknown[]) => unknown> {
   if (!config.loadNapiAddon) {
     throw new Error(
       '@mog-sdk/sdk native runtime requires a native N-API addon resolver; use the WASM entry for non-Node runtimes',

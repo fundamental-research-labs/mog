@@ -23,10 +23,7 @@ import type {
 } from '../../types';
 import { resolveChartColor } from '../../utils/chart-colors';
 import { stockRolePlan } from '../data-extractor-imported';
-import {
-  stockSourceCompositionFromConfig,
-  stockValueAxisRoles,
-} from '../stock-semantics';
+import { stockSourceCompositionFromConfig, stockValueAxisRoles } from '../stock-semantics';
 import { excelMarkerShape, markerPointSizeToArea } from './data-row-style';
 import {
   chartStyleOwner,
@@ -123,9 +120,10 @@ export function resolveStockGlyphVisual(input: {
     source: config.upDownBars?.downFormat ? 'importedUpDownBars' : 'excelDefault',
   });
   const flatBody = { ...upBody };
-  const volume = isVolumeStockSubType(subType) && volumeAxisPolicy === 'separateVolumeAxis'
-    ? resolveVolumeVisual(config, sourceSeries.volume)
-    : undefined;
+  const volume =
+    isVolumeStockSubType(subType) && volumeAxisPolicy === 'separateVolumeAxis'
+      ? resolveVolumeVisual(config, sourceSeries.volume)
+      : undefined;
   const expectsSourceRoleVisuals = composition.sourceKind !== 'modeled';
   const sourceRoleVisuals = expectsSourceRoleVisuals
     ? resolveSourceRoleVisuals(config, sourceSeries, composition)
@@ -156,9 +154,7 @@ export function resolveStockGlyphVisual(input: {
 
   return {
     visualStatus,
-    ...(missingReasons.length > 0
-      ? { visualStatusReason: missingReasons.join(';') }
-      : {}),
+    ...(missingReasons.length > 0 ? { visualStatusReason: missingReasons.join(';') } : {}),
     priceGlyphMode,
     volumeAxisPolicy,
     highLowEndpointPolicy,
@@ -287,7 +283,8 @@ function resolveStockStroke(input: {
       : resolvedLine?.opacity !== undefined
         ? { strokeOpacity: resolvedLine.opacity }
         : {}),
-    strokeWidth: resolvedLine?.width ?? linePointsToCanvasPx(input.line?.width) ?? input.fallbackWidth,
+    strokeWidth:
+      resolvedLine?.width ?? linePointsToCanvasPx(input.line?.width) ?? input.fallbackWidth,
     ...(resolvedLine?.dash ? { strokeDash: resolvedLine.dash } : {}),
     ...(resolvedLine ? { line: resolvedLine } : {}),
     source: input.source,
@@ -335,8 +332,7 @@ function sourceLineExplicitlyVisible(
 
 function sourceMarkerDefaultsToVisible(series: SeriesConfig | undefined): boolean {
   return (
-    series?.showMarkers === true ||
-    Boolean(series?.markerStyle && series.markerStyle !== 'none')
+    series?.showMarkers === true || Boolean(series?.markerStyle && series.markerStyle !== 'none')
   );
 }
 
@@ -355,9 +351,10 @@ function resolveStockBody(input: {
   const format = resolveChartOwnerFormat(input.config, input.ownerKey, input.format);
   const formatFill = format?.fill;
   const fillPaint = resolveChartFillPaint(formatFill, context);
-  const fill = fillPaint?.type === 'solid'
-    ? fillPaint.color
-    : resolveChartFillColor(formatFill, context) ?? input.defaults.fill;
+  const fill =
+    fillPaint?.type === 'solid'
+      ? fillPaint.color
+      : (resolveChartFillColor(formatFill, context) ?? input.defaults.fill);
   const fillOpacity =
     fillPaint?.type === 'solid'
       ? fillPaint.opacity
@@ -373,11 +370,13 @@ function resolveStockBody(input: {
   const borderOpacity =
     borderPaint?.type === 'solid' && borderPaint.opacity !== undefined
       ? borderPaint.opacity
-      : borderLine?.opacity ?? input.defaults.borderOpacity;
+      : (borderLine?.opacity ?? input.defaults.borderOpacity);
   const borderWidth =
     format?.line?.noFill === true
       ? 0
-      : borderLine?.width ?? linePointsToCanvasPx(format?.line?.width) ?? input.defaults.borderWidth;
+      : (borderLine?.width ??
+        linePointsToCanvasPx(format?.line?.width) ??
+        input.defaults.borderWidth);
   return {
     fill,
     ...(fillOpacity !== undefined ? { fillOpacity } : {}),
@@ -397,10 +396,9 @@ function resolveSourceRoleVisuals(
 ): StockGlyphSourceRoleVisualSpec[] {
   return composition.sourceRoleOrder.map((role, roleIndex) => {
     const glyphInputOnly =
-      (role === 'volume' && composition.volumeAxisPolicy === 'separateVolumeAxis');
+      role === 'volume' && composition.volumeAxisPolicy === 'separateVolumeAxis';
     const overlayCapable =
-      !glyphInputOnly &&
-      (role !== 'volume' || composition.volumeAxisPolicy === 'stockValueAxis');
+      !glyphInputOnly && (role !== 'volume' || composition.volumeAxisPolicy === 'stockValueAxis');
     return resolveSourceRoleVisual({
       config,
       role,
@@ -638,9 +636,10 @@ function stockExcelDefaultSourceRoleColor(input: {
   roleIndex: number;
   sourceRoleOrder: readonly ChartSeriesStockRole[];
 }): string | undefined {
-  const resolvedIndex = input.sourceRoleOrder[input.roleIndex] === input.role
-    ? input.roleIndex
-    : input.sourceRoleOrder.indexOf(input.role);
+  const resolvedIndex =
+    input.sourceRoleOrder[input.roleIndex] === input.role
+      ? input.roleIndex
+      : input.sourceRoleOrder.indexOf(input.role);
   if (resolvedIndex < 0) return undefined;
   return DEFAULT_SOURCE_ROLE_COLORS[resolvedIndex % DEFAULT_SOURCE_ROLE_COLORS.length];
 }
@@ -667,10 +666,7 @@ function resolveSourceRoleLineVisualStatus(input: {
   if (!Number.isFinite(input.line.strokeWidth) || input.line.strokeWidth <= 0) {
     return { status: 'missing', reason: 'sourceRoleLineWidthMissing' };
   }
-  if (
-    input.colorAuthorityStatus === 'approximate' ||
-    input.colorAuthorityStatus === 'missing'
-  ) {
+  if (input.colorAuthorityStatus === 'approximate' || input.colorAuthorityStatus === 'missing') {
     return {
       status: input.colorAuthorityStatus,
       reason: 'sourceRoleLineColorAuthorityUnresolved',
@@ -696,10 +692,7 @@ function resolveSourceRoleMarkerVisualStatus(input: {
   if (!input.marker.fill && !input.marker.stroke) {
     return { status: 'missing', reason: 'sourceRoleMarkerPaintMissing' };
   }
-  if (
-    input.colorAuthorityStatus === 'approximate' ||
-    input.colorAuthorityStatus === 'missing'
-  ) {
+  if (input.colorAuthorityStatus === 'approximate' || input.colorAuthorityStatus === 'missing') {
     return {
       status: input.colorAuthorityStatus,
       reason: 'sourceRoleMarkerColorAuthorityUnresolved',
@@ -759,8 +752,7 @@ function stockVisualMissingReasons(input: {
   }
   if (
     !input.hasVolumeVisual ||
-    (input.requiresVolume &&
-      !input.rows.some((row) => typeof row[STOCK_VOLUME_FIELD] === 'number'))
+    (input.requiresVolume && !input.rows.some((row) => typeof row[STOCK_VOLUME_FIELD] === 'number'))
   ) {
     reasons.push('stockVolumeVisualUnavailable');
   }
@@ -789,7 +781,9 @@ function volumeSlotOccupancyForGapWidth(gapWidth: number): number {
 function uniqueStyleSources(
   sources: Array<StockGlyphVisualSource | undefined>,
 ): StockGlyphVisualSource[] {
-  return Array.from(new Set(sources.filter((source): source is StockGlyphVisualSource => !!source)));
+  return Array.from(
+    new Set(sources.filter((source): source is StockGlyphVisualSource => !!source)),
+  );
 }
 
 function clamp01(value: number): number {

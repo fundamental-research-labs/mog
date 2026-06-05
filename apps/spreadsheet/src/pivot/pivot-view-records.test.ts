@@ -84,8 +84,6 @@ describe('loadPivotConfigEntries', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].sourceKind).toBe('promotedImport');
     expect(entries[0].handle).toBe(handle);
-    expect(entries[0].alternateIds).toEqual([
-      'imported:Pivot:xl/pivotTables/pivotTable1.xml',
-    ]);
+    expect(entries[0].alternateIds).toEqual(['imported:Pivot:xl/pivotTables/pivotTable1.xml']);
   });
 });

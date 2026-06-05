@@ -94,12 +94,7 @@ export async function movePivotField(options: {
   const { ctx, sheetId, pivotName, fieldId, fromArea, toArea, toPosition } = options;
   const { pivotId, config } = await resolvePivotName(ctx, sheetId, pivotName, 'moveField');
   const target = resolvePlacement(config, fieldId, fromArea, 'moveField');
-  await ctx.pivot.movePlacement(
-    pivotId,
-    pivotPlacementId(placementId(target)),
-    toArea,
-    toPosition,
-  );
+  await ctx.pivot.movePlacement(pivotId, pivotPlacementId(placementId(target)), toArea, toPosition);
 }
 
 export async function setPivotAggregateFunction(options: {
@@ -110,7 +105,12 @@ export async function setPivotAggregateFunction(options: {
   aggregateFunction: AggregateFunction;
 }): Promise<PivotKernelMutationReceipt> {
   const { ctx, sheetId, pivotName, placementOrFieldId, aggregateFunction } = options;
-  const { pivotId, config } = await resolvePivotName(ctx, sheetId, pivotName, 'setAggregateFunction');
+  const { pivotId, config } = await resolvePivotName(
+    ctx,
+    sheetId,
+    pivotName,
+    'setAggregateFunction',
+  );
   const target = resolvePlacement(config, placementOrFieldId, 'value', 'setAggregateFunction');
   if (placementId(target) === placementOrFieldId) {
     return ctx.pivot.setAggregateFunction(
@@ -149,11 +149,7 @@ export async function setPivotShowValuesAs(options: {
   const { pivotId, config } = await resolvePivotName(ctx, sheetId, pivotName, 'setShowValuesAs');
   const target = resolvePlacement(config, placementOrFieldId, 'value', 'setShowValuesAs');
   if (placementId(target) === placementOrFieldId) {
-    return ctx.pivot.setShowValuesAs(
-      pivotId,
-      pivotPlacementId(placementOrFieldId),
-      showValuesAs,
-    );
+    return ctx.pivot.setShowValuesAs(pivotId, pivotPlacementId(placementOrFieldId), showValuesAs);
   }
 
   const placements = config.placements.map((placement) =>

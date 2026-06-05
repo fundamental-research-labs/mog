@@ -318,12 +318,7 @@ export function PivotContextMenu({
       formula,
     });
     setIsCalculatedFieldOpen(false);
-  }, [
-    actions,
-    calculatedFieldFormula,
-    calculatedFieldName,
-    canEditFields,
-  ]);
+  }, [actions, calculatedFieldFormula, calculatedFieldName, canEditFields]);
 
   const isHeaderTarget = target === 'pivot-row-header' || target === 'pivot-column-header';
   const isValueTarget = target === 'pivot-value';

@@ -562,7 +562,12 @@ describe('CellsLayer', () => {
 
       layer.render(ctx, mainRegion, frame);
 
-      expect(collector.getAll().map((element) => element.id).sort()).toEqual([
+      expect(
+        collector
+          .getAll()
+          .map((element) => element.id)
+          .sort(),
+      ).toEqual([
         `checkbox:${sheetId}:1,0`,
         `comment-indicator:${sheetId}:1,0`,
         `filter-button:${sheetId}:0,2`,

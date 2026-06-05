@@ -247,7 +247,8 @@ export function PivotFieldList({
     return byArea;
   }, [fieldById, placements]);
 
-  const firstAxisPlacement = placementsByArea.row[0]?.placement ?? placementsByArea.column[0]?.placement ?? null;
+  const firstAxisPlacement =
+    placementsByArea.row[0]?.placement ?? placementsByArea.column[0]?.placement ?? null;
 
   const currentValueSortOrder = useCallback(
     (valuePlacement: PivotFieldPlacement): SortOrder => {
@@ -287,7 +288,10 @@ export function PivotFieldList({
       setDragState(state);
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData(DROP_PAYLOAD_TYPE, serializeDragState(state));
-      event.dataTransfer.setData('text/plain', state.kind === 'field' ? state.fieldId : state.placementId);
+      event.dataTransfer.setData(
+        'text/plain',
+        state.kind === 'field' ? state.fieldId : state.placementId,
+      );
     },
     [canDragState],
   );
@@ -336,14 +340,7 @@ export function PivotFieldList({
       setDragOverArea(null);
       setSelectedItem(null);
     },
-    [
-      canDragState,
-      dragStateFromEvent,
-      fieldById,
-      onAddField,
-      onMovePlacement,
-      placementsByArea,
-    ],
+    [canDragState, dragStateFromEvent, fieldById, onAddField, onMovePlacement, placementsByArea],
   );
 
   const handleDropOnZone = useCallback(

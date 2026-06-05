@@ -269,9 +269,7 @@ function stockSeriesColorAuthorityContext(
 
   const configuredIndex = configured ? config.series?.indexOf(configured) : undefined;
   const roleIndex =
-    configuredIndex !== undefined && configuredIndex >= 0
-      ? configuredIndex
-      : sourceSeriesIndex;
+    configuredIndex !== undefined && configuredIndex >= 0 ? configuredIndex : sourceSeriesIndex;
   const stockSourceRole =
     configured?.stockRole ??
     composition.sourceRoleOrder[roleIndex] ??
@@ -326,7 +324,7 @@ export function snapshotSeriesProjection(
           name: configured.name,
           reason: stockProjectionReason
             ? 'projectedIntoStockGlyph'
-            : diagnostic?.reason ?? droppedSeriesReason(configured),
+            : (diagnostic?.reason ?? droppedSeriesReason(configured)),
           message: diagnostic?.message,
           ...(stockProjectionReason
             ? {
@@ -605,11 +603,7 @@ function stockProjectionContext(
 
 function isRenderedStockSeries(series: ResolvedSeriesSnapshot): boolean {
   const stockValues = series.stockValues;
-  return (
-    series.type === 'stock' ||
-    series.stockRole !== undefined ||
-    stockValues !== undefined
-  );
+  return series.type === 'stock' || series.stockRole !== undefined || stockValues !== undefined;
 }
 
 function defaultSourceSeriesName(series: ChartSeriesConfig, sourceSeriesIndex: number): string {

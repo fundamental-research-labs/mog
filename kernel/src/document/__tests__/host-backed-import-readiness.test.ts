@@ -43,6 +43,7 @@ class MockDocumentLifecycleSystem {
 
 jest.unstable_mockModule('@mog-sdk/kernel/host-lifecycle-internal', () => ({
   DocumentLifecycleSystem: MockDocumentLifecycleSystem,
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
   _createDocumentHandleInternal: createDocumentHandleInternalMock,
   attachHostBootstrapCollaborationSidecar: jest.fn(),
   documentImportWarningsFromDiagnostics: documentImportWarningsFromDiagnosticsMock,
@@ -51,11 +52,7 @@ jest.unstable_mockModule('@mog-sdk/kernel/host-lifecycle-internal', () => ({
   validateAndResolveImportSource: validateAndResolveImportSourceMock,
 }));
 
-jest.unstable_mockModule('@mog-sdk/kernel/internal', () => ({
-  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
-}));
-
-const { importHostBackedDocument } = await import('../../../host-internal/src/create');
+const { importHostBackedDocument } = await import('@mog/kernel-host-internal');
 
 const PRINCIPAL_FP: HostCanonicalFingerprint = 'mog-host-fp:v1:sha256:test-principal-fp';
 

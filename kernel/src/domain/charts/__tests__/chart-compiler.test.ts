@@ -396,7 +396,8 @@ describe('chart compiler bridge module', () => {
           : false,
       );
       const trendlineLayer = compileInput.layer?.find(
-        (layer) => layer.data && 'values' in layer.data && layer.data.values === transformedTrendlineRows,
+        (layer) =>
+          layer.data && 'values' in layer.data && layer.data.values === transformedTrendlineRows,
       );
       expect(regressionCall?.data).toBe(compileInput.data?.values);
       expect(trendlineLayer?.transform).toBeUndefined();

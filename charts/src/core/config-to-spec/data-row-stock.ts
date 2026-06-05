@@ -16,11 +16,7 @@ import {
 type ChartDataPoint = NonNullable<ChartData['series'][number]['data'][number]>;
 type StockValueField = 'open' | 'high' | 'low' | 'close' | 'volume';
 
-export function applyStockFields(
-  row: DataRow,
-  point: ChartDataPoint,
-  config?: ChartConfig,
-): void {
+export function applyStockFields(row: DataRow, point: ChartDataPoint, config?: ChartConfig): void {
   if (point[STOCK_OPEN_FIELD] !== undefined) row[STOCK_OPEN_FIELD] = point[STOCK_OPEN_FIELD];
   if (point[STOCK_HIGH_FIELD] !== undefined) row[STOCK_HIGH_FIELD] = point[STOCK_HIGH_FIELD];
   if (point[STOCK_LOW_FIELD] !== undefined) row[STOCK_LOW_FIELD] = point[STOCK_LOW_FIELD];

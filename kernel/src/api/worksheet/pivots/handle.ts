@@ -341,11 +341,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return receipt;
     },
 
-    async setSortByValue(
-      axisPlacementId,
-      valuePlacementId,
-      config: PivotValueSortConfig | null,
-    ) {
+    async setSortByValue(axisPlacementId, valuePlacementId, config: PivotValueSortConfig | null) {
       const receipt = await ctx.pivot.setSortByValue(
         pivotId,
         pivotPlacementId(axisPlacementId),

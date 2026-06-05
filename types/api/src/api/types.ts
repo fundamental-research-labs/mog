@@ -898,9 +898,7 @@ export interface PivotTableHandle {
   /** Delete the pivot table. */
   delete(): Promise<boolean>;
   /** Subscribe to computed result updates for this pivot. */
-  subscribeResult(
-    callback: (result: PivotTableResult | null, error?: string) => void,
-  ): () => void;
+  subscribeResult(callback: (result: PivotTableResult | null, error?: string) => void): () => void;
   /** Compute this pivot table result. */
   compute(forceRefresh?: boolean): Promise<PivotTableResult | null>;
   /** Get the full range occupied by the rendered pivot table. */

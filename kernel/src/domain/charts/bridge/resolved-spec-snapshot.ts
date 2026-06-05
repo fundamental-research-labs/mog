@@ -250,9 +250,7 @@ export function buildResolvedChartSpecSnapshot(input: {
       categoryLevels,
       layout: input.layout ?? undefined,
       plot: {
-        ...(input.config.displayBlanksAs
-          ? { displayBlanksAs: input.config.displayBlanksAs }
-          : {}),
+        ...(input.config.displayBlanksAs ? { displayBlanksAs: input.config.displayBlanksAs } : {}),
         plotVisibleOnly: input.config.plotVisibleOnly,
         gapWidth: input.config.gapWidth,
         gapDepth: chartGapDepth(input.config),

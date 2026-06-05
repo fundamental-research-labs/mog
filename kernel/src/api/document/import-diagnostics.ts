@@ -10,9 +10,7 @@ import type {
   ImportDiagnosticRef as WireImportDiagnosticRef,
 } from '../../bridges/compute/compute-types.gen';
 
-export function projectImportDiagnostic(
-  diagnostic: WireImportDiagnostic,
-): ImportDiagnosticDto {
+export function projectImportDiagnostic(diagnostic: WireImportDiagnostic): ImportDiagnosticDto {
   const reference = diagnostic.reference
     ? projectImportDiagnosticReference(diagnostic.reference)
     : undefined;

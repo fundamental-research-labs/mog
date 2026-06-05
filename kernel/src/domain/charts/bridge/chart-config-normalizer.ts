@@ -189,9 +189,7 @@ function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] 
   const sourceChartType = stringValue(chart.chartType);
   const chartGroupTypes = chartGroupTypesFromChart(chart);
   const sourceFamily = sourceFamilyFromMetadata(sourceChartType, chartGroupTypes);
-  const standardChartProvenance = standardChartProvenanceSnapshot(
-    ooxml?.standardChartProvenance,
-  );
+  const standardChartProvenance = standardChartProvenanceSnapshot(ooxml?.standardChartProvenance);
 
   return {
     imported: true,
@@ -275,9 +273,9 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
   const layoutAuthority = (normalizedChart as ChartWithLayoutAuthority).layoutAuthority;
   const pivotProjection = (normalizedChart as ChartWithPivotProjection).pivotProjection;
-  const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(
-    normalizedChart.displayBlanksAs,
-  ) as ChartConfig['displayBlanksAs'] | undefined;
+  const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(normalizedChart.displayBlanksAs) as
+    | ChartConfig['displayBlanksAs']
+    | undefined;
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
@@ -359,9 +357,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
     seriesLines: wireToChartLineSettings(normalizedChart.seriesLines),
     upDownBars: wireToUpDownBarsConfig(normalizedChart.upDownBars),
-    stockSourceComposition: (normalizedChart as {
-      stockSourceComposition?: ChartConfig['stockSourceComposition'];
-    }).stockSourceComposition,
+    stockSourceComposition: (
+      normalizedChart as {
+        stockSourceComposition?: ChartConfig['stockSourceComposition'];
+      }
+    ).stockSourceComposition,
     barShape: normalizedChart.barShape as ChartConfig['barShape'],
     heightPt: normalizedChart.heightPt,
     widthPt: normalizedChart.widthPt,

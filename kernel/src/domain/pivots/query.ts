@@ -1,7 +1,4 @@
-import type {
-  PivotQueryRecord,
-  PivotQueryResult,
-} from '@mog-sdk/contracts/api';
+import type { PivotQueryRecord, PivotQueryResult } from '@mog-sdk/contracts/api';
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { PivotTableResult } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../context';
@@ -115,13 +112,8 @@ function buildQueryRecords(params: {
   valueFieldLabels: string[];
   colDimensionTuples: Record<string, CellValue>[];
 }): PivotQueryRecord[] {
-  const {
-    result,
-    fieldNameById,
-    valuePlacementsLength,
-    valueFieldLabels,
-    colDimensionTuples,
-  } = params;
+  const { result, fieldNameById, valuePlacementsLength, valueFieldLabels, colDimensionTuples } =
+    params;
   const records: PivotQueryRecord[] = [];
 
   for (const row of result.rows) {

@@ -393,9 +393,10 @@ describe('Node chart image exporter native raster loading', () => {
       default: init,
       render_chart_marks_image: render,
     }));
-    const exporter = createWasmChartImageExporterFactory(rasterModule, loadGlue)(
-      chartBridgeWithGetMarks(getMarksAtSize),
-    );
+    const exporter = createWasmChartImageExporterFactory(
+      rasterModule,
+      loadGlue,
+    )(chartBridgeWithGetMarks(getMarksAtSize));
 
     expect(loadGlue).not.toHaveBeenCalled();
     await expect(

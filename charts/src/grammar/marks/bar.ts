@@ -386,8 +386,7 @@ function valueBaselinePosition(input: {
   pixelMax: number;
   fallbackPixel: number;
 }): number {
-  const scaleDomain =
-    typeof input.scale.domain === 'function' ? input.scale.domain() : undefined;
+  const scaleDomain = typeof input.scale.domain === 'function' ? input.scale.domain() : undefined;
   const domain =
     Array.isArray(scaleDomain) && scaleDomain.length >= 2
       ? scaleDomain

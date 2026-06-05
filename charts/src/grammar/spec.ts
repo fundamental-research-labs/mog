@@ -638,12 +638,7 @@ export type StockGlyphVisualContractStatus =
   | 'approximate'
   | 'missing';
 export type StockGlyphPriceGlyphMode = 'hlcTick' | 'ohlcTick' | 'upDownBody';
-export type StockGlyphVisualRole =
-  | 'volume'
-  | 'highLowStem'
-  | 'body'
-  | 'openTick'
-  | 'closeTick';
+export type StockGlyphVisualRole = 'volume' | 'highLowStem' | 'body' | 'openTick' | 'closeTick';
 export type StockGlyphVisualSource =
   | 'importedHighLowLines'
   | 'importedUpDownBars'

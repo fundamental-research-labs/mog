@@ -15,10 +15,7 @@ import { categoryDisplayLabel } from './category-axis';
 import { isPathLikeChartType } from './path-axis-layout';
 import { hasSecondaryYAxis } from './secondary-axis';
 import { seriesConfigForDataSeries } from '../series-identity';
-import {
-  isSupportedChartType,
-  resolveComboSeriesType,
-} from './layers/combo-series-options';
+import { isSupportedChartType, resolveComboSeriesType } from './layers/combo-series-options';
 
 const UNRESOLVED_AXIS_LABEL_FONT_SIZE = 11;
 const AXIS_TEXT_WIDTH_RATIO = 0.6;
@@ -83,10 +80,7 @@ export function estimatePathChartAxisReservations(
   return reservations;
 }
 
-function hasImportedPathAxisLayout(
-  config: ChartConfig,
-  data: ChartData | undefined,
-): boolean {
+function hasImportedPathAxisLayout(config: ChartConfig, data: ChartData | undefined): boolean {
   if (chartImportSourceDialect(config) === undefined) return false;
   if (isPathLikeChartType(config.type)) return true;
   if (config.type !== 'combo' || !data) return false;

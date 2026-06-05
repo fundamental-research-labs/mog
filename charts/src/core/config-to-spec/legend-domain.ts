@@ -21,10 +21,7 @@ import {
   seriesSourceIndex,
   seriesSourceKey,
 } from '../series-identity';
-import {
-  stockSourceCompositionFromConfig,
-  stockSubTypeFromConfig,
-} from '../stock-semantics';
+import { stockSourceCompositionFromConfig, stockSubTypeFromConfig } from '../stock-semantics';
 import { MARK_TYPE_MAP } from './constants';
 import { isLegendShown } from './legend-spec';
 import { buildPieDoughnutGeometry, pieDisplayLabel } from './pie-doughnut-geometry';
@@ -270,14 +267,15 @@ function legendEntryForIndex(legend: LegendConfig, index: number): LegendEntryCo
   return legend.entries?.find((entry) => entry.idx === index);
 }
 
-function isXYPointLegendConfig(
-  config: Pick<ChartConfig, 'type' | 'varyByCategories'>,
-): boolean {
+function isXYPointLegendConfig(config: Pick<ChartConfig, 'type' | 'varyByCategories'>): boolean {
   if (config.varyByCategories !== true) return false;
   return config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter';
 }
 
-function pieLegendPoints(config: ChartConfig, data: ChartData): Array<{
+function pieLegendPoints(
+  config: ChartConfig,
+  data: ChartData,
+): Array<{
   key: string;
   legendKey: string;
   colorKey: string;

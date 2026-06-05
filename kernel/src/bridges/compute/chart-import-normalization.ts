@@ -5,10 +5,7 @@ import type {
   ChartSeriesData,
   SingleAxisData,
 } from './compute-types.gen';
-import type {
-  ChartSeriesStockRole,
-  StockSourceComposition,
-} from '@mog-sdk/contracts/data/charts';
+import type { ChartSeriesStockRole, StockSourceComposition } from '@mog-sdk/contracts/data/charts';
 import {
   chartPointCachePointsInsideCardinality,
   hasRenderableChartPointCache,

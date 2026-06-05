@@ -236,9 +236,7 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
     if (chartType === 'bubble' || chartType === 'bubble3DEffect') {
       const sizeScale = {
         range: [0, bubbleMaxArea(config)],
-        ...(useExcelCartesian
-          ? { domain: [0, maxRenderableBubbleMagnitude(data, config)] }
-          : {}),
+        ...(useExcelCartesian ? { domain: [0, maxRenderableBubbleMagnitude(data, config)] } : {}),
       };
       encoding.size = {
         field: BUBBLE_SIZE_FIELD,

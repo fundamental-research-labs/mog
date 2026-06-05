@@ -36,9 +36,7 @@ export function surfaceUnsupportedFeatureDiagnostics(
 export function surfaceApproximationDiagnostics(config: ChartConfig): string[] {
   const diagnostics: string[] = [];
   if (isSurfaceTopViewConfig(config)) {
-    diagnostics.push(
-      'contour/top-view surface chart is rendered as a Mog contour approximation',
-    );
+    diagnostics.push('contour/top-view surface chart is rendered as a Mog contour approximation');
   } else {
     diagnostics.push('surface chart is rendered as a Mog surface approximation');
   }

@@ -360,9 +360,7 @@ function toPublicPivotPlacement(placement: ComputePivotFieldPlacementFlat): Publ
       valuePlacementId: placementId(sortByValue.valuePlacementId ?? sortByValue.valueFieldId),
       order: sortByValue.order,
       columnKey: sortByValue.columnKey,
-      columnTupleKey: sortByValue.columnKey
-        ? pivotTupleKey(sortByValue.columnKey)
-        : undefined,
+      columnTupleKey: sortByValue.columnKey ? pivotTupleKey(sortByValue.columnKey) : undefined,
     };
   }
   if (source.dateGrouping) {
@@ -1053,9 +1051,7 @@ export class PivotBridge implements IPivotBridge {
 
     const affectedAreas = new Set<ApiPivotFieldArea>([moving.area, toArea]);
     const placements = [
-      ...remaining
-        .filter((p) => !affectedAreas.has(p.area))
-        .map((p) => ({ ...p })),
+      ...remaining.filter((p) => !affectedAreas.has(p.area)).map((p) => ({ ...p })),
       ...(moving.area === toArea
         ? []
         : renumberPlacements(placementsInArea(remaining, moving.area))),

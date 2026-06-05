@@ -101,7 +101,11 @@ function createMockCtx(): any {
   };
 }
 
-function createMutationBridge(config: any): { bridge: PivotBridge; ctx: any; getConfig: () => any } {
+function createMutationBridge(config: any): {
+  bridge: PivotBridge;
+  ctx: any;
+  getConfig: () => any;
+} {
   const ctx = createMockCtx();
   let currentConfig = config;
   ctx.computeBridge.pivotGet.mockImplementation(async (_sheetId: string, pivotId: string) =>
@@ -275,8 +279,9 @@ describe('PivotBridge placement mutations', () => {
       'row:Region:2',
       'row:Month:0',
     ]);
-    expect(sortedPlacements(getConfig().placements, 'row').map((placement) => placement.position))
-      .toEqual([0, 1, 2]);
+    expect(
+      sortedPlacements(getConfig().placements, 'row').map((placement) => placement.position),
+    ).toEqual([0, 1, 2]);
   });
 
   it('moves a placement across areas at the requested index and renumbers both areas', async () => {
@@ -294,8 +299,9 @@ describe('PivotBridge placement mutations', () => {
     await bridge.movePlacement('pivot-1', 'row:Vendor:1' as any, 'column', 1);
 
     expect(placementOrder(getConfig().placements, 'row')).toEqual(['row:Month:0']);
-    expect(sortedPlacements(getConfig().placements, 'row').map((placement) => placement.position))
-      .toEqual([0]);
+    expect(
+      sortedPlacements(getConfig().placements, 'row').map((placement) => placement.position),
+    ).toEqual([0]);
     expect(placementOrder(getConfig().placements, 'column')).toEqual([
       'column:Quarter:0',
       'row:Vendor:1',
@@ -409,12 +415,10 @@ describe('PivotBridge placement mutations', () => {
       }),
     );
 
-    await bridge.setSortByValue(
-      'pivot-1',
-      'row:Vendor:1' as any,
-      'value:Amount:count' as any,
-      { order: 'desc', columnKey: 'FY2026' },
-    );
+    await bridge.setSortByValue('pivot-1', 'row:Vendor:1' as any, 'value:Amount:count' as any, {
+      order: 'desc',
+      columnKey: 'FY2026',
+    });
 
     expect(sortedPlacements(getConfig().placements, 'row')).toEqual([
       expect.objectContaining({

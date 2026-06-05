@@ -78,9 +78,7 @@ export function wrapChartXML(content: string, options: ChartXMLOptions): string 
 </c:chartSpace>`;
 }
 
-function displayBlanksAsElement(
-  value: ChartXMLOptions['displayBlanksAs'],
-): string {
+function displayBlanksAsElement(value: ChartXMLOptions['displayBlanksAs']): string {
   if (value !== 'gap' && value !== 'zero' && value !== 'span') return '';
   return `<c:dispBlanksAs val="${value}"/>`;
 }

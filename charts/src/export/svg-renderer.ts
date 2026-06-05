@@ -123,10 +123,12 @@ function renderText(mark: SerializableChartTextMark): string {
           )} ${formatNumber(mark.y)})`,
         )}"`
       : '';
-  const maxWidth = mark.maxWidth !== undefined ? ` textLength="${formatNumber(mark.maxWidth)}"` : '';
+  const maxWidth =
+    mark.maxWidth !== undefined ? ` textLength="${formatNumber(mark.maxWidth)}"` : '';
   const fontWeight =
     mark.fontWeight !== undefined ? ` font-weight="${escapeAttr(String(mark.fontWeight))}"` : '';
-  const fontStyle = mark.fontStyle !== undefined ? ` font-style="${escapeAttr(mark.fontStyle)}"` : '';
+  const fontStyle =
+    mark.fontStyle !== undefined ? ` font-style="${escapeAttr(mark.fontStyle)}"` : '';
   const decoration = textDecoration(mark);
   return `<text x="${formatNumber(mark.x)}" y="${formatNumber(mark.y)}" font-family="${escapeAttr(
     mark.fontFamily,
@@ -138,18 +140,19 @@ function renderText(mark: SerializableChartTextMark): string {
 function styleAttrs(style: SerializableChartMarkStyle): string {
   const fill = style.fill === undefined ? 'none' : validatePaint(style.fill, 'style.fill');
   const stroke = style.stroke === undefined ? 'none' : validatePaint(style.stroke, 'style.stroke');
-  const attrs = [
-    `fill="${escapeAttr(fill)}"`,
-    `stroke="${escapeAttr(stroke)}"`,
-  ];
+  const attrs = [`fill="${escapeAttr(fill)}"`, `stroke="${escapeAttr(stroke)}"`];
 
   if (style.strokeWidth !== undefined) {
-    attrs.push(`stroke-width="${formatNumber(nonNegative(style.strokeWidth, 'style.strokeWidth'))}"`);
+    attrs.push(
+      `stroke-width="${formatNumber(nonNegative(style.strokeWidth, 'style.strokeWidth'))}"`,
+    );
   }
   if (style.strokeDash !== undefined && style.strokeDash.length > 0) {
     attrs.push(
       `stroke-dasharray="${escapeAttr(
-        style.strokeDash.map((value) => formatNumber(nonNegative(value, 'style.strokeDash'))).join(' '),
+        style.strokeDash
+          .map((value) => formatNumber(nonNegative(value, 'style.strokeDash')))
+          .join(' '),
       )}"`,
     );
   }
@@ -232,7 +235,12 @@ function circlePathData(x: number, y: number, radius: number, reverse = false): 
   ].join(' ');
 }
 
-function polarPoint(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+function polarPoint(
+  cx: number,
+  cy: number,
+  radius: number,
+  angle: number,
+): { x: number; y: number } {
   const theta = angle - Math.PI / 2;
   return {
     x: cx + Math.cos(theta) * radius,
@@ -310,9 +318,7 @@ function symbolPathData(mark: SerializableChartSymbolMark): string {
       }
       return `M ${formatNumber(x)} ${formatNumber(y + height - offset)} L ${formatNumber(
         x + side / 2,
-      )} ${formatNumber(y - offset)} L ${formatNumber(x - side / 2)} ${formatNumber(
-        y - offset,
-      )} Z`;
+      )} ${formatNumber(y - offset)} L ${formatNumber(x - side / 2)} ${formatNumber(y - offset)} Z`;
     }
   }
 }
@@ -387,14 +393,9 @@ function formatNumber(value: number): string {
 }
 
 function escapeText(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeAttr(value: string): string {
-  return escapeText(value)
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return escapeText(value).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }

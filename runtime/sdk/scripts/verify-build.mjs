@@ -165,9 +165,7 @@ function checkNoWorkerBundleNodeImports(file) {
     /importNodeModule\s*\(\s*['"]node:/,
     /new\s+Function\s*\(/,
   ];
-  const matches = forbidden
-    .map((pattern) => source.match(pattern)?.[0])
-    .filter(Boolean);
+  const matches = forbidden.map((pattern) => source.match(pattern)?.[0]).filter(Boolean);
   assert(matches.length === 0, `${file} has no Node/native imports in the worker graph`);
   if (matches.length > 0) {
     for (const match of matches.slice(0, 5)) console.error(`    -> ${match}`);
@@ -185,7 +183,10 @@ async function checkBundledEdgeImportMetaUrlUndefinedImport() {
 
       const sourcePath = resolve(DIST, entry.name);
       const source = readFileSync(sourcePath, 'utf-8');
-      writeFileSync(resolve(tempDir, entry.name), source.replaceAll('import.meta.url', 'undefined'));
+      writeFileSync(
+        resolve(tempDir, entry.name),
+        source.replaceAll('import.meta.url', 'undefined'),
+      );
     }
 
     const esm = await import(pathToFileURL(resolve(tempDir, 'index.js')).href);

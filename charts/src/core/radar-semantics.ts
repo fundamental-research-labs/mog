@@ -45,10 +45,7 @@ export interface RadarValueDomain {
 
 export type RadarValueScaleAuthority = 'explicitAxis' | 'excelAuto' | 'fallback';
 export type RadarBlankPolicy = 'gap' | 'span' | 'zero';
-export type RadarBlankPolicyAuthority =
-  | 'explicit'
-  | 'excelDefault'
-  | 'chartCacheLiveSourceBlank';
+export type RadarBlankPolicyAuthority = 'explicit' | 'excelDefault' | 'chartCacheLiveSourceBlank';
 
 export const RADAR_EXCEL_DEFAULT_BLANK_POLICY: RadarBlankPolicy = 'span';
 

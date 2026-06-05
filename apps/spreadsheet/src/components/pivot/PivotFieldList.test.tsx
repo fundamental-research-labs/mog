@@ -67,7 +67,13 @@ function renderList(
     placements: [
       placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
       placement({ placementId: 'row:Vendor:1', fieldId: 'Vendor', area: 'row', position: 1 }),
-      placement({ placementId: 'value:Amount:0', fieldId: 'Amount', area: 'value', position: 0, aggregateFunction: 'sum' }),
+      placement({
+        placementId: 'value:Amount:0',
+        fieldId: 'Amount',
+        area: 'value',
+        position: 0,
+        aggregateFunction: 'sum',
+      }),
     ],
     onAddField: jest.fn(),
     onRemovePlacement: jest.fn(),
@@ -101,7 +107,13 @@ describe('PivotFieldList placement editor', () => {
     const { container } = renderList({
       placements: [
         placement({ placementId: 'row:Vendor:1', fieldId: 'Vendor', area: 'row', position: 1 }),
-        placement({ placementId: 'value:Amount:0', fieldId: 'Amount', area: 'value', position: 0, aggregateFunction: 'sum' }),
+        placement({
+          placementId: 'value:Amount:0',
+          fieldId: 'Amount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+        }),
         placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
       ],
     });
@@ -118,9 +130,20 @@ describe('PivotFieldList placement editor', () => {
   it('maps row and column sort control changes to the target placement id', () => {
     const { props } = renderList({
       placements: [
-        placement({ placementId: 'column:Category:0', fieldId: 'Category', area: 'column', position: 0 }),
+        placement({
+          placementId: 'column:Category:0',
+          fieldId: 'Category',
+          area: 'column',
+          position: 0,
+        }),
         placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
-        placement({ placementId: 'value:Amount:0', fieldId: 'Amount', area: 'value', position: 0, aggregateFunction: 'sum' }),
+        placement({
+          placementId: 'value:Amount:0',
+          fieldId: 'Amount',
+          area: 'value',
+          position: 0,
+          aggregateFunction: 'sum',
+        }),
       ],
     });
 
@@ -232,7 +255,9 @@ describe('PivotFieldList placement editor', () => {
     );
     expect(amountChips).toHaveLength(2);
 
-    fireEvent.click(within(chip(container, 'value:Amount:1')).getByRole('button', { name: /Remove Amount Max/i }));
+    fireEvent.click(
+      within(chip(container, 'value:Amount:1')).getByRole('button', { name: /Remove Amount Max/i }),
+    );
     expect(props.onRemovePlacement).toHaveBeenCalledWith('value:Amount:1');
   });
 

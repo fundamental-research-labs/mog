@@ -1,13 +1,6 @@
 import type { AnyScale, ResolvedEncodings, ScaleMap } from './encoding-resolver';
 import { centeredScalePosition, renderableDataRows } from './marks/helpers';
-import type {
-  DataRow,
-  EncodingSpec,
-  FieldType,
-  Layout,
-  MarkSpec,
-  StockGlyphSubType,
-} from './spec';
+import type { DataRow, EncodingSpec, FieldType, Layout, MarkSpec, StockGlyphSubType } from './spec';
 import {
   NATIVE_STOCK_GLYPH_PROFILE,
   nativeStockGlyphWidth,
@@ -105,9 +98,7 @@ export function calculateStockGlyphGeometry(
   const nativeTickProfile = usesNativeStockTickGeometryProfile(subType, priceGlyphMode);
   const slotOccupancy =
     visual?.slotOccupancy ??
-    (nativeTickProfile
-      ? NATIVE_STOCK_GLYPH_PROFILE.slotOccupancy
-      : LEGACY_STOCK_SLOT_OCCUPANCY);
+    (nativeTickProfile ? NATIVE_STOCK_GLYPH_PROFILE.slotOccupancy : LEGACY_STOCK_SLOT_OCCUPANCY);
   const glyphWidth = nativeTickProfile
     ? nativeStockGlyphWidth(categoryPitch, slotOccupancy)
     : clamp(categoryPitch * slotOccupancy, 2, 18);
@@ -131,11 +122,7 @@ export function calculateStockGlyphGeometry(
     volumeAxisPolicy === 'separateVolumeAxis' &&
     (visual === undefined || visual.volume !== undefined);
   const volumeBarWidth = renderVolumeGlyph
-    ? clamp(
-        categoryPitch * (visual?.volume?.slotOccupancy ?? LEGACY_STOCK_SLOT_OCCUPANCY),
-        1,
-        24,
-      )
+    ? clamp(categoryPitch * (visual?.volume?.slotOccupancy ?? LEGACY_STOCK_SLOT_OCCUPANCY), 1, 24)
     : undefined;
   const volumeContext =
     volumeBarWidth !== undefined
@@ -350,7 +337,8 @@ function stockPointCandidate(
   fields: StockGlyphFields,
   subType: StockGlyphSubType,
 ): StockPointCandidate | undefined {
-  const xValue = input.encodings.x?.accessor(datum) ?? datum[input.encoding?.x?.field ?? CATEGORY_FIELD];
+  const xValue =
+    input.encodings.x?.accessor(datum) ?? datum[input.encoding?.x?.field ?? CATEGORY_FIELD];
   const xPixel = centeredScalePosition(input.scales.x, xValue);
   if (!Number.isFinite(xPixel)) return undefined;
 
@@ -627,9 +615,7 @@ function categoryPitchForCandidates(
     return deltas[Math.floor(deltas.length / 2)];
   }
 
-  return xValues.length > 1
-    ? layout.plotArea.width / (xValues.length - 1)
-    : layout.plotArea.width;
+  return xValues.length > 1 ? layout.plotArea.width / (xValues.length - 1) : layout.plotArea.width;
 }
 
 function stockXMode(encoding: EncodingSpec | undefined): StockGlyphXMode {

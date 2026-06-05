@@ -868,17 +868,10 @@ export type ChartSeriesXRole = 'category' | 'quantitative';
 export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
 
 /** Mechanical authority status for stock exactness evidence. */
-export type StockExactnessEvidenceStatus =
-  | 'exact'
-  | 'verifiedDefault'
-  | 'approximate'
-  | 'missing';
+export type StockExactnessEvidenceStatus = 'exact' | 'verifiedDefault' | 'approximate' | 'missing';
 
 /** Source composition behind a rendered stock chart. */
-export type StockSourceKind =
-  | 'singleStockChart'
-  | 'comboVolumeBarStockChart'
-  | 'modeled';
+export type StockSourceKind = 'singleStockChart' | 'comboVolumeBarStockChart' | 'modeled';
 
 /** Value-axis ownership for stock volume roles. */
 export type StockVolumeAxisPolicy = 'stockValueAxis' | 'separateVolumeAxis';
@@ -1572,10 +1565,7 @@ export interface ResolvedChartSeriesSnapshot {
   dataHash: string;
 }
 
-export type ResolvedChartCartesianXGeometryMode =
-  | 'categoryPoint'
-  | 'dateSerial'
-  | 'quantitative';
+export type ResolvedChartCartesianXGeometryMode = 'categoryPoint' | 'dateSerial' | 'quantitative';
 
 export interface ResolvedChartSeriesGeometrySnapshot {
   xMode: ResolvedChartCartesianXGeometryMode;
@@ -1701,14 +1691,12 @@ export interface ResolvedChartStockGlyphSegmentSnapshot {
   role: ResolvedChartStockGlyphSegmentRole;
 }
 
-export interface ResolvedChartStockGlyphVolumeRectSnapshot
-  extends ResolvedChartStockVolumeSurfaceSnapshot {
+export interface ResolvedChartStockGlyphVolumeRectSnapshot extends ResolvedChartStockVolumeSurfaceSnapshot {
   value: number;
   role: 'volumeBar';
 }
 
-export interface ResolvedChartStockGlyphBodyRectSnapshot
-  extends ResolvedChartStockVolumeSurfaceSnapshot {
+export interface ResolvedChartStockGlyphBodyRectSnapshot extends ResolvedChartStockVolumeSurfaceSnapshot {
   openValue: number;
   closeValue: number;
   role: 'body';
@@ -1732,8 +1720,7 @@ export interface ResolvedChartStockGlyphBodyVisualSnapshot {
   source: ResolvedChartStockGlyphVisualSource;
 }
 
-export interface ResolvedChartStockGlyphVolumeVisualSnapshot
-  extends ResolvedChartStockGlyphBodyVisualSnapshot {
+export interface ResolvedChartStockGlyphVolumeVisualSnapshot extends ResolvedChartStockGlyphBodyVisualSnapshot {
   visualStatus?: ResolvedChartStockVisualContractStatus;
   visualStatusReason?: string;
   gapWidth: number;
@@ -1924,12 +1911,8 @@ export interface ResolvedChartThreeDBarShapesSnapshot {
   distinctShapes: ResolvedChartThreeDBarShape[];
 }
 
-export type ResolvedChartProjectionTraceCoordinateSpace =
-  | 'chartNormalized'
-  | 'plotAreaNormalized';
-export type ResolvedChartProjectionOccupancySource =
-  | 'generatedMarkBounds'
-  | 'generatedPathBounds';
+export type ResolvedChartProjectionTraceCoordinateSpace = 'chartNormalized' | 'plotAreaNormalized';
+export type ResolvedChartProjectionOccupancySource = 'generatedMarkBounds' | 'generatedPathBounds';
 
 export interface ResolvedChartProjectionBoundsSnapshot {
   left: number;
@@ -2006,9 +1989,7 @@ export type ResolvedChartSurfaceBandAuthority =
   | 'generatedFromAxisAndData'
   | 'fallback'
   | 'sourceBandFmtPreservedOnly';
-export type ResolvedChartSurfacePlotAreaPolicy =
-  | 'squareTopView'
-  | 'normalizedProjectedCube';
+export type ResolvedChartSurfacePlotAreaPolicy = 'squareTopView' | 'normalizedProjectedCube';
 
 export interface ResolvedChartSurfaceGridSnapshot {
   rows: number;
@@ -2372,9 +2353,7 @@ export interface ResolvedChartPieDoughnutBoxSnapshot {
   height: number;
 }
 
-export type ResolvedChartPieDoughnutLegendOverflowPolicy =
-  | 'none'
-  | 'overflowVisible';
+export type ResolvedChartPieDoughnutLegendOverflowPolicy = 'none' | 'overflowVisible';
 
 export interface ResolvedChartPieDoughnutLegendEntryFlowSnapshot {
   index: number;
@@ -2415,10 +2394,7 @@ export interface ResolvedChartPieDoughnutLegendFlowSnapshot {
   entries: ResolvedChartPieDoughnutLegendEntryFlowSnapshot[];
 }
 
-export type ResolvedChartPieDoughnutLeaderLinePolicy =
-  | 'none'
-  | 'outsideLabels'
-  | 'estimated';
+export type ResolvedChartPieDoughnutLeaderLinePolicy = 'none' | 'outsideLabels' | 'estimated';
 
 export type ResolvedChartPieDoughnutCollisionPolicy =
   | 'notApplicable'
@@ -2652,10 +2628,7 @@ export interface ResolvedChartBarGeometryOffsetSnapshot {
 }
 
 export type ResolvedChartBarGeometryStatus = 'exact' | 'verifiedDefault' | 'approximate';
-export type ResolvedChartBarPostRenderTraceStatus =
-  | 'available'
-  | 'mismatch'
-  | 'unavailable';
+export type ResolvedChartBarPostRenderTraceStatus = 'available' | 'mismatch' | 'unavailable';
 export type ResolvedChartBarPlotAreaAuthority =
   | 'manualLayout'
   | 'excelAutoModel'
@@ -2707,10 +2680,7 @@ export interface ResolvedChartBarTracePlotAreaSnapshot {
   height: number;
 }
 
-export type ResolvedChartBarRectangleReconciliationStatus =
-  | 'exact'
-  | 'approximate'
-  | 'missing';
+export type ResolvedChartBarRectangleReconciliationStatus = 'exact' | 'approximate' | 'missing';
 
 export type ResolvedChartBarRectangleReconciliationAuthority =
   | 'excelOracleGeometry'
@@ -2876,10 +2846,7 @@ export type ResolvedChartXYVisualContractStatus =
   | 'approximate'
   | 'missing';
 export type ResolvedChartCartesianRenderedAxisOrient = 'top' | 'bottom' | 'left' | 'right';
-export type ResolvedChartCartesianAxisPeerKind =
-  | 'quantitative'
-  | 'categoryPoint'
-  | 'dateSerial';
+export type ResolvedChartCartesianAxisPeerKind = 'quantitative' | 'categoryPoint' | 'dateSerial';
 export type ResolvedChartCartesianAxisCategoryCrossingApplication =
   | 'applied'
   | 'notApplicableQuantitativePeer'
@@ -2910,10 +2877,7 @@ export interface ResolvedChartCartesianAxisCrossingSnapshot {
 
 export type ResolvedChartCartesianPathOrder = 'source' | 'xAscending';
 export type ResolvedChartCartesianLayerRole = 'linePath' | 'marker' | 'areaFill' | 'bubble';
-export type ResolvedChartCartesianSizeAuthority =
-  | 'bubbleSize'
-  | 'markerStyle'
-  | 'fixedMarkSize';
+export type ResolvedChartCartesianSizeAuthority = 'bubbleSize' | 'markerStyle' | 'fixedMarkSize';
 export type ResolvedChartAreaSurfaceExtentPolicy =
   | 'pointCaps'
   | 'plotEdgeCaps'
@@ -3072,14 +3036,8 @@ export interface ResolvedChartCartesianLayerGeometrySnapshot {
   xField?: string;
   yField?: string;
   sizeField?: string;
-  xAxisRole?: Extract<
-    ResolvedChartCartesianAxisRole,
-    'categoryX' | 'dateCategoryX' | 'xValue'
-  >;
-  yAxisRole?: Extract<
-    ResolvedChartCartesianAxisRole,
-    'primaryYValue' | 'secondaryYValue'
-  >;
+  xAxisRole?: Extract<ResolvedChartCartesianAxisRole, 'categoryX' | 'dateCategoryX' | 'xValue'>;
+  yAxisRole?: Extract<ResolvedChartCartesianAxisRole, 'primaryYValue' | 'secondaryYValue'>;
   xScale?: ResolvedChartCartesianScaleGeometrySnapshot;
   yScale?: ResolvedChartCartesianScaleGeometrySnapshot;
   sizeScale?: ResolvedChartCartesianScaleGeometrySnapshot;

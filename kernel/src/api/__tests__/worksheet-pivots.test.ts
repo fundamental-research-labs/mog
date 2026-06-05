@@ -505,12 +505,7 @@ describe('WorksheetPivotsImpl', () => {
 
       await ws.pivots.moveField('SalesPivot', 'Vendor', 'row', 'row', 0);
 
-      expect(ctx.pivot.movePlacement).toHaveBeenCalledWith(
-        'pivot-1',
-        'row:Vendor:1',
-        'row',
-        0,
-      );
+      expect(ctx.pivot.movePlacement).toHaveBeenCalledWith('pivot-1', 'row:Vendor:1', 'row', 0);
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
     });
 

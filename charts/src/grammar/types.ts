@@ -546,10 +546,7 @@ export type ThreeDApproximationMarkType = 'bar3d' | 'line3d' | 'area3d' | 'arc3d
 export type ThreeDApproximationRenderer = 'pathDepthApproximation';
 export type ThreeDApproximationDepthSource = 'view3dDepthPercent' | 'gapDepth' | 'default';
 export type ThreeDApproximationDepthClampStatus = 'withinRange' | 'clampedMin' | 'clampedMax';
-export type ThreeDApproximationGeometryStatus =
-  | 'approximate'
-  | 'traceMissing'
-  | 'notApplicable';
+export type ThreeDApproximationGeometryStatus = 'approximate' | 'traceMissing' | 'notApplicable';
 export type ThreeDApproximationFaceRole =
   | 'front'
   | 'back'
@@ -648,27 +645,20 @@ export interface ThreeDApproximationTrace {
   geometryStatus: ThreeDApproximationGeometryStatus;
 }
 
-export type SurfaceApproximationRenderer =
-  | 'mogSurfaceApproximation'
-  | 'mogContourApproximation';
+export type SurfaceApproximationRenderer = 'mogSurfaceApproximation' | 'mogContourApproximation';
 export type SurfaceApproximationMode = 'surface3d' | 'contour';
 export type SurfaceApproximationContractKind =
   | 'surface3dFilled'
   | 'surface3dWireframe'
   | 'contourFilled'
   | 'contourWireframe';
-export type SurfaceApproximationGeometryStatus =
-  | 'approximate'
-  | 'traceMissing'
-  | 'notApplicable';
+export type SurfaceApproximationGeometryStatus = 'approximate' | 'traceMissing' | 'notApplicable';
 export type SurfaceApproximationGridSource = 'seriesPointIndexGrid' | 'unavailable';
 export type SurfaceApproximationBandAuthority =
   | 'generatedFromAxisAndData'
   | 'fallback'
   | 'sourceBandFmtPreservedOnly';
-export type SurfaceApproximationPlotAreaPolicy =
-  | 'squareTopView'
-  | 'normalizedProjectedCube';
+export type SurfaceApproximationPlotAreaPolicy = 'squareTopView' | 'normalizedProjectedCube';
 
 export interface SurfaceApproximationGridTrace {
   rows: number;

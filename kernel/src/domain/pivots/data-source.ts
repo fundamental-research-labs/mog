@@ -1,6 +1,4 @@
-import type {
-  PivotTableConfig as ApiPivotTableConfig,
-} from '@mog-sdk/contracts/api';
+import type { PivotTableConfig as ApiPivotTableConfig } from '@mog-sdk/contracts/api';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
@@ -29,11 +27,7 @@ export type PivotCreateDataConfig = Omit<
   'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'
 >;
 
-type MakePlacementId = (
-  area: PivotFieldArea,
-  fieldId: string,
-  position: number,
-) => PlacementId;
+type MakePlacementId = (area: PivotFieldArea, fieldId: string, position: number) => PlacementId;
 
 export function isSimplePivotConfig(config: Record<string, unknown>): boolean {
   return typeof config.dataSource === 'string' && !('sourceSheetName' in config);

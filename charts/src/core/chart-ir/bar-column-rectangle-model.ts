@@ -114,8 +114,7 @@ export function buildBarColumnRectangleModel(
   const series = input.series.filter((item) => item.visible !== false);
   if (series.length === 0) return undefined;
 
-  const categoryAxisLength =
-    input.orientation === 'horizontal' ? plotArea.height : plotArea.width;
+  const categoryAxisLength = input.orientation === 'horizontal' ? plotArea.height : plotArea.width;
   const categoryPitch = categoryPitchForPolicy(
     categoryAxisLength,
     categoryCount,
@@ -127,7 +126,9 @@ export function buildBarColumnRectangleModel(
     grouping: input.grouping,
     gapWidth: effectiveGapWidth(input.gapWidth),
     overlap: effectiveOverlap(input.overlap, input.grouping),
-    ...(input.categoryPositionPolicy ? { categoryPositionPolicy: input.categoryPositionPolicy } : {}),
+    ...(input.categoryPositionPolicy
+      ? { categoryPositionPolicy: input.categoryPositionPolicy }
+      : {}),
   };
   const slotCount = isStackedBarGrouping(input.grouping) ? 1 : Math.max(1, series.length);
   const offsets = series.map((item, slotIndex) => {
@@ -223,7 +224,7 @@ function buildRectangles(
       const category = input.categories?.[categoryIndex] ?? categoryIndex;
       const value =
         input.grouping === 'percentStacked'
-          ? normalized.get(series)?.[categoryIndex] ?? 0
+          ? (normalized.get(series)?.[categoryIndex] ?? 0)
           : rawValue;
       const stack = stackRangeForValue({
         grouping: input.grouping,
@@ -514,7 +515,9 @@ function valueRange(
     : [plotArea.y, plotArea.y + plotArea.height];
 }
 
-function finiteDomain(value: readonly [number, number] | undefined): readonly [number, number] | undefined {
+function finiteDomain(
+  value: readonly [number, number] | undefined,
+): readonly [number, number] | undefined {
   if (!Array.isArray(value) || value.length < 2) return undefined;
   const min = finiteNumber(value[0]);
   const max = finiteNumber(value[1]);
@@ -548,9 +551,7 @@ function clampToRange(value: number, range: readonly [number, number]): number {
   return Math.min(Math.max(value, Math.min(...range)), Math.max(...range));
 }
 
-function roundPlotArea(
-  value: BarColumnRectangleModelPlotArea,
-): BarColumnRectangleModelPlotArea {
+function roundPlotArea(value: BarColumnRectangleModelPlotArea): BarColumnRectangleModelPlotArea {
   return {
     x: roundModelNumber(value.x),
     y: roundModelNumber(value.y),

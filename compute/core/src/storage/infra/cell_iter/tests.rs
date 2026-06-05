@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::super::grid_helpers::{get_cells_map, get_properties_map};
 use super::*;
 use crate::storage::YrsStorage;
+use crate::storage::sheet::{dimensions, filters};
 use cell_types::{CellId, IdAllocator, RangePos, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
@@ -93,6 +94,96 @@ fn seed_cell(
         }
     }
     cell_id
+}
+
+fn seeded_filter_navigation_sheet() -> (YrsStorage, SheetId, GridIndex, String) {
+    let (storage, sid, mut grid) = storage_with_grid();
+
+    let header_start = get_or_create_cell_id(storage.doc(), storage.sheets(), sid, &mut grid, 0, 0);
+    let header_filter_col =
+        get_or_create_cell_id(storage.doc(), storage.sheets(), sid, &mut grid, 0, 1);
+    let header_end = get_or_create_cell_id(storage.doc(), storage.sheets(), sid, &mut grid, 0, 3);
+    let data_end = get_or_create_cell_id(storage.doc(), storage.sheets(), sid, &mut grid, 11, 3);
+
+    seed_cell(
+        &storage,
+        sid,
+        &mut grid,
+        0,
+        0,
+        CellValue::Text(Arc::from("Account")),
+    );
+    seed_cell(
+        &storage,
+        sid,
+        &mut grid,
+        0,
+        1,
+        CellValue::Text(Arc::from("Amount")),
+    );
+    seed_cell(
+        &storage,
+        sid,
+        &mut grid,
+        0,
+        3,
+        CellValue::Text(Arc::from("Vendor")),
+    );
+
+    for row in 1..=11u32 {
+        seed_cell(
+            &storage,
+            sid,
+            &mut grid,
+            row,
+            1,
+            CellValue::Number(FiniteF64::must(row as f64)),
+        );
+        seed_cell(
+            &storage,
+            sid,
+            &mut grid,
+            row,
+            4,
+            CellValue::Number(FiniteF64::must(row as f64)),
+        );
+    }
+
+    let filter_id_alloc = IdAllocator::new();
+    let filter = filters::create_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        &id_to_hex(header_start.as_u128()),
+        &id_to_hex(header_end.as_u128()),
+        &id_to_hex(data_end.as_u128()),
+        filters::FilterKind::AutoFilter,
+        None,
+        &filter_id_alloc,
+    )
+    .expect("create filter");
+    filters::set_column_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        &filter.id,
+        &id_to_hex(header_filter_col.as_u128()),
+        filters::ColumnFilter::Values {
+            values: vec![serde_json::json!("KeepCo")],
+            include_blanks: false,
+        },
+    );
+    dimensions::set_filter_hidden_rows(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        &filter.id,
+        &[2, 4, 6, 8, 10],
+        &[],
+        Some(&grid),
+    );
+
+    (storage, sid, grid, filter.id)
 }
 
 fn seed_cell_with_formula(
@@ -805,6 +896,51 @@ fn test_get_data_bounds_full_rows_detects_bounded_columns() {
     assert_eq!(result.end_row(), 2);
     assert_eq!(result.start_col(), 3);
     assert_eq!(result.end_col(), 4);
+}
+
+// -------------------------------------------------------------------
+// find_data_edge: filter-owned visibility
+// -------------------------------------------------------------------
+
+#[test]
+fn test_find_data_edge_skips_filter_only_hidden_rows_inside_filter_body() {
+    let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 1, 1, "down");
+
+    assert_eq!(target.row, 11);
+    assert_eq!(target.col, 1);
+}
+
+#[test]
+fn test_find_data_edge_treats_manual_plus_filter_hidden_row_as_boundary() {
+    let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
+    dimensions::hide_manual_rows(storage.doc(), storage.sheets(), &sid, &[2], Some(&grid));
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 1, 1, "down");
+
+    assert_eq!(target.row, 1);
+    assert_eq!(target.col, 1);
+}
+
+#[test]
+fn test_find_data_edge_treats_filter_hidden_row_outside_filter_columns_as_boundary() {
+    let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 1, 4, "down");
+
+    assert_eq!(target.row, 1);
+    assert_eq!(target.col, 4);
+}
+
+#[test]
+fn test_find_data_edge_treats_filter_hidden_row_from_header_start_as_boundary() {
+    let (storage, sid, grid, _) = seeded_filter_navigation_sheet();
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 0, 1, "down");
+
+    assert_eq!(target.row, 1);
+    assert_eq!(target.col, 1);
 }
 
 // -------------------------------------------------------------------

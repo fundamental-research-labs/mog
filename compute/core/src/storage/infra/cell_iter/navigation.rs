@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use compute_document::hex::id_to_hex;
+use cell_types::{CellId, SheetId};
+use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::identity::GridIndex;
 use yrs::{Doc, MapRef, Transact};
 
 use super::super::grid_helpers::get_cells_map;
 use super::read::has_data_at;
-use cell_types::SheetId;
 
 /// Find the data edge from a cell in a given direction (Ctrl+Arrow navigation).
 ///
@@ -27,7 +27,7 @@ pub fn find_data_edge(
     start_col: u32,
     direction: &str,
 ) -> snapshot_types::queries::CellPosition {
-    use crate::storage::sheet::{dimensions, merges};
+    use crate::storage::sheet::{dimensions, grouping, merges};
 
     const MAX_ROW: u32 = 1_048_575;
     const MAX_COL: u32 = 16_383;
@@ -47,9 +47,15 @@ pub fn find_data_edge(
     // Pre-fetch hidden sets for efficiency
     let hidden_rows: HashSet<u32> = dimensions::get_hidden_rows(doc, sheets, &sheet_id)
         .into_iter()
+        .chain(grouping::get_rows_hidden_by_collapsed_groups(
+            doc, sheets, &sheet_id,
+        ))
         .collect();
     let hidden_cols: HashSet<u32> = dimensions::get_hidden_columns(doc, sheets, &sheet_id)
         .into_iter()
+        .chain(grouping::get_columns_hidden_by_collapsed_groups(
+            doc, sheets, &sheet_id,
+        ))
         .collect();
 
     // Direction deltas
@@ -73,6 +79,36 @@ pub fn find_data_edge(
 
     let is_hidden =
         |r: u32, c: u32| -> bool { hidden_rows.contains(&r) || hidden_cols.contains(&c) };
+
+    let relevant_filter_ids = relevant_vertical_filter_ids(
+        doc, sheets, &sheet_id, grid, start_row, start_col, direction,
+    );
+
+    let is_filter_skipped_row = |r: u32, c: u32| -> bool {
+        if dc != 0 || hidden_cols.contains(&c) || !hidden_rows.contains(&r) {
+            return false;
+        }
+        let ownership =
+            dimensions::get_row_visibility_ownership(doc, sheets, &sheet_id, r, Some(grid));
+        ownership.effective_hidden
+            && !ownership.manual
+            && !ownership.structural
+            && !ownership.filter_owner_ids.is_empty()
+            && ownership
+                .filter_owner_ids
+                .iter()
+                .all(|filter_id| relevant_filter_ids.contains(filter_id))
+    };
+
+    let is_hidden_boundary =
+        |r: u32, c: u32| -> bool { is_hidden(r, c) && !is_filter_skipped_row(r, c) };
+
+    let advance_skipped_rows = |ri: &mut i64, ci: &mut i64| {
+        while in_bounds(*ri, *ci) && is_filter_skipped_row(*ri as u32, *ci as u32) {
+            *ri += dr;
+            *ci += dc;
+        }
+    };
 
     let check_data = |r: u32, c: u32| -> bool { has_data_at(&txn, grid, &cells_map, r, c) };
 
@@ -140,12 +176,16 @@ pub fn find_data_edge(
     if !in_bounds(ri, ci) {
         return start_pos;
     }
+    advance_skipped_rows(&mut ri, &mut ci);
+    if !in_bounds(ri, ci) {
+        return start_pos;
+    }
 
     let r = ri as u32;
     let c = ci as u32;
 
     // Stop at hidden boundary
-    if is_hidden(r, c) {
+    if is_hidden_boundary(r, c) {
         return start_pos;
     }
 
@@ -159,9 +199,13 @@ pub fn find_data_edge(
 
         // Case 1: both empty → find first non-empty
         while in_bounds(ri, ci) {
+            advance_skipped_rows(&mut ri, &mut ci);
+            if !in_bounds(ri, ci) {
+                break;
+            }
             let rr = ri as u32;
             let cc = ci as u32;
-            if is_hidden(rr, cc) {
+            if is_hidden_boundary(rr, cc) {
                 return to_merge_origin((ri - dr) as u32, (ci - dc) as u32);
             }
             if cell_has_data(rr, cc) {
@@ -178,9 +222,13 @@ pub fn find_data_edge(
     if !next_has_data {
         // Case 3: next empty → jump over empties to next data
         while in_bounds(ri, ci) {
+            advance_skipped_rows(&mut ri, &mut ci);
+            if !in_bounds(ri, ci) {
+                break;
+            }
             let rr = ri as u32;
             let cc = ci as u32;
-            if is_hidden(rr, cc) {
+            if is_hidden_boundary(rr, cc) {
                 return to_merge_origin((ri - dr) as u32, (ci - dc) as u32);
             }
             if cell_has_data(rr, cc) {
@@ -196,9 +244,13 @@ pub fn find_data_edge(
     let mut prev_r = start_row;
     let mut prev_c = start_col;
     while in_bounds(ri, ci) {
+        advance_skipped_rows(&mut ri, &mut ci);
+        if !in_bounds(ri, ci) {
+            break;
+        }
         let rr = ri as u32;
         let cc = ci as u32;
-        if is_hidden(rr, cc) {
+        if is_hidden_boundary(rr, cc) {
             return to_merge_origin(prev_r, prev_c);
         }
         if !cell_has_data(rr, cc) {
@@ -211,4 +263,44 @@ pub fn find_data_edge(
         ci = next.1;
     }
     to_merge_origin(prev_r, prev_c)
+}
+
+fn relevant_vertical_filter_ids(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    grid: &GridIndex,
+    start_row: u32,
+    start_col: u32,
+    direction: &str,
+) -> HashSet<String> {
+    if !matches!(direction, "up" | "down") {
+        return HashSet::new();
+    }
+
+    crate::storage::sheet::filters::get_filters_in_sheet(doc, sheets, sheet_id)
+        .into_iter()
+        .filter(|filter| !filter.column_filters.is_empty())
+        .filter_map(|filter| {
+            let (header_row, filter_start_col) =
+                resolve_filter_cell_pos(grid, &filter.header_start_cell_id)?;
+            let (_, filter_end_col) = resolve_filter_cell_pos(grid, &filter.header_end_cell_id)?;
+            let (data_end_row, _) = resolve_filter_cell_pos(grid, &filter.data_end_cell_id)?;
+
+            let start_col_in_range = start_col >= filter_start_col.min(filter_end_col)
+                && start_col <= filter_start_col.max(filter_end_col);
+            let start_row_in_body = start_row > header_row && start_row <= data_end_row;
+
+            if start_col_in_range && start_row_in_body {
+                Some(filter.id)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn resolve_filter_cell_pos(grid: &GridIndex, cell_id_hex: &str) -> Option<(u32, u32)> {
+    let cell_id = CellId::from_raw(hex_to_id(cell_id_hex)?);
+    grid.cell_position(&cell_id)
 }

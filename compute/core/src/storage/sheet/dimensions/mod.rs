@@ -32,8 +32,8 @@ pub use cols::{
     get_col_width_with_default, get_sheet_default_col_width, set_col_width,
 };
 pub use row_visibility::{
-    clear_filter_hidden_rows, get_hidden_rows, hide_manual_rows, is_row_hidden,
-    set_filter_hidden_rows, unhide_manual_rows,
+    clear_filter_hidden_rows, get_hidden_rows, get_row_visibility_ownership, hide_manual_rows,
+    is_row_hidden, set_filter_hidden_rows, unhide_manual_rows,
 };
 #[cfg(test)]
 pub use row_visibility::{hide_rows, unhide_rows};

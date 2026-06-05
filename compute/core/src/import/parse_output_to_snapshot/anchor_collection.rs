@@ -11,6 +11,9 @@ use crate::import::phantom::{parse_cell_ref, parse_range_ref};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum IdentityAnchorReason {
     Comment,
+    /// A sheet-level AutoFilter range or header column needs a
+    /// durable CellId so the runtime FilterState can resolve its range.
+    AutoFilter,
     /// A floating object (form control, shape, picture, chart, OLE, connector)
     /// is anchored at this position. Covers both the start anchor and, for
     /// two-cell anchors, the end anchor so the whole anchored span gets durable
@@ -56,6 +59,7 @@ pub(crate) fn collect_identity_required_anchors(
     sheet_data: &SheetData,
 ) -> FxHashMap<(u32, u32), Vec<IdentityAnchorReason>> {
     let mut anchors = FxHashMap::default();
+    identity_anchors_from_auto_filter(sheet_data, &mut anchors);
     identity_anchors_from_comments(sheet_data, &mut anchors);
     identity_anchors_from_floating_objects(sheet_data, &mut anchors);
     anchors
@@ -90,6 +94,34 @@ fn identity_anchors_from_comments(
                 reasons.push(IdentityAnchorReason::Comment);
             }
         }
+    }
+}
+
+fn identity_anchors_from_auto_filter(
+    sheet_data: &SheetData,
+    out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>,
+) {
+    let Some(auto_filter) = &sheet_data.auto_filter else {
+        return;
+    };
+    let Some((start_row, start_col, end_row, end_col)) = parse_range_ref(&auto_filter.range_ref)
+    else {
+        return;
+    };
+
+    let push = |out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>, pos: (u32, u32)| {
+        let reasons = out.entry(pos).or_default();
+        if !reasons.contains(&IdentityAnchorReason::AutoFilter) {
+            reasons.push(IdentityAnchorReason::AutoFilter);
+        }
+    };
+
+    push(out, (start_row, start_col));
+    push(out, (start_row, end_col));
+    push(out, (end_row, end_col));
+
+    for col in start_col..=end_col {
+        push(out, (start_row, col));
     }
 }
 
@@ -284,9 +316,10 @@ mod tests {
     use super::*;
     use cell_types::{CellId, SheetId, SheetRange};
     use domain_types::{
-        Comment, ConditionalFormat, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon,
-        FloatingObjectData, Hyperlink, MergeRegion, ShapeData, Sparkline, SparklineCellAddress,
-        SparklineDataRange, SparklineType, ValidationSpec,
+        AutoFilter, Comment, ConditionalFormat, FilterColumn, FloatingObject, FloatingObjectAnchor,
+        FloatingObjectCommon, FloatingObjectData, Hyperlink, MergeRegion, OoxmlFilterType,
+        ShapeData, Sparkline, SparklineCellAddress, SparklineDataRange, SparklineType,
+        ValidationSpec,
     };
     use formula_types::{
         IdentityCellRef, IdentityFormula, IdentityRangeRef, NamedRangeDef, Scope, TableDef,
@@ -687,5 +720,46 @@ mod tests {
             "two-cell shape end anchor must be identity-required"
         );
         assert_eq!(anchors.len(), 3, "exactly the three anchor positions");
+    }
+
+    #[test]
+    fn auto_filter_header_columns_are_identity_required() {
+        let sheet_data = SheetData {
+            auto_filter: Some(AutoFilter {
+                range_ref: "A1:D12".to_string(),
+                columns: vec![FilterColumn {
+                    col_index: 2,
+                    filter_type: Some(OoxmlFilterType::Values {
+                        values: vec!["KeepCo".to_string()],
+                        blanks: false,
+                        calendar_type: None,
+                        date_group_items: Vec::new(),
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let anchors = collect_identity_required_anchors(&sheet_data);
+
+        for col in 0..=3 {
+            assert_eq!(
+                anchors.get(&(0, col)).map(Vec::as_slice),
+                Some([IdentityAnchorReason::AutoFilter].as_slice()),
+                "AutoFilter header col {col} must be identity-required even without filterColumn metadata"
+            );
+        }
+        assert_eq!(
+            anchors.get(&(11, 3)).map(Vec::as_slice),
+            Some([IdentityAnchorReason::AutoFilter].as_slice()),
+            "AutoFilter data-end corner must be identity-required"
+        );
+        assert_eq!(
+            anchors.len(),
+            5,
+            "A1:D12 requires four header anchors plus the data-end corner"
+        );
     }
 }

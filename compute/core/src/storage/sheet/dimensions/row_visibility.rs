@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact};
 
 use super::yrs_access::{
@@ -8,6 +10,14 @@ use crate::identity::GridIndex;
 use cell_types::SheetId;
 use compute_document::schema::{KEY_FILTER_HIDDEN_ROWS, KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS};
 use compute_document::undo::ORIGIN_USER_EDIT;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowVisibilityOwnership {
+    pub effective_hidden: bool,
+    pub manual: bool,
+    pub structural: bool,
+    pub filter_owner_ids: BTreeSet<String>,
+}
 
 /// Hide rows for manual/user ownership.
 pub fn hide_manual_rows(
@@ -224,6 +234,43 @@ pub fn clear_filter_hidden_rows(
     }
 
     transitions
+}
+
+pub fn get_row_visibility_ownership(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    grid_index: Option<&GridIndex>,
+) -> RowVisibilityOwnership {
+    let structural = !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+    let Some(row_id) = row_id_key(grid_index, row) else {
+        return RowVisibilityOwnership {
+            effective_hidden: structural,
+            manual: false,
+            structural,
+            filter_owner_ids: BTreeSet::new(),
+        };
+    };
+
+    let txn = doc.transact();
+    let manual = get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS)
+        .is_some_and(|m| map_has_true(&m, &txn, &row_id));
+    let mut filter_owner_ids = BTreeSet::new();
+    if let Some(filter_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS) {
+        for (filter_id, owner) in filter_map.iter(&txn) {
+            if matches!(owner, Out::YMap(owner_map) if map_has_true(&owner_map, &txn, &row_id)) {
+                filter_owner_ids.insert(filter_id.to_string());
+            }
+        }
+    }
+
+    RowVisibilityOwnership {
+        effective_hidden: manual || structural || !filter_owner_ids.is_empty(),
+        manual,
+        structural,
+        filter_owner_ids,
+    }
 }
 
 /// Check if a row is hidden.

@@ -316,6 +316,20 @@ export async function createWorkbook(
     return (_kernelCreateWorkbook as unknown as KernelCreateWorkbook)(arg);
   }
 
+  if (arg && typeof arg === 'object' && !(arg instanceof Uint8Array)) {
+    const runtimeOption = (arg as { readonly runtime?: unknown }).runtime;
+    if (runtimeOption !== undefined) {
+      throw new Error(
+        '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
+      );
+    }
+    if ((arg as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
+      throw new Error(
+        '[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry',
+      );
+    }
+  }
+
   // Normalize all overloads into a unified CreateWorkbookOptions + optional xlsxBytes.
   let opts: CreateWorkbookOptions;
   let xlsxBytes: Uint8Array | undefined;

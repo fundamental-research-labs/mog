@@ -252,6 +252,7 @@ export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
 export type { SheetId }
 
 ## dist/workerd.d.ts
+export const createWorkbook: CreateWasmWorkbook
 export function createWorkbook(): Promise<Workbook>
 export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array): Promise<Workbook>

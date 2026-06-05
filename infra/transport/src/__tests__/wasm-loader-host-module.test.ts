@@ -49,6 +49,28 @@ describe('wasm-loader host-provided module', () => {
 
     expect(wasmInit).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects a different host module while initialization is in flight', async () => {
+    const firstModule = emptyWasmModule();
+    const secondModule = emptyWasmModule();
+    let releaseInit!: () => void;
+    wasmInit.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseInit = resolve;
+        }),
+    );
+
+    const firstLoad = loadWasmModule({ wasmModule: firstModule });
+    await expect(loadWasmModule({ wasmModule: secondModule })).rejects.toThrow(
+      'WASM module singleton is already initialized with a different module source',
+    );
+    while (!releaseInit) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    releaseInit();
+    await firstLoad;
+  });
 });
 
 function emptyWasmModule(): WebAssembly.Module {

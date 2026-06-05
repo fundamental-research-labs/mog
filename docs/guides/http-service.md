@@ -11,9 +11,9 @@ saving, authentication, and tenant policy in your own trusted host service.
 
 ## What Exists Today
 
-- `@mog-sdk/sdk` is the shipped public headless Node package. It exposes
-  same-process workbook APIs such as `createWorkbook`; it does not start or
-  document an HTTP server.
+- `@mog-sdk/sdk` is the shipped public unified headless SDK for Node,
+  Workers, and WASM-capable hosts. It exposes same-process workbook APIs such
+  as `createWorkbook`; it does not start or document an HTTP server.
 - `contracts/runtime-services` (`@mog-sdk/runtime-service-contracts`) is
   workspace-internal and `private: true`. It defines TypeScript-only envelopes
   for prospective service boundaries, such as runtime errors, audit events,

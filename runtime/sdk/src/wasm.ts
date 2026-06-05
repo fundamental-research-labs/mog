@@ -89,6 +89,10 @@ export async function createWorkbook(
     xlsxBytes = opts.xlsx;
     if (opts.source?.type === 'bytes') {
       xlsxBytes = opts.source.data;
+    } else if (opts.source !== undefined) {
+      throw new Error(
+        'File-path workbook sources are not supported by the WASM SDK entry; pass XLSX bytes instead',
+      );
     }
   } else {
     opts = {};

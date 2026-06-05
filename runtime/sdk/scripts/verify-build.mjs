@@ -240,8 +240,13 @@ try {
   assert(!('DocumentFactory' in esm), 'DocumentFactory is not exported');
   const wasm = await import(resolve(DIST, 'wasm.js'));
   assert(typeof wasm.createWorkbook === 'function', 'WASM createWorkbook is a function');
-  const workerd = await import(resolve(DIST, 'workerd.js'));
-  assert(typeof workerd.createWorkbook === 'function', 'workerd createWorkbook is a function');
+  const workerdDts = readFileSync(resolve(DIST, 'workerd.d.ts'), 'utf-8');
+  assert(/createWorkbook/.test(workerdDts), 'workerd createWorkbook is declared');
+  const workerdSource = readFileSync(resolve(DIST, 'workerd.js'), 'utf-8');
+  assert(
+    /@mog-sdk\/wasm\/wasm/.test(workerdSource),
+    'workerd bundle imports the compute WASM asset for Workers bundlers',
+  );
 } catch (e) {
   assert(false, `ESM import failed: ${e.message}`);
 }

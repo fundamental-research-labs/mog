@@ -13,6 +13,7 @@ import type { WasmInitFn, WasmModule } from './types';
 let wasmModule: WasmModule | null = null;
 let wasmLoadPromise: Promise<void> | null = null;
 let wasmModuleSource: WasmModuleSource | null = null;
+let wasmLoadingModuleSource: WasmModuleSource | null = null;
 
 type NodeFsPromises = typeof import('node:fs/promises');
 type NodeUrl = typeof import('node:url');
@@ -76,7 +77,14 @@ export async function loadWasmModule(
     assertCompatibleWasmModuleSource(hostModule);
     return;
   }
-  if (wasmLoadPromise) return wasmLoadPromise;
+  if (wasmLoadPromise) {
+    assertCompatibleWasmModuleSource(hostModule, wasmLoadingModuleSource);
+    return wasmLoadPromise;
+  }
+
+  wasmLoadingModuleSource = hostModule
+    ? { kind: 'host-module', module: hostModule }
+    : { kind: 'default' };
 
   wasmLoadPromise = (async () => {
     try {
@@ -106,6 +114,7 @@ export async function loadWasmModule(
       await mod.default(moduleInput === undefined ? undefined : { module_or_path: moduleInput });
       wasmModule = mod;
       wasmModuleSource = moduleSource;
+      wasmLoadingModuleSource = null;
 
       // Run init callbacks to wire up WASM backends.
       if (options.initFns) {
@@ -115,6 +124,7 @@ export async function loadWasmModule(
       }
     } catch (err) {
       wasmLoadPromise = null;
+      wasmLoadingModuleSource = null;
       throw TransportError.fromCommand(err, 'loadWasmModule');
     }
   })();
@@ -135,9 +145,12 @@ async function resolveHostWasmModule(
   return module === undefined ? undefined : module;
 }
 
-function assertCompatibleWasmModuleSource(hostModule: WebAssembly.Module | undefined): void {
-  if (!hostModule || !wasmModuleSource) return;
-  if (wasmModuleSource.kind === 'host-module' && wasmModuleSource.module === hostModule) return;
+function assertCompatibleWasmModuleSource(
+  hostModule: WebAssembly.Module | undefined,
+  source: WasmModuleSource | null = wasmModuleSource,
+): void {
+  if (!hostModule || !source) return;
+  if (source.kind === 'host-module' && source.module === hostModule) return;
   throw new Error(
     'WASM module singleton is already initialized with a different module source',
   );
@@ -189,4 +202,5 @@ export function resetWasmModule(): void {
   wasmModule = null;
   wasmLoadPromise = null;
   wasmModuleSource = null;
+  wasmLoadingModuleSource = null;
 }

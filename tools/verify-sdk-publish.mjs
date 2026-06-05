@@ -263,6 +263,21 @@ await build({
   target: 'es2022',
   conditions: ['workerd', 'browser', 'import', 'default'],
   external: ['*.wasm'],
+  plugins: [
+    {
+      name: 'external-wasm-assets',
+      setup(build) {
+        build.onResolve({ filter: /^@mog-sdk\\/wasm\\/wasm$/ }, () => ({
+          path: './compute_core_wasm_bg.wasm',
+          external: true,
+        }));
+        build.onResolve({ filter: /\\.wasm$/ }, (args) => ({
+          path: args.path,
+          external: true,
+        }));
+      },
+    },
+  ],
   logLevel: 'silent',
   sourcemap: false,
   sourcesContent: false,
@@ -276,10 +291,12 @@ const wasmImportSpecifiers = [
 console.log('BUNDLE_PATH:' + bundlePath);
 console.log('BUNDLE_WASM_IMPORTS:' + JSON.stringify(wasmImportSpecifiers));
 const escapingWasmImports = wasmImportSpecifiers.filter((specifier) =>
-  specifier.split('/').includes('..'),
+  specifier.split('/').includes('..') && !specifier.includes('/node_modules/'),
 );
 if (escapingWasmImports.length > 0) {
-  throw new Error('Worker bundle has escaping WASM imports: ' + escapingWasmImports.join(', '));
+  throw new Error(
+    'Worker bundle has escaping non-package WASM imports: ' + escapingWasmImports.join(', '),
+  );
 }
 const forbiddenBundlePatterns = [
   /\\bnode:[^'")\\s]+/,
@@ -426,7 +443,7 @@ defineCheck('leaks', {
 
 defineCheck('exports-sync', {
   group: 'static',
-  description: 'Validate contracts publishConfig.exports covers all export paths',
+  description: 'Validate publish export maps for contracts and SDK runtime entries',
   fn() {
     section('Contracts publishConfig.exports sync');
     const pkg = JSON.parse(readFileSync(resolve(CONTRACTS_DIR, 'package.json'), 'utf-8'));
@@ -436,7 +453,25 @@ defineCheck('exports-sync', {
     assert(missing.length === 0, `publishConfig.exports covers all ${dev.length} export paths`);
     if (missing.length > 0) {
       for (const k of missing.slice(0, 10)) console.error(`    missing: ${k}`);
-      console.error('    Fix: node contracts/scripts/prepare-publish.mjs');
+        console.error('    Fix: node contracts/scripts/prepare-publish.mjs');
+    }
+
+    section('SDK runtime export map');
+    const sdkPkg = JSON.parse(readFileSync(resolve(SDK_DIR, 'package.json'), 'utf-8'));
+    const rootExports = sdkPkg.publishConfig?.exports?.['.'];
+    const rootKeys = rootExports && typeof rootExports === 'object' ? Object.keys(rootExports) : [];
+    for (const condition of ['workerd', 'node-addons', 'node', 'browser', 'default']) {
+      assert(rootKeys.includes(condition), `SDK root export includes ${condition} condition`);
+    }
+    assert(
+      !rootKeys.includes('import') && !rootKeys.includes('require'),
+      'SDK root export has no generic import/require branch before default WASM fallback',
+    );
+    for (const subpath of ['./node', './wasm', './workerd']) {
+      assert(
+        Boolean(sdkPkg.publishConfig?.exports?.[subpath]),
+        `SDK publish exports include ${subpath}`,
+      );
     }
   },
 });
@@ -511,6 +546,23 @@ defineCheck('pack-verify', {
         for (const [k, v] of srcExports.slice(0, 5))
           console.error(`    ${k} → ${typeof v === 'string' ? v : JSON.stringify(v)}`);
       }
+    }
+
+    const sdkPkgPath = join(dir, 'node_modules/@mog-sdk/sdk/package.json');
+    if (existsSync(sdkPkgPath)) {
+      const pkg = JSON.parse(readFileSync(sdkPkgPath, 'utf-8'));
+      const rootKeys = Object.keys(pkg.exports?.['.'] ?? {});
+      assert(rootKeys.includes('workerd'), 'Packed SDK root export includes workerd condition');
+      assert(rootKeys.includes('default'), 'Packed SDK root export includes default WASM fallback');
+      assert(
+        !rootKeys.includes('import') && !rootKeys.includes('require'),
+        'Packed SDK root export has no generic import/require native branch',
+      );
+      assert(Boolean(pkg.exports?.['./node']), 'Packed SDK exports ./node');
+      assert(Boolean(pkg.exports?.['./wasm']), 'Packed SDK exports ./wasm');
+      assert(Boolean(pkg.exports?.['./workerd']), 'Packed SDK exports ./workerd');
+    } else {
+      assert(false, 'Packed SDK package.json not found in consumer node_modules');
     }
   },
 });
@@ -828,7 +880,7 @@ defineCheck('worker-runtime', {
       join(fixtureDir, 'worker-entry.mjs'),
       `
 import { createWorkbook } from '@mog-sdk/sdk';
-import computeWasmModule from './compute_core_wasm_bg.wasm';
+import { createWorkbook as createWorkerdWorkbook } from '@mog-sdk/sdk/workerd';
 import chartRasterWasmModule from './compute_chart_render_wasm_bg.wasm';
 
 function decodeDataUrl(dataUrl, expectedPrefix) {
@@ -867,13 +919,13 @@ function serializeError(error) {
 export default {
   async fetch() {
     let wb;
+    let workerdSubpathWb;
     try {
       if (typeof process !== 'undefined') {
         throw new Error('Worker global unexpectedly exposes process');
       }
       console.log('WORKER_STAGE:createWorkbook:start');
       wb = await createWorkbook({
-        wasmModule: computeWasmModule,
         chartRendering: {
           rasterModule: chartRasterWasmModule,
         },
@@ -946,6 +998,17 @@ export default {
         throw new Error('JPEG signature mismatch: ' + jpegSignature);
       }
 
+      console.log('WORKER_STAGE:workerdSubpath:start');
+      workerdSubpathWb = await createWorkerdWorkbook({ userTimezone: 'UTC' });
+      const subpathSheet = workerdSubpathWb.activeSheet;
+      await subpathSheet.setCell('A1', 42);
+      await subpathSheet.setCell('A2', '=A1*2');
+      const subpathValue = await subpathSheet.getValue('A2');
+      if (subpathValue !== 84) {
+        throw new Error('Workerd subpath formula mismatch: ' + String(subpathValue));
+      }
+      console.log('WORKER_STAGE:workerdSubpath:end');
+
       return Response.json({
         ok: true,
         svgBytes: svgXml.length,
@@ -965,6 +1028,7 @@ export default {
       );
     } finally {
       wb?.dispose();
+      workerdSubpathWb?.dispose();
     }
   },
 };

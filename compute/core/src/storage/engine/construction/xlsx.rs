@@ -26,6 +26,12 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
 
     let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
     engine.import_report = import_report;
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::FullHydration,
+    );
 
     // Register physical phantom cells (created during hydration for merges and
     // hyperlinks on cells with no data) in the GridIndex so position-based
@@ -53,6 +59,12 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     engine.import_report = import_report;
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::FullHydration,
+    );
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);

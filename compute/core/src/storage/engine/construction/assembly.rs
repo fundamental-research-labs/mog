@@ -252,6 +252,12 @@ fn assemble_engine_inner(
 
     load_custom_cell_styles(&mut engine.stores);
     load_custom_table_styles(&mut engine.stores);
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        None,
+        domain_types::ImportPhase::FullHydration,
+    );
     engine.init_cf_caches();
     normalize_named_range_refs(&mut engine);
     sync_enable_calculation_flags(&mut engine);
@@ -355,6 +361,14 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     );
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
+
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        None,
+        domain_types::ImportPhase::FullHydration,
+    );
+    engine.update_buffer.clear();
 
     // Recreate observer + undo, derive settings, clear viewport
     let (observer, undo_manager) = create_observer_and_undo(&engine.stores.storage);

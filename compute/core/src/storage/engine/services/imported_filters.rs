@@ -5,7 +5,7 @@ use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::KEY_PROPERTIES;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::filter::{
-    AutoFilter, FilterColumn, OoxmlFilterType, column_filter_to_ooxml_filter_type,
+    column_filter_to_ooxml_filter_type, AutoFilter, FilterColumn, OoxmlFilterType,
 };
 use domain_types::yrs_schema;
 use value_types::CellValue;
@@ -13,7 +13,7 @@ use yrs::{Map, MapPrelim, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{dimensions, filters};
+use crate::storage::sheet::{dimensions, filters, properties};
 
 /// Reconcile imported sheet-level AutoFilters with runtime row visibility.
 ///
@@ -25,10 +25,18 @@ use crate::storage::sheet::{dimensions, filters};
 pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    mut import_report: Option<&mut domain_types::ImportReport>,
+    import_phase: domain_types::ImportPhase,
 ) {
     let sheet_ids: Vec<SheetId> = stores.grid_indexes.keys().copied().collect();
     for sheet_id in sheet_ids {
-        normalize_imported_auto_filter_visibility_for_sheet(stores, mirror, &sheet_id);
+        normalize_imported_auto_filter_visibility_for_sheet(
+            stores,
+            mirror,
+            &sheet_id,
+            import_report.as_deref_mut(),
+            import_phase,
+        );
     }
 }
 
@@ -36,6 +44,8 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
+    mut import_report: Option<&mut domain_types::ImportReport>,
+    import_phase: domain_types::ImportPhase,
 ) {
     let imported_auto_filter = read_imported_auto_filter_metadata(stores, sheet_id);
     if imported_auto_filter.is_none() {
@@ -59,15 +69,27 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             .collect::<Vec<_>>();
 
     for filter in imported_filters {
-        if filters::get_filter_metadata_binding(
+        let binding = filters::get_filter_metadata_binding(
             stores.storage.doc(),
             stores.storage.sheets(),
             sheet_id,
             &filter.id,
-        )
-        .is_some_and(|binding| binding.shell.capability == filters::FilterCapability::Unsupported)
-        {
-            continue;
+        );
+        if let Some(binding) = binding.as_ref() {
+            if binding.shell.capability == filters::FilterCapability::Unsupported {
+                if let Some(report) = import_report.as_deref_mut() {
+                    record_unsupported_filter_import_diagnostics(
+                        stores,
+                        mirror,
+                        sheet_id,
+                        binding,
+                        imported_auto_filter.as_ref(),
+                        report,
+                        import_phase,
+                    );
+                }
+                continue;
+            }
         }
 
         let results = evaluate_runtime_filter(stores, mirror, sheet_id, &filter.id);
@@ -485,8 +507,23 @@ fn unsupported_reasons_for_filter_type(
         } if !date_group_items.is_empty() => {
             vec![filters::ImportFilterUnsupportedReason::DateGroupUnsupported]
         }
-        OoxmlFilterType::Dynamic { .. } => {
-            vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported]
+        OoxmlFilterType::Custom { conditions, .. } => {
+            if conditions
+                .iter()
+                .any(|condition| !is_supported_custom_operator(&condition.operator))
+            {
+                vec![filters::ImportFilterUnsupportedReason::UnknownCustomOperator]
+            } else {
+                Vec::new()
+            }
+        }
+        OoxmlFilterType::Dynamic { dynamic_type, .. } => {
+            let mut reasons =
+                vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported];
+            if !is_known_dynamic_type(dynamic_type) {
+                reasons.push(filters::ImportFilterUnsupportedReason::UnknownDynamicType);
+            }
+            reasons
         }
         OoxmlFilterType::Color { .. } => {
             vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
@@ -498,6 +535,50 @@ fn unsupported_reasons_for_filter_type(
     }
 }
 
+fn is_supported_custom_operator(operator: &str) -> bool {
+    matches!(
+        operator,
+        "equal"
+            | "equals"
+            | "notEqual"
+            | "notEquals"
+            | "greaterThan"
+            | "greaterThanOrEqual"
+            | "lessThan"
+            | "lessThanOrEqual"
+            | "beginsWith"
+            | "startsWith"
+            | "endsWith"
+            | "contains"
+            | "notContains"
+            | "between"
+            | "notBetween"
+    )
+}
+
+fn is_known_dynamic_type(dynamic_type: &str) -> bool {
+    matches!(
+        dynamic_type,
+        "aboveAverage"
+            | "belowAverage"
+            | "today"
+            | "yesterday"
+            | "tomorrow"
+            | "thisWeek"
+            | "lastWeek"
+            | "nextWeek"
+            | "thisMonth"
+            | "lastMonth"
+            | "nextMonth"
+            | "thisQuarter"
+            | "lastQuarter"
+            | "nextQuarter"
+            | "thisYear"
+            | "lastYear"
+            | "nextYear"
+    )
+}
+
 fn lossless_filter_kind(filter_type: &OoxmlFilterType) -> &'static str {
     match filter_type {
         OoxmlFilterType::Values { .. } => "values",
@@ -507,6 +588,209 @@ fn lossless_filter_kind(filter_type: &OoxmlFilterType) -> &'static str {
         OoxmlFilterType::Color { .. } => "color",
         OoxmlFilterType::Icon { .. } => "icon",
     }
+}
+
+fn record_unsupported_filter_import_diagnostics(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    binding: &filters::FilterMetadataBinding,
+    imported_auto_filter: Option<&AutoFilter>,
+    report: &mut domain_types::ImportReport,
+    import_phase: domain_types::ImportPhase,
+) {
+    let Some(imported_auto_filter) = imported_auto_filter else {
+        return;
+    };
+
+    let sheet_index = stores
+        .storage
+        .sheet_order()
+        .iter()
+        .position(|candidate| candidate == sheet_id)
+        .map(|idx| idx as u32);
+    let sheet_name =
+        properties::get_sheet_name(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let source_key = serde_json::to_string(&binding.source_key).ok();
+
+    if imported_auto_filter.ext_lst_raw.is_some() {
+        let diagnostic = unsupported_filter_import_diagnostic(
+            binding,
+            sheet_index,
+            sheet_name.clone(),
+            source_key.clone(),
+            None,
+            None,
+            resolve_filter_cell_pos(stores, mirror, sheet_id, &binding.header_start_cell_id),
+            vec![filters::ImportFilterUnsupportedReason::UnknownExtension],
+            "autoFilter".to_string(),
+        );
+        upsert_import_diagnostic_phase(report, diagnostic, import_phase);
+    }
+
+    for column in &imported_auto_filter.columns {
+        let mut reasons = BTreeSet::new();
+        if column.ext_lst_raw.is_some() {
+            reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
+        }
+        if let Some(filter_type) = &column.filter_type {
+            reasons.extend(unsupported_reasons_for_filter_type(filter_type));
+        }
+        if reasons.is_empty() {
+            continue;
+        }
+
+        let resolved_cell = binding
+            .col_id_to_header_cell_id
+            .get(&column.col_index)
+            .and_then(|header_cell_id| {
+                resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
+            });
+        let filter_kind = column
+            .filter_type
+            .as_ref()
+            .map(lossless_filter_kind)
+            .unwrap_or("filterColumn")
+            .to_string();
+        let diagnostic = unsupported_filter_import_diagnostic(
+            binding,
+            sheet_index,
+            sheet_name.clone(),
+            source_key.clone(),
+            Some(column.col_index),
+            None,
+            resolved_cell,
+            reasons.into_iter().collect(),
+            filter_kind,
+        );
+        upsert_import_diagnostic_phase(report, diagnostic, import_phase);
+    }
+}
+
+fn unsupported_filter_import_diagnostic(
+    binding: &filters::FilterMetadataBinding,
+    sheet_index: Option<u32>,
+    sheet_name: Option<String>,
+    source_key: Option<String>,
+    filter_col_id: Option<u32>,
+    table_column_ordinal: Option<u32>,
+    resolved_cell: Option<(u32, u32)>,
+    reasons: Vec<filters::ImportFilterUnsupportedReason>,
+    filter_kind: String,
+) -> domain_types::ImportDiagnostic {
+    let code = domain_types::ImportDiagnosticCode::UnsupportedFeature;
+    let part = sheet_index.map(|idx| format!("sheet:{idx}"));
+    let (row, col) = resolved_cell
+        .map(|(row, col)| (Some(row), Some(col)))
+        .unwrap_or((None, None));
+    let cell_ref = resolved_cell.map(|(row, col)| cell_ref_from_pos(row, col));
+    let identity = format!(
+        "{}:{}:{}:{}",
+        binding.source_fingerprint,
+        filter_col_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        table_column_ordinal
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        reason_tokens(&reasons).join("|")
+    );
+    let message = format!(
+        "Imported AutoFilter criterion was preserved but cannot be applied: {}",
+        reason_tokens(&reasons).join(", ")
+    );
+
+    domain_types::ImportDiagnostic {
+        id: domain_types::deterministic_diagnostic_id(
+            &code,
+            part.as_deref(),
+            None,
+            row,
+            col,
+            Some(&identity),
+        ),
+        code: code.clone(),
+        severity: domain_types::ImportSeverity::Warning,
+        feature: domain_types::ImportFeatureKind::Worksheet,
+        recoverability: domain_types::ImportRecoverability::UnsupportedPreserved,
+        message: message.clone(),
+        reference: Some(domain_types::ImportDiagnosticRef {
+            code: Some(code),
+            message: Some(message),
+            part,
+            sheet_index,
+            sheet_name,
+            source_range: Some(binding.range_ref.clone()),
+            feature_kind: Some(domain_types::ImportFeatureKind::Worksheet),
+            object_id: Some(binding.filter_id.clone()),
+            filter_col_id,
+            table_column_ordinal,
+            unresolved_filter_col_id: filter_col_id.filter(|_| resolved_cell.is_none()),
+            unresolved_table_column_ordinal: table_column_ordinal
+                .filter(|_| resolved_cell.is_none()),
+            row,
+            col,
+            cell_ref,
+            ..domain_types::ImportDiagnosticRef::default()
+        }),
+        details: Some(domain_types::ImportDiagnosticDetails::UnsupportedFilter {
+            reasons,
+            filter_id: Some(binding.filter_id.clone()),
+            filter_kind: Some(filter_kind),
+            source_key,
+            filter_col_id,
+            table_column_ordinal,
+            resolved_col: col,
+        }),
+        import_phases: Vec::new(),
+        first_import_phase: None,
+    }
+}
+
+fn upsert_import_diagnostic_phase(
+    report: &mut domain_types::ImportReport,
+    mut diagnostic: domain_types::ImportDiagnostic,
+    phase: domain_types::ImportPhase,
+) {
+    if let Some(existing) = report
+        .diagnostics
+        .iter_mut()
+        .find(|existing| existing.id == diagnostic.id)
+    {
+        if !existing.import_phases.contains(&phase) {
+            existing.import_phases.push(phase);
+            existing.import_phases.sort();
+        }
+        existing.first_import_phase = Some(
+            existing
+                .first_import_phase
+                .map(|first| first.min(phase))
+                .unwrap_or(phase),
+        );
+        report.canonicalize();
+        return;
+    }
+
+    diagnostic.import_phases = vec![phase];
+    diagnostic.first_import_phase = Some(phase);
+    report.diagnostics.push(diagnostic);
+    report.canonicalize();
+}
+
+fn reason_tokens(reasons: &[filters::ImportFilterUnsupportedReason]) -> Vec<String> {
+    reasons
+        .iter()
+        .map(|reason| {
+            serde_json::to_string(reason)
+                .unwrap_or_else(|_| format!("{reason:?}"))
+                .trim_matches('"')
+                .to_string()
+        })
+        .collect()
+}
+
+fn cell_ref_from_pos(row: u32, col: u32) -> String {
+    format!("{}{}", column_name(col), row + 1)
 }
 
 fn filter_binding_fingerprint(
@@ -781,8 +1065,11 @@ fn resolve_filter_cell_pos(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
-    use domain_types::domain::filter::{DateGroupItem, FilterColumn, OoxmlFilterType};
+    use domain_types::domain::filter::{
+        DateGroupItem, FilterColumn, OoxmlFilterCondition, OoxmlFilterType,
+    };
 
     use super::*;
 
@@ -954,6 +1241,29 @@ mod tests {
                 },
                 FilterColumn {
                     col_index: 2,
+                    filter_type: Some(OoxmlFilterType::Custom {
+                        conditions: vec![OoxmlFilterCondition {
+                            operator: "notARealOperator".to_string(),
+                            value: CellValue::Text(Arc::from("x")),
+                            value2: None,
+                        }],
+                        and_logic: true,
+                    }),
+                    ..Default::default()
+                },
+                FilterColumn {
+                    col_index: 3,
+                    filter_type: Some(OoxmlFilterType::Dynamic {
+                        dynamic_type: "notARealDynamicFilter".to_string(),
+                        value: None,
+                        max_value: None,
+                        value_iso: None,
+                        max_value_iso: None,
+                    }),
+                    ..Default::default()
+                },
+                FilterColumn {
+                    col_index: 4,
                     filter_type: Some(OoxmlFilterType::Color {
                         dxf_id: Some(4),
                         cell_color: true,
@@ -961,7 +1271,7 @@ mod tests {
                     ..Default::default()
                 },
                 FilterColumn {
-                    col_index: 3,
+                    col_index: 5,
                     filter_type: Some(OoxmlFilterType::Icon {
                         icon_set: Some("3TrafficLights1".to_string()),
                         icon_id: 1,
@@ -981,6 +1291,8 @@ mod tests {
         assert_eq!(
             shell.unsupported_reasons,
             vec![
+                filters::ImportFilterUnsupportedReason::UnknownDynamicType,
+                filters::ImportFilterUnsupportedReason::UnknownCustomOperator,
                 filters::ImportFilterUnsupportedReason::DateGroupUnsupported,
                 filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported,
                 filters::ImportFilterUnsupportedReason::ColorDxfUnresolved,
@@ -995,7 +1307,98 @@ mod tests {
                 .iter()
                 .map(|criterion| criterion.kind.as_str())
                 .collect::<Vec<_>>(),
-            vec!["values", "dynamic", "color", "icon"]
+            vec!["values", "dynamic", "custom", "dynamic", "color", "icon"]
         );
+    }
+
+    #[test]
+    fn unsupported_import_diagnostic_merges_phases_and_preserves_filter_location() {
+        let mut col_id_to_header_cell_id = BTreeMap::new();
+        col_id_to_header_cell_id.insert(2, "header-c".to_string());
+        let binding = filters::FilterMetadataBinding {
+            filter_id: "filter-1".to_string(),
+            filter_kind: filters::FilterKind::AutoFilter,
+            sheet_id: "sheet-1".to_string(),
+            table_id: None,
+            owner_path: filters::FilterMetadataOwnerPath::SheetAutoFilter {
+                sheet_id: "sheet-1".to_string(),
+            },
+            source_key: filters::FilterMetadataSourceKey::SheetAutoFilter {
+                sheet_id: "sheet-1".to_string(),
+                range_ref: "A1:D12".to_string(),
+            },
+            range_ref: "A1:D12".to_string(),
+            header_start_cell_id: "header-a".to_string(),
+            header_end_cell_id: "header-d".to_string(),
+            data_end_cell_id: "data-d".to_string(),
+            col_id_to_header_cell_id,
+            shell: filters::FilterShellMetadata::default(),
+            source_fingerprint: "filterMetadataBindingFingerprintV1:test".to_string(),
+        };
+        let diagnostic = unsupported_filter_import_diagnostic(
+            &binding,
+            Some(0),
+            Some("Data".to_string()),
+            Some(r#"{"kind":"sheetAutoFilter"}"#.to_string()),
+            Some(2),
+            None,
+            Some((0, 2)),
+            vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported],
+            "icon".to_string(),
+        );
+        let mut report = domain_types::ImportReport::default();
+
+        upsert_import_diagnostic_phase(
+            &mut report,
+            diagnostic.clone(),
+            domain_types::ImportPhase::CriticalSheet,
+        );
+        upsert_import_diagnostic_phase(
+            &mut report,
+            diagnostic,
+            domain_types::ImportPhase::FullHydration,
+        );
+
+        assert_eq!(report.diagnostics.len(), 1);
+        let diagnostic = &report.diagnostics[0];
+        assert_eq!(
+            diagnostic.import_phases,
+            vec![
+                domain_types::ImportPhase::CriticalSheet,
+                domain_types::ImportPhase::FullHydration
+            ]
+        );
+        assert_eq!(
+            diagnostic.first_import_phase,
+            Some(domain_types::ImportPhase::CriticalSheet)
+        );
+        let reference = diagnostic.reference.as_ref().unwrap();
+        assert_eq!(reference.sheet_index, Some(0));
+        assert_eq!(reference.sheet_name.as_deref(), Some("Data"));
+        assert_eq!(reference.source_range.as_deref(), Some("A1:D12"));
+        assert_eq!(reference.filter_col_id, Some(2));
+        assert_eq!(reference.row, Some(0));
+        assert_eq!(reference.col, Some(2));
+        assert_eq!(reference.cell_ref.as_deref(), Some("C1"));
+
+        let Some(domain_types::ImportDiagnosticDetails::UnsupportedFilter {
+            reasons,
+            filter_id,
+            filter_kind,
+            filter_col_id,
+            resolved_col,
+            ..
+        }) = diagnostic.details.as_ref()
+        else {
+            panic!("expected unsupported filter details");
+        };
+        assert_eq!(
+            reasons,
+            &vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+        );
+        assert_eq!(filter_id.as_deref(), Some("filter-1"));
+        assert_eq!(filter_kind.as_deref(), Some("icon"));
+        assert_eq!(*filter_col_id, Some(2));
+        assert_eq!(*resolved_col, Some(2));
     }
 }

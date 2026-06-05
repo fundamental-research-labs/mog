@@ -5,7 +5,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     xlsx_data: &[u8],
 ) -> Result<RecalcResult, ComputeError> {
     use crate::import;
-    use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
+    use crate::storage::infra::hydration::{allocate_sheet_ids, DefaultIdAllocator};
 
     // Pass 1: Parse XLSX — only first sheet's cells (ZIP decompress + XML parse).
     // Remaining sheets get metadata only. Full parse happens in complete_deferred_hydration.
@@ -328,6 +328,13 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
 
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::CriticalSheet,
+    );
+
     // Pass 9: Observer/undo/settings for the critical Yrs document.
     engine.update_buffer.clear();
     engine._update_subscription = crate::storage::engine::update_buffer::install_observer(
@@ -383,7 +390,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let (full_parse_output, import_report) = {
+        let (full_parse_output, mut import_report) = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
             let (parsed, report) = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
@@ -630,6 +637,13 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         };
         load_custom_cell_styles(&mut stores);
         load_custom_table_styles(&mut stores);
+
+        crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+            &mut stores,
+            &mut new_mirror,
+            Some(&mut import_report),
+            domain_types::ImportPhase::FullHydration,
+        );
 
         DeferredHydrationCompletion {
             stores,

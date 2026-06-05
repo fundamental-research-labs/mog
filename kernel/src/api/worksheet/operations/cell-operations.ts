@@ -261,6 +261,7 @@ async function reapplyActiveFiltersAfterWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
 ): Promise<void> {
+  await ctx.awaitMaterialized?.('allSheets');
   const activeFilters = await ctx.computeBridge.getActiveFilters(sheetId);
   for (const filter of activeFilters) {
     await ctx.computeBridge.applyFilter(sheetId, filter.id);

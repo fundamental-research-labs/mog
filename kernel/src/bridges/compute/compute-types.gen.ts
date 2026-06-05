@@ -1972,6 +1972,11 @@ export interface FilterChange {
   sheetId: string;
   filterId?: string;
   filterKind?: string;
+  tableId?: string;
+  capability?: FilterCapability;
+  unsupportedReasons?: ImportFilterUnsupportedReason[];
+  hasActiveFilter?: boolean;
+  clearable?: boolean;
   action?: string;
   hiddenRowCount?: number;
   visibleRowCount?: number;
@@ -2034,6 +2039,46 @@ export type FilterOperator = "equals" | "notEquals" | "contains" | "notContains"
 export interface FilterRecordCount {
   visible: number;
   total: number;
+}
+
+export interface FilterHeaderRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
+export type FilterCapability = 'supported' | 'unsupported';
+
+export type ImportFilterUnsupportedReason =
+  | 'unknownDynamicType'
+  | 'unknownCustomOperator'
+  | 'dateGroupUnsupported'
+  | 'dynamicTemporalContextUnsupported'
+  | 'valueTokenUnresolved'
+  | 'valueTypeUnsupported'
+  | 'colorDxfUnresolved'
+  | 'iconFilterUnsupported'
+  | 'unknownExtension'
+  | 'tableFilterShapeUnsupported';
+
+export type FilterHeaderSourceType = 'sheetAutoFilter' | 'tableAutoFilter';
+
+export interface FilterHeaderInfo {
+  filterId: string;
+  headerCellId: string;
+  hasActiveFilter: boolean;
+  row: number;
+  col: number;
+  filterKind: FilterKind;
+  range: FilterHeaderRange;
+  tableId?: string;
+  sourceType: FilterHeaderSourceType;
+  capability: FilterCapability;
+  unsupportedReasons: ImportFilterUnsupportedReason[];
+  buttonVisible: boolean;
+  hiddenButton: boolean;
+  showButton: boolean;
 }
 
 export interface FilterSortState {
@@ -2610,6 +2655,64 @@ export interface ImportStats {
   totalCells: number;
   totalSheets: number;
   parseTimeUs: number;
+}
+
+export interface ImportedPivotAssociation {
+  schemaVersion: number;
+  importIdentity: string;
+  status: ImportedPivotAssociationStatus;
+  nativePivotId?: string;
+  outputSheetId?: string;
+  sourceSheetId?: string;
+  pivotSpecKey: string;
+  pivotSpecOrder: number;
+  definitionPartPath?: string;
+  outputWorksheetPartPath?: string;
+  worksheetRelationshipId?: string;
+  cacheId?: number;
+  originalName: string;
+  originalOutputSheetName?: string;
+  originalSourceSheetName?: string;
+  originalRefRange?: string;
+  unsupportedReason?: ImportedPivotUnsupportedReason;
+  deletedAt?: number;
+}
+
+export type ImportedPivotAssociationStatus = "promoted" | "unsupported" | "deleted";
+
+export interface ImportedPivotCapabilities {
+  canEditFields: boolean;
+  canReorderFields: boolean;
+  canRemoveFields: boolean;
+  canChangeAggregate: boolean;
+  canRefresh: boolean;
+  canDelete: boolean;
+  canExport: boolean;
+  unsupportedReason?: string;
+}
+
+export interface ImportedPivotRenderedRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+  ref?: string;
+}
+
+export type ImportedPivotUnsupportedReason = "missingImportIdentity" | "unresolvedOutputSheet" | "unresolvedSourceSheet" | "fallbackSourceSheet" | "externalSource" | "cacheOnlySource" | "invalidOutputRange" | "fieldCacheMismatch" | "lossyOoxml";
+
+export interface ImportedPivotViewRecord {
+  sourceKind: string;
+  status: ImportedPivotAssociationStatus;
+  importIdentity: string;
+  nativePivotId?: string;
+  outputSheetId: string;
+  sourceSheetId?: string;
+  config: PivotTableConfig;
+  result?: PivotTableResult;
+  capabilities: ImportedPivotCapabilities;
+  unsupportedReason?: string;
+  renderedRange?: ImportedPivotRenderedRange;
 }
 
 export interface ImportedPrinterSettingsIdentity {

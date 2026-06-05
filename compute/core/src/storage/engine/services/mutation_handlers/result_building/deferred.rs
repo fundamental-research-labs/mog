@@ -2,11 +2,12 @@ use cell_types::SheetId;
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{
-    ChangeKind, FloatingObjectChange, FloatingObjectChangeKind, MergeChange, MutationResult,
-    NamedRangeChange, RecalcResult, SheetChange, SheetChangeField, SheetSettingsChange,
-    WorkbookSettings, WorkbookSettingsChange,
+    ChangeKind, FilterChange, FloatingObjectChange, FloatingObjectChangeKind, MergeChange,
+    MutationResult, NamedRangeChange, RecalcResult, SheetChange, SheetChangeField,
+    SheetSettingsChange, WorkbookSettings, WorkbookSettingsChange,
 };
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::filters;
 use domain_types::units::{
     CharWidth, Points, char_width_to_pixels, platform_mdw, points_to_pixels,
 };
@@ -154,6 +155,37 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
                     data: Some(obj),
                     bounds,
                 });
+            }
+
+            // Filters are hydrated and normalized for the materialized critical
+            // sheet before the deferred import result is built. Surface those
+            // runtime FilterStates with the same "created" shape as normal
+            // sheet hydration; metadata-only sheets do not have grid indexes
+            // or runtime filter state yet.
+            if grid.is_some() {
+                for filter in filters::get_filters_in_sheet(doc, sheets, &sid) {
+                    result.filter_changes.push(FilterChange {
+                        sheet_id: sheet_snap.id.clone(),
+                        filter_id: filter.id,
+                        filter_kind: Some(
+                            match &filter.filter_kind {
+                                filters::FilterKind::AutoFilter => "autoFilter",
+                                filters::FilterKind::TableFilter => "tableFilter",
+                                filters::FilterKind::AdvancedFilter => "advancedFilter",
+                            }
+                            .to_string(),
+                        ),
+                        table_id: filter.table_id,
+                        capability: None,
+                        unsupported_reasons: Vec::new(),
+                        has_active_filter: Some(!filter.column_filters.is_empty()),
+                        clearable: Some(filter.filter_kind != filters::FilterKind::AdvancedFilter),
+                        action: Some("created".to_string()),
+                        hidden_row_count: None,
+                        visible_row_count: None,
+                        kind: ChangeKind::Set,
+                    });
+                }
             }
         }
 

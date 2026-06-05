@@ -40,6 +40,7 @@ import type {
   ImportDurabilityResult,
   StorageHighWaterMark,
 } from '@mog-sdk/types-document/storage/lifecycle';
+import type { MaterializationState } from '@mog-sdk/contracts/api';
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../context/types';
 import type { WorkbookLinkResolver, WorkbookLinkStatusScope } from '../services/workbook-links';
@@ -97,6 +98,24 @@ const PHASE_TO_GATE_MODE: Partial<Record<DocumentStoragePhase, GateMode>> = {
   closed: 'closed',
   destroyed: 'closed',
 };
+
+function markPerformance(name: string): void {
+  const perf = globalThis.performance;
+  if (perf && typeof perf.mark === 'function') {
+    perf.mark(name);
+  }
+}
+
+function measurePerformance(name: string, startMark: string, endMark: string): void {
+  const perf = globalThis.performance;
+  if (!perf || typeof perf.measure !== 'function') return;
+  try {
+    perf.measure(name, startMark, endMark);
+  } catch {
+    // Some runtimes expose User Timing partially or drop marks under pressure.
+    // Lifecycle instrumentation must not affect document creation.
+  }
+}
 
 // =============================================================================
 // DeferredContext Proxy
@@ -313,6 +332,9 @@ export class DocumentLifecycleSystem {
 
   /** True while imported content has not reached a full durable checkpoint. */
   private importDurabilityPending = false;
+
+  /** Last deferred hydration/materialization failure, if any. */
+  private materializationError: MaterializationState['error'] | null = null;
 
   /** Provider registry for the host-backed path (the storage provider lifecycle). */
   private readonly providerRegistry: StorageProviderRegistry;
@@ -867,8 +889,96 @@ export class DocumentLifecycleSystem {
     return this.scheduleDeferredHydration({ immediate: true });
   }
 
-  async awaitMaterialized(_scope: SheetId | 'allSheets' = 'allSheets'): Promise<void> {
+  async awaitMaterialized(scope: SheetId | 'allSheets' = 'allSheets'): Promise<void> {
+    const initialActiveSheetId = this.getInitialActiveSheetId();
+
+    if (scope !== 'allSheets' && initialActiveSheetId === scope) {
+      return;
+    }
+
+    if (scope !== 'allSheets' && !this.isKnownSheetId(scope)) {
+      throw this.materializationFailure({
+        code: 'sheet_not_found',
+        scope,
+        message: `Sheet ${scope} is not part of this document.`,
+      });
+    }
+
+    if (this.materializationError) {
+      throw this.materializationFailure(this.materializationError);
+    }
+
     await this.ensureDeferredHydration();
+  }
+
+  getMaterializationState(): MaterializationState {
+    const snap = this.actor.getSnapshot();
+    const initialActiveSheetId = this.getInitialActiveSheetId();
+
+    if (this.materializationError) {
+      return {
+        phase: 'MaterializationFailed',
+        isDeferred: true,
+        isMaterialized: false,
+        pendingScope: 'allSheets',
+        initialActiveSheetId,
+        error: this.materializationError,
+      };
+    }
+
+    if (
+      this.deferredHydrationPromise ||
+      this.deferredHydrationTimer ||
+      this.startDeferredHydrationNow
+    ) {
+      return {
+        phase: 'AllSheetsHydrating',
+        isDeferred: true,
+        isMaterialized: false,
+        pendingScope: 'allSheets',
+        initialActiveSheetId,
+      };
+    }
+
+    if (this.deferredHydrationPending || this.importDurabilityPending) {
+      return {
+        phase: 'CriticalSheetReady',
+        isDeferred: true,
+        isMaterialized: false,
+        pendingScope: 'allSheets',
+        initialActiveSheetId,
+      };
+    }
+
+    return {
+      phase: 'AllSheetsReady',
+      isDeferred: false,
+      isMaterialized: true,
+      initialActiveSheetId,
+    };
+  }
+
+  private getInitialActiveSheetId(): SheetId | undefined {
+    const snap = this.actor.getSnapshot();
+    if (!documentLifecycleSelectors.isReady(snap)) return undefined;
+    return snap.context.initialSheetIds?.[0];
+  }
+
+  private isKnownSheetId(sheetId: SheetId): boolean {
+    const snap = this.actor.getSnapshot();
+    if (!documentLifecycleSelectors.isReady(snap)) return true;
+    const ids = snap.context.initialSheetIds ?? [];
+    return ids.includes(sheetId);
+  }
+
+  private materializationFailure(details: MaterializationState['error']): Error {
+    const err = new Error(details?.message ?? 'XLSX materialization failed') as Error & {
+      code?: string;
+      scope?: SheetId | 'allSheets';
+    };
+    err.code = details?.code ?? 'materialization_failed';
+    err.scope = details?.scope;
+    return err;
   }
 
   /**
@@ -893,6 +1003,7 @@ export class DocumentLifecycleSystem {
     }
 
     const run = async () => {
+      this.materializationError = null;
       markPerformance('dls:deferredHydration:start');
       if (snap.context.rustDocument) {
         await this.completeImportDurability(bridge, snap.context.rustDocument, true);
@@ -963,6 +1074,11 @@ export class DocumentLifecycleSystem {
         this.startDeferredHydrationNow = null;
         this.deferredHydrationPromise = null;
         this.deferredHydrationPending = true;
+        this.materializationError = {
+          code: 'materialization_failed',
+          message: err instanceof Error ? err.message : String(err),
+          scope: 'allSheets',
+        };
         throw err;
       })
       .finally(() => {
@@ -1059,13 +1175,13 @@ export class DocumentLifecycleSystem {
 
         markPerformance('dls:createEngine:bridge:start');
         const computeBridge = await createComputeBridge(DeferredContext, engineInstanceId, {
+          ...(typeof hostTransportConfig === 'object' && hostTransportConfig !== null
+            ? (hostTransportConfig as Record<string, unknown>)
+            : {}),
           wasmInitFns: [initTableWasm, initChartWasm],
           explicitRuntime: transportConfig.explicitRuntime,
           forbidAutoDetect: true,
           getUserTimezone: () => userTimezone,
-          ...(typeof hostTransportConfig === 'object' && hostTransportConfig !== null
-            ? (hostTransportConfig as Record<string, unknown>)
-            : {}),
           // Host path uses explicit transport config — napiAddon only from
           // the transport config, never from legacy this.napiAddon.
           ...(transportConfig.napiAddon
@@ -1798,6 +1914,8 @@ export class DocumentLifecycleSystem {
           | undefined,
         workbookLinkScope: this.hostWorkbookLinkScope(lifecycleInput),
         operationGate,
+        awaitMaterialized: (scope) => this.awaitMaterialized(scope),
+        getMaterializationState: () => this.getMaterializationState(),
       });
 
       // Host-compliant path: awaited principal projection
@@ -1827,6 +1945,8 @@ export class DocumentLifecycleSystem {
       kernelHostContext: this.kernelHostContext,
       workbookLinkResolver: this.workbookLinkResolver,
       workbookLinkScope: this.workbookLinkScope,
+      awaitMaterialized: (scope) => this.awaitMaterialized(scope),
+      getMaterializationState: () => this.getMaterializationState(),
     });
 
     // Host contract path: awaited principal projection (not fire-and-forget).

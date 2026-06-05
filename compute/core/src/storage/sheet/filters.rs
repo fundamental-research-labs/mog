@@ -31,6 +31,7 @@
 
 // Keep this file as the compatibility facade for `storage::sheet::filters`.
 // New implementation logic belongs in the focused submodules below.
+mod bindings;
 mod bridge;
 mod codec;
 mod crud;
@@ -41,11 +42,19 @@ mod tests;
 
 pub use domain_types::domain::filter::{
     AdvancedFilterCriteriaRange, AdvancedFilterMode, AdvancedFilterRequest, AdvancedFilterResult,
-    AdvancedFilterState, ColumnFilter, DynamicFilterRule, FilterCondition, FilterEvaluationResult,
-    FilterHeaderInfo, FilterKind, FilterLogic, FilterOperator, FilterRecordCount, FilterSortState,
-    FilterState, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
+    AdvancedFilterState, ColumnFilter, DynamicFilterRule, FilterButtonMetadata, FilterCapability,
+    FilterCondition, FilterEvaluationResult, FilterHeaderInfo, FilterHeaderRange,
+    FilterHeaderSourceType, FilterKind, FilterLogic, FilterMetadataBinding,
+    FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterOperator, FilterRecordCount,
+    FilterShellMetadata, FilterSortState, FilterState, ImportFilterUnsupportedReason,
+    LosslessCriterionDescriptor, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
 };
 
+pub use bindings::{
+    clear_filter_metadata_bindings, delete_filter_metadata_binding, get_filter_metadata_binding,
+    get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
+    upsert_filter_metadata_binding_with_origin, upsert_import_filter_metadata_binding,
+};
 pub use bridge::convert_dynamic_rule;
 pub use codec::write_filter_state_to_ymap;
 pub use crud::{

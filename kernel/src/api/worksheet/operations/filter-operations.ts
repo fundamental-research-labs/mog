@@ -66,6 +66,7 @@ export async function createFilter(
   }
 
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertNoProtectedTableFilterCreation(ctx, sheetId, 'filters.add', {
       startRow,
       startCol,
@@ -96,6 +97,7 @@ export async function deleteFilter(
   filterId: string,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.remove', filterId);
     await ctx.computeBridge.deleteFilter(sheetId, filterId);
     return { success: true, data: undefined };
@@ -132,6 +134,7 @@ export async function setColumnFilter(
   criteria: ColumnFilterCriteria,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setColumnFilter', filterId);
     await ctx.computeBridge.setColumnFilter(
       sheetId,
@@ -164,6 +167,7 @@ export async function clearColumnFilter(
   headerCol: number,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearColumnFilter', filterId);
     await ctx.computeBridge.clearColumnFilter(sheetId, filterId, headerCol);
     return { success: true, data: undefined };
@@ -191,6 +195,7 @@ export async function clearAllColumnFilters(
   filterId: string,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearAllColumnFilters', filterId);
     await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
     return { success: true, data: undefined };
@@ -230,6 +235,7 @@ export async function applyFilter(
   filterId: string,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.apply', filterId);
     await ctx.computeBridge.applyFilter(sheetId, filterId);
     return { success: true, data: undefined };
@@ -376,6 +382,7 @@ export async function setFilterSortState(
   state: FilterSortState | null,
 ): Promise<OperationResult<void>> {
   try {
+    await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setSortState', filterId);
     await ctx.computeBridge.setFilterSortState(sheetId, filterId, state);
     return { success: true, data: undefined };

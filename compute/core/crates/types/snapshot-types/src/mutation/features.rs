@@ -17,6 +17,21 @@ pub struct FilterChange {
     /// Filter kind (`autoFilter`, `tableFilter`, or `advancedFilter`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter_kind: Option<String>,
+    /// Table ID for table-owned filter changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_id: Option<String>,
+    /// Capability of the filter shell when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability: Option<String>,
+    /// Unsupported feature reasons when the filter shell is lossless-preserved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported_reasons: Vec<String>,
+    /// Whether the filter has active runtime or lossless criteria.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub has_active_filter: Option<bool>,
+    /// Whether the filter can be cleared through the public filter command path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clearable: Option<bool>,
     /// Semantic action (`created`, `updated`, `applied`, `cleared`, `deleted`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,

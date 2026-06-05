@@ -116,13 +116,18 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
             sheet_id: sheet_id_str.clone(),
             filter_id: filter.id,
             filter_kind: Some(
-                match filter.filter_kind {
+                match &filter.filter_kind {
                     filters::FilterKind::AutoFilter => "autoFilter",
                     filters::FilterKind::TableFilter => "tableFilter",
                     filters::FilterKind::AdvancedFilter => "advancedFilter",
                 }
                 .to_string(),
             ),
+            table_id: filter.table_id,
+            capability: None,
+            unsupported_reasons: Vec::new(),
+            has_active_filter: Some(!filter.column_filters.is_empty()),
+            clearable: Some(filter.filter_kind != filters::FilterKind::AdvancedFilter),
             action: Some("created".to_string()),
             hidden_row_count: None,
             visible_row_count: None,

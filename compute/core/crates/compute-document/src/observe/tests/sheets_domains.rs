@@ -3,8 +3,9 @@ use super::fixtures::*;
 use crate::hex::id_to_hex;
 use crate::schema::{
     KEY_CELL_PROPERTIES, KEY_COL_FORMATS, KEY_COL_WIDTHS, KEY_COMMENTS, KEY_CONDITIONAL_FORMAT,
-    KEY_FILTERS, KEY_FLOATING_OBJECTS, KEY_GROUPING, KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS, KEY_MERGES,
-    KEY_PROPERTIES, KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_SORTING, KEY_SPARKLINES,
+    KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS, KEY_FLOATING_OBJECTS, KEY_GROUPING, KEY_HIDDEN_COLS,
+    KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PROPERTIES, KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_SORTING,
+    KEY_SPARKLINES,
 };
 use std::sync::Arc;
 use yrs::Any;
@@ -239,6 +240,30 @@ fn test_filter_change() {
     assert_eq!(changes.filters.len(), 1);
     assert_eq!(changes.filters[0].sheet_id, sheet_id);
     assert_eq!(changes.filters[0].key, Some("autoFilter".to_string()));
+}
+
+#[test]
+fn test_filter_metadata_binding_change_is_filter_domain_change() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(1);
+    let sheet_hex = add_sheet(&doc, &sheets, sheet_id);
+    add_sub_map(&doc, &sheets, &sheet_hex, KEY_FILTER_METADATA_BINDINGS);
+
+    let observer = new_observer(&sheets, &workbook);
+
+    insert_sub_map_entry(
+        &doc,
+        &sheets,
+        &sheet_hex,
+        KEY_FILTER_METADATA_BINDINGS,
+        "filter-1",
+        Any::String(Arc::from("{\"filterId\":\"filter-1\"}")),
+    );
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.filters.len(), 1);
+    assert_eq!(changes.filters[0].sheet_id, sheet_id);
+    assert_eq!(changes.filters[0].key, Some("filter-1".to_string()));
 }
 
 #[test]

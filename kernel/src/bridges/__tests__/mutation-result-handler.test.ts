@@ -185,6 +185,46 @@ describe('MutationResultHandler.applyAndNotify', () => {
     expect(colEvent!.newWidth).toBe(120);
   });
 
+  it('emits filter shell metadata from filter mutation changes', () => {
+    const eventBus = createMockEventBus();
+    const handler = new MutationResultHandler(eventBus);
+
+    handler.applyAndNotify(
+      buildMutationResult({
+        filterChanges: [
+          {
+            sheetId: 'sheet-1',
+            filterId: 'filter-1',
+            filterKind: 'autoFilter',
+            tableId: 'table-1',
+            capability: 'unsupported',
+            unsupportedReasons: ['iconFilterUnsupported'],
+            hasActiveFilter: true,
+            clearable: true,
+            action: 'applied',
+            hiddenRowCount: 0,
+            visibleRowCount: 10,
+            kind: 'Set',
+          },
+        ],
+      }),
+    );
+
+    expect(eventBus.emittedEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'filter:applied',
+        sheetId: 'sheet-1',
+        filterId: 'filter-1',
+        filterKind: 'autoFilter',
+        tableId: 'table-1',
+        capability: 'unsupported',
+        unsupportedReasons: ['iconFilterUnsupported'],
+        hasActiveFilter: true,
+        clearable: true,
+      }),
+    );
+  });
+
   it('performs both state updates and event emission together', () => {
     const eventBus = createMockEventBus();
 

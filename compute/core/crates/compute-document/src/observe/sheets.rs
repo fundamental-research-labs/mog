@@ -8,9 +8,9 @@ use cell_types::SheetId;
 use crate::hex::{parse_cell_id, parse_sheet_id};
 use crate::schema::{
     KEY_CELL_PROPERTIES, KEY_CELLS, KEY_COL_FORMATS, KEY_COL_WIDTHS, KEY_COMMENTS,
-    KEY_CONDITIONAL_FORMAT, KEY_FILTERS, KEY_FLOATING_OBJECTS, KEY_GROUPING, KEY_HIDDEN_COLS,
-    KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PIVOT_TABLES, KEY_PROPERTIES, KEY_ROW_FORMATS,
-    KEY_ROW_HEIGHTS, KEY_SORTING, KEY_SPARKLINES,
+    KEY_CONDITIONAL_FORMAT, KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS, KEY_FLOATING_OBJECTS,
+    KEY_GROUPING, KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PIVOT_TABLES, KEY_PROPERTIES,
+    KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_SORTING, KEY_SPARKLINES,
 };
 
 use super::changes::*;
@@ -242,7 +242,7 @@ pub(super) fn observe_sheets_events(
                     }
 
                     // --- filters ---
-                    k if k == KEY_FILTERS => {
+                    k if k == KEY_FILTERS || k == KEY_FILTER_METADATA_BINDINGS => {
                         push_sheet_level_change(
                             &mut buffer.filters,
                             sheet_id,

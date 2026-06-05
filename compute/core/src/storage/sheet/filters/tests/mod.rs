@@ -1,3 +1,4 @@
+mod bindings;
 mod bridge;
 mod codec;
 mod crud;

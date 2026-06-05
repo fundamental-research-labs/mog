@@ -413,8 +413,9 @@ export interface DocumentHandle {
   ensureDeferredHydration(): Promise<void>;
 
   /**
-   * Await materialization for the requested scope. The current engine supports
-   * all-sheet hydration; sheet-targeted callers join the same barrier.
+   * Await materialization for the requested scope. The initial active sheet in
+   * an interactive deferred import is available after critical-sheet hydration;
+   * non-critical sheets and all-sheet callers join the full hydration barrier.
    */
   awaitMaterialized(scope?: SheetId | 'allSheets'): Promise<void>;
 

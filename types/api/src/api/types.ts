@@ -18,7 +18,7 @@ import type {
 } from '@mog/types-core/core';
 import type { CFResult } from '@mog/types-formatting/conditional-format/rules';
 import type { SlicerSource, SlicerStyle, TimelineLevel } from '@mog/types-data/data/slicers';
-import type { ColumnFilterCriteria } from '@mog/types-data/data/filter';
+import type { ColumnFilterCriteria, FilterHeaderInfo } from '@mog/types-data/data/filter';
 import type {
   DataSourceType,
   PlacementId,
@@ -856,25 +856,30 @@ export interface PivotTableHandle {
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
   /** Add a field to the row, column, or filter area */
-  /** @deprecated Legacy facade. Prefer placement-id-first pivot mutators. */
-  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): void;
+  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): Promise<void>;
   /** Add a value field with aggregation */
-  /** @deprecated Legacy facade. Prefer placement-id-first pivot mutators. */
-  addValueField(field: string, aggregation: PivotValueField['aggregation'], label?: string): void;
+  addValueField(
+    field: string,
+    aggregation: PivotValueField['aggregation'],
+    label?: string,
+  ): Promise<void>;
   /** Remove a field by name */
-  removeField(fieldName: string): void;
+  removeField(fieldName: string): Promise<void>;
   /** Change the aggregation function of a value field */
-  changeAggregation(valueFieldLabel: string, newAggregation: PivotValueField['aggregation']): void;
+  changeAggregation(
+    valueFieldLabel: string,
+    newAggregation: PivotValueField['aggregation'],
+  ): Promise<void>;
   /** Rename a value field's display label */
-  renameValueField(currentLabel: string, newLabel: string): void;
+  renameValueField(currentLabel: string, newLabel: string): Promise<void>;
   /** Refresh the pivot table from its data source */
   refresh(): Promise<void>;
   /** Get all items for all non-value fields */
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */
-  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): void;
+  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
   /** Set item visibility by value string -> boolean map */
-  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): void;
+  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;
   /** Get the data source type (range, table, or external). */
   getDataSourceType(): DataSourceType;
   /** Change the source data range without refreshing/materializing. */
@@ -1697,6 +1702,55 @@ export interface FilterDetailInfo {
   tableId?: string;
   /** Advanced Filter metadata, present for advanced filters. */
   advancedFilter?: AdvancedFilterDetailInfo;
+}
+
+/** Compact filter information for UI controls that only need identity and activity. */
+export interface FilterSummaryInfo {
+  /** Filter ID */
+  id: string;
+  /** Filter kind. */
+  filterKind: FilterKind;
+  /** Resolved numeric range of the filter */
+  range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  /** Table ID if this filter is associated with a table. */
+  tableId?: string;
+  /** Number of columns with active criteria. */
+  activeColumnCount: number;
+  /** Whether this filter has any active criteria. */
+  hasActiveCriteria: boolean;
+}
+
+/** Renderer-ready filter-header entry keyed by sheet row/column. */
+export interface FilterHeaderInfoEntry extends FilterHeaderInfo {
+  /** Header row index, zero-based. */
+  row: number;
+  /** Header column index, zero-based. */
+  col: number;
+  /** Filter kind. */
+  filterKind: FilterKind;
+  /** Resolved numeric range of the filter. */
+  range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  /** Table ID if this filter is associated with a table. */
+  tableId?: string;
+  /** Source object that owns this header button. */
+  sourceType?: 'sheetAutoFilter' | 'tableAutoFilter';
+  /** Whether this filter is fully owned by the production evaluator. */
+  capability?: 'supported' | 'unsupported';
+  /** Unsupported imported features preserved in lossless metadata. */
+  unsupportedReasons?: readonly (
+    | 'unknownDynamicType'
+    | 'unknownCustomOperator'
+    | 'dateGroupUnsupported'
+    | 'dynamicTemporalContextUnsupported'
+    | 'valueTokenUnresolved'
+    | 'valueTypeUnsupported'
+    | 'colorDxfUnresolved'
+    | 'iconFilterUnsupported'
+    | 'unknownExtension'
+    | 'tableFilterShapeUnsupported'
+  )[];
+  /** Normalized button visibility after hiddenButton/showButton are applied. */
+  buttonVisible?: boolean;
 }
 
 // Group 5: Slicer state (returned by getSlicerState bridge — enriched runtime data)

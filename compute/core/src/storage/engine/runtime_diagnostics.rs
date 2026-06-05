@@ -10,18 +10,31 @@ const RUNTIME_DIAGNOSTIC_RETENTION: usize = 1024;
 pub(crate) struct RuntimeDiagnosticsStore {
     diagnostics: VecDeque<RuntimeOperationDiagnostic>,
     evicted: bool,
+    next_sequence: u64,
 }
 
 impl RuntimeDiagnosticsStore {
-    pub(crate) fn record(&mut self, diagnostics: &[RuntimeOperationDiagnostic]) {
+    pub(crate) fn assign_and_record(&mut self, diagnostics: &mut [RuntimeOperationDiagnostic]) {
         if diagnostics.is_empty() {
             return;
+        }
+        for diagnostic in diagnostics.iter_mut() {
+            self.next_sequence = self.next_sequence.saturating_add(1);
+            let sequence = self.next_sequence.to_string();
+            diagnostic.id = format!("runtime-diagnostic-{sequence}");
+            diagnostic.sequence = sequence;
         }
         self.diagnostics.extend(diagnostics.iter().cloned());
         while self.diagnostics.len() > RUNTIME_DIAGNOSTIC_RETENTION {
             self.diagnostics.pop_front();
             self.evicted = true;
         }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.diagnostics.clear();
+        self.evicted = false;
+        self.next_sequence = 0;
     }
 
     pub(crate) fn page(&self, options: RuntimeDiagnosticsOptions) -> RuntimeDiagnosticsPage {
@@ -102,7 +115,8 @@ mod tests {
     #[test]
     fn pages_diagnostics_after_since_sequence() {
         let mut store = RuntimeDiagnosticsStore::default();
-        store.record(&[diagnostic(1), diagnostic(2), diagnostic(3)]);
+        let mut diagnostics = vec![diagnostic(0), diagnostic(0), diagnostic(0)];
+        store.assign_and_record(&mut diagnostics);
 
         let page = store.page(RuntimeDiagnosticsOptions {
             since_sequence: Some("1".to_string()),
@@ -118,8 +132,8 @@ mod tests {
     #[test]
     fn reports_truncation_when_since_sequence_predates_retention_window() {
         let mut store = RuntimeDiagnosticsStore::default();
-        let diagnostics: Vec<_> = (1..=1030).map(diagnostic).collect();
-        store.record(&diagnostics);
+        let mut diagnostics: Vec<_> = (1..=1030).map(|_| diagnostic(0)).collect();
+        store.assign_and_record(&mut diagnostics);
 
         let page = store.page(RuntimeDiagnosticsOptions {
             since_sequence: Some("1".to_string()),
@@ -129,5 +143,21 @@ mod tests {
         assert_eq!(page.diagnostics.len(), 1);
         assert_eq!(page.diagnostics[0].sequence, "7");
         assert!(page.truncated);
+    }
+
+    #[test]
+    fn clear_resets_retention_and_sequence() {
+        let mut store = RuntimeDiagnosticsStore::default();
+        let mut diagnostics = vec![diagnostic(0)];
+        store.assign_and_record(&mut diagnostics);
+        store.clear();
+
+        let mut after_clear = vec![diagnostic(0)];
+        store.assign_and_record(&mut after_clear);
+        let page = store.page(RuntimeDiagnosticsOptions::default());
+
+        assert_eq!(page.diagnostics.len(), 1);
+        assert_eq!(page.diagnostics[0].sequence, "1");
+        assert!(!page.truncated);
     }
 }

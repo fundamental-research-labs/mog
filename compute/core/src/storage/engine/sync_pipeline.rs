@@ -5,10 +5,12 @@ use compute_document::observe::DocumentChanges;
 use value_types::ComputeError;
 
 use crate::scheduler::ComputeCore;
-use crate::snapshot::{CalculationSettings, ChangeKind, MutationResult, RecalcResult};
+use crate::snapshot::{ChangeKind, MutationResult, RecalcResult};
 
 use super::grid_indexing::{apply_grid_index_changes, build_grid_from_yrs_for_sheet};
 use super::{YrsComputeEngine, construction, services, viewport};
+
+mod runtime_settings;
 
 impl YrsComputeEngine {
     pub(super) fn rebuild_from_yrs_after_sync(
@@ -398,51 +400,6 @@ impl YrsComputeEngine {
                 self.mirror.rename_sheet(&change.sheet_id, &name);
             }
         }
-    }
-
-    pub(crate) fn sync_runtime_calculation_settings(
-        &mut self,
-        pre: &CalculationSettings,
-        post: &CalculationSettings,
-    ) {
-        self.apply_runtime_calculation_settings(post);
-
-        if pre != post {
-            self.stores.compute.mark_dirty();
-        }
-    }
-
-    fn sync_runtime_calculation_settings_from_storage(&mut self) {
-        let settings = crate::storage::workbook::settings::get_calculation_settings(
-            self.stores.storage.doc(),
-            self.stores.storage.workbook_map(),
-        );
-        let runtime_changed = self.runtime_calculation_settings_changed(&settings);
-        self.apply_runtime_calculation_settings(&settings);
-
-        if runtime_changed {
-            self.stores.compute.mark_dirty();
-        }
-    }
-
-    fn apply_runtime_calculation_settings(&mut self, settings: &CalculationSettings) {
-        self.stores.compute.set_calc_mode(settings.calc_mode);
-        self.stores
-            .compute
-            .set_iterative_calc(settings.enable_iterative_calculation);
-        self.stores
-            .compute
-            .set_max_iterations(settings.max_iterations);
-        self.stores
-            .compute
-            .set_max_change(settings.max_change.get());
-    }
-
-    fn runtime_calculation_settings_changed(&self, settings: &CalculationSettings) -> bool {
-        self.stores.compute.calc_mode() != settings.calc_mode
-            || self.stores.compute.iterative_calc() != settings.enable_iterative_calculation
-            || self.stores.compute.max_iterations() != settings.max_iterations
-            || self.stores.compute.max_change() != settings.max_change.get()
     }
 
     /// Drain observer changes, sync mirror + recalc, and return domain changes.

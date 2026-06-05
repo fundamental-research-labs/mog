@@ -28,6 +28,8 @@ export type {
   FilterDropdownData,
   FilterDropdownItem,
   FilterHeaderInfoEntry,
+  FilterListOptions,
+  FilterListScope,
   FilterSummaryInfo,
   WorksheetFilters,
 } from './filters';

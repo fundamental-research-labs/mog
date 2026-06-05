@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
-use compute_document::undo::ORIGIN_USER_EDIT;
+use compute_document::undo::{ORIGIN_BOOTSTRAP, ORIGIN_USER_EDIT};
 use value_types::ComputeError;
 use yrs::{Doc, Map, MapRef, Origin, Transact};
 
@@ -70,8 +70,27 @@ pub fn upsert_filter_state(
     sheet_id: &SheetId,
     state: &FilterState,
 ) -> Result<(), ComputeError> {
+    upsert_filter_state_with_origin(doc, sheets, sheet_id, state, ORIGIN_USER_EDIT)
+}
+
+pub fn upsert_import_filter_state(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    state: &FilterState,
+) -> Result<(), ComputeError> {
+    upsert_filter_state_with_origin(doc, sheets, sheet_id, state, ORIGIN_BOOTSTRAP)
+}
+
+pub fn upsert_filter_state_with_origin(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    state: &FilterState,
+    origin: &'static [u8],
+) -> Result<(), ComputeError> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
     let filters_map =
         get_filters_map(&txn, sheets, &sheet_hex).ok_or_else(|| ComputeError::SheetNotFound {
             sheet_id: sheet_hex.to_string(),

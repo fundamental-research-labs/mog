@@ -46,6 +46,10 @@ import {
   assertNoProtectedTableFilterCreation,
 } from './protected-table-operations';
 
+type FilterListOptions = {
+  readonly scope?: 'sheetLocal' | 'complete';
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -245,6 +249,18 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   private async awaitAllMaterialized(): Promise<void> {
     await this.ctx.awaitMaterialized?.('allSheets');
+  }
+
+  private async awaitFilterListScope(
+    options: FilterListOptions | undefined,
+    defaultScope: NonNullable<FilterListOptions['scope']>,
+  ): Promise<void> {
+    const scope = options?.scope ?? defaultScope;
+    if (scope === 'complete') {
+      await this.awaitAllMaterialized();
+      return;
+    }
+    await this.awaitSheetMaterialized();
   }
 
   /**
@@ -585,7 +601,16 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       currentFilter,
       composeVisibility(otherBitmaps),
     );
-    return { ...dropdownData, columnType };
+    const headerInfo = await this.headerInfoForColumn(filter.id, range.startRow, col);
+    const unsupportedPreserved = headerInfo?.capability === 'unsupported';
+    return {
+      ...dropdownData,
+      columnType,
+      ...(unsupportedPreserved ? { unsupportedPreserved: true } : {}),
+      ...(headerInfo?.unsupportedReasons?.length
+        ? { unsupportedReasons: headerInfo.unsupportedReasons }
+        : {}),
+    };
   }
 
   /** @deprecated Use {@link setColumnFilter} instead. */
@@ -629,8 +654,14 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     await this.ctx.computeBridge.applyFilter(this.sheetId, filterId);
   }
 
-  async getInfo(filterId: string): Promise<FilterDetailInfo | null> {
-    await this.awaitSheetMaterialized();
+  async reapply(filterId: string): Promise<void> {
+    await this.awaitAllMaterialized();
+    await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.reapply', filterId);
+    await this.ctx.computeBridge.reapplyFilter(this.sheetId, filterId);
+  }
+
+  async getInfo(filterId: string, options?: FilterListOptions): Promise<FilterDetailInfo | null> {
+    await this.awaitFilterListScope(options, 'complete');
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     const filter = filters.find((f) => f.id === filterId);
     if (!filter) return null;
@@ -643,14 +674,14 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filterId, col);
   }
 
-  async list(): Promise<FilterDetailInfo[]> {
-    await this.awaitSheetMaterialized();
+  async list(options?: FilterListOptions): Promise<FilterDetailInfo[]> {
+    await this.awaitFilterListScope(options, 'complete');
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     return Promise.all(filters.map((filter) => toFilterDetail(this.ctx, this.sheetId, filter)));
   }
 
-  async listSummaries(): Promise<FilterSummaryInfo[]> {
-    await this.awaitSheetMaterialized();
+  async listSummaries(options?: FilterListOptions): Promise<FilterSummaryInfo[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal');
     const [filters, headerEntries] = await Promise.all([
       this.ctx.computeBridge.getFiltersInSheet(this.sheetId),
       this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId),
@@ -668,8 +699,8 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     );
   }
 
-  async listHeaderInfo(): Promise<FilterHeaderInfoEntry[]> {
-    await this.awaitSheetMaterialized();
+  async listHeaderInfo(options?: FilterListOptions): Promise<FilterHeaderInfoEntry[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal');
     const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
     return entries.map((entry) => {
       const mapped: FilterHeaderInfoEntry = {
@@ -792,5 +823,16 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     }
 
     return { values, columnType: classifyDropdownColumnType(counts) };
+  }
+
+  private async headerInfoForColumn(
+    filterId: string,
+    headerRow: number,
+    col: number,
+  ): Promise<ComputeFilterHeaderInfo | undefined> {
+    const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
+    return entries.find(
+      (entry) => entry.filterId === filterId && entry.row === headerRow && entry.col === col,
+    );
   }
 }

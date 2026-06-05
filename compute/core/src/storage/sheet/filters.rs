@@ -64,6 +64,7 @@ pub use crud::{
     create_filter_in_txn, delete_filter, delete_filter_in_txn, get_active_filter_count,
     get_active_filters, get_filter, get_filter_count, get_filter_sort_state, get_filters_in_sheet,
     get_table_filter, set_column_filter, set_filter_sort_state, upsert_filter_state,
+    upsert_filter_state_with_origin, upsert_import_filter_state,
 };
 pub use evaluation::{evaluate_filter, get_filtered_record_count, get_unique_values};
 

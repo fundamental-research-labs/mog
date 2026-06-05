@@ -43,13 +43,19 @@ export function useFilterHeaderCache({
 
   // Cache: Map<"row,col", FilterHeaderInfo> for O(1) sync lookups
   const cacheRef = useRef(new Map<string, FilterHeaderInfo>());
+  const tableColumnActiveRef = useRef(new Map<string, boolean>());
+  const refreshIdRef = useRef(0);
 
   // Refresh cache: fetch filter header DTOs via ONE API, build lookup map
   const refresh = useCallback(async () => {
+    const refreshId = ++refreshIdRef.current;
     const newCache = new Map<string, FilterHeaderInfo>();
+    const newTableColumnActive = new Map<string, boolean>();
 
     if (!activeSheetId) {
+      if (refreshId !== refreshIdRef.current) return;
       cacheRef.current = newCache;
+      tableColumnActiveRef.current = newTableColumnActive;
       onCacheUpdate?.();
       return;
     }
@@ -59,12 +65,20 @@ export function useFilterHeaderCache({
       const filterHeaderInfo = await ws.filters.listHeaderInfo();
 
       if (filterHeaderInfo.length === 0) {
+        if (refreshId !== refreshIdRef.current) return;
         cacheRef.current = newCache;
+        tableColumnActiveRef.current = newTableColumnActive;
         onCacheUpdate?.();
         return;
       }
 
       for (const entry of filterHeaderInfo) {
+        if (entry.tableId) {
+          newTableColumnActive.set(
+            `${entry.tableId}:${entry.row}:${entry.col}`,
+            entry.hasActiveFilter,
+          );
+        }
         if (entry.buttonVisible === false) {
           continue;
         }
@@ -79,7 +93,9 @@ export function useFilterHeaderCache({
       });
     }
 
+    if (refreshId !== refreshIdRef.current) return;
     cacheRef.current = newCache;
+    tableColumnActiveRef.current = newTableColumnActive;
     onCacheUpdate?.();
   }, [wb, activeSheetId, onCacheUpdate]);
 
@@ -128,5 +144,13 @@ export function useFilterHeaderCache({
     [activeSheetId],
   );
 
-  return { getFilterHeaderInfo };
+  const hasTableColumnFilter = useCallback(
+    (sheetId: SheetId, tableId: string, headerRow: number, headerCol: number): boolean => {
+      if (sheetId !== activeSheetId) return false;
+      return tableColumnActiveRef.current.get(`${tableId}:${headerRow}:${headerCol}`) ?? false;
+    },
+    [activeSheetId],
+  );
+
+  return { getFilterHeaderInfo, hasTableColumnFilter };
 }

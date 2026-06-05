@@ -664,6 +664,7 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this._importWarnings = this.handle.importWarnings;
     this.registerChartImageExporter();
   }
 

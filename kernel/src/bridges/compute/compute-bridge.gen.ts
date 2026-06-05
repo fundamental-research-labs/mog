@@ -448,6 +448,7 @@ export interface GeneratedBridgeMethods {
   getFilterHeaderInfo(sheetId: SheetId): Promise<FilterHeaderInfo[]>;
   applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest): Promise<MutationResult>;
   applyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
+  reapplyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
   getUniqueColumnValues(sheetId: SheetId, filterId: string, headerCol: number): Promise<CellValue[]>;
   computeDynamicFilterSerialRange(rule: DynamicFilterRule): Promise<[number, number] | null>;
   sortRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: BridgeSortOptions): Promise<MutationResult>;
@@ -2396,6 +2397,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   applyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult> {
     return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_filter', { docId: this.core.docId, sheetId, filterId }));
+  }
+
+  reapplyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult> {
+    return this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_reapply_filter', { docId: this.core.docId, sheetId, filterId }));
   }
 
   getUniqueColumnValues(sheetId: SheetId, filterId: string, headerCol: number): Promise<CellValue[]> {

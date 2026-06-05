@@ -306,17 +306,27 @@ impl ComputeCore {
             self.register_all_variables(mirror);
             return Ok(());
         }
+        self.ensure_graph_construction_ready()?;
+
+        Ok(())
+    }
+
+    pub(crate) fn ensure_graph_construction_ready(&self) -> Result<(), ComputeError> {
         // Viewport-only XLSX import does not carry complete workbook graph
         // context: cross-sheet references, names, and later-sheet cells can be
         // absent. Formula readback is seeded separately, but graph construction
         // must wait for full deferred hydration.
         if self.deferred_snapshot.is_some() {
-            return Err(ComputeError::InvalidInput {
-                message: "dependency graph construction requires deferred XLSX hydration to complete before reading a viewport-only workbook snapshot".to_string(),
-            });
+            return Err(Self::deferred_graph_construction_error());
         }
 
         Ok(())
+    }
+
+    fn deferred_graph_construction_error() -> ComputeError {
+        ComputeError::InvalidInput {
+            message: "dependency graph construction requires deferred XLSX hydration to complete before reading a viewport-only workbook snapshot".to_string(),
+        }
     }
 
     pub(super) fn seed_cell_formula_text(&mut self, formula_cells: &[(CellId, SheetId, String)]) {

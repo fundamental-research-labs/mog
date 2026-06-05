@@ -25,6 +25,7 @@ import {
   type DocumentHandle,
   type FlushableCollaborationSidecar,
 } from '@mog-sdk/kernel/host-lifecycle-internal';
+import { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from '@mog-sdk/kernel/internal';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
 import { prepareHostBackedDocument } from './open';
 
@@ -80,6 +81,7 @@ export interface HostBackedCollaborationDocumentResult {
 
 export interface ImportHostBackedDocumentOptions {
   readonly importOptions?: DocumentImportOptions;
+  readonly interactiveDeferredImportToken?: typeof INTERNAL_INTERACTIVE_DEFERRED_IMPORT;
 }
 
 export interface ImportHostBackedDocumentResult {
@@ -269,6 +271,21 @@ export async function importHostBackedDocument(
   bindings: HostKernelAdapterBindings,
   options: ImportHostBackedDocumentOptions = {},
 ): Promise<ImportHostBackedDocumentResult> {
+  if (
+    'interactiveDeferredImportToken' in options &&
+    options.interactiveDeferredImportToken !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT
+  ) {
+    const err = new Error(
+      'interactiveDeferredImportToken is invalid for host-backed XLSX import.',
+    ) as Error & {
+      code?: string;
+      scope?: 'allSheets';
+    };
+    err.code = 'invalid_interactive_import_option';
+    err.scope = 'allSheets';
+    throw err;
+  }
+
   const lifecycleInput = prepareHostBackedDocument(host, bindings);
   if (!lifecycleInput.documentRef) {
     throw new Error('Host-backed XLSX import requires an authorized source-handle documentRef');
@@ -296,6 +313,11 @@ export async function importHostBackedDocument(
     options.importOptions,
   );
   await lifecycle.waitForReady();
+  if (options.interactiveDeferredImportToken !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT) {
+    // Match the direct DocumentFactory import contract: host-backed handles are
+    // returned only after deferred import hydration is mutation-ready/durable.
+    await lifecycle.awaitImportDurability();
+  }
 
   const context = lifecycle.documentContext;
   const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(

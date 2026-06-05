@@ -412,6 +412,9 @@ class Bridge:
     def apply_filter(self, sheet_id_json: str, filter_id: str) -> Any:
         return self.call_json("compute_apply_filter", sheet_id_json, filter_id)
 
+    def reapply_filter(self, sheet_id_json: str, filter_id: str) -> Any:
+        return self.call_json("compute_reapply_filter", sheet_id_json, filter_id)
+
     # ------------------------------------------------------------------
     # Comments
     # ------------------------------------------------------------------

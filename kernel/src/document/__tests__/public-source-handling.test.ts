@@ -14,6 +14,21 @@ describe('public DocumentSource handling', () => {
     expect(result.error?.message).toMatch(/source resolvers\/materializers|pass bytes/);
   });
 
+  it('rejects raw interactive deferred import options on public createFromXlsx', async () => {
+    const result = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: new Uint8Array([0x50, 0x4b, 0x03, 0x04]) },
+      {
+        environment: 'headless',
+        userTimezone: 'UTC',
+        internalInteractiveDeferred: true,
+      } as any,
+    );
+
+    expect(result.success).toBe(false);
+    expect((result.error as any)?.code).toBe('invalid_interactive_import_option');
+    expect((result.error as any)?.scope).toBe('allSheets');
+  });
+
   it('rejects path sources in the public SDK facade', async () => {
     const result = await MogDocumentFactory.open({
       source: { type: 'path', path: '/tmp/private.xlsx', format: 'xlsx' },

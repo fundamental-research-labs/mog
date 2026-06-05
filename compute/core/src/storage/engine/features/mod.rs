@@ -127,6 +127,15 @@ impl YrsComputeEngine {
         filters::apply_filter(self, sheet_id, filter_id)
     }
 
+    #[bridge::write(scope = "sheet")]
+    pub fn reapply_filter(
+        &mut self,
+        sheet_id: &SheetId,
+        filter_id: &str,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        filters::reapply_filter(self, sheet_id, filter_id)
+    }
+
     /// Get unique values in a filter column for populating the filter dropdown.
     /// Returns deduplicated, sorted cell values as JSON.
     #[bridge::read(scope = "sheet")]

@@ -303,6 +303,13 @@ export interface CanvasLayer {
   readonly clipPadding?: number;
 
   /**
+   * Optional hook called once before the layer renders for a dirty frame.
+   * Per-region layers may receive several render() calls for the same frame;
+   * frame-scoped output should be initialized here instead of in render().
+   */
+  beginFrame?(frame: FrameContext): void;
+
+  /**
    * Render this layer.
    *
    * **Coordinate contract by renderMode:**

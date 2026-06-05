@@ -2,8 +2,11 @@ use super::*;
 use crate::identity::GridIndex;
 use crate::storage::YrsStorage;
 use cell_types::SheetId;
+use compute_document::hex::id_to_hex;
+use compute_document::schema::KEY_HIDDEN_ROWS;
 use domain_types::units::{CharWidth, Points};
 use std::sync::Arc;
+use yrs::{Any, Map, Out, Transact};
 
 fn make_sheet_id(n: u128) -> SheetId {
     SheetId::from_raw(n)
@@ -19,6 +22,20 @@ fn setup() -> (YrsStorage, SheetId, GridIndex) {
     let id_alloc = Arc::new(cell_types::IdAllocator::new());
     let gi = GridIndex::new(sid, 100, 26, id_alloc);
     (storage, sid, gi)
+}
+
+fn write_hidden_cache_only(storage: &YrsStorage, sheet_id: &SheetId, rows: &[u32]) {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let mut txn = storage.doc().transact_mut();
+    let Some(Out::YMap(sheet_map)) = storage.sheets().get(&txn, &sheet_hex) else {
+        panic!("test sheet should exist");
+    };
+    let Some(Out::YMap(hidden_rows_map)) = sheet_map.get(&txn, KEY_HIDDEN_ROWS) else {
+        panic!("hiddenRows map should exist");
+    };
+    for row in rows {
+        hidden_rows_map.insert(&mut txn, &*row.to_string(), Any::Bool(true));
+    }
 }
 
 #[test]
@@ -465,6 +482,86 @@ fn test_clear_filter_hidden_rows_absent_owner_noop() {
     let transitions =
         clear_filter_hidden_rows(storage.doc(), storage.sheets(), &sid, "missing", Some(&gi));
     assert!(transitions.is_empty());
+}
+
+#[test]
+fn test_imported_filter_normalization_claims_only_excluded_rows() {
+    let (storage, sid, gi) = setup();
+    write_hidden_cache_only(&storage, &sid, &[2, 3]);
+
+    let transitions = normalize_imported_filter_hidden_rows(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        "filter-a",
+        &[2],
+        &[3],
+        Some(&gi),
+    );
+
+    assert!(transitions.is_empty());
+    assert!(is_row_hidden_by_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        2,
+        "filter-a",
+        Some(&gi)
+    ));
+    assert!(!is_row_manually_hidden(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        2,
+        Some(&gi)
+    ));
+    assert!(is_row_manually_hidden(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        3,
+        Some(&gi)
+    ));
+    assert!(!is_row_hidden_by_filter(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        3,
+        "filter-a",
+        Some(&gi)
+    ));
+    assert!(
+        !get_row_visibility_ownership(storage.doc(), storage.sheets(), &sid, 2, Some(&gi))
+            .cache_hidden_without_owner
+    );
+
+    let clear_transitions =
+        clear_filter_hidden_rows(storage.doc(), storage.sheets(), &sid, "filter-a", Some(&gi));
+    assert_eq!(clear_transitions, vec![(2, false)]);
+    assert!(!is_row_hidden(storage.doc(), storage.sheets(), &sid, 2));
+    assert!(is_row_hidden(storage.doc(), storage.sheets(), &sid, 3));
+}
+
+#[test]
+fn test_imported_hidden_cache_finalizer_converts_orphans_to_manual() {
+    let (storage, sid, gi) = setup();
+    write_hidden_cache_only(&storage, &sid, &[4]);
+
+    let transitions =
+        finalize_imported_hidden_row_cache(storage.doc(), storage.sheets(), &sid, Some(&gi));
+
+    assert!(transitions.is_empty());
+    assert!(is_row_manually_hidden(
+        storage.doc(),
+        storage.sheets(),
+        &sid,
+        4,
+        Some(&gi)
+    ));
+    assert!(
+        !get_row_visibility_ownership(storage.doc(), storage.sheets(), &sid, 4, Some(&gi))
+            .cache_hidden_without_owner
+    );
 }
 
 #[test]

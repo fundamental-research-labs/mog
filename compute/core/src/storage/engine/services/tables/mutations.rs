@@ -1,5 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
+use crate::storage::engine::services::filters as filter_services;
 
 // -------------------------------------------------------------------
 // Table CRUD Mutations
@@ -177,9 +178,21 @@ pub(in crate::storage::engine) fn delete_table(
         table_name,
     );
 
+    let mut result = if let Some((sheet_id, filter_id)) = table_filter.as_ref() {
+        filter_services::delete_filter(stores, mirror, sheet_id, filter_id)?
+    } else {
+        MutationResult::empty()
+    };
     stores.compute.remove_table(mirror, table_name);
-    remove_table_from_yrs_with_filter(stores, table_name, table_filter.as_ref());
-    Ok(MutationResult::empty())
+    remove_table_from_yrs(stores, table_name);
+    if let Some(table) = table {
+        result.table_changes.push(TableChange {
+            name: table.name,
+            sheet_id: table.sheet_id,
+            kind: ChangeKind::Removed,
+        });
+    }
+    Ok(result)
 }
 
 /// Rename a table.
@@ -788,10 +801,14 @@ pub(in crate::storage::engine) fn convert_table_to_range(
         &table_info,
     );
 
+    let mut result = if let Some((sheet_id, filter_id)) = table_filter.as_ref() {
+        filter_services::delete_filter(stores, mirror, sheet_id, filter_id)?
+    } else {
+        MutationResult::empty()
+    };
     stores.compute.remove_table(mirror, table_name);
-    remove_table_from_yrs_with_filter(stores, table_name, table_filter.as_ref());
+    remove_table_from_yrs(stores, table_name);
 
-    let mut result = MutationResult::empty();
     result.table_changes.push(TableChange {
         name: table_name.to_string(),
         sheet_id: sheet_id_str,

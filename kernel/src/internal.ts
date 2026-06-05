@@ -13,6 +13,10 @@ export { type DocumentHandleInternal } from './api/document';
 
 // Host-backed document creation — workspace-private, NOT public SDK surface.
 export { _createDocumentHandleInternal } from './api/document';
+export {
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
+  createInteractiveDeferredDocumentFromXlsx,
+} from './api/document/document-factory';
 
 // Lifecycle system — needed by host-backed document creation in @mog/kernel-host-internal.
 export {

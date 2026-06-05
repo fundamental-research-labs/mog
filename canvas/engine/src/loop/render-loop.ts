@@ -411,6 +411,8 @@ export class RenderLoop implements AnimationClock {
       if (cache) {
         // === Cached layer path ===
         if (layer.isDirty()) {
+          this.beginLayerFrame(layer, frame);
+
           if (dirtyUnion !== null) {
             // --- Partial cache clear + clip ---
             // DPR transform is active, so dirty rect coords are CSS pixels
@@ -487,6 +489,8 @@ export class RenderLoop implements AnimationClock {
         }
       } else {
         // === Non-cached layer: render directly ===
+        this.beginLayerFrame(layer, frame);
+
         // When in partial dirty path, clip to dirty rect to prevent
         // semi-transparent content from accumulating alpha outside the
         // cleared region (e.g., selection fill during marching ants animation).
@@ -523,6 +527,10 @@ export class RenderLoop implements AnimationClock {
       const elapsed = performance.now() - startTime;
       this.updateLayerTiming(layer.id, elapsed);
     }
+  }
+
+  private beginLayerFrame(layer: CanvasLayer, frame: FrameContext): void {
+    layer.beginFrame?.(frame);
   }
 
   private renderPerRegion(

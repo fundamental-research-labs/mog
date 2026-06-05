@@ -448,28 +448,41 @@ pub(in crate::storage::engine) fn export_auto_filter_for_sheet(
     use crate::storage::sheet::filters;
     use domain_types::domain::filter::{FilterKind, filter_state_to_auto_filter};
 
-    // Preferred path: typed AutoFilter at properties/autoFilter.
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
-    let txn = doc.transact();
     let sheets = stores.storage.sheets();
-    if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &sheet_hex)
-        && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
-        && let Some(Out::YMap(af_map)) = meta_map.get(&txn, "autoFilter")
-        && let Some(af) = yrs_schema::auto_filter::from_yrs_map(&af_map, &txn)
-    {
-        return Some(af);
-    }
-    drop(txn);
-
-    // Fallback: reconstruct from runtime FilterState (lossy for round-trip-only
-    // fields — see function doc). Only fires for filters created via runtime
-    // API without going through XLSX import.
     let all_filters = filters::get_filters_in_sheet(doc, sheets, sheet_id);
     let auto_filter_state = all_filters
         .into_iter()
         .find(|f| f.filter_kind == FilterKind::AutoFilter)?;
 
+    let binding =
+        filters::get_filter_metadata_binding(doc, sheets, sheet_id, &auto_filter_state.id);
+    let binding_allows_lossless_export = binding.as_ref().is_none_or(|binding| {
+        matches!(
+            &binding.owner_path,
+            filters::FilterMetadataOwnerPath::SheetAutoFilter { sheet_id: owner_sheet_id }
+                if owner_sheet_id == &sheet_id.to_uuid_string()
+        )
+    });
+
+    if binding_allows_lossless_export {
+        // Preferred path: typed AutoFilter at properties/autoFilter, but only
+        // while a live runtime sheet AutoFilter still owns it. This prevents
+        // stale lossless metadata from resurrecting a deleted filter on export.
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        let txn = doc.transact();
+        if let Some(Out::YMap(sheet_map)) = sheets.get(&txn, &sheet_hex)
+            && let Some(Out::YMap(meta_map)) = sheet_map.get(&txn, KEY_PROPERTIES)
+            && let Some(Out::YMap(af_map)) = meta_map.get(&txn, "autoFilter")
+            && let Some(af) = yrs_schema::auto_filter::from_yrs_map(&af_map, &txn)
+        {
+            return Some(af);
+        }
+    }
+
+    // Fallback: reconstruct from runtime FilterState (lossy for round-trip-only
+    // fields — see function doc). Only fires for filters created via runtime
+    // API without going through XLSX import.
     filter_state_to_auto_filter(&auto_filter_state, pos_resolver)
 }
 

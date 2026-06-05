@@ -39,6 +39,7 @@ export type ProtectedTableOperation =
   | 'filters.clearColumnFilter'
   | 'filters.clearAllColumnFilters'
   | 'filters.apply'
+  | 'filters.reapply'
   | 'filters.setSortState'
   | 'slicers.add'
   | 'slicers.remove'

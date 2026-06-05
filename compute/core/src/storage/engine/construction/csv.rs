@@ -171,6 +171,7 @@ pub(in crate::storage::engine) fn import_from_csv_bytes(
         parse_and_hydrate_csv(csv_data, options)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);

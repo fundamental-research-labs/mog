@@ -885,10 +885,10 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
   const sheetId = deps.getActiveSheetId();
-  let operation = 'filters.list';
+  let operation = 'filters.listSummaries';
 
   try {
-    const allFilters = await ws.filters.list();
+    const allFilters = await ws.filters.listSummaries();
 
     if (!allFilters || allFilters.length === 0) {
       return handled(); // No filters to reapply
@@ -897,18 +897,27 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
     operation = 'filters.apply';
     for (const filter of allFilters) {
       if (filter.filterKind === 'advancedFilter') {
-        if (!filter.advancedFilter?.active) continue;
+        const hasActiveFilter =
+          filter.hasActiveFilter ?? filter.hasActiveCriteria ?? (filter.activeColumnCount ?? 0) > 0;
+        if (!hasActiveFilter) continue;
+
+        operation = 'filters.getInfo';
+        const details = await ws.filters.getInfo(filter.id);
+        if (!details?.advancedFilter?.active) continue;
+
+        operation = 'filters.applyAdvanced';
         await ws.filters.applyAdvanced({
-          listRange: rangeToA1Notation(filter.range),
-          criteriaRange: filter.advancedFilter.criteriaRange
-            ? rangeToA1Notation(filter.advancedFilter.criteriaRange)
+          listRange: rangeToA1Notation(details.range),
+          criteriaRange: details.advancedFilter.criteriaRange
+            ? rangeToA1Notation(details.advancedFilter.criteriaRange)
             : undefined,
           mode: 'inPlace',
-          uniqueRecordsOnly: filter.advancedFilter.uniqueRecordsOnly,
+          uniqueRecordsOnly: details.advancedFilter.uniqueRecordsOnly,
           filterId: filter.id,
         });
       } else {
-        await ws.filters.apply(filter.id);
+        operation = 'filters.reapply';
+        await ws.filters.reapply(filter.id);
       }
     }
 

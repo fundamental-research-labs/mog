@@ -441,6 +441,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   getFilterHeaderInfo: 'read',
   applyAdvancedFilter: 'write',
   applyFilter: 'write',
+  reapplyFilter: 'write',
   getUniqueColumnValues: 'read',
   computeDynamicFilterSerialRange: 'read',
   sortRange: 'write',

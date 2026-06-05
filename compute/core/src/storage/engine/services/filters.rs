@@ -1,5 +1,6 @@
 use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
+use crate::storage::engine::services::filter_results::append_row_visibility_changes;
 use crate::storage::engine::services::imported_filters;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
@@ -193,20 +194,20 @@ fn unsupported_reason_wire(reason: filters::ImportFilterUnsupportedReason) -> &'
 }
 
 fn unsupported_filter_apply_diagnostic(
-    stores: &mut EngineStores,
+    _stores: &EngineStores,
     sheet_id: &SheetId,
     filter_id: &str,
     filter_kind: Option<String>,
     metadata: &FilterChangeMetadata,
+    operation: &'static str,
 ) -> RuntimeOperationDiagnostic {
-    let sequence = stores.id_alloc.next_u128().to_string();
     RuntimeOperationDiagnostic {
-        id: format!("runtime-diagnostic-{sequence}"),
-        sequence,
+        id: "runtime-diagnostic-pending".to_string(),
+        sequence: "0".to_string(),
         code: "unsupported_filter_reapply".to_string(),
         severity: "warning".to_string(),
         recoverability: "unsupported_preserved".to_string(),
-        operation: "applyFilter".to_string(),
+        operation: operation.to_string(),
         sheet_id: sheet_id.to_uuid_string(),
         filter_id: Some(filter_id.to_string()),
         filter_kind,
@@ -251,6 +252,12 @@ pub(in crate::storage::engine) fn delete_filter(
         sheet_id,
         filter_id,
     );
+    let binding = filters::get_filter_metadata_binding(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        filter_id,
+    );
     let metadata = filter_change_metadata_for_id(stores, sheet_id, filter_id, existing.as_ref());
     let transitions = dimensions::clear_filter_hidden_rows(
         stores.storage.doc(),
@@ -276,9 +283,10 @@ pub(in crate::storage::engine) fn delete_filter(
         .as_ref()
         .is_some_and(|filter| filter.filter_kind == filters::FilterKind::AutoFilter)
     {
-        imported_filters::delete_imported_auto_filter_metadata(stores, sheet_id);
+        imported_filters::delete_imported_auto_filter_metadata(stores, sheet_id, binding.as_ref());
     }
     let mut result = MutationResult::empty();
+    append_row_visibility_changes(&mut result, sheet_id, &transitions);
     result.filter_changes.push(FilterChange {
         sheet_id: sheet_id.to_uuid_string(),
         filter_id: filter_id.to_string(),
@@ -342,7 +350,14 @@ pub(in crate::storage::engine) fn set_column_filter(
     imported_filters::sync_imported_auto_filter_metadata_after_set_column(
         stores, mirror, sheet_id, filter_id, header_col,
     );
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "applied")
+    apply_filter_with_action(
+        stores,
+        mirror,
+        sheet_id,
+        filter_id,
+        "applied",
+        Some("applyFilter"),
+    )
 }
 
 pub(in crate::storage::engine) fn clear_column_filter(
@@ -364,7 +379,7 @@ pub(in crate::storage::engine) fn clear_column_filter(
     imported_filters::sync_imported_auto_filter_metadata_after_clear_column(
         stores, mirror, sheet_id, filter_id, header_col,
     );
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared")
+    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared", None)
 }
 
 pub(in crate::storage::engine) fn clear_all_column_filters(
@@ -382,7 +397,7 @@ pub(in crate::storage::engine) fn clear_all_column_filters(
     imported_filters::sync_imported_auto_filter_metadata_from_runtime(
         stores, mirror, sheet_id, filter_id,
     );
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared")
+    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared", None)
 }
 
 pub(in crate::storage::engine) fn get_filter(
@@ -471,6 +486,9 @@ pub(in crate::storage::engine) fn clear_all_filters(
     let mut result = MutationResult::empty();
     for filter in existing {
         let mut deleted = delete_filter(stores, mirror, sheet_id, &filter.id)?;
+        result
+            .visibility_changes
+            .append(&mut deleted.visibility_changes);
         result.filter_changes.append(&mut deleted.filter_changes);
         result.diagnostics.append(&mut deleted.diagnostics);
     }
@@ -680,7 +698,30 @@ pub(in crate::storage::engine) fn apply_filter(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "applied")
+    apply_filter_with_action(
+        stores,
+        mirror,
+        sheet_id,
+        filter_id,
+        "applied",
+        Some("applyFilter"),
+    )
+}
+
+pub(in crate::storage::engine) fn reapply_filter(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    filter_id: &str,
+) -> Result<MutationResult, ComputeError> {
+    apply_filter_with_action(
+        stores,
+        mirror,
+        sheet_id,
+        filter_id,
+        "reapplied",
+        Some("reapplyFilter"),
+    )
 }
 
 fn apply_filter_with_action(
@@ -689,6 +730,7 @@ fn apply_filter_with_action(
     sheet_id: &SheetId,
     filter_id: &str,
     action: &str,
+    diagnostic_operation: Option<&'static str>,
 ) -> Result<MutationResult, ComputeError> {
     let filter = filters::get_filter(
         stores.storage.doc(),
@@ -701,13 +743,14 @@ fn apply_filter_with_action(
         .map(|filter| filter_kind_wire(&filter.filter_kind).to_string());
     let metadata = filter_change_metadata_for_id(stores, sheet_id, filter_id, filter.as_ref());
     if imported_shell_disallows_filter_ownership(stores, sheet_id, filter_id) {
-        let diagnostics = if action == "applied" {
+        let diagnostics = if let Some(operation) = diagnostic_operation {
             vec![unsupported_filter_apply_diagnostic(
                 stores,
                 sheet_id,
                 filter_id,
                 filter_kind.clone(),
                 &metadata,
+                operation,
             )]
         } else {
             Vec::new()
@@ -799,6 +842,7 @@ fn apply_filter_with_action(
     imported_filters::apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
 
     let mut result = MutationResult::empty();
+    append_row_visibility_changes(&mut result, sheet_id, &transitions);
     result.filter_changes.push(FilterChange {
         sheet_id: sheet_id.to_uuid_string(),
         filter_id: filter_id.to_string(),

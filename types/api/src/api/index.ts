@@ -92,6 +92,8 @@ export type {
   FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
+  FilterListOptions,
+  FilterListScope,
   WorksheetFormControls,
   WorksheetFormats,
   WorksheetHyperlinks,

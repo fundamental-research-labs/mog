@@ -586,7 +586,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // and serves sync lookups for the canvas render loop.
   // On filter events, the cache refreshes automatically.
   // ==========================================================================
-  const { getFilterHeaderInfo } = useFilterHeaderCache({
+  const { getFilterHeaderInfo, hasTableColumnFilter } = useFilterHeaderCache({
     activeSheetId,
     onCacheUpdate: onFilterHeaderCacheUpdate,
   });
@@ -595,28 +595,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     activeSheetId,
     onCacheUpdate: onTableLayoutCacheUpdate,
   });
-
-  // ==========================================================================
-  // Table Column Filter Status (Tables - 10.2 Funnel Icon)
-  //
-  // ARCHITECTURE (Cell Identity):
-  // - Uses Filters.hasTableColumnFilter() which looks up header CellId internally
-  // - Returns true if the table column has active filter criteria
-  // - Used by cells-layer to render funnel icon instead of dropdown arrow
-  // ==========================================================================
-  // Use ws.filters.list to check if a table has active column filters.
-  // Replaces Filters.hasTableColumnFilter which found a filter by tableId
-  // and checked if columnFilters was non-empty.
-  const hasTableColumnFilter = useCallback(
-    async (_sheetId: string, tableId: string, _headerRow: number, _headerCol: number) => {
-      const ws = wb.getSheetById(activeSheetId);
-      const filters = await ws.filters.list();
-      const tableFilter = filters.find((f) => f.tableId === tableId);
-      if (!tableFilter) return false;
-      return Object.keys(tableFilter.columnFilters ?? {}).length > 0;
-    },
-    [wb, activeSheetId],
-  );
 
   // ==========================================================================
   // CHART CALLBACKS

@@ -1,5 +1,6 @@
 use super::support::*;
 use super::*;
+use crate::snapshot::{RuntimeDiagnosticsOptions, RuntimeOperationDiagnostic};
 use value_types::CellValue;
 
 #[test]
@@ -54,6 +55,47 @@ fn deferred_xlsx_import_exposes_first_sheet_formatting_before_full_hydration() {
             || c2_format_after.pattern_foreground_color.is_some(),
         "C2 imported fill should remain visible after full deferred hydration; got {c2_format_after:?}"
     );
+}
+
+#[test]
+fn deferred_xlsx_replacement_clears_runtime_diagnostics() {
+    let bytes = active_visible_deferred_fixture_xlsx();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let mut diagnostics = vec![RuntimeOperationDiagnostic {
+        id: "runtime-diagnostic-pending".to_string(),
+        sequence: "0".to_string(),
+        code: "unsupported_filter_reapply".to_string(),
+        severity: "warning".to_string(),
+        recoverability: "unsupported_preserved".to_string(),
+        operation: "reapplyFilter".to_string(),
+        sheet_id: sheet_id().to_uuid_string(),
+        filter_id: Some("filter-1".to_string()),
+        filter_kind: Some("autoFilter".to_string()),
+        table_id: None,
+        reason: Some("iconFilterUnsupported".to_string()),
+        reasons: vec!["iconFilterUnsupported".to_string()],
+        details: None,
+        location: None,
+    }];
+    engine.assign_and_record_runtime_diagnostics(&mut diagnostics);
+    assert_eq!(
+        engine
+            .get_runtime_diagnostics(RuntimeDiagnosticsOptions::default())
+            .diagnostics
+            .len(),
+        1
+    );
+
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX replacement should succeed");
+
+    let page = engine.get_runtime_diagnostics(RuntimeDiagnosticsOptions::default());
+    assert!(
+        page.diagnostics.is_empty(),
+        "deferred import replacement must clear stale runtime diagnostics: {page:?}"
+    );
+    assert!(!page.truncated);
 }
 
 #[test]
@@ -158,6 +200,54 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
         }),
         "full deferred hydration should not re-emit the first-paint AutoFilter creation: {:?}",
         completion_result.filter_changes
+    );
+}
+
+#[test]
+fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation() {
+    let bytes = active_visible_deferred_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let (_, active_visible) = sheet_ids(&engine);
+    let active_filter = engine
+        .get_filters_in_sheet(&active_visible)
+        .into_iter()
+        .find(|filter| filter.filter_kind == crate::storage::sheet::filters::FilterKind::AutoFilter)
+        .expect("active visible sheet AutoFilter should be hydrated before full hydration");
+    assert!(
+        !active_filter.column_filters.is_empty(),
+        "fixture AutoFilter should start with criteria: {active_filter:?}"
+    );
+    let active_filter_id = active_filter.id.clone();
+    let criteria_before = active_filter.column_filters.clone();
+    let hidden_before = engine.is_row_hidden_query(&active_visible, 2);
+
+    let err = match engine.clear_all_column_filters(&active_visible, &active_filter_id) {
+        Ok(_) => panic!("filter clear should reject before full deferred hydration"),
+        Err(err) => err,
+    };
+
+    assert!(
+        err.to_string().contains("deferred XLSX hydration"),
+        "clear should fail on the deferred hydration preflight, got {err:?}"
+    );
+    let filter_after = engine
+        .get_filters_in_sheet(&active_visible)
+        .into_iter()
+        .find(|filter| filter.id == active_filter_id)
+        .expect("rejected clear must not remove the imported AutoFilter");
+    assert_eq!(
+        filter_after.column_filters, criteria_before,
+        "rejected clear must leave imported criteria unchanged"
+    );
+    assert_eq!(
+        engine.is_row_hidden_query(&active_visible, 2),
+        hidden_before,
+        "rejected clear must leave filtered row visibility unchanged"
     );
 }
 

@@ -18,8 +18,14 @@ import { jest } from '@jest/globals';
 
 import type { FrameContext, RenderRegion, TextMeasurer } from '@mog/canvas-engine';
 import type { CellFormat, FormattedText } from '@mog-sdk/contracts/core';
-import { asFormattedText } from '@mog-sdk/contracts/core';
-import type { GridRegionMeta, SelectionDataSource } from '@mog-sdk/contracts/rendering';
+import { asFormattedText, toCellId } from '@mog-sdk/contracts/core';
+import type {
+  CellDataSource,
+  GridRegionMeta,
+  InteractiveElement,
+  InteractiveElementCollector,
+  SelectionDataSource,
+} from '@mog-sdk/contracts/rendering';
 
 import { ViewportMergeIndex } from '../../coordinates/viewport-merge-index';
 import { ViewportPositionIndex } from '../../coordinates/viewport-position-index';
@@ -37,6 +43,7 @@ function makeMainRegion(opts: {
   sheetId: string;
   viewportId?: string;
   bounds?: { x: number; y: number; width: number; height: number };
+  cellRange?: GridRegionMeta['cellRange'];
 }): RenderRegion<GridRegionMeta> {
   return {
     id: opts.viewportId ?? 'main',
@@ -46,7 +53,7 @@ function makeMainRegion(opts: {
     zoom: 1.0,
     metadata: {
       sheetId: opts.sheetId,
-      cellRange: { startRow: 0, startCol: 0, endRow: 30, endCol: 20 },
+      cellRange: opts.cellRange ?? { startRow: 0, startCol: 0, endRow: 30, endCol: 20 },
       isFrozen: false,
       scrollBehavior: 'free',
       viewportId: opts.viewportId ?? 'main',
@@ -352,6 +359,20 @@ function createLayerConfig(overrides: Partial<CellsLayerConfig> = {}): CellsLaye
   };
 }
 
+function createInteractiveElementCollector(): InteractiveElementCollector {
+  const elements = new Map<string, InteractiveElement>();
+  return {
+    clear: jest.fn(() => {
+      elements.clear();
+    }),
+    add: jest.fn((element: InteractiveElement) => {
+      elements.set(element.id, element);
+    }),
+    getAll: () => Array.from(elements.values()),
+    subscribe: () => () => undefined,
+  };
+}
+
 /** Extract all text strings passed to ctx.fillText() */
 function getRenderedTexts(ctx: CanvasRenderingContext2D): string[] {
   return (ctx.fillText as jest.Mock).mock.calls.map((c: unknown[]) => c[0] as string);
@@ -481,6 +502,73 @@ describe('CellsLayer', () => {
 
     // (Layout-pipeline invariant — every region carries a viewportId — is now
     // covered by canvas/grid-canvas/src/renderer/__tests__/viewport-to-region-layout.test.ts.)
+  });
+
+  describe('interactive element collection', () => {
+    it('accumulates interactive elements across multiple regions in one frame', () => {
+      const sheetId = 'sheet-interactions';
+      const cells = new Map<string, MockCellData>([
+        ['0,2', { valueType: 2, displayText: 'Vendor' }],
+        [
+          '1,0',
+          {
+            valueType: 3,
+            numberValue: 1,
+            displayText: 'TRUE',
+            isCheckbox: true,
+            hasComment: true,
+          },
+        ],
+      ]);
+      const reader = createMockReader(cells);
+      const collector = createInteractiveElementCollector();
+      const cellData: CellDataSource = {
+        ...NULL_CELL_DATA_SOURCE,
+        getFilterHeaderInfo: (_sheetId, cell) =>
+          cell.row === 0 && cell.col === 2
+            ? {
+                filterId: 'auto-filter-1',
+                headerCellId: toCellId('header-c'),
+                hasActiveFilter: true,
+              }
+            : undefined,
+      };
+      const layer = createCellsLayer(
+        createLayerConfig({
+          binaryCellReader: reader,
+          cellData,
+          interactiveElements: collector,
+          positionIndex: createPositionIndex(),
+        }),
+      );
+      const ctx = createMockContext();
+      const frame = createFrame();
+      const frozenHeaderRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'frozen-row',
+        cellRange: { startRow: 0, startCol: 2, endRow: 0, endCol: 2 },
+      });
+      const mainRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'main',
+        cellRange: { startRow: 1, startCol: 0, endRow: 1, endCol: 0 },
+      });
+
+      layer.beginFrame(frame);
+      layer.render(ctx, frozenHeaderRegion, frame);
+      expect(collector.getAll().map((element) => element.id)).toContain(
+        `filter-button:${sheetId}:0,2`,
+      );
+
+      layer.render(ctx, mainRegion, frame);
+
+      expect(collector.getAll().map((element) => element.id).sort()).toEqual([
+        `checkbox:${sheetId}:1,0`,
+        `comment-indicator:${sheetId}:1,0`,
+        `filter-button:${sheetId}:0,2`,
+      ]);
+      expect(collector.clear).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ===========================================================================

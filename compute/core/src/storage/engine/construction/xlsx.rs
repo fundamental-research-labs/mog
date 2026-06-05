@@ -59,6 +59,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
     engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
         &mut engine.mirror,

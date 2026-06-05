@@ -10,8 +10,10 @@ function createMockCtx(): any {
     writeGate: {
       assertWritable: jest.fn(),
     },
+    awaitMaterialized: jest.fn().mockResolvedValue(undefined),
     computeBridge: {
       getFiltersInSheet: jest.fn().mockResolvedValue([]),
+      getFilterHeaderInfo: jest.fn().mockResolvedValue([]),
       getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       getCellPosition: jest.fn().mockResolvedValue(null),
       getCellIdAt: jest.fn().mockResolvedValue(null),
@@ -77,6 +79,48 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
       null,
     );
     expect(result).toEqual({ ...dropdownData, columnType: 'text' });
+  });
+
+  it('marks dropdown data as unsupported-preserved from imported header metadata', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-a',
+      dataEndCellId: 'data-end',
+      columnFilters: {},
+    };
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 1, col: 0 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.getCellValue.mockResolvedValueOnce('A');
+    ctx.computeBridge.getFilterHeaderInfo.mockResolvedValue([
+      {
+        filterId: 'filter-1',
+        headerCellId: 'header-a',
+        hasActiveFilter: true,
+        row: 0,
+        col: 0,
+        filterKind: 'autoFilter',
+        range: { startRow: 0, startCol: 0, endRow: 1, endCol: 0 },
+        sourceType: 'sheetAutoFilter',
+        capability: 'unsupported',
+        unsupportedReasons: ['iconFilterUnsupported'],
+        buttonVisible: true,
+        hiddenButton: false,
+        showButton: true,
+      },
+    ]);
+
+    const result = await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(result).toMatchObject({
+      unsupportedPreserved: true,
+      unsupportedReasons: ['iconFilterUnsupported'],
+    });
   });
 
   it('classifies plain serial-like numbers as numbers unless their cells have date formats', async () => {

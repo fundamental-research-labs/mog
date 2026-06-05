@@ -180,11 +180,15 @@ impl YrsComputeEngine {
         }
     }
 
-    pub(crate) fn record_runtime_diagnostics(
+    pub(crate) fn assign_and_record_runtime_diagnostics(
         &mut self,
-        diagnostics: &[crate::snapshot::RuntimeOperationDiagnostic],
+        diagnostics: &mut [crate::snapshot::RuntimeOperationDiagnostic],
     ) {
-        self.runtime_diagnostics.record(diagnostics);
+        self.runtime_diagnostics.assign_and_record(diagnostics);
+    }
+
+    pub(crate) fn clear_runtime_diagnostics(&mut self) {
+        self.runtime_diagnostics.clear();
     }
 }
 

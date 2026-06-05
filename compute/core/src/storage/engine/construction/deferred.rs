@@ -47,6 +47,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     engine.update_buffer.clear();
     engine.stores.storage = YrsStorage::new();
     engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
 
     // Pass 2: Allocate IDs for ALL sheets (fast — only ~4ms for 28 sheets).
     // Cell/Row/Col IDs are only allocated for sheets with cells or imported
@@ -343,7 +344,9 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                     .map(|sheet| sheet.cells.len() as u64)
                     .sum::<u64>(),
             );
-            (parsed, report)
+            let mut merged_report = engine.import_report.clone();
+            merge_import_reports(&mut merged_report, report);
+            (parsed, merged_report)
         };
         dh_log!("phase 0 done");
 
@@ -592,6 +595,17 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     dh_log!("phase 5 done: mirror finalized, settings derived");
 
     Ok(Some(completion))
+}
+
+fn merge_import_reports(
+    target: &mut domain_types::ImportReport,
+    source: domain_types::ImportReport,
+) {
+    target.diagnostics.extend(source.diagnostics);
+    target.force_recalc_cells.extend(source.force_recalc_cells);
+    target.object_statuses.extend(source.object_statuses);
+    target.stats = source.stats;
+    target.canonicalize();
 }
 
 pub(in crate::storage::engine) fn commit_deferred_hydration(

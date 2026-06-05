@@ -28,6 +28,13 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
+    super::imported_table_filters::materialize_imported_table_auto_filters(
+        stores,
+        mirror,
+        import_report.as_deref_mut(),
+        import_phase,
+    );
+
     let sheet_ids: Vec<SheetId> = stores.grid_indexes.keys().copied().collect();
     for sheet_id in sheet_ids {
         normalize_imported_auto_filter_visibility_for_sheet(
@@ -48,23 +55,23 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
     import_phase: domain_types::ImportPhase,
 ) {
     let imported_auto_filter = read_imported_auto_filter_metadata(stores, sheet_id);
-    if imported_auto_filter.is_none() {
-        return;
+    if imported_auto_filter.is_some() {
+        upsert_sheet_auto_filter_bindings_for_sheet(
+            stores,
+            mirror,
+            sheet_id,
+            imported_auto_filter.as_ref(),
+        );
     }
-
-    upsert_sheet_auto_filter_bindings_for_sheet(
-        stores,
-        mirror,
-        sheet_id,
-        imported_auto_filter.as_ref(),
-    );
 
     let imported_filters =
         filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
             .into_iter()
             .filter(|filter| {
-                filter.filter_kind == filters::FilterKind::AutoFilter
-                    && !filter.column_filters.is_empty()
+                matches!(
+                    filter.filter_kind,
+                    filters::FilterKind::AutoFilter | filters::FilterKind::TableFilter
+                ) && !filter.column_filters.is_empty()
             })
             .collect::<Vec<_>>();
 
@@ -77,7 +84,9 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
         );
         if let Some(binding) = binding.as_ref() {
             if binding.shell.capability == filters::FilterCapability::Unsupported {
-                if let Some(report) = import_report.as_deref_mut() {
+                if filter.filter_kind == filters::FilterKind::AutoFilter
+                    && let Some(report) = import_report.as_deref_mut()
+                {
                     record_unsupported_filter_import_diagnostics(
                         stores,
                         mirror,
@@ -335,7 +344,18 @@ fn sync_imported_auto_filter_column_metadata(
 pub(in crate::storage::engine) fn delete_imported_auto_filter_metadata(
     stores: &EngineStores,
     sheet_id: &SheetId,
+    binding: Option<&filters::FilterMetadataBinding>,
 ) {
+    let current_sheet_id = sheet_id.to_uuid_string();
+    if let Some(binding) = binding {
+        match &binding.owner_path {
+            filters::FilterMetadataOwnerPath::SheetAutoFilter { sheet_id }
+                if sheet_id == &current_sheet_id
+                    && binding.filter_kind == filters::FilterKind::AutoFilter => {}
+            _ => return,
+        }
+    }
+
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let mut txn = stores
         .storage
@@ -461,8 +481,11 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
         }
     }
 
-    let shell = build_filter_shell_metadata(imported_auto_filter, button_metadata);
-    let fingerprint = filter_binding_fingerprint(
+    let shell = super::imported_filter_shell::build_filter_shell_metadata(
+        imported_auto_filter,
+        button_metadata,
+    );
+    let fingerprint = super::imported_filter_shell::filter_binding_fingerprint(
         &sheet_id_text,
         &range_ref,
         imported_auto_filter,
@@ -519,144 +542,6 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
     }
 }
 
-fn build_filter_shell_metadata(
-    imported_auto_filter: Option<&AutoFilter>,
-    button_metadata: BTreeMap<String, filters::FilterButtonMetadata>,
-) -> filters::FilterShellMetadata {
-    let mut unsupported_reasons = BTreeSet::new();
-    let mut lossless_criteria = Vec::new();
-    let mut has_active_lossless_criteria = false;
-
-    if let Some(auto_filter) = imported_auto_filter {
-        if auto_filter.ext_lst_raw.is_some() {
-            unsupported_reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
-        }
-        for column in &auto_filter.columns {
-            if column.ext_lst_raw.is_some() {
-                unsupported_reasons
-                    .insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
-            }
-            let Some(filter_type) = &column.filter_type else {
-                continue;
-            };
-            has_active_lossless_criteria = true;
-            unsupported_reasons.extend(unsupported_reasons_for_filter_type(filter_type));
-            lossless_criteria.push(filters::LosslessCriterionDescriptor {
-                filter_col_id: Some(column.col_index),
-                table_column_ordinal: None,
-                kind: lossless_filter_kind(filter_type).to_string(),
-                preserved_json: serde_json::to_value(filter_type)
-                    .unwrap_or(serde_json::Value::Null),
-            });
-        }
-    }
-
-    let unsupported_reasons = unsupported_reasons.into_iter().collect::<Vec<_>>();
-    filters::FilterShellMetadata {
-        capability: if unsupported_reasons.is_empty() {
-            filters::FilterCapability::Supported
-        } else {
-            filters::FilterCapability::Unsupported
-        },
-        unsupported_reasons,
-        has_active_lossless_criteria,
-        button_metadata,
-        lossless_criteria,
-    }
-}
-
-fn unsupported_reasons_for_filter_type(
-    filter_type: &OoxmlFilterType,
-) -> Vec<filters::ImportFilterUnsupportedReason> {
-    match filter_type {
-        OoxmlFilterType::Values {
-            date_group_items, ..
-        } if !date_group_items.is_empty() => {
-            vec![filters::ImportFilterUnsupportedReason::DateGroupUnsupported]
-        }
-        OoxmlFilterType::Custom { conditions, .. } => {
-            if conditions
-                .iter()
-                .any(|condition| !is_supported_custom_operator(&condition.operator))
-            {
-                vec![filters::ImportFilterUnsupportedReason::UnknownCustomOperator]
-            } else {
-                Vec::new()
-            }
-        }
-        OoxmlFilterType::Dynamic { dynamic_type, .. } => {
-            let mut reasons =
-                vec![filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported];
-            if !is_known_dynamic_type(dynamic_type) {
-                reasons.push(filters::ImportFilterUnsupportedReason::UnknownDynamicType);
-            }
-            reasons
-        }
-        OoxmlFilterType::Color { .. } => {
-            vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
-        }
-        OoxmlFilterType::Icon { .. } => {
-            vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn is_supported_custom_operator(operator: &str) -> bool {
-    matches!(
-        operator,
-        "equal"
-            | "equals"
-            | "notEqual"
-            | "notEquals"
-            | "greaterThan"
-            | "greaterThanOrEqual"
-            | "lessThan"
-            | "lessThanOrEqual"
-            | "beginsWith"
-            | "startsWith"
-            | "endsWith"
-            | "contains"
-            | "notContains"
-            | "between"
-            | "notBetween"
-    )
-}
-
-fn is_known_dynamic_type(dynamic_type: &str) -> bool {
-    matches!(
-        dynamic_type,
-        "aboveAverage"
-            | "belowAverage"
-            | "today"
-            | "yesterday"
-            | "tomorrow"
-            | "thisWeek"
-            | "lastWeek"
-            | "nextWeek"
-            | "thisMonth"
-            | "lastMonth"
-            | "nextMonth"
-            | "thisQuarter"
-            | "lastQuarter"
-            | "nextQuarter"
-            | "thisYear"
-            | "lastYear"
-            | "nextYear"
-    )
-}
-
-fn lossless_filter_kind(filter_type: &OoxmlFilterType) -> &'static str {
-    match filter_type {
-        OoxmlFilterType::Values { .. } => "values",
-        OoxmlFilterType::Top10 { .. } => "top10",
-        OoxmlFilterType::Custom { .. } => "custom",
-        OoxmlFilterType::Dynamic { .. } => "dynamic",
-        OoxmlFilterType::Color { .. } => "color",
-        OoxmlFilterType::Icon { .. } => "icon",
-    }
-}
-
 fn record_unsupported_filter_import_diagnostics(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -686,11 +571,13 @@ fn record_unsupported_filter_import_diagnostics(
             sheet_index,
             sheet_name.clone(),
             source_key.clone(),
+            Some(binding.filter_id.clone()),
             None,
             None,
             resolve_filter_cell_pos(stores, mirror, sheet_id, &binding.header_start_cell_id),
             vec![filters::ImportFilterUnsupportedReason::UnknownExtension],
             "autoFilter".to_string(),
+            domain_types::ImportFeatureKind::Worksheet,
         );
         upsert_import_diagnostic_phase(report, diagnostic, import_phase);
     }
@@ -701,7 +588,9 @@ fn record_unsupported_filter_import_diagnostics(
             reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
         }
         if let Some(filter_type) = &column.filter_type {
-            reasons.extend(unsupported_reasons_for_filter_type(filter_type));
+            reasons.extend(
+                super::imported_filter_shell::unsupported_reasons_for_filter_type(filter_type),
+            );
         }
         if reasons.is_empty() {
             continue;
@@ -713,37 +602,35 @@ fn record_unsupported_filter_import_diagnostics(
             .and_then(|header_cell_id| {
                 resolve_filter_cell_pos(stores, mirror, sheet_id, header_cell_id)
             });
-        let filter_kind = column
-            .filter_type
-            .as_ref()
-            .map(lossless_filter_kind)
-            .unwrap_or("filterColumn")
-            .to_string();
         let diagnostic = unsupported_filter_import_diagnostic(
             binding,
             sheet_index,
             sheet_name.clone(),
             source_key.clone(),
+            Some(binding.filter_id.clone()),
             Some(column.col_index),
             None,
             resolved_cell,
             reasons.into_iter().collect(),
-            filter_kind,
+            "autoFilter".to_string(),
+            domain_types::ImportFeatureKind::Worksheet,
         );
         upsert_import_diagnostic_phase(report, diagnostic, import_phase);
     }
 }
 
-fn unsupported_filter_import_diagnostic(
+pub(in crate::storage::engine::services) fn unsupported_filter_import_diagnostic(
     binding: &filters::FilterMetadataBinding,
     sheet_index: Option<u32>,
     sheet_name: Option<String>,
     source_key: Option<String>,
+    object_id: Option<String>,
     filter_col_id: Option<u32>,
     table_column_ordinal: Option<u32>,
     resolved_cell: Option<(u32, u32)>,
     reasons: Vec<filters::ImportFilterUnsupportedReason>,
     filter_kind: String,
+    feature: domain_types::ImportFeatureKind,
 ) -> domain_types::ImportDiagnostic {
     let code = domain_types::ImportDiagnosticCode::UnsupportedFeature;
     let part = sheet_index.map(|idx| format!("sheet:{idx}"));
@@ -778,7 +665,7 @@ fn unsupported_filter_import_diagnostic(
         ),
         code: code.clone(),
         severity: domain_types::ImportSeverity::Warning,
-        feature: domain_types::ImportFeatureKind::Worksheet,
+        feature,
         recoverability: domain_types::ImportRecoverability::UnsupportedPreserved,
         message: message.clone(),
         reference: Some(domain_types::ImportDiagnosticRef {
@@ -788,8 +675,8 @@ fn unsupported_filter_import_diagnostic(
             sheet_index,
             sheet_name,
             source_range: Some(binding.range_ref.clone()),
-            feature_kind: Some(domain_types::ImportFeatureKind::Worksheet),
-            object_id: Some(binding.filter_id.clone()),
+            feature_kind: Some(feature),
+            object_id,
             filter_col_id,
             table_column_ordinal,
             unresolved_filter_col_id: filter_col_id.filter(|_| resolved_cell.is_none()),
@@ -814,7 +701,7 @@ fn unsupported_filter_import_diagnostic(
     }
 }
 
-fn upsert_import_diagnostic_phase(
+pub(in crate::storage::engine::services) fn upsert_import_diagnostic_phase(
     report: &mut domain_types::ImportReport,
     mut diagnostic: domain_types::ImportDiagnostic,
     phase: domain_types::ImportPhase,
@@ -858,31 +745,6 @@ fn reason_tokens(reasons: &[filters::ImportFilterUnsupportedReason]) -> Vec<Stri
 
 fn cell_ref_from_pos(row: u32, col: u32) -> String {
     format!("{}{}", column_name(col), row + 1)
-}
-
-fn filter_binding_fingerprint(
-    sheet_id: &str,
-    range_ref: &str,
-    imported_auto_filter: Option<&AutoFilter>,
-    shell: &filters::FilterShellMetadata,
-    col_id_to_header_cell_id: &BTreeMap<u32, String>,
-) -> String {
-    let value = serde_json::json!({
-        "schema": "filterMetadataBindingFingerprintV1",
-        "ownerPath": { "kind": "sheetAutoFilter", "sheetId": sheet_id },
-        "rangeRef": range_ref,
-        "columns": imported_auto_filter.map(|auto_filter| &auto_filter.columns),
-        "sort": imported_auto_filter.and_then(|auto_filter| auto_filter.sort.as_ref()),
-        "xrUid": imported_auto_filter.and_then(|auto_filter| auto_filter.xr_uid.as_ref()),
-        "autoFilterExtLst": imported_auto_filter.and_then(|auto_filter| auto_filter.ext_lst_raw.as_ref()),
-        "buttonMetadata": &shell.button_metadata,
-        "losslessCriteria": &shell.lossless_criteria,
-        "colIdToHeaderCellId": col_id_to_header_cell_id,
-    });
-    format!(
-        "filterMetadataBindingFingerprintV1:{}",
-        serde_json::to_string(&value).unwrap_or_default()
-    )
 }
 
 fn range_ref_from_bounds(start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> String {
@@ -1112,7 +974,7 @@ fn evaluate_runtime_filter(
     )
 }
 
-fn resolve_filter_cell_pos(
+pub(in crate::storage::engine::services) fn resolve_filter_cell_pos(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
@@ -1130,342 +992,5 @@ fn resolve_filter_cell_pos(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-    use std::sync::Arc;
-
-    use domain_types::domain::filter::{
-        DateGroupItem, FilterColumn, OoxmlFilterCondition, OoxmlFilterType,
-    };
-
-    use super::*;
-
-    fn values_filter(value: &str) -> Option<OoxmlFilterType> {
-        Some(OoxmlFilterType::Values {
-            values: vec![value.to_string()],
-            blanks: false,
-            calendar_type: None,
-            date_group_items: Vec::new(),
-        })
-    }
-
-    #[test]
-    fn runtime_metadata_merge_preserves_imported_button_fields() {
-        let mut imported = AutoFilter {
-            range_ref: "A1:D12".to_string(),
-            columns: vec![
-                FilterColumn {
-                    col_index: 1,
-                    filter_type: values_filter("old"),
-                    hidden_button: true,
-                    show_button: false,
-                    ext_lst_raw: Some("<extLst/>".to_string()),
-                },
-                FilterColumn {
-                    col_index: 2,
-                    filter_type: values_filter("stale"),
-                    ..Default::default()
-                },
-            ],
-            sort: None,
-            xr_uid: Some("{uid}".to_string()),
-            ext_lst_raw: Some("<afExt/>".to_string()),
-        };
-        let runtime = AutoFilter {
-            range_ref: "A1:E12".to_string(),
-            columns: vec![
-                FilterColumn {
-                    col_index: 1,
-                    filter_type: values_filter("new"),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 4,
-                    filter_type: values_filter("added"),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        merge_runtime_auto_filter_into_imported_metadata(&mut imported, runtime);
-
-        assert_eq!(imported.range_ref, "A1:E12");
-        assert_eq!(imported.xr_uid.as_deref(), Some("{uid}"));
-        assert_eq!(imported.ext_lst_raw.as_deref(), Some("<afExt/>"));
-        assert_eq!(imported.columns.len(), 3);
-        assert_eq!(imported.columns[0].col_index, 1);
-        assert_eq!(imported.columns[0].filter_type, values_filter("new"));
-        assert!(imported.columns[0].hidden_button);
-        assert!(!imported.columns[0].show_button);
-        assert_eq!(
-            imported.columns[0].ext_lst_raw.as_deref(),
-            Some("<extLst/>")
-        );
-        assert_eq!(imported.columns[1].col_index, 2);
-        assert!(imported.columns[1].filter_type.is_none());
-        assert_eq!(imported.columns[2].col_index, 4);
-        assert_eq!(imported.columns[2].filter_type, values_filter("added"));
-    }
-
-    #[test]
-    fn column_metadata_replace_preserves_unrelated_lossless_criteria() {
-        let mut imported = AutoFilter {
-            range_ref: "A1:D12".to_string(),
-            columns: vec![
-                FilterColumn {
-                    col_index: 1,
-                    filter_type: values_filter("old"),
-                    hidden_button: true,
-                    show_button: false,
-                    ext_lst_raw: Some("<extLst/>".to_string()),
-                },
-                FilterColumn {
-                    col_index: 2,
-                    filter_type: values_filter("keep"),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        replace_imported_column_filter_type(&mut imported, 1, values_filter("new"));
-
-        assert_eq!(imported.columns.len(), 2);
-        assert_eq!(imported.columns[0].col_index, 1);
-        assert_eq!(imported.columns[0].filter_type, values_filter("new"));
-        assert!(imported.columns[0].hidden_button);
-        assert!(!imported.columns[0].show_button);
-        assert_eq!(
-            imported.columns[0].ext_lst_raw.as_deref(),
-            Some("<extLst/>")
-        );
-        assert_eq!(imported.columns[1].col_index, 2);
-        assert_eq!(imported.columns[1].filter_type, values_filter("keep"));
-    }
-
-    #[test]
-    fn column_metadata_clear_only_removes_target_criterion() {
-        let mut imported = AutoFilter {
-            range_ref: "A1:D12".to_string(),
-            columns: vec![
-                FilterColumn {
-                    col_index: 1,
-                    filter_type: values_filter("old"),
-                    hidden_button: true,
-                    ext_lst_raw: Some("<extLst/>".to_string()),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 2,
-                    filter_type: values_filter("keep"),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        replace_imported_column_filter_type(&mut imported, 1, None);
-        replace_imported_column_filter_type(&mut imported, 8, None);
-
-        assert_eq!(imported.columns.len(), 2);
-        assert_eq!(imported.columns[0].col_index, 1);
-        assert!(imported.columns[0].filter_type.is_none());
-        assert!(imported.columns[0].hidden_button);
-        assert_eq!(
-            imported.columns[0].ext_lst_raw.as_deref(),
-            Some("<extLst/>")
-        );
-        assert_eq!(imported.columns[1].col_index, 2);
-        assert_eq!(imported.columns[1].filter_type, values_filter("keep"));
-    }
-
-    #[test]
-    fn filter_shell_metadata_classifies_unsupported_lossless_criteria() {
-        let imported = AutoFilter {
-            range_ref: "A1:D10".to_string(),
-            columns: vec![
-                FilterColumn {
-                    col_index: 0,
-                    filter_type: Some(OoxmlFilterType::Values {
-                        values: Vec::new(),
-                        blanks: false,
-                        calendar_type: None,
-                        date_group_items: vec![DateGroupItem::default()],
-                    }),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 1,
-                    filter_type: Some(OoxmlFilterType::Dynamic {
-                        dynamic_type: "thisMonth".to_string(),
-                        value: None,
-                        max_value: None,
-                        value_iso: None,
-                        max_value_iso: None,
-                    }),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 2,
-                    filter_type: Some(OoxmlFilterType::Custom {
-                        conditions: vec![OoxmlFilterCondition {
-                            operator: "notARealOperator".to_string(),
-                            value: CellValue::Text(Arc::from("x")),
-                            value2: None,
-                        }],
-                        and_logic: true,
-                    }),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 3,
-                    filter_type: Some(OoxmlFilterType::Dynamic {
-                        dynamic_type: "notARealDynamicFilter".to_string(),
-                        value: None,
-                        max_value: None,
-                        value_iso: None,
-                        max_value_iso: None,
-                    }),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 4,
-                    filter_type: Some(OoxmlFilterType::Color {
-                        dxf_id: Some(4),
-                        cell_color: true,
-                    }),
-                    ..Default::default()
-                },
-                FilterColumn {
-                    col_index: 5,
-                    filter_type: Some(OoxmlFilterType::Icon {
-                        icon_set: Some("3TrafficLights1".to_string()),
-                        icon_id: 1,
-                    }),
-                    ext_lst_raw: Some("<extLst/>".to_string()),
-                    ..Default::default()
-                },
-            ],
-            sort: None,
-            xr_uid: None,
-            ext_lst_raw: Some("<autoFilterExt/>".to_string()),
-        };
-
-        let shell = build_filter_shell_metadata(Some(&imported), BTreeMap::new());
-
-        assert_eq!(shell.capability, filters::FilterCapability::Unsupported);
-        assert_eq!(
-            shell.unsupported_reasons,
-            vec![
-                filters::ImportFilterUnsupportedReason::UnknownDynamicType,
-                filters::ImportFilterUnsupportedReason::UnknownCustomOperator,
-                filters::ImportFilterUnsupportedReason::DateGroupUnsupported,
-                filters::ImportFilterUnsupportedReason::DynamicTemporalContextUnsupported,
-                filters::ImportFilterUnsupportedReason::ColorDxfUnresolved,
-                filters::ImportFilterUnsupportedReason::IconFilterUnsupported,
-                filters::ImportFilterUnsupportedReason::UnknownExtension,
-            ]
-        );
-        assert!(shell.has_active_lossless_criteria);
-        assert_eq!(
-            shell
-                .lossless_criteria
-                .iter()
-                .map(|criterion| criterion.kind.as_str())
-                .collect::<Vec<_>>(),
-            vec!["values", "dynamic", "custom", "dynamic", "color", "icon"]
-        );
-    }
-
-    #[test]
-    fn unsupported_import_diagnostic_merges_phases_and_preserves_filter_location() {
-        let mut col_id_to_header_cell_id = BTreeMap::new();
-        col_id_to_header_cell_id.insert(2, "header-c".to_string());
-        let binding = filters::FilterMetadataBinding {
-            filter_id: "filter-1".to_string(),
-            filter_kind: filters::FilterKind::AutoFilter,
-            sheet_id: "sheet-1".to_string(),
-            table_id: None,
-            owner_path: filters::FilterMetadataOwnerPath::SheetAutoFilter {
-                sheet_id: "sheet-1".to_string(),
-            },
-            source_key: filters::FilterMetadataSourceKey::SheetAutoFilter {
-                sheet_id: "sheet-1".to_string(),
-                range_ref: "A1:D12".to_string(),
-            },
-            range_ref: "A1:D12".to_string(),
-            header_start_cell_id: "header-a".to_string(),
-            header_end_cell_id: "header-d".to_string(),
-            data_end_cell_id: "data-d".to_string(),
-            col_id_to_header_cell_id,
-            shell: filters::FilterShellMetadata::default(),
-            source_fingerprint: "filterMetadataBindingFingerprintV1:test".to_string(),
-        };
-        let diagnostic = unsupported_filter_import_diagnostic(
-            &binding,
-            Some(0),
-            Some("Data".to_string()),
-            Some(r#"{"kind":"sheetAutoFilter"}"#.to_string()),
-            Some(2),
-            None,
-            Some((0, 2)),
-            vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported],
-            "icon".to_string(),
-        );
-        let mut report = domain_types::ImportReport::default();
-
-        upsert_import_diagnostic_phase(
-            &mut report,
-            diagnostic.clone(),
-            domain_types::ImportPhase::CriticalSheet,
-        );
-        upsert_import_diagnostic_phase(
-            &mut report,
-            diagnostic,
-            domain_types::ImportPhase::FullHydration,
-        );
-
-        assert_eq!(report.diagnostics.len(), 1);
-        let diagnostic = &report.diagnostics[0];
-        assert_eq!(
-            diagnostic.import_phases,
-            vec![
-                domain_types::ImportPhase::CriticalSheet,
-                domain_types::ImportPhase::FullHydration
-            ]
-        );
-        assert_eq!(
-            diagnostic.first_import_phase,
-            Some(domain_types::ImportPhase::CriticalSheet)
-        );
-        let reference = diagnostic.reference.as_ref().unwrap();
-        assert_eq!(reference.sheet_index, Some(0));
-        assert_eq!(reference.sheet_name.as_deref(), Some("Data"));
-        assert_eq!(reference.source_range.as_deref(), Some("A1:D12"));
-        assert_eq!(reference.filter_col_id, Some(2));
-        assert_eq!(reference.row, Some(0));
-        assert_eq!(reference.col, Some(2));
-        assert_eq!(reference.cell_ref.as_deref(), Some("C1"));
-
-        let Some(domain_types::ImportDiagnosticDetails::UnsupportedFilter {
-            reasons,
-            filter_id,
-            filter_kind,
-            filter_col_id,
-            resolved_col,
-            ..
-        }) = diagnostic.details.as_ref()
-        else {
-            panic!("expected unsupported filter details");
-        };
-        assert_eq!(
-            reasons,
-            &vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
-        );
-        assert_eq!(filter_id.as_deref(), Some("filter-1"));
-        assert_eq!(filter_kind.as_deref(), Some("icon"));
-        assert_eq!(*filter_col_id, Some(2));
-        assert_eq!(*resolved_col, Some(2));
-    }
-}
+#[path = "imported_filters_tests.rs"]
+mod tests;

@@ -198,6 +198,10 @@ pub fn normalize_imported_filter_hidden_rows(
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
+    let structural_rows: BTreeSet<u32> =
+        super::super::grouping::get_rows_hidden_by_structural_groups(doc, sheets, sheet_id)
+            .into_iter()
+            .collect();
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
     let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
@@ -241,8 +245,7 @@ pub fn normalize_imported_filter_hidden_rows(
     for &row in rows_included_by_filter {
         if let Some(row_id) = row_id_key(grid_index, row) {
             let cache_hidden = map_has_true(&hidden_rows_map, &txn, &row.to_string());
-            let structural =
-                !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+            let structural = structural_rows.contains(&row);
             owner_map.remove(&mut txn, &row_id);
             let has_filter_owner = any_filter_hides_row(&filter_hidden_rows_map, &txn, &row_id);
             if cache_hidden
@@ -288,6 +291,10 @@ pub fn finalize_imported_hidden_row_cache(
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
+    let structural_rows: BTreeSet<u32> =
+        super::super::grouping::get_rows_hidden_by_structural_groups(doc, sheets, sheet_id)
+            .into_iter()
+            .collect();
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
     let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
@@ -320,8 +327,7 @@ pub fn finalize_imported_hidden_row_cache(
         let filter = filter_hidden_rows_map
             .as_ref()
             .is_some_and(|m| any_filter_hides_row(m, &txn, &row_id));
-        let structural =
-            !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+        let structural = structural_rows.contains(&row);
 
         if !manual && !filter {
             if structural {
@@ -474,7 +480,6 @@ pub fn is_row_hidden_only_by_filter(
         return false;
     }
     !filter_map.iter(&txn).any(|(other_filter_id, owner)| {
-        let other_filter_id: &str = other_filter_id.as_ref();
         other_filter_id != filter_id
             && matches!(owner, Out::YMap(owner_map) if map_has_true(&owner_map, &txn, &row_id))
     })

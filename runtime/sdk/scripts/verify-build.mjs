@@ -156,6 +156,24 @@ function checkNoEagerChartRasterRegistration(file) {
   );
 }
 
+function checkNoWorkerBundleNodeImports(file) {
+  const source = readFileSync(resolve(DIST, file), 'utf-8');
+  const forbidden = [
+    /\bnode:[^'")\s]+/,
+    /\bcreateRequire\b/,
+    /@mog-sdk\/(?:darwin|linux|win32)-/,
+    /importNodeModule\s*\(\s*['"]node:/,
+    /new\s+Function\s*\(/,
+  ];
+  const matches = forbidden
+    .map((pattern) => source.match(pattern)?.[0])
+    .filter(Boolean);
+  assert(matches.length === 0, `${file} has no Node/native imports in the worker graph`);
+  if (matches.length > 0) {
+    for (const match of matches.slice(0, 5)) console.error(`    -> ${match}`);
+  }
+}
+
 async function checkBundledEdgeImportMetaUrlUndefinedImport() {
   const tempDir = mkdtempSync(resolve(tmpdir(), 'mog-sdk-edge-import-'));
 
@@ -190,10 +208,16 @@ console.log('\n--- 1. Dist files exist ---');
 const expectedFiles = [
   'index.js', // ESM
   'index.cjs', // CJS
+  'wasm.js', // ESM worker/WASM entry
+  'workerd.js', // ESM workerd condition entry
   'index.d.ts', // ESM types
   'index.d.cts', // CJS types
+  'wasm.d.ts', // WASM entry types
+  'workerd.d.ts', // workerd entry types
   'index.js.map', // ESM sourcemap
   'index.cjs.map', // CJS sourcemap
+  'wasm.js.map', // WASM sourcemap
+  'workerd.js.map', // workerd sourcemap
 ];
 
 for (const file of expectedFiles) {
@@ -214,6 +238,10 @@ try {
   const esm = await import(resolve(DIST, 'index.js'));
   assert(typeof esm.createWorkbook === 'function', 'createWorkbook is a function');
   assert(!('DocumentFactory' in esm), 'DocumentFactory is not exported');
+  const wasm = await import(resolve(DIST, 'wasm.js'));
+  assert(typeof wasm.createWorkbook === 'function', 'WASM createWorkbook is a function');
+  const workerd = await import(resolve(DIST, 'workerd.js'));
+  assert(typeof workerd.createWorkbook === 'function', 'workerd createWorkbook is a function');
 } catch (e) {
   assert(false, `ESM import failed: ${e.message}`);
 }
@@ -322,6 +350,8 @@ console.log('\n--- 6. Lazy chart raster registration ---');
 
 checkNoEagerChartRasterRegistration('index.js');
 checkNoEagerChartRasterRegistration('index.cjs');
+checkNoWorkerBundleNodeImports('wasm.js');
+checkNoWorkerBundleNodeImports('workerd.js');
 
 // =========================================================================
 // 7. Integration test: create a workbook

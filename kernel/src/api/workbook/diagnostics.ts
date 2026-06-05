@@ -91,7 +91,20 @@ function projectDiagnostic(
 function exportOptionsSnapshot(
   normalized: ReturnType<typeof normalizeImageExportOptions>,
 ): ChartExportOptionsSnapshot {
+  if (normalized.kind === 'vector') {
+    return {
+      kind: normalized.kind,
+      format: normalized.format,
+      width: normalized.width,
+      height: normalized.height,
+      backgroundColor: normalized.backgroundColor,
+      fittingMode: normalized.fittingMode,
+      frame: normalized.frame,
+    };
+  }
+
   return {
+    kind: normalized.kind,
     format: normalized.format,
     width: normalized.width,
     height: normalized.height,
@@ -100,5 +113,7 @@ function exportOptionsSnapshot(
     physicalHeight: normalized.physicalHeight,
     backgroundColor: normalized.backgroundColor,
     quality: normalized.quality,
+    fittingMode: normalized.fittingMode,
+    frame: normalized.frame,
   };
 }

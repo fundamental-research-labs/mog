@@ -893,14 +893,14 @@ export class DocumentLifecycleSystem {
     }
 
     const run = async () => {
-      performance.mark('dls:deferredHydration:start');
+      markPerformance('dls:deferredHydration:start');
       if (snap.context.rustDocument) {
         await this.completeImportDurability(bridge, snap.context.rustDocument, true);
       } else {
         await bridge.completeDeferredHydration();
       }
-      performance.mark('dls:deferredHydration:end');
-      performance.measure(
+      markPerformance('dls:deferredHydration:end');
+      measurePerformance(
         'dls:deferredHydration',
         'dls:deferredHydration:start',
         'dls:deferredHydration:end',
@@ -1025,15 +1025,15 @@ export class DocumentLifecycleSystem {
   private async executeCreateEngine(input: CreateEngineInput): Promise<CreateEngineOutput> {
     try {
       const engineInstanceId = this.allocateEngineInstanceId(input.docId);
-      performance.mark('dls:createEngine:start');
-      performance.mark('dls:createEngine:imports:start');
+      markPerformance('dls:createEngine:start');
+      markPerformance('dls:createEngine:imports:start');
       // Dynamic import to avoid circular dependencies and enable code splitting
       const { createComputeBridge } = await import('../bridges/compute/compute-bridge');
       const { initTableWasm } = await import('@mog/table-engine');
       const { initChartWasm } = await import('../domain/charts/chart-bridge');
       const { RustDocument: RustDocumentClass } = await import('./rust-document');
-      performance.mark('dls:createEngine:imports:end');
-      performance.measure(
+      markPerformance('dls:createEngine:imports:end');
+      measurePerformance(
         'dls:createEngine:imports',
         'dls:createEngine:imports:start',
         'dls:createEngine:imports:end',
@@ -1057,7 +1057,7 @@ export class DocumentLifecycleSystem {
           );
         }
 
-        performance.mark('dls:createEngine:bridge:start');
+        markPerformance('dls:createEngine:bridge:start');
         const computeBridge = await createComputeBridge(DeferredContext, engineInstanceId, {
           wasmInitFns: [initTableWasm, initChartWasm],
           explicitRuntime: transportConfig.explicitRuntime,
@@ -1077,8 +1077,8 @@ export class DocumentLifecycleSystem {
               }
             : {}),
         });
-        performance.mark('dls:createEngine:bridge:end');
-        performance.measure(
+        markPerformance('dls:createEngine:bridge:end');
+        measurePerformance(
           'dls:createEngine:bridge',
           'dls:createEngine:bridge:start',
           'dls:createEngine:bridge:end',
@@ -1087,7 +1087,7 @@ export class DocumentLifecycleSystem {
         // Host path: normal creation does not accept initialSnapshot or yrsState.
         // Collaboration bootstrap is the only named private handoff that may
         // carry room-owned Yrs bytes into the host-backed lifecycle.
-        performance.mark('dls:createEngine:rustDoc:start');
+        markPerformance('dls:createEngine:rustDoc:start');
         const rustDocument = new RustDocumentClass({
           docId,
           computeBridge,
@@ -1098,15 +1098,15 @@ export class DocumentLifecycleSystem {
         });
 
         await rustDocument.ready;
-        performance.mark('dls:createEngine:rustDoc:end');
-        performance.measure(
+        markPerformance('dls:createEngine:rustDoc:end');
+        measurePerformance(
           'dls:createEngine:rustDoc',
           'dls:createEngine:rustDoc:start',
           'dls:createEngine:rustDoc:end',
         );
 
-        performance.mark('dls:createEngine:end');
-        performance.measure('dls:createEngine', 'dls:createEngine:start', 'dls:createEngine:end');
+        markPerformance('dls:createEngine:end');
+        measurePerformance('dls:createEngine', 'dls:createEngine:start', 'dls:createEngine:end');
         return { computeBridge, rustDocument };
       }
 
@@ -1125,7 +1125,7 @@ export class DocumentLifecycleSystem {
       // hit DeferredContext on the first recalc command and crash setup.
       //
       const userTimezone = this.userTimezone;
-      performance.mark('dls:createEngine:bridge:start');
+      markPerformance('dls:createEngine:bridge:start');
       const computeBridge = await createComputeBridge(DeferredContext, engineInstanceId, {
         wasmInitFns: [initTableWasm, initChartWasm],
         getUserTimezone: () => userTimezone,
@@ -1134,8 +1134,8 @@ export class DocumentLifecycleSystem {
           : {}),
       });
 
-      performance.mark('dls:createEngine:bridge:end');
-      performance.measure(
+      markPerformance('dls:createEngine:bridge:end');
+      measurePerformance(
         'dls:createEngine:bridge',
         'dls:createEngine:bridge:start',
         'dls:createEngine:bridge:end',
@@ -1147,7 +1147,7 @@ export class DocumentLifecycleSystem {
       //   `providers[]` path is the headless branch.
       // - `internal: true` is forwarded from CreateDocumentOptions so the
       //   shell's fallback doc opts out of `touchDoc`.
-      performance.mark('dls:createEngine:rustDoc:start');
+      markPerformance('dls:createEngine:rustDoc:start');
       const rustDocument = new RustDocumentClass({
         docId: input.docId,
         computeBridge,
@@ -1161,8 +1161,8 @@ export class DocumentLifecycleSystem {
       // Wait for the orchestrator to finish engine init + wire its single
       // `subscribeUpdateV1` subscription. After this, Providers can attach.
       await rustDocument.ready;
-      performance.mark('dls:createEngine:rustDoc:end');
-      performance.measure(
+      markPerformance('dls:createEngine:rustDoc:end');
+      measurePerformance(
         'dls:createEngine:rustDoc',
         'dls:createEngine:rustDoc:start',
         'dls:createEngine:rustDoc:end',
@@ -1194,8 +1194,8 @@ export class DocumentLifecycleSystem {
       // Provider attach now runs in a dedicated `attachProviders` actor
       // after `startBridge`. See {@link executeAttachProviders}.
 
-      performance.mark('dls:createEngine:end');
-      performance.measure('dls:createEngine', 'dls:createEngine:start', 'dls:createEngine:end');
+      markPerformance('dls:createEngine:end');
+      measurePerformance('dls:createEngine', 'dls:createEngine:start', 'dls:createEngine:end');
       return { computeBridge, rustDocument };
     } catch (error) {
       throw new EngineCreateError(`Engine creation failed for doc ${input.docId}`, {
@@ -1233,7 +1233,7 @@ export class DocumentLifecycleSystem {
   private async executeAttachProviders(
     input: AttachProvidersInput,
   ): Promise<AttachProvidersOutput> {
-    performance.mark('dls:attachProviders:start');
+    markPerformance('dls:attachProviders:start');
 
     // =====================================================================
     // Host-compliant path: provider selection is driven by the authorized
@@ -1517,8 +1517,8 @@ export class DocumentLifecycleSystem {
       }
       const sheetIds = await input.computeBridge.getAllSheetIds();
 
-      performance.mark('dls:attachProviders:end');
-      performance.measure(
+      markPerformance('dls:attachProviders:end');
+      measurePerformance(
         'dls:attachProviders',
         'dls:attachProviders:start',
         'dls:attachProviders:end',
@@ -1639,8 +1639,8 @@ export class DocumentLifecycleSystem {
     // authoritative replay-resolved set. Pre-fix the workbook mounted on
     // `[S_new]` (created by startBridge) and never saw the replayed
     // `S_orig` cells. See {@link AttachProvidersOutput}.
-    performance.mark('dls:attachProviders:end');
-    performance.measure(
+    markPerformance('dls:attachProviders:end');
+    measurePerformance(
       'dls:attachProviders',
       'dls:attachProviders:start',
       'dls:attachProviders:end',
@@ -1759,7 +1759,7 @@ export class DocumentLifecycleSystem {
    *   3. computeBridge.initMutationHandler() — initializes mutation result processing
    */
   private async executeWireContext(input: WireContextInput): Promise<WireContextOutput> {
-    performance.mark('dls:wireContext:start');
+    markPerformance('dls:wireContext:start');
     // Import createDocumentContext — it handles:
     // - UndoService creation and wiring
     // - All service construction (clipboard, selection, etc.)
@@ -1812,8 +1812,8 @@ export class DocumentLifecycleSystem {
       input.computeBridge.setContext(documentContext);
       input.computeBridge.initMutationHandler();
 
-      performance.mark('dls:wireContext:end');
-      performance.measure('dls:wireContext', 'dls:wireContext:start', 'dls:wireContext:end');
+      markPerformance('dls:wireContext:end');
+      measurePerformance('dls:wireContext', 'dls:wireContext:start', 'dls:wireContext:end');
       return { documentContext };
     }
 
@@ -1844,8 +1844,8 @@ export class DocumentLifecycleSystem {
     input.computeBridge.setContext(documentContext);
     input.computeBridge.initMutationHandler();
 
-    performance.mark('dls:wireContext:end');
-    performance.measure('dls:wireContext', 'dls:wireContext:start', 'dls:wireContext:end');
+    markPerformance('dls:wireContext:end');
+    measurePerformance('dls:wireContext', 'dls:wireContext:start', 'dls:wireContext:end');
     return { documentContext };
   }
 
@@ -1869,7 +1869,7 @@ export class DocumentLifecycleSystem {
    * - Resolves bridge.ready
    */
   private async executeStartBridge(input: StartBridgeInput): Promise<StartBridgeOutput> {
-    performance.mark('dls:startBridge:start');
+    markPerformance('dls:startBridge:start');
     await input.computeBridge.start();
 
     // Install the write gate on the bridge. The gate starts in `open`
@@ -1917,8 +1917,8 @@ export class DocumentLifecycleSystem {
     // `initialSheetIds` via `storeSheetIdsAfterAttach`, so this initial
     // capture is just a placeholder — sheet truth lands post-attach.
     const sheetIds = await input.computeBridge.getAllSheetIds();
-    performance.mark('dls:startBridge:end');
-    performance.measure('dls:startBridge', 'dls:startBridge:start', 'dls:startBridge:end');
+    markPerformance('dls:startBridge:end');
+    measurePerformance('dls:startBridge', 'dls:startBridge:start', 'dls:startBridge:end');
     return { sheetIds };
   }
 
@@ -1935,7 +1935,7 @@ export class DocumentLifecycleSystem {
    */
   private async executeHydrateXlsx(input: HydrateXlsxInput): Promise<HydrateXlsxOutput> {
     try {
-      performance.mark('dls:hydrateXlsx:start');
+      markPerformance('dls:hydrateXlsx:start');
       const computeBridge = input.documentContext.computeBridge;
 
       // Resolve XLSX bytes from the source (path or inline bytes).
@@ -1966,10 +1966,10 @@ export class DocumentLifecycleSystem {
       // conditional formats, pivots, grouping) before this `await`
       // resolves. The result itself is discarded here — projections are
       // the consumer.
-      performance.mark('dls:hydrateXlsx:import:start');
+      markPerformance('dls:hydrateXlsx:import:start');
       await computeBridge.importFromXlsxBytesDeferred(xlsxBytes);
-      performance.mark('dls:hydrateXlsx:import:end');
-      performance.measure(
+      markPerformance('dls:hydrateXlsx:import:end');
+      measurePerformance(
         'dls:hydrateXlsx:import',
         'dls:hydrateXlsx:import:start',
         'dls:hydrateXlsx:import:end',
@@ -1987,8 +1987,8 @@ export class DocumentLifecycleSystem {
       // Identity formula conversion is already done in Rust during
       // init_from_snapshot() → bulk_parse_and_register(). No TypeScript pass needed.
 
-      performance.mark('dls:hydrateXlsx:end');
-      performance.measure('dls:hydrateXlsx', 'dls:hydrateXlsx:start', 'dls:hydrateXlsx:end');
+      markPerformance('dls:hydrateXlsx:end');
+      measurePerformance('dls:hydrateXlsx', 'dls:hydrateXlsx:start', 'dls:hydrateXlsx:end');
       return {
         cellCount: 0, // cell count not available from single-call path
         sheetIds,

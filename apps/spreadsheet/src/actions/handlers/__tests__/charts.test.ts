@@ -894,6 +894,32 @@ describe('Chart Handlers - Context Menu Actions', () => {
       expect(writtenBytes.byteLength).toBeGreaterThan(0);
     });
 
+    it('writes decoded base64 SVG bytes for SVG chart export', async () => {
+      const deps = createMockDeps();
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>';
+      withChartExporter(deps, `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+
+      const handle = createMockFileHandle({ name: 'chart-chart-123.svg' });
+      (deps.platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(handle as never);
+
+      const result = await ChartHandlers.SAVE_CHART_AS_IMAGE(deps, {
+        chartId: 'chart-123',
+        format: 'svg',
+      });
+
+      expect(result.handled).toBe(true);
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.charts.exportImage).toHaveBeenCalledWith('chart-123', { format: 'svg' });
+      expect(deps.platform.dialogs.showSaveDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultPath: 'chart-chart-123.svg',
+          filters: [{ name: 'SVG', extensions: ['svg'] }],
+        }),
+      );
+      const writtenBytes = (handle.write as jest.Mock).mock.calls[0][0] as Uint8Array;
+      expect(Buffer.from(writtenBytes).toString('utf8')).toBe(svg);
+    });
+
     it('defaults to png format when none is supplied', async () => {
       const deps = createMockDeps();
       withChartExporter(

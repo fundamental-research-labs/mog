@@ -30,11 +30,7 @@ import type {
  * those marks to an image.
  */
 export interface ChartImageExporter {
-  exportImage(
-    sheetId: string,
-    chartId: string,
-    options?: ImageExportOptions,
-  ): Promise<string | null>;
+  exportImage(sheetId: string, chartId: string, options?: ImageExportOptions): Promise<string>;
 }
 
 export interface WorksheetCharts {
@@ -70,10 +66,8 @@ export interface WorksheetCharts {
   /**
    * Export a chart as an image.
    *
-   * Supported formats are PNG and JPEG. SVG and other unsupported formats
-   * reject explicitly instead of falling back to another image type.
-   * Browser exports render through the app canvas backend; Node SDK exports
-   * render through the native headless raster backend.
+   * Supported formats are SVG, PNG, and JPEG. SVG uses the portable vector
+   * renderer; PNG and JPEG require a runtime raster backend.
    */
   exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;
 

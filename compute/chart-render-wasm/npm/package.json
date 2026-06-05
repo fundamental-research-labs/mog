@@ -1,0 +1,47 @@
+{
+  "name": "@mog-sdk/chart-raster-wasm",
+  "version": "0.8.0",
+  "description": "Mog chart raster backend for browsers, edge runtimes, and headless WASM hosts",
+  "type": "module",
+  "main": "compute_chart_render_wasm.js",
+  "types": "compute_chart_render_wasm.d.ts",
+  "scripts": {
+    "build": "bash ../build.sh --profile release",
+    "build:dev": "bash ../build.sh --profile dev",
+    "test": "node ./scripts/verify-package.mjs"
+  },
+  "files": [
+    "compute_chart_render_wasm.js",
+    "compute_chart_render_wasm_bg.wasm",
+    "compute_chart_render_wasm.d.ts",
+    "compute_chart_render_wasm_bg.wasm.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./compute_chart_render_wasm.d.ts",
+      "import": "./compute_chart_render_wasm.js",
+      "default": "./compute_chart_render_wasm.js"
+    },
+    "./wasm": "./compute_chart_render_wasm_bg.wasm"
+  },
+  "keywords": [
+    "mog",
+    "charts",
+    "wasm",
+    "raster",
+    "png",
+    "jpeg"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog",
+    "directory": "compute/chart-render-wasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

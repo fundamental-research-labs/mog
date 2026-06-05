@@ -10,6 +10,7 @@ describe('WorkbookDiagnosticsImpl', () => {
       sheetId: 'sheet-1',
       chartObject: { id: 'chart-1' },
       export: {
+        kind: 'raster',
         format: 'png',
         width: 320,
         height: 180,
@@ -17,6 +18,15 @@ describe('WorkbookDiagnosticsImpl', () => {
         physicalWidth: 640,
         physicalHeight: 360,
         backgroundColor: '#ffffff',
+        fittingMode: 'fill',
+        frame: {
+          exportWidth: 320,
+          exportHeight: 180,
+          contentX: 0,
+          contentY: 0,
+          contentWidth: 320,
+          contentHeight: 180,
+        },
       },
       implementation: {
         renderAuthority: 'chartBridge',
@@ -80,6 +90,7 @@ describe('WorkbookDiagnosticsImpl', () => {
       320,
       180,
       expect.objectContaining({
+        kind: 'raster',
         format: 'png',
         width: 320,
         height: 180,
@@ -87,6 +98,15 @@ describe('WorkbookDiagnosticsImpl', () => {
         physicalWidth: 640,
         physicalHeight: 360,
         backgroundColor: '#ffffff',
+        fittingMode: 'fill',
+        frame: {
+          exportWidth: 320,
+          exportHeight: 180,
+          contentX: 0,
+          contentY: 0,
+          contentWidth: 320,
+          contentHeight: 180,
+        },
       }),
     );
   });

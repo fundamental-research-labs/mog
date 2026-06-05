@@ -236,15 +236,29 @@ are internal implementation surfaces; package consumers should use
 createWorkbook()
   └─ DocumentFactory.create({ environment: 'headless' })
        └─ DocumentLifecycleSystem (XState machine)
-            ├─ createTransport() → auto-detects NAPI
-            │    └─ LazyNapiTransport → compute-core-napi.node (Rust)
+            ├─ createTransport() → NAPI by default, WASM when requested
+            │    ├─ LazyNapiTransport → compute-core-napi.node (Rust)
+            │    └─ WasmTransport → @mog-sdk/wasm or host WebAssembly.Module
             ├─ ComputeBridge (async cell ops, recalc)
             └─ DocumentContext (kernel services, event bus)
                  ├─ Workbook / Worksheet (unified API)
-                 └─ NodeChartImageExporter → native mark raster backend
+                 └─ ChartImageExporter → portable SVG + runtime raster backend
 ```
 
-The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed. Chart image export is supported in Node for PNG/JPEG through `sheet.charts.exportImage(...)`; chart marks are compiled in TypeScript via the shared chart bridge, then rasterized by the native backend. The native chart raster backend is required only when exporting a chart image; ordinary workbook creation, cell operations, formula evaluation, and non-image exports do not validate that raster function.
+The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no IPC, full native speed. Chart image export is supported through `sheet.charts.exportImage(...)`: SVG uses the shared portable vector renderer, while PNG/JPEG compile chart marks in TypeScript via the shared chart bridge and rasterize through a runtime backend. By default, Node uses the native raster backend lazily. Advanced callers can pass `chartRendering: { rasterBackend }` to provide their own backend or `chartRendering: { rasterModule }` to initialize `@mog-sdk/chart-raster-wasm` from a host-provided `WebAssembly.Module`. The raster backend is required only when exporting PNG/JPEG chart images; ordinary workbook creation, cell operations, formula evaluation, SVG chart export, and non-image exports do not validate that raster function.
+
+```ts
+const wb = await createWorkbook({
+  userTimezone: 'UTC',
+  runtime: 'wasm',
+  wasmModule: computeWasmModule,
+  chartRendering: {
+    rasterModule: chartRasterWasmModule,
+  },
+});
+```
+
+Use `runtime: 'wasm'` to route compute through the WASM transport instead of the native N-API addon. Hosts that disallow package-side WASM compilation can precompile the compute module themselves and pass it as `wasmModule`; PNG/JPEG chart export can do the same with `chartRendering.rasterModule`.
 
 ## Prerequisites
 

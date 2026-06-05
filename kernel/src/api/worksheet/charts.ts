@@ -1182,8 +1182,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     if (exporter) {
       try {
         const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
-        if (dataUrl) return dataUrl;
-        throw operationFailed('exportChartImage', 'Exporter returned null');
+        return dataUrl;
       } catch (error) {
         if (error instanceof KernelError) throw error;
         const reason = error instanceof Error ? error.message : String(error);

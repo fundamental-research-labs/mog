@@ -263,6 +263,15 @@
       "./wasm": { "disposition": "public-experimental" },
     },
   },
+  "@mog-sdk/chart-raster-wasm": {
+    "disposition": "binary-wrapper",
+    "requirePrivate": false,
+    "publicTarget": "@mog-sdk/chart-raster-wasm",
+    "forbiddenRuntimeDeps": [],
+    "exports": {
+      "./wasm": { "disposition": "public-experimental" },
+    },
+  },
   "@mog-sdk/darwin-arm64": {
     "disposition": "binary-wrapper",
     "requirePrivate": false,

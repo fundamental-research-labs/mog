@@ -12,12 +12,22 @@ import type { WasmInitFn, WasmModule } from './types';
 
 let wasmModule: WasmModule | null = null;
 let wasmLoadPromise: Promise<void> | null = null;
+let wasmModuleSource: WasmModuleSource | null = null;
 
 type NodeFsPromises = typeof import('node:fs/promises');
 type NodeUrl = typeof import('node:url');
 type ImportMetaWithResolve = ImportMeta & {
   resolve?: (specifier: string) => string;
 };
+export interface LoadWasmModuleOptions {
+  readonly initFns?: WasmInitFn[];
+  readonly wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
+}
+
+type WasmModuleSource =
+  | { readonly kind: 'host-module'; readonly module: WebAssembly.Module }
+  | { readonly kind: 'node-resolved-bytes' }
+  | { readonly kind: 'default' };
 
 async function importNodeModule<T>(specifier: string): Promise<T> {
   const dynamicImport = new Function('specifier', 'return import(specifier)') as (
@@ -54,8 +64,18 @@ async function resolveNodeWasmInitInput(): Promise<ArrayBuffer | undefined> {
  *   Used to wire up WASM backends (e.g., initTableWasm, initChartWasm).
  *   Only called on the first load — subsequent calls are no-ops.
  */
-export async function loadWasmModule(initFns?: WasmInitFn[]): Promise<void> {
-  if (wasmModule) return;
+export async function loadWasmModule(
+  initFnsOrOptions?: WasmInitFn[] | LoadWasmModuleOptions,
+): Promise<void> {
+  const options = Array.isArray(initFnsOrOptions)
+    ? { initFns: initFnsOrOptions }
+    : (initFnsOrOptions ?? {});
+  const hostModule = await resolveHostWasmModule(options.wasmModule);
+
+  if (wasmModule) {
+    assertCompatibleWasmModuleSource(hostModule);
+    return;
+  }
   if (wasmLoadPromise) return wasmLoadPromise;
 
   wasmLoadPromise = (async () => {
@@ -71,15 +91,25 @@ export async function loadWasmModule(initFns?: WasmInitFn[]): Promise<void> {
       // Initialize the WASM binary. In Node, wasm-bindgen's default file URL
       // path goes through fetch(file://...), which undici does not implement.
       // Passing the local bytes keeps Node tests on the intended WASM fallback.
-      const nodeWasmInput = await resolveNodeWasmInitInput();
-      await mod.default(
-        nodeWasmInput === undefined ? undefined : { module_or_path: nodeWasmInput },
-      );
+      let moduleInput: ArrayBuffer | WebAssembly.Module | undefined;
+      let moduleSource: WasmModuleSource;
+      if (hostModule) {
+        moduleInput = hostModule;
+        moduleSource = { kind: 'host-module', module: hostModule };
+      } else {
+        const nodeWasmInput = await resolveNodeWasmInitInput();
+        moduleInput = nodeWasmInput;
+        moduleSource =
+          nodeWasmInput === undefined ? { kind: 'default' } : { kind: 'node-resolved-bytes' };
+      }
+
+      await mod.default(moduleInput === undefined ? undefined : { module_or_path: moduleInput });
       wasmModule = mod;
+      wasmModuleSource = moduleSource;
 
       // Run init callbacks to wire up WASM backends.
-      if (initFns) {
-        for (const fn of initFns) {
+      if (options.initFns) {
+        for (const fn of options.initFns) {
           fn(mod);
         }
       }
@@ -97,6 +127,20 @@ export async function loadWasmModule(initFns?: WasmInitFn[]): Promise<void> {
  */
 export function getWasmModule(): WasmModule | null {
   return wasmModule;
+}
+
+async function resolveHostWasmModule(
+  module: WebAssembly.Module | Promise<WebAssembly.Module> | undefined,
+): Promise<WebAssembly.Module | undefined> {
+  return module === undefined ? undefined : module;
+}
+
+function assertCompatibleWasmModuleSource(hostModule: WebAssembly.Module | undefined): void {
+  if (!hostModule || !wasmModuleSource) return;
+  if (wasmModuleSource.kind === 'host-module' && wasmModuleSource.module === hostModule) return;
+  throw new Error(
+    'WASM module singleton is already initialized with a different module source',
+  );
 }
 
 /**
@@ -144,4 +188,5 @@ export function resetWasmModule(): void {
   }
   wasmModule = null;
   wasmLoadPromise = null;
+  wasmModuleSource = null;
 }

@@ -8,6 +8,10 @@ async function importNodeHeadlessHost() {
   return import('../src/host-adapters/node-headless-host');
 }
 
+async function importNativeNodeRuntime() {
+  return import('../src/host-adapters/native-node-runtime');
+}
+
 function mockNodeModule(createRequire: NodeModuleExports['createRequire']): void {
   jest.unstable_mockModule<NodeModuleExports>('node:module', () => ({
     ...actualNodeModule,
@@ -29,7 +33,7 @@ describe('node headless host import laziness', () => {
     const host = await importNodeHeadlessHost();
 
     expect(createRequire).not.toHaveBeenCalled();
-    expect(typeof host.loadNodeSdkNapiAddon).toBe('function');
+    expect(typeof host.createNodeHeadlessHost).toBe('function');
   });
 
   it('creates require when the N-API addon path is loaded', async () => {
@@ -43,7 +47,7 @@ describe('node headless host import laziness', () => {
     const createRequire = jest.fn(() => requireFromHere as unknown as NodeRequire);
     mockNodeModule(createRequire as NodeModuleExports['createRequire']);
 
-    const { loadNodeSdkNapiAddon } = await importNodeHeadlessHost();
+    const { loadNodeSdkNapiAddon } = await importNativeNodeRuntime();
     const loaded = loadNodeSdkNapiAddon();
 
     expect(createRequire).toHaveBeenCalledTimes(1);

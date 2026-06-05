@@ -512,6 +512,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "compute-chart-render-wasm"
+version = "0.1.0"
+dependencies = [
+ "compute-chart-render",
+ "console_error_panic_hook",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "compute-charts"
 version = "0.1.0"
 dependencies = [

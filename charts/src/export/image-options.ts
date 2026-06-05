@@ -1,18 +1,69 @@
 import type { ImageExportOptions } from '../types';
 
-export type SupportedImageExportFormat = 'png' | 'jpeg';
+export type ChartRasterImageExportFormat = 'png' | 'jpeg';
+export type ChartVectorImageExportFormat = 'svg';
+export type SupportedImageExportFormat =
+  | ChartRasterImageExportFormat
+  | ChartVectorImageExportFormat;
+export type ChartImageFittingMode = 'fill' | 'fit' | 'fitAndCenter';
 
-export interface NormalizedImageExportOptions {
-  format: SupportedImageExportFormat;
-  mimeType: 'image/png' | 'image/jpeg';
-  width: number;
-  height: number;
-  pixelRatio: number;
-  physicalWidth: number;
-  physicalHeight: number;
-  backgroundColor: string;
-  quality?: number;
-  fittingMode: 'fill';
+export interface ChartImageFrame {
+  readonly exportWidth: number;
+  readonly exportHeight: number;
+  readonly sourceWidth?: number;
+  readonly sourceHeight?: number;
+  readonly contentX: number;
+  readonly contentY: number;
+  readonly contentWidth: number;
+  readonly contentHeight: number;
+}
+
+export interface NormalizeImageExportFrameInput {
+  readonly sourceWidth?: number;
+  readonly sourceHeight?: number;
+}
+
+export interface NormalizedVectorImageExportOptions {
+  readonly kind: 'vector';
+  readonly format: 'svg';
+  readonly mimeType: 'image/svg+xml';
+  readonly width: number;
+  readonly height: number;
+  readonly backgroundColor: string;
+  readonly fittingMode: ChartImageFittingMode;
+  readonly frame: ChartImageFrame;
+}
+
+export interface NormalizedRasterImageExportOptions {
+  readonly kind: 'raster';
+  readonly format: ChartRasterImageExportFormat;
+  readonly mimeType: 'image/png' | 'image/jpeg';
+  readonly width: number;
+  readonly height: number;
+  readonly pixelRatio: number;
+  readonly physicalWidth: number;
+  readonly physicalHeight: number;
+  readonly backgroundColor: string;
+  readonly quality?: number;
+  readonly fittingMode: ChartImageFittingMode;
+  readonly frame: ChartImageFrame;
+}
+
+export type NormalizedImageExportOptions =
+  | NormalizedVectorImageExportOptions
+  | NormalizedRasterImageExportOptions;
+
+export type NormalizedChartImageExportOptions = NormalizedImageExportOptions;
+
+export interface NormalizedChartRasterOptions {
+  readonly format: ChartRasterImageExportFormat;
+  readonly width: number;
+  readonly height: number;
+  readonly pixelRatio: number;
+  readonly backgroundColor: string;
+  readonly quality?: number;
+  readonly fittingMode: ChartImageFittingMode;
+  readonly frame: ChartImageFrame;
 }
 
 export class ChartImageExportOptionsError extends Error {
@@ -32,11 +83,16 @@ function finitePositive(name: string, value: unknown, defaultValue: number): num
   return normalized;
 }
 
+function optionalPositiveDimension(name: string, value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  return finitePositive(name, value, 0);
+}
+
 function normalizeFormat(format: ImageExportOptions['format']): SupportedImageExportFormat {
   const normalized = format ?? 'png';
-  if (normalized === 'png' || normalized === 'jpeg') return normalized;
+  if (normalized === 'png' || normalized === 'jpeg' || normalized === 'svg') return normalized;
   throw new ChartImageExportOptionsError(
-    `Unsupported chart image format "${normalized}". Supported formats are "png" and "jpeg".`,
+    `Unsupported chart image format "${normalized}". Supported formats are "png", "jpeg", and "svg".`,
   );
 }
 
@@ -62,11 +118,15 @@ function normalizeQuality(
   return quality;
 }
 
-function normalizeFittingMode(fittingMode: ImageExportOptions['fittingMode']): 'fill' {
+function normalizeFittingMode(
+  fittingMode: ImageExportOptions['fittingMode'],
+): ChartImageFittingMode {
   const normalized = fittingMode ?? 'fill';
-  if (normalized === 'fill') return normalized;
+  if (normalized === 'fill' || normalized === 'fit' || normalized === 'fitAndCenter') {
+    return normalized;
+  }
   throw new ChartImageExportOptionsError(
-    `fittingMode "${normalized}" is not implemented for chart image export; only "fill" is supported.`,
+    `Unsupported chart image fittingMode "${normalized}". Supported modes are "fill", "fit", and "fitAndCenter".`,
   );
 }
 
@@ -85,18 +145,38 @@ function physicalDimension(name: string, value: number): number {
 
 export function normalizeImageExportOptions(
   options: ImageExportOptions = {},
+  frameInput: NormalizeImageExportFrameInput = {},
 ): NormalizedImageExportOptions {
   const format = normalizeFormat(options.format);
   const width = finitePositive('width', options.width, 640);
   const height = finitePositive('height', options.height, 480);
-  const pixelRatio = finitePositive('pixelRatio', options.pixelRatio, 2);
-  const physicalWidth = physicalDimension('width * pixelRatio', width * pixelRatio);
-  const physicalHeight = physicalDimension('height * pixelRatio', height * pixelRatio);
   const backgroundColor = normalizeBackgroundColor(options.backgroundColor);
   const quality = normalizeQuality(format, options.quality);
   const fittingMode = normalizeFittingMode(options.fittingMode);
+  const frame = resolveChartImageFrame(width, height, fittingMode, frameInput);
+
+  if (format === 'svg') {
+    if (options.pixelRatio !== undefined) {
+      finitePositive('pixelRatio', options.pixelRatio, 2);
+    }
+    return {
+      kind: 'vector',
+      format,
+      mimeType: 'image/svg+xml',
+      width,
+      height,
+      backgroundColor,
+      fittingMode,
+      frame,
+    };
+  }
+
+  const pixelRatio = finitePositive('pixelRatio', options.pixelRatio, 2);
+  const physicalWidth = physicalDimension('width * pixelRatio', width * pixelRatio);
+  const physicalHeight = physicalDimension('height * pixelRatio', height * pixelRatio);
 
   return {
+    kind: 'raster',
     format,
     mimeType: format === 'jpeg' ? 'image/jpeg' : 'image/png',
     width,
@@ -107,5 +187,59 @@ export function normalizeImageExportOptions(
     backgroundColor,
     quality,
     fittingMode,
+    frame,
+  };
+}
+
+export function rasterOptionsForRequest(
+  normalized: NormalizedRasterImageExportOptions,
+): NormalizedChartRasterOptions {
+  return {
+    format: normalized.format,
+    width: normalized.width,
+    height: normalized.height,
+    pixelRatio: normalized.pixelRatio,
+    backgroundColor: normalized.backgroundColor,
+    quality: normalized.quality,
+    fittingMode: normalized.fittingMode,
+    frame: normalized.frame,
+  };
+}
+
+function resolveChartImageFrame(
+  exportWidth: number,
+  exportHeight: number,
+  fittingMode: ChartImageFittingMode,
+  input: NormalizeImageExportFrameInput,
+): ChartImageFrame {
+  const sourceWidth = optionalPositiveDimension('sourceWidth', input.sourceWidth);
+  const sourceHeight = optionalPositiveDimension('sourceHeight', input.sourceHeight);
+  const base = {
+    exportWidth,
+    exportHeight,
+    ...(sourceWidth !== undefined ? { sourceWidth } : {}),
+    ...(sourceHeight !== undefined ? { sourceHeight } : {}),
+  };
+
+  if (fittingMode === 'fill' || sourceWidth === undefined || sourceHeight === undefined) {
+    return {
+      ...base,
+      contentX: 0,
+      contentY: 0,
+      contentWidth: exportWidth,
+      contentHeight: exportHeight,
+    };
+  }
+
+  const scale = Math.min(exportWidth / sourceWidth, exportHeight / sourceHeight);
+  const contentWidth = sourceWidth * scale;
+  const contentHeight = sourceHeight * scale;
+
+  return {
+    ...base,
+    contentX: fittingMode === 'fitAndCenter' ? (exportWidth - contentWidth) / 2 : 0,
+    contentY: fittingMode === 'fitAndCenter' ? (exportHeight - contentHeight) / 2 : 0,
+    contentWidth,
+    contentHeight,
   };
 }

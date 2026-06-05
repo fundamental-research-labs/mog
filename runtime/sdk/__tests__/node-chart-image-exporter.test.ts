@@ -3,7 +3,10 @@ import { jest } from '@jest/globals';
 
 import type { ChartImageExporter } from '@mog-sdk/contracts/api';
 import { installNodeChartImageExporter } from '../src/boot';
-import { createNodeChartImageExporterFactory } from '../src/chart-export/node-chart-image-exporter';
+import {
+  createNodeChartImageExporterFactory,
+  createWasmChartImageExporterFactory,
+} from '../src/chart-export/node-chart-image-exporter';
 
 describe('Node chart image exporter mark serialization', () => {
   it('serializes the production chart mark IR into the native raster request', async () => {
@@ -182,23 +185,31 @@ describe('Node chart image exporter native raster loading', () => {
         backgroundColor: '#ffffff',
       }),
     ).rejects.toThrow(
-      /Native chart raster backend is unavailable for chart image export.*render_chart_marks_image/,
+      /Chart raster backend is unavailable for png export.*render_chart_marks_image/,
     );
     expect(getMarksAtSize).not.toHaveBeenCalled();
   });
 
-  it('rejects unsupported SVG export without resolving the native raster backend', async () => {
+  it('exports SVG without resolving the native raster backend', async () => {
     const getMarksAtSize = jest.fn(async () => validMarks());
     const resolveAddon = jest.fn(() => ({}));
     const exporter = createNodeChartImageExporterFactory(resolveAddon)(
       chartBridgeWithGetMarks(getMarksAtSize),
     );
 
-    await expect(exporter.exportImage('sheet-1', 'chart-1', { format: 'svg' })).rejects.toThrow(
-      /Unsupported chart image format "svg"/,
-    );
+    const dataUrl = await exporter.exportImage('sheet-1', 'chart-1', {
+      format: 'svg',
+      width: 20,
+      height: 10,
+      backgroundColor: '#ffffff',
+    });
+
+    expect(dataUrl.startsWith('data:image/svg+xml;base64,')).toBe(true);
+    const svg = Buffer.from(dataUrl.split(',', 2)[1], 'base64').toString('utf8');
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('<rect');
     expect(resolveAddon).not.toHaveBeenCalled();
-    expect(getMarksAtSize).not.toHaveBeenCalled();
+    expect(getMarksAtSize).toHaveBeenCalledWith('sheet-1', 'chart-1', 20, 10);
   });
 
   it('does not invoke resolver form until exportImage and caches successful resolution', async () => {
@@ -262,9 +273,145 @@ describe('Node chart image exporter native raster loading', () => {
         pixelRatio: 1,
         backgroundColor: '#ffffff',
       }),
-    ).rejects.toThrow(/Native chart raster backend is unavailable for chart image export/);
+    ).rejects.toThrow(/Chart raster backend is unavailable for png export/);
     expect(resolveAddon).toHaveBeenCalledTimes(1);
     expect(getMarksAtSize).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicit chartRendering rasterBackend without resolving native raster', async () => {
+    const getMarksAtSize = jest.fn(async () => validMarks());
+    const resolveAddon = jest.fn(() => ({}));
+    const render = jest.fn(() => ({
+      bytes: new Uint8Array([4]),
+      format: 'png' as const,
+      width: 20,
+      height: 10,
+    }));
+    let exporter: ChartImageExporter | null = null;
+    const handle = {
+      registerChartImageExporter(factory: (chartBridge: IChartBridge) => ChartImageExporter) {
+        exporter = factory(chartBridgeWithGetMarks(getMarksAtSize));
+      },
+    };
+
+    installNodeChartImageExporter(handle, resolveAddon, {
+      rasterBackend: {
+        id: 'test-raster',
+        runtime: 'custom',
+        supportedFormats: ['png'],
+        render,
+      },
+    });
+
+    await expect(
+      exporter!.exportImage('sheet-1', 'chart-1', {
+        format: 'png',
+        width: 20,
+        height: 10,
+        pixelRatio: 1,
+        backgroundColor: '#ffffff',
+      }),
+    ).resolves.toBe('data:image/png;base64,BA==');
+    expect(resolveAddon).not.toHaveBeenCalled();
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(getMarksAtSize).toHaveBeenCalledWith('sheet-1', 'chart-1', 20, 10);
+  });
+
+  it('allows chartRendering without raster capability for SVG while PNG fails locally', async () => {
+    const getMarksAtSize = jest.fn(async () => validMarks());
+    const resolveAddon = jest.fn(() => ({}));
+    let exporter: ChartImageExporter | null = null;
+    const handle = {
+      registerChartImageExporter(factory: (chartBridge: IChartBridge) => ChartImageExporter) {
+        exporter = factory(chartBridgeWithGetMarks(getMarksAtSize));
+      },
+    };
+
+    installNodeChartImageExporter(handle, resolveAddon, {});
+
+    await expect(
+      exporter!.exportImage('sheet-1', 'chart-1', {
+        format: 'svg',
+        width: 20,
+        height: 10,
+        backgroundColor: '#ffffff',
+      }),
+    ).resolves.toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(resolveAddon).not.toHaveBeenCalled();
+
+    await expect(
+      exporter!.exportImage('sheet-1', 'chart-1', {
+        format: 'png',
+        width: 20,
+        height: 10,
+        pixelRatio: 1,
+        backgroundColor: '#ffffff',
+      }),
+    ).rejects.toThrow('Chart raster backend is unavailable for png export in this runtime');
+    expect(resolveAddon).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous chartRendering rasterBackend plus rasterModule configuration', () => {
+    const handle = {
+      registerChartImageExporter() {
+        throw new Error('registerChartImageExporter should not be called');
+      },
+    };
+
+    expect(() =>
+      installNodeChartImageExporter(handle, () => ({}), {
+        rasterBackend: {
+          id: 'test-raster',
+          runtime: 'custom',
+          supportedFormats: ['png'],
+          render: () => ({
+            bytes: new Uint8Array([1]),
+            format: 'png',
+            width: 1,
+            height: 1,
+          }),
+        },
+        rasterModule: Promise.resolve({} as WebAssembly.Module),
+      }),
+    ).toThrow('[createWorkbook] chartRendering cannot provide both rasterBackend and rasterModule');
+  });
+
+  it('initializes the WASM chart raster module lazily for rasterModule configuration', async () => {
+    const getMarksAtSize = jest.fn(async () => validMarks());
+    const rasterModule = {} as WebAssembly.Module;
+    const init = jest.fn(async () => undefined);
+    const render = jest.fn((requestJson: string) => {
+      JSON.parse(requestJson);
+      return {
+        bytes: new Uint8Array([5]),
+        format: 'png',
+        width: 20,
+        height: 10,
+      };
+    });
+    const loadGlue = jest.fn(async () => ({
+      default: init,
+      render_chart_marks_image: render,
+    }));
+    const exporter = createWasmChartImageExporterFactory(rasterModule, loadGlue)(
+      chartBridgeWithGetMarks(getMarksAtSize),
+    );
+
+    expect(loadGlue).not.toHaveBeenCalled();
+    await expect(
+      exporter.exportImage('sheet-1', 'chart-1', {
+        format: 'png',
+        width: 20,
+        height: 10,
+        pixelRatio: 1,
+        backgroundColor: '#ffffff',
+      }),
+    ).resolves.toBe('data:image/png;base64,BQ==');
+
+    expect(loadGlue).toHaveBeenCalledTimes(1);
+    expect(init).toHaveBeenCalledWith({ module_or_path: rasterModule });
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(getMarksAtSize).toHaveBeenCalledWith('sheet-1', 'chart-1', 20, 10);
   });
 });
 

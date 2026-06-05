@@ -165,19 +165,6 @@ import type {
 } from '@mog-sdk/types-host/kernel';
 import { createHostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
 
-async function importNodeModule<T>(specifier: string): Promise<T> {
-  if (typeof window !== 'undefined') {
-    throw new KernelError(
-      'API_UNSUPPORTED_OPERATION',
-      `Workbook.save(path) is not available in browser runtimes (${specifier})`,
-    );
-  }
-  const dynamicImport = new Function('specifier', 'return import(specifier)') as (
-    specifier: string,
-  ) => Promise<T>;
-  return dynamicImport(specifier);
-}
-
 // =============================================================================
 // WorkbookImpl
 // =============================================================================
@@ -222,6 +209,7 @@ export class WorkbookImpl implements WorkbookInternal {
 
   // Platform-provided save handler
   private readonly _onSave?: (buffer: Uint8Array) => Promise<void>;
+  private readonly _writeFile?: (path: string, data: Uint8Array) => Promise<void>;
 
   // Track disposal
   private _disposed = false;
@@ -294,6 +282,7 @@ export class WorkbookImpl implements WorkbookInternal {
     this.name = config.name ?? '';
     this.readOnly = config.readOnly ?? false;
     this._onSave = config.onSave;
+    this._writeFile = config.writeFile;
     this._importWarnings = config.importWarnings ?? [];
 
     // Write gate: if the workbook is opened read-only, lock the gate.
@@ -1646,9 +1635,13 @@ export class WorkbookImpl implements WorkbookInternal {
     this._ensureNotDisposed();
     const buffer = await this.toXlsx();
     if (path) {
-      const { writeFile } =
-        await importNodeModule<typeof import('node:fs/promises')>('node:fs/promises');
-      await writeFile(path, buffer);
+      if (!this._writeFile) {
+        throw new KernelError(
+          'API_UNSUPPORTED_OPERATION',
+          'Workbook.save(path) requires a platform-provided file writer in this runtime',
+        );
+      }
+      await this._writeFile(path, buffer);
     }
     if (this._onSave) {
       await this._onSave(buffer);

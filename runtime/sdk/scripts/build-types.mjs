@@ -26,6 +26,8 @@ const DIST = resolve(SDK_ROOT, 'dist');
 const PUBLIC_DECLARATIONS = new Set([
   'index.d.ts',
   'index.d.cts',
+  'wasm.d.ts',
+  'workerd.d.ts',
   'api-describe.d.ts',
   'boot.d.ts',
   'collaborative-engine.d.ts',

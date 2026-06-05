@@ -609,6 +609,8 @@ importers:
         specifier: ^5.3.0
         version: 5.9.3
 
+  compute/chart-render-wasm/npm: {}
+
   compute/napi:
     devDependencies:
       '@napi-rs/cli':
@@ -1193,9 +1195,15 @@ importers:
 
   runtime/sdk:
     dependencies:
+      '@mog-sdk/chart-raster-wasm':
+        specifier: workspace:*
+        version: link:../../compute/chart-render-wasm/npm
       '@mog-sdk/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@mog-sdk/wasm':
+        specifier: workspace:*
+        version: link:../../compute/wasm/npm
       '@types/node':
         specifier: ^25.5.0
         version: 25.9.1

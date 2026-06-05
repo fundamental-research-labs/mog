@@ -8,6 +8,14 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "workerd": {
+        "types": "./dist/workerd.d.ts",
+        "default": "./dist/workerd.js"
+      },
+      "browser": {
+        "types": "./dist/wasm.d.ts",
+        "default": "./dist/wasm.js"
+      },
       "development": "./src/index.ts",
       "import": {
         "types": "./dist/index.d.ts",
@@ -17,6 +25,27 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./node": {
+      "development": "./src/index.ts",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./wasm": {
+      "development": "./src/wasm.ts",
+      "types": "./dist/wasm.d.ts",
+      "default": "./dist/wasm.js"
+    },
+    "./workerd": {
+      "development": "./src/workerd.ts",
+      "types": "./dist/workerd.d.ts",
+      "default": "./dist/workerd.js"
     }
   },
   "files": [
@@ -58,6 +87,14 @@
     "access": "public",
     "exports": {
       ".": {
+        "workerd": {
+          "types": "./dist/workerd.d.ts",
+          "default": "./dist/workerd.js"
+        },
+        "browser": {
+          "types": "./dist/wasm.d.ts",
+          "default": "./dist/wasm.js"
+        },
         "import": {
           "types": "./dist/index.d.ts",
           "default": "./dist/index.js"
@@ -66,11 +103,31 @@
           "types": "./dist/index.d.cts",
           "default": "./dist/index.cjs"
         }
+      },
+      "./node": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.cjs"
+        }
+      },
+      "./wasm": {
+        "types": "./dist/wasm.d.ts",
+        "default": "./dist/wasm.js"
+      },
+      "./workerd": {
+        "types": "./dist/workerd.d.ts",
+        "default": "./dist/workerd.js"
       }
     }
   },
   "dependencies": {
+    "@mog-sdk/chart-raster-wasm": "workspace:*",
     "@mog-sdk/contracts": "workspace:*",
+    "@mog-sdk/wasm": "workspace:*",
     "@types/node": "^25.5.0"
   },
   "optionalDependencies": {

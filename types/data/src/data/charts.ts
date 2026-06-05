@@ -1270,16 +1270,40 @@ export interface ImageExportOptions {
   fittingMode?: ImageFittingMode;
 }
 
-export interface ChartExportOptionsSnapshot {
-  format: 'png' | 'jpeg';
-  width: number;
-  height: number;
-  pixelRatio: number;
-  physicalWidth: number;
-  physicalHeight: number;
-  backgroundColor: string;
-  quality?: number;
+export interface ChartImageFrame {
+  readonly exportWidth: number;
+  readonly exportHeight: number;
+  readonly sourceWidth?: number;
+  readonly sourceHeight?: number;
+  readonly contentX: number;
+  readonly contentY: number;
+  readonly contentWidth: number;
+  readonly contentHeight: number;
 }
+
+export type ChartExportOptionsSnapshot =
+  | {
+      readonly kind: 'vector';
+      readonly format: 'svg';
+      readonly width: number;
+      readonly height: number;
+      readonly backgroundColor: string;
+      readonly fittingMode: ImageFittingMode;
+      readonly frame: ChartImageFrame;
+    }
+  | {
+      readonly kind: 'raster';
+      readonly format: 'png' | 'jpeg';
+      readonly width: number;
+      readonly height: number;
+      readonly pixelRatio: number;
+      readonly physicalWidth: number;
+      readonly physicalHeight: number;
+      readonly backgroundColor: string;
+      readonly quality?: number;
+      readonly fittingMode: ImageFittingMode;
+      readonly frame: ChartImageFrame;
+    };
 
 export interface ChartRangeReferenceSnapshot {
   kind: string;

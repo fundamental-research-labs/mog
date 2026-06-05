@@ -22,6 +22,7 @@ packages:
   - 'compute/napi/npm/linux-x64-gnu'
   - 'compute/napi/npm/linux-x64-musl'
   - 'compute/napi/npm/win32-x64-msvc'
+  - 'compute/chart-render-wasm/npm'
   - 'compute/wasm/npm'
   - 'contracts'
   - 'contracts/runtime-services'

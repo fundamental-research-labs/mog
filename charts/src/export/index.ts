@@ -211,9 +211,60 @@ export * from './ooxml';
 export {
   ChartImageExportOptionsError,
   normalizeImageExportOptions,
+  rasterOptionsForRequest,
+  type ChartImageFittingMode,
+  type ChartImageFrame,
+  type ChartRasterImageExportFormat,
+  type ChartVectorImageExportFormat,
+  type NormalizedChartImageExportOptions,
+  type NormalizedChartRasterOptions,
   type NormalizedImageExportOptions,
+  type NormalizedRasterImageExportOptions,
+  type NormalizedVectorImageExportOptions,
+  type NormalizeImageExportFrameInput,
   type SupportedImageExportFormat,
 } from './image-options';
+export {
+  ChartMarkImageExporter,
+  type ChartMarkImageExporterOptions,
+} from './chart-mark-image-exporter';
+export {
+  serializeChartMark,
+  serializeChartMarks,
+  translateSerializableChartMarks,
+  type SerializableChartArcMark,
+  type SerializableChartMark,
+  type SerializableChartMarkBase,
+  type SerializableChartMarkClip,
+  type SerializableChartMarkStyle,
+  type SerializableChartMarkType,
+  type SerializableChartPathMark,
+  type SerializableChartRectMark,
+  type SerializableChartSymbolMark,
+  type SerializableChartSymbolShape,
+  type SerializableChartTextMark,
+} from './mark-serialization';
+export {
+  assertChartRasterBackendSupports,
+  resolveChartRasterBackend,
+  type ChartRasterBackend,
+  type ChartRasterBackendResolver,
+  type ChartRasterRequest,
+  type ChartRasterResult,
+} from './raster-backend';
+export {
+  createWasmChartRasterBackend,
+  type WasmChartRasterBackendOptions,
+  type WasmChartRasterImageResult,
+  type WasmChartRasterModule,
+  type WasmChartRasterModuleSource,
+} from './wasm-raster-backend';
+export {
+  renderChartMarksSvg,
+  type ChartSvgRenderRequest,
+  type ChartSvgRenderResult,
+} from './svg-renderer';
+export { bytesToBase64, bytesToDataUrl, utf8ToBase64 } from './data-url';
 
 // =============================================================================
 // Convenience Functions

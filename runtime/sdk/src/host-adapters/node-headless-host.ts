@@ -15,9 +15,6 @@
  * NOT exported from @mog-sdk/node public surface.
  */
 
-import { createHash, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
-
 import type { TrustedDocumentHostContext } from '@mog-sdk/types-host/trusted';
 import type {
   KernelHostContext,
@@ -52,6 +49,10 @@ import type {
   SourceHandleResolveResult,
 } from '@mog-sdk/types-host/bindings';
 import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
+import {
+  createPortableCanonicalFingerprint,
+  createPortableRandomUUID,
+} from './portable-host-crypto';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,13 +61,11 @@ import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints'
 const HOST_ID = 'node-headless-sdk-host' as const;
 const HANDOFF_TTL_MS = 3_600_000; // 1 hour
 
-function getRequireFromHere(): NodeRequire {
-  return createRequire(import.meta.url);
-}
-
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
+
+export type NapiAddonResolver = () => Record<string, (...args: unknown[]) => unknown>;
 
 export interface NodeHeadlessHostConfig {
   /** Unique document identifier. */
@@ -74,6 +73,15 @@ export interface NodeHeadlessHostConfig {
 
   /** Document operation. Defaults to 'create'. */
   readonly operation?: 'create' | 'open' | 'import';
+
+  /** Runtime binding. Defaults to native N-API. */
+  readonly runtime?: 'native' | 'wasm';
+
+  /** Host-provided compute WASM module for headless-wasm runtime. */
+  readonly wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
+
+  /** Native addon resolver. Required only when resolving a native runtime binding. */
+  readonly loadNapiAddon?: NapiAddonResolver;
 
   /** Native addon resolution strategy. Defaults to 'public-platform-package'. */
   readonly addonResolution?: 'public-platform-package' | 'host-provided-path';
@@ -170,7 +178,8 @@ function createReplayRegistry(): HostHandoffReplayRegistry {
 
 function isDebugEnabled(config: Pick<NodeHeadlessHostConfig, 'debug'>): boolean {
   if (config.debug !== undefined) return config.debug;
-  const value = process.env.MOG_SDK_DEBUG ?? process.env.MOG_DEBUG;
+  const env = getProcessEnv();
+  const value = env?.MOG_SDK_DEBUG ?? env?.MOG_DEBUG;
   return value === '1' || value === 'true' || value === 'yes';
 }
 
@@ -223,8 +232,7 @@ function canonicalJsonStringify(value: unknown): string {
 
 function computeCanonicalFingerprint(value: unknown): HostCanonicalFingerprint {
   const canonical = canonicalJsonStringify(value);
-  const digest = createHash('sha256').update(canonical).digest('hex');
-  return `mog-host-fp:v1:sha256:${digest}` as HostCanonicalFingerprint;
+  return createPortableCanonicalFingerprint(canonical);
 }
 
 function computeByteContentIdentity(bytes: Uint8Array) {
@@ -238,27 +246,31 @@ function computeByteContentIdentity(bytes: Uint8Array) {
   };
 }
 
-function getPlatformPackageName(): string {
-  if (process.platform === 'darwin') return `@mog-sdk/darwin-${process.arch}`;
-  if (process.platform === 'win32' && process.arch === 'x64') return '@mog-sdk/win32-x64-msvc';
-  if (process.platform === 'linux') {
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-    const report = process.report?.getReport?.() as
-      | { readonly header?: { readonly glibcVersionRuntime?: string } }
-      | undefined;
-    const libc = report?.header?.glibcVersionRuntime ? 'gnu' : 'musl';
-    return `@mog-sdk/linux-${arch}-${libc}`;
-  }
-  throw new Error(
-    `Unsupported platform for @mog-sdk/node native runtime: ${process.platform}/${process.arch}`,
-  );
+type ProcessEnv = Record<string, string | undefined>;
+type AmbientProcess = {
+  readonly env?: ProcessEnv;
+  readonly pid?: number;
+};
+
+function getAmbientProcess(): AmbientProcess | undefined {
+  return (globalThis as typeof globalThis & { readonly process?: AmbientProcess }).process;
 }
 
-export function loadNodeSdkNapiAddon(): Record<string, (...args: unknown[]) => unknown> {
-  return getRequireFromHere()(getPlatformPackageName()) as Record<
-    string,
-    (...args: unknown[]) => unknown
-  >;
+function getProcessEnv(): ProcessEnv | undefined {
+  return getAmbientProcess()?.env;
+}
+
+function getProcessPid(): number | undefined {
+  return getAmbientProcess()?.pid;
+}
+
+function resolveNativeAddon(config: NodeHeadlessHostConfig): Record<string, (...args: unknown[]) => unknown> {
+  if (!config.loadNapiAddon) {
+    throw new Error(
+      '@mog-sdk/node native runtime requires a native N-API addon resolver; use the WASM entry for non-Node runtimes',
+    );
+  }
+  return config.loadNapiAddon();
 }
 
 // ---------------------------------------------------------------------------
@@ -267,12 +279,15 @@ export function loadNodeSdkNapiAddon(): Record<string, (...args: unknown[]) => u
 
 export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHeadlessHostResult {
   const now = Date.now();
-  const sessionId = randomUUID();
+  const sessionId = createPortableRandomUUID();
   const operation = config.operation ?? 'create';
+  const runtimeMode = config.runtime ?? 'native';
   const addonResolution = config.addonResolution ?? 'public-platform-package';
   const workerPolicy = config.workerPolicy ?? 'main-thread';
   const locale = config.locale ?? 'en-US';
-  const subjectId = config.principal?.subjectId ?? `node-process-${process.pid}`;
+  const subjectId =
+    config.principal?.subjectId ??
+    (getProcessPid() ? `node-process-${getProcessPid()}` : `headless-runtime-${sessionId}`);
   const tags = config.principal?.tags ? [...config.principal.tags].sort() : [];
 
   // --- Diagnostics ---
@@ -349,8 +364,8 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
   const resourceContextFingerprint = computeCanonicalFingerprint(resourceContext);
   const handoffExpiry = now + HANDOFF_TTL_MS;
 
-  const importSourceHandleId = config.importBytes ? randomUUID() : null;
-  const importSourceIssuanceId = config.importBytes ? randomUUID() : null;
+  const importSourceHandleId = config.importBytes ? createPortableRandomUUID() : null;
+  const importSourceIssuanceId = config.importBytes ? createPortableRandomUUID() : null;
   const importContentIdentity = config.importBytes
     ? computeByteContentIdentity(config.importBytes)
     : null;
@@ -380,8 +395,8 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
 
   // --- Storage Handoff ---
 
-  const decisionId = randomUUID();
-  const nonce = randomUUID();
+  const decisionId = createPortableRandomUUID();
+  const nonce = createPortableRandomUUID();
 
   const intent =
     operation === 'create' ? 'create' : operation === 'import' ? 'importInitialize' : 'open';
@@ -429,8 +444,8 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
 
   const documentAuthorization: HostDocumentAuthorizationService = {
     async authorize(request: HostDocumentAuthorizationRequest): Promise<HostAuthorizationDecision> {
-      const reqDecisionId = randomUUID();
-      const reqNonce = randomUUID();
+      const reqDecisionId = createPortableRandomUUID();
+      const reqNonce = createPortableRandomUUID();
       const reqOperation = request.details.operation;
 
       // Session operations: create/open/import — always allow with ephemeral handoff.
@@ -575,7 +590,7 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
       // Cooperative local: always allow all capabilities.
       return {
         allowed: true,
-        decisionId: randomUUID(),
+        decisionId: createPortableRandomUUID(),
         correlationId: request.correlationId,
         decidedAt: Date.now(),
         operation: request.operation,
@@ -587,11 +602,18 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
 
   // --- Runtime Config ---
 
-  const runtimeConfig: KernelRuntimeConfig = {
-    kind: 'node-napi',
-    addonResolution,
-    workerPolicy,
-  };
+  const runtimeConfig: KernelRuntimeConfig =
+    runtimeMode === 'wasm'
+      ? {
+          kind: 'headless-wasm',
+          wasmModulePolicy: config.wasmModule ? 'host-provided' : 'package-default',
+          executionPolicy: 'same-thread',
+        }
+      : {
+          kind: 'node-napi',
+          addonResolution,
+          workerPolicy,
+        };
 
   // --- KernelHostContext ---
 
@@ -627,9 +649,22 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
 
   const transportBindings: HostTransportBindingRegistry = {
     has(runtimeKind: string): boolean {
-      return runtimeKind === 'node-napi';
+      return runtimeKind === runtimeConfig.kind;
     },
     resolve(runtimeKind: string): HostTransportBinding {
+      if (runtimeKind === 'headless-wasm') {
+        return {
+          runtimeKind,
+          createTransportConfig(): unknown {
+            return {
+              kind: 'headless',
+              explicitRuntime: 'wasm',
+              ...(config.wasmModule ? { wasmModule: config.wasmModule } : {}),
+            };
+          },
+        };
+      }
+
       return {
         runtimeKind,
         createTransportConfig(): unknown {
@@ -638,7 +673,7 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
             explicitRuntime: 'napi',
             addonResolution,
             workerPolicy,
-            napiAddon: loadNodeSdkNapiAddon(),
+            napiAddon: resolveNativeAddon(config),
           };
         },
       };

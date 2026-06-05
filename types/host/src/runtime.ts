@@ -14,6 +14,11 @@ export type KernelRuntimeConfig =
       readonly workerPolicy: 'main-thread' | 'worker-thread';
     }
   | {
+      readonly kind: 'headless-wasm';
+      readonly wasmModulePolicy: 'host-provided' | 'package-default';
+      readonly executionPolicy: 'same-thread';
+    }
+  | {
       readonly kind: 'tauri-native';
       readonly ipcNamespace: string;
       readonly nativePermissionProfile: string;

@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
+import { KernelError } from '../../errors';
 import { WorksheetChartsImpl } from '../worksheet/charts';
 import { WorksheetImpl } from '../worksheet/worksheet-impl';
 
@@ -529,5 +530,35 @@ describe('Worksheet chart image export', () => {
 
     await expect(charts.exportImage(chart.id)).resolves.toBe(dataUrl);
     expect(exporter.exportImage).toHaveBeenCalledWith(SHEET_ID, chart.id, undefined);
+  });
+
+  it('wraps exporter failures as operation errors while preserving cause', async () => {
+    const chart = makeChart();
+    const cause = new Error('native chart raster backend missing');
+    const exporter = {
+      exportImage: jest.fn(async () => {
+        throw cause;
+      }),
+    };
+    const ctx = {
+      chartImageExporter: exporter,
+      computeBridge: {
+        getChart: jest.fn(async () => chart),
+      },
+    };
+    const worksheet = new WorksheetImpl(SHEET_ID, ctx as any);
+
+    let caught: unknown;
+    try {
+      await worksheet.charts.exportImage(chart.id);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(KernelError);
+    expect((caught as KernelError).message).toBe(
+      'Operation "exportChartImage" failed: native chart raster backend missing',
+    );
+    expect((caught as KernelError).cause).toBe(cause);
   });
 });

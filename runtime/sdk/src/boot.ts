@@ -17,7 +17,8 @@
  */
 
 import { createWorkbook as _kernelCreateWorkbook } from '@mog-sdk/kernel';
-import type { Workbook } from '@mog-sdk/contracts/api';
+import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
+import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { CodeExecutionResult, CodeExecutionOptions } from '@mog-sdk/contracts/core';
 import type {
@@ -40,9 +41,14 @@ import {
   type NodeHeadlessHostResult,
 } from './host-adapters/node-headless-host';
 import { createNodeChartImageExporterFactory } from './chart-export/node-chart-image-exporter';
+import type { NativeChartRasterAddon } from './chart-export/node-chart-image-exporter';
 
 type KernelCreateWorkbook = (...args: readonly unknown[]) => Promise<Workbook>;
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
+type ChartImageExporterRegistrationHandle = {
+  registerChartImageExporter(factory: (chartBridge: IChartBridge) => ChartImageExporter): void;
+};
+type NativeChartRasterAddonCandidate = Record<string, unknown>;
 type KernelEventBus = IKernelContext['eventBus'];
 type WorkbookLinkStatusScope = {
   readonly requestingDocumentId: string;
@@ -321,9 +327,7 @@ export async function createWorkbook(
     await readyHandle.awaitImportDurability();
   }
 
-  readyHandle.registerChartImageExporter(
-    createNodeChartImageExporterFactory(loadNodeSdkNapiAddon()),
-  );
+  installNodeChartImageExporter(readyHandle, loadNodeSdkNapiAddon);
 
   // Create a Workbook from the handle — uses the cached workbook() path
   // which wires context, event bus, and sheet metadata internally.
@@ -560,9 +564,7 @@ class HeadlessLifecycleSystem {
 
   private registerChartImageExporter(): void {
     if (!this.handle) return;
-    this.handle.registerChartImageExporter(
-      createNodeChartImageExporterFactory(this.options.computeAddon),
-    );
+    installNodeChartImageExporter(this.handle, () => this.options.computeAddon);
   }
 
   /** @internal */
@@ -745,6 +747,19 @@ export function _getDocumentSyncPort(engine: HeadlessEngine): DocumentByteSyncPo
  */
 export function _getComputeBridge(engine: HeadlessEngine): unknown {
   return (engine as unknown as { lifecycle: { computeBridge: unknown } }).lifecycle.computeBridge;
+}
+
+/**
+ * @internal Package-private chart exporter registration helper for regression tests.
+ * Not re-exported from the public package entrypoint.
+ */
+export function installNodeChartImageExporter(
+  handle: ChartImageExporterRegistrationHandle,
+  resolveAddon: () => NativeChartRasterAddonCandidate,
+): void {
+  handle.registerChartImageExporter(
+    createNodeChartImageExporterFactory(() => resolveAddon() as NativeChartRasterAddon),
+  );
 }
 
 // =============================================================================

@@ -1187,7 +1187,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
       } catch (error) {
         if (error instanceof KernelError) throw error;
         const reason = error instanceof Error ? error.message : String(error);
-        throw operationFailed('exportChartImage', reason);
+        throw operationFailed('exportChartImage', reason, { cause: error });
       }
     }
 

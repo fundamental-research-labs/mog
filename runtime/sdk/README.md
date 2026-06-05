@@ -244,7 +244,7 @@ createWorkbook()
                  └─ NodeChartImageExporter → native mark raster backend
 ```
 
-The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed. Chart image export is supported in Node for PNG/JPEG through `sheet.charts.exportImage(...)`; chart marks are compiled in TypeScript via the shared chart bridge, then rasterized by the native backend.
+The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed. Chart image export is supported in Node for PNG/JPEG through `sheet.charts.exportImage(...)`; chart marks are compiled in TypeScript via the shared chart bridge, then rasterized by the native backend. The native chart raster backend is required only when exporting a chart image; ordinary workbook creation, cell operations, formula evaluation, and non-image exports do not validate that raster function.
 
 ## Prerequisites
 

@@ -81,6 +81,20 @@ describe('API error factories', () => {
     expect(err.context).toEqual({ operation: 'paste', reason: 'clipboard empty' });
   });
 
+  it('operationFailed preserves an optional cause without changing message or context', () => {
+    const cause = new Error('native raster unavailable');
+    const err = operationFailed('exportChartImage', 'native raster unavailable', { cause });
+
+    expect(err).toBeInstanceOf(KernelError);
+    expect(err.code).toBe('OPERATION_FAILED');
+    expect(err.message).toBe('Operation "exportChartImage" failed: native raster unavailable');
+    expect(err.context).toEqual({
+      operation: 'exportChartImage',
+      reason: 'native raster unavailable',
+    });
+    expect(err.cause).toBe(cause);
+  });
+
   it('all factories return throwable Error instances', () => {
     const err = sheetNotFound('x');
     expect(err).toBeInstanceOf(Error);

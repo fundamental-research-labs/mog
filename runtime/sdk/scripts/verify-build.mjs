@@ -146,6 +146,16 @@ void main;
   }
 }
 
+function checkNoEagerChartRasterRegistration(file) {
+  const source = readFileSync(resolve(DIST, file), 'utf-8');
+  const eagerPattern =
+    /createNodeChartImageExporterFactory\s*\(\s*loadNodeSdkNapiAddon\s*\(\s*\)\s*\)/;
+  assert(
+    !eagerPattern.test(source),
+    `${file} does not eagerly load the chart raster backend during exporter registration`,
+  );
+}
+
 async function checkBundledEdgeImportMetaUrlUndefinedImport() {
   const tempDir = mkdtempSync(resolve(tmpdir(), 'mog-sdk-edge-import-'));
 
@@ -306,9 +316,17 @@ assert(pkg.optionalDependencies['@mog-sdk/linux-x64-musl'], 'linux-x64-musl opti
 assert(pkg.engines && pkg.engines.node, 'engines.node specified');
 
 // =========================================================================
-// 6. Integration test: create a workbook
+// 6. Lazy chart raster registration
 // =========================================================================
-console.log('\n--- 6. Integration test ---');
+console.log('\n--- 6. Lazy chart raster registration ---');
+
+checkNoEagerChartRasterRegistration('index.js');
+checkNoEagerChartRasterRegistration('index.cjs');
+
+// =========================================================================
+// 7. Integration test: create a workbook
+// =========================================================================
+console.log('\n--- 7. Integration test ---');
 
 try {
   const { createWorkbook } = await import(resolve(DIST, 'index.js'));

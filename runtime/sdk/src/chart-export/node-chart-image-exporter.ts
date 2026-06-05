@@ -13,9 +13,13 @@ type NativeChartRasterResult = {
   readonly height: number;
 };
 
-type NativeChartRasterAddon = {
+export type NativeChartRasterAddon = {
   readonly render_chart_marks_image?: (requestJson: string) => NativeChartRasterResult;
 };
+
+type NativeChartRasterAddonResolver = () => NativeChartRasterAddon;
+type NativeChartRasterBackendResolver = () => NativeChartRasterBackend;
+type NativeChartRasterBackendSource = NativeChartRasterAddon | NativeChartRasterAddonResolver;
 
 type ChartMarkStyle = ChartMark['style'];
 type ChartPaint = NonNullable<ChartMarkStyle['fillPaint']>;
@@ -116,16 +120,18 @@ type SerializableMark =
   | SerializableTextMark;
 
 export function createNodeChartImageExporterFactory(
-  addon: NativeChartRasterAddon,
+  backendSource: NativeChartRasterBackendSource,
 ): (chartBridge: IChartBridge) => ChartImageExporter {
-  const backend = createNativeChartRasterBackend(addon);
-  return (chartBridge) => new NodeChartImageExporter(chartBridge, backend);
+  return (chartBridge) =>
+    new NodeChartImageExporter(chartBridge, () => resolveNativeChartRasterBackend(backendSource));
 }
 
 class NodeChartImageExporter implements ChartImageExporter {
+  private backend: NativeChartRasterBackend | null = null;
+
   constructor(
     private readonly chartBridge: IChartBridge,
-    private readonly backend: NativeChartRasterBackend,
+    private readonly backendResolver: NativeChartRasterBackendResolver,
   ) {}
 
   async exportImage(
@@ -134,6 +140,7 @@ class NodeChartImageExporter implements ChartImageExporter {
     options?: ImageExportOptions,
   ): Promise<string> {
     const normalized = normalizeImageExportOptions(options);
+    const backend = this.resolveBackend();
     const marks = await this.chartBridge.getMarksAtSize(
       sheetId as SheetId,
       chartId,
@@ -149,7 +156,7 @@ class NodeChartImageExporter implements ChartImageExporter {
     }
 
     const serializedMarks = marks.map((mark, index) => serializeMark(mark, index));
-    const rendered = this.backend.render({
+    const rendered = backend.render({
       version: 1,
       marks: serializedMarks,
       options: {
@@ -174,6 +181,13 @@ class NodeChartImageExporter implements ChartImageExporter {
 
     return `data:${normalized.mimeType};base64,${Buffer.from(rendered.bytes).toString('base64')}`;
   }
+
+  private resolveBackend(): NativeChartRasterBackend {
+    if (this.backend) return this.backend;
+    const backend = this.backendResolver();
+    this.backend = backend;
+    return backend;
+  }
 }
 
 type NativeChartRasterRequest = {
@@ -193,10 +207,29 @@ type NativeChartRasterBackend = {
   render(request: NativeChartRasterRequest): NativeChartRasterResult;
 };
 
+function resolveNativeChartRasterBackend(
+  source: NativeChartRasterBackendSource,
+): NativeChartRasterBackend {
+  try {
+    const addon = typeof source === 'function' ? source() : source;
+    return createNativeChartRasterBackend(addon);
+  } catch (error) {
+    throw createChartRasterUnavailableError(error);
+  }
+}
+
+function createChartRasterUnavailableError(cause: unknown): Error {
+  const message = 'Native chart raster backend is unavailable for chart image export';
+  if (cause instanceof Error && cause.message) {
+    return new Error(`${message}: ${cause.message}`, { cause });
+  }
+  return new Error(message, { cause });
+}
+
 function createNativeChartRasterBackend(addon: NativeChartRasterAddon): NativeChartRasterBackend {
   const render = addon.render_chart_marks_image;
   if (typeof render !== 'function') {
-    throw new Error('Native chart raster backend is unavailable in this @mog-sdk/node package');
+    throw new Error('render_chart_marks_image is missing from the @mog-sdk/node native addon');
   }
 
   return {

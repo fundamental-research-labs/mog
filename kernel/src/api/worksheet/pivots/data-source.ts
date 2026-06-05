@@ -14,14 +14,14 @@ import type {
   PivotTableConfig as DataPivotTableConfig,
   PlacementId,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
+import type { DocumentContext } from '../../../context';
 import {
   KernelError,
   createPivotInvalidDataSourceError,
   createPivotUnresolvedFieldReferencesError,
   type PivotInvalidReference,
-} from '../../errors';
-import { parseCellRange } from '../internal/utils';
+} from '../../../errors';
+import { parseCellRange } from '../../internal/utils';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 

@@ -1,11 +1,11 @@
 import type { PivotTableConfig as ApiPivotTableConfig } from '@mog-sdk/contracts/api';
-import { toA1 } from '../internal/utils';
+import { toA1 } from '../../internal/utils';
 import type {
   PivotFieldArea,
   PivotTableConfig as DataPivotTableConfig,
   PlacementId,
 } from '@mog-sdk/contracts/pivot';
-import { makePlacementId } from './pivot-identifiers';
+import { makePlacementId } from './identifiers';
 
 function formatDataSource(
   sourceSheetName: string | null,

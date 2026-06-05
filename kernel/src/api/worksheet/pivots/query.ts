@@ -5,9 +5,9 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { CellValue } from '@mog-sdk/contracts/core';
 import type { PivotTableResult } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
-import { findPivotByName } from './pivot-lookup';
+import type { DocumentContext } from '../../../context';
+import { KernelError } from '../../../errors';
+import { findPivotByName } from './lookup';
 
 export async function queryPivotByName(params: {
   ctx: DocumentContext;

@@ -5,14 +5,14 @@ import type {
   PivotFieldPlacementFlat,
   PivotKernelMutationReceipt,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
+import type { DocumentContext } from '../../../context';
 import {
   cleanPivotFormula,
   makePlacementId,
   pivotCalculatedFieldId,
-} from './pivot-identifiers';
-import { requirePivot, resolvePivotName } from './pivot-lookup';
-import { createMutationReceipt } from './pivot-receipts';
+} from './identifiers';
+import { requirePivot, resolvePivotName } from './lookup';
+import { createMutationReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 

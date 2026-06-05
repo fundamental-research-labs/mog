@@ -6,8 +6,8 @@ import type {
 import {
   KernelError,
   createPivotAmbiguousPlacementError,
-} from '../../errors';
-import { makePlacementId } from './pivot-identifiers';
+} from '../../../errors';
+import { makePlacementId } from './identifiers';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 

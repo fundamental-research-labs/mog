@@ -7,12 +7,12 @@ import type {
   ShowValuesAsConfig,
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
-import { makePlacementId, pivotPlacementId } from './pivot-identifiers';
-import { requirePivot, resolvePivotName } from './pivot-lookup';
-import { placementId, resolvePlacement } from './pivot-placements';
-import { createPlacementReceipt } from './pivot-receipts';
+import type { DocumentContext } from '../../../context';
+import { KernelError } from '../../../errors';
+import { makePlacementId, pivotPlacementId } from './identifiers';
+import { requirePivot, resolvePivotName } from './lookup';
+import { placementId, resolvePlacement } from './placements';
+import { createPlacementReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type PivotSortDirection = Exclude<SortOrder, 'none'>;

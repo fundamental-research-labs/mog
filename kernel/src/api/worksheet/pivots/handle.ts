@@ -22,7 +22,7 @@ import type {
   ShowValuesAsConfig,
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
+import type { DocumentContext } from '../../../context';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';

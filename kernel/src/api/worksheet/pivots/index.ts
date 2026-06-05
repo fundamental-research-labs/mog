@@ -35,48 +35,48 @@ import type {
   PivotTableLayout,
   PivotTableStyle,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
-import { toA1 } from '../internal/utils';
-import { buildPivotTableHandle } from './pivot-handle';
-import { dataConfigToApiConfig } from './pivot-config-conversion';
+import type { DocumentContext } from '../../../context';
+import { KernelError } from '../../../errors';
+import { toA1 } from '../../internal/utils';
+import { buildPivotTableHandle } from './handle';
+import { dataConfigToApiConfig } from './config-conversion';
 import {
   convertSimpleToDataConfig,
   isSimplePivotConfig,
   updatePivotDataSource,
   type PivotCreateDataConfig,
-} from './pivot-data-source';
+} from './data-source';
 import {
   configWithRequiredMetadata,
   makePlacementId,
   pivotPlacementId,
-} from './pivot-identifiers';
+} from './identifiers';
 import {
   findPivotByName,
   requirePivot,
-} from './pivot-lookup';
+} from './lookup';
 import {
   placementFieldName,
   placementReadout,
   placementId,
   resolvePlacement,
-} from './pivot-placements';
-import { queryPivotByName } from './pivot-query';
+} from './placements';
+import { queryPivotByName } from './query';
 import {
   addPivotCalculatedFieldByName,
   addPivotCalculatedFieldToId,
   removePivotCalculatedFieldByName,
   updatePivotCalculatedFieldByName,
-} from './pivot-calculated-fields';
+} from './calculated-fields';
 import {
   getPivotDataHierarchyAtCell,
   getPivotItemsAtCell,
-} from './pivot-cell-provenance';
+} from './cell-provenance';
 import {
   setPivotFilterByName,
   removePivotFilterByName,
   setPivotItemVisibilityByName,
-} from './pivot-filters';
+} from './filters';
 import {
   addPivotField,
   movePivotField,
@@ -85,7 +85,7 @@ import {
   setPivotAggregateFunction,
   setPivotShowValuesAs,
   setPivotSortOrder,
-} from './pivot-field-mutations';
+} from './field-mutations';
 import {
   getPivotAllowMultipleFiltersPerField,
   getPivotAutoFormat,
@@ -95,11 +95,11 @@ import {
   setPivotAutoFormat,
   setPivotEnableMultipleFilterItems,
   setPivotPreserveFormatting,
-} from './pivot-formatting-options';
+} from './formatting-options';
 import {
   setPivotLayoutByName,
   setPivotStyleByName,
-} from './pivot-layout-style';
+} from './layout-style';
 import {
   getPivotColumnLabelRangeByName,
   getPivotDataBodyRangeByName,
@@ -107,7 +107,7 @@ import {
   getPivotRangeByName,
   getPivotRangeForId,
   getPivotRowLabelRangeByName,
-} from './pivot-ranges';
+} from './ranges';
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   constructor(

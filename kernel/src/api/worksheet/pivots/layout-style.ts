@@ -4,9 +4,9 @@ import type {
   PivotTableLayout,
   PivotTableStyle,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { pivotStyleIdForCompute } from '../../domain/pivots/style-normalization';
-import { requirePivot, resolvePivotName } from './pivot-lookup';
+import type { DocumentContext } from '../../../context';
+import { pivotStyleIdForCompute } from '../../../domain/pivots/style-normalization';
+import { requirePivot, resolvePivotName } from './lookup';
 
 export async function setPivotLayoutByName(options: {
   ctx: DocumentContext;

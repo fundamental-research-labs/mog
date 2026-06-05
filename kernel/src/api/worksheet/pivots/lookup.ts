@@ -1,7 +1,7 @@
 import type { SheetId } from '@mog-sdk/contracts/api';
 import type { PivotTableConfig as DataPivotTableConfig } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { KernelError } from '../../errors';
+import type { DocumentContext } from '../../../context';
+import { KernelError } from '../../../errors';
 
 export async function requirePivot(
   ctx: DocumentContext,

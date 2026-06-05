@@ -4,8 +4,8 @@ import type {
   PivotTableConfig as DataPivotTableConfig,
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { requirePivot, resolvePivotName } from './pivot-lookup';
+import type { DocumentContext } from '../../../context';
+import { requirePivot, resolvePivotName } from './lookup';
 
 interface PivotRenderedBounds {
   config: DataPivotTableConfig;

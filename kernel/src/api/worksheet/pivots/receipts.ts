@@ -1,5 +1,5 @@
 import type { PivotKernelMutationReceipt } from '@mog-sdk/contracts/pivot';
-import { pivotPlacementId } from './pivot-identifiers';
+import { pivotPlacementId } from './identifiers';
 
 type RefreshPolicy = 'dirtyOnly' | 'refreshAndMaterialize';
 

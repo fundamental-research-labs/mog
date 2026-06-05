@@ -6,9 +6,9 @@ import type {
   PivotItemLocation,
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../context';
-import { pivotMemberKey } from './pivot-identifiers';
-import { requirePivot, resolvePivotName } from './pivot-lookup';
+import type { DocumentContext } from '../../../context';
+import { pivotMemberKey } from './identifiers';
+import { requirePivot, resolvePivotName } from './lookup';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 

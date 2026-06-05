@@ -657,8 +657,8 @@ The pivot table engine is Rust-backed for computation, storage, and materializat
 - `PivotBridge` updated to call Rust via ComputeBridge
 - Former TypeScript `PivotStore` config ownership removed; persisted config state now lives in Rust/Yrs storage
 - ComputeBridge pivot CRUD and materialization paths (`pivotCreate`, `pivotGet`, `pivotGetAll`, `pivotUpdate`, `pivotDelete`, `pivotCreateWithSheet`, `pivotComputeFromSource`, `pivotMaterialize`)
-- Show Values As UI dispatch persists via `PIVOT_SET_SHOW_VALUES_AS` / `WorksheetPivots.setShowValuesAs()`
-- Public worksheet API types include placement-id-first mutation methods (`addPlacement`, `updatePlacement`, `removePlacement`, `movePlacement`, `setSortByValue`, `resetPlacement`) alongside deprecated name/field facades
+- Show Values As UI persists through worksheet-scoped `PivotTableHandle` methods such as `setShowValuesAs()`
+- Public worksheet API types keep ergonomic name/handle-based pivot operations; exact app targeting uses returned handles rather than public ID-first mutation methods
 
 ### Known Limitations
 

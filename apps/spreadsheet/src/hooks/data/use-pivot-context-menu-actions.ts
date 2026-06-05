@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   AggregateFunction,
+  CalculatedField,
   PivotFieldItems,
   PivotFilter,
   PivotTableLayout,
@@ -109,6 +110,10 @@ export interface UsePivotContextMenuActionsReturn {
   pivotFilterFields: PivotFilterFieldOption[];
   /** Set include/exclude filter criteria for a pivot field */
   setPivotFilter: (fieldId: string, filter: Omit<PivotFilter, 'fieldId'>) => void;
+  /** Change the pivot data source through the selected pivot handle. */
+  setDataSource: (dataSource: string) => void;
+  /** Add a calculated field through the selected pivot handle. */
+  addCalculatedField: (field: CalculatedField) => void;
 
   // Group/Ungroup operations
   /** Group selected items */
@@ -274,6 +279,24 @@ export function usePivotContextMenuActions(
       closeContextMenu();
     }
   }, [pivotId, canDelete, deletePivotTable, closeContextMenu]);
+
+  const setDataSource = useCallback(
+    (dataSource: string) => {
+      if (!pivot?.handle || !canEditFields) return;
+      void pivot.handle.setDataSource(dataSource);
+      closeContextMenu();
+    },
+    [pivot, canEditFields, closeContextMenu],
+  );
+
+  const addCalculatedField = useCallback(
+    (field: CalculatedField) => {
+      if (!pivot?.handle || !canEditFields) return;
+      void pivot.handle.addCalculatedField(field).then(() => pivot.handle?.refresh());
+      closeContextMenu();
+    },
+    [pivot, canEditFields, closeContextMenu],
+  );
 
   // ==========================================================================
   // Expand/Collapse Operations
@@ -477,6 +500,8 @@ export function usePivotContextMenuActions(
       showColumnGrandTotals,
       pivotFilterFields,
       setPivotFilter,
+      setDataSource,
+      addCalculatedField,
 
       // Group/Ungroup
       groupItems,
@@ -516,6 +541,8 @@ export function usePivotContextMenuActions(
       showColumnGrandTotals,
       pivotFilterFields,
       setPivotFilter,
+      setDataSource,
+      addCalculatedField,
       groupItems,
       ungroupItems,
       canGroup,

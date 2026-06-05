@@ -38,8 +38,6 @@ import type { ContextMenuTarget } from '../context-menu/types';
 import type { ShowValuesAsType } from '../../hooks/data/use-pivot-context-menu-actions';
 import { usePivotContextMenuActions } from '../../hooks/data/use-pivot-context-menu-actions';
 import { rangeToA1 } from '../../systems/shared/types';
-import { useActiveSheetId } from '../../infra/context';
-import { useDispatch } from '../../hooks/toolbar/use-action-dependencies';
 import {
   Button,
   ContextMenuContent,
@@ -213,8 +211,6 @@ export function PivotContextMenu({
     headerKey,
     fieldId,
   });
-  const activeSheetId = useActiveSheetId();
-  const dispatchAction = useDispatch();
   const [isChangeSourceOpen, setIsChangeSourceOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -250,7 +246,6 @@ export function PivotContextMenu({
   const applyChangeDataSource = useCallback(() => {
     const config = actions.pivotConfig;
     if (!config || !canEditFields) return;
-    if (!config.name) return;
 
     const dataSource = normalizeQualifiedDataSource(sourceDraft, config.sourceSheetName);
     if (!dataSource.includes('!')) {
@@ -258,13 +253,9 @@ export function PivotContextMenu({
       return;
     }
 
-    dispatchAction('PIVOT_SET_DATA_SOURCE', {
-      sheetId: activeSheetId,
-      pivotName: config.name,
-      dataSource,
-    });
+    actions.setDataSource(dataSource);
     setIsChangeSourceOpen(false);
-  }, [actions.pivotConfig, activeSheetId, canEditFields, dispatchAction, sourceDraft]);
+  }, [actions, canEditFields, sourceDraft]);
 
   const toggleFilterValue = useCallback(
     (targetFieldId: string, value: string, checked: boolean, currentValues: string[]) => {
@@ -309,7 +300,6 @@ export function PivotContextMenu({
   const applyCalculatedField = useCallback(() => {
     const config = actions.pivotConfig;
     if (!config || !canEditFields) return;
-    if (!config.name) return;
 
     const name = calculatedFieldName.trim();
     const formula = calculatedFieldFormula.trim();
@@ -322,23 +312,17 @@ export function PivotContextMenu({
       return;
     }
 
-    dispatchAction('PIVOT_ADD_CALCULATED_FIELD', {
-      sheetId: activeSheetId,
-      pivotName: config.name,
-      field: {
-        fieldId: makeCalculatedFieldId(name),
-        name,
-        formula,
-      },
+    actions.addCalculatedField({
+      fieldId: makeCalculatedFieldId(name),
+      name,
+      formula,
     });
     setIsCalculatedFieldOpen(false);
   }, [
-    actions.pivotConfig,
-    activeSheetId,
+    actions,
     calculatedFieldFormula,
     calculatedFieldName,
     canEditFields,
-    dispatchAction,
   ]);
 
   const isHeaderTarget = target === 'pivot-row-header' || target === 'pivot-column-header';

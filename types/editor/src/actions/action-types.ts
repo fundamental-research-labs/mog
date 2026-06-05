@@ -679,11 +679,6 @@ export type UIActionType =
   | 'CLOSE_DV_DIALOG'
   // Pivot table dialog
   | 'OPEN_PIVOT_DIALOG'
-  | 'PIVOT_SET_SHOW_VALUES_AS'
-  | 'PIVOT_SET_GRAND_TOTALS'
-  | 'PIVOT_SET_DATA_SOURCE'
-  | 'PIVOT_SET_FILTER'
-  | 'PIVOT_ADD_CALCULATED_FIELD'
   // Data Tab Dialogs (Architecture Alignment)
   | 'OPEN_SUBTOTAL_DIALOG'
   | 'OPEN_SCHEMA_BROWSER'

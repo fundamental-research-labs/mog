@@ -120,7 +120,7 @@ pub fn set_filter_hidden_rows(
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
         None => return transitions,
@@ -198,7 +198,7 @@ pub fn normalize_imported_filter_hidden_rows(
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_BOOTSTRAP));
     let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
         None => return transitions,
@@ -243,8 +243,8 @@ pub fn normalize_imported_filter_hidden_rows(
             let cache_hidden = map_has_true(&hidden_rows_map, &txn, &row.to_string());
             let structural =
                 !super::super::grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
-            let has_filter_owner = any_filter_hides_row(&filter_hidden_rows_map, &txn, &row_id);
             owner_map.remove(&mut txn, &row_id);
+            let has_filter_owner = any_filter_hides_row(&filter_hidden_rows_map, &txn, &row_id);
             if cache_hidden
                 && !structural
                 && !has_filter_owner

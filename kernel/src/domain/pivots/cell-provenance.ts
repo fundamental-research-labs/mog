@@ -1,4 +1,4 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
   PivotDataHierarchyInfo,
@@ -6,7 +6,7 @@ import type {
   PivotItemLocation,
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
+import type { DocumentContext } from '../../context';
 import { pivotMemberKey } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
 

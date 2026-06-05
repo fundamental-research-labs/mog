@@ -1,11 +1,11 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   PivotKernelMutationReceipt,
   PivotTableLayout,
   PivotTableStyle,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
-import { pivotStyleIdForCompute } from '../../../domain/pivots/style-normalization';
+import type { DocumentContext } from '../../context';
+import { pivotStyleIdForCompute } from './style-normalization';
 import { requirePivot, resolvePivotName } from './lookup';
 
 export async function setPivotLayoutByName(options: {

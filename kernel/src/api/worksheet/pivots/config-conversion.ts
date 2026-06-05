@@ -5,7 +5,7 @@ import type {
   PivotTableConfig as DataPivotTableConfig,
   PlacementId,
 } from '@mog-sdk/contracts/pivot';
-import { makePlacementId } from './identifiers';
+import { makePlacementId } from '../../../domain/pivots/identifiers';
 
 function formatDataSource(
   sourceSheetName: string | null,

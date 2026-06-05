@@ -45,38 +45,38 @@ import {
   isSimplePivotConfig,
   updatePivotDataSource,
   type PivotCreateDataConfig,
-} from './data-source';
+} from '../../../domain/pivots/data-source';
 import {
   configWithRequiredMetadata,
   makePlacementId,
   pivotPlacementId,
-} from './identifiers';
+} from '../../../domain/pivots/identifiers';
 import {
   findPivotByName,
   requirePivot,
-} from './lookup';
+} from '../../../domain/pivots/lookup';
 import {
   placementFieldName,
   placementReadout,
   placementId,
   resolvePlacement,
-} from './placements';
-import { queryPivotByName } from './query';
+} from '../../../domain/pivots/placements';
+import { queryPivotByName } from '../../../domain/pivots/query';
 import {
   addPivotCalculatedFieldByName,
   addPivotCalculatedFieldToId,
   removePivotCalculatedFieldByName,
   updatePivotCalculatedFieldByName,
-} from './calculated-fields';
+} from '../../../domain/pivots/calculated-fields';
 import {
   getPivotDataHierarchyAtCell,
   getPivotItemsAtCell,
-} from './cell-provenance';
+} from '../../../domain/pivots/cell-provenance';
 import {
   setPivotFilterByName,
   removePivotFilterByName,
   setPivotItemVisibilityByName,
-} from './filters';
+} from '../../../domain/pivots/filters';
 import {
   addPivotField,
   movePivotField,
@@ -85,7 +85,7 @@ import {
   setPivotAggregateFunction,
   setPivotShowValuesAs,
   setPivotSortOrder,
-} from './field-mutations';
+} from '../../../domain/pivots/field-mutations';
 import {
   getPivotAllowMultipleFiltersPerField,
   getPivotAutoFormat,
@@ -95,11 +95,11 @@ import {
   setPivotAutoFormat,
   setPivotEnableMultipleFilterItems,
   setPivotPreserveFormatting,
-} from './formatting-options';
+} from '../../../domain/pivots/formatting-options';
 import {
   setPivotLayoutByName,
   setPivotStyleByName,
-} from './layout-style';
+} from '../../../domain/pivots/layout-style';
 import {
   getPivotColumnLabelRangeByName,
   getPivotDataBodyRangeByName,
@@ -107,7 +107,7 @@ import {
   getPivotRangeByName,
   getPivotRangeForId,
   getPivotRowLabelRangeByName,
-} from './ranges';
+} from '../../../domain/pivots/ranges';
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   constructor(

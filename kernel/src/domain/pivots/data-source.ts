@@ -1,8 +1,7 @@
 import type {
   PivotTableConfig as ApiPivotTableConfig,
-  SheetId,
 } from '@mog-sdk/contracts/api';
-import { type CellValue, sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -14,14 +13,14 @@ import type {
   PivotTableConfig as DataPivotTableConfig,
   PlacementId,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
+import type { DocumentContext } from '../../context';
 import {
   KernelError,
   createPivotInvalidDataSourceError,
   createPivotUnresolvedFieldReferencesError,
   type PivotInvalidReference,
-} from '../../../errors';
-import { parseCellRange } from '../../internal/utils';
+} from '../../errors';
+import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 

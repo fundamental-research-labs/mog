@@ -1,10 +1,9 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
-import type { CellRange } from '@mog-sdk/contracts/core';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type {
   PivotTableConfig as DataPivotTableConfig,
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
+import type { DocumentContext } from '../../context';
 import { requirePivot, resolvePivotName } from './lookup';
 
 interface PivotRenderedBounds {

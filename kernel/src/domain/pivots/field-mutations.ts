@@ -1,4 +1,4 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
   PivotFieldArea,
@@ -7,8 +7,8 @@ import type {
   ShowValuesAsConfig,
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
-import { KernelError } from '../../../errors';
+import type { DocumentContext } from '../../context';
+import { KernelError } from '../../errors';
 import { makePlacementId, pivotPlacementId } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
 import { placementId, resolvePlacement } from './placements';

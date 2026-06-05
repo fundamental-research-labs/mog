@@ -1,5 +1,5 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
-import type { DocumentContext } from '../../../context';
+import type { SheetId } from '@mog-sdk/contracts/core';
+import type { DocumentContext } from '../../context';
 import { requirePivot, resolvePivotName } from './lookup';
 
 export async function getPivotAllowMultipleFiltersPerField(options: {

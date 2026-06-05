@@ -1,11 +1,11 @@
-import type { SheetId } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   CalculatedField,
   CalculatedFieldId,
   PivotFieldPlacementFlat,
   PivotKernelMutationReceipt,
 } from '@mog-sdk/contracts/pivot';
-import type { DocumentContext } from '../../../context';
+import type { DocumentContext } from '../../context';
 import {
   cleanPivotFormula,
   makePlacementId,

@@ -1,0 +1,136 @@
+name: Publish Mog CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build artifacts and print release output without uploading
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  package:
+    name: Package @mog-sdk/cli and skill
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - run: npm install -g npm@^11.5.1
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check CLI version contract
+        run: |
+          CLI_VERSION=$(node -p "require('./cli/package.json').version")
+          SDK_VERSION=$(node -p "require('./runtime/sdk/package.json').version")
+          if [ "$CLI_VERSION" != "$SDK_VERSION" ]; then
+            echo "@mog-sdk/cli version ${CLI_VERSION} does not match @mog-sdk/node ${SDK_VERSION}."
+            exit 1
+          fi
+
+      - run: pnpm --filter @mog-sdk/cli test:npm-local
+
+      - run: pnpm --filter @mog-sdk/cli package:skill
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mog-cli-kernel-skill
+          path: artifacts/mog-cli-kernel.skill.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm/mog-sdk-cli-*.tgz
+          if-no-files-found: error
+
+  publish-dry-run:
+    name: Dry-run publish @mog-sdk/cli to npm
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ inputs.dry_run == 'true' }}
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@^11.5.1
+
+      - name: Configure npm token fallback
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          else
+            echo "NPM_TOKEN is not configured; npm will use trusted publishing if available."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm
+
+      - name: Publish CLI package
+        run: |
+          TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
+          npm publish "$TARBALL" --access public --dry-run
+
+  publish:
+    name: Publish @mog-sdk/cli to npm
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ inputs.dry_run == 'false' }}
+    environment: npm-production
+    concurrency:
+      group: npm-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@^11.5.1
+
+      - name: Configure npm token fallback
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          else
+            echo "NPM_TOKEN is not configured; npm will use trusted publishing if available."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mog-sdk-cli-npm-package
+          path: artifacts/npm
+
+      - name: Publish CLI package
+        run: |
+          TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
+          npm publish "$TARBALL" --access public

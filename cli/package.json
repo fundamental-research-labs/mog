@@ -1,0 +1,27 @@
+{
+  "name": "@mog-sdk/cli",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mog": "./dist/mog.cjs"
+  },
+  "scripts": {
+    "build": "pnpm -w run build:public-artifacts -- --through @mog-sdk/node --skip-native-build --skip-host-native-artifact --skip-wasm-build && tsup",
+    "package:npm": "pnpm run build && node scripts/package-npm.mjs",
+    "package:release": "pnpm run package:npm && pnpm run package:skill",
+    "package:skill": "node scripts/package-skill.mjs",
+    "test:npm-local": "pnpm run package:npm && node testing/npm-local-e2e.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm test:e2e",
+    "test:e2e": "pnpm build && node testing/e2e.mjs"
+  },
+  "dependencies": {
+    "@mog-sdk/node": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  }
+}

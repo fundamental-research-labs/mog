@@ -166,12 +166,23 @@ impl YrsComputeEngine {
                 if let Some(series) = &chart_data.series {
                     colors.extend(series.iter().filter_map(|series| series.color.clone()));
                 }
+                let series_names = chart_data
+                    .series
+                    .as_ref()
+                    .map(|series| {
+                        series
+                            .iter()
+                            .filter_map(|series| series.name.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
 
                 Some(ChartOverlay {
                     rect: CssRect::new(local_x as f32, local_y as f32, w as f32, h as f32),
                     chart_type: chart_data.chart_type.as_str().to_string(),
                     title: chart_data.title.take(),
                     colors,
+                    series_names,
                     series_count,
                     point_count: 4,
                     z_index: chart.common.z_index,

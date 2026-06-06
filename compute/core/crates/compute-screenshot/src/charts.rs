@@ -2,6 +2,8 @@ use tiny_skia::Color;
 
 use crate::canvas::{CssRect, SheetCanvas};
 use crate::colors;
+use crate::text;
+use compute_text_measurement::FontDb;
 
 const DEFAULT_SERIES_COLORS: [&str; 6] = [
     "#4472C4", "#ED7D31", "#A5A5A5", "#FFC000", "#5B9BD5", "#70AD47",
@@ -14,6 +16,7 @@ pub struct ChartOverlay {
     pub chart_type: String,
     pub title: Option<String>,
     pub colors: Vec<String>,
+    pub series_names: Vec<String>,
     pub series_count: usize,
     pub point_count: usize,
     pub z_index: i32,
@@ -24,6 +27,7 @@ pub fn render_chart_overlays(
     charts: &[ChartOverlay],
     offset_x: f32,
     offset_y: f32,
+    font_db: &FontDb,
 ) {
     let mut sorted = charts.to_vec();
     sorted.sort_by_key(|chart| chart.z_index);
@@ -32,7 +36,7 @@ pub fn render_chart_overlays(
         if chart.rect.w < 8.0 || chart.rect.h < 8.0 {
             continue;
         }
-        render_chart_overlay(canvas, chart, offset_x, offset_y);
+        render_chart_overlay(canvas, chart, offset_x, offset_y, font_db);
     }
 }
 
@@ -41,6 +45,7 @@ fn render_chart_overlay(
     chart: &ChartOverlay,
     offset_x: f32,
     offset_y: f32,
+    font_db: &FontDb,
 ) {
     let x = chart.rect.x + offset_x;
     let y = chart.rect.y + offset_y;
@@ -61,6 +66,21 @@ fn render_chart_overlay(
     } else {
         0.0
     };
+
+    if let Some(title) = chart.title.as_ref().filter(|title| !title.is_empty()) {
+        let title_font_size = (h * 0.045).clamp(10.0, 14.0);
+        let title_x = x + w * 0.5;
+        let title_y = y + (title_h * 0.58).clamp(12.0, 22.0);
+        render_centered_text(
+            canvas,
+            font_db,
+            title,
+            title_x,
+            title_y,
+            title_font_size,
+            colors::BLACK,
+        );
+    }
 
     let plot = CssRect::new(
         x + (w * 0.12).clamp(26.0, 58.0),
@@ -99,6 +119,7 @@ fn render_chart_overlay(
             x + w - legend_w + 10.0,
             plot.y + 4.0,
             legend_w - 18.0,
+            font_db,
         );
     }
 
@@ -157,19 +178,133 @@ fn render_pie_like(canvas: &mut SheetCanvas, plot: CssRect, chart: &ChartOverlay
     }
 }
 
-fn render_legend(canvas: &mut SheetCanvas, chart: &ChartOverlay, x: f32, y: f32, w: f32) {
+fn render_legend(
+    canvas: &mut SheetCanvas,
+    chart: &ChartOverlay,
+    x: f32,
+    y: f32,
+    w: f32,
+    font_db: &FontDb,
+) {
     for s in 0..chart.series_count.clamp(1, 4) {
         let row_y = y + s as f32 * 14.0;
         canvas.fill_rect(x, row_y, 10.0, 10.0, series_color(chart, s));
-        canvas.stroke_line(
-            x + 14.0,
-            row_y + 5.0,
-            x + w.min(54.0),
-            row_y + 5.0,
-            Color::from_rgba8(0x66, 0x66, 0x66, 0xFF),
-            1.0,
+        let label = chart
+            .series_names
+            .get(s)
+            .map(String::as_str)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("Series");
+        let text = if label == "Series" {
+            format!("Series {}", s + 1)
+        } else {
+            label.to_string()
+        };
+        render_text(
+            canvas,
+            font_db,
+            OverlayText {
+                text: &text,
+                x: x + 14.0,
+                baseline_y: row_y + 9.0,
+                font_size: 9.0,
+                max_width: (w - 14.0).max(12.0),
+                color: Color::from_rgba8(0x33, 0x33, 0x33, 0xFF),
+            },
         );
     }
+}
+
+struct OverlayText<'a> {
+    text: &'a str,
+    x: f32,
+    baseline_y: f32,
+    font_size: f32,
+    max_width: f32,
+    color: Color,
+}
+
+fn render_centered_text(
+    canvas: &mut SheetCanvas,
+    font_db: &FontDb,
+    text_value: &str,
+    center_x: f32,
+    baseline_y: f32,
+    font_size: f32,
+    color: Color,
+) {
+    let Some((_, entry)) = font_db.resolve_styled("Carlito", false, false) else {
+        return;
+    };
+    let Some(buzz_face) = entry.face() else {
+        return;
+    };
+    let Ok(ttf_face) = ttf_parser::Face::parse(entry.data(), entry.index()) else {
+        return;
+    };
+    let text_w = text::measure_text_advance(&buzz_face, font_size, text_value);
+    text::render_text(
+        canvas,
+        &buzz_face,
+        &ttf_face,
+        text::TextRun {
+            font_size,
+            text: text_value,
+            x: center_x - text_w / 2.0,
+            y: baseline_y,
+            color,
+        },
+    );
+}
+
+fn render_text(canvas: &mut SheetCanvas, font_db: &FontDb, run: OverlayText<'_>) {
+    let Some((_, entry)) = font_db.resolve_styled("Carlito", false, false) else {
+        return;
+    };
+    let Some(buzz_face) = entry.face() else {
+        return;
+    };
+    let Ok(ttf_face) = ttf_parser::Face::parse(entry.data(), entry.index()) else {
+        return;
+    };
+    let rendered = fit_text_to_width(&buzz_face, run.font_size, run.text, run.max_width);
+    if rendered.is_empty() {
+        return;
+    }
+    text::render_text(
+        canvas,
+        &buzz_face,
+        &ttf_face,
+        text::TextRun {
+            font_size: run.font_size,
+            text: &rendered,
+            x: run.x,
+            y: run.baseline_y,
+            color: run.color,
+        },
+    );
+}
+
+fn fit_text_to_width(
+    face: &rustybuzz::Face<'_>,
+    font_size: f32,
+    text_value: &str,
+    max_width: f32,
+) -> String {
+    if text::measure_text_advance(face, font_size, text_value) <= max_width {
+        return text_value.to_string();
+    }
+
+    let mut fitted = String::new();
+    for ch in text_value.chars() {
+        let mut candidate = fitted.clone();
+        candidate.push(ch);
+        if text::measure_text_advance(face, font_size, &candidate) > max_width {
+            break;
+        }
+        fitted = candidate;
+    }
+    fitted
 }
 
 fn series_color(chart: &ChartOverlay, index: usize) -> Color {

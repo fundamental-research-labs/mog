@@ -117,7 +117,7 @@ pub fn render_sheet_to_png_with_charts(
     );
 
     // 4. Floating chart objects (over cells, under headers).
-    render_chart_overlays(&mut canvas, charts, offset_x, offset_y);
+    render_chart_overlays(&mut canvas, charts, offset_x, offset_y, font_db);
 
     // 5. Headers (over data area edges)
     if options.show_headers {

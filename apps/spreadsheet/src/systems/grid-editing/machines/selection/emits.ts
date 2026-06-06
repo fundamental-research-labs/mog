@@ -28,7 +28,22 @@
 
 import { emit } from 'xstate';
 import { getSelectionViewportFollowCell } from '../../../shared/types';
-import type { SelectionContext } from './types';
+import type { SelectionContext, SelectionEvent, SelectionScrollIntent } from './types';
+
+function getSelectionScrollIntent(event: SelectionEvent): SelectionScrollIntent | undefined {
+  switch (event.type) {
+    case 'PAGE_LEFT':
+      return { type: 'page', axis: 'horizontal', direction: 'previous' };
+    case 'PAGE_RIGHT':
+      return { type: 'page', axis: 'horizontal', direction: 'next' };
+    case 'PAGE_UP':
+      return { type: 'page', axis: 'vertical', direction: 'previous' };
+    case 'PAGE_DOWN':
+      return { type: 'page', axis: 'vertical', direction: 'next' };
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Emit `userSelectionChanged` carrying the post-transition active cell and
@@ -37,16 +52,20 @@ import type { SelectionContext } from './types';
  * Wired on every event in §3.2's emit set. The SET_SELECTION transition uses
  * the `isUserSelection` guard to gate the emit on `source === 'user'` (default).
  */
-export const emitUserSelectionChanged = emit(({ context }: { context: SelectionContext }) => {
-  const followCell = getSelectionViewportFollowCell(
-    context.pendingRange,
-    context.activeCell,
-    context.anchor,
-  );
+export const emitUserSelectionChanged = emit(
+  ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
+    const followCell = getSelectionViewportFollowCell(
+      context.pendingRange,
+      context.activeCell,
+      context.anchor,
+    );
+    const scrollIntent = getSelectionScrollIntent(event);
 
-  return {
-    type: 'userSelectionChanged' as const,
-    activeCell: context.activeCell,
-    followCell,
-  };
-});
+    return {
+      type: 'userSelectionChanged' as const,
+      activeCell: context.activeCell,
+      followCell,
+      ...(scrollIntent ? { scrollIntent } : {}),
+    };
+  },
+);

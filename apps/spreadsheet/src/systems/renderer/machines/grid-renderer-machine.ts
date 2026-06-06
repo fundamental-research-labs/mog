@@ -96,7 +96,13 @@ export type RendererEvent =
   | { type: 'RESIZE'; width: number; height: number }
   | { type: 'QUEUE_ACTION'; action: PendingAction }
   | { type: 'INVALIDATE'; priority: RenderPriority; regions?: CellRange[] }
-  | { type: 'SCROLL_TO_ACTIVE_CELL'; cell: CellCoord };
+  | { type: 'SCROLL_TO_ACTIVE_CELL'; cell: CellCoord }
+  | {
+      type: 'SCROLL_PAGE';
+      axis: 'horizontal' | 'vertical';
+      direction: 'previous' | 'next';
+      cell: CellCoord;
+    };
 
 /**
  * Emitted events broadcast by the machine to subscribers via `actor.on()`.
@@ -105,10 +111,17 @@ export type RendererEvent =
  * runtime resources (coordinate system, DOM, scroll engine) which the pure
  * machine intentionally does not hold. Subscribers in RenderSystem react.
  */
-export type RendererEmitted = {
-  type: 'scrollToActiveCellRequested';
-  cell: CellCoord;
-};
+export type RendererEmitted =
+  | {
+      type: 'scrollToActiveCellRequested';
+      cell: CellCoord;
+    }
+  | {
+      type: 'pageScrollRequested';
+      axis: 'horizontal' | 'vertical';
+      direction: 'previous' | 'next';
+      cell: CellCoord;
+    };
 
 // =============================================================================
 // EVENT FACTORY
@@ -184,6 +197,17 @@ export const RendererEvents = {
 
   scrollToActiveCell: (cell: CellCoord): RendererEvent => ({
     type: 'SCROLL_TO_ACTIVE_CELL',
+    cell,
+  }),
+
+  scrollPage: (
+    axis: 'horizontal' | 'vertical',
+    direction: 'previous' | 'next',
+    cell: CellCoord,
+  ): RendererEvent => ({
+    type: 'SCROLL_PAGE',
+    axis,
+    direction,
     cell,
   }),
 } as const;
@@ -287,6 +311,26 @@ export const rendererMachine = setup({
         return { type: 'scrollToActiveCellRequested', cell: { row: 0, col: 0 } };
       }
       return { type: 'scrollToActiveCellRequested', cell: event.cell };
+    }),
+
+    // Emit a page-scroll request to subscribers. Page navigation differs from
+    // viewport-follow: it scrolls one rendered page even when the destination
+    // active cell would be visible after a minimal nudge.
+    emitPageScrollRequested: emit(({ event }) => {
+      if (event.type !== 'SCROLL_PAGE') {
+        return {
+          type: 'pageScrollRequested',
+          axis: 'horizontal',
+          direction: 'next',
+          cell: { row: 0, col: 0 },
+        };
+      }
+      return {
+        type: 'pageScrollRequested',
+        axis: event.axis,
+        direction: event.direction,
+        cell: event.cell,
+      };
     }),
   },
   guards: {
@@ -406,6 +450,11 @@ export const rendererMachine = setup({
           // The machine remains pure — coordinate-system + scroll application
           // live in RenderSystem (actor.on subscriber).
           actions: 'emitScrollToActiveCellRequested',
+        },
+        SCROLL_PAGE: {
+          // Stay in ready; emit a request so RenderSystem applies a page-sized
+          // scroll based on the live rendered viewport.
+          actions: 'emitPageScrollRequested',
         },
         UNMOUNT: {
           target: 'disposing',

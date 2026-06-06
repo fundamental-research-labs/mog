@@ -624,6 +624,12 @@
   },
 
   // ── private (product apps, native binaries, servers) ──────────────────
+  "@mog-sdk/cli": {
+    "disposition": "private",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
   "@mog/app-spreadsheet": {
     "disposition": "private",
     "requirePrivate": true,

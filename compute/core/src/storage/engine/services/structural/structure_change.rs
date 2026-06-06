@@ -183,14 +183,11 @@ pub(in crate::storage::engine) fn apply_structure_change(
         .compute
         .structure_change(mirror, Some((change, *sheet_id)))?;
 
-    // Refresh stale KEY_FORMULA entries in Yrs for formula cells on the
-    // affected sheet. `structure_change()` refreshed
-    // `compute.formula_strings[cell_id]` with the shifted A1 form, but Yrs
-    // still has the pre-shift string. We write the shifted form back to Yrs
-    // so that Yrs remains the authoritative source — on undo, yrs's
-    // rollback restores the pre-shift formula naturally, and the standard
-    // observer rebuild re-parses it into a fresh IdentityFormula.
-    invalidate_stale_yrs_formulas(stores, mirror, sheet_id);
+    // Refresh stale KEY_FORMULA entries in Yrs for every formula cell whose
+    // A1 text changed. Cross-sheet formulas can shift when a different sheet's
+    // rows/columns change, so this scans the workbook's formula cells rather
+    // than only the affected sheet.
+    invalidate_stale_yrs_formulas(stores, mirror);
 
     // Regenerate named range A1 strings in Yrs.
     // CellIds in IdentityFormulas don't change on structural ops, but positions

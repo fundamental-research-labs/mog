@@ -459,7 +459,6 @@ impl ComputeCore {
             .collect();
 
         mirror.add_sheet(snapshot)?;
-        self.seed_cell_formula_text(&formula_cells);
 
         // Maintain sheet_order — initialized at init_from_snapshot but
         // never updated for dynamically added sheets, so without this the
@@ -476,9 +475,14 @@ impl ComputeCore {
         self.sheet_order.insert(sheet_id, next_pos);
         self.rebuild_ordered_sheets_cache();
 
-        // Parse formulas for the new sheet using bulk parallel parsing.
-        // These are new cells with no prior edges, so set_precedents_fresh is safe.
-        self.bulk_parse_and_register(mirror, formula_cells);
+        // Parse formulas for the new sheet into the existing live graph.
+        // `bulk_parse_and_register` owns the full-graph init path and replaces
+        // the graph with the formulas it was handed. A live sheet add must
+        // append edges for the new sheet without dropping existing sheets'
+        // dependency edges.
+        for (cell_id, sheet_id, formula) in formula_cells {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+        }
 
         Ok(())
     }

@@ -11,6 +11,7 @@ mod test_cell_input_value;
 mod test_comments;
 mod test_copy_range;
 mod test_core;
+mod test_cross_sheet_regressions;
 mod test_data_bounds;
 mod test_deferred_xlsx_import;
 mod test_formatting;

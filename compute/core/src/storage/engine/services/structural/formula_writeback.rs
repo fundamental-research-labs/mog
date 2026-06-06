@@ -1,4 +1,3 @@
-use cell_types::SheetId;
 use compute_document::hex::{SmallHex, id_to_hex};
 use domain_types::domain::named_range::DefinedName;
 
@@ -23,9 +22,11 @@ use crate::storage::workbook::named_ranges;
 /// `rebuild_after_structural_observer_change` re-parse the correct string on
 /// undo — no parallel journal, no out-of-band state.
 ///
-/// Iteration is bounded by the formula-cell count of the affected sheet
-/// (not total cells): we walk `mirror.get_sheet(sheet_id).cells_iter()`
-/// filtered on `entry.formula.is_some()`.
+/// Iteration is bounded by the workbook's formula-cell count (not total cells):
+/// we walk each sheet's `cells_iter()` filtered on `entry.formula.is_some()`.
+/// A structural change on Sheet2 can change the A1 text of a formula on Sheet1
+/// (`=Sheet2!A2` -> `=Sheet2!A3`), so this must scan workbook-wide rather than
+/// only the sheet whose rows/columns changed.
 ///
 /// `result.changed_cells` is intentionally **not** used to scope this —
 /// it tracks cell *value* changes, and a formula whose refs shifted but
@@ -36,25 +37,17 @@ use crate::storage::workbook::named_ranges;
 /// so undo groups the invalidation with the structural op itself. The
 /// caller's observer-suppression window still applies (these writes are
 /// initiated from within `apply_structure_change`).
-pub(super) fn invalidate_stale_yrs_formulas(
-    stores: &mut EngineStores,
-    mirror: &CellMirror,
-    sheet_id: &SheetId,
-) {
+pub(super) fn invalidate_stale_yrs_formulas(stores: &mut EngineStores, mirror: &CellMirror) {
     use compute_document::schema::{KEY_CELLS, KEY_FORMULA};
     use compute_document::undo::ORIGIN_STRUCTURAL;
     use std::sync::Arc;
     use yrs::{Any, Map, Origin, Out, Transact};
 
-    let Some(sheet_mirror) = mirror.get_sheet(sheet_id) else {
-        return;
-    };
-
-    // Pass 1 — read: collect (cell_hex, shifted_formula) pairs for cells
-    // where Yrs KEY_FORMULA disagrees with the compute cache. Skip cells that
-    // have no formula in the mirror (shouldn't have KEY_FORMULA anyway) and
-    // cells that match (no-op optimization — avoids churn on cells untouched
-    // by the shift).
+    // Pass 1 — read: collect (sheet_hex, cell_hex, shifted_formula) triples
+    // for cells where Yrs KEY_FORMULA disagrees with the compute cache. Skip
+    // cells that have no formula in the mirror (shouldn't have KEY_FORMULA
+    // anyway) and cells that match (no-op optimization — avoids churn on cells
+    // untouched by the shift).
     //
     // KEY_FORMULA stores the formula body *without* the leading '=' (see
     // `services/cell_editing.rs` write path, which strips the '=' before
@@ -62,50 +55,56 @@ pub(super) fn invalidate_stale_yrs_formulas(
     // returns the A1 string *with* the leading '=' (see `display.rs`
     // `render_identity_formula` which always pushes '=' first). Strip it on
     // both the read-comparison and the write side.
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
     let sheets_map = stores.storage.sheets();
 
-    let updates: Vec<(SmallHex, String)> = {
+    let updates: Vec<(SmallHex, SmallHex, String)> = {
         let txn = doc.transact();
-        let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) else {
-            return;
-        };
-        let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS) else {
-            return;
-        };
 
         let mut pending = Vec::new();
-        for (cell_id, entry) in sheet_mirror.cells_iter() {
-            if entry.formula.is_none() {
+        for sheet_id in mirror.sheet_ids() {
+            let Some(sheet_mirror) = mirror.get_sheet(sheet_id) else {
                 continue;
-            }
-            let cell_hex = id_to_hex(cell_id.as_u128());
+            };
+            let sheet_hex = id_to_hex(sheet_id.as_u128());
+            let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) else {
+                continue;
+            };
+            let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS) else {
+                continue;
+            };
 
-            let yrs_formula = match cells_map.get(&txn, &cell_hex) {
-                Some(Out::YMap(cell_map)) => match cell_map.get(&txn, KEY_FORMULA) {
-                    Some(Out::Any(Any::String(s))) => Some(s.to_string()),
+            for (cell_id, entry) in sheet_mirror.cells_iter() {
+                if entry.formula.is_none() {
+                    continue;
+                }
+                let cell_hex = id_to_hex(cell_id.as_u128());
+
+                let yrs_formula = match cells_map.get(&txn, &cell_hex) {
+                    Some(Out::YMap(cell_map)) => match cell_map.get(&txn, KEY_FORMULA) {
+                        Some(Out::Any(Any::String(s))) => Some(s.to_string()),
+                        _ => None,
+                    },
                     _ => None,
-                },
-                _ => None,
-            };
+                };
 
-            // Authoritative post-shift A1 string from the compute cache.
-            // Includes the leading '=' (render_identity_formula convention).
-            let Some(compute_formula) = stores.compute.get_formula(cell_id) else {
-                continue;
-            };
-            // KEY_FORMULA convention: no leading '='.
-            let shifted_body = compute_formula.strip_prefix('=').unwrap_or(compute_formula);
+                // Authoritative post-shift A1 string from the compute cache.
+                // Includes the leading '=' (render_identity_formula convention).
+                let Some(compute_formula) = stores.compute.get_formula(cell_id) else {
+                    continue;
+                };
+                // KEY_FORMULA convention: no leading '='.
+                let shifted_body = compute_formula.strip_prefix('=').unwrap_or(compute_formula);
 
-            // If Yrs already matches the shifted form, nothing to do.
-            if let Some(ref existing) = yrs_formula
-                && existing.as_str() == shifted_body
-            {
-                continue;
+                // If Yrs already matches the shifted form, nothing to do.
+                if let Some(ref existing) = yrs_formula
+                    && existing.as_str() == shifted_body
+                {
+                    continue;
+                }
+
+                pending.push((sheet_hex.clone(), cell_hex, shifted_body.to_string()));
             }
-
-            pending.push((cell_hex, shifted_body.to_string()));
         }
         pending
     };
@@ -119,17 +118,16 @@ pub(super) fn invalidate_stale_yrs_formulas(
     // authoritative so undo's rollback restores the pre-shift string
     // naturally, without leaving a window where no formula exists in Yrs.
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_STRUCTURAL));
-    if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex)
-        && let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS)
-    {
-        for (cell_hex, shifted_body) in &updates {
-            if let Some(Out::YMap(cell_map)) = cells_map.get(&txn, cell_hex) {
-                cell_map.insert(
-                    &mut txn,
-                    KEY_FORMULA,
-                    Any::String(Arc::from(shifted_body.as_str())),
-                );
-            }
+    for (sheet_hex, cell_hex, shifted_body) in &updates {
+        if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, sheet_hex)
+            && let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS)
+            && let Some(Out::YMap(cell_map)) = cells_map.get(&txn, cell_hex)
+        {
+            cell_map.insert(
+                &mut txn,
+                KEY_FORMULA,
+                Any::String(Arc::from(shifted_body.as_str())),
+            );
         }
     }
 }

@@ -153,30 +153,32 @@ function getSelectedColsOrActive(
   return cols.length > 0 ? cols : [activeCell.col];
 }
 
-function getHiddenIndexesWithinOrAdjacentSelection(
+function getHiddenIndexesForUnhideSelection(
   ranges: CellRange[],
   activeCell: { row: number; col: number },
   hiddenIndexes: Iterable<number>,
   axis: 'row' | 'col',
 ): number[] {
   const targetRanges = getRangesOrActiveCell(ranges, activeCell);
-  const targets = new Set<number>();
+  const insideTargets = new Set<number>();
+  const adjacentTargets = new Set<number>();
 
   for (const hiddenIndex of hiddenIndexes) {
     for (const range of targetRanges) {
       const start = axis === 'row' ? range.startRow : range.startCol;
       const end = axis === 'row' ? range.endRow : range.endCol;
-      if (
-        (hiddenIndex >= start && hiddenIndex <= end) ||
-        (start > 0 && hiddenIndex === start - 1) ||
-        hiddenIndex === end + 1
-      ) {
-        targets.add(hiddenIndex);
+      if (hiddenIndex >= start && hiddenIndex <= end) {
+        insideTargets.add(hiddenIndex);
+        break;
+      }
+      if ((start > 0 && hiddenIndex === start - 1) || hiddenIndex === end + 1) {
+        adjacentTargets.add(hiddenIndex);
         break;
       }
     }
   }
 
+  const targets = insideTargets.size > 0 ? insideTargets : adjacentTargets;
   return Array.from(targets).sort((a, b) => a - b);
 }
 
@@ -326,7 +328,7 @@ export const UNHIDE_ROW: AsyncActionHandler = async (deps) => {
           : new Set<number>();
       const rows =
         hiddenRows.size > 0
-          ? getHiddenIndexesWithinOrAdjacentSelection(ranges, activeCell, hiddenRows, 'row')
+          ? getHiddenIndexesForUnhideSelection(ranges, activeCell, hiddenRows, 'row')
           : [];
       const targetRows = rows.length > 0 ? rows : getSelectedRowsOrActive(ranges, activeCell);
       if (targetRows.length > 0) {
@@ -386,7 +388,7 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
           : new Set<number>();
       const cols =
         hiddenCols.size > 0
-          ? getHiddenIndexesWithinOrAdjacentSelection(ranges, activeCell, hiddenCols, 'col')
+          ? getHiddenIndexesForUnhideSelection(ranges, activeCell, hiddenCols, 'col')
           : [];
       const targetCols = cols.length > 0 ? cols : getSelectedColsOrActive(ranges, activeCell);
       if (targetCols.length > 0) {

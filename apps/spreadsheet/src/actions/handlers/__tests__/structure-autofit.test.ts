@@ -217,6 +217,20 @@ describe('Structure autofit handlers', () => {
     expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(1, true);
   });
 
+  it('UNHIDE_COLUMN prefers hidden columns inside the selection over adjacent hidden columns', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 0, startCol: 0, endRow: MAX_ROWS - 1, endCol: 2, isFullColumn: true }],
+      hiddenCols: [1, 3],
+    });
+
+    await StructureHandlers.UNHIDE_COLUMN(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledTimes(1);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(1, true);
+  });
+
   it('UNHIDE_ROW targets hidden rows inside or adjacent to the selection', async () => {
     const deps = createDeps({
       activeCell: { row: 0, col: 0 },
@@ -229,6 +243,21 @@ describe('Structure autofit handlers', () => {
     const worksheet = getMockWorksheet(deps);
     expect(worksheet.layout.setRowVisible).toHaveBeenCalledTimes(1);
     expect(worksheet.layout.setRowVisible).toHaveBeenCalledWith(1, true);
+  });
+
+  it('UNHIDE_ROW prefers hidden rows inside the selection over adjacent hidden rows', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 1, startCol: 0, endRow: 4, endCol: MAX_COLS - 1, isFullRow: true }],
+      hiddenRows: [2, 3, 5],
+    });
+
+    await StructureHandlers.UNHIDE_ROW(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledTimes(2);
+    expect(worksheet.layout.setRowVisible).toHaveBeenNthCalledWith(1, 2, true);
+    expect(worksheet.layout.setRowVisible).toHaveBeenNthCalledWith(2, 3, true);
   });
 
   it('AUTO_FIT_COLUMN_WIDTH still honors explicit multi-column selections', async () => {

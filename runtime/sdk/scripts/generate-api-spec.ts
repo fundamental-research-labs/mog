@@ -155,11 +155,9 @@ function toRepoPath(filePath: string): string {
   return path.relative(REPO_ROOT, filePath).split(path.sep).join('/');
 }
 
-function getSourceLocation(sourceFile: ts.SourceFile, node: ts.Node): SourceLocation {
-  const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+function getSourceLocation(sourceFile: ts.SourceFile): SourceLocation {
   return {
     file: toRepoPath(sourceFile.fileName),
-    line: position.line + 1,
   };
 }
 
@@ -234,7 +232,7 @@ type AsyncModel = 'sync' | 'promise';
 
 interface SourceLocation {
   file: string;
-  line: number;
+  line?: number;
 }
 
 interface OwnershipMetadata {
@@ -611,7 +609,7 @@ function createMemberEntry(options: {
       replacement: null,
     },
     deprecation,
-    source: getSourceLocation(sourceFile, member),
+    source: getSourceLocation(sourceFile),
     ...(targetInterface ? { targetInterface } : {}),
   };
 }
@@ -730,7 +728,7 @@ function extractInterface(
 
   return {
     docstring,
-    source: getSourceLocation(sourceFile, node),
+    source: getSourceLocation(sourceFile),
     ownership: { package: ownerPackage },
     ownerPackage,
     members: sortRecord(members),
@@ -970,7 +968,7 @@ function findTypeDefinitions(
           isEnum: true,
           values: sortRecord(values),
           docstring,
-          source: getSourceLocation(sourceFile, node),
+          source: getSourceLocation(sourceFile),
           ownership: { package: ownerPackage },
           ownerPackage,
         };
@@ -989,7 +987,7 @@ function findTypeDefinitions(
           name,
           definition,
           docstring,
-          source: getSourceLocation(sourceFile, node),
+          source: getSourceLocation(sourceFile),
           ownership: { package: ownerPackage },
           ownerPackage,
         };
@@ -1029,7 +1027,7 @@ function findTypeDefinitions(
           name,
           definition: parts.length > 0 ? `{\n${parts.join('\n')}\n}` : '{}',
           docstring,
-          source: getSourceLocation(sourceFile, node),
+          source: getSourceLocation(sourceFile),
           ownership: { package: ownerPackage },
           ownerPackage,
         };
@@ -1310,7 +1308,7 @@ const API_SPEC_SCHEMA = {
   $defs: {
     sourceLocation: {
       type: 'object',
-      required: ['file', 'line'],
+      required: ['file'],
       additionalProperties: false,
       properties: {
         file: { type: 'string', minLength: 1 },
@@ -1634,7 +1632,7 @@ function assertFunctionEntry(entry: FunctionEntry, pathLabel: string): void {
   if (!['sync', 'promise'].includes(entry.asyncModel)) {
     throw new Error(`${pathLabel}: invalid asyncModel ${entry.asyncModel}`);
   }
-  if (!entry.source.file || entry.source.line < 1) {
+  if (!entry.source.file || (entry.source.line !== undefined && entry.source.line < 1)) {
     throw new Error(`${pathLabel}: invalid source`);
   }
   entry.parameters.forEach((param, index) => {
@@ -1654,7 +1652,7 @@ function assertApiSpec(spec: ApiSpec): void {
     throw new Error('api spec must contain subApis.workbook and subApis.worksheet');
   }
   for (const [interfaceName, entry] of Object.entries(spec.interfaces)) {
-    if (!entry.source.file || entry.source.line < 1) {
+    if (!entry.source.file || (entry.source.line !== undefined && entry.source.line < 1)) {
       throw new Error(`${interfaceName}: invalid source`);
     }
     for (const [methodName, fn] of Object.entries(entry.functions)) {

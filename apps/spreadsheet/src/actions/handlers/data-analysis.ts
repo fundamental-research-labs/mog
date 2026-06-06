@@ -18,6 +18,7 @@ import type {
 import type { SpellingError } from '../../ui-store/slices/dialogs/spelling-dialog';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import { guardBridgeMutation } from './bridge-error-guard';
+import { createForecastSheetPlan, uniqueForecastSheetName } from './forecast-sheet';
 import { getUIStore } from './handler-utils';
 
 export {
@@ -171,17 +172,22 @@ export const CANCEL_GOAL_SEEK: ActionHandler = (deps): ActionResult => {
 export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (
   deps,
 ): Promise<ActionResult> => {
-  const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
-  const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
-  const rangeLabel =
-    ranges.length === 1
-      ? `${toA1(ranges[0].startRow, ranges[0].startCol)}:${toA1(ranges[0].endRow, ranges[0].endCol)}`
-      : activeCell
-        ? toA1(activeCell.row, activeCell.col)
-        : 'the selected range';
+  const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
+  const plan = await createForecastSheetPlan(deps, ws);
+
+  if (plan.values.length > 0) {
+    const ok = await guardBridgeMutation(() =>
+      deps.workbook.undoGroup(async () => {
+        const forecastSheetName = await uniqueForecastSheetName(deps.workbook);
+        const forecastSheet = await deps.workbook.sheets.add(forecastSheetName);
+        await forecastSheet.setRange(0, 0, plan.values);
+      }),
+    );
+    if (ok) return { handled: true };
+  }
 
   await deps.platform.dialogs.alert(
-    `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${rangeLabel}.`,
+    `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${plan.rangeLabel}.`,
     { type: 'info' },
   );
   return { handled: true };

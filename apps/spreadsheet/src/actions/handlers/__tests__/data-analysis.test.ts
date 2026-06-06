@@ -2,7 +2,11 @@ import { describe, expect, it, jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 
-import { EXECUTE_DATA_TABLE, EXECUTE_GOAL_SEEK } from '../data-analysis';
+import {
+  EXECUTE_DATA_TABLE,
+  EXECUTE_GOAL_SEEK,
+  OPEN_FORECAST_SHEET_DIALOG,
+} from '../data-analysis';
 
 function createDeps(overrides?: {
   ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
@@ -107,7 +111,120 @@ function createGoalSeekDeps(overrides?: {
   } as unknown as ActionDependencies;
 }
 
+function createForecastDeps(overrides?: {
+  cells?: unknown[][];
+  ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  sheetNames?: string[];
+}): ActionDependencies {
+  const cells =
+    overrides?.cells ??
+    [
+      ['Month', 'Revenue'],
+      [46023, 100],
+      [46054, 118],
+      [46082, 132],
+      [46113, 155],
+      [46143, 181],
+      [46174, 214],
+      [46204, 246],
+    ];
+  const getCell = jest.fn((row: number, col: number) =>
+    Promise.resolve({
+      value: cells[row]?.[col] ?? null,
+      displayText: cells[row]?.[col] == null ? '' : String(cells[row]?.[col]),
+    }),
+  );
+  const setRange = jest.fn().mockResolvedValue(undefined);
+  const forecastSheet = { setRange };
+  const activeSheet = {
+    getCell,
+    getCurrentRegion: jest.fn().mockResolvedValue({
+      startRow: 0,
+      startCol: 0,
+      endRow: cells.length - 1,
+      endCol: 1,
+    }),
+  };
+  const alert = jest.fn().mockResolvedValue(undefined);
+  const undoGroup = jest.fn(async (fn: () => Promise<void>) => fn());
+  const sheetsAdd = jest.fn().mockResolvedValue(forecastSheet);
+
+  return {
+    workbook: {
+      getSheetById: jest.fn().mockReturnValue(activeSheet),
+      getSheetNames: jest.fn().mockResolvedValue(overrides?.sheetNames ?? ['Sheet1']),
+      sheets: { add: sheetsAdd },
+      undoGroup,
+    },
+    getActiveSheetId: () => 'sheet-1',
+    accessors: {
+      selection: {
+        getActiveCell: () => ({ row: 0, col: 0 }),
+        getRanges: () =>
+          overrides?.ranges ?? [
+            {
+              startRow: 0,
+              startCol: 0,
+              endRow: cells.length - 1,
+              endCol: 1,
+            },
+          ],
+      },
+    },
+    platform: {
+      dialogs: { alert },
+    },
+  } as unknown as ActionDependencies;
+}
+
 describe('data analysis actions', () => {
+  it('creates a forecast worksheet from a selected two-column time series', async () => {
+    const deps = createForecastDeps();
+
+    const result = await OPEN_FORECAST_SHEET_DIALOG(deps);
+    const workbook = deps.workbook as any;
+    const forecastSheet = await workbook.sheets.add.mock.results[0].value;
+    const values = forecastSheet.setRange.mock.calls[0][2] as unknown[][];
+
+    expect(result).toEqual({ handled: true });
+    expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
+    expect(workbook.sheets.add).toHaveBeenCalledWith('Forecast');
+    expect(forecastSheet.setRange).toHaveBeenCalledWith(0, 0, expect.any(Array));
+    expect(values[0][0]).toBe('Forecast Sheet');
+    expect(values[1][1]).toBe('A1:B8');
+    expect(values[2]).toEqual([
+      'Timeline',
+      'Revenue',
+      'Forecast',
+      'Lower Confidence Bound',
+      'Upper Confidence Bound',
+    ]);
+    expect(values.every((row) => Array.isArray(row) && row.length === 5)).toBe(true);
+    expect(values.filter((row) => typeof row?.[2] === 'number' && row[2] > 260)).toHaveLength(6);
+    expect((deps.platform as any).dialogs.alert).not.toHaveBeenCalled();
+  });
+
+  it('keeps invalid Forecast Sheet selections on the validation alert path', async () => {
+    const deps = createForecastDeps({
+      cells: [
+        ['Product', 'Region', 'Amount'],
+        ['Alpha', 'East', 100],
+        ['Beta', 'West', 125],
+      ],
+      ranges: [{ startRow: 0, startCol: 0, endRow: 2, endCol: 2 }],
+    });
+
+    const result = await OPEN_FORECAST_SHEET_DIALOG(deps);
+    const workbook = deps.workbook as any;
+
+    expect(result).toEqual({ handled: true });
+    expect(workbook.sheets.add).not.toHaveBeenCalled();
+    expect((deps.platform as any).dialogs.alert).toHaveBeenCalledWith(
+      expect.stringContaining('Current selection: A1:C3'),
+      { type: 'info' },
+    );
+  });
+
   it('reports raw target-cell goal seek result separately from the changing-cell solution', async () => {
     const goalSeek = jest.fn().mockResolvedValue({
       found: true,

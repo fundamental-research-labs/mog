@@ -143,6 +143,46 @@ fn test_create_chart_object_basic() {
 }
 
 #[test]
+fn test_create_chart_object_accepts_nested_anchor_contract() {
+    let (storage, sheet_id) = storage_with_sheet();
+    let doc = storage.doc();
+    let sheets = storage.sheets();
+    let config = serde_json::json!({
+        "chartType": "column",
+        "anchor": {
+            "anchorRow": 6,
+            "anchorCol": 2,
+            "anchorRowOffsetEmu": 5 * 9525,
+            "anchorColOffsetEmu": 7 * 9525,
+            "anchorMode": "oneCell",
+            "extentCxEmu": 640 * 9525,
+            "extentCyEmu": 300 * 9525
+        },
+        "width": 640,
+        "height": 300,
+        "dataRange": "A1:B4"
+    });
+
+    let obj = create_chart_object(
+        doc,
+        sheets,
+        &sheet_id,
+        &config,
+        None,
+        &crate::storage::STORAGE_ID_ALLOC,
+    )
+    .unwrap();
+
+    assert_eq!(obj["anchor"]["anchorRow"].as_i64(), Some(6));
+    assert_eq!(obj["anchor"]["anchorCol"].as_i64(), Some(2));
+    assert_eq!(obj["anchor"]["anchorRowOffsetEmu"].as_i64(), Some(5 * 9525));
+    assert_eq!(obj["anchor"]["anchorColOffsetEmu"].as_i64(), Some(7 * 9525));
+    assert_eq!(obj["anchor"]["anchorMode"], "oneCell");
+    assert_eq!(obj["anchor"]["extentCxEmu"].as_i64(), Some(640 * 9525));
+    assert_eq!(obj["anchor"]["extentCyEmu"].as_i64(), Some(300 * 9525));
+}
+
+#[test]
 fn test_chart_z_index_unified_with_shapes() {
     let (storage, sheet_id) = storage_with_sheet();
     let doc = storage.doc();

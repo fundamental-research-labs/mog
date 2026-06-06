@@ -408,6 +408,15 @@ export interface DevToolsConsoleAPI {
   clear(): void;
 
   /**
+   * Clear retained actor/machine snapshots.
+   *
+   * `clear()` is step-scoped and intentionally preserves the last-known
+   * machine state for assertions. Use this at document/runtime boundaries
+   * after the old document has been disposed.
+   */
+  clearActorState(): void;
+
+  /**
    * Dispatch an action through the spreadsheet's unified action
    * system, routed through the wired `KeyboardCoordinator` so the
    * handler runs with the same `ActionDependencies` real keyboard

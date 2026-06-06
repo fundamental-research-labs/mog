@@ -102,6 +102,15 @@ export class ActorRecorder {
     }
   }
 
+  /**
+   * Clear all retained actor snapshots. Use at document/runtime boundaries
+   * where stale actors from a disposed document must not appear in the next
+   * document's machine readbacks.
+   */
+  clear(): void {
+    this.machines.clear();
+  }
+
   private handleEvent(actorId: string, evt: Record<string, unknown>): void {
     const machine = this.getOrCreateMachine(actorId);
     machine.eventCount++;

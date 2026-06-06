@@ -1187,6 +1187,11 @@ export function createConsoleAPI(
       console.log('  DevTools cleared');
     },
 
+    clearActorState() {
+      actorRecorder.clear();
+      console.log('  DevTools actor state cleared');
+    },
+
     // ── Programmatic API ──
 
     getFlow(correlationId: number): ProgrammaticFlow | null {
@@ -1275,7 +1280,7 @@ export function createConsoleAPI(
                 // Skip functions, symbols, and other non-serializable types
                 if (typeof value === 'function' || typeof value === 'symbol') return undefined;
                 // Skip DOM nodes
-                if (value instanceof Node) return '[DOM Node]';
+                if (typeof Node !== 'undefined' && value instanceof Node) return '[DOM Node]';
                 // Convert Sets to arrays so assertions can use Array.isArray
                 if (value instanceof Set) return Array.from(value);
                 // Truncate very large arrays

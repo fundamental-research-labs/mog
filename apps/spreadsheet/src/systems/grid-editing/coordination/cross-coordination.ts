@@ -139,15 +139,19 @@ export function setupEditorToSelectionCoordination(
     if (wasFormulaEditing && !isFormulaEditing) {
       selectionActor.send({ type: 'EXIT_FORMULA_RANGE_MODE' });
 
-      const exitedViaNormalCancel =
-        state.matches('inactive') &&
+      const previousContext = previousState?.context;
+      const editingCell = previousContext?.editingCell;
+      const currentSheetId = getCurrentSheetId?.();
+      const isSameSheetAsFormulaOwner =
+        !previousContext?.sheetId || !currentSheetId || previousContext.sheetId === currentSheetId;
+      const shouldRestoreFormulaOwnerSelection =
+        editingCell &&
+        isSameSheetAsFormulaOwner &&
         !state.context.wasRemotelyDeleted &&
         !state.context.wasSheetDeleted &&
         !state.context.wasStructurallyCancelled;
-      const previousContext = previousState?.context;
-      const editingCell = previousContext?.editingCell;
 
-      if (exitedViaNormalCancel && editingCell) {
+      if (shouldRestoreFormulaOwnerSelection) {
         const restoreRanges = previousContext.editStartSelectionRanges?.length
           ? previousContext.editStartSelectionRanges.map((range) => ({ ...range }))
           : [

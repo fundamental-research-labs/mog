@@ -56,7 +56,7 @@ describe('Formula Range Selection', () => {
     expect(sim.isSelectingRangeForFormula()).toBe(true);
   });
 
-  it('plain arrow in formula point-mode preserves the editing active cell', async () => {
+  it('plain arrow in formula point-mode moves the point cursor while editor owns the edited cell', async () => {
     sim = createGridSimulator({ activeCell: { row: 0, col: 0 }, sheetId: 'sheet-1' });
 
     sim.startEditing('=');
@@ -65,7 +65,8 @@ describe('Formula Range Selection', () => {
     sim.arrow('right');
     await sim.flush();
 
-    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 1 });
+    expect(sim.editingCell()).toEqual({ row: 0, col: 0 });
     expect(sim.selectionRanges()[0]).toEqual({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 });
     expect(sim.editorValue()).toBe('=B1');
   });
@@ -181,7 +182,8 @@ describe('Formula Range Selection', () => {
     await sim.flush();
 
     expect(sim.editorValue()).toBe('=B6');
-    expect(sim.activeCell()).toEqual({ row: 4, col: 1 });
+    expect(sim.activeCell()).toEqual({ row: 5, col: 1 });
+    expect(sim.editingCell()).toEqual({ row: 4, col: 1 });
     expect(sim.selectionRanges()).toEqual([{ startRow: 5, startCol: 1, endRow: 5, endCol: 1 }]);
 
     sim.cancelEdit();

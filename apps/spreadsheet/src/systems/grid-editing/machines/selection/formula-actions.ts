@@ -68,6 +68,7 @@ const setFormulaRange = assign(
     return {
       pendingRange: singleCellRange(event.cell),
       committedRanges: [],
+      activeCell: event.cell,
       anchor: event.cell,
       direction: 'down-right' as const,
       tabOriginCol: null,
@@ -81,7 +82,7 @@ const setFormulaRange = assign(
 const updateFormulaRange = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_MOVE' || !context.anchor) return {};
-    return buildExtendUpdate(context.anchor, event.cell);
+    return buildExtendUpdate(context.anchor, event.cell, event.cell);
   },
 );
 

@@ -54,9 +54,10 @@ describe('Formula Click-to-Insert Reference', () => {
     // Click cell A1 (row 0, col 0)
     sim.clickCell(0, 0);
 
-    // The active cell remains the formula owner; point-mode uses anchor/range
-    // geometry for the referenced cell so Shift+Arrow still extends from A1.
-    expect(sim.activeCell()).toEqual({ row: 3, col: 2 });
+    // The editor context remains the formula owner; selection.activeCell is
+    // the visible formula point cursor so app/user readbacks see A1 selected.
+    expect(sim.editingCell()).toEqual({ row: 3, col: 2 });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
     expect(sim.anchor()).toEqual({ row: 0, col: 0 });
     expect(sim.selectionRanges()).toEqual([{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }]);
     expect(sim.editorValue()).toBe('=A1');
@@ -75,7 +76,8 @@ describe('Formula Click-to-Insert Reference', () => {
     sim.arrow('down', { shift: true });
 
     expect(sim.editorValue()).toBe('=SUM(A1:A3');
-    expect(sim.activeCell()).toEqual({ row: 3, col: 0 });
+    expect(sim.editingCell()).toEqual({ row: 3, col: 0 });
+    expect(sim.activeCell()).toEqual({ row: 2, col: 0 });
     expect(sim.anchor()).toEqual({ row: 0, col: 0 });
     expect(sim.selectionRanges()).toEqual([{ startRow: 0, startCol: 0, endRow: 2, endCol: 0 }]);
   });

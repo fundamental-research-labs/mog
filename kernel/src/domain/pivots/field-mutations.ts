@@ -13,6 +13,7 @@ import { makePlacementId, pivotPlacementId } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
 import { placementId, resolvePlacement } from './placements';
 import { createPlacementReceipt } from './receipts';
+import { automaticPivotValueDisplayName, valuePlacementWithAggregate } from './value-labels';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type PivotSortDirection = Exclude<SortOrder, 'none'>;
@@ -46,7 +47,15 @@ export async function addPivotField(options: {
     position,
     aggregateFunction: aggregateFunction as AggregateFunction | undefined,
     sortOrder: placementOptions?.sortOrder === 'none' ? undefined : placementOptions?.sortOrder,
-    displayName: placementOptions?.displayName,
+    displayName:
+      area === 'value'
+        ? automaticPivotValueDisplayName({
+            config,
+            fieldId,
+            aggregateFunction,
+            displayName: placementOptions?.displayName,
+          })
+        : placementOptions?.displayName,
     showValuesAs: placementOptions?.showValuesAs,
   });
 
@@ -121,7 +130,9 @@ export async function setPivotAggregateFunction(options: {
   }
 
   const placements = config.placements.map((placement) =>
-    placement === target ? { ...placement, aggregateFunction } : placement,
+    placement === target
+      ? valuePlacementWithAggregate({ config, placement, aggregateFunction })
+      : placement,
   );
   const result = await ctx.pivot.updatePivot(
     sheetId,

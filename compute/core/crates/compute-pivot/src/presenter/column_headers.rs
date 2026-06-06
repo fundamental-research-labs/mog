@@ -5,7 +5,7 @@ use value_types::CellValue;
 
 use crate::engine::VALUES_FIELD_KEY;
 use crate::resolved::{ResolvedAxisPlacement, ResolvedCalculatedField, ResolvedValuePlacement};
-use crate::types::{FieldId, PivotColumnHeader, PivotHeader};
+use crate::types::{AggregateFunction, FieldId, PivotColumnHeader, PivotField, PivotHeader};
 
 use super::visibility::{
     count_visible_leaves, get_nodes_at_depth_agg, get_visible_leaves, is_node_expanded,
@@ -17,10 +17,11 @@ pub(super) fn build_column_headers(
     column_placements: &[ResolvedAxisPlacement],
     value_placements: &[ResolvedValuePlacement],
     calculated_fields: &[ResolvedCalculatedField],
+    fields: &[PivotField],
     expanded_set: Option<&HashSet<String>>,
 ) -> Vec<PivotColumnHeader> {
     let mut headers: Vec<PivotColumnHeader> = Vec::new();
-    let value_headers = measure_headers(value_placements, calculated_fields);
+    let value_headers = measure_headers(value_placements, calculated_fields, fields);
     let measure_count = value_headers.len();
 
     if column_placements.is_empty() {
@@ -81,7 +82,7 @@ pub(super) fn build_column_headers(
         let mut value_headers: Vec<PivotHeader> = Vec::new();
 
         for leaf in &leaves {
-            for header in measure_headers(value_placements, calculated_fields) {
+            for header in measure_headers(value_placements, calculated_fields, fields) {
                 value_headers.push(
                     header.into_pivot_header(column_placements.len(), Some(leaf.key.clone())),
                 );
@@ -127,13 +128,17 @@ impl MeasureHeader {
 fn measure_headers(
     value_placements: &[ResolvedValuePlacement],
     calculated_fields: &[ResolvedCalculatedField],
+    fields: &[PivotField],
 ) -> Vec<MeasureHeader> {
     let mut headers = Vec::with_capacity(value_placements.len() + calculated_fields.len());
     headers.extend(value_placements.iter().map(|vp| {
         let display = vp.display_name().unwrap_or("");
         let value = if display.is_empty() {
-            let agg = format!("{:?}", vp.aggregate_function()).to_lowercase();
-            format!("{} of {}", agg, vp.field_id())
+            let field_name = fields
+                .iter()
+                .find(|field| field.id == *vp.field_id())
+                .map_or_else(|| vp.field_id().to_string(), |field| field.name.clone());
+            format!("{} of {}", agg_label(vp.aggregate_function()), field_name)
         } else {
             display.to_string()
         };
@@ -151,10 +156,27 @@ fn measure_headers(
     headers
 }
 
+fn agg_label(aggregate: AggregateFunction) -> &'static str {
+    match aggregate {
+        AggregateFunction::Count | AggregateFunction::CountA | AggregateFunction::CountUnique => {
+            "Count"
+        }
+        AggregateFunction::Average => "Average",
+        AggregateFunction::Min => "Min",
+        AggregateFunction::Max => "Max",
+        AggregateFunction::Product => "Product",
+        AggregateFunction::StdDev => "StdDev",
+        AggregateFunction::StdDevP => "StdDevP",
+        AggregateFunction::Var => "Var",
+        AggregateFunction::VarP => "VarP",
+        _ => "Sum",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AggregateFunction, SortDirection};
+    use crate::types::{DetectedDataType, PivotField, SortDirection};
 
     fn node(value: CellValue) -> AggregatedNode {
         AggregatedNode {
@@ -192,6 +214,7 @@ mod tests {
             &[axis_placement()],
             &[],
             &[],
+            &[],
             None,
         );
 
@@ -213,12 +236,20 @@ mod tests {
             show_values_as: None,
         }];
 
-        let headers = build_column_headers(&[], &[], &values, &[], None);
+        let fields = [PivotField {
+            id: FieldId::from("sales"),
+            name: "Sales".to_string(),
+            source_column: 2,
+            data_type: DetectedDataType::Number,
+            ..Default::default()
+        }];
+
+        let headers = build_column_headers(&[], &[], &values, &[], &fields, None);
 
         assert_eq!(headers[0].headers[0].key, "value_sales");
         assert_eq!(
             headers[0].headers[0].value,
-            CellValue::Text("sum of sales".into())
+            CellValue::Text("Sum of Sales".into())
         );
     }
 
@@ -251,7 +282,7 @@ mod tests {
             parsed_expr: crate::calc_field::parse_calc_field("Revenue - Cost").unwrap(),
         }];
 
-        let headers = build_column_headers(&[], &[], &values, &calculated, None);
+        let headers = build_column_headers(&[], &[], &values, &calculated, &[], None);
 
         assert_eq!(headers[0].headers.len(), 3);
         assert_eq!(

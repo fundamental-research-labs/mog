@@ -19,6 +19,7 @@ import {
   type PivotInvalidReference,
 } from '../../errors';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
+import { pivotValueFieldDisplayName } from './value-labels';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 
@@ -250,13 +251,19 @@ export async function convertSimpleToDataConfig(
     for (let i = 0; i < simpleConfig.valueFields.length; i++) {
       const vf = simpleConfig.valueFields[i];
       const fieldId = resolveFieldId(vf.field);
+      const sourceFieldName = fields.find((field) => field.id === fieldId)?.name ?? fieldId;
       placements.push({
         placementId: makePlacementId('value', fieldId, i),
         fieldId,
         area: 'value',
         position: i,
         aggregateFunction: vf.aggregation as AggregateFunction,
-        displayName: vf.label ?? undefined,
+        displayName: pivotValueFieldDisplayName({
+          displayName: vf.label,
+          sourceFieldName,
+          fieldId,
+          aggregateFunction: vf.aggregation as AggregateFunction,
+        }),
       });
     }
   }

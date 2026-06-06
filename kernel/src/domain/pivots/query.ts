@@ -4,6 +4,7 @@ import type { PivotTableResult } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import { findPivotByName } from './lookup';
+import { automaticPivotValuePlacementDisplayName } from './value-labels';
 
 export async function queryPivotByName(params: {
   ctx: DocumentContext;
@@ -45,12 +46,9 @@ export async function queryPivotByName(params: {
   const colFieldNames = colPlacements.map(
     (placement) => fieldNameById.get(placement.fieldId) ?? placement.fieldId,
   );
-  const valueFieldLabels = valuePlacements.map((placement) => {
-    if (placement.displayName) return placement.displayName;
-    const name = fieldNameById.get(placement.fieldId) ?? placement.fieldId;
-    const aggregate = placement.aggregateFunction ?? 'sum';
-    return `${aggregate.charAt(0).toUpperCase() + aggregate.slice(1)} of ${name}`;
-  });
+  const valueFieldLabels = valuePlacements.map((placement) =>
+    automaticPivotValuePlacementDisplayName({ config: pivot, placement }),
+  );
 
   const colDimensionTuples = buildColumnDimensionTuples(
     result,

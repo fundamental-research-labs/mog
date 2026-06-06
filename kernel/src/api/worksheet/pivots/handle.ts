@@ -25,6 +25,10 @@ import type {
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
+import {
+  automaticPivotValueDisplayName,
+  valuePlacementWithAggregate,
+} from '../../../domain/pivots/value-labels';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -178,7 +182,12 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
               area: 'value',
               position: valuePlacements.length,
               aggregateFunction: aggregation,
-              displayName: label ?? undefined,
+              displayName: automaticPivotValueDisplayName({
+                config: current,
+                fieldId: field,
+                aggregateFunction: aggregation,
+                displayName: label,
+              }),
             },
           ],
         },
@@ -254,7 +263,11 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         {
           placements: current.placements.map((placement) =>
             placement === target
-              ? { ...placement, aggregateFunction: newAggregation as AggregateFunction }
+              ? valuePlacementWithAggregate({
+                  config: current,
+                  placement,
+                  aggregateFunction: newAggregation as AggregateFunction,
+                })
               : placement,
           ),
         },

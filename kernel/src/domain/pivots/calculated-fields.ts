@@ -6,7 +6,7 @@ import type {
   PivotKernelMutationReceipt,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../context';
-import { cleanPivotFormula, makePlacementId, pivotCalculatedFieldId } from './identifiers';
+import { displayPivotFormula, makePlacementId, pivotCalculatedFieldId } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
 import { createMutationReceipt } from './receipts';
 
@@ -22,11 +22,15 @@ export async function addPivotCalculatedFieldByName(options: {
   const { pivotId, config } = await resolvePivotName(ctx, sheetId, pivotName, 'addCalculatedField');
   const cleanedField: CalculatedField = {
     ...field,
-    formula: cleanPivotFormula(field.formula),
+    formula: displayPivotFormula(field.formula),
   };
   const calculatedFields = [...(config.calculatedFields ?? []), cleanedField];
   const existingPlacement = config.placements.find(
-    (placement) => placement.fieldId === field.fieldId && placement.area === 'value',
+    (placement) =>
+      placement.area === 'value' &&
+      (placement.fieldId === field.fieldId ||
+        (field.calculatedFieldId != null &&
+          placement.calculatedFieldId === field.calculatedFieldId)),
   );
   let placements = config.placements;
 
@@ -35,6 +39,7 @@ export async function addPivotCalculatedFieldByName(options: {
     const newPlacement: PivotFieldPlacement = {
       placementId: makePlacementId('value', field.fieldId, valuePlacements.length),
       fieldId: field.fieldId,
+      calculatedFieldId: field.calculatedFieldId,
       area: 'value',
       position: valuePlacements.length,
       aggregateFunction: 'sum',
@@ -64,18 +69,46 @@ export async function addPivotCalculatedFieldToId(options: {
     fieldId: field.fieldId,
     calculatedFieldId,
     name: field.name,
-    formula: cleanPivotFormula(field.formula),
+    formula: displayPivotFormula(field.formula),
   };
+  const existingPlacement = config.placements.find(
+    (placement) =>
+      placement.area === 'value' &&
+      (placement.calculatedFieldId === calculatedFieldId ||
+        placement.fieldId === cleanedField.fieldId),
+  );
+  let placements = config.placements;
+  const effects: Parameters<typeof createMutationReceipt>[4] = [
+    { type: 'calculatedFieldAdded', calculatedFieldId },
+  ];
+  if (!existingPlacement) {
+    const valuePlacements = config.placements.filter((placement) => placement.area === 'value');
+    const newPlacement: PivotFieldPlacement = {
+      placementId: makePlacementId('value', cleanedField.fieldId, valuePlacements.length),
+      fieldId: cleanedField.fieldId,
+      calculatedFieldId,
+      area: 'value',
+      position: valuePlacements.length,
+      aggregateFunction: 'sum',
+      displayName: cleanedField.name,
+    };
+    placements = [...config.placements, newPlacement];
+    effects.push({ type: 'placementAdded', placementId: newPlacement.placementId });
+  }
   const result = await ctx.pivot.updatePivot(
     sheetId,
     pivotId,
-    { calculatedFields: [...(config.calculatedFields ?? []), cleanedField] },
+    { calculatedFields: [...(config.calculatedFields ?? []), cleanedField], placements },
     { reason: 'calculatedFieldChanged', refreshPolicy: 'refreshAndMaterialize' },
   );
   return {
-    ...createMutationReceipt(pivotId, 'calculatedFieldChanged', 'refreshAndMaterialize', result, [
-      { type: 'calculatedFieldAdded', calculatedFieldId },
-    ]),
+    ...createMutationReceipt(
+      pivotId,
+      'calculatedFieldChanged',
+      'refreshAndMaterialize',
+      result,
+      effects,
+    ),
     calculatedFieldId,
   };
 }
@@ -93,13 +126,22 @@ export async function removePivotCalculatedFieldByName(options: {
     pivotName,
     'removeCalculatedField',
   );
-  const calculatedFields = (config.calculatedFields ?? []).filter(
-    (field) => field.fieldId !== fieldId,
+  const removed = (config.calculatedFields ?? []).find((field) => field.fieldId === fieldId);
+  const removedCalculatedFieldId = removed?.calculatedFieldId;
+  const calculatedFields = (config.calculatedFields ?? []).filter((field) => field !== removed);
+  const placements = config.placements.filter(
+    (placement) =>
+      placement.area !== 'value' ||
+      !(
+        placement.fieldId === fieldId ||
+        (removedCalculatedFieldId != null &&
+          placement.calculatedFieldId === removedCalculatedFieldId)
+      ),
   );
   await ctx.pivot.updatePivot(
     sheetId,
     pivotId,
-    { calculatedFields },
+    { calculatedFields, placements },
     { reason: 'calculatedFieldChanged', refreshPolicy: 'refreshAndMaterialize' },
   );
 }
@@ -120,7 +162,7 @@ export async function updatePivotCalculatedFieldByName(options: {
   );
   const normalizedUpdates = {
     ...updates,
-    ...(updates.formula != null ? { formula: cleanPivotFormula(updates.formula) } : {}),
+    ...(updates.formula != null ? { formula: displayPivotFormula(updates.formula) } : {}),
   };
   const calculatedFields = (config.calculatedFields ?? []).map((field) =>
     field.fieldId === fieldId ? { ...field, ...normalizedUpdates } : field,

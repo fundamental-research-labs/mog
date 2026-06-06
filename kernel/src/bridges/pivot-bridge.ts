@@ -58,6 +58,11 @@ import type {
 import type { DocumentContext } from '../context/types';
 import { normalizeCellValue } from '../api/internal/value-conversions';
 import { getOrder as getSheetOrder } from '../domain/sheets/sheet-meta';
+import { cleanPivotFormula, displayPivotFormula } from '../domain/pivots/identifiers';
+import {
+  automaticPivotValuePlacementDisplayName,
+  valuePlacementWithAggregate,
+} from '../domain/pivots/value-labels';
 import { extractMutationData } from './compute/compute-core';
 
 type PublicPivotPlacement = PivotTableConfig['placements'][number];
@@ -254,7 +259,7 @@ function toComputeCalculatedField(field: PublicCalculatedField): ComputeCalculat
   return {
     fieldId,
     name: field.name,
-    formula: field.formula,
+    formula: cleanPivotFormula(field.formula),
   };
 }
 
@@ -263,7 +268,7 @@ function toPublicCalculatedField(field: ComputeCalculatedField): PublicCalculate
   const converted: PublicCalculatedField = {
     fieldId: source.fieldId,
     name: source.name,
-    formula: source.formula,
+    formula: displayPivotFormula(source.formula),
   };
   if (source.calculatedFieldId) {
     converted.calculatedFieldId = calculatedFieldId(source.calculatedFieldId);
@@ -961,6 +966,14 @@ export class PivotBridge implements IPivotBridge {
     if (spec.displayName) {
       placement.displayName = spec.displayName;
     }
+    if (spec.area === 'value') {
+      placement.displayName = automaticPivotValuePlacementDisplayName({
+        config,
+        placement,
+        aggregateFunction,
+        displayName: spec.displayName,
+      });
+    }
     if (spec.showValuesAs) {
       placement.showValuesAs = spec.showValuesAs;
     }
@@ -993,9 +1006,20 @@ export class PivotBridge implements IPivotBridge {
   ): Promise<PivotKernelMutationReceipt> {
     const { sheetId, config } = await this.findPivotLocation(pivotId);
     const normalizedPatch = normalizePlacementPatch(patch);
-    const placements = config.placements.map((p) =>
-      getBridgePlacementId(p) === placementId ? { ...p, ...normalizedPatch } : p,
-    );
+    const placements = config.placements.map((p) => {
+      if (getBridgePlacementId(p) !== placementId) return p;
+      if (normalizedPatch.aggregateFunction && p.area === 'value') {
+        return {
+          ...valuePlacementWithAggregate({
+            config,
+            placement: p,
+            aggregateFunction: normalizedPatch.aggregateFunction,
+          }),
+          ...normalizedPatch,
+        };
+      }
+      return { ...p, ...normalizedPatch };
+    });
     await this.updatePivot(
       sheetId,
       pivotId,

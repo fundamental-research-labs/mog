@@ -106,29 +106,36 @@ impl YrsComputeEngine {
     }
 
     fn derive_pivot_source_name(&self, mut config: PivotTableConfig) -> PivotTableConfig {
-        if let Some(source_sheet_id) = config.source_sheet_id.as_deref()
-            && let Ok(source_id) = SheetId::from_uuid_str(source_sheet_id)
-            && let Some(sheet) = self.mirror.get_sheet(&source_id)
-        {
-            config.source_sheet_name = sheet.name.clone();
-            config.source_sheet_id = Some(source_id.to_uuid_string());
-        } else if config.source_sheet_id.is_none()
+        let mut resolved_source = false;
+        if let Some(source_sheet_id) = config.source_sheet_id.as_deref() {
+            if let Ok(source_id) = SheetId::from_uuid_str(source_sheet_id) {
+                if let Some(sheet) = self.mirror.get_sheet(&source_id) {
+                    config.source_sheet_name = sheet.name.clone();
+                    config.source_sheet_id = Some(source_id.to_uuid_string());
+                    resolved_source = true;
+                }
+            }
+        }
+        if !resolved_source
+            && config.source_sheet_id.is_none()
             && !config.source_sheet_name.is_empty()
-            && let Some(source_id) = self.mirror.sheet_by_name(&config.source_sheet_name)
         {
-            config.source_sheet_id = Some(source_id.to_uuid_string());
+            if let Some(source_id) = self.mirror.sheet_by_name(&config.source_sheet_name) {
+                config.source_sheet_id = Some(source_id.to_uuid_string());
+            }
         }
         config
     }
 
     fn derive_pivot_sheet_names(&self, config: PivotTableConfig) -> PivotTableConfig {
         let mut config = self.derive_pivot_source_name(config);
-        if let Some(output_sheet_id) = config.output_sheet_id.as_deref()
-            && let Ok(output_id) = SheetId::from_uuid_str(output_sheet_id)
-            && let Some(sheet) = self.mirror.get_sheet(&output_id)
-        {
-            config.output_sheet_name = sheet.name.clone();
-            config.output_sheet_id = Some(output_id.to_uuid_string());
+        if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
+            if let Ok(output_id) = SheetId::from_uuid_str(output_sheet_id) {
+                if let Some(sheet) = self.mirror.get_sheet(&output_id) {
+                    config.output_sheet_name = sheet.name.clone();
+                    config.output_sheet_id = Some(output_id.to_uuid_string());
+                }
+            }
         }
         config
     }
@@ -308,19 +315,19 @@ impl YrsComputeEngine {
         config: PivotTableConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         let config = self.resolve_pivot_source_identity(config)?;
-        if let Some(output_sheet_id) = config.output_sheet_id.as_deref()
-            && output_sheet_id != sheet_id.to_uuid_string()
-        {
-            return Err(ComputeError::InvalidInput {
-                message: format!(
-                    "pivot_update outputSheetId '{}' does not match containing sheet '{}'",
-                    output_sheet_id,
-                    sheet_id.to_uuid_string()
-                ),
-            });
+        let sheet_uuid = sheet_id.to_uuid_string();
+        if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
+            if output_sheet_id != sheet_uuid {
+                return Err(ComputeError::InvalidInput {
+                    message: format!(
+                        "pivot_update outputSheetId '{}' does not match containing sheet '{}'",
+                        output_sheet_id, sheet_uuid
+                    ),
+                });
+            }
         }
         let mut config = config;
-        config.output_sheet_id = Some(sheet_id.to_uuid_string());
+        config.output_sheet_id = Some(sheet_uuid);
         if let Some(sheet) = self.mirror.get_sheet(sheet_id) {
             config.output_sheet_name = sheet.name.clone();
         }
@@ -340,29 +347,30 @@ impl YrsComputeEngine {
         pivot_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         // Clear materialized cells before deleting
-        if let Some(config) = services::objects::pivot_get(&self.stores, sheet_id, pivot_id)
-            && let Some(output_sheet_id) = config
+        if let Some(config) = services::objects::pivot_get(&self.stores, sheet_id, pivot_id) {
+            if let Some(output_sheet_id) = config
                 .output_sheet_id
                 .as_deref()
                 .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
                 .or_else(|| self.mirror.sheet_by_name(&config.output_sheet_name))
-        {
-            let output_sheet_uuid = output_sheet_id.to_uuid_string();
-            let old_def = self
-                .mirror
-                .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
-                .cloned();
-            if let Some(def) = old_def {
-                let old_rows = def.rendered_row_count();
-                let old_cols = def.rendered_col_count();
-                if old_rows > 0 && old_cols > 0 {
-                    self.mirror.clear_pivot_region(
-                        &output_sheet_id,
-                        def.start_row,
-                        def.start_col,
-                        old_rows,
-                        old_cols,
-                    );
+            {
+                let output_sheet_uuid = output_sheet_id.to_uuid_string();
+                let old_def = self
+                    .mirror
+                    .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
+                    .cloned();
+                if let Some(def) = old_def {
+                    let old_rows = def.rendered_row_count();
+                    let old_cols = def.rendered_col_count();
+                    if old_rows > 0 && old_cols > 0 {
+                        self.mirror.clear_pivot_region(
+                            &output_sheet_id,
+                            def.start_row,
+                            def.start_col,
+                            old_rows,
+                            old_cols,
+                        );
+                    }
                 }
             }
         }
@@ -605,12 +613,13 @@ impl YrsComputeEngine {
                     .unwrap_or_else(|| p.field_id().to_string())
             })
             .collect();
-        self.mirror.materialize_pivot(
+        self.mirror.materialize_pivot_with_identities(
             &output_sheet_id,
             config.output_location.row,
             config.output_location.col,
             &result,
             &row_field_names,
+            &self.stores.grid_id_alloc,
         );
 
         // 6. Register bounds for GETPIVOTDATA

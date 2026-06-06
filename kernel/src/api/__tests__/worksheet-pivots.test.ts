@@ -625,6 +625,7 @@ describe('WorksheetPivotsImpl', () => {
       const newPlacement = placements.find((p: any) => p.fieldId === 'Amount2');
       expect(newPlacement).toBeDefined();
       expect(newPlacement.showValuesAs).toEqual(showValuesAs);
+      expect(newPlacement.displayName).toBe('Sum of Amount2');
     });
   });
 

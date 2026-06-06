@@ -188,12 +188,13 @@ impl YrsComputeEngine {
                                 .unwrap_or_else(|| p.field_id().to_string())
                         })
                         .collect();
-                    mirror.materialize_pivot(
+                    mirror.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
                         &result,
                         &row_field_names,
+                        &stores.grid_id_alloc,
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
@@ -291,12 +292,13 @@ impl YrsComputeEngine {
                                 .unwrap_or_else(|| p.field_id().to_string())
                         })
                         .collect();
-                    self.mirror.materialize_pivot(
+                    self.mirror.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
                         &result,
                         &row_field_names,
+                        &self.stores.grid_id_alloc,
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);

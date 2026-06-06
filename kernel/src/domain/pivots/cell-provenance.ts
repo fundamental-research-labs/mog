@@ -9,6 +9,7 @@ import type {
 import type { DocumentContext } from '../../context';
 import { pivotMemberKey } from './identifiers';
 import { requirePivot, resolvePivotName } from './lookup';
+import { automaticPivotValuePlacementDisplayName } from './value-labels';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 
@@ -39,11 +40,12 @@ export async function getPivotDataHierarchyAtCell(options: {
   const valuePlacement = valuePlacements[valueIndex];
   if (!valuePlacement) return null;
 
-  const field = config.fields.find((candidate) => candidate.id === valuePlacement.fieldId);
-  const fieldName = field?.name ?? valuePlacement.fieldId;
   const aggregate = valuePlacement.aggregateFunction ?? 'sum';
-  const aggregateLabel = aggregate.charAt(0).toUpperCase() + aggregate.slice(1);
-  const displayName = valuePlacement.displayName ?? `${aggregateLabel} of ${fieldName}`;
+  const displayName = automaticPivotValuePlacementDisplayName({
+    config,
+    placement: valuePlacement,
+    aggregateFunction: aggregate,
+  });
 
   return {
     fieldId: valuePlacement.fieldId,

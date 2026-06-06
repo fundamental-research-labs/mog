@@ -27,6 +27,10 @@ export function cleanPivotFormula(formula: string): string {
   return formula.startsWith('=') ? formula.slice(1) : formula;
 }
 
+export function displayPivotFormula(formula: string): string {
+  return formula.startsWith('=') ? formula : `=${formula}`;
+}
+
 export function configWithRequiredMetadata(
   config: Omit<DataPivotTableConfig, 'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'>,
   id: string,

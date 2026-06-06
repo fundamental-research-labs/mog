@@ -487,4 +487,55 @@ describe('PivotBridge Rust DTO boundary', () => {
       }),
     );
   });
+
+  it('strips calculated-field formulas for Rust and restores display formulas for public configs', async () => {
+    const ctx = createMockCtx();
+    const bridge = new PivotBridge(ctx);
+    const config = makePivotConfig({
+      calculatedFields: [
+        {
+          fieldId: 'CalcMargin',
+          calculatedFieldId: 'CalcMargin',
+          name: 'Margin',
+          formula: '=Amount / 2',
+        },
+      ],
+    });
+
+    await bridge.createPivot(config);
+
+    expect(ctx.computeBridge.pivotCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        calculatedFields: [
+          expect.objectContaining({
+            fieldId: 'CalcMargin',
+            formula: 'Amount / 2',
+          }),
+        ],
+      }),
+    );
+
+    ctx.computeBridge.pivotGet.mockResolvedValue({
+      ...config,
+      calculatedFields: [
+        {
+          fieldId: 'CalcMargin',
+          calculatedFieldId: 'CalcMargin',
+          name: 'Margin',
+          formula: 'Amount / 2',
+        },
+      ],
+    });
+
+    await expect(bridge.getPivot(SHEET_ID, 'pivot-1')).resolves.toEqual(
+      expect.objectContaining({
+        calculatedFields: [
+          expect.objectContaining({
+            fieldId: 'CalcMargin',
+            formula: '=Amount / 2',
+          }),
+        ],
+      }),
+    );
+  });
 });

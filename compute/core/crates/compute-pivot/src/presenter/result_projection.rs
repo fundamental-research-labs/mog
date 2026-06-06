@@ -43,6 +43,7 @@ pub fn query_result_to_pivot(
         config.column_placements(),
         config.value_placements(),
         config.calculated_fields(),
+        config.fields(),
         col_expanded_set,
     );
 

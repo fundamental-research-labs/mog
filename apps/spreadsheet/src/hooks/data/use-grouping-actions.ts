@@ -67,6 +67,66 @@ function computeSelectionBounds(ranges: readonly CellRange[]): SelectionBounds |
   return { startRow, endRow, startCol, endCol };
 }
 
+interface OutlineSummarySettings {
+  summaryRowsBelow: boolean;
+  summaryColumnsRight: boolean;
+}
+
+async function readOutlineSummarySettings(ws: {
+  outline: {
+    getSettings: () => Promise<{
+      summaryRowsBelow?: boolean;
+      summaryColumnsRight?: boolean;
+    }>;
+  };
+}): Promise<OutlineSummarySettings> {
+  try {
+    const settings = await ws.outline.getSettings();
+    return {
+      summaryRowsBelow: settings.summaryRowsBelow ?? true,
+      summaryColumnsRight: settings.summaryColumnsRight ?? true,
+    };
+  } catch {
+    return {
+      summaryRowsBelow: true,
+      summaryColumnsRight: true,
+    };
+  }
+}
+
+function summaryIndex(
+  group: Pick<GroupDefinition, 'start' | 'end'>,
+  summaryAfter: boolean,
+): number | null {
+  if (summaryAfter) return group.end + 1;
+  const index = group.start - 1;
+  return index >= 0 ? index : null;
+}
+
+function selectionMatchesRowGroupForDetail(
+  group: Pick<GroupDefinition, 'start' | 'end'>,
+  bounds: SelectionBounds,
+  settings: OutlineSummarySettings,
+): boolean {
+  if (group.start <= bounds.startRow && group.end >= bounds.endRow) {
+    return true;
+  }
+  const summary = summaryIndex(group, settings.summaryRowsBelow);
+  return summary !== null && bounds.startRow === summary && bounds.endRow === summary;
+}
+
+function selectionMatchesColumnGroupForDetail(
+  group: Pick<GroupDefinition, 'start' | 'end'>,
+  bounds: SelectionBounds,
+  settings: OutlineSummarySettings,
+): boolean {
+  if (group.start <= bounds.startCol && group.end >= bounds.endCol) {
+    return true;
+  }
+  const summary = summaryIndex(group, settings.summaryColumnsRight);
+  return summary !== null && bounds.startCol === summary && bounds.endCol === summary;
+}
+
 // =============================================================================
 // Return Type
 // =============================================================================
@@ -387,19 +447,20 @@ export function useGroupingActions(): UseGroupingActionsReturn {
 
       const ws = wb.getSheetById(activeSheetId);
       const state = await ws.outline.getState();
+      const settings = await readOutlineSummarySettings(ws);
       const currentRowGroups = state.rowGroups as GroupDefinition[];
       const currentColumnGroups = state.columnGroups as GroupDefinition[];
 
       // Find all collapsed groups containing the selection and expand them
       for (const group of currentRowGroups) {
-        if (group.collapsed && group.start <= bounds.startRow && group.end >= bounds.endRow) {
+        if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings)) {
           // Toggle to expand (collapsed -> expanded)
           await ws.outline.toggleCollapsed(group.id);
         }
       }
 
       for (const group of currentColumnGroups) {
-        if (group.collapsed && group.start <= bounds.startCol && group.end >= bounds.endCol) {
+        if (group.collapsed && selectionMatchesColumnGroupForDetail(group, bounds, settings)) {
           await ws.outline.toggleCollapsed(group.id);
         }
       }
@@ -413,6 +474,7 @@ export function useGroupingActions(): UseGroupingActionsReturn {
 
       const ws = wb.getSheetById(activeSheetId);
       const state = await ws.outline.getState();
+      const settings = await readOutlineSummarySettings(ws);
       const currentRowGroups = state.rowGroups as GroupDefinition[];
       const currentColumnGroups = state.columnGroups as GroupDefinition[];
 
@@ -420,7 +482,7 @@ export function useGroupingActions(): UseGroupingActionsReturn {
       const rowGroupsContaining = currentRowGroups
         .filter(
           (g: GroupDefinition) =>
-            !g.collapsed && g.start <= bounds.startRow && g.end >= bounds.endRow,
+            !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings),
         )
         .sort((a: GroupDefinition, b: GroupDefinition) => b.level - a.level); // Innermost first
 
@@ -432,7 +494,7 @@ export function useGroupingActions(): UseGroupingActionsReturn {
       const colGroupsContaining = currentColumnGroups
         .filter(
           (g: GroupDefinition) =>
-            !g.collapsed && g.start <= bounds.startCol && g.end >= bounds.endCol,
+            !g.collapsed && selectionMatchesColumnGroupForDetail(g, bounds, settings),
         )
         .sort((a: GroupDefinition, b: GroupDefinition) => b.level - a.level);
 

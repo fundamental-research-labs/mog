@@ -132,6 +132,60 @@ function findInnermostContainingGroup(
   );
 }
 
+interface OutlineSummarySettings {
+  summaryRowsBelow: boolean;
+  summaryColumnsRight: boolean;
+}
+
+const DEFAULT_OUTLINE_SUMMARY_SETTINGS: OutlineSummarySettings = {
+  summaryRowsBelow: true,
+  summaryColumnsRight: true,
+};
+
+async function readOutlineSummarySettings(
+  ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
+): Promise<OutlineSummarySettings> {
+  try {
+    const settings = await ws.outline.getSettings();
+    return {
+      summaryRowsBelow: settings.summaryRowsBelow ?? true,
+      summaryColumnsRight: settings.summaryColumnsRight ?? true,
+    };
+  } catch {
+    return DEFAULT_OUTLINE_SUMMARY_SETTINGS;
+  }
+}
+
+function summaryIndex(group: GroupRecord, summaryAfter: boolean): number | null {
+  if (summaryAfter) return group.end + 1;
+  const index = group.start - 1;
+  return index >= 0 ? index : null;
+}
+
+function selectionMatchesRowGroupForDetail(
+  group: GroupRecord,
+  bounds: SelectionBounds,
+  settings: OutlineSummarySettings,
+): boolean {
+  if (group.start <= bounds.startRow && group.end >= bounds.endRow) {
+    return true;
+  }
+  const summary = summaryIndex(group, settings.summaryRowsBelow);
+  return summary !== null && bounds.startRow === summary && bounds.endRow === summary;
+}
+
+function selectionMatchesColumnGroupForDetail(
+  group: GroupRecord,
+  bounds: SelectionBounds,
+  settings: OutlineSummarySettings,
+): boolean {
+  if (group.start <= bounds.startCol && group.end >= bounds.endCol) {
+    return true;
+  }
+  const summary = summaryIndex(group, settings.summaryColumnsRight);
+  return summary !== null && bounds.startCol === summary && bounds.endCol === summary;
+}
+
 /** Minimal shape of `GroupDefinition` used by the show/hide detail iterators. */
 interface GroupRecord {
   id: string;
@@ -321,18 +375,19 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
   const state = await ws.outline.getState();
+  const settings = await readOutlineSummarySettings(ws);
   const rowGroups = state.rowGroups as GroupRecord[];
   const columnGroups = state.columnGroups as GroupRecord[];
 
   let toggled = false;
   for (const group of rowGroups) {
-    if (group.collapsed && group.start <= bounds.startRow && group.end >= bounds.endRow) {
+    if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings)) {
       await ws.outline.toggleCollapsed(group.id);
       toggled = true;
     }
   }
   for (const group of columnGroups) {
-    if (group.collapsed && group.start <= bounds.startCol && group.end >= bounds.endCol) {
+    if (group.collapsed && selectionMatchesColumnGroupForDetail(group, bounds, settings)) {
       await ws.outline.toggleCollapsed(group.id);
       toggled = true;
     }
@@ -352,12 +407,13 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
   const state = await ws.outline.getState();
+  const settings = await readOutlineSummarySettings(ws);
   const rowGroups = state.rowGroups as GroupRecord[];
   const columnGroups = state.columnGroups as GroupRecord[];
 
   // Find the innermost expanded row group containing the selection.
   const rowGroupsContaining = rowGroups
-    .filter((g) => !g.collapsed && g.start <= bounds.startRow && g.end >= bounds.endRow)
+    .filter((g) => !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings))
     .sort((a, b) => b.level - a.level);
 
   let toggled = false;
@@ -367,7 +423,7 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   }
 
   const colGroupsContaining = columnGroups
-    .filter((g) => !g.collapsed && g.start <= bounds.startCol && g.end >= bounds.endCol)
+    .filter((g) => !g.collapsed && selectionMatchesColumnGroupForDetail(g, bounds, settings))
     .sort((a, b) => b.level - a.level);
 
   if (colGroupsContaining.length > 0) {

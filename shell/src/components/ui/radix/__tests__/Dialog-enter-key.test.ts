@@ -104,6 +104,23 @@ describe('isEnterKeyDefaultAction', () => {
     expect(isEnterKeyDefaultAction(buildEvent({ target: radio }))).toBe(true);
   });
 
+  it('FIRES on default-prevented radio button Enter events from Radix controls', () => {
+    const group = el('div', { role: 'radiogroup' });
+    const radio = el('button', { role: 'radio' }, group);
+    expect(isEnterKeyDefaultAction(buildEvent({ defaultPrevented: true, target: radio }))).toBe(
+      true,
+    );
+  });
+
+  it('FIRES on default-prevented events nested inside selection controls', () => {
+    const listbox = el('div', { role: 'listbox' });
+    const option = el('button', { role: 'option' }, listbox);
+    const icon = el('span', {}, option);
+    expect(isEnterKeyDefaultAction(buildEvent({ defaultPrevented: true, target: icon }))).toBe(
+      true,
+    );
+  });
+
   it('FIRES on tree items', () => {
     const tree = el('div', { role: 'tree' });
     const item = el('div', { role: 'treeitem' }, tree);

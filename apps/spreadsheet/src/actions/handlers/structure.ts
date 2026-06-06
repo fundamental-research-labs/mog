@@ -46,6 +46,10 @@ import {
   insertColumnLeftSelection,
   insertRowAboveSelection,
 } from './structure-row-column';
+import {
+  getAutofitColumnsForSelection,
+  getAutofitRowsForSelection,
+} from '../../systems/grid-editing/features/autofit/selection-targets';
 
 // =============================================================================
 // Type Helpers
@@ -371,14 +375,15 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
 export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const { activeCell, ranges } = getSelectionContext(deps);
-  const rows = getSelectedRowsOrActive(ranges, activeCell);
+  const ws = deps.workbook.getSheetById(sheetId);
+  const usedRange = await ws.getUsedRange();
+  const rows = getAutofitRowsForSelection(ranges, activeCell, usedRange);
 
   const [{ autoFitRows }, { getTextMeasurementService }] = await Promise.all([
     import('../../systems/grid-editing/features/autofit'),
     import('@mog/grid-renderer'),
   ]);
   const textMeasurement = getTextMeasurementService();
-  const ws = deps.workbook.getSheetById(sheetId);
   return withProtectionFeedback(deps, () =>
     autoFitRows(
       sheetId,
@@ -397,14 +402,15 @@ export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
 export const AUTO_FIT_COLUMN_WIDTH: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const { activeCell, ranges } = getSelectionContext(deps);
-  const cols = getSelectedColsOrActive(ranges, activeCell);
+  const ws = deps.workbook.getSheetById(sheetId);
+  const usedRange = await ws.getUsedRange();
+  const cols = getAutofitColumnsForSelection(ranges, activeCell, usedRange);
 
   const [{ autoFitColumns }, { getTextMeasurementService }] = await Promise.all([
     import('../../systems/grid-editing/features/autofit'),
     import('@mog/grid-renderer'),
   ]);
   const textMeasurement = getTextMeasurementService();
-  const ws = deps.workbook.getSheetById(sheetId);
   return withProtectionFeedback(deps, () =>
     autoFitColumns(
       sheetId,

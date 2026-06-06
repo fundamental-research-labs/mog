@@ -1,7 +1,12 @@
 import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
-import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
+import {
+  MAX_COLS,
+  MAX_ROWS,
+  sheetId as makeSheetId,
+  type CellRange,
+} from '@mog-sdk/contracts/core';
 
 const autoFitRows = jest.fn(async () => undefined);
 const autoFitColumns = jest.fn(async () => undefined);
@@ -29,11 +34,13 @@ function createDeps(
       isFullRow?: boolean;
       isFullColumn?: boolean;
     }>;
+    usedRange?: CellRange | null;
   } = {},
 ): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
   const worksheet = {
     formatValues: jest.fn(async () => []),
+    getUsedRange: jest.fn(async () => options.usedRange ?? null),
     layout: {
       setRowVisible: jest.fn(async () => undefined),
       setColumnVisible: jest.fn(async () => undefined),
@@ -156,6 +163,60 @@ describe('Structure autofit handlers', () => {
     expect(autoFitColumns).toHaveBeenCalledWith(
       makeSheetId('sheet1'),
       [2, 3, 4],
+      expect.anything(),
+      expect.any(Function),
+      deps.workbook,
+    );
+  });
+
+  it('AUTO_FIT_COLUMN_WIDTH bounds select-all to used range columns', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: MAX_ROWS - 1,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+          isFullColumn: true,
+        },
+      ],
+      usedRange: { startRow: 0, startCol: 0, endRow: 24, endCol: 3 },
+    });
+
+    await StructureHandlers.AUTO_FIT_COLUMN_WIDTH(deps);
+
+    expect(autoFitColumns).toHaveBeenCalledWith(
+      makeSheetId('sheet1'),
+      [0, 1, 2, 3],
+      expect.anything(),
+      expect.any(Function),
+      deps.workbook,
+    );
+  });
+
+  it('AUTO_FIT_ROW_HEIGHT bounds select-all to used range rows', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: MAX_ROWS - 1,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+          isFullColumn: true,
+        },
+      ],
+      usedRange: { startRow: 0, startCol: 0, endRow: 2, endCol: 3 },
+    });
+
+    await StructureHandlers.AUTO_FIT_ROW_HEIGHT(deps);
+
+    expect(autoFitRows).toHaveBeenCalledWith(
+      makeSheetId('sheet1'),
+      [0, 1, 2],
       expect.anything(),
       expect.any(Function),
       deps.workbook,

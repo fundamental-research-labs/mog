@@ -7,7 +7,7 @@
  * ARCHITECTURAL NOTES:
  * - Batch-fetches all data upfront (5 parallel IPC calls) then iterates in-memory
  * - Reads from Worksheet API batch methods (getRange, getHiddenColumnsBitmap, etc.)
- * - Writes through ws.layout.setRowHeight() (fire-and-forget)
+ * - Writes through ws.layout.setRowHeight() and awaits all committed mutations
  * - Skips hidden columns for efficiency
  * - Handles merged cells by distributing height across rows
  * - wrapText calculation depends on column width
@@ -21,6 +21,7 @@ import type { SheetBounds, TextMeasurementService } from '@mog-sdk/contracts/ren
 import { DEFAULT_ROW_HEIGHT, MIN_ROW_HEIGHT } from '@mog-sdk/contracts/rendering';
 
 import { getDefaultCulture } from '@mog/culture';
+import { getUsedSheetBoundsForAutofit } from './bounds';
 
 // =============================================================================
 // Constants
@@ -151,7 +152,7 @@ export async function calculateRowAutoFitHeight(
 
   // If no batch data provided, fetch it for this standalone call
   if (!batchData) {
-    const bounds = await getSheetBoundsForSheet(ws);
+    const bounds = await getUsedSheetBoundsForAutofit(ws);
     if (!bounds) {
       return DEFAULT_ROW_HEIGHT;
     }
@@ -196,15 +197,14 @@ export async function autoFitRows(
   const ws = workbook.getSheetById(sheetId);
 
   // Helper: set row height via unified Workbook API
-  const setRowHeight = (row: number, height: number): void => {
-    void ws.layout.setRowHeight(row, height);
-  };
+  const setRowHeight = (row: number, height: number): Promise<void> =>
+    ws.layout.setRowHeight(row, height);
 
   // Pre-compute bounds once for all rows
-  const bounds = await getSheetBoundsForSheet(ws);
+  const bounds = await getUsedSheetBoundsForAutofit(ws);
   if (!bounds) {
     // No data - set all rows to default
-    rows.forEach((row) => setRowHeight(row, DEFAULT_ROW_HEIGHT));
+    await Promise.all(rows.map((row) => setRowHeight(row, DEFAULT_ROW_HEIGHT)));
     return;
   }
 
@@ -260,10 +260,8 @@ export async function autoFitRows(
     heights.push({ row, height });
   }
 
-  // Batch all dimension writes (fire-and-forget)
-  for (const { row, height } of heights) {
-    setRowHeight(row, height);
-  }
+  // Batch all dimension writes and return only after the layout mutations land.
+  await Promise.all(heights.map(({ row, height }) => setRowHeight(row, height)));
 }
 
 /**
@@ -362,18 +360,3 @@ function toFormatValue(value: unknown): { type: string; value?: unknown } {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Get sheet bounds using Worksheet API getRowCount/getColumnCount.
- */
-async function getSheetBoundsForSheet(ws: Worksheet): Promise<SheetBounds | null> {
-  const rowCount = await ws.structure.getRowCount();
-  const colCount = await ws.structure.getColumnCount();
-  if (rowCount === 0 && colCount === 0) return null;
-  return {
-    minRow: 0,
-    maxRow: Math.max(0, rowCount - 1),
-    minCol: 0,
-    maxCol: Math.max(0, colCount - 1),
-  };
-}

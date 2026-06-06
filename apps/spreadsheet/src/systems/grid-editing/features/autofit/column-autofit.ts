@@ -20,6 +20,7 @@ import type { SheetBounds, TextMeasurementService } from '@mog-sdk/contracts/ren
 import { DEFAULT_COL_WIDTH, MIN_COL_WIDTH } from '@mog-sdk/contracts/rendering';
 
 import { getDefaultCulture } from '@mog/culture';
+import { getUsedSheetBoundsForAutofit } from './bounds';
 
 // =============================================================================
 // Constants
@@ -135,7 +136,7 @@ export async function calculateColumnAutoFitWidth(
   const culture = getDefaultCulture();
 
   // Get sheet bounds to limit iteration
-  const bounds = await getSheetBoundsForSheet(ws);
+  const bounds = await getUsedSheetBoundsForAutofit(ws);
   if (!bounds) {
     return DEFAULT_COL_WIDTH;
   }
@@ -174,7 +175,7 @@ export async function autoFitColumns(
   const ws = workbook.getSheetById(sheetId);
 
   // Pre-compute bounds once for all columns
-  const bounds = await getSheetBoundsForSheet(ws);
+  const bounds = await getUsedSheetBoundsForAutofit(ws);
   if (!bounds) {
     // No data - set all columns to default
     await ws.layout.setColumnWidths(columns.map((col) => [col, DEFAULT_COL_WIDTH]));
@@ -318,18 +319,3 @@ function toFormatValue(value: unknown): { type: string; value?: unknown } {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Get sheet bounds using Worksheet API getRowCount/getColumnCount.
- */
-async function getSheetBoundsForSheet(ws: Worksheet): Promise<SheetBounds | null> {
-  const rowCount = await ws.structure.getRowCount();
-  const colCount = await ws.structure.getColumnCount();
-  if (rowCount === 0 && colCount === 0) return null;
-  return {
-    minRow: 0,
-    maxRow: Math.max(0, rowCount - 1),
-    minCol: 0,
-    maxCol: Math.max(0, colCount - 1),
-  };
-}

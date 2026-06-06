@@ -124,17 +124,6 @@ export interface UseCommentPopoverReturn {
   /** Resolve/unresolve a thread */
   resolveThread: (threadId: string, resolved: boolean) => void;
 
-  /**
-   * Convert a legacy note into a threaded comment (silent promotion).
-   *
-   * Calls the kernel API to flip `commentType` to `'threadedComment'`,
-   * clear the four note-only geometry fields, and assign `thread_id`.
-   * Then transitions the popover into reply compose mode so the user
-   * can immediately type their reply (Excel-parity UX — clicking
-   * "Reply" on a note converts and opens compose in one motion).
-   */
-  convertNoteToThread: (commentId: string) => Promise<void>;
-
   /** Start editing an existing comment */
   startEdit: (commentId: string, content: RichText) => void;
 
@@ -212,13 +201,6 @@ export function useCommentPopover(): UseCommentPopoverReturn {
   const draftContent = useSelector(
     commentActor,
     commentActor ? asSelector(commentSelectors.draftContent) : () => [] as RichText,
-  );
-
-  const composeCommentType = useSelector(
-    commentActor,
-    commentActor
-      ? asSelector(commentSelectors.composeCommentType)
-      : () => 'threadedComment' as const,
   );
 
   const editingCommentId = useSelector(
@@ -392,13 +374,9 @@ export function useCommentPopover(): UseCommentPopoverReturn {
       if (!ws) return;
 
       const text = typeof content === 'string' ? content : toPlainText(content);
-      if (composeCommentType === 'note') {
-        await ws.comments.addNote(target.row, target.col, { text, author: currentAuthor });
-      } else {
-        await ws.comments.add(target.row, target.col, { text, author: currentAuthor });
-      }
+      await ws.comments.add(target.row, target.col, { text, author: currentAuthor });
     },
-    [wb, target, currentAuthor, composeCommentType],
+    [wb, target, currentAuthor],
   );
 
   const updateComment = useCallback(
@@ -433,24 +411,6 @@ export function useCommentPopover(): UseCommentPopoverReturn {
       await ws.comments.addReply(parentCommentId, text, currentAuthor);
     },
     [wb, target, currentAuthor],
-  );
-
-  const convertNoteToThread = useCallback(
-    async (commentId: string) => {
-      if (!target) return;
-      const ws = wb.getSheetById(target.sheetId);
-      if (!ws) return;
-
-      // Flip commentType + drop note-only geometry on the kernel side.
-      // The poll-loop in the comments effect picks up the new commentType
-      // value within ≤1s, at which point CommentPopover re-renders as
-      // ThreadVariant. The popover's NoteVariant Reply button is
-      // responsible for transitioning the popover's local state into
-      // reply mode against this commentId after this resolves; the hook
-      // only owns the kernel-side flip.
-      await ws.comments.convertNoteToThread(commentId);
-    },
-    [wb, target],
   );
 
   const resolveThread = useCallback(
@@ -533,7 +493,6 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     deleteComment,
     replyToComment,
     resolveThread,
-    convertNoteToThread,
     startEdit,
     startCompose,
     requestDelete,

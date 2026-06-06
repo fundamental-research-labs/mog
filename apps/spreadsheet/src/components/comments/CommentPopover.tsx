@@ -78,10 +78,6 @@ interface CommentItemProps {
   canEdit: boolean; // true if current user is author
   /**
    * Whether to render the Reply (`+`) button on this item.
-   *
-   * True for ThreadVariant (threads always support per-item reply).
-   * False for NoteVariant (notes hide per-item thread affordances;
-   * promotion lives in a dedicated footer button instead).
    */
   showReply: boolean;
 }
@@ -236,7 +232,6 @@ export function CommentPopover() {
     deleteComment,
     replyToComment,
     resolveThread,
-    convertNoteToThread,
     startEdit,
     startCompose,
   } = useCommentPopover();
@@ -489,45 +484,10 @@ export function CommentPopover() {
 
   const isResolved = comments.length > 0 && comments[0].resolved;
 
-  // Variant dispatch — `commentType` is now required end-to-end (Tracks 1+2a).
-  // `comments[0]?.commentType` is undefined only when `comments` is empty,
-  // i.e. compose mode for a fresh cell. Default to `'threadedComment'` since
-  // "New Comment" creates threads (Excel default).
-  const variant: 'note' | 'threadedComment' = comments[0]?.commentType ?? 'threadedComment';
-
-  // NoteVariant: the Reply (`+`) button is repurposed as silent promotion —
-  // call convertNoteToThread, then transition into reply mode against that
-  // comment id (it's now the thread root). The poll-loop in the hook will
-  // pick up the new commentType within ≤1s and re-render as ThreadVariant.
-  const handleConvertAndReply = useCallback(
-    async (commentId: string) => {
-      try {
-        await convertNoteToThread(commentId);
-      } catch (err) {
-        console.error('[CommentPopover] convertNoteToThread failed', err);
-        return;
-      }
-      // Local-state transition into reply mode keyed off the converted
-      // comment's id — it's the new thread root. When the poll-loop
-      // refreshes `comments` the variant flips to ThreadVariant; the
-      // reply textarea (gated on localMode === 'reply') is already
-      // visible, so the transition is seamless.
-      handleStartReply(commentId);
-    },
-    [convertNoteToThread, handleStartReply],
-  );
-
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);
 
-  // Shared body for both variants. Extracted so the only difference between
-  // ThreadVariant and NoteVariant is the header (Resolve button) and the
-  // CommentItem onReply behavior — everything else (compose textarea, reply
-  // textarea, "Add Comment" button) is identical.
-  const renderCommentsList = (
-    onReplyForComment: (commentId: string) => void,
-    showReplyOnItems = true,
-  ) => (
+  const renderCommentsList = () => (
     <div className="flex-1 overflow-auto">
       {comments.map((comment) => (
         <CommentItem
@@ -540,9 +500,9 @@ export function CommentPopover() {
           onSaveEdit={handleSaveEdit}
           onEditContentChange={setEditContent}
           onDelete={() => handleDelete(comment.id)}
-          onReply={() => onReplyForComment(comment.id)}
+          onReply={() => handleStartReply(comment.id)}
           canEdit={!currentAuthorId || comment.authorId === currentAuthorId}
-          showReply={showReplyOnItems}
+          showReply={true}
         />
       ))}
 
@@ -629,10 +589,10 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // ThreadVariant — existing UI verbatim. Header has Close + Resolve.
-  // CommentItem's Reply (+) button calls handleStartReply (regular reply path).
+  // Comment popover body. Mog exposes a single modern comment surface; legacy
+  // imported note records are normalized below this component.
   // ===========================================================================
-  const ThreadVariant = (
+  const CommentBody = (
     <>
       <div className="px-3 py-2 border-b border-ss-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -667,53 +627,8 @@ export function CommentPopover() {
         </div>
       </div>
 
-      {renderCommentsList(handleStartReply)}
+      {renderCommentsList()}
       {renderComposeFooter()}
-    </>
-  );
-
-  // ===========================================================================
-  // NoteVariant — legacy notes from XLSX import.
-  // Header has Close only (no Resolve — notes are not threads).
-  // Per-item Reply buttons are hidden (notes are not threads). A dedicated
-  // footer button offers silent promotion: clicking it converts the note to
-  // a thread and opens the reply textarea in one motion (Excel-parity UX).
-  // ===========================================================================
-  const NoteVariant = (
-    <>
-      <div className="px-3 py-2 border-b border-ss-border flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-caption font-medium text-ss-text-secondary">Note</span>
-        </div>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className="p-1 rounded text-ss-text-secondary hover:text-text hover:bg-ss-surface-hover transition-colors"
-            title="Close"
-            onClick={close}
-          >
-            <CloseSvg style={{ width: 16, height: 16 }} />
-          </button>
-        </div>
-      </div>
-
-      {renderCommentsList(handleConvertAndReply, false)}
-      {renderComposeFooter()}
-
-      {localMode === 'view' && comments.length > 0 && (
-        <div className="px-3 py-2 border-t border-ss-border shrink-0">
-          <Button
-            variant="secondary"
-            size="sm"
-            data-testid="promote-note"
-            onClick={() => comments[0] && handleConvertAndReply(comments[0].id)}
-            className="w-full"
-          >
-            <AddSvg style={{ width: 14, height: 14 }} />
-            Reply (convert to thread)
-          </Button>
-        </div>
-      )}
     </>
   );
 
@@ -740,7 +655,7 @@ export function CommentPopover() {
           }
         }}
       >
-        {variant === 'note' ? NoteVariant : ThreadVariant}
+        {CommentBody}
       </PopoverContent>
     </Popover>
   );

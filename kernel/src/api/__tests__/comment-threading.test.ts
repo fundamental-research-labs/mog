@@ -73,6 +73,7 @@ function createMockCtx() {
       getCommentsForCellByPosition: jest.fn(),
       getCommentThread: jest.fn(),
       getCommentCount: jest.fn(),
+      convertNoteToThread: jest.fn(),
     },
   } as any;
 }
@@ -242,6 +243,44 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
       );
       expect(result.parentId).toBe('root-1');
       expect(result.threadId).toBe('root-1');
+    });
+
+    it('converts a legacy note parent before creating a threaded reply', async () => {
+      const noteParent = makeComment({
+        id: 'note-1',
+        cellRef: '5:10',
+        commentType: 'note',
+        threadId: null,
+      });
+      const convertedParent = makeComment({
+        id: 'note-1',
+        cellRef: '5:10',
+        commentType: 'threadedComment',
+        threadId: 'note-1',
+      });
+      const reply = makeComment({
+        id: 'reply-1',
+        cellRef: '5:10',
+        parentId: 'note-1',
+        threadId: 'note-1',
+      });
+
+      mockCtx.computeBridge.getComment.mockResolvedValue(noteParent);
+      mockCtx.computeBridge.convertNoteToThread.mockResolvedValue({ data: convertedParent });
+      mockCtx.computeBridge.addComment.mockResolvedValue(reply);
+
+      const result = await ws.addReply('note-1', 'My reply', 'Bob');
+
+      expect(mockCtx.computeBridge.convertNoteToThread).toHaveBeenCalledWith(SHEET_ID, 'note-1');
+      expect(mockCtx.computeBridge.addComment).toHaveBeenCalledWith(
+        SHEET_ID,
+        '5:10',
+        'My reply',
+        'Bob',
+        { parentId: 'note-1', commentType: 'threadedComment' },
+      );
+      expect(result.parentId).toBe('note-1');
+      expect(result.threadId).toBe('note-1');
     });
 
     it('throws when parent comment not found', async () => {

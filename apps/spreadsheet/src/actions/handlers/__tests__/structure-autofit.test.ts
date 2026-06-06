@@ -69,11 +69,20 @@ function createDeps(
         getRanges: jest.fn(() => options.ranges ?? []),
       },
     },
+    commands: {
+      selection: {
+        setSelection: jest.fn(),
+      },
+    },
   } as unknown as ActionDependencies;
 }
 
 function getMockWorksheet(deps: ActionDependencies) {
   return (deps.workbook.getSheetById as jest.Mock).mock.results[0]?.value;
+}
+
+function getSelectionSetMock(deps: ActionDependencies): jest.Mock {
+  return (deps.commands.selection.setSelection as unknown as jest.Mock);
 }
 
 describe('Structure autofit handlers', () => {
@@ -126,6 +135,44 @@ describe('Structure autofit handlers', () => {
     expect(worksheet.structure.insertColumns).toHaveBeenCalledWith(3, 1);
     expect(worksheet.structure.deleteRows).toHaveBeenCalledWith(4, 1);
     expect(worksheet.structure.deleteColumns).toHaveBeenCalledWith(3, 1);
+  });
+
+  it('command-initiated row and column inserts keep the active cell in the inserted slot', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+    await StructureHandlers.INSERT_COLUMN_LEFT(deps);
+
+    const setSelection = getSelectionSetMock(deps);
+    expect(setSelection).toHaveBeenNthCalledWith(
+      1,
+      [{ startRow: 4, startCol: 3, endRow: 4, endCol: 3 }],
+      { row: 4, col: 3 },
+    );
+    expect(setSelection).toHaveBeenNthCalledWith(
+      2,
+      [{ startRow: 4, startCol: 3, endRow: 4, endCol: 3 }],
+      { row: 4, col: 3 },
+    );
+  });
+
+  it('command-initiated row and column deletes keep the active cell at the vacated index', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    await StructureHandlers.DELETE_ROWS(deps);
+    await StructureHandlers.DELETE_COLUMNS(deps);
+
+    const setSelection = getSelectionSetMock(deps);
+    expect(setSelection).toHaveBeenNthCalledWith(
+      1,
+      [{ startRow: 4, startCol: 3, endRow: 4, endCol: 3 }],
+      { row: 4, col: 3 },
+    );
+    expect(setSelection).toHaveBeenNthCalledWith(
+      2,
+      [{ startRow: 4, startCol: 3, endRow: 4, endCol: 3 }],
+      { row: 4, col: 3 },
+    );
   });
 
   it('INSERT_CELLS_SHIFT_DOWN uses the active cell as a one-cell range when ranges are empty', async () => {

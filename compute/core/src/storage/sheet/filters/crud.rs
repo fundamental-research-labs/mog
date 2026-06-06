@@ -276,7 +276,7 @@ pub fn clear_column_filter(
     write_stored_filter(&filters_map, &mut txn, filter_id, &stored);
 }
 
-/// Clear all column filters (show all rows).
+/// Clear all criteria for a filter (show all rows).
 pub fn clear_all_column_filters(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, filter_id: &str) {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
@@ -295,6 +295,9 @@ pub fn clear_all_column_filters(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, 
     };
 
     stored.column_filters.clear();
+    if stored.filter_type == FilterKind::AdvancedFilter {
+        stored.advanced_filter = None;
+    }
     stored.updated_at = Some(now_millis());
 
     write_stored_filter(&filters_map, &mut txn, filter_id, &stored);

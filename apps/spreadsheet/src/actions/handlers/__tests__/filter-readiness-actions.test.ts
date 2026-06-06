@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
-import { REAPPLY_FILTERS } from '../filter';
+import { CLEAR_ALL_FILTERS, REAPPLY_FILTERS } from '../filter';
 
 function createDeps(filters: Record<string, unknown>): ActionDependencies {
   return {
@@ -85,5 +85,27 @@ describe('filter action readiness', () => {
       uniqueRecordsOnly: true,
       filterId: 'advanced-1',
     });
+  });
+
+  test('CLEAR_ALL_FILTERS clears active advanced filters from summaries', async () => {
+    const filters = {
+      listSummaries: jest.fn(async () => [
+        {
+          id: 'advanced-1',
+          filterKind: 'advancedFilter',
+          range: { startRow: 0, startCol: 0, endRow: 10, endCol: 2 },
+          activeColumnCount: 0,
+          hasActiveCriteria: true,
+          hasActiveFilter: true,
+        },
+      ]),
+      clearAllCriteria: jest.fn(async () => undefined),
+    };
+
+    const result = await CLEAR_ALL_FILTERS(createDeps(filters));
+
+    expect(result.handled).toBe(true);
+    expect(filters.listSummaries).toHaveBeenCalledTimes(1);
+    expect(filters.clearAllCriteria).toHaveBeenCalledWith('advanced-1');
   });
 });

@@ -132,7 +132,7 @@ async function toFilterSummary(
     activeColumnCount,
     hasActiveCriteria: hasActiveFilter,
     hasActiveFilter,
-    clearable: filter.type !== 'advancedFilter' && hasActiveFilter,
+    clearable: hasActiveFilter,
     detailsReady: true,
     capability,
     unsupportedReasons,

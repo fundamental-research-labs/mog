@@ -59,8 +59,7 @@ function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo
     const activeColumnCount = filter.activeColumnCount ?? 0;
     const hasActiveFilter =
       filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
-    const clearable =
-      filter.clearable ?? (filter.filterKind !== 'advancedFilter' && hasActiveFilter);
+    const clearable = filter.clearable ?? hasActiveFilter;
     if (clearable) {
       hasActiveFilters = true;
       activeFilterCount += activeColumnCount > 0 ? activeColumnCount : 1;

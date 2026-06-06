@@ -848,7 +848,7 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
     const allFilters = await ws.filters.listSummaries();
     const clearableFilters = allFilters.filter((filter) => {
       const hasActiveFilter = filter.hasActiveFilter ?? filter.hasActiveCriteria;
-      return filter.clearable ?? (filter.filterKind !== 'advancedFilter' && hasActiveFilter);
+      return filter.clearable ?? hasActiveFilter;
     });
 
     if (clearableFilters.length === 0) {

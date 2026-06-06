@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { Sparkline } from '@mog-sdk/contracts/sparklines';
+import type { Sparkline, SparklineGroup } from '@mog-sdk/contracts/sparklines';
 import { createSparklineManager } from '../sparkline-manager';
 
 const SHEET_ID = 'sheet-1' as SheetId;
@@ -23,6 +23,7 @@ function createSparkline(overrides: Partial<Sparkline> = {}): Sparkline {
 
 function createWorkbook(sparklines: {
   add?: jest.Mock;
+  updateGroup?: jest.Mock;
   getAtCell?: jest.Mock;
   list?: jest.Mock;
   listGroups?: jest.Mock;
@@ -31,6 +32,7 @@ function createWorkbook(sparklines: {
   const worksheet = {
     sparklines: {
       add: sparklines.add ?? jest.fn(),
+      updateGroup: sparklines.updateGroup ?? jest.fn(async () => undefined),
       getAtCell: sparklines.getAtCell ?? jest.fn(),
       list: sparklines.list ?? jest.fn(async () => []),
       listGroups: sparklines.listGroups ?? jest.fn(async () => []),
@@ -124,6 +126,52 @@ describe('SparklineManager', () => {
       expect.objectContaining({
         type: 'sparkline:dataChanged',
         sparklineId: sparkline.id,
+        sheetId: SHEET_ID,
+      }),
+    );
+  });
+
+  it('updates grouped sparkline settings through the worksheet group API and local cache', async () => {
+    const sparkline = createSparkline({ groupId: 'group-1' });
+    const group: SparklineGroup = {
+      id: 'group-1',
+      sheetId: SHEET_ID,
+      sparklineIds: [sparkline.id],
+      type: 'line',
+      visual: { color: '#4472C4' },
+      axis: { minValue: 'auto', maxValue: 'auto', displayEmptyCells: 'gaps' },
+      createdAt: 1,
+    };
+    const updateGroup = jest.fn(async () => undefined);
+    const { workbook } = createWorkbook({
+      list: jest.fn(async () => [sparkline]),
+      listGroups: jest.fn(async () => [group]),
+      updateGroup,
+    });
+    const eventBus = createEventBus();
+    const manager = createSparklineManager({
+      workbook: workbook as any,
+      eventBus: eventBus as any,
+      getCellValue: () => null,
+    });
+
+    await manager.hydrateSheet(SHEET_ID);
+    await manager.updateSparklineGroup('group-1', {
+      type: 'column',
+      visual: { color: '#4472C4', showMarkers: true },
+    });
+
+    expect(updateGroup).toHaveBeenCalledWith('group-1', {
+      type: 'column',
+      visual: { color: '#4472C4', showMarkers: true },
+    });
+    expect(manager.getSparklineGroup('group-1')?.type).toBe('column');
+    expect(manager.getSparkline(sparkline.id)?.type).toBe('column');
+    expect(manager.getSparkline(sparkline.id)?.visual.showMarkers).toBe(true);
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sparklineGroup:updated',
+        groupId: 'group-1',
         sheetId: SHEET_ID,
       }),
     );

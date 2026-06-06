@@ -194,10 +194,16 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
       );
     }
 
+    const updatedGroup: SparklineGroup = {
+      ...group,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+
     // Propagate updates to all member sparklines.
     const memberUpdates: Partial<Sparkline> = {};
-    if (updates.visual) memberUpdates.visual = updates.visual;
-    if (updates.axis) memberUpdates.axis = updates.axis;
+    if (updatedGroup.visual) memberUpdates.visual = updatedGroup.visual;
+    if (updatedGroup.axis) memberUpdates.axis = updatedGroup.axis;
     if (updates.type) memberUpdates.type = updates.type;
 
     await Promise.all(
@@ -205,6 +211,8 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
         this.ctx.computeBridge.updateSparkline(this.sheetId, sparklineId, memberUpdates),
       ),
     );
+
+    await this.ctx.computeBridge.addSparklineGroup(this.sheetId, updatedGroup);
   }
 
   async remove(sparklineId: string): Promise<void> {

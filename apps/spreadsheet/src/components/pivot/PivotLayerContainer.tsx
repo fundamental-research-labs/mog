@@ -62,7 +62,7 @@ export function PivotLayerContainer() {
   const activeSheetId = useActiveSheetId();
   const { pivotTables } = usePivotTables({ sheetId: activeSheetId });
   const { isReady } = useRendererStatus();
-  const { getGeometry } = useRendererActions();
+  const { getGeometry, getViewport } = useRendererActions();
   const coordinator = useCoordinator();
   const [scrollTick, setScrollTick] = useState(0);
 
@@ -72,6 +72,25 @@ export function PivotLayerContainer() {
       setScrollTick((value) => value + 1);
     });
   }, [coordinator]);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const sheetViewEvents = coordinator.renderer.getSheetView()?.events.subscribe((event) => {
+      if (
+        event.type === 'geometry-change' ||
+        event.type === 'visible-range-change' ||
+        event.type === 'scroll-position-reset' ||
+        event.type === 'zoom-change'
+      ) {
+        setScrollTick((value) => value + 1);
+      }
+    });
+
+    return () => {
+      sheetViewEvents?.dispose();
+    };
+  }, [coordinator, isReady]);
 
   useEffect(() => {
     if (!isReady || pivotTables.length === 0) return;
@@ -87,14 +106,30 @@ export function PivotLayerContainer() {
     if (!isReady || !geometry || pivotTables.length === 0) return [];
 
     const positionDimensions = geometry.getPositionDimensions();
+    const viewport = getViewport();
+    const scrollPosition = viewport?.getScrollPosition() ?? { x: 0, y: 0 };
+    const containerRect = geometry.getContainerRect();
+    const cellAreaOffset = geometry.getCellAreaOffset();
+
     return pivotTables
       .map((pivot): PivotMarker | null => {
         const bounds = renderedBoundsForPivot(pivot);
-        const anchorRect = geometry.getCellPageRect({
+        const visibleAnchorRect = geometry.getCellPageRect({
           row: bounds.startRow,
           col: bounds.startCol,
         });
-        if (!anchorRect) return null;
+        const anchorRect = visibleAnchorRect ?? {
+          x:
+            containerRect.x +
+            cellAreaOffset.x +
+            positionDimensions.getColLeft(bounds.startCol) -
+            scrollPosition.x,
+          y:
+            containerRect.y +
+            cellAreaOffset.y +
+            positionDimensions.getRowTop(bounds.startRow) -
+            scrollPosition.y,
+        };
 
         let width = 0;
         for (let col = bounds.startCol; col <= bounds.endCol; col += 1) {
@@ -121,7 +156,7 @@ export function PivotLayerContainer() {
         };
       })
       .filter((marker): marker is PivotMarker => marker != null);
-  }, [geometry, isReady, pivotTables, scrollTick]);
+  }, [geometry, getViewport, isReady, pivotTables, scrollTick]);
 
   if (markers.length === 0) {
     return null;

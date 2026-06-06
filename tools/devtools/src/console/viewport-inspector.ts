@@ -21,6 +21,37 @@ const STYLES = {
 } as const;
 
 /**
+ * Normalize devtools format readbacks to the product `CellFormat` keys while
+ * preserving compatibility aliases that existing probes use.
+ */
+export function normalizeCellFormatReadback(
+  format: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!format || typeof format !== 'object') return null;
+  const normalized = { ...format };
+
+  if ('backgroundColor' in normalized && !('fillColor' in normalized)) {
+    normalized.fillColor = normalized.backgroundColor;
+  } else if ('fillColor' in normalized && !('backgroundColor' in normalized)) {
+    normalized.backgroundColor = normalized.fillColor;
+  }
+
+  if ('horizontalAlign' in normalized && !('horizontalAlignment' in normalized)) {
+    normalized.horizontalAlignment = normalized.horizontalAlign;
+  } else if ('horizontalAlignment' in normalized && !('horizontalAlign' in normalized)) {
+    normalized.horizontalAlign = normalized.horizontalAlignment;
+  }
+
+  if ('verticalAlign' in normalized && !('verticalAlignment' in normalized)) {
+    normalized.verticalAlignment = normalized.verticalAlign;
+  } else if ('verticalAlignment' in normalized && !('verticalAlign' in normalized)) {
+    normalized.verticalAlign = normalized.verticalAlignment;
+  }
+
+  return normalized;
+}
+
+/**
  * Helper to reach the compute bridge from window.__SHELL__.
  * Returns null if shell/doc not available.
  */
@@ -286,7 +317,7 @@ export function readCellFormat(
     if (fontOverride) {
       result.fontColor = fontOverride;
     }
-    return result;
+    return normalizeCellFormatReadback(result);
   };
 
   if (viewportId) return tryRead(viewportId);
@@ -540,10 +571,10 @@ export async function readResolvedNumberFormats(
 }
 
 /**
- * Read CF-resolved displayed format properties for a batch of cells via the
- * compute bridge — production read path used by app-eval's CF capture step.
+ * Read displayed format properties for a batch of cells via the compute bridge.
  * Out-of-viewport cells are supported because `getDisplayedRangeProperties`
  * runs through Rust without depending on the rendered binary buffer.
+ * Results use the same normalized readback contract as `readCellFormat`.
  *
  * Returns a map keyed by `"row,col"`. Cells with no displayed properties
  * (e.g. no CF rule fires) are omitted.
@@ -592,8 +623,9 @@ export async function readDisplayedFormatsViaBridge(
             if (!Array.isArray(rowFmts)) continue;
             for (let ci = 0; ci < rowFmts.length; ci++) {
               const fmt = rowFmts[ci];
-              if (fmt) {
-                out[`${minRow + ri},${minCol + ci}`] = fmt;
+              const normalized = normalizeCellFormatReadback(fmt);
+              if (normalized) {
+                out[`${minRow + ri},${minCol + ci}`] = normalized;
               }
             }
           }
@@ -612,7 +644,8 @@ export async function readDisplayedFormatsViaBridge(
         if (out[key]) return;
         try {
           const fmt = await bridge.getDisplayedCellProperties(sheetId, row, col);
-          if (fmt) out[key] = fmt;
+          const normalized = normalizeCellFormatReadback(fmt);
+          if (normalized) out[key] = normalized;
         } catch {
           // best-effort
         }

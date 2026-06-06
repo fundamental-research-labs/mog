@@ -566,6 +566,41 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(formats['0,1']).toEqual({ italic: true });
   });
 
+  test('getDisplayedFormatsForCells normalizes bridge format readbacks', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100 },
+    });
+    (globalThis as any).window.__SHELL__.documentManager.getDocument = () => ({
+      context: {
+        computeBridge: {
+          getDisplayedRangeProperties: async () => [
+            [
+              {
+                backgroundColor: '#123456',
+                horizontalAlign: 'center',
+                verticalAlign: 'middle',
+              },
+            ],
+          ],
+          getDisplayedCellProperties: async () => null,
+        },
+      },
+    });
+
+    const formats = await runtime.api.getDisplayedFormatsForCells([{ row: 0, col: 0 }]);
+
+    expect(formats['0,0']).toEqual({
+      backgroundColor: '#123456',
+      fillColor: '#123456',
+      horizontalAlign: 'center',
+      horizontalAlignment: 'center',
+      verticalAlign: 'middle',
+      verticalAlignment: 'middle',
+    });
+  });
+
   test('getDisplayedFormatsForCells skips range prefetch for sparse oversized cells', async () => {
     runtime = setupRuntime({
       drawings: [],
@@ -582,6 +617,9 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
           },
           getDisplayedCellProperties: async (_sheetId: string, row: number, col: number) => {
             calls.cell++;
+            if (row === 99999) {
+              return { backgroundColor: '#abcdef', horizontalAlign: 'center' };
+            }
             return { row, col };
           },
         },
@@ -596,6 +634,11 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(calls.range).toBe(0);
     expect(calls.cell).toBe(2);
     expect(formats['0,0']).toEqual({ row: 0, col: 0 });
-    expect(formats['99999,1']).toEqual({ row: 99999, col: 1 });
+    expect(formats['99999,1']).toEqual({
+      backgroundColor: '#abcdef',
+      fillColor: '#abcdef',
+      horizontalAlign: 'center',
+      horizontalAlignment: 'center',
+    });
   });
 });

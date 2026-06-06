@@ -1239,24 +1239,7 @@ export function createConsoleAPI(
     },
 
     getCellFormat(row: number, col: number, viewportId?: string) {
-      const fmt = readCellFormat(row, col, viewportId);
-      if (fmt) {
-        // Alias fillColor ↔ backgroundColor so callers can use either name
-        if ('backgroundColor' in fmt && !('fillColor' in fmt)) {
-          fmt.fillColor = fmt.backgroundColor;
-        } else if ('fillColor' in fmt && !('backgroundColor' in fmt)) {
-          fmt.backgroundColor = fmt.fillColor;
-        }
-        // Alias horizontalAlign ↔ horizontalAlignment
-        if ('horizontalAlign' in fmt && !('horizontalAlignment' in fmt)) {
-          fmt.horizontalAlignment = fmt.horizontalAlign;
-        }
-        // Alias verticalAlign ↔ verticalAlignment
-        if ('verticalAlign' in fmt && !('verticalAlignment' in fmt)) {
-          fmt.verticalAlignment = fmt.verticalAlign;
-        }
-      }
-      return fmt;
+      return readCellFormat(row, col, viewportId);
     },
 
     hasComment(row: number, col: number, viewportId?: string): boolean {

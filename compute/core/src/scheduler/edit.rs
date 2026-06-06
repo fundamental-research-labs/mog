@@ -843,7 +843,7 @@ impl ComputeCore {
         //    Since positions changed, the A1 representation changes. Refs that
         //    pointed at deleted cells render as `#REF!` (their backing
         //    CellId / RowId / ColId is unregistered after the structural op).
-        self.regenerate_formula_strings(mirror);
+        self.regenerate_formula_strings_and_cell_formula_text(mirror);
 
         // 4. Rebuild dep graph edges.
         //    Inserting/deleting between range corners changes the range
@@ -885,12 +885,36 @@ impl ComputeCore {
         }
     }
 
-    /// Regenerate all `formula_strings` entries from CellEntry.formula IdentityFormulas.
+    /// Regenerate all rendered `formula_strings` entries from CellEntry.formula
+    /// IdentityFormulas.
     ///
     /// Walks all sheets, finds cells with IdentityFormulas, and converts them back
-    /// to A1 notation using the mirror's current position mappings. This is needed
-    /// after structural changes because positions have shifted.
+    /// to A1 notation using the mirror's current position mappings. This cache is
+    /// secondary to `cell_formula_text`: ordinary observer sync must not replace
+    /// authored formula text because rendering an IdentityFormula intentionally
+    /// drops qualifiers that are implicit for the formula's owner sheet.
     pub(crate) fn regenerate_formula_strings(&mut self, mirror: &CellMirror) {
+        self.formula_strings.clear();
+        let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+        for sheet_id in sheet_ids {
+            if let Some(sheet) = mirror.get_sheet(&sheet_id) {
+                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
+                for (cell_id, entry) in sheet.cells_iter() {
+                    if let Some(formula) = &entry.formula {
+                        let a1 = compute_parser::to_a1_string(formula, &lookup);
+                        self.formula_strings.insert(*cell_id, a1);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Regenerate rendered formula strings and replace cell formula text.
+    ///
+    /// This is intentionally narrower than `regenerate_formula_strings`: use it
+    /// only for paths that have changed formula identities/templates and whose
+    /// persisted formula text must be rewritten to match the new structure.
+    pub(crate) fn regenerate_formula_strings_and_cell_formula_text(&mut self, mirror: &CellMirror) {
         self.formula_strings.clear();
         let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {

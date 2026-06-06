@@ -850,3 +850,132 @@ fn test_copy_range_cross_sheet_preserves_explicit_target_sheet_ref_text() {
         Some("=Sheet2!A1")
     );
 }
+
+#[test]
+fn test_copy_range_cross_sheet_preserves_explicit_source_sheet_ref_after_formula_cache_refresh() {
+    let snap = WorkbookSnapshot {
+        sheets: vec![
+            SheetSnapshot {
+                id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+                name: "Sheet1".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![
+                    CellData {
+                        cell_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+                        row: 0,
+                        col: 0,
+                        value: CellValue::Number(FiniteF64::must(5.0)),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                    CellData {
+                        cell_id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
+                        row: 1,
+                        col: 0,
+                        value: CellValue::Number(FiniteF64::must(7.0)),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                    CellData {
+                        cell_id: "550e8400-e29b-41d4-a716-446655440005".to_string(),
+                        row: 0,
+                        col: 4,
+                        value: CellValue::Number(FiniteF64::must(12.0)),
+                        formula: Some("=Sheet1!A1+Sheet1!A2".to_string()),
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                ],
+                ranges: vec![],
+            },
+            SheetSnapshot {
+                id: "550e8400-e29b-41d4-a716-446655440099".to_string(),
+                name: "Sheet2".to_string(),
+                rows: 100,
+                cols: 26,
+                cells: vec![
+                    CellData {
+                        cell_id: "550e8400-e29b-41d4-a716-446655440101".to_string(),
+                        row: 0,
+                        col: 0,
+                        value: CellValue::Number(FiniteF64::must(100.0)),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                    CellData {
+                        cell_id: "550e8400-e29b-41d4-a716-446655440102".to_string(),
+                        row: 1,
+                        col: 0,
+                        value: CellValue::Number(FiniteF64::must(200.0)),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                ],
+                ranges: vec![],
+            },
+        ],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sheet1 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+    let sheet2 = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
+
+    assert_eq!(
+        formula_text_at(&engine, &sheet1, 0, 4).as_deref(),
+        Some("=Sheet1!A1+Sheet1!A2"),
+        "authored same-sheet qualifiers are part of the copy contract"
+    );
+
+    engine.with_internals_for_test(|stores, mirror, _mutation| {
+        stores.compute.regenerate_formula_strings(mirror);
+    });
+
+    assert_eq!(
+        formula_text_at(&engine, &sheet1, 0, 4).as_deref(),
+        Some("=Sheet1!A1+Sheet1!A2"),
+        "a non-structural formula-cache refresh must not collapse authored Sheet1! refs"
+    );
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sheet1,
+            src_start_row: 0,
+            src_start_col: 4,
+            src_end_row: 0,
+            src_end_col: 4,
+            target_sheet_id: sheet2,
+            target_row: 0,
+            target_col: 4,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        formula_text_at(&engine, &sheet2, 0, 4).as_deref(),
+        Some("=Sheet1!A1+Sheet1!A2"),
+        "cross-sheet copy must preserve explicitly authored source-sheet refs"
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet2, SheetPos::new(0, 4))
+            .cloned(),
+        Some(CellValue::Number(FiniteF64::must(12.0))),
+        "Sheet2!E1 should evaluate through Sheet1!A1+Sheet1!A2, not Sheet2 A1+A2"
+    );
+}

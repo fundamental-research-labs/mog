@@ -8,6 +8,7 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "workerd": {
         "types": "./dist/workerd.d.ts",
         "default": "./dist/workerd.js"
@@ -28,7 +29,6 @@
         "types": "./dist/wasm.d.ts",
         "default": "./dist/wasm.js"
       },
-      "development": "./src/index.ts",
       "default": {
         "types": "./dist/wasm.d.ts",
         "default": "./dist/wasm.js"

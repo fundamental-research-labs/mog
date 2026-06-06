@@ -3,7 +3,7 @@ use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::mutation::CellInput;
 use cell_types::{SheetId, SheetPos};
 use snapshot_types::{RecalcOptions, SheetSnapshot, WorkbookSnapshot};
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 const SHEET_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -40,6 +40,16 @@ fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
     {
         Some(CellValue::Number(n)) => n.get(),
         other => panic!("expected numeric value at ({row}, {col}), got {other:?}"),
+    }
+}
+
+fn assert_circular_error_at(engine: &YrsComputeEngine, row: u32, col: u32) {
+    match engine
+        .mirror()
+        .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
+    {
+        Some(CellValue::Error(CellError::Circ, None)) => {}
+        other => panic!("expected circular error at ({row}, {col}), got {other:?}"),
     }
 }
 
@@ -205,10 +215,8 @@ fn set_calculation_settings_marks_dirty_for_existing_circular_recalc() {
     engine
         .recalculate_with_options(&RecalcOptions::default())
         .expect("non-iterative recalc should run");
-    assert!(
-        (number_at(&engine, 0, 0) - 2.0).abs() > 0.01,
-        "test setup should leave A1 non-converged before iterative calc is enabled"
-    );
+    assert_circular_error_at(&engine, 0, 0);
+    assert_circular_error_at(&engine, 0, 1);
 
     engine
         .set_calculation_settings(CalculationSettings {

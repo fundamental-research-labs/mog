@@ -1,4 +1,5 @@
 use super::*;
+use value_types::CellError;
 
 static FULL_RECALC_WITH_OPTIONS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -50,24 +51,16 @@ fn test_circular_reference_detected() {
 
     let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
 
-    // With always-converge: A1=B1, B1=A1 is a stable tautology seeded from
-    // cached values (0.0). Both cells should be numbers, not errors.
+    // With iterative calculation disabled, circular formula cells surface
+    // explicit circular-reference errors instead of silently warm-starting.
     let a1_id = cid(0x10);
     let b1_id = cid(0x11);
 
     let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
     let b1_val = core.get_cell_value(&mirror, &b1_id).unwrap();
 
-    assert!(
-        matches!(*a1_val, CellValue::Number(_)),
-        "A1 should be a number: {:?}",
-        a1_val
-    );
-    assert!(
-        matches!(*b1_val, CellValue::Number(_)),
-        "B1 should be a number: {:?}",
-        b1_val
-    );
+    assert_eq!(*a1_val, CellValue::Error(CellError::Circ, None));
+    assert_eq!(*b1_val, CellValue::Error(CellError::Circ, None));
 
     // Circular reference diagnostics should be emitted
     let has_circular_diag = result.errors.iter().any(|e| e.error.contains("Circular"));
@@ -110,15 +103,11 @@ fn test_self_referencing_formula() {
 
     let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
 
-    // With always-converge: A1=A1+1 is divergent, caps at max_iterations.
-    // Starting from cached value 0.0, it should be a large number, not an error.
+    // With iterative calculation disabled, direct self-reference is a real
+    // circular-reference error.
     let a1_id = cid(0x10);
     let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
-    assert!(
-        matches!(*a1_val, CellValue::Number(_)),
-        "Self-reference should produce a number (divergent, capped): {:?}",
-        a1_val
-    );
+    assert_eq!(*a1_val, CellValue::Error(CellError::Circ, None));
 
     // Circular reference diagnostic should be emitted
     let has_circular_diag = result.errors.iter().any(|e| e.error.contains("Circular"));
@@ -136,11 +125,9 @@ fn test_self_referencing_formula() {
 // `wb.calculate()` dispatches through the bridge: TS `wb.calculate()` →
 // `compute_full_recalc` → `BridgeService::full_recalc` →
 // `Engine::recalculate_with_options`) rather than `ComputeCore::full_recalc`.
-// The inner `full_recalc` is NOT idempotent under single-pass cycle
-// evaluation — each call advances the cycle by one iteration because numeric
-// cells are warm-started from the previous pass, not reset to the seed.
 // Idempotency is a property of the engine wrapper, which short-circuits on a
-// clean dirty bit.
+// clean dirty bit. A second user-facing call must not re-emit the already
+// materialized circular errors.
 //
 // The invariant this test pins down:
 //
@@ -150,14 +137,6 @@ fn test_self_referencing_formula() {
 //        short-circuit fires — no work done, no new changes emitted), and
 //     2. leave mirror values for the cycle cells byte-identical to what
 //        they were after the previous `calculate()`.
-//
-// On current `origin/dev` this test FAILS: `recalculate_with_options`
-// re-arms the dirty bit whenever a recalc touches a cycle that did not
-// converge (the default non-iterative mode never converges because
-// `iterative_converged` is never set to `true` there). So the second call
-// re-enters `full_recalc`, advances the cycle one more iteration, and emits
-// a non-empty `changed_cells`. PR B removes that re-arm, after which the
-// second call short-circuits and this test passes.
 //
 // A single-cell mutation precedes the first `calculate()` to arm the dirty
 // bit — without it, `from_snapshot`'s own `clear_dirty()` at the end of
@@ -237,13 +216,19 @@ fn test_calculate_idempotent_under_cycles() {
     let a1_after_first = engine.mirror().get_cell_value(&a1_id).cloned();
     let a2_after_first = engine.mirror().get_cell_value(&a2_id).cloned();
     assert!(
-        matches!(a1_after_first, Some(CellValue::Number(_))),
-        "A1 should be a number after first recalculate, got {:?}",
+        matches!(
+            a1_after_first,
+            Some(CellValue::Error(CellError::Circ, None))
+        ),
+        "A1 should be a circular error after first recalculate, got {:?}",
         a1_after_first
     );
     assert!(
-        matches!(a2_after_first, Some(CellValue::Number(_))),
-        "A2 should be a number after first recalculate, got {:?}",
+        matches!(
+            a2_after_first,
+            Some(CellValue::Error(CellError::Circ, None))
+        ),
+        "A2 should be a circular error after first recalculate, got {:?}",
         a2_after_first
     );
 
@@ -459,10 +444,11 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
     core.init_from_snapshot(&mut mirror, self_cycle_snapshot())
         .expect("self-cycle snapshot should initialize");
     let a1 = cid(0x10);
-    let before = match core.get_cell_value(&mirror, &a1).unwrap() {
-        CellValue::Number(n) => n.get(),
-        other => panic!("A1 should start numeric after init, got {other:?}"),
-    };
+    assert_eq!(
+        *core.get_cell_value(&mirror, &a1).unwrap(),
+        CellValue::Error(CellError::Circ, None),
+        "A1 should start as a circular error with iterative calculation disabled"
+    );
 
     let result = core
         .full_recalc_with_options(
@@ -482,7 +468,7 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
     assert!(result.metrics.has_circular_refs);
     assert_eq!(result.metrics.iterative_iterations, 4);
     assert!(!result.metrics.iterative_converged);
-    assert_eq!(after - before, 4.0);
+    assert_eq!(after, 4.0);
     assert!(!core.iterative_calc());
     assert_eq!(core.max_iterations(), 100);
     assert_eq!(core.max_change(), 0.001);

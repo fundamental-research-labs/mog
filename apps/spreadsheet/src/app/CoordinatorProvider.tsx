@@ -735,6 +735,7 @@ export function SpreadsheetCoordinatorProvider({
           () => {
             void workbook
               .setIterativeCalculation(true)
+              .then(() => workbook.calculate())
               .then(() => {
                 onEnableIterative();
               })

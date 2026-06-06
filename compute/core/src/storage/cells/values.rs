@@ -378,13 +378,15 @@ fn dispatch_cell_input(
         CellInput::Value {
             value: CellValue::Text(text),
         } => {
-            let (cid, cv) =
-                yrs_store_text(txn, sheets, sheet_hex, cells_map, grid_index, row, col, &text);
+            let (cid, cv) = yrs_store_text(
+                txn, sheets, sheet_hex, cells_map, grid_index, row, col, &text,
+            );
             MirrorAction::Apply(cid, cv)
         }
         CellInput::Value { value } => {
-            let (cid, cv) =
-                yrs_store_typed(txn, sheets, sheet_hex, cells_map, grid_index, row, col, value);
+            let (cid, cv) = yrs_store_typed(
+                txn, sheets, sheet_hex, cells_map, grid_index, row, col, value,
+            );
             MirrorAction::Apply(cid, cv)
         }
         CellInput::Parse { text } => match CellWrite::from_user_string(&text, target) {

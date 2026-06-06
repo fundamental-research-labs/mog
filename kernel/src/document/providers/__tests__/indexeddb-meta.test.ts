@@ -14,7 +14,7 @@
 import 'fake-indexeddb/auto';
 
 import { clearMeta, forgetDoc, readMeta, touchDoc } from '../indexeddb-meta';
-import { deleteDatabase } from '../indexeddb-schema';
+import { deleteDatabase, META_STORE, openDb } from '../indexeddb-schema';
 
 describe('Meta API — indexeddb-meta.ts', () => {
   beforeEach(async () => {
@@ -91,6 +91,37 @@ describe('Meta API — indexeddb-meta.ts', () => {
       const ids = new Set(meta.recentDocs.map((r) => r.docId));
       expect(ids.has('doc-59')).toBe(true);
       expect(ids.has('doc-50')).toBe(true);
+    });
+
+    it('preserves the previous lastActiveDocId when trimming a full list', async () => {
+      const now = Date.now();
+      const db = await openDb();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(META_STORE, 'readwrite');
+        const store = tx.objectStore(META_STORE);
+        store.put(
+          Array.from({ length: 50 }, (_, i) => ({
+            docId: `doc-${String(49 - i).padStart(3, '0')}`,
+            lastTouchedAt: now - i,
+          })),
+          'recentDocs',
+        );
+        store.put('doc-000', 'lastActiveDocId');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+      db.close();
+
+      await touchDoc('doc-new');
+
+      const meta = await readMeta();
+      const ids = meta.recentDocs.map((entry) => entry.docId);
+      expect(ids).toHaveLength(50);
+      expect(ids[0]).toBe('doc-new');
+      expect(ids).toContain('doc-000');
+      expect(ids).not.toContain('doc-001');
+      expect(meta.lastActiveDocId).toBe('doc-new');
     });
   });
 

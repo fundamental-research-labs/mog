@@ -56,12 +56,12 @@ export class ViewportCoordinatorRegistry {
   private _hydrationDeficit = false;
 
   /**
-   * Callback invoked when a coordinator registers AFTER one or more
-   * patches were dropped (`_hydrationDeficit === true`). Wired by the
-   * owning ComputeCore to call `fetchManager.forceRefreshAllViewports()`,
-   * which re-fetches full viewport binaries from Rust for every registered
-   * coordinator — picking up the engine state the dropped patches would
-   * have delivered.
+   * Callback invoked when one or more patches are dropped
+   * (`_hydrationDeficit === true`) and there is a registered coordinator
+   * that can be backfilled. Wired by the owning ComputeCore to call
+   * `fetchManager.forceRefreshAllViewports()`, which re-fetches full
+   * viewport binaries from Rust for every registered coordinator — picking
+   * up the engine state the dropped patches would have delivered.
    *
    * Optional because the registry is also used in standalone unit tests
    * where no fetch backend exists; in that mode the deficit flag is set
@@ -140,16 +140,8 @@ export class ViewportCoordinatorRegistry {
     //
     // Only on a brand-new coordinator — re-registering the same viewportId
     // doesn't represent a new "first paint" the dropped patches must cover.
-    if (isNew && this._hydrationDeficit && this._onHydrationDeficitHandler) {
-      this._hydrationDeficit = false;
-      try {
-        this._onHydrationDeficitHandler();
-      } catch (err) {
-        // Recovery path failure should never block coordinator registration
-        // — the renderer's own subsequent refresh will re-fetch anyway. Log
-        // and continue.
-        console.error('[ViewportCoordinatorRegistry] hydration-deficit handler threw:', err);
-      }
+    if (isNew && this._hydrationDeficit) {
+      this._triggerHydrationDeficitHandler();
     }
 
     return coordinator;
@@ -176,6 +168,19 @@ export class ViewportCoordinatorRegistry {
    */
   markHydrationDeficit(): void {
     this._hydrationDeficit = true;
+  }
+
+  private _triggerHydrationDeficitHandler(): void {
+    if (!this._onHydrationDeficitHandler) return;
+    this._hydrationDeficit = false;
+    try {
+      this._onHydrationDeficitHandler();
+    } catch (err) {
+      // Recovery path failure should never block coordinator registration or
+      // mutation processing — the renderer's own subsequent refresh can still
+      // recover. Log and continue.
+      console.error('[ViewportCoordinatorRegistry] hydration-deficit handler threw:', err);
+    }
   }
 
   /**
@@ -276,17 +281,20 @@ export class ViewportCoordinatorRegistry {
         }
       } else {
         // Patch dropped — the engine state advanced past the viewport
-        // buffer. Most common cause: `Provider.attach()` replayed
-        // persisted bytes via `bridge-provider-doc.applyUpdate →
-        // ComputeBridge.syncApply` BEFORE the renderer mounted any
-        // coordinators. Mark the deficit so the next coordinator-register
-        // can fire `forceRefreshAllViewports` and backfill from Rust.
+        // buffer. This can happen before a coordinator exists at all
+        // (provider replay before renderer mount), or after the coordinator
+        // exists but before its first full viewport fetch commits. Mark the
+        // deficit; when a coordinator already exists, fire the recovery
+        // immediately because there may be no later register event.
         //
         // Patches with patchLen === 0 are not "dropped data" — they're
         // empty notifications. Don't arm the deficit in that case (avoids
         // an unnecessary force-refresh on every mount).
         if (patchLen > 0) {
           this._hydrationDeficit = true;
+          if (coordinator) {
+            this._triggerHydrationDeficitHandler();
+          }
         }
       }
     }

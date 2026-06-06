@@ -563,14 +563,28 @@ function parseTableRange(range: string): CellRange | null {
   }
 }
 
-async function removeTablesContainedByRange(ws: Worksheet, range: CellRange): Promise<void> {
+async function removeTablesContainedByRange(
+  ws: Worksheet,
+  range: CellRange,
+): Promise<{ removedAnyTable: boolean; removedExactRange: boolean }> {
   const tables = await ws.tables.list();
+  let removedAnyTable = false;
+  let removedExactRange = false;
   for (const table of tables) {
     const tableRange = parseTableRange(table.range);
-    if (tableRange && (rangesEqual(tableRange, range) || rangeContainsRange(range, tableRange))) {
+    if (!tableRange) {
+      continue;
+    }
+    if (rangesEqual(tableRange, range)) {
       await ws.tables.remove(table.name);
+      removedAnyTable = true;
+      removedExactRange = true;
+    } else if (rangeContainsRange(range, tableRange)) {
+      await ws.tables.remove(table.name);
+      removedAnyTable = true;
     }
   }
+  return { removedAnyTable, removedExactRange };
 }
 
 /**
@@ -825,9 +839,14 @@ export const CLEAR_AND_EDIT: AsyncActionHandler = async (deps) => {
   if (isMultiCell) {
     const ws = getWorksheet(deps, sheetId);
     let cleared = true;
+    let removedAnyTable = false;
     await deps.workbook.undoGroup(async () => {
       for (const range of ranges) {
-        await removeTablesContainedByRange(ws, range);
+        const tableRemoval = await removeTablesContainedByRange(ws, range);
+        removedAnyTable ||= tableRemoval.removedAnyTable;
+        if (tableRemoval.removedExactRange) {
+          continue;
+        }
         const ok = await guardBridgeMutation(() => ws.clear(range, 'contents'));
         if (!ok) {
           cleared = false;
@@ -840,6 +859,16 @@ export const CLEAR_AND_EDIT: AsyncActionHandler = async (deps) => {
       // on a selection that overlaps a CSE block and Rust rejected it.
       return handled();
     }
+    if (removedAnyTable) {
+      return handled();
+    }
+    await beginEditSessionFromAction(deps, {
+      sheetId,
+      cell: activeCell,
+      entryMode: 'typing',
+      initialTextHint: '',
+    });
+    return handled();
   }
 
   // Then enter edit mode on the active cell. For single-cell, the active

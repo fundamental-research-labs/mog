@@ -7,8 +7,8 @@ use crate::snapshot::{
     Axis, CellPosition, CfChange, ChangeKind, CommentChange, DimensionChange, FilterChange,
     FloatingObjectChange, FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult,
     NamedRangeChange, PivotTableChange, PropertyChange, RecalcResult, SheetChange,
-    SheetChangeField, SheetSettingsChange, SortingChange, SparklineChange, TableChange,
-    VisibilityChange, WorkbookSettingsChange,
+    SheetChangeField, SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType,
+    SortingChange, SparklineChange, TableChange, VisibilityChange, WorkbookSettingsChange,
 };
 use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::engine::settings::EngineSettings;
@@ -19,11 +19,47 @@ use crate::storage::sheet::{
 use crate::storage::workbook;
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::observe::{CellChangeKind, DocumentChanges};
+use yrs::{Map, Transact};
 
 use super::super::{
     observer_kind_to_change_kind, resolve_col_id_to_index, resolve_row_id_to_index,
 };
 use super::sheet_hydration::build_sheet_hydration_changes;
+
+fn parse_cell_ref(cell_ref: &str) -> Option<CellId> {
+    hex_to_id(cell_ref)
+        .map(CellId::from_raw)
+        .or_else(|| CellId::from_uuid_str(cell_ref).ok())
+}
+
+fn slicer_source_metadata(
+    source: &domain_types::domain::slicer::SlicerSource,
+) -> (SlicerSourceType, String) {
+    match source {
+        domain_types::domain::slicer::SlicerSource::Table { table_id, .. } => {
+            (SlicerSourceType::Table, table_id.clone())
+        }
+        domain_types::domain::slicer::SlicerSource::Pivot { pivot_id, .. } => {
+            (SlicerSourceType::Pivot, pivot_id.clone())
+        }
+    }
+}
+
+fn current_slicer_state(
+    stores: &EngineStores,
+    slicer_id: &str,
+) -> Option<domain_types::domain::slicer::StoredSlicer> {
+    let txn = stores.storage.doc().transact();
+    let workbook = stores.storage.workbook_map();
+    let slicers_map = match workbook.get(&txn, compute_document::schema::KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return None,
+    };
+    match slicers_map.get(&txn, slicer_id) {
+        Some(yrs::Out::YMap(map)) => domain_types::yrs_schema::slicer::from_yrs_map(&map, &txn),
+        _ => None,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // build_mutation_result_from_changes
@@ -274,9 +310,8 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     for cch in &changes.comments {
         let sheet_id_str = cch.sheet_id.to_uuid_string();
         let kind = observer_kind_to_change_kind(cch.kind);
-        let cell_id = hex_to_id(&cch.key)
-            .map(CellId::from_raw)
-            .unwrap_or_else(|| CellId::from_raw(0));
+        let cell_ref = cch.cell_ref.as_deref().unwrap_or(&cch.key);
+        let cell_id = parse_cell_ref(cell_ref).unwrap_or_else(|| CellId::from_raw(0));
         let position = stores
             .grid_indexes
             .get(&cch.sheet_id)
@@ -285,9 +320,40 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
 
         result.comment_changes.push(CommentChange {
             sheet_id: sheet_id_str,
-            cell_id: cch.key.clone(),
+            cell_id: cell_ref.to_string(),
             position,
             kind,
+        });
+    }
+
+    // --- Slicer changes ---
+    for sch in &changes.slicers {
+        let data = current_slicer_state(stores, &sch.slicer_id).or_else(|| sch.data.clone());
+        let sheet_id = sch
+            .sheet_id
+            .map(|sid| sid.to_uuid_string())
+            .or_else(|| data.as_ref().map(|slicer| slicer.sheet_id.clone()))
+            .unwrap_or_default();
+        let (source_type, source_id) = data
+            .as_ref()
+            .map(|slicer| slicer_source_metadata(&slicer.source))
+            .map_or((None, None), |(source_type, source_id)| {
+                (Some(source_type), Some(source_id))
+            });
+
+        result.slicer_changes.push(SlicerChange {
+            sheet_id,
+            slicer_id: sch.slicer_id.clone(),
+            kind: match sch.kind {
+                CellChangeKind::Modified => SlicerChangeKind::Updated,
+                CellChangeKind::Removed => SlicerChangeKind::Deleted,
+            },
+            source_type,
+            source_id,
+            updated_fields: Vec::new(),
+            selected_values: None,
+            selection_change_type: None,
+            data,
         });
     }
 

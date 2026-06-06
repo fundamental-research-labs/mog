@@ -947,6 +947,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const activeCell = selection.snapshot.activeCell;
             const edge = getSelectionBorderEdge({ x, y }, selectionViewportRect);
             const lastBorderClick = lastSelectionBorderClickRef.current;
+            const doubleClickBorderTolerance = e.pointerType === 'touch' ? 5 : 1;
             const isDoubleClick =
               lastBorderClick !== null &&
               lastBorderClick.row === activeCell.row &&
@@ -955,28 +956,32 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               lastBorderClick.edge === edge &&
               now - lastBorderClick.time < clickWindow;
 
-            lastSelectionBorderClickRef.current = {
-              row: activeCell.row,
-              col: activeCell.col,
-              sheetId: activeSheetId,
-              edge,
-              time: now,
-            };
-
             if (isDoubleClick) {
               lastSelectionBorderClickRef.current = null;
-              nativeHandledSelectionBorderDoubleClickRef.current = {
+              if (
+                isOnSelectionBorder({ x, y }, selectionViewportRect, doubleClickBorderTolerance)
+              ) {
+                nativeHandledSelectionBorderDoubleClickRef.current = {
+                  sheetId: activeSheetId,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                  time: now,
+                };
+                handleSelectionBorderDoubleClick(edge);
+                return;
+              }
+            } else {
+              lastSelectionBorderClickRef.current = {
+                row: activeCell.row,
+                col: activeCell.col,
                 sheetId: activeSheetId,
-                clientX: e.clientX,
-                clientY: e.clientY,
+                edge,
                 time: now,
               };
-              handleSelectionBorderDoubleClick(edge);
+
+              coordinator.grid.handleStartDragCells(activeCell, false);
               return;
             }
-
-            coordinator.grid.handleStartDragCells(activeCell, false);
-            return;
           }
         }
 
@@ -2019,10 +2024,11 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const lastRangeRect = lastRange ? geometry.getRangeRects(lastRange)[0] : null;
             const firstRange = selection.ranges[0];
             const firstRangeRect = firstRange ? geometry.getRangeRects(firstRange)[0] : null;
-            const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
+            const doubleClickBorderTolerance = e.pointerType === 'touch' ? 5 : 1;
             const isReservedSelectionGesture =
               (lastRangeRect && isOnFillHandle(point, lastRangeRect)) ||
-              (firstRangeRect && isOnSelectionBorder(point, firstRangeRect, borderTolerance));
+              (firstRangeRect &&
+                isOnSelectionBorder(point, firstRangeRect, doubleClickBorderTolerance));
 
             if (
               !isReservedSelectionGesture &&

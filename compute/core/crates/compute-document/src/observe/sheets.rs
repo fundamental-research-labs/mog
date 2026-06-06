@@ -18,6 +18,24 @@ use super::helpers::{
     any_to_cell_value, entry_change_kind, extract_old_value_from_entry, extract_sheet_id,
 };
 
+fn comment_cell_ref_from_out(out: &Out, txn: &TransactionMut) -> Option<String> {
+    match out {
+        Out::YMap(map) => domain_types::yrs_schema::comment::from_yrs_map(map, txn)
+            .map(|comment| comment.cell_ref),
+        _ => None,
+    }
+}
+
+fn comment_cell_ref_from_change(change: &EntryChange, txn: &TransactionMut) -> Option<String> {
+    match change {
+        EntryChange::Inserted(new) => comment_cell_ref_from_out(new, txn),
+        EntryChange::Updated(old, new) => {
+            comment_cell_ref_from_out(new, txn).or_else(|| comment_cell_ref_from_out(old, txn))
+        }
+        EntryChange::Removed(old) => comment_cell_ref_from_out(old, txn),
+    }
+}
+
 pub(super) fn observe_sheets_events(
     buffer: &mut DocumentChanges,
     txn: &TransactionMut,
@@ -227,6 +245,7 @@ pub(super) fn observe_sheets_events(
                                 buffer.comments.push(CommentCellChange {
                                     sheet_id,
                                     key: key.to_string(),
+                                    cell_ref: comment_cell_ref_from_change(change, txn),
                                     kind: entry_change_kind(change),
                                 });
                             }
@@ -236,6 +255,7 @@ pub(super) fn observe_sheets_events(
                             buffer.comments.push(CommentCellChange {
                                 sheet_id,
                                 key: k.to_string(),
+                                cell_ref: None,
                                 kind: CellChangeKind::Modified,
                             });
                         }

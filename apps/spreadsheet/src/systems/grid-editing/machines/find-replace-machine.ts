@@ -421,8 +421,8 @@ export const findReplaceMachine = setup({
     /** Check if results are stale */
     isStale: ({ context }) => context.resultsStale,
 
-    /** Check if we can replace (has results and replacement text) */
-    canReplace: ({ context }) => context.results.length > 0 && context.currentIndex >= 0,
+    /** Check if we can replace */
+    canReplace: ({ context }) => context.results.length > 0,
   },
 }).createMachine({
   id: 'findReplace',

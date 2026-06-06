@@ -7,6 +7,7 @@ use crate::schema::{
     KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PROPERTIES, KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_SORTING,
     KEY_SPARKLINES,
 };
+use domain_types::yrs_schema::comment as comment_schema;
 use std::sync::Arc;
 use yrs::Any;
 
@@ -216,6 +217,43 @@ fn test_comment_change() {
     assert_eq!(changes.comments.len(), 1);
     assert_eq!(changes.comments[0].sheet_id, sheet_id);
     assert_eq!(cell_hex, changes.comments[0].key);
+}
+
+#[test]
+fn test_structured_comment_change_carries_cell_ref() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(1);
+    let sheet_hex = add_sheet(&doc, &sheets, sheet_id);
+    add_sub_map(&doc, &sheets, &sheet_hex, KEY_COMMENTS);
+
+    let observer = new_observer(&sheets, &workbook);
+
+    let cell_hex = id_to_hex(make_cell_id(6101).as_u128());
+    insert_sub_map_map_entry(
+        &doc,
+        &sheets,
+        &sheet_hex,
+        KEY_COMMENTS,
+        "comment-1",
+        &[
+            (comment_schema::KEY_ID, Any::String(Arc::from("comment-1"))),
+            (
+                comment_schema::KEY_CELL_REF,
+                Any::String(Arc::from(cell_hex.as_str())),
+            ),
+            (comment_schema::KEY_AUTHOR, Any::String(Arc::from("Alice"))),
+        ],
+    );
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.comments.len(), 1);
+    assert_eq!(changes.comments[0].sheet_id, sheet_id);
+    assert_eq!(changes.comments[0].key, "comment-1");
+    assert_eq!(
+        changes.comments[0].cell_ref.as_deref(),
+        Some(cell_hex.as_str())
+    );
+    assert_eq!(changes.comments[0].kind, CellChangeKind::Modified);
 }
 
 #[test]

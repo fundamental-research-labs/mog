@@ -134,3 +134,22 @@ fn slicer_crud_and_selection_emit_mutation_result_changes() {
         Some("slicer-1")
     );
 }
+
+#[test]
+fn undo_slicer_creation_emits_deleted_change() {
+    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .create_slicer(&sid, table_slicer("slicer-1"))
+        .expect("create slicer");
+
+    let (_patches, undo_result) = engine.undo().expect("undo create slicer");
+
+    assert_eq!(undo_result.slicer_changes.len(), 1);
+    let change = &undo_result.slicer_changes[0];
+    assert_eq!(change.kind, SlicerChangeKind::Deleted);
+    assert_eq!(change.slicer_id, "slicer-1");
+    assert_eq!(change.source_type, Some(SlicerSourceType::Table));
+    assert_eq!(change.source_id.as_deref(), Some("table-1"));
+}

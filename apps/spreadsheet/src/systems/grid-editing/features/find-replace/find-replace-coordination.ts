@@ -461,13 +461,14 @@ export class FindReplaceCoordinator {
 
     const state = this.deps.findReplaceActor.getSnapshot();
     const { results, replacement, query, options } = state.context;
+    const targetIndex = currentIndex >= 0 ? currentIndex : 0;
 
-    if (currentIndex < 0 || currentIndex >= results.length) {
+    if (targetIndex < 0 || targetIndex >= results.length) {
       this.deps.findReplaceActor.send({ type: 'REPLACE_COMPLETE', success: false });
       return;
     }
 
-    const result = results[currentIndex];
+    const result = results[targetIndex];
     // Resolve from cache first (O(1)), fallback to deps
     const cached = this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId);
     const position = cached

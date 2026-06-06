@@ -682,6 +682,35 @@ describe('MutationResultHandler.applyAndNotify', () => {
 // Mutation Event Pipeline Tests
 // =============================================================================
 
+describe('MutationResultHandler — comment events', () => {
+  it('emits comment invalidation for set and removed comment changes', () => {
+    const eventBus = createMockEventBus();
+    const handler = new MutationResultHandler(eventBus);
+
+    const result = buildMutationResult({
+      commentChanges: [
+        {
+          sheetId: 'sheet-1',
+          cellId: 'cell-1',
+          kind: 'Set',
+        },
+        {
+          sheetId: 'sheet-1',
+          cellId: 'cell-1',
+          kind: 'Removed',
+        },
+      ],
+    } as Partial<MutationResult>);
+
+    handler.applyAndNotify(result);
+
+    expect(eventBus.emittedEvents.map((event) => event.type)).toEqual([
+      'comments:cleared',
+      'comments:cleared',
+    ]);
+  });
+});
+
 describe('MutationResultHandler — slicer events', () => {
   it('emits slicer lifecycle events from slicerChanges', () => {
     const eventBus = createMockEventBus();

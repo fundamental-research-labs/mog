@@ -68,8 +68,11 @@ pub struct VisibilityCellChange {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentCellChange {
     pub sheet_id: SheetId,
-    /// The cell hex key for the comment.
+    /// The comment map key. Legacy rows used the cell hex key here; runtime
+    /// comment rows are keyed by comment ID and carry the cell identity in
+    /// `cell_ref`.
     pub key: String,
+    pub cell_ref: Option<String>,
     pub kind: CellChangeKind,
 }
 
@@ -106,6 +109,15 @@ pub struct TableCellChange {
     /// The table key/ID.
     pub key: String,
     pub kind: CellChangeKind,
+}
+
+/// A slicer change (workbook-level).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlicerCellChange {
+    pub slicer_id: String,
+    pub sheet_id: Option<SheetId>,
+    pub kind: CellChangeKind,
+    pub data: Option<domain_types::domain::slicer::StoredSlicer>,
 }
 
 /// A sheet metadata change (name, visibility, order).
@@ -205,6 +217,8 @@ pub struct DocumentChanges {
     pub pivot_tables: Vec<PivotCellChange>,
     /// Table changes (workbook-level).
     pub tables: Vec<TableCellChange>,
+    /// Slicer changes (workbook-level).
+    pub slicers: Vec<SlicerCellChange>,
     /// Sheet metadata changes (name, visibility, order).
     pub sheet_meta: Vec<SheetMetaChange>,
     /// Row format changes.
@@ -258,6 +272,7 @@ impl DocumentChanges {
             && self.floating_objects.is_empty()
             && self.pivot_tables.is_empty()
             && self.tables.is_empty()
+            && self.slicers.is_empty()
             && self.sheet_meta.is_empty()
             && self.row_formats.is_empty()
             && self.col_formats.is_empty()
@@ -290,6 +305,7 @@ impl DocumentChanges {
             || !self.floating_objects.is_empty()
             || !self.pivot_tables.is_empty()
             || !self.tables.is_empty()
+            || !self.slicers.is_empty()
             || !self.sheet_meta.is_empty()
             || !self.row_formats.is_empty()
             || !self.col_formats.is_empty()

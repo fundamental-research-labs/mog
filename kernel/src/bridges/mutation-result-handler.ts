@@ -1016,14 +1016,12 @@ export class MutationResultHandler {
     // Simplified notification: subscribers can query Rust for full data.
     const timestamp = Date.now();
     for (const change of changes) {
-      if (change.kind === 'Set') {
-        this.eventBus.emit({
-          type: 'comments:cleared', // Reuse as a "comments changed" signal
-          timestamp,
-          sheetId: change.sheetId,
-          source: source === 'user' ? 'user' : 'remote',
-        });
-      }
+      this.eventBus.emit({
+        type: 'comments:cleared', // Reuse as a "comments changed" signal
+        timestamp,
+        sheetId: change.sheetId,
+        source: source === 'user' ? 'user' : 'remote',
+      });
     }
   }
 

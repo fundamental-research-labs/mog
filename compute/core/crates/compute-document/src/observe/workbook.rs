@@ -1,14 +1,76 @@
-use yrs::TransactionMut;
-use yrs::types::{Event, Events, PathSegment};
+use yrs::types::{EntryChange, Event, Events, PathSegment};
+use yrs::{Map, Out, ReadTxn, TransactionMut};
 
 use cell_types::SheetId;
 
 use crate::schema::{
-    KEY_NAMED_RANGES, KEY_RANGE_BINDINGS, KEY_SHEET_ORDER, KEY_TABLES, KEY_WORKBOOK_SETTINGS,
+    KEY_NAMED_RANGES, KEY_RANGE_BINDINGS, KEY_SHEET_ORDER, KEY_SLICERS, KEY_TABLES,
+    KEY_WORKBOOK_SETTINGS,
 };
 
 use super::changes::*;
 use super::helpers::entry_change_kind;
+
+fn parse_slicer_sheet_id(sheet_id: &str) -> Option<SheetId> {
+    SheetId::from_uuid_str(sheet_id).ok()
+}
+
+fn slicer_from_out<T: ReadTxn>(
+    out: &Out,
+    txn: &T,
+) -> Option<domain_types::domain::slicer::StoredSlicer> {
+    match out {
+        Out::YMap(map) => domain_types::yrs_schema::slicer::from_yrs_map(map, txn),
+        _ => None,
+    }
+}
+
+fn sheet_id_from_slicer(slicer: &domain_types::domain::slicer::StoredSlicer) -> Option<SheetId> {
+    parse_slicer_sheet_id(&slicer.sheet_id)
+}
+
+fn slicer_change_from_entry<T: ReadTxn>(
+    slicer_id: &str,
+    change: &EntryChange,
+    txn: &T,
+) -> SlicerCellChange {
+    let data = match change {
+        EntryChange::Inserted(new) => slicer_from_out(new, txn),
+        EntryChange::Updated(old, new) => {
+            slicer_from_out(new, txn).or_else(|| slicer_from_out(old, txn))
+        }
+        EntryChange::Removed(old) => slicer_from_out(old, txn),
+    };
+    SlicerCellChange {
+        slicer_id: slicer_id.to_string(),
+        sheet_id: data.as_ref().and_then(sheet_id_from_slicer),
+        kind: entry_change_kind(change),
+        data,
+    }
+}
+
+fn push_slicer_submap_changes<T: ReadTxn>(
+    buffer: &mut DocumentChanges,
+    change: &EntryChange,
+    txn: &T,
+) {
+    let out = match change {
+        EntryChange::Inserted(new) => new,
+        EntryChange::Updated(_, new) => new,
+        EntryChange::Removed(old) => old,
+    };
+    if let Out::YMap(map) = out {
+        for (slicer_id, value) in map.iter(txn) {
+            let data = slicer_from_out(&value, txn);
+            buffer.slicers.push(SlicerCellChange {
+                slicer_id: slicer_id.to_string(),
+                sheet_id: data.as_ref().and_then(sheet_id_from_slicer),
+                kind: entry_change_kind(change),
+                data,
+            });
+        }
+    }
+}
 
 pub(super) fn observe_workbook_events(
     buffer: &mut DocumentChanges,
@@ -65,11 +127,12 @@ pub(super) fn observe_workbook_events(
                         k if k == KEY_WORKBOOK_SETTINGS => {
                             buffer.workbook_settings_changed = true;
                         }
+                        k if k == KEY_SLICERS => {
+                            push_slicer_submap_changes(buffer, change, txn);
+                        }
                         _ => {
-                            // Other workbook sub-maps (slicers, etc.)
-                            // don't currently have a mirror-sync pipeline keyed on
-                            // observer changes. They're either read on-demand from
-                            // yrs or driven by direct mutation paths.
+                            // Other workbook sub-maps are either read on-demand
+                            // from yrs or driven by direct mutation paths.
                         }
                     }
                 }
@@ -148,6 +211,27 @@ pub(super) fn observe_workbook_events(
                 // --- workbookSettings ---
                 k if k == KEY_WORKBOOK_SETTINGS => {
                     buffer.workbook_settings_changed = true;
+                }
+
+                // --- slicers ---
+                k if k == KEY_SLICERS => {
+                    if path.len() == 1 {
+                        let keys = map_event.keys(txn);
+                        for (key, change) in keys {
+                            buffer
+                                .slicers
+                                .push(slicer_change_from_entry(&key, change, txn));
+                        }
+                    } else if path.len() == 2
+                        && let Some(PathSegment::Key(k)) = path.get(1)
+                    {
+                        buffer.slicers.push(SlicerCellChange {
+                            slicer_id: k.to_string(),
+                            sheet_id: None,
+                            kind: CellChangeKind::Modified,
+                            data: None,
+                        });
+                    }
                 }
 
                 // --- Unknown workbook sub-maps ---

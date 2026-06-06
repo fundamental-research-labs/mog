@@ -320,6 +320,8 @@ export function FormulaBar({
             ref={setInputRef as React.Ref<HTMLTextAreaElement>}
             value={value}
             size="ribbon"
+            data-testid="formula-bar-input"
+            aria-label="Formula bar"
             readOnly={readOnly}
             onChange={readOnly ? undefined : handleTextareaChange}
             onKeyDown={readOnly ? undefined : handleKeyDown}
@@ -355,6 +357,8 @@ export function FormulaBar({
             type="text"
             value={value}
             size="ribbon"
+            data-testid="formula-bar-input"
+            aria-label="Formula bar"
             readOnly={readOnly}
             onChange={readOnly ? undefined : handleChange}
             onKeyDown={readOnly ? undefined : handleKeyDown}

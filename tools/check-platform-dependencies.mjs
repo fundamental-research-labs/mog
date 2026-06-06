@@ -269,12 +269,13 @@ function scan() {
   return occurrences;
 }
 
-function exactOccurrenceKey(entry) {
-  return `${entry.path}\0${entry.ruleId}\0${entry.line}\0${entry.column}\0${entry.match}`;
-}
-
 function stableOccurrenceKey(entry) {
   return `${entry.path}\0${entry.ruleId}\0${entry.match}`;
+}
+
+function stableKeyParts(key) {
+  const [path, ruleId, match] = key.split('\0');
+  return { path, ruleId, match };
 }
 
 function sortOccurrences(entries) {
@@ -286,6 +287,38 @@ function sortOccurrences(entries) {
       a.ruleId.localeCompare(b.ruleId) ||
       a.match.localeCompare(b.match),
   );
+}
+
+function sortGroups(entries) {
+  return [...entries].sort(
+    (a, b) =>
+      a.path.localeCompare(b.path) ||
+      a.ruleId.localeCompare(b.ruleId) ||
+      a.match.localeCompare(b.match),
+  );
+}
+
+function defaultOwnerMetadata() {
+  return {
+    'local-elapsed-budget-owner': {
+      reason: 'Existing elapsed-time/profiling occurrence pending owner-specific clock migration.',
+      migrationPlan:
+        'Route through a local monotonic clock owned by the scheduler, parser, solver, or UI runtime.',
+    },
+    'platform-contract-migration': {
+      reason: 'Existing direct platform dependency captured by the platform dependency inventory.',
+      migrationPlan: 'Replace with the semantic owner contract named by the platform facts matrix.',
+    },
+    'target-mechanics-owner': {
+      reason: 'Existing target-specific mechanics occurrence pending review.',
+      migrationPlan:
+        'Keep only at binding/local compatibility boundaries; remove from domain logic.',
+    },
+    'test-dev-only': {
+      reason: 'Test or development-only platform dependency occurrence.',
+      migrationPlan: 'Keep outside production contract or remove when the test no longer needs it.',
+    },
+  };
 }
 
 function defaultMetadata(entry) {
@@ -319,6 +352,30 @@ function defaultMetadata(entry) {
   };
 }
 
+function effectiveMetadata(entry, ownerDefaults) {
+  const ownerDefault = ownerDefaults[entry.owner] ?? {};
+  return {
+    owner: entry.owner,
+    reason: entry.reason ?? ownerDefault.reason,
+    migrationPlan: entry.migrationPlan ?? ownerDefault.migrationPlan,
+  };
+}
+
+function metadataOverrideFields(metadata, ownerDefaults) {
+  const ownerDefault = ownerDefaults[metadata.owner];
+  if (
+    ownerDefault &&
+    ownerDefault.reason === metadata.reason &&
+    ownerDefault.migrationPlan === metadata.migrationPlan
+  ) {
+    return {};
+  }
+  return {
+    reason: metadata.reason,
+    migrationPlan: metadata.migrationPlan,
+  };
+}
+
 function occurrenceBucketsByStableKey(entries) {
   const buckets = new Map();
   for (const entry of sortOccurrences(entries)) {
@@ -333,82 +390,108 @@ function occurrenceBucketsByStableKey(entries) {
   return buckets;
 }
 
-function occurrenceCountsByStableKey(entries) {
-  const counts = new Map();
-  for (const entry of entries) {
-    const key = stableOccurrenceKey(entry);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function takeExistingMetadataEntry(existingByStableKey, currentEntry) {
-  const bucket = existingByStableKey.get(stableOccurrenceKey(currentEntry));
-  if (!bucket || bucket.length === 0) return null;
-
-  const exactKey = exactOccurrenceKey(currentEntry);
-  const exactIndex = bucket.findIndex((entry) => exactOccurrenceKey(entry) === exactKey);
-  if (exactIndex >= 0) {
-    return bucket.splice(exactIndex, 1)[0];
-  }
-  return bucket.shift();
-}
-
-function existingAllowlistEntries() {
-  if (!existsSync(ALLOWLIST_PATH)) return [];
-  const existing = loadJsonc(ALLOWLIST_PATH);
-  return existing.allowlist ?? [];
-}
-
-function migrateLegacyBaseline(current) {
-  if (!existsSync(ALLOWLIST_PATH)) return new Map();
-  const existing = loadJsonc(ALLOWLIST_PATH);
-  const baseline = existing.baseline ?? {};
-  const legacy = new Map();
-  const remainingByRule = new Map(
-    Object.entries(baseline).flatMap(([path, byRule]) =>
-      Object.entries(byRule).map(([ruleId, count]) => [`${path}\0${ruleId}`, count]),
-    ),
+function groupsFromOccurrences(occurrences, ownerDefaults) {
+  return sortGroups(
+    [...occurrenceBucketsByStableKey(occurrences).entries()].map(([key, entries]) => {
+      const representative = entries[0];
+      const metadata = representative.owner
+        ? effectiveMetadata(representative, ownerDefaults)
+        : defaultMetadata(representative);
+      return {
+        ...stableKeyParts(key),
+        category: representative.category,
+        allowedCount: entries.length,
+        ...metadata,
+      };
+    }),
   );
-  for (const entry of current) {
-    const key = `${entry.path}\0${entry.ruleId}`;
-    const remaining = remainingByRule.get(key) ?? 0;
-    if (remaining > 0) {
-      legacy.set(exactOccurrenceKey(entry), {
-        ...entry,
-        ...defaultMetadata(entry),
-      });
-      remainingByRule.set(key, remaining - 1);
-    }
+}
+
+function normalizeAllowlistGroups(payload) {
+  const ownerDefaults = payload.ownerDefaults ?? defaultOwnerMetadata();
+  const entries = payload.allowlist;
+  if (!Array.isArray(entries)) return { ownerDefaults, groups: null };
+
+  if (entries.every((entry) => typeof entry.allowedCount === 'number')) {
+    return {
+      ownerDefaults,
+      groups: sortGroups(
+        entries.map((entry) => ({
+          path: entry.path,
+          ruleId: entry.ruleId,
+          category: entry.category,
+          match: entry.match,
+          allowedCount: entry.allowedCount,
+          ...effectiveMetadata(entry, ownerDefaults),
+        })),
+      ),
+    };
   }
-  return legacy;
+
+  return {
+    ownerDefaults,
+    groups: groupsFromOccurrences(entries, ownerDefaults),
+  };
+}
+
+function existingAllowlistGroups() {
+  if (!existsSync(ALLOWLIST_PATH)) return { ownerDefaults: defaultOwnerMetadata(), groups: [] };
+  const existing = loadJsonc(ALLOWLIST_PATH);
+  const normalized = normalizeAllowlistGroups(existing);
+  return {
+    ownerDefaults: normalized.ownerDefaults,
+    groups: normalized.groups ?? [],
+  };
+}
+
+function compactGroupForOutput(group, ownerDefaults) {
+  const metadata = {
+    owner: group.owner,
+    reason: group.reason,
+    migrationPlan: group.migrationPlan,
+  };
+  return {
+    path: group.path,
+    ruleId: group.ruleId,
+    category: group.category,
+    match: group.match,
+    allowedCount: group.allowedCount,
+    owner: group.owner,
+    ...metadataOverrideFields(metadata, ownerDefaults),
+  };
 }
 
 function writeAllowlist(current) {
-  const existingEntries = existingAllowlistEntries();
-  const existingByStableKey = occurrenceBucketsByStableKey(existingEntries);
-  const legacyByKey = existingEntries.length === 0 ? migrateLegacyBaseline(current) : new Map();
-  const allowlist = sortOccurrences(
-    current.map((entry) => {
-      const existing =
-        takeExistingMetadataEntry(existingByStableKey, entry) ??
-        legacyByKey.get(exactOccurrenceKey(entry));
-      return {
-        ...entry,
-        ...(existing
+  const ownerDefaults = defaultOwnerMetadata();
+  const existing = existingAllowlistGroups();
+  const existingByStableKey = new Map(
+    existing.groups.map((entry) => [stableOccurrenceKey(entry), entry]),
+  );
+  const allowlist = sortGroups(
+    groupsFromOccurrences(current, ownerDefaults).map((group) => {
+      const existingGroup = existingByStableKey.get(stableOccurrenceKey(group));
+      const metadata =
+        existingGroup && ownerDefaults[existingGroup.owner]
           ? {
-              owner: existing.owner,
-              reason: existing.reason,
-              migrationPlan: existing.migrationPlan,
+              owner: existingGroup.owner,
+              ...ownerDefaults[existingGroup.owner],
             }
-          : defaultMetadata(entry)),
-      };
+          : existingGroup
+            ? effectiveMetadata(existingGroup, existing.ownerDefaults)
+            : defaultMetadata(group);
+      return compactGroupForOutput(
+        {
+          ...group,
+          ...metadata,
+        },
+        ownerDefaults,
+      );
     }),
   );
   const payload = {
     $schema: './platform-dependency-allowlist.schema.json',
     description:
-      'Occurrence-level baseline for direct platform dependency usage. Run `pnpm check:platform-dependencies -- --update` after deliberately reducing or reclassifying debt.',
+      'Grouped count baseline for direct platform dependency usage. Run `pnpm check:platform-dependencies -- --update` after deliberately reducing or reclassifying debt.',
     rules: Object.fromEntries(
       RULES.map((rule) => [
         rule.id,
@@ -418,16 +501,16 @@ function writeAllowlist(current) {
         },
       ]),
     ),
+    ownerDefaults,
     allowlist,
   };
   const header = [
     '// Baseline for tools/check-platform-dependencies.mjs.',
-    '// Entries are per matched occurrence. New direct platform dependency',
-    '// occurrences are enforced by stable file/rule/match counts so line',
-    '// movement does not create false positives.',
+    '// Entries are grouped by stable file/rule/match counts. Exact',
+    '// line/column locations are generated by the scanner at runtime.',
     '',
   ].join('\n');
-  writeFileSync(ALLOWLIST_PATH, header + JSON.stringify(payload, null, 2) + '\n');
+  writeFileSync(ALLOWLIST_PATH, header + formatAllowlistPayload(payload) + '\n');
 }
 
 function formatOccurrence(entry) {
@@ -442,19 +525,51 @@ function countOccurrences(groups) {
   return groups.reduce((total, group) => total + group.entries.length - group.allowedCount, 0);
 }
 
+function countReductions(groups) {
+  return groups.reduce((total, group) => total + group.group.allowedCount - group.currentCount, 0);
+}
+
+function formatGroup(group) {
+  return `${group.path} ${group.ruleId} ${JSON.stringify(group.match)}`;
+}
+
+function formatAllowlistPayload(payload) {
+  const lines = [];
+  lines.push('{');
+  lines.push(`  "$schema": ${JSON.stringify(payload.$schema)},`);
+  lines.push(`  "description": ${JSON.stringify(payload.description)},`);
+  lines.push(`  "rules": ${indentJson(payload.rules, 2)},`);
+  lines.push(`  "ownerDefaults": ${indentJson(payload.ownerDefaults, 2)},`);
+  lines.push('  "allowlist": [');
+  payload.allowlist.forEach((entry, index) => {
+    const suffix = index === payload.allowlist.length - 1 ? '' : ',';
+    lines.push(`    ${JSON.stringify(entry)}${suffix}`);
+  });
+  lines.push('  ]');
+  lines.push('}');
+  return lines.join('\n');
+}
+
+function indentJson(value, spaces) {
+  const indent = ' '.repeat(spaces);
+  return JSON.stringify(value, null, 2).replace(/\n/g, `\n${indent}`);
+}
+
 const current = sortOccurrences(scan());
 
 if (UPDATE_MODE || !existsSync(ALLOWLIST_PATH)) {
   writeAllowlist(current);
-  console.log(`Updated ${relative(ROOT, ALLOWLIST_PATH)} with ${current.length} occurrences.`);
+  const groupCount = groupsFromOccurrences(current, defaultOwnerMetadata()).length;
+  console.log(
+    `Updated ${relative(ROOT, ALLOWLIST_PATH)} with ${groupCount} grouped baseline entries for ${current.length} occurrences.`,
+  );
   process.exit(0);
 }
 
 const allowlist = loadJsonc(ALLOWLIST_PATH);
-if (!Array.isArray(allowlist.allowlist)) {
-  console.error(
-    'FAIL: platform dependency allowlist must use occurrence-level `allowlist` entries.',
-  );
+const normalizedAllowlist = normalizeAllowlistGroups(allowlist);
+if (!normalizedAllowlist.groups) {
+  console.error('FAIL: platform dependency allowlist must use grouped `allowlist` entries.');
   console.error('Rebaseline with: pnpm check:platform-dependencies -- --update');
   process.exit(1);
 }
@@ -463,29 +578,36 @@ const failureGroups = [];
 const reductionGroups = [];
 const metadataFailures = [];
 const currentByStableKey = occurrenceBucketsByStableKey(current);
-const allowedByStableKey = occurrenceBucketsByStableKey(allowlist.allowlist);
-const currentCountsByStableKey = occurrenceCountsByStableKey(current);
-const allowedCountsByStableKey = occurrenceCountsByStableKey(allowlist.allowlist);
+const allowedGroupsByStableKey = new Map(
+  normalizedAllowlist.groups.map((entry) => [stableOccurrenceKey(entry), entry]),
+);
 
 for (const [key, entries] of currentByStableKey) {
-  const allowedCount = allowedCountsByStableKey.get(key) ?? 0;
+  const allowedCount = allowedGroupsByStableKey.get(key)?.allowedCount ?? 0;
   if (entries.length > allowedCount) {
     failureGroups.push({ entries, allowedCount });
   }
 }
 
-for (const [key, entries] of allowedByStableKey) {
-  const currentCount = currentCountsByStableKey.get(key) ?? 0;
-  if (entries.length > currentCount) {
-    reductionGroups.push({ entries, allowedCount: currentCount });
+for (const [key, group] of allowedGroupsByStableKey) {
+  const currentCount = currentByStableKey.get(key)?.length ?? 0;
+  if (group.allowedCount > currentCount) {
+    reductionGroups.push({ group, currentCount });
   }
 }
 
-for (const entry of allowlist.allowlist) {
+for (const entry of normalizedAllowlist.groups) {
   for (const field of ['owner', 'reason', 'migrationPlan']) {
-    if (typeof entry[field] !== 'string' || entry[field].trim() === '' || entry[field] === 'TODO') {
-      metadataFailures.push(`${formatOccurrence(entry)} missing ${field}`);
+    if (
+      typeof entry[field] !== 'string' ||
+      entry[field].trim() === '' ||
+      entry[field] === 'TODO'
+    ) {
+      metadataFailures.push(`${formatGroup(entry)} missing ${field}`);
     }
+  }
+  if (!Number.isInteger(entry.allowedCount) || entry.allowedCount < 0) {
+    metadataFailures.push(`${formatGroup(entry)} has invalid allowedCount`);
   }
 }
 
@@ -532,25 +654,17 @@ if (metadataFailures.length > 0) {
 }
 
 if (reductionGroups.length > 0) {
-  const reductionCount = countOccurrences(reductionGroups);
+  const reductionCount = countReductions(reductionGroups);
   console.log('Platform dependency debt decreased; consider rebaselining:');
   console.log(
     `Detected ${reductionCount} removed occurrences across ${reductionGroups.length} stable groups.`,
   );
   for (const group of reductionGroups.slice(0, 20)) {
-    const representative = group.entries[0];
-    const removedEntries = group.entries.slice(group.allowedCount);
     console.log(
-      `  - ${representative.path} ${representative.ruleId} ${JSON.stringify(
-        representative.match,
-      )}: baseline ${group.entries.length}, found ${group.allowedCount}, removed ${removedEntries.length}`,
+      `  - ${formatGroup(group.group)}: baseline ${group.group.allowedCount}, found ${group.currentCount}, removed ${
+        group.group.allowedCount - group.currentCount
+      }`,
     );
-    for (const entry of removedEntries.slice(0, 3)) {
-      console.log(`      baseline at ${formatOccurrenceLocation(entry)}`);
-    }
-    if (removedEntries.length > 3) {
-      console.log(`      ... ${removedEntries.length - 3} more baseline locations in this group`);
-    }
   }
   if (reductionGroups.length > 20) {
     console.log(`  ... ${reductionGroups.length - 20} more groups`);

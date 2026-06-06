@@ -687,7 +687,8 @@ export interface CellInfo {
 export type CellInput =
   | { kind: "clear" }
   | { kind: "literal" } & CellInput_literal
-  | { kind: "parse" } & CellInput_parse;
+  | { kind: "parse" } & CellInput_parse
+  | { kind: "value" } & CellInput_value;
 
 export interface CellInput_literal {
   text: string;
@@ -695,6 +696,10 @@ export interface CellInput_literal {
 
 export interface CellInput_parse {
   text: string;
+}
+
+export interface CellInput_value {
+  value: CellValue;
 }
 
 export interface CellMergeInfo {

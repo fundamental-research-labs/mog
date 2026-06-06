@@ -27,15 +27,28 @@ describe('toCellInput', () => {
     expect(toCellInput('hello')).toEqual({ kind: 'parse', text: 'hello' });
   });
 
-  it('number → parse', () => {
-    expect(toCellInput(42)).toEqual({ kind: 'parse', text: '42' });
-    expect(toCellInput(0)).toEqual({ kind: 'parse', text: '0' });
-    expect(toCellInput(-3.14)).toEqual({ kind: 'parse', text: '-3.14' });
+  it('finite number → value', () => {
+    expect(toCellInput(42)).toEqual({ kind: 'value', value: 42 });
+    expect(toCellInput(0)).toEqual({ kind: 'value', value: 0 });
+    expect(toCellInput(-3.14)).toEqual({ kind: 'value', value: -3.14 });
   });
 
-  it('boolean → parse', () => {
-    expect(toCellInput(true)).toEqual({ kind: 'parse', text: 'true' });
-    expect(toCellInput(false)).toEqual({ kind: 'parse', text: 'false' });
+  it('non-finite number → parse compatibility path', () => {
+    expect(toCellInput(Number.NaN)).toEqual({ kind: 'parse', text: 'NaN' });
+    expect(toCellInput(Number.POSITIVE_INFINITY)).toEqual({
+      kind: 'parse',
+      text: 'Infinity',
+    });
+  });
+
+  it('boolean → value', () => {
+    expect(toCellInput(true)).toEqual({ kind: 'value', value: true });
+    expect(toCellInput(false)).toEqual({ kind: 'value', value: false });
+  });
+
+  it('CellError → value', () => {
+    const error = { type: 'error' as const, value: 'Div0' as const };
+    expect(toCellInput(error)).toEqual({ kind: 'value', value: error });
   });
 
   it('formula passes through to parse unchanged', () => {

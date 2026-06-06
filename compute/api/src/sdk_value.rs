@@ -2,15 +2,16 @@
 //!
 //! `SdkValue` bridges dynamically-typed SDK inputs (e.g. Python `None`, `int`,
 //! `str`) into the typed `CellInput` enum. The `to_cell_input()` method
-//! produces a `CellInput` that carries semantic intent (Clear, Literal, Parse)
-//! across the SDK↔engine boundary — no in-band sentinels.
+//! produces a `CellInput` that carries semantic intent (Clear, Literal, Parse,
+//! Value) across the SDK↔engine boundary — no in-band sentinels.
 
 use compute_core::bridge_types::CellInput;
+use value_types::CellValue;
 
 /// Value type for SDK inputs (Python, JavaScript, etc.).
 ///
 /// Normalizes dynamically-typed values into a typed `CellInput` for the
-/// engine's parsed-input path.
+/// engine's cell-write path.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SdkValue {
     /// No value (Python `None`, JS `null`/`undefined`).
@@ -27,15 +28,19 @@ impl SdkValue {
     /// Convert to the typed `CellInput` expected by the engine.
     ///
     /// - `Null` → `CellInput::Clear`
-    /// - `Bool` → `Parse("TRUE")` / `Parse("FALSE")`
-    /// - `Number` → `Parse(int_or_float_string)`
+    /// - `Bool` → `Value(Boolean)`
+    /// - finite `Number` → `Value(Number)`
+    /// - non-finite `Number` → `Parse(non_finite_string)` for compatibility
     /// - `Text("")` → `Literal("")` (preserves empty-string vs. clear distinction)
     /// - `Text(s)` → `Parse(s)` (Excel-like parsing of formulas/numbers/text)
     pub fn to_cell_input(&self) -> CellInput {
         match self {
             SdkValue::Null => CellInput::Clear,
-            SdkValue::Bool(b) => CellInput::Parse {
-                text: if *b { "TRUE".into() } else { "FALSE".into() },
+            SdkValue::Bool(b) => CellInput::Value {
+                value: CellValue::Boolean(*b),
+            },
+            SdkValue::Number(n) if n.is_finite() => CellInput::Value {
+                value: CellValue::from(*n),
             },
             SdkValue::Number(n) => {
                 let text = if *n == (*n as i64) as f64 && n.is_finite() {
@@ -116,49 +121,55 @@ mod tests {
     }
 
     #[test]
-    fn bool_to_parse_uppercase() {
+    fn bool_to_typed_value() {
         assert_eq!(
             SdkValue::Bool(true).to_cell_input(),
-            CellInput::Parse {
-                text: "TRUE".into()
+            CellInput::Value {
+                value: CellValue::Boolean(true)
             }
         );
         assert_eq!(
             SdkValue::Bool(false).to_cell_input(),
-            CellInput::Parse {
-                text: "FALSE".into()
+            CellInput::Value {
+                value: CellValue::Boolean(false)
             }
         );
     }
 
     #[test]
-    fn integer_number_no_decimal() {
+    fn integer_number_to_typed_value() {
         assert_eq!(
             SdkValue::Number(42.0).to_cell_input(),
-            CellInput::Parse { text: "42".into() }
+            CellInput::Value {
+                value: CellValue::from(42.0)
+            }
         );
         assert_eq!(
             SdkValue::Number(-7.0).to_cell_input(),
-            CellInput::Parse { text: "-7".into() }
+            CellInput::Value {
+                value: CellValue::from(-7.0)
+            }
         );
         assert_eq!(
             SdkValue::Number(0.0).to_cell_input(),
-            CellInput::Parse { text: "0".into() }
+            CellInput::Value {
+                value: CellValue::from(0.0)
+            }
         );
     }
 
     #[test]
-    fn float_number_keeps_decimal() {
+    fn float_number_to_typed_value() {
         assert_eq!(
             SdkValue::Number(3.14).to_cell_input(),
-            CellInput::Parse {
-                text: "3.14".into()
+            CellInput::Value {
+                value: CellValue::from(3.14)
             }
         );
         assert_eq!(
             SdkValue::Number(-0.5).to_cell_input(),
-            CellInput::Parse {
-                text: "-0.5".into()
+            CellInput::Value {
+                value: CellValue::from(-0.5)
             }
         );
     }

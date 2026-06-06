@@ -108,7 +108,10 @@ impl ComputeCore {
         }
 
         match input {
-            CellInput::Clear => {
+            CellInput::Clear
+            | CellInput::Value {
+                value: CellValue::Null,
+            } => {
                 // Clear the cell
                 mirror.apply_edit(
                     sheet_id,
@@ -129,6 +132,18 @@ impl ComputeCore {
                 // Store the exact text — no coercion, no trimming, no formula parsing.
                 let value = CellValue::Text(text.clone().into());
                 mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                self.clear_formula_deps(mirror, cell_id);
+            }
+            CellInput::Value { value } => {
+                // Store the already-typed value verbatim. This is the same
+                // lossless path as process_value_input's value arm.
+                mirror.apply_edit(
+                    sheet_id,
+                    cell_id,
+                    SheetPos::new(row, col),
+                    value.clone(),
+                    None,
+                );
                 self.clear_formula_deps(mirror, cell_id);
             }
             CellInput::Parse { text } => {

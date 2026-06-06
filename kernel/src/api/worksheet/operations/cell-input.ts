@@ -8,7 +8,8 @@
  * do something sensible. Programmatic / app callers that want full intent
  * fidelity (e.g. "store empty text verbatim") should skip this helper and
  * build `CellInput` directly — the shape at the boundary is
- * `{ kind: 'clear' } | { kind: 'literal', text } | { kind: 'parse', text }`.
+ * `{ kind: 'clear' } | { kind: 'literal', text } | { kind: 'parse', text } |
+ * { kind: 'value', value }`.
  *
  * # Semantics
  *
@@ -19,8 +20,10 @@
  * - `''` (empty string)        → `{ kind: 'clear' }` — Excel convention: an
  *   empty textbox clears the cell. Callers who want the rare "store empty
  *   text" intent must pass `{ kind: 'literal', text: '' }` explicitly.
- * - any other string / number / boolean → `{ kind: 'parse', text: String(value) }`
- * - `CellError`-shaped object  → `{ kind: 'parse', text: error display string }`
+ * - any other string           → `{ kind: 'parse', text: value }`
+ * - finite number / boolean    → `{ kind: 'value', value }`
+ * - non-finite number          → `{ kind: 'parse', text: String(value) }`
+ * - `CellError`-shaped object  → `{ kind: 'value', value }`
  *
  * This replaces the legacy `\x00`-prefix sentinel that the SDK used to
  * smuggle "store empty text" through a plain `String` at the engine
@@ -30,7 +33,7 @@
 
 import type { CellInput } from '../../../bridges/compute/compute-types.gen';
 import type { CellValue, CellValuePrimitive } from './types';
-import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
+import { isCellError } from '@mog/spreadsheet-utils/errors';
 
 export type { CellInput } from '../../../bridges/compute/compute-types.gen';
 
@@ -54,10 +57,18 @@ export function toCellInput(value: ToCellInputValue): CellInput {
   }
   if (typeof value === 'object') {
     if (isCellError(value)) {
-      return { kind: 'parse', text: errorDisplayString(value.value) };
+      return { kind: 'value', value };
     }
     return { kind: 'parse', text: String(value) };
   }
-  const text = String(value);
-  return { kind: 'parse', text };
+  if (typeof value === 'number') {
+    if (Number.isFinite(value)) {
+      return { kind: 'value', value };
+    }
+    return { kind: 'parse', text: String(value) };
+  }
+  if (typeof value === 'boolean') {
+    return { kind: 'value', value };
+  }
+  return { kind: 'parse', text: value };
 }

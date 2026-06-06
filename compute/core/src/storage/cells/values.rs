@@ -346,7 +346,7 @@ enum MirrorAction {
 /// `target` is the cell's effective number-format category, pre-computed
 /// by the caller *before* opening the write transaction (so the cascade
 /// helpers — which open their own read txn — don't conflict with the
-/// active write txn). `Literal` and `Clear` arms ignore the hint by
+/// active write txn). `Literal`, `Value`, and `Clear` arms ignore the hint by
 /// construction.
 #[allow(clippy::too_many_arguments)]
 fn dispatch_cell_input(
@@ -369,6 +369,22 @@ fn dispatch_cell_input(
             let (cid, cv) = yrs_store_text(
                 txn, sheets, sheet_hex, cells_map, grid_index, row, col, &text,
             );
+            MirrorAction::Apply(cid, cv)
+        }
+        CellInput::Value {
+            value: CellValue::Null,
+        } => yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col)
+            .map_or(MirrorAction::None, MirrorAction::Remove),
+        CellInput::Value {
+            value: CellValue::Text(text),
+        } => {
+            let (cid, cv) =
+                yrs_store_text(txn, sheets, sheet_hex, cells_map, grid_index, row, col, &text);
+            MirrorAction::Apply(cid, cv)
+        }
+        CellInput::Value { value } => {
+            let (cid, cv) =
+                yrs_store_typed(txn, sheets, sheet_hex, cells_map, grid_index, row, col, value);
             MirrorAction::Apply(cid, cv)
         }
         CellInput::Parse { text } => match CellWrite::from_user_string(&text, target) {
@@ -516,6 +532,8 @@ fn apply_mirror_action(
 /// - [`CellInput::Clear`] → remove the cell (no-op if absent).
 /// - [`CellInput::Literal`] → store the text verbatim. Empty text stores
 ///   `Text("")`, which is structurally distinct from `Clear`.
+/// - [`CellInput::Value`] → store an already-typed value verbatim. No
+///   parser, formula detection, or format-aware coercion.
 /// - [`CellInput::Parse`] → classify via
 ///   [`CellWrite::from_user_string`] (with the cell's effective number
 ///   format as a hint) and dispatch to the matching leaf.

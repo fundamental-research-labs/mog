@@ -29,26 +29,23 @@ pub(in crate::storage::engine) fn mutation_set_cells_by_position(
     let mut resolved: Vec<(SheetId, CellId, u32, u32, CellInput)> = Vec::with_capacity(edits.len());
 
     for (sheet_id, row, col, input) in edits {
-        match &input {
-            CellInput::Clear => {
-                // Clear cell — only process if cell exists (no CellId allocation for no-ops).
-                // Use mirror-aware lookup so Range-resident virtual CellIds are found.
-                if let Some(cell_id) = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                    stores, mirror, &sheet_id, row, col,
-                ) {
-                    resolved.push((sheet_id, cell_id, row, col, input));
-                }
-            }
-            CellInput::Literal { .. } | CellInput::Parse { .. } => {
-                // Set cell value — allocate a CellId if needed.
-                // Use mirror-aware lookup so Range-resident positions get
-                // their deterministic virtual CellId instead of a random one.
-                let cell_id = super::super::super::cell_editing::find_cell_id_at_mirrored(
-                    stores, mirror, &sheet_id, row, col,
-                )
-                .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
+        if input.is_clear_intent() {
+            // Clear cell — only process if cell exists (no CellId allocation for no-ops).
+            // Use mirror-aware lookup so Range-resident virtual CellIds are found.
+            if let Some(cell_id) = super::super::super::cell_editing::find_cell_id_at_mirrored(
+                stores, mirror, &sheet_id, row, col,
+            ) {
                 resolved.push((sheet_id, cell_id, row, col, input));
             }
+        } else {
+            // Set cell value — allocate a CellId if needed.
+            // Use mirror-aware lookup so Range-resident positions get
+            // their deterministic virtual CellId instead of a random one.
+            let cell_id = super::super::super::cell_editing::find_cell_id_at_mirrored(
+                stores, mirror, &sheet_id, row, col,
+            )
+            .unwrap_or_else(|| stores.grid_id_alloc.next_cell_id());
+            resolved.push((sheet_id, cell_id, row, col, input));
         }
     }
 

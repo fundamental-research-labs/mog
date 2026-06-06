@@ -48,11 +48,14 @@ pub(super) enum RegionGuardOutcome {
 /// | `Clear` (CSE non-anchor member)        | Reject as `PartialArrayWrite`             |
 /// | `Literal { text }` (any CSE cell)      | Reject as `PartialArrayWrite`             |
 /// | `Parse  { text }`  (any CSE cell)      | Reject as `PartialArrayWrite`             |
+/// | `Value  { value }` (any CSE cell)      | Reject as `PartialArrayWrite` unless Null anchor-clear |
 /// | `Clear` (Data Table any cell)          | Reject as `PartialArrayWrite`             |
 /// | `Literal { text }` (Data Table master) | Reject as `PartialArrayWrite`             |
 /// | `Parse  { text }`  (Data Table master) | Reject as `PartialArrayWrite`             |
+/// | `Value  { value }` (Data Table master) | Reject as `PartialArrayWrite`             |
 /// | `Literal { text }` (Data Table body)   | Reject as `PartialArrayWrite`             |
 /// | `Parse  { text }`  (Data Table body)   | Reject as `PartialArrayWrite`             |
+/// | `Value  { value }` (Data Table body)   | Reject as `PartialArrayWrite`             |
 ///
 /// Excel parity: pressing Delete on a **single** cell of a CSE
 /// rectangle (anchor or member) is rejected — "You cannot change part
@@ -83,24 +86,20 @@ pub(super) fn check_region_partial_write(
     //    array." In batch paths the anchor is processed first (row-
     //    order), so by the time members are checked the CSE is gone.
     if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, row, col) {
-        match input {
-            CellInput::Clear if anchor_id == cell_id => {
-                // Anchor-Clear: tear down the array and proceed.
-                mirror.unmark_cse_anchor(&anchor_id);
-                mirror.cse_single_cell.remove(&anchor_id);
-                return Ok(RegionGuardOutcome::Continue);
-            }
-            // Member-Clear, Literal, Parse: reject.
-            _ => {
-                return Err(ComputeError::PartialArrayWrite {
-                    sheet_id: sheet_id.to_uuid_string(),
-                    row,
-                    col,
-                    anchor_row: anchor_pos.row(),
-                    anchor_col: anchor_pos.col(),
-                });
-            }
+        if input.is_clear_intent() && anchor_id == cell_id {
+            // Anchor-Clear: tear down the array and proceed.
+            mirror.unmark_cse_anchor(&anchor_id);
+            mirror.cse_single_cell.remove(&anchor_id);
+            return Ok(RegionGuardOutcome::Continue);
         }
+        // Member-Clear, Literal, Parse, non-null Value: reject.
+        return Err(ComputeError::PartialArrayWrite {
+            sheet_id: sheet_id.to_uuid_string(),
+            row,
+            col,
+            anchor_row: anchor_pos.row(),
+            anchor_col: anchor_pos.col(),
+        });
     }
 
     // 2. Data Table region check — same conceptual guard. Members of a
@@ -147,7 +146,7 @@ impl ComputeCore {
     ) -> Result<(), ComputeError> {
         let anchors_being_cleared: std::collections::HashSet<CellId> = edits
             .iter()
-            .filter(|(_, _, _, _, input)| matches!(input, CellInput::Clear))
+            .filter(|(_, _, _, _, input)| input.is_clear_intent())
             .filter_map(|(sheet_id, cell_id, row, col, _)| {
                 mirror
                     .cse_anchor_covering(sheet_id, *row, *col)
@@ -159,28 +158,16 @@ impl ComputeCore {
         for (sheet_id, cell_id, row, col, input) in edits {
             if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, *row, *col)
             {
-                match input {
-                    CellInput::Literal { .. } | CellInput::Parse { .. } => {
-                        return Err(ComputeError::PartialArrayWrite {
-                            sheet_id: sheet_id.to_uuid_string(),
-                            row: *row,
-                            col: *col,
-                            anchor_row: anchor_pos.row(),
-                            anchor_col: anchor_pos.col(),
-                        });
-                    }
-                    CellInput::Clear
-                        if *cell_id != anchor_id && !anchors_being_cleared.contains(&anchor_id) =>
-                    {
-                        return Err(ComputeError::PartialArrayWrite {
-                            sheet_id: sheet_id.to_uuid_string(),
-                            row: *row,
-                            col: *col,
-                            anchor_row: anchor_pos.row(),
-                            anchor_col: anchor_pos.col(),
-                        });
-                    }
-                    _ => {}
+                if !input.is_clear_intent()
+                    || (*cell_id != anchor_id && !anchors_being_cleared.contains(&anchor_id))
+                {
+                    return Err(ComputeError::PartialArrayWrite {
+                        sheet_id: sheet_id.to_uuid_string(),
+                        row: *row,
+                        col: *col,
+                        anchor_row: anchor_pos.row(),
+                        anchor_col: anchor_pos.col(),
+                    });
                 }
             }
 

@@ -121,8 +121,8 @@ describe('setRange', () => {
     // value goes through `toCellInput` — no \x00 sentinel.
     expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
       { row: 0, col: 0, input: { kind: 'parse', text: 'hello' } },
-      { row: 0, col: 1, input: { kind: 'parse', text: '42' } },
-      { row: 1, col: 0, input: { kind: 'parse', text: 'true' } },
+      { row: 0, col: 1, input: { kind: 'value', value: 42 } },
+      { row: 1, col: 0, input: { kind: 'value', value: true } },
       { row: 1, col: 1, input: { kind: 'clear' } },
     ]);
   });

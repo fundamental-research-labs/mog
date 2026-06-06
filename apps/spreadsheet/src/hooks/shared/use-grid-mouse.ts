@@ -35,6 +35,10 @@ import {
   getAutofitColumnsForResize,
   getAutofitRowsForResize,
 } from '../../systems/grid-editing/features/autofit/selection-targets';
+import {
+  resolveSelectionBorderDoubleClickTarget,
+  type SelectionBorderEdge,
+} from '../grid-mouse/helpers/selection-border-double-click';
 import { useEditorActions } from '../editing/use-editor-actions';
 import { useObjectInteraction } from '../objects/use-object-interaction';
 import { useSelection } from '../selection/use-selection';
@@ -68,7 +72,6 @@ export type {
 // Helpers
 // =============================================================================
 
-type SelectionBorderEdge = 'left' | 'right' | 'up' | 'down';
 type RangeSelectionDragMode = 'cell' | 'row' | 'column';
 
 interface NativeHandledCellDoubleClick {
@@ -137,15 +140,6 @@ function getSelectionBorderEdge(
   if (min === dL) return 'left';
   if (min === dT) return 'up';
   return 'down';
-}
-
-function getSelectionBorderDoubleClickTarget(
-  edge: SelectionBorderEdge,
-  activeCell: { row: number; col: number },
-): { row: number; col: number } | null {
-  if (edge === 'left') return { row: activeCell.row, col: 0 };
-  if (edge === 'up') return { row: 0, col: activeCell.col };
-  return null;
 }
 
 function singleCellRange(cell: { row: number; col: number }): CellRange {
@@ -660,17 +654,15 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   );
 
   const handleSelectionBorderDoubleClick = useCallback(
-    (edge: SelectionBorderEdge): void => {
+    async (edge: SelectionBorderEdge): Promise<void> => {
       const activeCell = selection.snapshot.activeCell;
-      const targetCell = getSelectionBorderDoubleClickTarget(edge, activeCell);
-
-      if (!targetCell) {
-        return;
-      }
+      const ws = wb.getSheetById(activeSheetId);
+      const targetCell = await resolveSelectionBorderDoubleClickTarget(ws, activeCell, edge);
+      if (!targetCell) return;
 
       selection.setSelection([singleCellRange(targetCell)], targetCell);
     },
-    [selection],
+    [activeSheetId, selection, wb],
   );
 
   const applyPendingFormatPainterTarget = useCallback(() => {
@@ -967,7 +959,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                   clientY: e.clientY,
                   time: now,
                 };
-                handleSelectionBorderDoubleClick(edge);
+                await handleSelectionBorderDoubleClick(edge);
                 return;
               }
             } else {
@@ -1886,14 +1878,14 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         }
       }
 
-      // Double-click selection border uses the mouse-border contract: left/top
-      // jump to sheet start on the same row/column; right/bottom are no-ops.
+      // Double-click selection border uses Excel data-edge navigation while
+      // preserving empty-region right/bottom no-op behavior.
       if (selection.ranges.length > 0 && geometry) {
         const firstRange = selection.ranges[0];
         const selRect = geometry.getRangeRects(firstRange)[0];
 
         if (selRect && isOnSelectionBorder({ x, y }, selRect, 2)) {
-          handleSelectionBorderDoubleClick(getSelectionBorderEdge({ x, y }, selRect));
+          await handleSelectionBorderDoubleClick(getSelectionBorderEdge({ x, y }, selRect));
           return;
         }
       }

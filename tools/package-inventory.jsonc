@@ -240,6 +240,7 @@
       "./context-menu": { "disposition": "public-experimental" },
       "./data": { "disposition": "public-experimental" },
       "./data/charts": { "disposition": "public-experimental" },
+      "./data/diagnostics": { "disposition": "public-experimental" },
       "./utils": { "disposition": "public-experimental" },
       "./utils/function-registry": { "disposition": "public-experimental" },
       "./utils/a1": { "disposition": "public-experimental" },

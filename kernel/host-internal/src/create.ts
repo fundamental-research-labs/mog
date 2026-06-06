@@ -14,6 +14,7 @@ import type { HostKernelAdapterBindings } from '@mog-sdk/types-host/bindings';
 import type { DocumentImportOptions, DocumentImportWarning } from '@mog-sdk/contracts/document';
 import {
   DocumentLifecycleSystem,
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
   _createDocumentHandleInternal,
   attachHostBootstrapCollaborationSidecar,
   documentImportWarningsFromDiagnostics,
@@ -24,8 +25,8 @@ import {
   type DocumentByteSyncPort,
   type DocumentHandle,
   type FlushableCollaborationSidecar,
+  type InteractiveDeferredImportToken,
 } from '@mog-sdk/kernel/host-lifecycle-internal';
-import { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from '@mog-sdk/kernel/internal';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
 import { prepareHostBackedDocument } from './open';
 
@@ -81,7 +82,11 @@ export interface HostBackedCollaborationDocumentResult {
 
 export interface ImportHostBackedDocumentOptions {
   readonly importOptions?: DocumentImportOptions;
-  readonly interactiveDeferredImportToken?: typeof INTERNAL_INTERACTIVE_DEFERRED_IMPORT;
+  readonly interactiveDeferredImportToken?: InteractiveDeferredImportToken;
+}
+
+export interface ImportHostBackedInteractiveDeferredDocumentOptions {
+  readonly importOptions?: DocumentImportOptions;
 }
 
 export interface ImportHostBackedDocumentResult {
@@ -332,6 +337,17 @@ export async function importHostBackedDocument(
     importWarnings,
   );
   return { handle, importWarnings };
+}
+
+export async function importHostBackedInteractiveDeferredDocument(
+  host: KernelHostContext,
+  bindings: HostKernelAdapterBindings,
+  options: ImportHostBackedInteractiveDeferredDocumentOptions = {},
+): Promise<ImportHostBackedDocumentResult> {
+  return importHostBackedDocument(host, bindings, {
+    importOptions: options.importOptions,
+    interactiveDeferredImportToken: INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -31,13 +31,19 @@ export const pasteChartFromClipboard: AsyncActionHandler = async (deps): Promise
     createdAt: _clipCreated,
     updatedAt: _clipUpdated,
     sheetId: _clipSheet,
+    leftPt: _clipLeftPt,
+    topPt: _clipTopPt,
     ...baseConfig
   } = clipboard.copiedChart.config;
+  const activeCell = deps.accessors.selection.getActiveCell();
+  const anchorRow = activeCell?.row ?? (baseConfig.anchorRow ?? 0) + 2;
+  const anchorCol = activeCell?.col ?? (baseConfig.anchorCol ?? 0) + 2;
+
   try {
     const newChart = await ws.charts.add({
       ...baseConfig,
-      anchorRow: (baseConfig.anchorRow ?? 0) + 2,
-      anchorCol: (baseConfig.anchorCol ?? 0) + 2,
+      anchorRow,
+      anchorCol,
     });
 
     if (clipboard.isCut && clipboard.cutChartId) {

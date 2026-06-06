@@ -2530,6 +2530,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
+    renameColumn: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     removeColumn: {
       decision: 'allow',
       capability: 'workbook:write',

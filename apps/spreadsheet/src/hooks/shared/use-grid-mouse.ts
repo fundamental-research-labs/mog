@@ -25,7 +25,6 @@ import { isOnFillHandle, isOnSelectionBorder, isOnTableResizeHandle } from '@mog
 import { editorSelectors } from '../../selectors';
 import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
-import type { TotalFunction } from '@mog-sdk/contracts/tables';
 import { parseA1Range } from '@mog/spreadsheet-utils/a1';
 
 import { useUIStore, useUIStoreApi, useWorkbook } from '../../infra/context';
@@ -35,6 +34,14 @@ import {
   getAutofitColumnsForResize,
   getAutofitRowsForResize,
 } from '../../systems/grid-editing/features/autofit/selection-targets';
+import {
+  getCachedTableHitRegion,
+  resolvePendingTableClickSelection,
+  getTableCornerDoubleClickRange,
+  getTableHitRegion,
+  type CachedTableHitInfo,
+  type PendingTableClickSelection,
+} from '../grid-mouse/helpers/table-click-selection';
 import {
   resolveSelectionBorderDoubleClickTarget,
   type SelectionBorderEdge,
@@ -89,29 +96,6 @@ interface NativeHandledSelectionBorderDoubleClick {
   clientY: number;
   time: number;
 }
-
-type PendingTableClickSelection =
-  | {
-      kind: 'column';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    }
-  | {
-      kind: 'table-data-or-full';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    }
-  | {
-      kind: 'row';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    };
 
 /**
  * Get mouse position relative to container.
@@ -281,111 +265,7 @@ function getRangeSelectionAnchor(currentRange: string): { row: number; col: numb
 // Table Hit Testing (inlined from domain module)
 // =============================================================================
 
-/**
- * Table regions for hit testing.
- */
-type TableRegion =
-  | 'header'
-  | 'data'
-  | 'total'
-  | 'header-left-edge'
-  | 'data-left-edge'
-  | 'total-left-edge'
-  | 'corner'
-  | 'column-resize-edge'
-  | 'outside';
-
-interface TableHitTestOptions {
-  clickXInCell: number;
-  clickYInCell: number;
-  cellWidth: number;
-  cellHeight: number;
-}
-
-interface TableHitResult {
-  table: { id: string; columns: { name: string; totalFunction?: TotalFunction }[] } | null;
-  region: TableRegion;
-  tableColumnIndex: number | null;
-}
-
-const LEFT_EDGE_WIDTH = 4;
-const CORNER_WIDTH = 6;
 const COLUMN_RESIZE_EDGE_WIDTH = 4;
-
-/**
- * Local table hit region computation using Worksheet API.
- * Local table hit region computation using Worksheet API.
- */
-async function getTableHitRegion(
-  ws: { tables: { getAtCell(row: number, col: number): Promise<any> } },
-  row: number,
-  col: number,
-  options?: TableHitTestOptions,
-): Promise<TableHitResult> {
-  const tableInfo = await ws.tables.getAtCell(row, col);
-
-  if (!tableInfo) {
-    return { table: null, region: 'outside', tableColumnIndex: null };
-  }
-
-  // Parse the A1 range string to numeric range
-  let tableRange: CellRange;
-  try {
-    tableRange = parseA1Range(tableInfo.range);
-  } catch {
-    return { table: null, region: 'outside', tableColumnIndex: null };
-  }
-
-  const hasHeaderRow = tableInfo.hasHeaderRow ?? true;
-  const hasTotalRow = tableInfo.hasTotalsRow ?? false;
-
-  const tableColumnIndex = col - tableRange.startCol;
-
-  const isHeaderRow = hasHeaderRow && row === tableRange.startRow;
-  const isTotalRow = hasTotalRow && row === tableRange.endRow;
-
-  // Build a compatible table object with id and columns
-  const table = {
-    id: tableInfo.name, // TableInfo.name serves as the table identifier
-    columns: (tableInfo.columns ?? []).map((c: any) => ({
-      name: c.name,
-      totalFunction: c.totalFunction,
-    })),
-  };
-
-  if (!options) {
-    let region: TableRegion;
-    if (isHeaderRow) region = 'header';
-    else if (isTotalRow) region = 'total';
-    else region = 'data';
-    return { table, region, tableColumnIndex };
-  }
-
-  const { clickXInCell, clickYInCell, cellWidth } = options;
-  const isOnLeftEdge = clickXInCell <= LEFT_EDGE_WIDTH;
-  const isOnRightEdge = clickXInCell >= cellWidth - COLUMN_RESIZE_EDGE_WIDTH;
-  const isFirstColumn = col === tableRange.startCol;
-
-  let region: TableRegion;
-
-  if (isHeaderRow) {
-    if (isFirstColumn && isOnLeftEdge && clickYInCell <= CORNER_WIDTH) {
-      region = 'corner';
-    } else if (isOnRightEdge) {
-      region = 'column-resize-edge';
-    } else if (isOnLeftEdge) {
-      region = 'header-left-edge';
-    } else {
-      region = 'header';
-    }
-  } else if (isTotalRow) {
-    region = isOnLeftEdge ? 'total-left-edge' : 'total';
-  } else {
-    region = isOnLeftEdge ? 'data-left-edge' : 'data';
-  }
-
-  return { table, region, tableColumnIndex };
-}
 
 // =============================================================================
 // Hook Implementation
@@ -488,30 +368,42 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
   // Pre-cache tables via Worksheet API for sync mouse handlers.
   // Tables are pre-fetched and their A1 ranges parsed to numeric CellRange for cursor feedback.
-  const [cachedTables, setCachedTables] = useState<
-    { id: string; range: CellRange; columns: any[] }[]
-  >([]);
+  const [cachedTables, setCachedTables] = useState<CachedTableHitInfo[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const ws = wb.getSheetById(activeSheetId);
-        const tables = await ws.tables.list();
-        if (!cancelled) {
-          setCachedTables(
-            (tables ?? []).map((t: any) => ({
-              id: t.name,
-              range: parseA1Range(t.range),
-              columns: t.columns ?? [],
-            })),
-          );
+    const refreshTables = () => {
+      void (async () => {
+        try {
+          const ws = wb.getSheetById(activeSheetId);
+          const tables = await ws.tables.list();
+          if (!cancelled) {
+            setCachedTables(
+              (tables ?? []).map((t: any) => ({
+                id: t.name,
+                range: parseA1Range(t.range),
+                hasHeaderRow: t.hasHeaderRow ?? true,
+                hasTotalsRow: t.hasTotalsRow ?? false,
+                columns: t.columns ?? [],
+              })),
+            );
+          }
+        } catch {
+          if (!cancelled) setCachedTables([]);
         }
-      } catch {
-        if (!cancelled) setCachedTables([]);
-      }
-    })();
+      })();
+    };
+
+    refreshTables();
+
+    const unsubscribeTableCreated = wb.on('table:created', refreshTables);
+    const unsubscribeTableUpdated = wb.on('table:updated', refreshTables);
+    const unsubscribeTableDeleted = wb.on('table:deleted', refreshTables);
+
     return () => {
       cancelled = true;
+      unsubscribeTableCreated?.();
+      unsubscribeTableUpdated?.();
+      unsubscribeTableDeleted?.();
     };
   }, [wb, activeSheetId]);
 
@@ -1077,8 +969,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
             // Table-aware click handling
             if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const ws = wb.getSheetById(activeSheetId);
-              const tableHit = await getTableHitRegion(ws, cell.row, cell.col, {
+              const tableHit = getCachedTableHitRegion(cachedTables, cell.row, cell.col, {
                 clickXInCell: clickPosition.clickInCellX,
                 clickYInCell: clickPosition.clickInCellY,
                 cellWidth: clickPosition.cellWidth,
@@ -1096,10 +987,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                   case 'corner': {
                     pendingTableClickSelectionRef.current = {
@@ -1108,10 +1002,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                   case 'total': {
                     const cellRect = geometry.getCellRect(cell);
@@ -1149,10 +1046,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                 }
               }
@@ -1313,6 +1213,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       cellInteraction,
       uiStoreApi,
       dispatch,
+      cachedTables,
       pageBreakPreviewMode,
       formatPainter.isActive,
       formatPainter.sourceFormat,
@@ -1904,6 +1805,24 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       if (hit.type === 'cell') {
         const cell = { row: hit.row, col: hit.col };
+        const cellRect = geometry.getCellRect(cell);
+        const cornerSelection = cellRect
+          ? getTableCornerDoubleClickRange(cachedTables, cell.row, cell.col, {
+              clickXInCell: x - cellRect.x,
+              clickYInCell: y - cellRect.y,
+              cellWidth: cellRect.width,
+              cellHeight: cellRect.height,
+            })
+          : null;
+
+        if (cornerSelection) {
+          uiStoreApi.getState().handleCornerClick(cornerSelection.tableId);
+          selection.setSelection([cornerSelection.range], {
+            row: cornerSelection.range.startRow,
+            col: cornerSelection.range.startCol,
+          });
+          return;
+        }
 
         if (
           isMatchingNativeCellDoubleClick(
@@ -1932,6 +1851,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       dispatch,
       handleCellDoubleClickAtViewportPoint,
       handleSelectionBorderDoubleClick,
+      uiStoreApi,
+      cachedTables,
     ],
   );
 
@@ -2022,6 +1943,34 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               (firstRangeRect &&
                 isOnSelectionBorder(point, firstRangeRect, doubleClickBorderTolerance));
 
+            const cellRect = geometry.getCellRect(cell);
+            if (cellRect) {
+              const cornerSelection = getTableCornerDoubleClickRange(
+                cachedTables,
+                cell.row,
+                cell.col,
+                {
+                  clickXInCell: relX - cellRect.x,
+                  clickYInCell: relY - cellRect.y,
+                  cellWidth: cellRect.width,
+                  cellHeight: cellRect.height,
+                },
+              );
+
+              if (cornerSelection) {
+                uiStoreApi.getState().handleCornerClick(cornerSelection.tableId);
+                selection.setSelection([cornerSelection.range], {
+                  row: cornerSelection.range.startRow,
+                  col: cornerSelection.range.startCol,
+                });
+                pendingTableClickSelectionRef.current = null;
+                pendingTableClickStartRef.current = null;
+                pendingTableClickMovedRef.current = false;
+                e.preventDefault();
+                return;
+              }
+            }
+
             if (
               !isReservedSelectionGesture &&
               handleCellDoubleClickAtViewportPoint(cell, point, geometry)
@@ -2087,29 +2036,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       const pendingTableClick = pendingTableClickSelectionRef.current;
       if (pendingTableClick && !pendingTableClickMovedRef.current) {
-        if (pendingTableClick.kind === 'column') {
-          const stage = uiStoreApi
-            .getState()
-            .handleHeaderClick(pendingTableClick.tableId, pendingTableClick.col);
-          dispatch('SELECT_TABLE_COLUMN', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-            stage,
-          });
-        } else if (pendingTableClick.kind === 'table-data-or-full') {
-          const stage = uiStoreApi.getState().handleCornerClick(pendingTableClick.tableId);
-          dispatch(stage === 0 ? 'SELECT_TABLE_DATA' : 'SELECT_FULL_TABLE', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-          });
-        } else {
-          dispatch('SELECT_TABLE_ROW', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-          });
+        const resolved = resolvePendingTableClickSelection(pendingTableClick, uiStoreApi.getState());
+        if (resolved) {
+          selection.setSelection([resolved.range], resolved.activeCell);
         }
       }
       pendingTableClickSelectionRef.current = null;
@@ -2164,6 +2093,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     handleCellDoubleClickAtViewportPoint,
     dispatch,
     uiStoreApi,
+    cachedTables,
   ]);
 
   // ==========================================================================

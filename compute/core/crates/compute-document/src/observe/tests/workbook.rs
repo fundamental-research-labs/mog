@@ -94,6 +94,11 @@ fn test_workbook_table_change() {
 #[test]
 fn test_workbook_table_range_binding_change() {
     let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(1);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
 
     // Table metadata is now persisted primarily in workbook.rangeBindings
     // using table:<name> keys. The observer must route those entries through
@@ -115,7 +120,7 @@ fn test_workbook_table_range_binding_change() {
             bindings.insert(
                 &mut txn,
                 "table:SalesData",
-                Any::String(Arc::from(r#"{"name":"SalesData"}"#)),
+                Any::String(Arc::from(table_json)),
             );
             bindings.insert(
                 &mut txn,
@@ -128,7 +133,110 @@ fn test_workbook_table_range_binding_change() {
     let changes = observer.drain_all_changes();
     assert_eq!(changes.tables.len(), 1);
     assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
     assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+}
+
+#[test]
+fn test_workbook_table_range_binding_removal_carries_sheet_id() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapRef = workbook.insert(
+            &mut txn,
+            KEY_RANGE_BINDINGS,
+            MapPrelim::from([] as [(&str, Any); 0]),
+        );
+        bindings.insert(
+            &mut txn,
+            "table:SalesData",
+            Any::String(Arc::from(table_json)),
+        );
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        if let Some(Out::YMap(bindings)) = workbook.get(&txn, KEY_RANGE_BINDINGS) {
+            bindings.remove(&mut txn, "table:SalesData");
+        }
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
+}
+
+#[test]
+fn test_workbook_table_range_bindings_map_insert_carries_table_details() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:SalesData",
+            Any::String(Arc::from(table_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+}
+
+#[test]
+fn test_workbook_table_range_bindings_map_removal_emits_domain_reset() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:SalesData",
+            Any::String(Arc::from(table_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        workbook.remove(&mut txn, KEY_RANGE_BINDINGS);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "");
+    assert_eq!(changes.tables[0].sheet_id, None);
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
 }
 
 #[test]
@@ -150,10 +258,8 @@ fn test_workbook_slicer_change() {
     {
         let mut txn = doc.transact_mut();
         if let Some(Out::YMap(slicers)) = workbook.get(&txn, KEY_SLICERS) {
-            let entries = domain_types::yrs_schema::slicer::to_yrs_prelim(&table_slicer(
-                "slicer-1",
-                &sheet_id.to_uuid_string(),
-            ));
+            let slicer = table_slicer("slicer-1", &sheet_id.to_uuid_string());
+            let entries = domain_types::yrs_schema::slicer::to_yrs_prelim(&slicer);
             let nested: MapPrelim = entries.into_iter().collect();
             slicers.insert(&mut txn, "slicer-1", nested);
         }

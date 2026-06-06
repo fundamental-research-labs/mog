@@ -30,6 +30,7 @@ import {
   hasImplicitRowStructuredReference,
   qualifyImplicitRowStructuredReferences,
   resolveCalculatedColumnCellContext,
+  resolveTableHeaderCellContext,
 } from '../coordinator/tables/calculated-column-context';
 import { CircularReferenceDialog, useCircularReferenceDialog } from '../dialogs/formulas';
 import {
@@ -634,6 +635,14 @@ export function SpreadsheetCoordinatorProvider({
       // dropped both the resolved value and any rejection.
       setCellValue: async (sheetId, row, col, value) => {
         const ws = workbook.getSheetById(sheetId);
+        const tableHeader = await resolveTableHeaderCellContext(sheetId, row, col, workbook);
+        if (tableHeader) {
+          if (tableHeader.columnName !== value) {
+            await ws.tables.renameColumn(tableHeader.tableName, tableHeader.columnIndex, value);
+          }
+          return;
+        }
+
         await ws.setCell(row, col, value);
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);

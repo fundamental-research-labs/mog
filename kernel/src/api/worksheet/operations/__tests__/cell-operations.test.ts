@@ -6,6 +6,21 @@ import * as CellOps from '../cell-operations';
 
 const SHEET_ID = sheetId('sheet-1');
 
+function createBridgeTable() {
+  return {
+    id: 'table-1',
+    name: 'Sales',
+    sheetId: SHEET_ID,
+    range: { startRow: 0, startCol: 0, endRow: 2, endCol: 1 },
+    hasHeaderRow: true,
+    hasTotalsRow: false,
+    columns: [
+      { id: 'col-1', name: 'Region', index: 0 },
+      { id: 'col-2', name: 'Revenue', index: 1 },
+    ],
+  };
+}
+
 function createMockCtx() {
   const order: string[] = [];
   return {
@@ -20,6 +35,11 @@ function createMockCtx() {
           setDirectEdits: jest.fn(),
         },
       })),
+      getTableAtCell: jest.fn().mockResolvedValue(null),
+      getSheetProtectionOptions: jest.fn().mockResolvedValue(null),
+      renameTableColumn: jest.fn().mockImplementation(async () => {
+        order.push('renameTableColumn');
+      }),
       setCellsByPosition: jest.fn().mockImplementation(async () => {
         order.push('setCellsByPosition');
       }),
@@ -49,5 +69,53 @@ describe('CellOps filter reapply materialization', () => {
       'getActiveFilters',
       'applyFilter',
     ]);
+  });
+
+  it('renames a table column when setCell targets a visible table header', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.getTableAtCell.mockResolvedValue(createBridgeTable());
+
+    await CellOps.setCell(ctx, SHEET_ID, 0, 1, 'Area');
+
+    expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Area');
+    expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.getMutationHandler).not.toHaveBeenCalled();
+    expect(ctx.order).toEqual([
+      'renameTableColumn',
+      'await:allSheets',
+      'getActiveFilters',
+      'applyFilter',
+    ]);
+  });
+
+  it('treats same-name table header writes as no-ops', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.getTableAtCell.mockResolvedValue(createBridgeTable());
+
+    await CellOps.setCell(ctx, SHEET_ID, 0, 0, 'Region');
+
+    expect(ctx.computeBridge.renameTableColumn).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.getActiveFilters).not.toHaveBeenCalled();
+  });
+
+  it('splits table header renames from normal cells in batch writes', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.getTableAtCell.mockImplementation(async (_sheetId, row, col) => {
+      if (row === 0 && col >= 0 && col <= 1) return createBridgeTable();
+      return null;
+    });
+
+    const result = await CellOps.setCells(ctx, SHEET_ID, [
+      { row: 0, col: 1, value: 'Area' },
+      { row: 1, col: 0, value: 'West' },
+    ]);
+
+    expect(result).toEqual({ cellsWritten: 2, errors: null });
+    expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Area');
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
+      { row: 1, col: 0, input: { kind: 'parse', text: 'West' } },
+    ]);
+    expect(ctx.computeBridge.getMutationHandler).toHaveBeenCalledTimes(1);
   });
 });

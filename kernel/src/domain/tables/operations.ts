@@ -161,10 +161,7 @@ export async function renameColumn(
   const oldName = existing.columns[columnIndex].name;
   const tableName = existing.name;
 
-  // Column rename is handled as part of table update in Rust
-  // For now, use addTableColumn/removeTableColumn pattern or direct bridge call
-  // The bridge doesn't have a direct renameColumn — we update formulas on the TS side
-  void ctx.computeBridge.renameTable(tableName, tableName); // no-op to trigger sync
+  await ctx.computeBridge.renameTableColumn(tableName, columnIndex, newName);
 
   // Update all formulas that reference this column
   const updatedFormulaCount = updateFormulasForColumnRename(ctx, tableName, oldName, newName);

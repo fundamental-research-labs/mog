@@ -88,7 +88,10 @@ fn format_structured_ref(f: &mut fmt::Formatter<'_>, sr: &StructuredRef) -> fmt:
     write!(f, "{}[", sr.table_name)?;
     let specs = &sr.specifiers;
     if specs.len() == 1 {
-        format_specifier(f, &specs[0])?;
+        match &specs[0] {
+            StructuredRefSpecifier::Column { name } => write!(f, "{name}")?,
+            spec => format_specifier(f, spec)?,
+        }
     } else {
         for (i, spec) in specs.iter().enumerate() {
             if i > 0 {

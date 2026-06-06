@@ -616,8 +616,10 @@ impl YrsComputeEngine {
             self.rebuild_after_structural_observer_change(&structural_sheets, &doc_changes)?
         } else {
             // Normal path: incremental cell changes only.
-            if !occupied_positions.is_empty() {
-                self.stores.compute.regenerate_formula_strings(&self.mirror);
+            if !vacated_positions.is_empty() {
+                self.stores
+                    .compute
+                    .regenerate_formula_strings_and_cell_formula_text(&self.mirror);
             }
             if !doc_changes.cells.is_empty() {
                 services::mutation::apply_cell_changes(

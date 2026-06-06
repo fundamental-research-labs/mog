@@ -30,6 +30,7 @@ mod bridge_imports;
 mod cell_bridge;
 mod cell_semantics;
 mod sync_bridge;
+mod table_result_merge;
 mod undo_bridge;
 mod workbook_theme;
 pub use cell_semantics::CellInfo;

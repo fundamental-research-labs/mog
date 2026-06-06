@@ -263,6 +263,15 @@ export interface WorksheetTables {
   addColumn(name: string, columnName: string, position?: number): Promise<TableAddColumnReceipt>;
 
   /**
+   * Rename a table column by index.
+   *
+   * @param name - Table name
+   * @param columnIndex - Column index within the table (0-based)
+   * @param newColumnName - New column header name
+   */
+  renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;
+
+  /**
    * Remove a column from a table by index.
    *
    * @param name - Table name

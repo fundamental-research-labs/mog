@@ -707,6 +707,20 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return { kind: 'tableAddColumn', tableName: name, columnName, position: actualPosition };
   }
 
+  async renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void> {
+    const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.renameColumn',
+      name,
+      table.range,
+    );
+    await this.ctx.computeBridge.renameTableColumn(name, columnIndex, newColumnName);
+    this.emitTableUpdated(name);
+  }
+
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);

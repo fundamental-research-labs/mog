@@ -21,6 +21,7 @@ export type ProtectedTableOperation =
   | 'tables.sort.reapply'
   | 'tables.resize'
   | 'tables.addColumn'
+  | 'tables.renameColumn'
   | 'tables.removeColumn'
   | 'tables.toggleTotalsRow'
   | 'tables.toggleHeaderRow'

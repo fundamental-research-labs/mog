@@ -2,7 +2,7 @@
 
 use super::super::*;
 use crate::snapshot::{CellData, SheetSnapshot};
-use snapshot_types::Axis;
+use snapshot_types::{Axis, ChangeKind};
 use value_types::{CellValue, FiniteF64};
 
 const SHEET_UUID: &str = "7b000000-0000-4000-8000-000000000001";
@@ -144,6 +144,92 @@ fn delete_table_clears_owned_table_filter_visibility() {
             .visibility_changes
             .iter()
             .any(|change| { change.axis == Axis::Row && change.index == 2 && !change.hidden })
+    );
+}
+
+#[test]
+fn redo_delete_table_emits_sheet_scoped_table_removal() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+    let expected_sheet_id = sheet_id.to_uuid_string();
+    create_filtered_table(&mut engine);
+
+    engine.delete_table("People").expect("delete table");
+
+    let (_, undo_result) = engine.undo().expect("undo delete table");
+    assert!(undo_result.table_changes.iter().any(|change| {
+        change.name == "People"
+            && change.sheet_id == expected_sheet_id
+            && change.kind == ChangeKind::Set
+    }));
+    assert!(!undo_result.table_changes.iter().any(|change| {
+        change.name == "People"
+            && change.sheet_id == expected_sheet_id
+            && change.kind == ChangeKind::Removed
+    }));
+
+    let (_, redo_result) = engine.redo().expect("redo delete table");
+    assert!(redo_result.table_changes.iter().any(|change| {
+        change.name == "People"
+            && change.sheet_id == expected_sheet_id
+            && change.kind == ChangeKind::Removed
+    }));
+    assert!(!redo_result.table_changes.iter().any(|change| {
+        change.name == "People"
+            && change.sheet_id == expected_sheet_id
+            && change.kind == ChangeKind::Set
+    }));
+    assert!(
+        engine.get_filters_in_sheet(&sheet_id).is_empty(),
+        "redoing the table delete must remove the owned table filter"
+    );
+}
+
+#[test]
+fn hidden_table_header_suppresses_filter_button_visibility() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+    create_filtered_table(&mut engine);
+
+    let before = engine.get_filter_header_info(&sheet_id);
+    assert!(
+        before.iter().any(|entry| entry.button_visible),
+        "table filters should expose visible header buttons before hiding the header"
+    );
+
+    engine
+        .toggle_header_row("People")
+        .expect("toggle header row");
+
+    let after = engine.get_filter_header_info(&sheet_id);
+    assert!(
+        !after.is_empty(),
+        "filter metadata should remain available after hiding the table header"
+    );
+    assert!(
+        after.iter().all(|entry| !entry.button_visible),
+        "hidden table headers must suppress rendered filter buttons"
+    );
+}
+
+#[test]
+fn hidden_table_filter_buttons_suppress_filter_button_visibility() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+    create_filtered_table(&mut engine);
+
+    engine
+        .set_table_bool_option("People", "showFilterButtons", false)
+        .expect("hide filter buttons");
+
+    let after = engine.get_filter_header_info(&sheet_id);
+    assert!(
+        !after.is_empty(),
+        "filter metadata should remain available after hiding filter buttons"
+    );
+    assert!(
+        after.iter().all(|entry| !entry.button_visible),
+        "hidden table filter buttons must suppress rendered filter buttons"
     );
 }
 

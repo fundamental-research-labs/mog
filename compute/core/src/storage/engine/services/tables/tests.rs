@@ -14,6 +14,8 @@ mod tests {
     use cell_types::SheetPos;
     use value_types::{CellValue, FiniteF64};
 
+    mod rename_column;
+
     fn simple_snapshot() -> WorkbookSnapshot {
         WorkbookSnapshot {
             sheets: vec![SheetSnapshot {

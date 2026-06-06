@@ -99,6 +99,24 @@ fn filter_kind_wire(kind: &filters::FilterKind) -> &'static str {
     }
 }
 
+fn table_filter_buttons_visible(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    filter: &filters::FilterState,
+) -> bool {
+    let Some(table_id) = filter.table_id.as_deref() else {
+        return false;
+    };
+    let sheet_id = sheet_id.to_uuid_string();
+    mirror
+        .all_tables()
+        .iter()
+        .find(|table| {
+            table.sheet_id == sheet_id && (table.id == table_id || table.name == table_id)
+        })
+        .is_some_and(|table| table.has_header_row && table.show_filter_buttons)
+}
+
 #[derive(Default)]
 struct FilterChangeMetadata {
     table_id: Option<String>,
@@ -584,9 +602,11 @@ pub(in crate::storage::engine) fn get_filter_header_info(
                     .unwrap_or_else(|| {
                         imported_filter_button_flags(imported_auto_filter.as_ref(), relative_col)
                     }),
-                filters::FilterKind::TableFilter | filters::FilterKind::AdvancedFilter => {
-                    (false, true)
-                }
+                filters::FilterKind::TableFilter => (
+                    false,
+                    table_filter_buttons_visible(mirror, sheet_id, &filter),
+                ),
+                filters::FilterKind::AdvancedFilter => (false, true),
             };
             let source_type = match &filter.filter_kind {
                 filters::FilterKind::AutoFilter => filters::FilterHeaderSourceType::SheetAutoFilter,

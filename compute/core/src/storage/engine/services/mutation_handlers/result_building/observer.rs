@@ -61,6 +61,27 @@ fn current_slicer_state(
     }
 }
 
+fn push_table_change_once(
+    result: &mut MutationResult,
+    name: String,
+    sheet_id: String,
+    kind: ChangeKind,
+) {
+    if result.table_changes.iter().any(|change| {
+        change.name.eq_ignore_ascii_case(&name)
+            && change.sheet_id == sheet_id
+            && change.kind == kind
+    }) {
+        return;
+    }
+
+    result.table_changes.push(TableChange {
+        name,
+        sheet_id,
+        kind,
+    });
+}
+
 // ---------------------------------------------------------------------------
 // build_mutation_result_from_changes
 // ---------------------------------------------------------------------------
@@ -386,11 +407,32 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     // --- Table changes ---
     for tch in &changes.tables {
         let kind = observer_kind_to_change_kind(tch.kind);
-        result.table_changes.push(TableChange {
-            name: tch.key.clone(),
-            sheet_id: String::new(),
-            kind,
-        });
+        if tch.key.is_empty() {
+            if kind == ChangeKind::Set {
+                for table in mirror.all_tables() {
+                    push_table_change_once(
+                        &mut result,
+                        table.name.clone(),
+                        table.sheet_id.clone(),
+                        kind,
+                    );
+                }
+            }
+            continue;
+        }
+
+        let table_name = tch.key.strip_prefix("table:").unwrap_or(&tch.key);
+        let current_table = mirror.get_table(table_name);
+        let kind = if current_table.is_some() {
+            ChangeKind::Set
+        } else {
+            ChangeKind::Removed
+        };
+        let sheet_id = current_table
+            .map(|table| table.sheet_id.clone())
+            .or_else(|| tch.sheet_id.map(|sheet_id| sheet_id.to_uuid_string()))
+            .unwrap_or_default();
+        push_table_change_once(&mut result, table_name.to_string(), sheet_id, kind);
     }
 
     // --- Floating object changes ---

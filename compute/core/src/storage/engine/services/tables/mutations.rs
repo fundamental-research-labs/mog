@@ -1,6 +1,7 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
 use crate::storage::engine::services::filters as filter_services;
+use crate::storage::engine::{mutation::CellInput, mutation_coordinator::MutationCoordinator};
 
 // -------------------------------------------------------------------
 // Table CRUD Mutations
@@ -405,6 +406,7 @@ pub(in crate::storage::engine) fn add_table_column(
 pub(in crate::storage::engine) fn rename_table_column(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    mutation: &mut MutationCoordinator,
     table_name: &str,
     column_index: u32,
     new_column_name: &str,
@@ -431,8 +433,36 @@ pub(in crate::storage::engine) fn rename_table_column(
         return Ok(MutationResult::empty());
     }
 
-    let mut updated = table;
-    updated.columns[idx].name = new_column_name.to_string();
+    let updated =
+        compute_table::operations::rename_table_column_by_index(&table, idx, new_column_name)
+            .map_err(|err| ComputeError::Eval {
+                message: err.to_string(),
+            })?;
+
+    let mut result = if updated.has_header_row {
+        let sheet_id =
+            SheetId::from_uuid_str(&updated.sheet_id).map_err(|_| ComputeError::Eval {
+                message: format!("Invalid sheet ID in table: {}", table_name),
+            })?;
+        let row = updated.range.start_row();
+        let col = updated.range.start_col() + column_index;
+        let cell_id = super::super::cell_editing::ensure_cell_id_mirrored(
+            stores, mirror, &sheet_id, row, col,
+        )
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+        let input = CellInput::Literal {
+            text: new_column_name.to_string(),
+        };
+        let recalc = super::super::cell_editing::set_cell(
+            stores, mirror, mutation, &sheet_id, cell_id, row, col, &input,
+        )?;
+        MutationResult::from_recalc(recalc)
+    } else {
+        MutationResult::empty()
+    };
+
     stores.compute.set_table(mirror, updated.clone());
     persist_table_to_yrs(stores, &updated);
 
@@ -445,7 +475,13 @@ pub(in crate::storage::engine) fn rename_table_column(
         new_column_name,
     );
 
-    Ok(MutationResult::empty())
+    result.table_changes.push(TableChange {
+        name: updated.name,
+        sheet_id: updated.sheet_id,
+        kind: ChangeKind::Set,
+    });
+
+    Ok(result)
 }
 
 /// Remove a column from a table by index.

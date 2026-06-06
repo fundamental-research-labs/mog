@@ -20,8 +20,6 @@ export const HELP_URLS = {
   help: 'https://docs.mog.com/spreadsheet',
   /** Support contact page or email */
   support: 'mailto:support@mog.com',
-  /** Changelog / release notes */
-  whatsNew: 'https://docs.mog.com/changelog',
 } as const;
 
 // =============================================================================

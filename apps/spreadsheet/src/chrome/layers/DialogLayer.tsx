@@ -122,6 +122,7 @@ import { DeleteSheetConfirmDialog } from '../../dialogs/sheet/DeleteSheetConfirm
 // Data Analysis Dialogs
 // =============================================================================
 import { DataTableDialog } from '../../dialogs/data/DataTableDialog';
+import { ConsolidateDialog } from '../../dialogs/data/ConsolidateDialog';
 import { GoalSeekDialog } from '../../dialogs/formulas/GoalSeekDialog';
 import { ScenarioManagerDialog } from '../../dialogs/tools/ScenarioManagerDialog';
 
@@ -313,6 +314,8 @@ export function DialogLayer() {
       <GoalSeekDialog />
       {/* Data Table Dialog */}
       <DataTableDialog />
+      {/* Consolidate Dialog */}
+      <ConsolidateDialog />
       {/* Scenario Manager Dialog */}
       <ScenarioManagerDialog />
 

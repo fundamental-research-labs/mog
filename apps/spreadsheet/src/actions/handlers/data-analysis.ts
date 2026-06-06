@@ -20,6 +20,12 @@ import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh
 import { guardBridgeMutation } from './bridge-error-guard';
 import { getUIStore } from './handler-utils';
 
+export {
+  CLOSE_CONSOLIDATE_DIALOG,
+  EXECUTE_CONSOLIDATE,
+  OPEN_CONSOLIDATE_DIALOG,
+} from './data-consolidate';
+
 // =============================================================================
 // Goal Seek Dialog Handlers
 // =============================================================================
@@ -179,35 +185,6 @@ export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (
     { type: 'info' },
   );
   return { handled: true };
-};
-
-// =============================================================================
-// Consolidate Dialog Handlers
-// =============================================================================
-
-/**
- * Open Consolidate dialog
- */
-export const OPEN_CONSOLIDATE_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().openConsolidateDialog();
-  return { handled: true };
-};
-
-/**
- * Close Consolidate dialog
- */
-export const CLOSE_CONSOLIDATE_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().closeConsolidateDialog();
-  return { handled: true };
-};
-
-/**
- * Execute Consolidation
- * Note: Actual consolidation would be implemented in a domain module
- */
-export const EXECUTE_CONSOLIDATE: ActionHandler = (_deps): ActionResult => {
-  // TODO: Implement actual consolidation via domain module
-  return { handled: false, reason: 'not_implemented' };
 };
 
 // =============================================================================

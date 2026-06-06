@@ -12,26 +12,11 @@
  */
 
 import type { StateCreator } from 'zustand';
+import type { ConsolidateFunction } from '../../../domain/data/consolidate';
 
 // =============================================================================
 // Types
 // =============================================================================
-
-/**
- * Consolidation function type
- */
-export type ConsolidateFunction =
-  | 'sum'
-  | 'count'
-  | 'average'
-  | 'max'
-  | 'min'
-  | 'product'
-  | 'countNumbers'
-  | 'stdDev'
-  | 'stdDevP'
-  | 'var'
-  | 'varP';
 
 /**
  * Source reference for consolidation
@@ -51,6 +36,8 @@ export interface ConsolidateDialogState {
   isOpen: boolean;
   /** Aggregation function to use */
   func: ConsolidateFunction;
+  /** Top-left destination cell for the consolidated output */
+  destination: string;
   /** Current reference input (for adding new references) */
   currentReference: string;
   /** List of all source references */
@@ -72,7 +59,7 @@ export interface ConsolidateDialogSlice {
   consolidateDialog: ConsolidateDialogState;
 
   /** Open the Consolidate dialog */
-  openConsolidateDialog: () => void;
+  openConsolidateDialog: (initial?: { destination?: string }) => void;
 
   /** Close the Consolidate dialog */
   closeConsolidateDialog: () => void;
@@ -82,6 +69,9 @@ export interface ConsolidateDialogSlice {
 
   /** Set the current reference input */
   setConsolidateCurrentReference: (reference: string) => void;
+
+  /** Set the output destination */
+  setConsolidateDestination: (destination: string) => void;
 
   /** Add a source reference to the list */
   addConsolidateReference: (reference: string) => void;
@@ -109,6 +99,7 @@ export interface ConsolidateDialogSlice {
 const initialConsolidateDialogState: ConsolidateDialogState = {
   isOpen: false,
   func: 'sum',
+  destination: '',
   currentReference: '',
   sourceReferences: [],
   useTopRowLabels: false,
@@ -130,10 +121,11 @@ export const createConsolidateDialogSlice: StateCreator<
 > = (set, _get) => ({
   consolidateDialog: initialConsolidateDialogState,
 
-  openConsolidateDialog: () => {
+  openConsolidateDialog: (initial) => {
     set({
       consolidateDialog: {
         ...initialConsolidateDialogState,
+        destination: initial?.destination ?? '',
         isOpen: true,
       },
     });
@@ -159,6 +151,15 @@ export const createConsolidateDialogSlice: StateCreator<
       consolidateDialog: {
         ...state.consolidateDialog,
         currentReference: reference,
+      },
+    }));
+  },
+
+  setConsolidateDestination: (destination) => {
+    set((state) => ({
+      consolidateDialog: {
+        ...state.consolidateDialog,
+        destination,
       },
     }));
   },

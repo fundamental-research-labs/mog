@@ -131,3 +131,9 @@ export const FUNNEL_X2_FIELD = '__mogFunnelX2';
 export const FUNNEL_Y_FIELD = '__mogFunnelY';
 export const FUNNEL_Y2_FIELD = '__mogFunnelY2';
 export const FUNNEL_FILL_FIELD = '__mogFunnelFill';
+
+export const TREEMAP_X_FIELD = '__mogTreemapX';
+export const TREEMAP_X2_FIELD = '__mogTreemapX2';
+export const TREEMAP_Y_FIELD = '__mogTreemapY';
+export const TREEMAP_Y2_FIELD = '__mogTreemapY2';
+export const TREEMAP_FILL_FIELD = '__mogTreemapFill';

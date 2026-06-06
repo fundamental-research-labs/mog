@@ -335,3 +335,46 @@ fn test_update_chart_config() {
     assert_eq!(obj["dataRange"], "A1:C10");
     assert_eq!(obj["legend"]["show"], true);
 }
+
+#[test]
+fn test_update_chart_series_config() {
+    let (storage, sheet_id) = storage_with_sheet();
+    let doc = storage.doc();
+    let sheets = storage.sheets();
+
+    let config = serde_json::json!({
+        "chartType": "column",
+        "anchorRow": 0,
+        "anchorCol": 0,
+        "width": 400,
+        "height": 300,
+        "dataRange": "A1:B4"
+    });
+    let chart_obj = create_chart_object(
+        doc,
+        sheets,
+        &sheet_id,
+        &config,
+        None,
+        &crate::storage::STORAGE_ID_ALLOC,
+    )
+    .unwrap();
+    let chart_id = chart_obj["id"].as_str().unwrap();
+
+    let updates = serde_json::json!({
+        "series": [
+            {
+                "name": "Revenue (USD)",
+                "values": "B2:B4",
+                "categories": "A2:A4"
+            }
+        ]
+    });
+    let updated = update_floating_object(doc, sheets, &sheet_id, chart_id, &updates);
+    assert!(updated);
+
+    let obj = get_floating_object(doc, sheets, &sheet_id, chart_id).unwrap();
+    assert_eq!(obj["series"][0]["name"], "Revenue (USD)");
+    assert_eq!(obj["series"][0]["values"], "B2:B4");
+    assert_eq!(obj["series"][0]["categories"], "A2:A4");
+}

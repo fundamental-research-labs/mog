@@ -23,6 +23,7 @@ import { buildPerSeriesLineLayers, shouldBuildPerSeriesLineLayers } from './laye
 import { buildStockLayers, hasStockVolumeLayer } from './layers/stock';
 import { buildSurface3DSpec, shouldRenderSurface3D } from './layers/surface-3d';
 import { buildSurfaceContourSpec, shouldRenderSurfaceContour } from './layers/surface-contour';
+import { buildTreemapLayers } from './layers/treemap';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
 import { buildPieDoughnutGeometry, pieDoughnutRowsFromGeometry } from './pie-doughnut-geometry';
@@ -53,6 +54,7 @@ export {
   buildStockLayers,
   buildSurface3DSpec,
   buildSurfaceContourSpec,
+  buildTreemapLayers,
   buildTitle,
   buildTrendlineTransform,
   buildWaterfallLayers,
@@ -150,7 +152,7 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       mark,
       encoding,
       title,
-      config: withRadarDefaultChartBackground(configSpec),
+      config: withOpaqueChartBackground(configSpec),
       transforms,
     });
   }
@@ -240,7 +242,18 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       rows: funnel.rows,
       layers: funnel.layers,
       title,
-      config: configSpec,
+      config: withOpaqueChartBackground(configSpec),
+    });
+  }
+
+  if (renderConfig.type === 'treemap') {
+    const treemap = buildTreemapLayers(renderConfig, rows);
+    return buildLayerSpec({
+      dimensions,
+      rows: treemap.rows,
+      layers: treemap.layers,
+      title,
+      config: withOpaqueChartBackground(configSpec),
     });
   }
 
@@ -345,14 +358,14 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 }
 
 function isPreservedOnlyChartExFamily(type: ChartConfig['type']): boolean {
-  return type === 'treemap' || type === 'sunburst' || type === 'regionMap';
+  return type === 'sunburst' || type === 'regionMap';
 }
 
 function isLayeredXYPointChart(type: ChartConfig['type']): boolean {
   return type === 'scatter' || type === 'bubble';
 }
 
-function withRadarDefaultChartBackground(config: ConfigSpec | undefined): ConfigSpec {
+function withOpaqueChartBackground(config: ConfigSpec | undefined): ConfigSpec {
   const defaultFill: ChartFrameSpec['fill'] = { type: 'solid', color: '#ffffff' };
   const chartFrame = config?.chartFrame
     ? {

@@ -11,6 +11,11 @@ import {
   WATERFALL_RUNNING_TOTAL_FIELD,
   WATERFALL_START_FIELD,
   WATERFALL_TYPE_FIELD,
+  TREEMAP_FILL_FIELD,
+  TREEMAP_X2_FIELD,
+  TREEMAP_X_FIELD,
+  TREEMAP_Y2_FIELD,
+  TREEMAP_Y_FIELD,
 } from '../config-to-spec/fields';
 
 function asLayerSpec(spec: ChartSpec): LayerSpec {
@@ -19,7 +24,7 @@ function asLayerSpec(spec: ChartSpec): LayerSpec {
 }
 
 describe('configToSpec ChartEx-family semantics', () => {
-  it.each(['treemap', 'sunburst', 'regionMap'] as const)(
+  it.each(['sunburst', 'regionMap'] as const)(
     'does not render %s as generic placeholder geometry',
     (type) => {
       const data: ChartData = {
@@ -57,6 +62,130 @@ describe('configToSpec ChartEx-family semantics', () => {
       expect(compiled.marks).toEqual([]);
     },
   );
+
+  it('renders flat treemap data as proportional full-height rectangles', () => {
+    const data: ChartData = {
+      categories: ['Electronics', 'Clothing', 'Food'],
+      series: [
+        {
+          name: 'Value',
+          data: [
+            { x: 'Electronics', y: 50 },
+            { x: 'Clothing', y: 30 },
+            { x: 'Food', y: 20 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'treemap',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 6,
+      height: 4,
+      colors: ['#111111', '#222222', '#333333'],
+    };
+
+    const spec = asLayerSpec(configToSpec(config, data));
+    const rows = 'values' in spec.data! ? spec.data.values : [];
+
+    expect(rows.map((row) => [row.category, row.value])).toEqual([
+      ['Electronics', 50],
+      ['Clothing', 30],
+      ['Food', 20],
+    ]);
+    expect(rows.map((row) => row[TREEMAP_X_FIELD])).toEqual([0, 0.5, 0.8]);
+    expect(rows.map((row) => row[TREEMAP_X2_FIELD])).toEqual([0.5, 0.8, 1]);
+    expect(rows.every((row) => row[TREEMAP_Y_FIELD] === 0)).toBe(true);
+    expect(rows.every((row) => row[TREEMAP_Y2_FIELD] === 1)).toBe(true);
+    expect(rows.map((row) => row[TREEMAP_FILL_FIELD])).toEqual([
+      '#111111',
+      '#222222',
+      '#333333',
+    ]);
+    expect(spec.layer).toEqual([
+      expect.objectContaining({
+        mark: expect.objectContaining({
+          type: 'rect',
+          coordinateSystem: 'plotFraction',
+          xField: TREEMAP_X_FIELD,
+          x2Field: TREEMAP_X2_FIELD,
+          yField: TREEMAP_Y_FIELD,
+          y2Field: TREEMAP_Y2_FIELD,
+        }),
+      }),
+    ]);
+
+    const compiled = compile(spec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const treemapRects = compiled.marks.filter((mark) => mark.type === 'rect');
+
+    expect(treemapRects.map((mark) => mark.datum?.category)).toEqual([
+      'Electronics',
+      'Clothing',
+      'Food',
+    ]);
+    expect(treemapRects.every((mark) => mark.height === treemapRects[0].height)).toBe(true);
+    expect(treemapRects[0].width).toBeGreaterThan(treemapRects[1].width);
+    expect(treemapRects[1].width).toBeGreaterThan(treemapRects[2].width);
+    expect(treemapRects[1].x).toBe(treemapRects[0].x + treemapRects[0].width);
+    expect(treemapRects[2].x).toBe(treemapRects[1].x + treemapRects[1].width);
+  });
+
+  it('renders one-point-per-series ChartEx data as category/value rows', () => {
+    const data: ChartData = {
+      categories: ['Value'],
+      series: [
+        { name: 'Electronics', data: [{ x: 'Value', y: 50 }] },
+        { name: 'Clothing', data: [{ x: 'Value', y: 30 }] },
+        { name: 'Food', data: [{ x: 'Value', y: 20 }] },
+      ],
+    };
+    const baseConfig = {
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 6,
+      height: 4,
+      colors: ['#111111', '#222222', '#333333'],
+    } satisfies Omit<ChartConfig, 'type'>;
+
+    const treemapSpec = asLayerSpec(configToSpec({ ...baseConfig, type: 'treemap' }, data));
+    const treemapRows = 'values' in treemapSpec.data! ? treemapSpec.data.values : [];
+    expect(treemapRows.map((row) => [row.category, row.value])).toEqual([
+      ['Electronics', 50],
+      ['Clothing', 30],
+      ['Food', 20],
+    ]);
+    expect(treemapRows.map((row) => row[TREEMAP_X_FIELD])).toEqual([0, 0.5, 0.8]);
+    expect(treemapRows.map((row) => row[TREEMAP_X2_FIELD])).toEqual([0.5, 0.8, 1]);
+
+    const funnelSpec = asLayerSpec(configToSpec({ ...baseConfig, type: 'funnel' }, data));
+    const funnelRows = 'values' in funnelSpec.data! ? funnelSpec.data.values : [];
+    expect(funnelRows.map((row) => [row.category, row.value])).toEqual([
+      ['Electronics', 50],
+      ['Clothing', 30],
+      ['Food', 20],
+    ]);
+    expect(funnelRows.map((row) => row[FUNNEL_X_FIELD])).toEqual([0, 0.2, 0.3]);
+    expect(funnelRows.map((row) => row[FUNNEL_X2_FIELD])).toEqual([1, 0.8, 0.7]);
+
+    const compiledFunnel = compile(funnelSpec, undefined, {
+      width: 400,
+      height: 240,
+      skipAxes: true,
+      skipLegend: true,
+      skipTitle: true,
+    });
+    const funnelRects = compiledFunnel.marks.filter((mark) => mark.type === 'rect');
+    expect(funnelRects).toHaveLength(3);
+    expect(funnelRects[0].width).toBeGreaterThan(funnelRects[1].width);
+    expect(funnelRects[1].width).toBeGreaterThan(funnelRects[2].width);
+  });
 
   it('renders funnel as centered proportional bars in source order', () => {
     const data: ChartData = {

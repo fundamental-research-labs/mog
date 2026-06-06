@@ -296,6 +296,21 @@ describe('chart-type-converters', () => {
     );
   });
 
+  it('omits undefined fields from sparse series update payloads', () => {
+    const wire = seriesConfigToWire({
+      name: 'Revenue (USD)',
+      values: 'B2:B4',
+      categories: 'A2:A4',
+    });
+
+    expect(wire).toEqual({
+      name: 'Revenue (USD)',
+      values: 'B2:B4',
+      categories: 'A2:A4',
+    });
+    expect('projectionDiagnostics' in wire).toBe(false);
+  });
+
   it('round-trips nested series format colors through the wire boundary', () => {
     const seriesConfig = wireToSeriesConfig({
       name: 'Styled',

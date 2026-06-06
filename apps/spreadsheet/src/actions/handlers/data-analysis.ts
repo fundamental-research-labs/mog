@@ -92,21 +92,10 @@ export const EXECUTE_GOAL_SEEK: AsyncActionHandler = async (deps): Promise<Actio
   try {
     const ws = deps.workbook.getSheetById(state.activeSheetId);
     const result = await ws.whatIf.goalSeek(setCell, targetValue, byChangingCell);
-    let achievedValue = result.value;
-    try {
-      const setPos = parseA1(setCell.toUpperCase());
-      const targetCell = await ws.getCell(setPos.row, setPos.col);
-      const targetCellValue = targetCell?.value;
-      if (typeof targetCellValue === 'number' && Number.isFinite(targetCellValue)) {
-        achievedValue = targetCellValue;
-      }
-    } catch {
-      // Keep the solver result if the target cell cannot be read as a finite raw numeric value.
-    }
     state.setGoalSeekResult({
       found: result.found,
       solutionValue: result.value,
-      achievedValue,
+      achievedValue: result.achievedValue ?? result.value,
       iterations: result.iterations ?? 0,
     });
   } catch (err) {

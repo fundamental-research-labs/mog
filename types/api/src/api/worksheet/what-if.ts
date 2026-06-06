@@ -27,7 +27,7 @@ export interface WorksheetWhatIf {
    * // B1 = WACC assumption, B5 = =NPV(B1, C10:C20)
    * const result = await ws.whatIf.goalSeek('B5', 0, 'B1');
    * if (result.found) {
-   *   await ws.cells.setCellValue('B1', result.solutionValue);
+   *   await ws.setCell('B1', result.value);
    * }
    * ```
    *
@@ -37,7 +37,7 @@ export interface WorksheetWhatIf {
    * @param targetCell - A1 address of the cell containing the formula to evaluate
    * @param targetValue - The desired result value
    * @param changingCell - A1 address of the input cell to vary
-   * @returns GoalSeekResult with solutionValue if found
+   * @returns GoalSeekResult with value if found
    */
   goalSeek(targetCell: string, targetValue: number, changingCell: string): Promise<GoalSeekResult>;
 

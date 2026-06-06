@@ -225,10 +225,11 @@ describe('data analysis actions', () => {
     );
   });
 
-  it('reports raw target-cell goal seek result separately from the changing-cell solution', async () => {
+  it('reports the goal seek achieved value separately from the changing-cell solution', async () => {
     const goalSeek = jest.fn().mockResolvedValue({
       found: true,
       value: 10,
+      achievedValue: 20,
       iterations: 5,
     });
     const getCell = jest.fn().mockResolvedValue({ value: 20, formatted: '$20.00' });
@@ -243,7 +244,7 @@ describe('data analysis actions', () => {
 
     expect(result).toEqual({ handled: true });
     expect(goalSeek).toHaveBeenCalledWith('B1', 20, 'A1');
-    expect(getCell).toHaveBeenCalledWith(0, 1);
+    expect(getCell).not.toHaveBeenCalled();
     expect(getDisplayValue).not.toHaveBeenCalled();
     expect(state.setGoalSeekStatus).toHaveBeenCalledWith('running');
     expect(state.setGoalSeekResult).toHaveBeenCalledWith({
@@ -254,7 +255,7 @@ describe('data analysis actions', () => {
     });
   });
 
-  it('falls back to the solver goal seek value when raw target-cell readback is unavailable', async () => {
+  it('falls back to the solver goal seek value when achieved value is unavailable', async () => {
     const getCell = jest.fn().mockResolvedValue({ value: 'not numeric', formatted: '$20.00' });
     const deps = createGoalSeekDeps({ getCell });
 
@@ -263,6 +264,7 @@ describe('data analysis actions', () => {
       setGoalSeekResult: jest.Mock;
     };
 
+    expect(getCell).not.toHaveBeenCalled();
     expect(state.setGoalSeekResult).toHaveBeenCalledWith({
       found: true,
       solutionValue: 10,

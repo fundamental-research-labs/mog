@@ -9,6 +9,7 @@
  * ARCHITECTURE:
  * - Takes (ctx: DocumentContext, sheetId: string) as first two params
  * - Resolves A1 addresses to CellIds, calls ComputeBridge.goalSeek()
+ * - Returns the proposed solution without mutating the changing cell
  * - Returns contract GoalSeekResult
  */
 
@@ -23,8 +24,8 @@ import * as CellOps from './cell-operations';
  * Find the input value that makes a formula cell reach a target value.
  *
  * Resolves A1 references, retrieves CellIds, runs the Goal Seek algorithm
- * via the compute bridge, and applies the solution to the changing cell
- * if one is found.
+ * via the compute bridge. The operation is intentionally read-only; callers
+ * that want to keep the proposed solution must write it explicitly.
  */
 export async function goalSeek(
   ctx: DocumentContext,
@@ -76,15 +77,11 @@ export async function goalSeek(
     iterations: number;
   };
 
-  // If a solution was found, apply it to the changing cell
-  if (result.found && result.solutionValue != null) {
-    await CellOps.setCell(ctx, sheetId, changingPos.row, changingPos.col, result.solutionValue);
-  }
-
   // Map bridge result to contract GoalSeekResult
   return {
     found: result.found,
     value: result.solutionValue,
+    achievedValue: result.achievedValue,
     iterations: result.iterations,
   };
 }

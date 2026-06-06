@@ -1,227 +1,14 @@
 //! Cell editing — set, clear, apply changes, and structural mutations.
 
+use super::region_guard::check_region_partial_write;
 use super::*;
 use crate::storage::engine::mutation::CellInput;
 use formula_types::WorkbookLookup;
-
-/// Trust level for value-typed `set_cells_raw` writes.
-///
-/// **Stream A′ trust marker** (per `cse-display-and-batch-write.md`).
-/// `set_cells_raw` is value-typed: there's no string parser between the
-/// caller's intent and the mirror, which means it has historically been
-/// an unguarded backdoor for partial-array writes. The trust marker
-/// distinguishes:
-///
-/// - `UserEdit` — the call originates from a user-driven path
-///   (`import_values`, range fill, structural value-replay). These MUST
-///   reject partial writes into a CSE / Data Table region with
-///   `PartialArrayWrite`.
-/// - `TrustedReplay` — the call originates from a Yrs replay or other
-///   path whose upstream op already passed its guard (or is the
-///   array re-materialization itself). These skip the guard.
-///
-/// `set_cells_raw` ships this enum inline as part of D1.5; if Stream A′
-/// has already landed when D1.5 merges, the merge is a no-op (same
-/// shape, same semantics).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WriteTrust {
-    UserEdit,
-    TrustedReplay,
-}
-
-/// Outcome of the shared region partial-write guard.
-///
-/// - `Continue` — no region conflict (or the edit is permitted, e.g.,
-///   anchor Clear of a CSE that tore down the array). The caller
-///   proceeds with the original `(cell_id, row, col, input)`.
-pub(super) enum RegionGuardOutcome {
-    Continue,
-}
-
-/// Excel rejection family — what the engine does when an edit lands
-/// inside an existing region rectangle (CSE anchor/member or Data
-/// Table master/body):
-///
-/// | Input + Region kind                    | Behavior                                  |
-/// |----------------------------------------|-------------------------------------------|
-/// | `Clear` (CSE anchor)                   | Tear down the whole CSE; proceed at anchor |
-/// | `Clear` (CSE non-anchor member)        | Reject as `PartialArrayWrite`             |
-/// | `Literal { text }` (any CSE cell)      | Reject as `PartialArrayWrite`             |
-/// | `Parse  { text }`  (any CSE cell)      | Reject as `PartialArrayWrite`             |
-/// | `Value  { value }` (any CSE cell)      | Reject as `PartialArrayWrite` unless Null anchor-clear |
-/// | `Clear` (Data Table any cell)          | Reject as `PartialArrayWrite`             |
-/// | `Literal { text }` (Data Table master) | Reject as `PartialArrayWrite`             |
-/// | `Parse  { text }`  (Data Table master) | Reject as `PartialArrayWrite`             |
-/// | `Value  { value }` (Data Table master) | Reject as `PartialArrayWrite`             |
-/// | `Literal { text }` (Data Table body)   | Reject as `PartialArrayWrite`             |
-/// | `Parse  { text }`  (Data Table body)   | Reject as `PartialArrayWrite`             |
-/// | `Value  { value }` (Data Table body)   | Reject as `PartialArrayWrite`             |
-///
-/// Excel parity: pressing Delete on a **single** cell of a CSE
-/// rectangle (anchor or member) is rejected — "You cannot change part
-/// of an array." The user must select the entire CSE extent; when the
-/// anchor-Clear is included in a batch, it tears down the CSE and
-/// subsequent member-Clears land on plain cells. **Data Tables reject ALL partial writes** —
-/// including master cell edits and body cell clears — because the
-/// region's single source-of-truth is the master's `=TABLE(r2,r1)`
-/// expression and the surrounding header cells; any partial write would
-/// orphan the body cells. Users must clear the entire Data Table
-/// rectangle explicitly to remove it.
-///
-/// Run BEFORE any mutation work so rejection is atomic. Used by
-/// `set_cell` (single-cell), `set_cells` (batch), and `set_cells_raw`
-/// (`UserEdit` trust). One helper, one path; no parallel `check_data_table_partial_write`.
-pub(super) fn check_region_partial_write(
-    mirror: &mut CellMirror,
-    sheet_id: &SheetId,
-    cell_id: CellId,
-    row: u32,
-    col: u32,
-    input: &CellInput,
-) -> Result<RegionGuardOutcome, ComputeError> {
-    // 1. CSE check — anchor-Clear tears down the array; all other
-    //    inputs (member-Clear, Literal, Parse) are rejected. Excel
-    //    requires selecting the entire CSE extent to delete; a single-
-    //    cell Delete on a member is "You cannot change part of an
-    //    array." In batch paths the anchor is processed first (row-
-    //    order), so by the time members are checked the CSE is gone.
-    if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, row, col) {
-        if input.is_clear_intent() && anchor_id == cell_id {
-            // Anchor-Clear: tear down the array and proceed.
-            mirror.unmark_cse_anchor(&anchor_id);
-            mirror.cse_single_cell.remove(&anchor_id);
-            return Ok(RegionGuardOutcome::Continue);
-        }
-        // Member-Clear, Literal, Parse, non-null Value: reject.
-        return Err(ComputeError::PartialArrayWrite {
-            sheet_id: sheet_id.to_uuid_string(),
-            row,
-            col,
-            anchor_row: anchor_pos.row(),
-            anchor_col: anchor_pos.col(),
-        });
-    }
-
-    // 2. Data Table region check — same conceptual guard. Members of a
-    //    Data Table region (master + body cells) cannot be edited or
-    //    cleared piecewise: the region is a single semantic unit. Any
-    //    partial write returns `PartialArrayWrite` reporting the
-    //    master's coordinates as the anchor.
-    //
-    //    Note: Data Tables differ from CSE in that BOTH master and body
-    //    cells reject all input kinds (Literal, Parse, Clear). Editing
-    //    the master's TABLE formula would orphan body cells; editing a
-    //    body cell would diverge from the synthesized formula text.
-    //    Users must clear the entire region to remove it.
-    if let Some(dt) = mirror.find_data_table_at(sheet_id, row, col) {
-        let anchor_row = dt.start_row;
-        let anchor_col = dt.start_col;
-        return Err(ComputeError::PartialArrayWrite {
-            sheet_id: sheet_id.to_uuid_string(),
-            row,
-            col,
-            anchor_row,
-            anchor_col,
-        });
-    }
-
-    Ok(RegionGuardOutcome::Continue)
-}
 
 impl ComputeCore {
     // -----------------------------------------------------------------------
     // Cell editing
     // -----------------------------------------------------------------------
-
-    /// Validate user-originating cell edits against region atomicity rules
-    /// before any storage or mirror mutation happens.
-    ///
-    /// This is the preflight counterpart to `check_region_partial_write`.
-    /// Storage-level mutation handlers call it before writing to Yrs so a
-    /// rejected CSE/Data Table partial edit is genuinely atomic.
-    pub fn validate_region_partial_writes(
-        &self,
-        mirror: &CellMirror,
-        edits: &[(SheetId, CellId, u32, u32, CellInput)],
-    ) -> Result<(), ComputeError> {
-        let anchors_being_cleared: std::collections::HashSet<CellId> = edits
-            .iter()
-            .filter(|(_, _, _, _, input)| input.is_clear_intent())
-            .filter_map(|(sheet_id, cell_id, row, col, _)| {
-                mirror
-                    .cse_anchor_covering(sheet_id, *row, *col)
-                    .filter(|(anchor_id, _)| *anchor_id == *cell_id)
-                    .map(|(anchor_id, _)| anchor_id)
-            })
-            .collect();
-
-        for (sheet_id, cell_id, row, col, input) in edits {
-            if let Some((anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, *row, *col)
-            {
-                if !input.is_clear_intent()
-                    || (*cell_id != anchor_id && !anchors_being_cleared.contains(&anchor_id))
-                {
-                    return Err(ComputeError::PartialArrayWrite {
-                        sheet_id: sheet_id.to_uuid_string(),
-                        row: *row,
-                        col: *col,
-                        anchor_row: anchor_pos.row(),
-                        anchor_col: anchor_pos.col(),
-                    });
-                }
-            }
-
-            if let Some(dt) = mirror.find_data_table_at(sheet_id, *row, *col) {
-                return Err(ComputeError::PartialArrayWrite {
-                    sheet_id: sheet_id.to_uuid_string(),
-                    row: *row,
-                    col: *col,
-                    anchor_row: dt.start_row,
-                    anchor_col: dt.start_col,
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Validate lossless value-typed user edits against CSE/Data Table
-    /// region atomicity before storage writes.
-    ///
-    /// Value-typed edits do not carry a `CellInput::Clear` discriminator, so
-    /// every user edit inside a guarded region is a partial write. Trusted
-    /// replay paths intentionally skip this method and use
-    /// `set_cells_raw_with_trust(TrustedReplay)`.
-    pub fn validate_raw_user_edit_region_writes(
-        &self,
-        mirror: &CellMirror,
-        edits: &[(SheetId, CellId, u32, u32, CellValue, Option<String>)],
-    ) -> Result<(), ComputeError> {
-        for (sheet_id, _cell_id, row, col, _value, _formula) in edits {
-            if let Some((_anchor_id, anchor_pos)) = mirror.cse_anchor_covering(sheet_id, *row, *col)
-            {
-                return Err(ComputeError::PartialArrayWrite {
-                    sheet_id: sheet_id.to_uuid_string(),
-                    row: *row,
-                    col: *col,
-                    anchor_row: anchor_pos.row(),
-                    anchor_col: anchor_pos.col(),
-                });
-            }
-
-            if let Some(dt) = mirror.find_data_table_at(sheet_id, *row, *col) {
-                return Err(ComputeError::PartialArrayWrite {
-                    sheet_id: sheet_id.to_uuid_string(),
-                    row: *row,
-                    col: *col,
-                    anchor_row: dt.start_row,
-                    anchor_col: dt.start_col,
-                });
-            }
-        }
-
-        Ok(())
-    }
 
     /// Set a single cell's value or formula, triggering partial recalculation.
     ///
@@ -230,10 +17,9 @@ impl ComputeCore {
     /// while boundary-aware callers build `CellInput` explicitly.
     ///
     /// Rejects writes to any position that falls inside an existing CSE
-    /// (`Ctrl+Shift+Enter`) array formula extent — anchor or member —
-    /// with [`ComputeError::PartialArrayWrite`]. The caller must clear
-    /// the entire array (`clear_cells` on the anchor) and re-enter via
-    /// [`ComputeCore::set_array_formula`].
+    /// (`Ctrl+Shift+Enter`) array formula extent, or any non-anchor member
+    /// of an active dynamic-array spill, with
+    /// [`ComputeError::PartialArrayWrite`].
     pub fn set_cell<I: Into<CellInput>>(
         &mut self,
         mirror: &mut CellMirror,
@@ -247,7 +33,7 @@ impl ComputeCore {
         // Excel region rejection family — see `check_region_partial_write`
         // for the full rejection table covering CSE rectangles and Data
         // Table regions. The shared helper rejects partial writes
-        // uniformly; CSE anchor-Clear is the one allowed case (tears
+        // uniformly; CSE anchor-Clear is the one allowed CSE case (tears
         // down the whole array). Both `set_cell` and the batch path
         // `set_cells` route through it; production user edits go
         // through `set_cells`.
@@ -588,31 +374,9 @@ impl ComputeCore {
         // For UserEdit trust, run the unified region partial-write guard
         // up front so rejection is atomic. `set_cells_raw` is value-typed:
         // there's no `CellInput::Clear` discriminator, so any value-write
-        // into a region (CSE or Data Table) is treated as a partial
-        // write. The guard rejects with `PartialArrayWrite`.
+        // into a guarded region is treated as a partial write.
         if matches!(trust, WriteTrust::UserEdit) {
-            for (sheet_id, _cell_id, row, col, _value, _formula) in edits {
-                if let Some((_anchor_id, anchor_pos)) =
-                    mirror.cse_anchor_covering(sheet_id, *row, *col)
-                {
-                    return Err(ComputeError::PartialArrayWrite {
-                        sheet_id: sheet_id.to_uuid_string(),
-                        row: *row,
-                        col: *col,
-                        anchor_row: anchor_pos.row(),
-                        anchor_col: anchor_pos.col(),
-                    });
-                }
-                if let Some(dt) = mirror.find_data_table_at(sheet_id, *row, *col) {
-                    return Err(ComputeError::PartialArrayWrite {
-                        sheet_id: sheet_id.to_uuid_string(),
-                        row: *row,
-                        col: *col,
-                        anchor_row: dt.start_row,
-                        anchor_col: dt.start_col,
-                    });
-                }
-            }
+            self.validate_raw_user_edit_region_writes(mirror, edits)?;
         }
         self.ensure_graph_built(mirror)?;
 
@@ -709,9 +473,9 @@ impl ComputeCore {
     /// Clear one or more cells — removes values, formulas, and dependencies.
     /// Also tears down any CSE registration on the cleared anchors so a
     /// subsequent edit at that position is no longer rejected as
-    /// `PartialArrayWrite`. Clearing a CSE *member* (not the anchor)
-    /// also tears down the whole array — Excel parity, matching
-    /// `set_cell`'s rejection-family table.
+    /// `PartialArrayWrite`. Dynamic spill members are read-only
+    /// projection cells and are rejected rather than converted into
+    /// blockers.
     pub fn clear_cells(
         &mut self,
         mirror: &mut CellMirror,
@@ -722,8 +486,31 @@ impl ComputeCore {
         // collect the anchor cell IDs so the caller-issued list is
         // expanded to include them. Excel: Clear on any cell of a CSE
         // rectangle clears the whole array.
+        let dynamic_sources_being_cleared: std::collections::HashSet<CellId> = cell_ids
+            .iter()
+            .filter(|cell_id| {
+                mirror.projection_registry.get(cell_id).is_some() && !mirror.is_cse_anchor(cell_id)
+            })
+            .copied()
+            .collect();
         let mut expanded: Vec<CellId> = Vec::with_capacity(cell_ids.len());
         for cell_id in cell_ids {
+            if let Some(sheet_id) = mirror.sheet_for_cell(cell_id)
+                && let Some(pos) = mirror.resolve_position(cell_id)
+                && let Some((anchor_id, anchor_pos)) =
+                    mirror.dynamic_spill_member_covering(&sheet_id, pos.row(), pos.col())
+            {
+                if dynamic_sources_being_cleared.contains(&anchor_id) {
+                    continue;
+                }
+                return Err(ComputeError::PartialArrayWrite {
+                    sheet_id: sheet_id.to_uuid_string(),
+                    row: pos.row(),
+                    col: pos.col(),
+                    anchor_row: anchor_pos.row(),
+                    anchor_col: anchor_pos.col(),
+                });
+            }
             if !expanded.contains(cell_id) {
                 expanded.push(*cell_id);
             }

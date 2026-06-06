@@ -16,6 +16,28 @@ pub(in crate::storage::engine) fn find_cell_id_at(
     stores.grid_indexes.get(sheet_id)?.cell_id_at(row, col)
 }
 
+pub(in crate::storage::engine) fn cell_id_for_region_guard(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> CellId {
+    if let Some(cell_id) = find_cell_id_at(stores, sheet_id, row, col) {
+        return cell_id;
+    }
+
+    if let Some((source, _, _)) = mirror.projection_registry.resolve(sheet_id, row, col)
+        && let Some(pos) = mirror.resolve_position(&source)
+        && pos.row() == row
+        && pos.col() == col
+    {
+        return source;
+    }
+
+    CellId::from_raw(0)
+}
+
 /// Mirror-aware variant of [`find_cell_id_at`].
 ///
 /// When the GridIndex has no CellId at `(row, col)`, checks the mirror's

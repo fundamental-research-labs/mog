@@ -6,7 +6,7 @@ use super::helpers::*;
 use crate::mirror::CellMirror;
 use crate::snapshot::CellData;
 use std::sync::Arc;
-use value_types::CellValue;
+use value_types::{CellValue, ComputeError};
 
 #[test]
 fn test_interactive_sequence_spills() {
@@ -183,12 +183,8 @@ fn test_spill_shrinkage_clears_old_phantoms() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Test 4: Editing a phantom triggers #SPILL! on source
-// ---------------------------------------------------------------------------
-
 #[test]
-fn test_edit_phantom_triggers_spill_error() {
+fn test_editing_dynamic_spill_member_is_rejected() {
     let a1_str = cell_id_str(0, 0);
 
     let snap = spill_snapshot(vec![CellData {
@@ -224,16 +220,26 @@ fn test_edit_phantom_triggers_spill_error() {
         .ensure_cell_id(&mut mirror, &sheet_id, SheetPos::new(2, 0))
         .unwrap();
 
-    // Edit A3 directly — this should invalidate A1's projection
-    core.set_cell(&mut mirror, &sheet_id, a3_id, 2, 0, "hello")
-        .unwrap();
+    let err = core
+        .set_cell(&mut mirror, &sheet_id, a3_id, 2, 0, "hello")
+        .expect_err("editing a dynamic-array spill member should reject");
 
-    // A1 should show #SPILL! because A3 now blocks its spill range
+    assert!(
+        matches!(err, ComputeError::PartialArrayWrite { .. }),
+        "expected PartialArrayWrite, got {err:?}",
+    );
     let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
     assert_eq!(
         *a1_val,
-        CellValue::Error(CellError::Spill, None),
-        "A1 should be #SPILL! after editing phantom A3"
+        CellValue::number(1.0),
+        "A1 should remain the spill anchor value after rejected member edit"
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
+            .cloned(),
+        Some(CellValue::number(3.0)),
+        "A3 should remain projected from A1 after rejected member edit"
     );
 }
 

@@ -1,6 +1,6 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
-use value_types::{CellError, CellValue, ComputeError};
+use value_types::{CellValue, ComputeError};
 
 use super::*;
 use crate::storage::engine::YrsComputeEngine;
@@ -219,7 +219,7 @@ fn mutation_clear_range_full_cse_extent_clears_anchor() {
 }
 
 #[test]
-fn mutation_clear_range_dynamic_spill_member_creates_blank_blocker() {
+fn mutation_clear_range_dynamic_spill_member_rejects_without_blocker() {
     let snapshot = snapshot_with_cells(vec![CellData {
         cell_id: A1_UUID.to_string(),
         row: 0,
@@ -254,26 +254,26 @@ fn mutation_clear_range_dynamic_spill_member_creates_blank_blocker() {
         "precondition: A3 should be projected from A1",
     );
 
-    let (_patches, result) = engine
+    let err = engine
         .clear_range(&sheet_id, 2, 0, 2, 0)
-        .expect("clear projected member");
+        .expect_err("clear projected member should reject");
 
+    assert!(
+        matches!(err, ComputeError::PartialArrayWrite { .. }),
+        "expected PartialArrayWrite, got {err:?}",
+    );
     assert_eq!(
         engine.mirror().get_cell_value(&a1_id).cloned(),
-        Some(CellValue::Error(CellError::Spill, None)),
-        "A1 should recalc to #SPILL! after A3 becomes a blocker",
+        Some(CellValue::number(1.0)),
+        "A1 should remain the spill anchor value after rejected clear",
     );
     assert_eq!(
         engine
             .mirror()
             .get_cell_value_at(&sheet_id, SheetPos::new(2, 0))
             .cloned(),
-        Some(CellValue::Text(String::new().into())),
-        "A3 should become an explicit blank text blocker",
-    );
-    assert!(
-        cell_change_at(&result.recalc.changed_cells, 0, 0).is_some(),
-        "anchor transition to #SPILL! should be reported",
+        Some(CellValue::number(3.0)),
+        "A3 should remain projected from A1 after rejected clear",
     );
 }
 

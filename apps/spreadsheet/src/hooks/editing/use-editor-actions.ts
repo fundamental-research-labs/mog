@@ -243,15 +243,11 @@ export function useEditorActions(): UseEditorActionsReturn {
           return protectionError('You cannot change part of an array formula.');
         }
 
-        // CSE partial-array rejection now lives in Rust (`compute-core`
-        // returns `ComputeError::PartialArrayWrite` from `set_cell` for
-        // any cell covered by a CSE anchor's projection). The TS guard
-        // that previously duplicated that logic here was deleted along
-        // with the `arrayFormulaCells` Zustand registry; the editor
-        // commit path surfaces the Rust error via the standard error
-        // path. Dynamic-array spills are NOT covered — the spill member
-        // edit places a blocker literal and raises `#SPILL!` at the
-        // anchor (existing scheduler/spill behavior, unchanged).
+        // Rust compute-core owns the authoritative region guard. This
+        // TS preflight keeps editor startup behavior crisp for
+        // projection children; commit paths still surface
+        // `ComputeError::PartialArrayWrite` if a lower-level caller
+        // reaches the guarded region.
 
         const fastEditability = ws.protection.canEditCellFast(cell.row, cell.col);
         if (fastEditability === 'unknown') {

@@ -8,7 +8,7 @@ use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::find_cell_id_at;
+use super::{cell_id_for_region_guard, find_cell_id_at};
 
 pub(in crate::storage::engine) fn set_cell_values_parsed(
     stores: &mut EngineStores,
@@ -47,6 +47,21 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
             )
         })
         .collect();
+    let guard_edits: Vec<(SheetId, CellId, u32, u32, CellInput)> = typed_updates
+        .iter()
+        .map(|(row, col, input)| {
+            (
+                *sheet_id,
+                cell_id_for_region_guard(stores, mirror, sheet_id, *row, *col),
+                *row,
+                *col,
+                input.clone(),
+            )
+        })
+        .collect();
+    stores
+        .compute
+        .validate_region_partial_writes(mirror, &guard_edits)?;
 
     mutation.observer.set_suppressed(true);
     {
@@ -165,6 +180,23 @@ pub(in crate::storage::engine) fn import_values(
     sheet_id: &SheetId,
     updates: &[(u32, u32, CellValue, Option<String>)],
 ) -> Result<RecalcResult, ComputeError> {
+    let guard_edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)> = updates
+        .iter()
+        .map(|(row, col, value, formula)| {
+            (
+                *sheet_id,
+                cell_id_for_region_guard(stores, mirror, sheet_id, *row, *col),
+                *row,
+                *col,
+                value.clone(),
+                formula.clone(),
+            )
+        })
+        .collect();
+    stores
+        .compute
+        .validate_raw_user_edit_region_writes(mirror, &guard_edits)?;
+
     // Snapshot old values from mirror BEFORE the bulk import updates them.
     let mut direct_edit_old_values: std::collections::HashMap<CellId, CellValue> =
         std::collections::HashMap::with_capacity(updates.len());

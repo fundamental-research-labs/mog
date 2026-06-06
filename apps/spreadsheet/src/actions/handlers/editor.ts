@@ -173,12 +173,10 @@ export const EDIT_CELL: AsyncActionHandler = async (deps) => {
     return handled();
   }
 
-  // CSE partial-write rejection lives in Rust compute-core
-  // (`ComputeError::PartialArrayWrite`). Editing a CSE member surfaces
-  // the error from `ws.setCell` at commit time; the TS-side pre-check
-  // that previously duplicated the projection lookup was deleted.
-  // Dynamic-array spill members continue to accept blocker writes
-  // (Excel 365 `#SPILL!` behavior, unchanged).
+  // Region partial-write rejection is enforced in Rust compute-core
+  // (`ComputeError::PartialArrayWrite`). The edit-entry service also
+  // preflights projection children so dynamic spill members never enter
+  // an editor session.
 
   // Auto-deactivate selection modes on edit start (Excel behavior)
   // End Mode, Extend Selection (F8), and Add to Selection (Shift+F8) all deactivate

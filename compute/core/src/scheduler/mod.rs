@@ -81,6 +81,7 @@ mod init;
 pub(crate) mod input;
 mod level_eval;
 mod recalc;
+mod region_guard;
 mod resolvers;
 mod schema_validation;
 mod solver_methods;
@@ -113,8 +114,8 @@ use resolvers::ConcurrentIdentityResolver;
 use resolvers::{CoreIdentityResolver, CoreResolver};
 use value_utils::{truncate_chars, values_equal};
 
-/// Stream A′ trust marker — see `edit::WriteTrust` for full docs.
-pub use edit::WriteTrust;
+/// Stream A′ trust marker — see `region_guard::WriteTrust` for full docs.
+pub use region_guard::WriteTrust;
 
 // ---------------------------------------------------------------------------
 // AstEntry — cached formula AST with metadata flags

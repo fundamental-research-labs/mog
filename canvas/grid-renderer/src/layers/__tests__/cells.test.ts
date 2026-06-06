@@ -239,10 +239,10 @@ function createMockReader(cells: Map<string, MockCellData>): BinaryCellReader {
   };
 }
 
-function createPositionIndex(rows = 100, cols = 26): ViewportPositionIndex {
-  const pi = new ViewportPositionIndex(25, 100);
+function createPositionIndex(rows = 100, cols = 26, rowHeight = 25): ViewportPositionIndex {
+  const pi = new ViewportPositionIndex(rowHeight, 100);
   const rowPositions = new Float64Array(rows);
-  for (let i = 0; i < rows; i++) rowPositions[i] = i * 25;
+  for (let i = 0; i < rows; i++) rowPositions[i] = i * rowHeight;
   const colPositions = new Float64Array(cols);
   for (let i = 0; i < cols; i++) colPositions[i] = i * 100;
   pi.setPositions(rowPositions, colPositions, 0, 0);
@@ -637,6 +637,22 @@ describe('CellsLayer', () => {
       const ctx = createMockContext();
       layer.render(ctx, createRegionWithViewport(), createFrame());
       expect(getRenderedTexts(ctx)).toContain('Hello World');
+    });
+
+    it('renders explicit line breaks as separate lines without wrapText format', () => {
+      const reader = createMockReader(
+        new Map([['0,0', { valueType: 2, displayText: 'Line 1\nLine 2\nLine 3' }]]),
+      );
+      const layer = createLayerWithReader(reader, {
+        positionIndex: createPositionIndex(100, 26, 60),
+      });
+      const ctx = createMockContext();
+
+      layer.render(ctx, createRegionWithViewport(), createFrame());
+
+      const texts = getRenderedTexts(ctx);
+      expect(texts).toEqual(expect.arrayContaining(['Line 1', 'Line 2', 'Line 3']));
+      expect(texts).not.toContain('Line 1\nLine 2\nLine 3');
     });
 
     it('renders multiple cells', () => {

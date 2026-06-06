@@ -754,6 +754,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     const defaultFontColor = this.sheetData.sheetViewSkin.defaultCellText;
     const textMeasurer = this.textMeasurer;
     const { x, y, width, height, row, col } = cellInfo;
+    const hasHardLineBreaks = /[\r\n]/.test(displayText);
 
     // 1. Rich text
     if (richTextSegments && richTextSegments.length > 0) {
@@ -837,7 +838,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     }
 
     // 5. Distributed horizontal alignment (non-wrap)
-    if (format?.horizontalAlign === 'distributed' && !format.wrapText) {
+    if (format?.horizontalAlign === 'distributed' && !format.wrapText && !hasHardLineBreaks) {
       renderDistributedHorizontalText(
         ctx,
         displayText,
@@ -853,8 +854,8 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       return;
     }
 
-    // 6. Wrap text
-    if (format?.wrapText) {
+    // 6. Multi-line text
+    if (format?.wrapText || hasHardLineBreaks) {
       renderWrappedText(ctx, cellInfo, format, {
         hasHyperlink,
         isCutCell: false,

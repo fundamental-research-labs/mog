@@ -421,7 +421,10 @@ export function ChartEditor({ config, onChange, onClose, onDelete }: ChartEditor
   };
 
   return (
-    <div className="w-[280px] bg-ss-surface rounded-ss-lg shadow-ss-md border border-ss-border overflow-hidden">
+    <div
+      data-testid="chart-editor-panel"
+      className="w-[280px] bg-ss-surface rounded-ss-lg shadow-ss-md border border-ss-border overflow-hidden"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-ss-border bg-ss-surface-secondary">
         <span className="text-body-lg font-semibold text-text">Edit Chart</span>

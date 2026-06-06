@@ -1,6 +1,6 @@
 ---
 name: mog-cli-kernel
-description: Use when operating Mog workbooks through the `mog` CLI, executing code against the headless @mog-sdk/node workbook API, committing workbook changes, unloading handles, or discovering the workbook/worksheet API from the bundled generated API JSON.
+description: Use when operating Mog workbooks through the `mog` CLI, executing code against the headless @mog-sdk/sdk workbook API, committing workbook changes, unloading handles, or discovering the workbook/worksheet API from the bundled generated API JSON.
 ---
 
 # Mog CLI Kernel
@@ -142,7 +142,7 @@ await wb.calculate();
   tables, conditional formats, names, sheets, and other uniquely named objects
   before adding them.
 - Prefer `--code-file` for nontrivial snippets to avoid shell quoting issues.
-- Use public SDK methods from `@mog-sdk/node`; do not deep-import internals.
+- Use public SDK methods from `@mog-sdk/sdk`; do not deep-import internals.
 - Always `commit` before reporting a workbook edit as saved.
 - Always `unload` when the task is complete.
 - Probe risky calls on a scratch sheet or range, then delete/clear it, before

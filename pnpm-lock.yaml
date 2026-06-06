@@ -611,7 +611,7 @@ importers:
 
   cli:
     dependencies:
-      '@mog-sdk/node':
+      '@mog-sdk/sdk':
         specifier: workspace:*
         version: link:../runtime/sdk
     devDependencies:

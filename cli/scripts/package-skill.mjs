@@ -59,7 +59,7 @@ function releasePackageVersion() {
   );
   if (packageJson.version !== sdkPackageJson.version) {
     throw new Error(
-      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/sdk version ${sdkPackageJson.version}`,
     );
   }
   return packageJson.version;

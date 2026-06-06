@@ -6,7 +6,7 @@ import { mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { api, createWorkbook, Utils, type Workbook } from '@mog-sdk/node';
+import { api, createWorkbook, Utils, type Workbook } from '@mog-sdk/sdk/node';
 import {
   parseCliArgs,
   pidPathForState,

@@ -4,6 +4,20 @@ use super::*;
 use crate::storage::engine::mutation::CellInput;
 
 impl ComputeCore {
+    pub(super) fn rendered_formula_string_or_fallback(
+        mirror: &CellMirror,
+        sheet_id: SheetId,
+        identity_formula: Option<&IdentityFormula>,
+        fallback: &str,
+    ) -> String {
+        identity_formula
+            .map(|formula| {
+                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
+                compute_parser::to_a1_string(formula, &lookup)
+            })
+            .unwrap_or_else(|| fallback.to_string())
+    }
+
     // -----------------------------------------------------------------------
     // Internal: input processing
     // -----------------------------------------------------------------------
@@ -198,8 +212,9 @@ impl ComputeCore {
                         .is_some_and(|v| matches!(v, CellValue::Error(..)));
                     let same_formula = !current_is_error
                         && self
-                            .formula_strings
+                            .cell_formula_text
                             .get(&cell_id)
+                            .or_else(|| self.formula_strings.get(&cell_id))
                             .is_some_and(|existing| *existing == formula_str);
                     if !same_formula {
                         mirror.apply_edit(
@@ -303,8 +318,9 @@ impl ComputeCore {
                     .is_some_and(|v| matches!(v, CellValue::Error(..)));
                 let same_formula = !current_is_error
                     && self
-                        .formula_strings
+                        .cell_formula_text
                         .get(&cell_id)
+                        .or_else(|| self.formula_strings.get(&cell_id))
                         .is_some_and(|existing| *existing == formula_str);
                 if !same_formula {
                     mirror.apply_edit(
@@ -497,6 +513,12 @@ impl ComputeCore {
                 };
 
                 // Step 3: Store IdentityFormula in CellEntry
+                let rendered_formula = Self::rendered_formula_string_or_fallback(
+                    mirror,
+                    sheet_id,
+                    identity_formula.as_ref(),
+                    &formula,
+                );
                 mirror.set_formula(&cell_id, identity_formula);
 
                 // Step 4: Extract dependencies and check volatility in a single AST walk
@@ -532,7 +554,7 @@ impl ComputeCore {
                         self.formula_text_deps.clear_formula(&cell_id);
                         self.ast_cache.remove(&cell_id);
                         self.cell_range_keys.remove(&cell_id);
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         return;
                     }
@@ -575,7 +597,7 @@ impl ComputeCore {
                         is_dynamic_array,
                     },
                 );
-                self.formula_strings.insert(cell_id, formula.clone());
+                self.formula_strings.insert(cell_id, rendered_formula);
                 self.cell_formula_text.insert(cell_id, formula);
             }
             Err(_parse_err) => {

@@ -132,6 +132,52 @@ fn set_workbook_settings_returns_workbook_settings_change() {
 }
 
 #[test]
+fn set_custom_setting_returns_workbook_settings_change() {
+    let mut engine = build_engine();
+    let active_sheet = sheet_id().to_uuid_string();
+
+    let (_patches, result) = engine
+        .set_custom_setting("mog.activeSheetId", Some(active_sheet.clone()))
+        .expect("set custom setting");
+    assert_eq!(result.workbook_settings_changes.len(), 1);
+    let change = &result.workbook_settings_changes[0];
+    assert_eq!(change.kind, ChangeKind::Set);
+    assert!(
+        change.changed_keys.iter().any(|k| k == "customSettings"),
+        "changed_keys must include customSettings; got {:?}",
+        change.changed_keys
+    );
+    assert_eq!(
+        change
+            .settings
+            .get("customSettings")
+            .and_then(|v| v.get("mog.activeSheetId"))
+            .and_then(|v| v.as_str()),
+        Some(active_sheet.as_str())
+    );
+
+    let (_patches, result) = engine
+        .set_custom_setting("mog.activeSheetId", None)
+        .expect("delete custom setting");
+    assert_eq!(result.workbook_settings_changes.len(), 1);
+    let change = &result.workbook_settings_changes[0];
+    assert_eq!(change.kind, ChangeKind::Set);
+    assert!(
+        change.changed_keys.iter().any(|k| k == "customSettings"),
+        "changed_keys must include customSettings after delete; got {:?}",
+        change.changed_keys
+    );
+    assert!(
+        change
+            .settings
+            .get("customSettings")
+            .and_then(|v| v.get("mog.activeSheetId"))
+            .is_none(),
+        "deleted custom setting must be absent from emitted workbook settings"
+    );
+}
+
+#[test]
 fn reset_workbook_settings_returns_workbook_settings_change() {
     let mut engine = build_engine();
     let mut next = engine.get_workbook_settings();

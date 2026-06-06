@@ -696,25 +696,49 @@ impl ComputeCore {
         }
     }
 
-    /// Regenerate rendered formula strings and replace cell formula text.
+    /// Regenerate rendered formula strings and update shifted cell formula text.
     ///
-    /// This is intentionally narrower than `regenerate_formula_strings`: use it
-    /// only for paths that have changed formula identities/templates and whose
-    /// persisted formula text must be rewritten to match the new structure.
+    /// `formula_strings` is the lossy display cache derived from
+    /// `IdentityFormula`. `cell_formula_text` is user-visible formula text and is
+    /// rewritten only when the rendered identity display changed since the last
+    /// cache build. Rewrites preserve per-reference sheet qualifiers from the
+    /// prior formula text, so `=Sheet1!A1` structurally shifts to `=Sheet1!A2`
+    /// rather than collapsing to `=A2`.
     pub(crate) fn regenerate_formula_strings_and_cell_formula_text(&mut self, mirror: &CellMirror) {
-        self.formula_strings.clear();
+        let previous_formula_strings = std::mem::take(&mut self.formula_strings);
+        let mut formula_text_updates: Vec<(CellId, String)> = Vec::new();
         let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
             if let Some(sheet) = mirror.get_sheet(&sheet_id) {
                 let lookup = MirrorPositionLookup::new(mirror, sheet_id);
                 for (cell_id, entry) in sheet.cells_iter() {
                     if let Some(formula) = &entry.formula {
-                        let a1 = compute_parser::to_a1_string(formula, &lookup);
-                        self.formula_strings.insert(*cell_id, a1.clone());
-                        self.cell_formula_text.insert(*cell_id, a1);
+                        let rendered = compute_parser::to_a1_string(formula, &lookup);
+                        let rendered_changed = previous_formula_strings
+                            .get(cell_id)
+                            .map_or(true, |previous| previous != &rendered);
+                        self.formula_strings.insert(*cell_id, rendered.clone());
+
+                        if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
+                            let rewritten = self
+                                .cell_formula_text
+                                .get(cell_id)
+                                .and_then(|previous_text| {
+                                    render_formula_text_with_previous_qualifiers(
+                                        formula,
+                                        &lookup,
+                                        previous_text,
+                                    )
+                                })
+                                .unwrap_or(rendered);
+                            formula_text_updates.push((*cell_id, rewritten));
+                        }
                     }
                 }
             }
+        }
+        for (cell_id, formula_text) in formula_text_updates {
+            self.cell_formula_text.insert(cell_id, formula_text);
         }
     }
 
@@ -727,7 +751,8 @@ impl ComputeCore {
         mirror: &CellMirror,
         deleted_sheet_id: &SheetId,
     ) {
-        self.formula_strings.clear();
+        let previous_formula_strings = std::mem::take(&mut self.formula_strings);
+        let mut formula_text_updates: Vec<(CellId, String)> = Vec::new();
         let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
         for sheet_id in sheet_ids {
             if sheet_id == *deleted_sheet_id {
@@ -737,12 +762,32 @@ impl ComputeCore {
                 let lookup = DeletedSheetDisplayLookup::new(mirror, sheet_id, *deleted_sheet_id);
                 for (cell_id, entry) in sheet.cells_iter() {
                     if let Some(formula) = &entry.formula {
-                        let a1 = compute_parser::to_a1_string(formula, &lookup);
-                        self.formula_strings.insert(*cell_id, a1.clone());
-                        self.cell_formula_text.insert(*cell_id, a1);
+                        let rendered = compute_parser::to_a1_string(formula, &lookup);
+                        let rendered_changed = previous_formula_strings
+                            .get(cell_id)
+                            .map_or(true, |previous| previous != &rendered);
+                        self.formula_strings.insert(*cell_id, rendered.clone());
+
+                        if rendered_changed || !self.cell_formula_text.contains_key(cell_id) {
+                            let rewritten = self
+                                .cell_formula_text
+                                .get(cell_id)
+                                .and_then(|previous_text| {
+                                    render_formula_text_with_previous_qualifiers(
+                                        formula,
+                                        &lookup,
+                                        previous_text,
+                                    )
+                                })
+                                .unwrap_or(rendered);
+                            formula_text_updates.push((*cell_id, rewritten));
+                        }
                     }
                 }
             }
+        }
+        for (cell_id, formula_text) in formula_text_updates {
+            self.cell_formula_text.insert(cell_id, formula_text);
         }
     }
 
@@ -822,6 +867,20 @@ impl ComputeCore {
             self.graph.mark_volatile(&cell_id);
         }
     }
+}
+
+fn render_formula_text_with_previous_qualifiers(
+    formula: &formula_types::IdentityFormula,
+    lookup: &dyn WorkbookLookup,
+    previous_text: &str,
+) -> Option<String> {
+    let force_qualified_refs =
+        compute_parser::sheet_qualified_reference_flags(previous_text, formula.refs.len())?;
+    Some(compute_parser::to_a1_string_with_forced_qualifiers(
+        formula,
+        lookup,
+        &force_qualified_refs,
+    ))
 }
 
 struct DeletedSheetDisplayLookup<'a> {

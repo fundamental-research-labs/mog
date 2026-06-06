@@ -472,6 +472,7 @@ impl ComputeCore {
                                 (
                                     cell_id,
                                     Ok((
+                                        sheet_id,
                                         ast,
                                         extracted.value_deps,
                                         extracted.formula_text_deps,
@@ -505,6 +506,7 @@ impl ComputeCore {
             for (cell_id, result) in compiled {
                 match result {
                     Ok((
+                        sheet_id,
                         ast,
                         deps,
                         formula_text_deps,
@@ -514,6 +516,12 @@ impl ComputeCore {
                         is_dynamic_array,
                         range_keys,
                     )) => {
+                        let rendered_formula = Self::rendered_formula_string_or_fallback(
+                            mirror,
+                            sheet_id,
+                            identity_formula.as_ref(),
+                            &formula,
+                        );
                         mirror.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, deps));
                         self.formula_text_deps.replace(cell_id, formula_text_deps);
@@ -527,7 +535,7 @@ impl ComputeCore {
                                 is_dynamic_array,
                             },
                         );
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         if !range_keys.is_empty() {
                             self.cell_range_keys.insert(cell_id, range_keys);
@@ -633,6 +641,12 @@ impl ComputeCore {
                             plan.into_iter().collect::<Vec<_>>()
                         };
 
+                        let rendered_formula = Self::rendered_formula_string_or_fallback(
+                            mirror,
+                            sheet_id,
+                            identity_formula.as_ref(),
+                            &formula,
+                        );
                         mirror.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, extracted.value_deps));
                         self.formula_text_deps
@@ -647,7 +661,7 @@ impl ComputeCore {
                                 is_dynamic_array,
                             },
                         );
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         if !range_keys.is_empty() {
                             self.cell_range_keys.insert(cell_id, range_keys);

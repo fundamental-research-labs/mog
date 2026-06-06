@@ -99,7 +99,10 @@ pub use parser::{ParseError, ParseErrorKind, parse_formula};
 pub use reference_tokens::{ReferenceToken, ReferenceTokenClass, collect_reference_tokens};
 
 // Re-export transform functions
-pub use a1_display::{to_a1_string, to_a1_string_qualified};
+pub use a1_display::{
+    sheet_qualified_reference_flags, to_a1_string, to_a1_string_qualified,
+    to_a1_string_with_forced_qualifiers,
+};
 pub use ast::needs_quoting;
 pub use identity_transform::{
     ExternalLinkBinder, ast_to_identity, to_identity_formula,

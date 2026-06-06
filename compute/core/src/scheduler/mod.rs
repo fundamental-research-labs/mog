@@ -567,8 +567,7 @@ impl ComputeCore {
 
         for (cell_id, formula) in authored_formula_text {
             let updated = replace_sheet_name_in_a1_formula(&formula, &old_name, name);
-            self.cell_formula_text.insert(cell_id, updated.clone());
-            self.formula_strings.insert(cell_id, updated);
+            self.cell_formula_text.insert(cell_id, updated);
         }
     }
 

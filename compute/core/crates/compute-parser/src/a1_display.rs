@@ -7,7 +7,7 @@
 
 use formula_types::{IdentityFormula, RefStyle, WorkbookLookup};
 
-use crate::display::render_identity_formula;
+use crate::display::{render_identity_formula, render_identity_formula_with_qualifier_flags};
 
 /// Convert an `IdentityFormula` to an A1-style display string.
 ///
@@ -74,6 +74,102 @@ pub fn to_a1_string(formula: &IdentityFormula, lookup: &dyn WorkbookLookup) -> S
 #[must_use]
 pub fn to_a1_string_qualified(formula: &IdentityFormula, lookup: &dyn WorkbookLookup) -> String {
     render_identity_formula(formula, lookup, RefStyle::A1, true)
+}
+
+/// Like [`to_a1_string`], but forces sheet prefixes for selected reference
+/// placeholders even when they resolve to `lookup.formula_sheet()`.
+///
+/// `force_qualified_refs[N] = true` means placeholder `{N}` should render with a
+/// sheet prefix. Missing entries default to `false`.
+#[must_use]
+pub fn to_a1_string_with_forced_qualifiers(
+    formula: &IdentityFormula,
+    lookup: &dyn WorkbookLookup,
+    force_qualified_refs: &[bool],
+) -> String {
+    render_identity_formula_with_qualifier_flags(
+        formula,
+        lookup,
+        RefStyle::A1,
+        false,
+        force_qualified_refs,
+    )
+}
+
+/// Return one flag per identity reference indicating whether the corresponding
+/// A1 reference in `formula` was explicitly sheet-qualified.
+///
+/// Returns `None` when the formula does not parse or when the number of parsed
+/// reference nodes does not match `ref_count`.
+#[must_use]
+pub fn sheet_qualified_reference_flags(formula: &str, ref_count: usize) -> Option<Vec<bool>> {
+    let ast = crate::parse_formula(formula, None).ok()?.into_inner();
+    let mut flags = Vec::with_capacity(ref_count);
+    collect_sheet_qualified_reference_flags(&ast, false, &mut flags);
+    (flags.len() == ref_count).then_some(flags)
+}
+
+fn collect_sheet_qualified_reference_flags(
+    node: &crate::ASTNode,
+    sheet_qualified: bool,
+    flags: &mut Vec<bool>,
+) {
+    use crate::ASTNode;
+
+    match node {
+        ASTNode::CellReference(_) | ASTNode::Range(_) => flags.push(sheet_qualified),
+        ASTNode::SheetRef { inner, .. }
+        | ASTNode::UnresolvedSheetRef { inner, .. }
+        | ASTNode::ThreeDRef { inner, .. }
+        | ASTNode::UnresolvedThreeDRef { inner, .. }
+        | ASTNode::ExternalSheetRef { inner, .. }
+        | ASTNode::ExternalThreeDRef { inner, .. } => {
+            collect_sheet_qualified_reference_flags(inner, true, flags);
+        }
+        ASTNode::ExternalNameRef { .. } => flags.push(true),
+        ASTNode::BinaryOp { left, right, .. } => {
+            collect_sheet_qualified_reference_flags(left, sheet_qualified, flags);
+            collect_sheet_qualified_reference_flags(right, sheet_qualified, flags);
+        }
+        ASTNode::UnaryOp { operand, .. } | ASTNode::Paren(operand) => {
+            collect_sheet_qualified_reference_flags(operand, sheet_qualified, flags);
+        }
+        ASTNode::Function { args, .. } => {
+            for arg in args {
+                collect_sheet_qualified_reference_flags(arg, sheet_qualified, flags);
+            }
+        }
+        ASTNode::Array { rows } => {
+            for row in rows {
+                for element in row {
+                    collect_sheet_qualified_reference_flags(element, sheet_qualified, flags);
+                }
+            }
+        }
+        ASTNode::CallExpression { callee, args } => {
+            collect_sheet_qualified_reference_flags(callee, sheet_qualified, flags);
+            for arg in args {
+                collect_sheet_qualified_reference_flags(arg, sheet_qualified, flags);
+            }
+        }
+        ASTNode::RangeOp { start, end } => {
+            collect_sheet_qualified_reference_flags(start, sheet_qualified, flags);
+            collect_sheet_qualified_reference_flags(end, sheet_qualified, flags);
+        }
+        ASTNode::Union { ranges } => {
+            for range in ranges {
+                collect_sheet_qualified_reference_flags(range, sheet_qualified, flags);
+            }
+        }
+        ASTNode::Number(_)
+        | ASTNode::Text(_)
+        | ASTNode::Boolean(_)
+        | ASTNode::Error(_)
+        | ASTNode::StructuredRef(_)
+        | ASTNode::Identifier(_)
+        | ASTNode::OptionalLambdaParam(_)
+        | ASTNode::Omitted => {}
+    }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -176,6 +272,37 @@ mod tests {
         );
 
         assert_eq!(to_a1_string(&formula, &lookup), "=A1+B1");
+    }
+
+    #[test]
+    fn forced_qualifiers_preserve_same_sheet_prefix() {
+        let s1 = sheet(1);
+        let mut lookup = MockLookup::new(s1);
+        lookup.sheet_names.insert(s1, "Sheet1".to_string());
+        lookup.cell_positions.insert(cell(10), (s1, 0, 0));
+
+        let formula = make_formula(
+            "{0}",
+            vec![IdentityFormulaRef::Cell(IdentityCellRef {
+                id: cell(10),
+                row_absolute: false,
+                col_absolute: false,
+            })],
+        );
+
+        assert_eq!(to_a1_string(&formula, &lookup), "=A1");
+        assert_eq!(
+            to_a1_string_with_forced_qualifiers(&formula, &lookup, &[true]),
+            "=Sheet1!A1"
+        );
+    }
+
+    #[test]
+    fn sheet_qualified_flags_follow_reference_order() {
+        assert_eq!(
+            sheet_qualified_reference_flags("=Sheet1!A1+B1+Sheet2!C1", 3),
+            Some(vec![true, false, true])
+        );
     }
 
     #[test]

@@ -1,8 +1,6 @@
 use cell_types::SheetId;
 use compute_fill::types::AdjustedRef;
-use formula_types::{
-    IdentityFormula, IdentityFormulaRef, RefStyle, ReferenceTarget, WorkbookLookup,
-};
+use formula_types::{IdentityFormula, ReferenceTarget, WorkbookLookup};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
@@ -72,10 +70,11 @@ pub(super) fn build_cross_sheet_adjusted_formula(
     if a1.is_empty() {
         return None;
     }
-    let force_qualified_refs = sheet_qualified_ref_flags(&a1, source_formula.refs.len())
-        .unwrap_or_else(|| {
-            infer_cross_sheet_ref_flags(source_formula, &source_lookup, source_sheet_id)
-        });
+    let force_qualified_refs =
+        compute_parser::sheet_qualified_reference_flags(&a1, source_formula.refs.len())
+            .unwrap_or_else(|| {
+                infer_cross_sheet_ref_flags(source_formula, &source_lookup, source_sheet_id)
+            });
 
     // Step 2 + 3a: re-parse on the target sheet. `to_identity_formula` walks
     // the parser's `IdentityResolver` with `current_sheet = target_sheet_id`,
@@ -126,7 +125,7 @@ pub(super) fn build_cross_sheet_adjusted_formula(
         formula_sheet: *target_sheet_id,
         overrides,
     };
-    let out = render_identity_formula_with_forced_qualifiers(
+    let out = compute_parser::to_a1_string_with_forced_qualifiers(
         &new_formula,
         &lookup,
         &force_qualified_refs,
@@ -140,82 +139,6 @@ fn ensure_formula_prefix(text: &str) -> String {
         text.to_string()
     } else {
         format!("={text}")
-    }
-}
-
-fn sheet_qualified_ref_flags(formula: &str, ref_count: usize) -> Option<Vec<bool>> {
-    let ast = compute_parser::parse_formula(formula, None)
-        .ok()?
-        .into_inner();
-    let mut flags = Vec::with_capacity(ref_count);
-    collect_sheet_qualified_ref_flags(&ast, false, &mut flags);
-    if flags.len() == ref_count {
-        Some(flags)
-    } else {
-        None
-    }
-}
-
-fn collect_sheet_qualified_ref_flags(
-    node: &compute_parser::ASTNode,
-    sheet_qualified: bool,
-    flags: &mut Vec<bool>,
-) {
-    use compute_parser::ASTNode;
-
-    match node {
-        ASTNode::CellReference(_) | ASTNode::Range(_) => flags.push(sheet_qualified),
-        ASTNode::SheetRef { inner, .. }
-        | ASTNode::UnresolvedSheetRef { inner, .. }
-        | ASTNode::ThreeDRef { inner, .. }
-        | ASTNode::UnresolvedThreeDRef { inner, .. }
-        | ASTNode::ExternalSheetRef { inner, .. }
-        | ASTNode::ExternalThreeDRef { inner, .. } => {
-            collect_sheet_qualified_ref_flags(inner, true, flags);
-        }
-        ASTNode::ExternalNameRef { .. } => flags.push(true),
-        ASTNode::BinaryOp { left, right, .. } => {
-            collect_sheet_qualified_ref_flags(left, sheet_qualified, flags);
-            collect_sheet_qualified_ref_flags(right, sheet_qualified, flags);
-        }
-        ASTNode::UnaryOp { operand, .. } | ASTNode::Paren(operand) => {
-            collect_sheet_qualified_ref_flags(operand, sheet_qualified, flags);
-        }
-        ASTNode::Function { args, .. } => {
-            for arg in args {
-                collect_sheet_qualified_ref_flags(arg, sheet_qualified, flags);
-            }
-        }
-        ASTNode::Array { rows } => {
-            for row in rows {
-                for element in row {
-                    collect_sheet_qualified_ref_flags(element, sheet_qualified, flags);
-                }
-            }
-        }
-        ASTNode::CallExpression { callee, args } => {
-            collect_sheet_qualified_ref_flags(callee, sheet_qualified, flags);
-            for arg in args {
-                collect_sheet_qualified_ref_flags(arg, sheet_qualified, flags);
-            }
-        }
-        ASTNode::RangeOp { start, end } => {
-            collect_sheet_qualified_ref_flags(start, sheet_qualified, flags);
-            collect_sheet_qualified_ref_flags(end, sheet_qualified, flags);
-        }
-        ASTNode::Union { ranges } => {
-            for range in ranges {
-                collect_sheet_qualified_ref_flags(range, sheet_qualified, flags);
-            }
-        }
-        ASTNode::Number(_)
-        | ASTNode::Text(_)
-        | ASTNode::Boolean(_)
-        | ASTNode::Error(_)
-        | ASTNode::StructuredRef(_)
-        | ASTNode::Identifier(_)
-        | ASTNode::OptionalLambdaParam(_)
-        | ASTNode::Omitted => {}
     }
 }
 
@@ -284,93 +207,4 @@ fn preserve_original_ref_position(
         }
     }
     adjusted_ref.out_of_bounds = false;
-}
-
-fn render_identity_formula_with_forced_qualifiers(
-    formula: &IdentityFormula,
-    lookup: &dyn WorkbookLookup,
-    force_qualified_refs: &[bool],
-) -> String {
-    let template = formula.template.as_bytes();
-    let mut out = String::with_capacity(formula.template.len() + 8);
-    out.push('=');
-
-    let mut idx = 0;
-    while idx < template.len() {
-        if template[idx] == b'{'
-            && let Some((ref_index, end)) = parse_placeholder(template, idx)
-        {
-            if let Some(ref_) = formula.refs.get(ref_index) {
-                format_ref(
-                    ref_,
-                    lookup,
-                    force_qualified_refs
-                        .get(ref_index)
-                        .copied()
-                        .unwrap_or(false),
-                    &mut out,
-                );
-            } else {
-                out.push_str("#REF!");
-            }
-            idx = end;
-            continue;
-        }
-        out.push(template[idx] as char);
-        idx += 1;
-    }
-
-    out
-}
-
-fn parse_placeholder(template: &[u8], start: usize) -> Option<(usize, usize)> {
-    let after_open = start + 1;
-    let mut idx = after_open;
-    while idx < template.len() && template[idx] != b'}' {
-        if !template[idx].is_ascii_digit() {
-            return None;
-        }
-        idx += 1;
-    }
-    if idx >= template.len() || idx == after_open {
-        return None;
-    }
-    let num_str = std::str::from_utf8(&template[after_open..idx]).ok()?;
-    let ref_index = num_str.parse().ok()?;
-    Some((ref_index, idx + 1))
-}
-
-fn format_ref(
-    ref_: &IdentityFormulaRef,
-    lookup: &dyn WorkbookLookup,
-    force_qualified: bool,
-    out: &mut String,
-) {
-    if let Some(sheet_id) = ref_.resolved_sheet(lookup)
-        && (force_qualified || sheet_id != lookup.formula_sheet())
-    {
-        write_sheet_prefix(out, lookup, sheet_id);
-    }
-    ref_.display_body(lookup, RefStyle::A1, out);
-}
-
-fn write_sheet_prefix(out: &mut String, lookup: &dyn WorkbookLookup, sheet_id: SheetId) {
-    let Some(name) = lookup.sheet_name(&sheet_id) else {
-        out.push_str("#REF!");
-        return;
-    };
-
-    if compute_parser::needs_quoting(name) {
-        out.push('\'');
-        for ch in name.chars() {
-            if ch == '\'' {
-                out.push('\'');
-            }
-            out.push(ch);
-        }
-        out.push('\'');
-    } else {
-        out.push_str(name);
-    }
-    out.push('!');
 }

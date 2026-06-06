@@ -121,6 +121,9 @@ export interface UseCommentPopoverReturn {
   /** Reply to an existing comment */
   replyToComment: (parentCommentId: string, content: RichText | string) => Promise<void>;
 
+  /** Convert a legacy note into a threaded comment */
+  convertNoteToThread: (commentId: string) => Promise<void>;
+
   /** Resolve/unresolve a thread */
   resolveThread: (threadId: string, resolved: boolean) => void;
 
@@ -413,6 +416,20 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     [wb, target, currentAuthor],
   );
 
+  const convertNoteToThread = useCallback(
+    async (commentId: string) => {
+      if (!target) return;
+
+      const ws = wb.getSheetById(target.sheetId);
+      if (!ws) return;
+
+      await ws.comments.convertNoteToThread(commentId);
+      const updatedComments = await ws.comments.getForCell(target.row, target.col);
+      setComments(updatedComments.map(toContractsComment));
+    },
+    [wb, target],
+  );
+
   const resolveThread = useCallback(
     (threadId: string, resolved: boolean) => {
       if (!target) return;
@@ -492,6 +509,7 @@ export function useCommentPopover(): UseCommentPopoverReturn {
     updateComment,
     deleteComment,
     replyToComment,
+    convertNoteToThread,
     resolveThread,
     startEdit,
     startCompose,

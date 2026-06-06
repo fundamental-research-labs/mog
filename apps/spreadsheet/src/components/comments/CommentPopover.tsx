@@ -231,6 +231,7 @@ export function CommentPopover() {
     updateComment,
     deleteComment,
     replyToComment,
+    convertNoteToThread,
     resolveThread,
     startEdit,
     startCompose,
@@ -365,6 +366,16 @@ export function CommentPopover() {
     setNewContent('');
   }, []);
 
+  const handleConvertNoteToThreadAndReply = useCallback(
+    async (commentId: string) => {
+      await convertNoteToThread(commentId);
+      setLocalMode('reply');
+      setReplyingToId(commentId);
+      setNewContent('');
+    },
+    [convertNoteToThread],
+  );
+
   const handleCancelReply = useCallback(() => {
     setLocalMode('view');
     setReplyingToId(null);
@@ -482,7 +493,9 @@ export function CommentPopover() {
     coordinator.grid.commentHover.notifyPopoverMouseLeave?.();
   }, [coordinator]);
 
-  const isResolved = comments.length > 0 && comments[0].resolved;
+  const primaryComment = comments[0] ?? null;
+  const isNoteVariant = primaryComment?.commentType === 'note';
+  const isResolved = !isNoteVariant && comments.length > 0 && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);
@@ -500,7 +513,13 @@ export function CommentPopover() {
           onSaveEdit={handleSaveEdit}
           onEditContentChange={setEditContent}
           onDelete={() => handleDelete(comment.id)}
-          onReply={() => handleStartReply(comment.id)}
+          onReply={() => {
+            if (isNoteVariant) {
+              void handleConvertNoteToThreadAndReply(comment.id);
+            } else {
+              handleStartReply(comment.id);
+            }
+          }}
           canEdit={!currentAuthorId || comment.authorId === currentAuthorId}
           showReply={true}
         />
@@ -539,45 +558,47 @@ export function CommentPopover() {
     </div>
   );
 
-  const renderComposeFooter = () => (
+  const renderComposeFooter = (allowAddComment: boolean) => (
     <>
       {/* New comment input (when composing or no comments) */}
-      {(localMode === 'compose' || comments.length === 0) && localMode !== 'reply' && (
-        <div className="p-3 border-t border-ss-border bg-ss-surface-secondary">
-          <div className="text-caption text-ss-text-secondary mb-2">
-            {comments.length === 0
-              ? `New comment as ${currentAuthor}`
-              : `Add comment as ${currentAuthor}`}
-          </div>
-          <textarea
-            ref={newCommentRef}
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            className="w-full px-2 py-1.5 border border-ss-border rounded text-body resize-none focus:outline-none focus:ring-2 focus:ring-ss-primary focus:border-transparent"
-            rows={3}
-            placeholder="Write a comment..."
-            autoFocus
-          />
-          <div className="flex justify-end gap-2 mt-2">
-            {comments.length > 0 && (
-              <Button variant="secondary" size="sm" onClick={handleCancelCompose}>
-                Cancel
+      {(localMode === 'compose' || comments.length === 0) &&
+        localMode !== 'reply' &&
+        (allowAddComment || comments.length === 0) && (
+          <div className="p-3 border-t border-ss-border bg-ss-surface-secondary">
+            <div className="text-caption text-ss-text-secondary mb-2">
+              {comments.length === 0
+                ? `New comment as ${currentAuthor}`
+                : `Add comment as ${currentAuthor}`}
+            </div>
+            <textarea
+              ref={newCommentRef}
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              className="w-full px-2 py-1.5 border border-ss-border rounded text-body resize-none focus:outline-none focus:ring-2 focus:ring-ss-primary focus:border-transparent"
+              rows={3}
+              placeholder="Write a comment..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 mt-2">
+              {comments.length > 0 && (
+                <Button variant="secondary" size="sm" onClick={handleCancelCompose}>
+                  Cancel
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSubmitComment}
+                disabled={!newContent.trim()}
+              >
+                {comments.length === 0 ? 'Add Comment' : 'Comment'}
               </Button>
-            )}
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSubmitComment}
-              disabled={!newContent.trim()}
-            >
-              {comments.length === 0 ? 'Add Comment' : 'Comment'}
-            </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Add comment button (when viewing existing comments) */}
-      {localMode === 'view' && comments.length > 0 && (
+      {allowAddComment && localMode === 'view' && comments.length > 0 && (
         <div className="px-3 py-2 border-t border-ss-border shrink-0">
           <Button variant="secondary" size="sm" onClick={handleStartCompose} className="w-full">
             <AddSvg style={{ width: 14, height: 14 }} />
@@ -589,14 +610,16 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // Comment popover body. Mog exposes a single modern comment surface; legacy
-  // imported note records are normalized below this component.
+  // Comment popover body. Notes and threaded comments share the shell and item
+  // layout, but the header affordances must honor the persisted discriminator.
   // ===========================================================================
   const CommentBody = (
     <>
       <div className="px-3 py-2 border-b border-ss-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-caption font-medium text-ss-text-secondary">Comment</span>
+          <span className="text-caption font-medium text-ss-text-secondary">
+            {isNoteVariant ? 'Note' : 'Comment'}
+          </span>
           {isResolved && (
             <span className="text-caption text-ss-success flex items-center gap-1">
               <CheckmarkCircleSvg style={{ width: 12, height: 12 }} />
@@ -605,7 +628,7 @@ export function CommentPopover() {
           )}
         </div>
         <div className="flex gap-1">
-          {comments.length > 0 && (
+          {!isNoteVariant && comments.length > 0 && (
             <button
               type="button"
               data-testid="resolve-thread"
@@ -628,7 +651,7 @@ export function CommentPopover() {
       </div>
 
       {renderCommentsList()}
-      {renderComposeFooter()}
+      {renderComposeFooter(!isNoteVariant)}
     </>
   );
 

@@ -20,7 +20,12 @@ import type {
   PivotCacheStats,
 } from '@mog-sdk/contracts/bridges';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { PivotEvent, PivotUpdateOptions } from '@mog-sdk/contracts/events';
+import type {
+  CellChangedEvent,
+  CellsBatchChangedEvent,
+  PivotEvent,
+  PivotUpdateOptions,
+} from '@mog-sdk/contracts/events';
 import type {
   AggregateFunction as ApiAggregateFunction,
   CalculatedFieldId,
@@ -135,6 +140,20 @@ function pivotUsesSourceSheet(
     return pivot.sourceSheetId === sourceSheetId;
   }
   return sourceName !== null && pivot.sourceSheetName === sourceName;
+}
+
+function sourceChangesAffectPivot(
+  changes: readonly { row: number; col: number }[] | undefined,
+  pivot: PivotTableConfig,
+): boolean {
+  if (!changes) {
+    return true;
+  }
+  const range = pivot.sourceRange;
+  return changes.some(
+    ({ row, col }) =>
+      row >= range.startRow && row <= range.endRow && col >= range.startCol && col <= range.endCol,
+  );
 }
 
 function placementId(value: string): PlacementId {
@@ -1348,8 +1367,16 @@ export class PivotBridge implements IPivotBridge {
     const dataVersion = this.getDataVersion(sheetId);
 
     try {
+      const mutationHandler = this.ctx.computeBridge.getMutationHandler();
+      const materialize = () =>
+        this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null);
       const result = toPublicPivotTableResult(
-        await this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null),
+        mutationHandler
+          ? await mutationHandler.withPivotUpdateOptions(
+              { reason: 'sourceRangeChanged', refreshPolicy: 'refreshAndMaterialize' },
+              materialize,
+            )
+          : await materialize(),
       );
       await this.ctx.computeBridge.forceRefreshAllViewports();
 
@@ -1371,7 +1398,10 @@ export class PivotBridge implements IPivotBridge {
   /**
    * Refresh all pivot tables that depend on a sheet's data.
    */
-  async refreshDependentPivots(sourceSheetId: SheetId): Promise<void> {
+  async refreshDependentPivots(
+    sourceSheetId: SheetId,
+    changes?: readonly { row: number; col: number }[],
+  ): Promise<void> {
     // Increment data version for this sheet
     const currentVersion = this.dataVersions.get(sourceSheetId) ?? 0;
     this.dataVersions.set(sourceSheetId, currentVersion + 1);
@@ -1385,9 +1415,23 @@ export class PivotBridge implements IPivotBridge {
       const pivots = await this.ctx.computeBridge.pivotGetAll(sheetId);
       for (const pivot of pivots) {
         const publicPivot = toPublicPivotConfig(pivot);
-        if (pivotUsesSourceSheet(publicPivot, sourceSheetId, sourceName)) {
-          await this.compute(sheetId, pivot.id);
+        if (
+          pivotUsesSourceSheet(publicPivot, sourceSheetId, sourceName) &&
+          sourceChangesAffectPivot(changes, publicPivot)
+        ) {
+          await this.refresh(sheetId, pivot.id);
         }
+      }
+    }
+  }
+
+  async refreshAllPivots(): Promise<void> {
+    const sheetIds = await this.ctx.computeBridge.getAllSheetIds();
+    for (const sheetIdValue of sheetIds) {
+      const sheetId = toSheetId(sheetIdValue as string);
+      const pivots = await this.ctx.computeBridge.pivotGetAll(sheetId);
+      for (const pivot of pivots) {
+        await this.refresh(sheetId, pivot.id);
       }
     }
   }
@@ -1657,9 +1701,15 @@ export class PivotBridge implements IPivotBridge {
       this.ctx.eventBus.on('pivot:created', handlePivotChange),
       this.ctx.eventBus.on('pivot:updated', handlePivotChange),
       this.ctx.eventBus.on('pivot:deleted', handlePivotChange),
+      this.ctx.eventBus.on('cell:changed', (event: CellChangedEvent) => {
+        void this.refreshDependentPivots(toSheetId(event.sheetId), [
+          { row: event.row, col: event.col },
+        ]);
+      }),
+      this.ctx.eventBus.on('cells:batch-changed', (event: CellsBatchChangedEvent) => {
+        void this.refreshDependentPivots(toSheetId(event.sheetId), event.changes);
+      }),
     );
-
-    // Data change observation is handled by EventBus / MutationResultHandler.
   }
 
   private notifySubscribers(

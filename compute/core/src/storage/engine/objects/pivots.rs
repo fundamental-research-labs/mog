@@ -1,6 +1,7 @@
 use super::shared;
 use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::pivot_materialization::apply_pivot_value_number_formats;
 use crate::storage::engine::services;
 use bridge_core as bridge;
 use cell_types::SheetId;
@@ -620,6 +621,15 @@ impl YrsComputeEngine {
             &result,
             &row_field_names,
             &self.stores.grid_id_alloc,
+        );
+        apply_pivot_value_number_formats(
+            &self.stores,
+            &self.mirror,
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
+            &config,
+            &result,
         );
 
         // 6. Register bounds for GETPIVOTDATA

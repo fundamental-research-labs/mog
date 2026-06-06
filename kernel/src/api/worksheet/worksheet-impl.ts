@@ -100,6 +100,7 @@ import * as RangeOps from './operations/range-operations';
 import * as RangeQueryOps from './operations/range-query-operations';
 import * as DescribeOps from './operations/describe-operations';
 import * as SortOps from './operations/sort-operations';
+import { deletePivotsContainedByClearRange } from './pivot-clear';
 import { createViewportReader } from './viewport-reader';
 
 // Sub-API imports
@@ -1129,6 +1130,7 @@ export class WorksheetImpl implements Worksheet {
             return parsed;
           })();
     await this.ensureRangeEditable(bounds.startRow, bounds.startCol, bounds.endRow, bounds.endCol);
+    await deletePivotsContainedByClearRange(this.ctx, this.sheetId, bounds, applyTo ?? 'all');
     this._invalidateActiveCellEditSourceForRange(bounds);
     return RangeQueryOps.clearWithMode(
       this.ctx,

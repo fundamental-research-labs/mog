@@ -1,9 +1,144 @@
-use cell_types::SheetId;
+use std::collections::BTreeMap;
+
+use cell_types::{SheetId, SheetPos};
+use compute_document::hex::{SmallHex, id_to_hex};
+use compute_document::undo::ORIGIN_FORMULA_RESULT;
+use domain_types::CellFormat;
+use domain_types::domain::pivot::{PivotTableConfig, ShowValuesAs, ShowValuesAsConfig};
 use value_types::ComputeError;
 
 use crate::mirror::CellMirror;
+use crate::storage::properties;
 
 use super::{YrsComputeEngine, services, stores::EngineStores};
+
+fn is_percent_show_values_as(show_values_as: Option<&ShowValuesAsConfig>) -> bool {
+    matches!(
+        show_values_as.map(|config| &config.calculation_type),
+        Some(
+            ShowValuesAs::PercentOfGrandTotal
+                | ShowValuesAs::PercentOfColumnTotal
+                | ShowValuesAs::PercentOfRowTotal
+                | ShowValuesAs::PercentOfParentRowTotal
+                | ShowValuesAs::PercentOfParentColumnTotal
+                | ShowValuesAs::PercentDifference
+                | ShowValuesAs::PercentRunningTotal
+        )
+    )
+}
+
+fn pivot_value_number_formats(config: &PivotTableConfig) -> Vec<Option<String>> {
+    config
+        .value_placements()
+        .into_iter()
+        .map(|placement| {
+            placement.number_format.clone().or_else(|| {
+                if is_percent_show_values_as(placement.show_values_as.as_ref()) {
+                    Some("0%".to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .collect()
+}
+
+pub(in crate::storage::engine) fn apply_pivot_value_number_formats(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    output_sheet_id: &SheetId,
+    anchor_row: u32,
+    anchor_col: u32,
+    config: &PivotTableConfig,
+    result: &compute_pivot::PivotTableResult,
+) {
+    let value_formats = pivot_value_number_formats(config);
+    if value_formats.is_empty() {
+        return;
+    }
+
+    let bounds = &result.rendered_bounds;
+    if bounds.total_rows == 0 || bounds.total_cols == 0 {
+        return;
+    }
+
+    let mut cells_by_format: BTreeMap<String, Vec<SmallHex>> = BTreeMap::new();
+    let mut record_cell = |row: u32, col: u32, value_index: usize| {
+        let Some(format) = value_formats
+            .get(value_index % value_formats.len())
+            .and_then(|format| format.as_ref())
+        else {
+            return;
+        };
+        let Some(cell_id) = mirror.resolve_cell_id(output_sheet_id, SheetPos::new(row, col)) else {
+            return;
+        };
+        cells_by_format
+            .entry(format.clone())
+            .or_default()
+            .push(id_to_hex(cell_id.as_u128()));
+    };
+
+    let first_data_row = anchor_row + bounds.first_data_row;
+    let first_data_col = anchor_col + bounds.first_data_col;
+
+    for (row_index, pivot_row) in result.rows.iter().enumerate() {
+        let row = first_data_row + row_index as u32;
+        for (value_index, _value) in pivot_row.values.iter().enumerate() {
+            record_cell(row, first_data_col + value_index as u32, value_index);
+        }
+    }
+
+    if let Some(row_totals) = result.grand_totals.row.as_ref() {
+        let row = anchor_row + bounds.total_rows - 1;
+        for (value_index, _value) in row_totals.iter().enumerate() {
+            record_cell(row, first_data_col + value_index as u32, value_index);
+        }
+    }
+
+    let value_field_count = value_formats.len() as u32;
+    let grand_total_start_col = bounds
+        .total_cols
+        .checked_sub(value_field_count)
+        .map(|offset| anchor_col + offset);
+
+    if let (Some(column_totals), Some(start_col)) =
+        (result.grand_totals.column.as_ref(), grand_total_start_col)
+    {
+        for (row_index, row_totals) in column_totals.iter().enumerate() {
+            let row = first_data_row + row_index as u32;
+            for (value_index, _value) in row_totals.iter().enumerate() {
+                record_cell(row, start_col + value_index as u32, value_index);
+            }
+        }
+    }
+
+    if let (Some(grand_totals), Some(start_col)) =
+        (result.grand_totals.grand.as_ref(), grand_total_start_col)
+    {
+        let row = anchor_row + bounds.total_rows - 1;
+        for (value_index, _value) in grand_totals.iter().enumerate() {
+            record_cell(row, start_col + value_index as u32, value_index);
+        }
+    }
+
+    for (number_format, cell_hexes) in cells_by_format {
+        let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|hex| hex.as_str()).collect();
+        let format = CellFormat {
+            number_format: Some(number_format),
+            ..Default::default()
+        };
+        properties::set_cell_formats_with_origin(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+            stores.storage.sheets(),
+            output_sheet_id,
+            &cell_hex_refs,
+            &format,
+            ORIGIN_FORMULA_RESULT,
+        );
+    }
+}
 
 impl YrsComputeEngine {
     /// Materialize all pivot tables across all sheets after recalc.
@@ -196,6 +331,15 @@ impl YrsComputeEngine {
                         &row_field_names,
                         &stores.grid_id_alloc,
                     );
+                    apply_pivot_value_number_formats(
+                        stores,
+                        mirror,
+                        &output_sheet_id,
+                        config.output_location.row,
+                        config.output_location.col,
+                        config,
+                        &result,
+                    );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);
                     mirror.upsert_pivot_table_def(def);
@@ -299,6 +443,15 @@ impl YrsComputeEngine {
                         &result,
                         &row_field_names,
                         &self.stores.grid_id_alloc,
+                    );
+                    apply_pivot_value_number_formats(
+                        &self.stores,
+                        &self.mirror,
+                        &output_sheet_id,
+                        config.output_location.row,
+                        config.output_location.col,
+                        config,
+                        &result,
                     );
                     let def =
                         engine_config.to_pivot_table_def(&result.rendered_bounds, &output_sheet_id);

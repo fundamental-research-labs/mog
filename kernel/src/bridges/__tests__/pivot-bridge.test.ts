@@ -70,6 +70,7 @@ function createMockCtx(): any {
       pivotUpdate: jest.fn(async (_sheetId: string, _pivotId: string, config: unknown) => ({
         data: config,
       })),
+      getSheetName: jest.fn().mockResolvedValue('Sheet1'),
       getAllSheetIds: jest.fn().mockResolvedValue([SHEET_ID]),
       pivotComputeFromSource: jest.fn().mockResolvedValue(makePivotResult()),
       pivotMaterialize: jest.fn().mockResolvedValue(makePivotResult()),
@@ -128,6 +129,10 @@ function sortedPlacements(placements: any[], area: string): any[] {
 
 function placementOrder(placements: any[], area: string): string[] {
   return sortedPlacements(placements, area).map((placement) => placement.placementId);
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 describe('PivotBridge read vs refresh paths', () => {
@@ -210,6 +215,55 @@ describe('PivotBridge read vs refresh paths', () => {
     });
 
     await Promise.resolve();
+
+    expect(ctx.computeBridge.pivotMaterialize).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
+  });
+
+  it('source cell changes refresh dependent pivots through the materialization path', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.pivotGetAll.mockResolvedValue([makePivotConfig()]);
+    new PivotBridge(ctx);
+
+    ctx.eventBus.emit({
+      type: 'cell:changed',
+      sheetId: SHEET_ID,
+      row: 2,
+      col: 1,
+      oldValue: undefined,
+      newValue: 150,
+      source: 'user',
+      timestamp: Date.now(),
+    });
+
+    await flushPromises();
+
+    expect(ctx.computeBridge.pivotMaterialize).toHaveBeenCalledWith(SHEET_ID, 'pivot-1', {
+      expandedRows: {},
+      expandedColumns: {},
+    });
+    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
+  });
+
+  it('source cell changes outside the pivot source range do not refresh', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.pivotGetAll.mockResolvedValue([makePivotConfig()]);
+    new PivotBridge(ctx);
+
+    ctx.eventBus.emit({
+      type: 'cell:changed',
+      sheetId: SHEET_ID,
+      row: 200,
+      col: 1,
+      oldValue: undefined,
+      newValue: 150,
+      source: 'user',
+      timestamp: Date.now(),
+    });
+
+    await flushPromises();
 
     expect(ctx.computeBridge.pivotMaterialize).not.toHaveBeenCalled();
     expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();

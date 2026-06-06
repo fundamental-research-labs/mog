@@ -18,6 +18,7 @@ mod test_imported_autofilter_metadata;
 mod test_named_range_refers_to;
 mod test_old_value;
 mod test_outline_visibility;
+mod test_pivot_materialization;
 mod test_properties;
 mod test_queries;
 mod test_range_sort;

@@ -547,6 +547,13 @@ export function setupClipboardPasteIntegration(
             pastePreviewTarget.row,
             pastePreviewTarget.col,
           );
+          await store.movePivotsForCutPaste?.(
+            toSheetId(data.sourceSheetId),
+            sourceRange,
+            sheetId,
+            pastePreviewTarget.row,
+            pastePreviewTarget.col,
+          );
           await clearSystemClipboardText();
           clipboardActor.send({ type: 'PASTE_COMPLETE' });
 
@@ -600,6 +607,13 @@ export function setupClipboardPasteIntegration(
           if (isCut && sourceRanges && sourceRanges.length > 0 && data.sourceSheetId) {
             for (const sourceRange of sourceRanges) {
               await store.moveTablesForCutPaste?.(
+                toSheetId(data.sourceSheetId),
+                sourceRange,
+                sheetId,
+                pastePreviewTarget.row,
+                pastePreviewTarget.col,
+              );
+              await store.movePivotsForCutPaste?.(
                 toSheetId(data.sourceSheetId),
                 sourceRange,
                 sheetId,

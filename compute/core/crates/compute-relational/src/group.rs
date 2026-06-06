@@ -12,7 +12,8 @@ use value_types::CellValue;
 use value_types::date_serial::serial_to_date;
 
 use compute_stats::sort::{
-    SortConfig as StatsSortConfig, sort_by_custom_order_in_place, sort_by_in_place,
+    SortConfig as StatsSortConfig, compare_cell_values, sort_by_custom_order_in_place,
+    sort_by_in_place,
 };
 use compute_stats::values::{GroupKey, cell_value_to_group_key};
 
@@ -241,6 +242,20 @@ fn sort_nodes_in_place(nodes: &mut [AggregatedNode], field: &GroupField) {
         sort_by_custom_order_in_place(nodes, |node| node.value.clone(), custom_list, &sort_config);
     } else {
         sort_by_in_place(nodes, |node| node.value.clone(), &sort_config);
+    }
+
+    if effective_custom_list.is_none()
+        && !matches!(field.sort.sort_by, SortBy::Value { .. })
+        && matches!(field.sort.direction, SortDirection::Ascending)
+    {
+        nodes.sort_by(
+            |a, b| match (a.value.is_visually_blank(), b.value.is_visually_blank()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                (false, false) => compare_cell_values(&a.value, &b.value, &sort_config),
+            },
+        );
     }
 }
 

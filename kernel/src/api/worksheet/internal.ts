@@ -15,6 +15,7 @@ import type { IdentityFormula } from '@mog-sdk/contracts/cell-identity';
 import type { RangeSchema } from '@mog-sdk/contracts/schema';
 import type { RangeSchema as BridgeRangeSchema } from '../../bridges/compute/compute-bridge';
 import type { Table as CanonicalTable } from '../../bridges/compute/compute-types.gen';
+import type { PivotTableConfig as DataPivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { TableConfig } from '@mog-sdk/contracts/tables';
 
 import {
@@ -24,6 +25,7 @@ import {
 import type { DocumentContext } from '../../context';
 import { getOrCreateCellId as getOrCreateCellIdDomain } from '../../domain/cells/cell-identity';
 import { getData as getCellStoreDataDomain } from '../../domain/cells/cell-values';
+import { getPivotRangeForId } from '../../domain/pivots/ranges';
 import * as CellOps from './operations/cell-operations';
 import {
   getWorksheetValidationCache,
@@ -130,6 +132,33 @@ export class WorksheetInternalImpl implements WorksheetInternal {
         this.isSameRange(table.range, sourceRange) ||
         this.rangeContainsRange(sourceRange, table.range),
     );
+  }
+
+  private async getPivotDefinitionsForRange(
+    sourceRange: CellRange,
+  ): Promise<Array<{ config: DataPivotTableConfig; range: CellRange }>> {
+    let pivots: DataPivotTableConfig[];
+    try {
+      pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
+    } catch {
+      return [];
+    }
+
+    const matches: Array<{ config: DataPivotTableConfig; range: CellRange }> = [];
+    for (const config of pivots) {
+      const range = await getPivotRangeForId({
+        ctx: this.ctx,
+        sheetId: this.sheetId,
+        pivotId: config.id,
+      }).catch(() => null);
+      if (
+        range &&
+        (this.isSameRange(range, sourceRange) || this.rangeContainsRange(sourceRange, range))
+      ) {
+        matches.push({ config, range });
+      }
+    }
+    return matches;
   }
 
   private async copyTableDefinitionsToTarget(
@@ -263,6 +292,38 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     }
   }
 
+  private async movePivotDefinitionsForRange(
+    sourceRange: CellRange,
+    targetRow: number,
+    targetCol: number,
+    pivotsInSourceRange?: Array<{ config: DataPivotTableConfig; range: CellRange }>,
+  ): Promise<void> {
+    const pivots = pivotsInSourceRange ?? (await this.getPivotDefinitionsForRange(sourceRange));
+    const pivotMoves = pivots.map(({ config, range }) => {
+      const rowOffset = range.startRow - sourceRange.startRow;
+      const colOffset = range.startCol - sourceRange.startCol;
+      return {
+        id: config.id,
+        outputLocation: {
+          row: targetRow + rowOffset,
+          col: targetCol + colOffset,
+        },
+      };
+    });
+    if (pivotMoves.length === 0) return;
+
+    await Promise.all(
+      pivotMoves.map((move) =>
+        this.ctx.pivot.updatePivot(
+          this.sheetId,
+          move.id,
+          { outputLocation: move.outputLocation },
+          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+        ),
+      ),
+    );
+  }
+
   async getCellIdAt(row: number, col: number): Promise<string | null> {
     return CellOps.getCellIdAt(this.ctx, this.sheetId, row, col);
   }
@@ -356,11 +417,21 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       sourceRange.endCol - sourceRange.startCol + 1,
     );
     const tablesInSourceRange = await this.getTableDefinitionsForRange(sourceRange);
+    const pivotsInSourceRange = await this.getPivotDefinitionsForRange(sourceRange);
     await CellOps.relocateCells(this.ctx, this.sheetId, sourceRange, {
       row: targetRow,
       col: targetCol,
     });
     await this.moveTableDefinitionsForRange(sourceRange, targetRow, targetCol, tablesInSourceRange);
+    await this.movePivotDefinitionsForRange(sourceRange, targetRow, targetCol, pivotsInSourceRange);
+  }
+
+  async movePivotsForCutPaste(
+    sourceRange: CellRange,
+    targetRow: number,
+    targetCol: number,
+  ): Promise<void> {
+    await this.movePivotDefinitionsForRange(sourceRange, targetRow, targetCol);
   }
 
   async relocateCellsToSheet(

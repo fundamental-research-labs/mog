@@ -385,6 +385,8 @@ function KeyboardCaptureSetup({
       // so NEXT_SHEET/PREVIOUS_SHEET actions can fire while formula editing is active
       const isSheetSwitch =
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
+      const isPickerDropdownShortcut =
+        e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown';
       if (!isNavigationKey && !isSheetSwitch) {
         const isFormattingShortcut =
           (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());
@@ -420,6 +422,15 @@ function KeyboardCaptureSetup({
             e.preventDefault();
             e.stopPropagation();
           }
+        }
+
+        if (isPickerDropdownShortcut) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
         }
 
         // Not a navigation key - let it through for text input

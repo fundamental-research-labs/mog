@@ -121,6 +121,7 @@ export function RowHeightDialog() {
       onClose={handleCancel}
       dialogId="row-height-dialog"
       width={320}
+      initialFocusRef={inputRef}
     >
       <DialogHeader onClose={handleCancel}>Row Height</DialogHeader>
 

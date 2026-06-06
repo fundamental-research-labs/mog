@@ -116,6 +116,7 @@ export function ColumnWidthDialog() {
       onClose={handleCancel}
       dialogId="column-width-dialog"
       width={320}
+      initialFocusRef={inputRef}
     >
       <DialogHeader onClose={handleCancel}>Column Width</DialogHeader>
 

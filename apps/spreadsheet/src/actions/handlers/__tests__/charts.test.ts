@@ -68,6 +68,10 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       add: jest.fn().mockResolvedValue({ id: 'new-chart-id' }),
       update: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined),
+      bringToFront: jest.fn().mockResolvedValue(undefined),
+      sendToBack: jest.fn().mockResolvedValue(undefined),
+      bringForward: jest.fn().mockResolvedValue(undefined),
+      sendBackward: jest.fn().mockResolvedValue(undefined),
     },
     // Legacy flat aliases for backward-compatible test assertions
     getChart: jest.fn().mockResolvedValue(null),
@@ -371,6 +375,17 @@ describe('Chart Handlers - Editing Actions', () => {
 
       expect(result.handled).toBe(false);
     });
+
+    it('should use selected object id when keyboard payload is omitted', () => {
+      const deps = createMockDeps();
+      jest.spyOn(deps.accessors.object, 'getFirstSelectedId').mockReturnValue('chart-123');
+
+      const result = ChartHandlers.EDIT_CHART(deps, undefined);
+
+      expect(result.handled).toBe(true);
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
+      expect(deps.commands.chart.startEdit).toHaveBeenCalled();
+    });
   });
 
   describe('EDIT_CHART_TITLE', () => {
@@ -387,6 +402,17 @@ describe('Chart Handlers - Editing Actions', () => {
       const result = ChartHandlers.EDIT_CHART_TITLE(deps, {});
 
       expect(result.handled).toBe(false);
+    });
+
+    it('should use selected object id when keyboard payload is omitted', () => {
+      const deps = createMockDeps();
+      jest.spyOn(deps.accessors.object, 'getFirstSelectedId').mockReturnValue('chart-123');
+
+      const result = ChartHandlers.EDIT_CHART_TITLE(deps, undefined);
+
+      expect(result.handled).toBe(true);
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
+      expect(deps.commands.chart.startTitleEdit).toHaveBeenCalledWith('');
     });
   });
 
@@ -573,13 +599,22 @@ describe('Chart Handlers - Selection Actions', () => {
 // =============================================================================
 
 describe('Chart Handlers - Z-Order Actions', () => {
+  const zOrderActions = [
+    ['BRING_CHART_TO_FRONT', ChartHandlers.BRING_CHART_TO_FRONT, 'bringToFront'],
+    ['SEND_CHART_TO_BACK', ChartHandlers.SEND_CHART_TO_BACK, 'sendToBack'],
+    ['BRING_CHART_FORWARD', ChartHandlers.BRING_CHART_FORWARD, 'bringForward'],
+    ['SEND_CHART_BACKWARD', ChartHandlers.SEND_CHART_BACKWARD, 'sendBackward'],
+  ] as const;
+
   describe('BRING_CHART_TO_FRONT', () => {
     it('should use Worksheet API for z-order operations', async () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.BRING_CHART_TO_FRONT(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect((deps.workbook as any).activeSheet.charts.bringToFront).toHaveBeenCalledWith(
+        'chart-123',
+      );
     });
 
     it('should return not handled when chartId is missing', async () => {
@@ -595,8 +630,10 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.SEND_CHART_TO_BACK(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect((deps.workbook as any).activeSheet.charts.sendToBack).toHaveBeenCalledWith(
+        'chart-123',
+      );
     });
   });
 
@@ -605,8 +642,10 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.BRING_CHART_FORWARD(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect((deps.workbook as any).activeSheet.charts.bringForward).toHaveBeenCalledWith(
+        'chart-123',
+      );
     });
   });
 
@@ -615,10 +654,26 @@ describe('Chart Handlers - Z-Order Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.SEND_CHART_BACKWARD(deps, { chartId: 'chart-123' });
 
-      // Handler delegates to ws.charts.update() via Worksheet API
       expect(result.handled).toBe(true);
+      expect((deps.workbook as any).activeSheet.charts.sendBackward).toHaveBeenCalledWith(
+        'chart-123',
+      );
     });
   });
+
+  it.each(zOrderActions)(
+    'should use selected object id for %s when keyboard payload is omitted',
+    async (_name, handler, methodName) => {
+      const deps = createMockDeps();
+      jest.spyOn(deps.accessors.object, 'getFirstSelectedId').mockReturnValue('chart-123');
+      const ws = (deps.workbook as any).activeSheet;
+
+      const result = await handler(deps, undefined);
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts[methodName]).toHaveBeenCalledWith('chart-123');
+    },
+  );
 });
 
 // =============================================================================

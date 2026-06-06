@@ -14,7 +14,7 @@
  * @see docs/ARCHITECTURE-CHECKLIST.md - Unified Action System pattern
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import {
   BringForwardLayerSvg,
@@ -90,14 +90,24 @@ interface MenuItemRendererProps {
 }
 
 function MenuItemRenderer({ items, onClose }: MenuItemRendererProps) {
+  const [openSubmenuId, setOpenSubmenuId] = useState<string | null>(null);
+
   return (
     <>
       {items.map((item, index) => (
         <React.Fragment key={item.id}>
           {item.children && item.children.length > 0 ? (
             // Render as submenu
-            <ContextMenuSub>
-              <ContextMenuSubTrigger icon={item.icon} disabled={item.disabled}>
+            <ContextMenuSub
+              open={openSubmenuId === item.id}
+              onOpenChange={(open) => setOpenSubmenuId(open ? item.id : null)}
+            >
+              <ContextMenuSubTrigger
+                icon={item.icon}
+                disabled={item.disabled}
+                onFocus={() => setOpenSubmenuId(item.id)}
+                onPointerEnter={() => setOpenSubmenuId(item.id)}
+              >
                 {item.label}
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>

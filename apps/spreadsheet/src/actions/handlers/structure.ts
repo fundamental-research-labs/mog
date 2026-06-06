@@ -153,6 +153,33 @@ function getSelectedColsOrActive(
   return cols.length > 0 ? cols : [activeCell.col];
 }
 
+function getHiddenIndexesWithinOrAdjacentSelection(
+  ranges: CellRange[],
+  activeCell: { row: number; col: number },
+  hiddenIndexes: Iterable<number>,
+  axis: 'row' | 'col',
+): number[] {
+  const targetRanges = getRangesOrActiveCell(ranges, activeCell);
+  const targets = new Set<number>();
+
+  for (const hiddenIndex of hiddenIndexes) {
+    for (const range of targetRanges) {
+      const start = axis === 'row' ? range.startRow : range.startCol;
+      const end = axis === 'row' ? range.endRow : range.endCol;
+      if (
+        (hiddenIndex >= start && hiddenIndex <= end) ||
+        (start > 0 && hiddenIndex === start - 1) ||
+        hiddenIndex === end + 1
+      ) {
+        targets.add(hiddenIndex);
+        break;
+      }
+    }
+  }
+
+  return Array.from(targets).sort((a, b) => a - b);
+}
+
 // =============================================================================
 // Row Insert Handlers
 // =============================================================================
@@ -290,19 +317,25 @@ export const UNHIDE_ROW: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const rows = getSelectedRowsOrActive(ranges, activeCell);
-  if (rows.length > 0) {
-    return withProtectionFeedback(deps, async () => {
-      for (const sheetId of targetSheetIds) {
-        const ws = deps.workbook.getSheetById(sheetId);
-        for (const row of rows) {
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      const hiddenRows =
+        typeof ws.layout.getHiddenRowsBitmap === 'function'
+          ? await ws.layout.getHiddenRowsBitmap()
+          : new Set<number>();
+      const rows =
+        hiddenRows.size > 0
+          ? getHiddenIndexesWithinOrAdjacentSelection(ranges, activeCell, hiddenRows, 'row')
+          : [];
+      const targetRows = rows.length > 0 ? rows : getSelectedRowsOrActive(ranges, activeCell);
+      if (targetRows.length > 0) {
+        for (const row of targetRows) {
           await ws.layout.setRowVisible(row, true);
         }
       }
-    });
-  }
-
-  return handled();
+    }
+  });
 };
 
 // =============================================================================
@@ -344,19 +377,25 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const cols = getSelectedColsOrActive(ranges, activeCell);
-  if (cols.length > 0) {
-    return withProtectionFeedback(deps, async () => {
-      for (const sheetId of targetSheetIds) {
-        const ws = deps.workbook.getSheetById(sheetId);
-        for (const col of cols) {
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      const hiddenCols =
+        typeof ws.layout.getHiddenColumnsBitmap === 'function'
+          ? await ws.layout.getHiddenColumnsBitmap()
+          : new Set<number>();
+      const cols =
+        hiddenCols.size > 0
+          ? getHiddenIndexesWithinOrAdjacentSelection(ranges, activeCell, hiddenCols, 'col')
+          : [];
+      const targetCols = cols.length > 0 ? cols : getSelectedColsOrActive(ranges, activeCell);
+      if (targetCols.length > 0) {
+        for (const col of targetCols) {
           await ws.layout.setColumnVisible(col, true);
         }
       }
-    });
-  }
-
-  return handled();
+    }
+  });
 };
 
 // =============================================================================

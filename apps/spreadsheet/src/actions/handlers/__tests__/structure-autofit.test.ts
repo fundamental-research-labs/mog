@@ -35,6 +35,8 @@ function createDeps(
       isFullColumn?: boolean;
     }>;
     usedRange?: CellRange | null;
+    hiddenRows?: number[];
+    hiddenCols?: number[];
   } = {},
 ): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
@@ -46,6 +48,8 @@ function createDeps(
       setColumnVisible: jest.fn(async () => undefined),
       setRowHeight: jest.fn(async () => undefined),
       setColumnWidths: jest.fn(async () => undefined),
+      getHiddenRowsBitmap: jest.fn(async () => new Set(options.hiddenRows ?? [])),
+      getHiddenColumnsBitmap: jest.fn(async () => new Set(options.hiddenCols ?? [])),
     },
     structure: {
       insertRows: jest.fn(async () => undefined),
@@ -197,6 +201,34 @@ describe('Structure autofit handlers', () => {
     expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(3, true);
     expect(worksheet.layout.setRowHeight).toHaveBeenCalledWith(4, 27);
     expect(worksheet.layout.setColumnWidths).toHaveBeenCalledWith([[3, 88]]);
+  });
+
+  it('UNHIDE_COLUMN targets hidden columns inside or adjacent to the selection', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 0, startCol: 0, endRow: MAX_ROWS - 1, endCol: 0, isFullColumn: true }],
+      hiddenCols: [1, 4],
+    });
+
+    await StructureHandlers.UNHIDE_COLUMN(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledTimes(1);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(1, true);
+  });
+
+  it('UNHIDE_ROW targets hidden rows inside or adjacent to the selection', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: MAX_COLS - 1, isFullRow: true }],
+      hiddenRows: [1, 4],
+    });
+
+    await StructureHandlers.UNHIDE_ROW(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledTimes(1);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledWith(1, true);
   });
 
   it('AUTO_FIT_COLUMN_WIDTH still honors explicit multi-column selections', async () => {

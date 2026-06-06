@@ -119,6 +119,9 @@ export function setupEditorToSelectionCoordination(
   getCurrentSheetId?: () => string,
 ): () => void {
   let previousState: EditorState | null = null;
+  // Capture the viewed sheet at commit start. Cross-sheet formula commits may restore
+  // the origin sheet before this coordinator sees `committing -> inactive`.
+  let commitStartedOnSheetId: string | null = null;
 
   const subscription = editorActor.subscribe((state) => {
     const wasFormulaEditing = previousState?.matches('formulaEditing') ?? false;
@@ -166,7 +169,15 @@ export function setupEditorToSelectionCoordination(
 
     // Editor is committing - move selection based on direction
     const wasCommitting = previousState?.matches('committing') ?? false;
+    const isCommitting = state.matches('committing');
     const isInactive = state.matches('inactive');
+
+    if (!wasCommitting && isCommitting) {
+      commitStartedOnSheetId = getCurrentSheetId?.() ?? null;
+    }
+    if (wasCommitting && !isCommitting && !isInactive) {
+      commitStartedOnSheetId = null;
+    }
 
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
@@ -176,8 +187,15 @@ export function setupEditorToSelectionCoordination(
         (commitKey === 'enter' || commitKey === 'shift-enter');
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();
+      const committedFromDifferentSheet =
+        editingSheetId && commitStartedOnSheetId && editingSheetId !== commitStartedOnSheetId;
+      commitStartedOnSheetId = null;
 
-      if (editingSheetId && currentSheetId && editingSheetId !== currentSheetId) {
+      // Origin-sheet selection restoration handles cross-sheet commit navigation.
+      if (
+        committedFromDifferentSheet ||
+        (editingSheetId && currentSheetId && editingSheetId !== currentSheetId)
+      ) {
         previousState = state;
         return;
       }

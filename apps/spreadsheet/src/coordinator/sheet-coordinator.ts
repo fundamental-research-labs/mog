@@ -588,12 +588,14 @@ export class SheetCoordinator {
           // Delegate to RenderSystem for top-left visible cell (Rust scroll persistence).
           getTopLeftCell: (sheetId) => this.renderer.getTopLeftVisibleCell(sheetId),
 
-          // Restore focus to grid after sheet switch completes (Bug #30).
-          // Skip during formula editing — the editor input must retain focus so
-          // keystrokes (operators, cell refs) reach the formula bar, not the grid.
+          // Restore focus to grid unless same-sheet formula editing still owns the inline editor.
           onSheetSwitchComplete: () => {
             const editorState = this.grid.access.actors.editor.getSnapshot();
-            if (!editorState.matches('formulaEditing')) {
+            const activeSheetId = uiStoreApi.getState().activeSheetId;
+            const editingSheetId = editorState.context.sheetId;
+            const formulaEditingOnActiveSheet =
+              editorState.matches('formulaEditing') && editingSheetId === activeSheetId;
+            if (!formulaEditingOnActiveSheet) {
               this.input.focusGrid();
             }
           },

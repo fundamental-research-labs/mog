@@ -107,8 +107,17 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   const eventBus = useEventBus();
 
   // Editor state (isEditing, editingCell, value)
-  const { isEditing, editingCell, value, cursorPosition, selectionAnchor, hasSelection } =
+  const {
+    isEditing,
+    editingCell,
+    sheetId: editingSheetId,
+    value,
+    cursorPosition,
+    selectionAnchor,
+    hasSelection,
+  } =
     useEditorState();
+  const isEditingOnActiveSheet = isEditing && editingSheetId === activeSheetId;
 
   // Editor actions (input, commit, imeStart, imeUpdate, imeEnd)
   const editorActions = useEditorActions();
@@ -260,7 +269,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
 
   // Compute cell rect (memoized) — needed for scroll sync hook and positioning
   const cellRect = useMemo(() => {
-    if (!isEditing || !editingCell) return null;
+    if (!isEditingOnActiveSheet || !editingCell) return null;
 
     const geometry = rendererActions.getGeometry();
     if (!geometry) return null;
@@ -271,7 +280,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     } else {
       return geometry.getCellRect(editingCell);
     }
-  }, [isEditing, editingCell, mergeBounds, activeSheetId, rendererActions]);
+  }, [isEditingOnActiveSheet, editingCell, mergeBounds, activeSheetId, rendererActions]);
 
   // Keep the last known non-null cellRect so the editor stays mounted during
   // scroll animations (e.g. the 100ms animateScrollTo triggered by
@@ -289,7 +298,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   if (cellRect !== null) {
     _lastKnownCellRect = cellRect;
   }
-  const effectiveCellRect = cellRect ?? _lastKnownCellRect;
+  const effectiveCellRect = isEditingOnActiveSheet ? (cellRect ?? _lastKnownCellRect) : null;
 
   // Scroll sync: imperatively track cell position on scroll via CSS transform
   // Must be called before early returns (rules of hooks)
@@ -432,7 +441,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   // temporarily pushes the cell outside the rendered viewport. Without this,
   // InlineCellEditor unmounts, the textarea loses focus, and subsequent typed
   // characters are silently dropped.
-  if (!isEditing || !editingCell || !effectiveCellRect) {
+  if (!isEditingOnActiveSheet || !editingCell || !effectiveCellRect) {
     return null;
   }
 

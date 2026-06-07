@@ -421,13 +421,17 @@ export function CommentPopover() {
     }
   }, [newContent, addComment, close]);
 
-  const handleResolve = useCallback(() => {
-    if (comments.length > 0) {
-      const threadId = comments[0].threadId ?? comments[0].id;
-      const isResolved = comments[0].resolved ?? false;
-      resolveThread(threadId, !isResolved);
+  const handleResolve = useCallback(async () => {
+    const rootComment = comments[0];
+    if (!rootComment) return;
+
+    const nextResolved = !(rootComment.resolved ?? false);
+    const threadId = rootComment.threadId ?? rootComment.id;
+    if (rootComment.commentType === 'note') {
+      await convertNoteToThread(rootComment.id);
     }
-  }, [comments, resolveThread]);
+    resolveThread(threadId, nextResolved);
+  }, [comments, convertNoteToThread, resolveThread]);
 
   const handleDelete = useCallback(
     async (commentId: string) => {
@@ -494,8 +498,8 @@ export function CommentPopover() {
   }, [coordinator]);
 
   const primaryComment = comments[0] ?? null;
-  const isNoteVariant = primaryComment?.commentType === 'note';
-  const isResolved = !isNoteVariant && comments.length > 0 && comments[0].resolved;
+  const isNoteBacked = primaryComment?.commentType === 'note';
+  const isResolved = comments.length > 0 && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);
@@ -514,7 +518,7 @@ export function CommentPopover() {
           onEditContentChange={setEditContent}
           onDelete={() => handleDelete(comment.id)}
           onReply={() => {
-            if (isNoteVariant) {
+            if (comment.commentType === 'note') {
               void handleConvertNoteToThreadAndReply(comment.id);
             } else {
               handleStartReply(comment.id);
@@ -610,15 +614,15 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // Comment popover body. Notes and threaded comments share the shell and item
-  // layout, but the header affordances must honor the persisted discriminator.
+  // Comment popover body. Note-backed imports use the modern comment surface;
+  // note storage only changes mutation paths that must promote before writing.
   // ===========================================================================
   const CommentBody = (
     <>
       <div className="px-3 py-2 border-b border-ss-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-caption font-medium text-ss-text-secondary">
-            {isNoteVariant ? 'Note' : 'Comment'}
+            Comment
           </span>
           {isResolved && (
             <span className="text-caption text-ss-success flex items-center gap-1">
@@ -628,7 +632,7 @@ export function CommentPopover() {
           )}
         </div>
         <div className="flex gap-1">
-          {!isNoteVariant && comments.length > 0 && (
+          {comments.length > 0 && (
             <button
               type="button"
               data-testid="resolve-thread"
@@ -651,7 +655,7 @@ export function CommentPopover() {
       </div>
 
       {renderCommentsList()}
-      {renderComposeFooter(!isNoteVariant)}
+      {renderComposeFooter(!isNoteBacked)}
     </>
   );
 

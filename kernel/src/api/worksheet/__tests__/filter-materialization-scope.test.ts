@@ -61,6 +61,15 @@ describe('WorksheetFiltersImpl materialization scopes', () => {
     expect(ctx.awaitMaterialized).toHaveBeenNthCalledWith(2, SHEET_ID);
   });
 
+  it('allows compact summaries and headers to read currently available metadata', async () => {
+    await filters.listSummaries({ scope: 'available' });
+    await filters.listHeaderInfo({ scope: 'available' });
+
+    expect(ctx.awaitMaterialized).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.getFiltersInSheet).toHaveBeenCalledWith(SHEET_ID);
+    expect(ctx.computeBridge.getFilterHeaderInfo).toHaveBeenCalledWith(SHEET_ID);
+  });
+
   it('can force compact header reads through complete materialization', async () => {
     await filters.listHeaderInfo({ scope: 'complete' });
 

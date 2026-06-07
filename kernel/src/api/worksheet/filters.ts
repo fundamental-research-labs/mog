@@ -46,8 +46,15 @@ import {
   assertNoProtectedTableFilterCreation,
 } from './protected-table-operations';
 
+type FilterMaterializationScope = 'sheetLocal' | 'complete';
+type FilterCompactReadScope = 'available' | FilterMaterializationScope;
+
 type FilterListOptions = {
-  readonly scope?: 'sheetLocal' | 'complete';
+  readonly scope?: FilterMaterializationScope;
+};
+
+type FilterCompactListOptions = {
+  readonly scope?: FilterCompactReadScope;
 };
 
 // ---------------------------------------------------------------------------
@@ -252,10 +259,14 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   private async awaitFilterListScope(
-    options: FilterListOptions | undefined,
-    defaultScope: NonNullable<FilterListOptions['scope']>,
+    options: { readonly scope?: FilterCompactReadScope } | undefined,
+    defaultScope: FilterCompactReadScope,
+    allowAvailable = false,
   ): Promise<void> {
     const scope = options?.scope ?? defaultScope;
+    if (scope === 'available' && allowAvailable) {
+      return;
+    }
     if (scope === 'complete') {
       await this.awaitAllMaterialized();
       return;
@@ -680,8 +691,8 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     return Promise.all(filters.map((filter) => toFilterDetail(this.ctx, this.sheetId, filter)));
   }
 
-  async listSummaries(options?: FilterListOptions): Promise<FilterSummaryInfo[]> {
-    await this.awaitFilterListScope(options, 'sheetLocal');
+  async listSummaries(options?: FilterCompactListOptions): Promise<FilterSummaryInfo[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal', true);
     const [filters, headerEntries] = await Promise.all([
       this.ctx.computeBridge.getFiltersInSheet(this.sheetId),
       this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId),
@@ -699,8 +710,8 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     );
   }
 
-  async listHeaderInfo(options?: FilterListOptions): Promise<FilterHeaderInfoEntry[]> {
-    await this.awaitFilterListScope(options, 'sheetLocal');
+  async listHeaderInfo(options?: FilterCompactListOptions): Promise<FilterHeaderInfoEntry[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal', true);
     const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
     return entries.map((entry) => {
       const mapped: FilterHeaderInfoEntry = {

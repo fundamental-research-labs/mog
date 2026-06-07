@@ -27,6 +27,8 @@ export type {
   FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
+  FilterCompactListOptions,
+  FilterCompactListScope,
   FilterHeaderInfoEntry,
   FilterListOptions,
   FilterListScope,

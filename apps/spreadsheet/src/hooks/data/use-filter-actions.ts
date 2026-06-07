@@ -109,7 +109,7 @@ export function useFilterActions(): UseFilterActionsReturn {
     }
 
     try {
-      const allFilters = await ws.filters.listSummaries();
+      const allFilters = await ws.filters.listSummaries({ scope: 'available' });
       setFilterState(deriveFilterStateInfo(allFilters));
     } catch (error) {
       recordFilterReadinessError({

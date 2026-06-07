@@ -62,7 +62,7 @@ export function useFilterHeaderCache({
 
     try {
       const ws = wb.getSheetById(activeSheetId);
-      const filterHeaderInfo = await ws.filters.listHeaderInfo();
+      const filterHeaderInfo = await ws.filters.listHeaderInfo({ scope: 'available' });
 
       if (filterHeaderInfo.length === 0) {
         if (refreshId !== refreshIdRef.current) return;

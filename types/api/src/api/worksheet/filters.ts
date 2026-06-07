@@ -112,6 +112,7 @@ export interface FilterDropdownData {
 }
 
 export type FilterListScope = 'sheetLocal' | 'complete';
+export type FilterCompactListScope = 'available' | FilterListScope;
 
 export interface FilterListOptions {
   /**
@@ -119,6 +120,16 @@ export interface FilterListOptions {
    * for all deferred workbook materialization before resolving details.
    */
   readonly scope?: FilterListScope;
+}
+
+export interface FilterCompactListOptions {
+  /**
+   * `available` returns currently available compact metadata without promoting
+   * deferred XLSX materialization. It is intended for passive renderer/status
+   * UI that can refresh later. `sheetLocal` waits for this sheet, and
+   * `complete` waits for all deferred workbook materialization.
+   */
+  readonly scope?: FilterCompactListScope;
 }
 
 /** Sub-API for filter operations on a worksheet. */
@@ -355,14 +366,14 @@ export interface WorksheetFilters {
    *
    * @returns Array of filter summary objects
    */
-  listSummaries(options?: FilterListOptions): Promise<FilterSummaryInfo[]>;
+  listSummaries(options?: FilterCompactListOptions): Promise<FilterSummaryInfo[]>;
 
   /**
    * List renderer-ready filter header entries for the sheet.
    *
    * @returns Array of header entries keyed by row/column
    */
-  listHeaderInfo(options?: FilterListOptions): Promise<FilterHeaderInfoEntry[]>;
+  listHeaderInfo(options?: FilterCompactListOptions): Promise<FilterHeaderInfoEntry[]>;
 
   /**
    * Whether any auto-filter exists on the sheet.

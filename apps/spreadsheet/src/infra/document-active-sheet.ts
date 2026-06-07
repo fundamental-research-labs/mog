@@ -16,6 +16,7 @@ interface ActiveSheetStore<TState extends ActiveSheetStoreState> {
 export interface ImportDurabilityGate {
   readonly isImportDurabilityPending: boolean;
   scheduleDeferredHydration?(): Promise<void>;
+  awaitMaterialized?(scope?: SheetId | 'allSheets'): Promise<void>;
   awaitImportDurability(): Promise<void>;
 }
 

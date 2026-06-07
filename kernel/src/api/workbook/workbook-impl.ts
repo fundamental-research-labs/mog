@@ -1206,6 +1206,7 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array> {
     this._ensureNotDisposed();
+    await this.ctx.awaitMaterialized?.('allSheets');
 
     // Host-backed path: export requires authorization through the operation gate.
     const gate = this.ctx.operationGate;

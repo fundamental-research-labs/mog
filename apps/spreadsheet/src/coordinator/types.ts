@@ -11,7 +11,7 @@ import type { ActorRefFrom, SnapshotFrom } from 'xstate';
 
 import type { SheetViewHandle } from '@mog-sdk/sheet-view';
 import type { focusMachine } from '@mog/shell';
-import type { CellFormat, SheetViewOptions } from '@mog-sdk/contracts/core';
+import type { CellFormat, SheetId, SheetViewOptions } from '@mog-sdk/contracts/core';
 import type { ViewportReader } from '@mog-sdk/contracts/api';
 import type {
   CellCoord,
@@ -293,6 +293,7 @@ export interface SheetSwitchDependencies {
 export interface SheetSwitchImportDurabilityGate {
   readonly isImportDurabilityPending: boolean;
   scheduleDeferredHydration?(): Promise<void>;
+  awaitMaterialized?(scope?: SheetId | 'allSheets'): Promise<void>;
   awaitImportDurability(): Promise<void>;
 }
 

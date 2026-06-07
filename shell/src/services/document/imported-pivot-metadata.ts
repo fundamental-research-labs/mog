@@ -34,6 +34,7 @@ export interface ImportedPivotPlacementMetadata {
 
 export interface ImportedPivotTableMetadata {
   readonly id: string;
+  readonly importIdentity: string;
   readonly name: string;
   readonly sheetName: string;
   readonly definitionPath: string;
@@ -372,6 +373,7 @@ function parsePivotDefinition(args: {
   xml: string;
   sheetName: string;
   definitionPath: string;
+  importIdentity: string;
   cacheFields: readonly ImportedPivotFieldMetadata[];
   sourceRange?: string;
 }): ImportedPivotTableMetadata | null {
@@ -393,6 +395,7 @@ function parsePivotDefinition(args: {
 
   return {
     id: `imported:${args.sheetName}:${args.definitionPath}`,
+    importIdentity: args.importIdentity,
     name,
     sheetName: args.sheetName,
     definitionPath: args.definitionPath,
@@ -403,6 +406,22 @@ function parsePivotDefinition(args: {
     placements: parsePivotPlacements(doc),
     readOnly: true,
   };
+}
+
+function buildImportedPivotImportIdentity(args: {
+  outputWorksheetPartPath: string;
+  outputWorksheetRelationshipId: string;
+  definitionPartPath: string;
+  pivotCacheRelationshipId?: string;
+  cacheId?: number;
+}): string {
+  return [
+    `ooxml:outputWorksheetPartPath=${args.outputWorksheetPartPath}`,
+    `worksheetRelationshipId=${args.outputWorksheetRelationshipId}`,
+    `definitionPartPath=${args.definitionPartPath}`,
+    `pivotCacheRelationshipId=${args.pivotCacheRelationshipId ?? ''}`,
+    `cacheId=${args.cacheId ?? 0}`,
+  ].join(';');
 }
 
 export async function extractImportedPivotMetadata(
@@ -441,10 +460,24 @@ export async function extractImportedPivotMetadata(
         const cachePath =
           cacheId != null && Number.isFinite(cacheId) ? cacheTargets.get(cacheId) : undefined;
         const cacheXml = cachePath ? await readZipText(bytes, entries, cachePath) : null;
+        const pivotRelationships = parseRelationships(
+          await readZipText(bytes, entries, relationshipsPath(definitionPath)),
+        );
+        const pivotCacheRelationshipId = pivotRelationships.find((pivotRel) =>
+          pivotRel.type.endsWith('/pivotCacheDefinition'),
+        )?.id;
+        const importIdentity = buildImportedPivotImportIdentity({
+          outputWorksheetPartPath: sheetPath,
+          outputWorksheetRelationshipId: rel.id,
+          definitionPartPath: definitionPath,
+          pivotCacheRelationshipId,
+          cacheId: Number.isFinite(cacheId) ? cacheId : undefined,
+        });
         const pivot = parsePivotDefinition({
           xml: pivotXml,
           sheetName: sheet.name,
           definitionPath,
+          importIdentity,
           cacheFields: parseCacheFields(cacheXml),
           sourceRange: parseSourceRange(cacheXml),
         });

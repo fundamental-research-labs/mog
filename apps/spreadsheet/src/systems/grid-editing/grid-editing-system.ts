@@ -1597,6 +1597,83 @@ export class GridEditingSystem implements IGridEditingSystem {
           ),
         );
       },
+      movePivotsForCutPaste: async (
+        sourceSheetId,
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+      ) => {
+        if (sourceSheetId !== targetSheetId) return;
+
+        const internal = workbook.getSheetById(sourceSheetId)._internal as {
+          movePivotsForCutPaste?: (
+            sourceRange: CellRange,
+            targetRow: number,
+            targetCol: number,
+          ) => Promise<void>;
+        };
+        await internal.movePivotsForCutPaste?.(sourceRange, targetRow, targetCol);
+
+        const sheet = workbook.getSheetById(sourceSheetId);
+        const pivotBridge = (
+          sheet as unknown as {
+            ctx?: {
+              pivot?: {
+                getAllPivots(sheetId: SheetId): Promise<
+                  Array<{
+                    id: string;
+                    outputLocation: { row: number; col: number };
+                  }>
+                >;
+                compute(
+                  sheetId: SheetId,
+                  pivotId: string,
+                ): Promise<{
+                  renderedBounds?: { totalRows: number; totalCols: number };
+                } | null>;
+                updatePivot(
+                  sheetId: SheetId,
+                  pivotId: string,
+                  updates: { outputLocation: { row: number; col: number } },
+                  options: { reason: 'uiConfigChanged'; refreshPolicy: 'refreshAndMaterialize' },
+                ): Promise<unknown>;
+              };
+            };
+          }
+        ).ctx?.pivot;
+        if (!pivotBridge) return;
+
+        const pivots = await pivotBridge.getAllPivots(sourceSheetId);
+        await Promise.all(
+          pivots.map(async (pivot) => {
+            const result = await pivotBridge.compute(sourceSheetId, pivot.id).catch(() => null);
+            const totalRows = result?.renderedBounds?.totalRows ?? 1;
+            const totalCols = result?.renderedBounds?.totalCols ?? 1;
+            const range: CellRange = {
+              startRow: pivot.outputLocation.row,
+              startCol: pivot.outputLocation.col,
+              endRow: pivot.outputLocation.row + Math.max(1, totalRows) - 1,
+              endCol: pivot.outputLocation.col + Math.max(1, totalCols) - 1,
+            };
+            if (!rangesEqual(range, sourceRange) && !rangeContainsRange(sourceRange, range)) {
+              return;
+            }
+
+            await pivotBridge.updatePivot(
+              sourceSheetId,
+              pivot.id,
+              {
+                outputLocation: {
+                  row: targetRow + (range.startRow - sourceRange.startRow),
+                  col: targetCol + (range.startCol - sourceRange.startCol),
+                },
+              },
+              { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+            );
+          }),
+        );
+      },
       copyRange: async (
         sourceSheetId,
         sourceRange,

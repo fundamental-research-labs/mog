@@ -25,12 +25,27 @@ import { isOnFillHandle, isOnSelectionBorder, isOnTableResizeHandle } from '@mog
 import { editorSelectors } from '../../selectors';
 import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
-import type { TotalFunction } from '@mog-sdk/contracts/tables';
 import { parseA1Range } from '@mog/spreadsheet-utils/a1';
 
 import { useUIStore, useUIStoreApi, useWorkbook } from '../../infra/context';
 import { formatRangeSelectionRange } from '../../systems/grid-editing/coordination/range-selection-format';
 import { isValidDropTarget } from '../../systems/grid-editing/features/drag-drop';
+import {
+  getAutofitColumnsForResize,
+  getAutofitRowsForResize,
+} from '../../systems/grid-editing/features/autofit/selection-targets';
+import {
+  getCachedTableHitRegion,
+  resolvePendingTableClickSelection,
+  getTableCornerDoubleClickRange,
+  getTableHitRegion,
+  type CachedTableHitInfo,
+  type PendingTableClickSelection,
+} from '../grid-mouse/helpers/table-click-selection';
+import {
+  resolveSelectionBorderDoubleClickTarget,
+  type SelectionBorderEdge,
+} from '../grid-mouse/helpers/selection-border-double-click';
 import { useEditorActions } from '../editing/use-editor-actions';
 import { useObjectInteraction } from '../objects/use-object-interaction';
 import { useSelection } from '../selection/use-selection';
@@ -42,8 +57,6 @@ import {
   type CellClickPosition,
   getCursorForDrag,
   getCursorForHitType,
-  getSelectedColumnsOrSingle,
-  getSelectedRowsOrSingle,
   type GridMouseEvent,
   isClickOnValidationDropdown,
   useCellInteraction,
@@ -66,7 +79,6 @@ export type {
 // Helpers
 // =============================================================================
 
-type SelectionBorderEdge = 'left' | 'right' | 'up' | 'down';
 type RangeSelectionDragMode = 'cell' | 'row' | 'column';
 
 interface NativeHandledCellDoubleClick {
@@ -78,28 +90,12 @@ interface NativeHandledCellDoubleClick {
   time: number;
 }
 
-type PendingTableClickSelection =
-  | {
-      kind: 'column';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    }
-  | {
-      kind: 'table-data-or-full';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    }
-  | {
-      kind: 'row';
-      sheetId: string;
-      row: number;
-      col: number;
-      tableId: string;
-    };
+interface NativeHandledSelectionBorderDoubleClick {
+  sheetId: string;
+  clientX: number;
+  clientY: number;
+  time: number;
+}
 
 /**
  * Get mouse position relative to container.
@@ -130,14 +126,13 @@ function getSelectionBorderEdge(
   return 'down';
 }
 
-function dispatchMoveToSelectionEdge(
-  dispatch: ReturnType<typeof useDispatch>,
-  edge: SelectionBorderEdge,
-): void {
-  if (edge === 'right') dispatch('MOVE_TO_EDGE_RIGHT');
-  else if (edge === 'left') dispatch('MOVE_TO_EDGE_LEFT');
-  else if (edge === 'up') dispatch('MOVE_TO_EDGE_UP');
-  else dispatch('MOVE_TO_EDGE_DOWN');
+function singleCellRange(cell: { row: number; col: number }): CellRange {
+  return {
+    startRow: cell.row,
+    startCol: cell.col,
+    endRow: cell.row,
+    endCol: cell.col,
+  };
 }
 
 function isObjectDragOperationLive(coordinator: UseGridMouseOptions['coordinator']): boolean {
@@ -230,6 +225,23 @@ function isMatchingNativeCellDoubleClick(
   );
 }
 
+function isMatchingNativeSelectionBorderDoubleClick(
+  handled: NativeHandledSelectionBorderDoubleClick | null,
+  sheetId: string,
+  event: GridMouseEvent,
+): boolean {
+  if (!handled) return false;
+  const maxAgeMs = 1000;
+  const coordinateTolerancePx = 2;
+
+  return (
+    Date.now() - handled.time <= maxAgeMs &&
+    handled.sheetId === sheetId &&
+    Math.abs(handled.clientX - event.clientX) <= coordinateTolerancePx &&
+    Math.abs(handled.clientY - event.clientY) <= coordinateTolerancePx
+  );
+}
+
 function getRangeSelectionAnchor(currentRange: string): { row: number; col: number } | null {
   const normalized = currentRange.trim().replace(/^=/, '');
   if (
@@ -253,111 +265,7 @@ function getRangeSelectionAnchor(currentRange: string): { row: number; col: numb
 // Table Hit Testing (inlined from domain module)
 // =============================================================================
 
-/**
- * Table regions for hit testing.
- */
-type TableRegion =
-  | 'header'
-  | 'data'
-  | 'total'
-  | 'header-left-edge'
-  | 'data-left-edge'
-  | 'total-left-edge'
-  | 'corner'
-  | 'column-resize-edge'
-  | 'outside';
-
-interface TableHitTestOptions {
-  clickXInCell: number;
-  clickYInCell: number;
-  cellWidth: number;
-  cellHeight: number;
-}
-
-interface TableHitResult {
-  table: { id: string; columns: { name: string; totalFunction?: TotalFunction }[] } | null;
-  region: TableRegion;
-  tableColumnIndex: number | null;
-}
-
-const LEFT_EDGE_WIDTH = 4;
-const CORNER_WIDTH = 6;
 const COLUMN_RESIZE_EDGE_WIDTH = 4;
-
-/**
- * Local table hit region computation using Worksheet API.
- * Local table hit region computation using Worksheet API.
- */
-async function getTableHitRegion(
-  ws: { tables: { getAtCell(row: number, col: number): Promise<any> } },
-  row: number,
-  col: number,
-  options?: TableHitTestOptions,
-): Promise<TableHitResult> {
-  const tableInfo = await ws.tables.getAtCell(row, col);
-
-  if (!tableInfo) {
-    return { table: null, region: 'outside', tableColumnIndex: null };
-  }
-
-  // Parse the A1 range string to numeric range
-  let tableRange: CellRange;
-  try {
-    tableRange = parseA1Range(tableInfo.range);
-  } catch {
-    return { table: null, region: 'outside', tableColumnIndex: null };
-  }
-
-  const hasHeaderRow = tableInfo.hasHeaderRow ?? true;
-  const hasTotalRow = tableInfo.hasTotalsRow ?? false;
-
-  const tableColumnIndex = col - tableRange.startCol;
-
-  const isHeaderRow = hasHeaderRow && row === tableRange.startRow;
-  const isTotalRow = hasTotalRow && row === tableRange.endRow;
-
-  // Build a compatible table object with id and columns
-  const table = {
-    id: tableInfo.name, // TableInfo.name serves as the table identifier
-    columns: (tableInfo.columns ?? []).map((c: any) => ({
-      name: c.name,
-      totalFunction: c.totalFunction,
-    })),
-  };
-
-  if (!options) {
-    let region: TableRegion;
-    if (isHeaderRow) region = 'header';
-    else if (isTotalRow) region = 'total';
-    else region = 'data';
-    return { table, region, tableColumnIndex };
-  }
-
-  const { clickXInCell, clickYInCell, cellWidth } = options;
-  const isOnLeftEdge = clickXInCell <= LEFT_EDGE_WIDTH;
-  const isOnRightEdge = clickXInCell >= cellWidth - COLUMN_RESIZE_EDGE_WIDTH;
-  const isFirstColumn = col === tableRange.startCol;
-
-  let region: TableRegion;
-
-  if (isHeaderRow) {
-    if (isFirstColumn && isOnLeftEdge && clickYInCell <= CORNER_WIDTH) {
-      region = 'corner';
-    } else if (isOnRightEdge) {
-      region = 'column-resize-edge';
-    } else if (isOnLeftEdge) {
-      region = 'header-left-edge';
-    } else {
-      region = 'header';
-    }
-  } else if (isTotalRow) {
-    region = isOnLeftEdge ? 'total-left-edge' : 'total';
-  } else {
-    region = isOnLeftEdge ? 'data-left-edge' : 'data';
-  }
-
-  return { table, region, tableColumnIndex };
-}
 
 // =============================================================================
 // Hook Implementation
@@ -448,6 +356,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     time: number;
   } | null>(null);
   const nativeHandledCellDoubleClickRef = useRef<NativeHandledCellDoubleClick | null>(null);
+  const nativeHandledSelectionBorderDoubleClickRef =
+    useRef<NativeHandledSelectionBorderDoubleClick | null>(null);
   const pendingFormatPainterTargetRef = useRef(false);
   const pendingTableClickSelectionRef = useRef<PendingTableClickSelection | null>(null);
   const pendingTableClickStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -458,30 +368,42 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
   // Pre-cache tables via Worksheet API for sync mouse handlers.
   // Tables are pre-fetched and their A1 ranges parsed to numeric CellRange for cursor feedback.
-  const [cachedTables, setCachedTables] = useState<
-    { id: string; range: CellRange; columns: any[] }[]
-  >([]);
+  const [cachedTables, setCachedTables] = useState<CachedTableHitInfo[]>([]);
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const ws = wb.getSheetById(activeSheetId);
-        const tables = await ws.tables.list();
-        if (!cancelled) {
-          setCachedTables(
-            (tables ?? []).map((t: any) => ({
-              id: t.name,
-              range: parseA1Range(t.range),
-              columns: t.columns ?? [],
-            })),
-          );
+    const refreshTables = () => {
+      void (async () => {
+        try {
+          const ws = wb.getSheetById(activeSheetId);
+          const tables = await ws.tables.list();
+          if (!cancelled) {
+            setCachedTables(
+              (tables ?? []).map((t: any) => ({
+                id: t.name,
+                range: parseA1Range(t.range),
+                hasHeaderRow: t.hasHeaderRow ?? true,
+                hasTotalsRow: t.hasTotalsRow ?? false,
+                columns: t.columns ?? [],
+              })),
+            );
+          }
+        } catch {
+          if (!cancelled) setCachedTables([]);
         }
-      } catch {
-        if (!cancelled) setCachedTables([]);
-      }
-    })();
+      })();
+    };
+
+    refreshTables();
+
+    const unsubscribeTableCreated = wb.on('table:created', refreshTables);
+    const unsubscribeTableUpdated = wb.on('table:updated', refreshTables);
+    const unsubscribeTableDeleted = wb.on('table:deleted', refreshTables);
+
     return () => {
       cancelled = true;
+      unsubscribeTableCreated?.();
+      unsubscribeTableUpdated?.();
+      unsubscribeTableDeleted?.();
     };
   }, [wb, activeSheetId]);
 
@@ -621,6 +543,18 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       return true;
     },
     [activeSheetId, wb, cellInteraction],
+  );
+
+  const handleSelectionBorderDoubleClick = useCallback(
+    async (edge: SelectionBorderEdge): Promise<void> => {
+      const activeCell = selection.snapshot.activeCell;
+      const ws = wb.getSheetById(activeSheetId);
+      const targetCell = await resolveSelectionBorderDoubleClickTarget(ws, activeCell, edge);
+      if (!targetCell) return;
+
+      selection.setSelection([singleCellRange(targetCell)], targetCell);
+    },
+    [activeSheetId, selection, wb],
   );
 
   const applyPendingFormatPainterTarget = useCallback(() => {
@@ -869,6 +803,74 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           return;
         }
 
+        const now = Date.now();
+        const clickWindow = 500;
+        const formatPainterTargeting = formatPainter.isActive && formatPainter.sourceFormat;
+
+        // Selected-cell borders have their own gesture contract and must not
+        // inherit the renderer hit-test cell at the boundary. A right/bottom
+        // border pixel can classify as the adjacent cell; if we let that pass
+        // through normal cell routing, a click moves the active cell and a
+        // double-click dispatches Ctrl+Arrow data-edge navigation.
+        if (
+          selection.ranges.length > 0 &&
+          !formatPainterTargeting &&
+          !e.shiftKey &&
+          !e.ctrlKey &&
+          !e.metaKey
+        ) {
+          const firstRange = selection.ranges[0];
+          const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
+          const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
+
+          if (
+            selectionViewportRect &&
+            !isOnFillHandle({ x, y }, selectionViewportRect) &&
+            isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
+          ) {
+            const activeCell = selection.snapshot.activeCell;
+            const edge = getSelectionBorderEdge({ x, y }, selectionViewportRect);
+            const lastBorderClick = lastSelectionBorderClickRef.current;
+            const doubleClickBorderTolerance = e.pointerType === 'touch' ? 5 : 1;
+            const isDoubleClick =
+              lastBorderClick !== null &&
+              lastBorderClick.row === activeCell.row &&
+              lastBorderClick.col === activeCell.col &&
+              lastBorderClick.sheetId === activeSheetId &&
+              lastBorderClick.edge === edge &&
+              now - lastBorderClick.time < clickWindow;
+
+            if (isDoubleClick) {
+              lastSelectionBorderClickRef.current = null;
+              if (
+                isOnSelectionBorder({ x, y }, selectionViewportRect, doubleClickBorderTolerance)
+              ) {
+                nativeHandledSelectionBorderDoubleClickRef.current = {
+                  sheetId: activeSheetId,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                  time: now,
+                };
+                await handleSelectionBorderDoubleClick(edge);
+                return;
+              }
+            } else {
+              lastSelectionBorderClickRef.current = {
+                row: activeCell.row,
+                col: activeCell.col,
+                sheetId: activeSheetId,
+                edge,
+                time: now,
+              };
+
+              coordinator.grid.handleStartDragCells(activeCell, false);
+              return;
+            }
+          }
+        }
+
+        lastSelectionBorderClickRef.current = null;
+
         // 6. Handle grid hit test results
         // Note: We already have `hit` from renderer.hitTest() above - no need for classifyPoint()
         switch (hit.type) {
@@ -880,8 +882,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             // Sheet2 within 500ms must NOT escalate to a triple-click, otherwise the
             // selectAllText branch swallows the click and prevents formula range
             // insertion across sheets.
-            const now = Date.now();
-            const clickWindow = 500;
             const lastCell = lastClickCellRef.current;
             const sameCell =
               lastCell &&
@@ -942,51 +942,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const containerRect = container.getBoundingClientRect();
             const screenPosition = { x: e.clientX, y: e.clientY };
 
-            // Native pointerdown owns the grid's primary input path. A click
-            // on a selected-cell border starts cell drag-drop before the
-            // browser can synthesize a reliable React dblclick; the second
-            // press may target the inline editor overlay instead of the
-            // canvas. Detect the second border press here so Excel's
-            // double-click-border data-edge jump stays on the real input path.
-            if (selection.ranges.length > 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const firstRange = selection.ranges[0];
-              const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
-              const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
-
-              if (
-                selectionViewportRect &&
-                isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
-              ) {
-                const edge = getSelectionBorderEdge({ x, y }, selectionViewportRect);
-                const lastBorderClick = lastSelectionBorderClickRef.current;
-                const isDoubleClick =
-                  lastBorderClick !== null &&
-                  lastBorderClick.row === cell.row &&
-                  lastBorderClick.col === cell.col &&
-                  lastBorderClick.sheetId === activeSheetId &&
-                  lastBorderClick.edge === edge &&
-                  now - lastBorderClick.time < clickWindow;
-
-                lastSelectionBorderClickRef.current = {
-                  row: cell.row,
-                  col: cell.col,
-                  sheetId: activeSheetId,
-                  edge,
-                  time: now,
-                };
-
-                if (isDoubleClick) {
-                  lastSelectionBorderClickRef.current = null;
-                  dispatchMoveToSelectionEdge(dispatch, edge);
-                  return;
-                }
-              } else {
-                lastSelectionBorderClickRef.current = null;
-              }
-            } else {
-              lastSelectionBorderClickRef.current = null;
-            }
-
             // Editing interception - MUST run synchronously before any await.
             // The async table hit region check below yields to the event loop,
             // which could allow blur to fire. handlePointerDown already prevents
@@ -1014,8 +969,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
             // Table-aware click handling
             if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const ws = wb.getSheetById(activeSheetId);
-              const tableHit = await getTableHitRegion(ws, cell.row, cell.col, {
+              const tableHit = getCachedTableHitRegion(cachedTables, cell.row, cell.col, {
                 clickXInCell: clickPosition.clickInCellX,
                 clickYInCell: clickPosition.clickInCellY,
                 cellWidth: clickPosition.cellWidth,
@@ -1033,10 +987,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                   case 'corner': {
                     pendingTableClickSelectionRef.current = {
@@ -1045,10 +1002,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                   case 'total': {
                     const cellRect = geometry.getCellRect(cell);
@@ -1086,10 +1046,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
                       row: cell.row,
                       col: cell.col,
                       tableId: table.id,
+                      tableRange: table.range,
+                      hasHeaderRow: table.hasHeaderRow,
+                      hasTotalsRow: table.hasTotalsRow,
                     };
                     pendingTableClickStartRef.current = { x: e.clientX, y: e.clientY };
                     pendingTableClickMovedRef.current = false;
-                    break;
+                    return;
                   }
                 }
               }
@@ -1102,32 +1065,6 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
               if (selectionViewportRect && isOnFillHandle({ x, y }, selectionViewportRect)) {
                 selection.startFillHandleDrag();
-                return;
-              }
-            }
-
-            // Selection border check for cell drag-drop.
-            //
-            // Tolerance is pointer-type aware: mouse/pen get 3px (matches
-            // Excel's ~2-3px border zone). Touch keeps 5px because finger
-            // targets are imprecise. Pointer events without a pointerType
-            // (legacy callers, synthetic events) default to the mouse path.
-            // The same tolerance is shared with the cursor-feedback path
-            // (mouse-move below) so the cursor affordance and click action
-            // agree — no dead zone where the cursor shows `move` but the
-            // click still selects the cell.
-            if (selection.ranges.length > 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              const firstRange = selection.ranges[0];
-              const selectionViewportRect = geometry.getRangeRects(firstRange)[0];
-              const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
-
-              if (
-                selectionViewportRect &&
-                isOnSelectionBorder({ x, y }, selectionViewportRect, borderTolerance)
-              ) {
-                const effectiveCtrlKey = e.ctrlKey || e.metaKey;
-                // Use coordinator method instead of direct actor access
-                coordinator.grid.handleStartDragCells(cell, effectiveCtrlKey);
                 return;
               }
             }
@@ -1276,9 +1213,11 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       cellInteraction,
       uiStoreApi,
       dispatch,
+      cachedTables,
       pageBreakPreviewMode,
       formatPainter.isActive,
       formatPainter.sourceFormat,
+      handleSelectionBorderDoubleClick,
     ],
   );
 
@@ -1711,6 +1650,17 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       const hit = hitTest.atViewportPoint({ x, y });
 
+      if (
+        isMatchingNativeSelectionBorderDoubleClick(
+          nativeHandledSelectionBorderDoubleClickRef.current,
+          activeSheetId,
+          e,
+        )
+      ) {
+        nativeHandledSelectionBorderDoubleClickRef.current = null;
+        return;
+      }
+
       // 1. Check floating objects FIRST
       if (hit.type === 'floating-object') {
         const dblClickObj = await ws.objects.getInfo(hit.objectId);
@@ -1782,9 +1732,10 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           import('../../systems/grid-editing/features/autofit'),
           import('@mog/grid-renderer'),
         ]).then(async ([{ autoFitColumns }, { getTextMeasurementService }]) => {
-          const columnsToFit = getSelectedColumnsOrSingle(hit.col, selection.ranges);
           const textMeasurement = getTextMeasurementService();
           const ws = wb.getSheetById(activeSheetId);
+          const usedRange = await ws.getUsedRange();
+          const columnsToFit = getAutofitColumnsForResize(hit.col, selection.ranges, usedRange);
           await autoFitColumns(
             activeSheetId,
             columnsToFit,
@@ -1802,9 +1753,10 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           import('../../systems/grid-editing/features/autofit'),
           import('@mog/grid-renderer'),
         ]).then(async ([{ autoFitRows }, { getTextMeasurementService }]) => {
-          const rowsToFit = getSelectedRowsOrSingle(hit.row, selection.ranges);
           const textMeasurement = getTextMeasurementService();
           const ws = wb.getSheetById(activeSheetId);
+          const usedRange = await ws.getUsedRange();
+          const rowsToFit = getAutofitRowsForResize(hit.row, selection.ranges, usedRange);
           await autoFitRows(
             activeSheetId,
             rowsToFit,
@@ -1827,13 +1779,14 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         }
       }
 
-      // Double-click selection border → jump to data edge (Excel: dblclick cell border)
+      // Double-click selection border uses Excel data-edge navigation while
+      // preserving empty-region right/bottom no-op behavior.
       if (selection.ranges.length > 0 && geometry) {
         const firstRange = selection.ranges[0];
         const selRect = geometry.getRangeRects(firstRange)[0];
 
         if (selRect && isOnSelectionBorder({ x, y }, selRect, 2)) {
-          dispatchMoveToSelectionEdge(dispatch, getSelectionBorderEdge({ x, y }, selRect));
+          await handleSelectionBorderDoubleClick(getSelectionBorderEdge({ x, y }, selRect));
           return;
         }
       }
@@ -1852,6 +1805,24 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       if (hit.type === 'cell') {
         const cell = { row: hit.row, col: hit.col };
+        const cellRect = geometry.getCellRect(cell);
+        const cornerSelection = cellRect
+          ? getTableCornerDoubleClickRange(cachedTables, cell.row, cell.col, {
+              clickXInCell: x - cellRect.x,
+              clickYInCell: y - cellRect.y,
+              cellWidth: cellRect.width,
+              cellHeight: cellRect.height,
+            })
+          : null;
+
+        if (cornerSelection) {
+          uiStoreApi.getState().handleCornerClick(cornerSelection.tableId);
+          selection.setSelection([cornerSelection.range], {
+            row: cornerSelection.range.startRow,
+            col: cornerSelection.range.startCol,
+          });
+          return;
+        }
 
         if (
           isMatchingNativeCellDoubleClick(
@@ -1879,6 +1850,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       wb,
       dispatch,
       handleCellDoubleClickAtViewportPoint,
+      handleSelectionBorderDoubleClick,
+      uiStoreApi,
+      cachedTables,
     ],
   );
 
@@ -1963,10 +1937,39 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
             const lastRangeRect = lastRange ? geometry.getRangeRects(lastRange)[0] : null;
             const firstRange = selection.ranges[0];
             const firstRangeRect = firstRange ? geometry.getRangeRects(firstRange)[0] : null;
-            const borderTolerance = e.pointerType === 'touch' ? 5 : 3;
+            const doubleClickBorderTolerance = e.pointerType === 'touch' ? 5 : 1;
             const isReservedSelectionGesture =
               (lastRangeRect && isOnFillHandle(point, lastRangeRect)) ||
-              (firstRangeRect && isOnSelectionBorder(point, firstRangeRect, borderTolerance));
+              (firstRangeRect &&
+                isOnSelectionBorder(point, firstRangeRect, doubleClickBorderTolerance));
+
+            const cellRect = geometry.getCellRect(cell);
+            if (cellRect) {
+              const cornerSelection = getTableCornerDoubleClickRange(
+                cachedTables,
+                cell.row,
+                cell.col,
+                {
+                  clickXInCell: relX - cellRect.x,
+                  clickYInCell: relY - cellRect.y,
+                  cellWidth: cellRect.width,
+                  cellHeight: cellRect.height,
+                },
+              );
+
+              if (cornerSelection) {
+                uiStoreApi.getState().handleCornerClick(cornerSelection.tableId);
+                selection.setSelection([cornerSelection.range], {
+                  row: cornerSelection.range.startRow,
+                  col: cornerSelection.range.startCol,
+                });
+                pendingTableClickSelectionRef.current = null;
+                pendingTableClickStartRef.current = null;
+                pendingTableClickMovedRef.current = false;
+                e.preventDefault();
+                return;
+              }
+            }
 
             if (
               !isReservedSelectionGesture &&
@@ -2033,29 +2036,12 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       const pendingTableClick = pendingTableClickSelectionRef.current;
       if (pendingTableClick && !pendingTableClickMovedRef.current) {
-        if (pendingTableClick.kind === 'column') {
-          const stage = uiStoreApi
-            .getState()
-            .handleHeaderClick(pendingTableClick.tableId, pendingTableClick.col);
-          dispatch('SELECT_TABLE_COLUMN', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-            stage,
-          });
-        } else if (pendingTableClick.kind === 'table-data-or-full') {
-          const stage = uiStoreApi.getState().handleCornerClick(pendingTableClick.tableId);
-          dispatch(stage === 0 ? 'SELECT_TABLE_DATA' : 'SELECT_FULL_TABLE', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-          });
-        } else {
-          dispatch('SELECT_TABLE_ROW', {
-            sheetId: pendingTableClick.sheetId,
-            row: pendingTableClick.row,
-            col: pendingTableClick.col,
-          });
+        const resolved = resolvePendingTableClickSelection(
+          pendingTableClick,
+          uiStoreApi.getState(),
+        );
+        if (resolved) {
+          selection.setSelection([resolved.range], resolved.activeCell);
         }
       }
       pendingTableClickSelectionRef.current = null;
@@ -2110,6 +2096,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     handleCellDoubleClickAtViewportPoint,
     dispatch,
     uiStoreApi,
+    cachedTables,
   ]);
 
   // ==========================================================================

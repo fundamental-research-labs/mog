@@ -11,17 +11,21 @@
 
 import type { KernelHostContext } from '@mog-sdk/types-host/kernel';
 import type { HostKernelAdapterBindings } from '@mog-sdk/types-host/bindings';
-import type { DocumentImportOptions } from '@mog-sdk/contracts/document';
+import type { DocumentImportOptions, DocumentImportWarning } from '@mog-sdk/contracts/document';
 import {
   DocumentLifecycleSystem,
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
   _createDocumentHandleInternal,
   attachHostBootstrapCollaborationSidecar,
+  documentImportWarningsFromDiagnostics,
   fetchRoomSnapshotForHostBootstrap,
+  projectImportDiagnostic,
   validateAndResolveImportSource,
   type AuthorizedRoomBootstrap,
   type DocumentByteSyncPort,
   type DocumentHandle,
   type FlushableCollaborationSidecar,
+  type InteractiveDeferredImportToken,
 } from '@mog-sdk/kernel/host-lifecycle-internal';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
 import { prepareHostBackedDocument } from './open';
@@ -78,6 +82,16 @@ export interface HostBackedCollaborationDocumentResult {
 
 export interface ImportHostBackedDocumentOptions {
   readonly importOptions?: DocumentImportOptions;
+  readonly interactiveDeferredImportToken?: InteractiveDeferredImportToken;
+}
+
+export interface ImportHostBackedInteractiveDeferredDocumentOptions {
+  readonly importOptions?: DocumentImportOptions;
+}
+
+export interface ImportHostBackedDocumentResult {
+  readonly handle: DocumentHandle;
+  readonly importWarnings: readonly DocumentImportWarning[];
 }
 
 export interface DocumentSyncCapableHandle extends DocumentHandle {
@@ -261,7 +275,22 @@ export async function importHostBackedDocument(
   host: KernelHostContext,
   bindings: HostKernelAdapterBindings,
   options: ImportHostBackedDocumentOptions = {},
-): Promise<DocumentHandle> {
+): Promise<ImportHostBackedDocumentResult> {
+  if (
+    'interactiveDeferredImportToken' in options &&
+    options.interactiveDeferredImportToken !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT
+  ) {
+    const err = new Error(
+      'interactiveDeferredImportToken is invalid for host-backed XLSX import.',
+    ) as Error & {
+      code?: string;
+      scope?: 'allSheets';
+    };
+    err.code = 'invalid_interactive_import_option';
+    err.scope = 'allSheets';
+    throw err;
+  }
+
   const lifecycleInput = prepareHostBackedDocument(host, bindings);
   if (!lifecycleInput.documentRef) {
     throw new Error('Host-backed XLSX import requires an authorized source-handle documentRef');
@@ -289,9 +318,36 @@ export async function importHostBackedDocument(
     options.importOptions,
   );
   await lifecycle.waitForReady();
+  if (options.interactiveDeferredImportToken !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT) {
+    // Match the direct DocumentFactory import contract: host-backed handles are
+    // returned only after deferred import hydration is mutation-ready/durable.
+    await lifecycle.awaitImportDurability();
+  }
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(lifecycleInput.documentId, lifecycle, context);
+  const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+    projectImportDiagnostic,
+  );
+  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+  const handle = _createDocumentHandleInternal(
+    lifecycleInput.documentId,
+    lifecycle,
+    context,
+    undefined,
+    importWarnings,
+  );
+  return { handle, importWarnings };
+}
+
+export async function importHostBackedInteractiveDeferredDocument(
+  host: KernelHostContext,
+  bindings: HostKernelAdapterBindings,
+  options: ImportHostBackedInteractiveDeferredDocumentOptions = {},
+): Promise<ImportHostBackedDocumentResult> {
+  return importHostBackedDocument(host, bindings, {
+    importOptions: options.importOptions,
+    interactiveDeferredImportToken: INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +401,17 @@ export async function importHeadlessDocumentFromXlsx(
   await lifecycle.awaitImportDurability();
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(options.documentId, lifecycle, context);
+  const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+    projectImportDiagnostic,
+  );
+  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+  return _createDocumentHandleInternal(
+    options.documentId,
+    lifecycle,
+    context,
+    undefined,
+    importWarnings,
+  );
 }
 
 function assertEphemeralCollaborationStorage(storage: {

@@ -4,9 +4,9 @@
  * Provides filter state for toolbar button enable/disable logic.
  * Follows the same pattern as useGroupingActions.
  *
- * Reads filter state via ws.filters.list() (async, unified Worksheet API).
- * Active filter counts derived from returned filter objects' columnFilters and
- * advanced filter state.
+ * Reads filter state via ws.filters.listSummaries() (async, unified Worksheet API).
+ * Active filter counts derive from summary activity fields, including imported
+ * shell/header activity when detailed criteria are not materialized as supported.
  *
  * DESIGN NOTE: This hook is optimized for toolbar/low-frequency UI contexts.
  * It subscribes to filter events and updates state reactively, which is appropriate
@@ -19,6 +19,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import type { FilterSummaryInfo } from '@mog-sdk/contracts/api';
+
+import { recordFilterReadinessError } from '../../infra/diagnostics/filter-readiness-errors';
 import { useActiveSheetId, useWorkbook } from '../../infra/context';
 
 // =============================================================================
@@ -45,22 +48,21 @@ export interface UseFilterActionsReturn {
 // =============================================================================
 
 /**
- * Derive filter state info from an array of filter objects returned by ws.filters.list().
- * Mirrors the logic previously in Filters.getActiveFilters / getActiveFilterCount.
+ * Derive filter state info from sheet-local filter summaries returned by
+ * ws.filters.listSummaries().
  */
-function deriveFilterStateInfo(allFilters: any[]): FilterStateInfo {
+function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo {
   let activeFilterCount = 0;
   let hasActiveFilters = false;
 
   for (const filter of allFilters) {
-    const columnFilterKeys = filter.columnFilters ? Object.keys(filter.columnFilters).length : 0;
-    if (columnFilterKeys > 0) {
+    const activeColumnCount = filter.activeColumnCount ?? 0;
+    const hasActiveFilter =
+      filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
+    const clearable = filter.clearable ?? hasActiveFilter;
+    if (clearable) {
       hasActiveFilters = true;
-      activeFilterCount += columnFilterKeys;
-    }
-    if (filter.advancedFilter?.active === true) {
-      hasActiveFilters = true;
-      activeFilterCount += 1;
+      activeFilterCount += activeColumnCount > 0 ? activeColumnCount : 1;
     }
   }
 
@@ -107,10 +109,15 @@ export function useFilterActions(): UseFilterActionsReturn {
     }
 
     try {
-      const allFilters = await ws.filters.list();
+      const allFilters = await ws.filters.listSummaries({ scope: 'available' });
       setFilterState(deriveFilterStateInfo(allFilters));
-    } catch {
-      // On error, fall back to empty state
+    } catch (error) {
+      recordFilterReadinessError({
+        source: 'filterActions',
+        sheetId: activeSheetId,
+        operation: 'filters.listSummaries',
+        error,
+      });
       setFilterState(EMPTY_FILTER_STATE);
     }
   }, [ws, activeSheetId]);

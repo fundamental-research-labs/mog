@@ -196,8 +196,37 @@ find_wasm_bindgen() {
 }
 
 # Both paths (wasm-pack for release, wasm-bindgen-cli for dev) generate their
-# own package.json in the output dir. The tracked npm/package.json (@mog-sdk/wasm)
-# is saved before and restored after each tool invocation.
+# own package.json in the output dir. Preserve tracked files outside npm/ because
+# the generators may clear their output directory before writing new artifacts.
+run_preserving_tracked_outputs() {
+  local backup_dir
+  backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/mog-wasm-preserve.XXXXXX")"
+
+  local -a files=()
+  while [[ "$1" != "--" ]]; do
+    files+=("$1")
+    shift
+  done
+  shift
+
+  local file
+  for file in "${files[@]}"; do
+    cp "$file" "$backup_dir/$(basename "$file")"
+  done
+
+  set +e
+  "$@"
+  local status=$?
+  set -e
+
+  for file in "${files[@]}"; do
+    mkdir -p "$(dirname "$file")"
+    cp "$backup_dir/$(basename "$file")" "$file"
+  done
+  rm -rf "$backup_dir"
+
+  return "$status"
+}
 
 case "$PROFILE" in
   dev)
@@ -230,10 +259,8 @@ case "$PROFILE" in
     RAW_WASM="$CARGO_TARGET_DIR/wasm32-unknown-unknown/wasm-dev/compute_core_wasm.wasm"
 
     # wasm-bindgen-cli generates its own package.json in the output dir, which
-    # would clobber the tracked npm/package.json (@mog-sdk/wasm). Save and restore.
-    cp npm/package.json npm/package.json.bak
-    "$WBG" --target web --out-dir npm "$RAW_WASM"
-    mv npm/package.json.bak npm/package.json
+    # would clobber the tracked npm/package.json (@mog-sdk/wasm).
+    run_preserving_tracked_outputs npm/package.json -- "$WBG" --target web --out-dir npm "$RAW_WASM"
 
     # Drop any leftover Brotli-compressed wasm from a prior release build —
     # it'd be older than this dev .wasm and is never used by the dev server.
@@ -248,12 +275,8 @@ case "$PROFILE" in
     echo "Building @mog-sdk/wasm (--profile release)..."
 
     # wasm-pack generates its own package.json and .gitignore that would clobber
-    # the tracked files in npm/. Save before wasm-pack, restore after.
-    cp npm/package.json npm/package.json.bak
-    cp npm/.gitignore npm/.gitignore.bak
-    wasm-pack build --target web --out-dir npm --release
-    mv npm/package.json.bak npm/package.json
-    mv npm/.gitignore.bak npm/.gitignore
+    # the tracked files in npm/.
+    run_preserving_tracked_outputs npm/package.json npm/.gitignore -- wasm-pack build --target web --out-dir npm --release
 
     RAW_SIZE=$(wc -c < "$WASM_FILE" | tr -d ' ')
     echo "  Raw WASM size: $(( RAW_SIZE / 1024 / 1024 ))MB ($RAW_SIZE bytes)"

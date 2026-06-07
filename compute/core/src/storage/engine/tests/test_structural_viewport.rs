@@ -193,6 +193,53 @@ fn test_structural_change_without_viewport_no_crash() {
 }
 
 #[test]
+fn structural_formula_text_preserves_explicit_same_sheet_qualifier() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 0, 1, "=Sheet1!A1")
+        .expect("seed qualified same-sheet formula");
+    assert_eq!(
+        engine.get_formula(&cell_id_b1()).as_deref(),
+        Some("=Sheet1!A1")
+    );
+
+    let unrelated_insert = StructureChange::InsertRows {
+        at: 10,
+        count: 1,
+        new_row_ids: vec![],
+    };
+    engine
+        .structure_change(&sid, &unrelated_insert)
+        .expect("insert row below reference");
+    assert_eq!(
+        engine.get_formula(&cell_id_b1()).as_deref(),
+        Some("=Sheet1!A1"),
+        "unrelated structural cache refresh must not collapse authored same-sheet qualifier"
+    );
+
+    let shifting_insert = StructureChange::InsertRows {
+        at: 0,
+        count: 1,
+        new_row_ids: vec![],
+    };
+    engine
+        .structure_change(&sid, &shifting_insert)
+        .expect("insert row above reference");
+    assert_eq!(
+        engine.get_formula(&cell_id_b1()).as_deref(),
+        Some("=Sheet1!A2"),
+        "structural rewrite must shift the reference while preserving the explicit qualifier"
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 1, 1),
+        CellValue::Number(FiniteF64::must(10.0))
+    );
+}
+
+#[test]
 fn relocate_precedent_regenerates_dependent_formula_text() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

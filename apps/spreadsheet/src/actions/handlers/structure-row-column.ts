@@ -65,6 +65,15 @@ function getSelectedColsOrActive(
   return cols.length > 0 ? cols : [activeCell.col];
 }
 
+function singleCellRange(cell: { row: number; col: number }): CellRange {
+  return {
+    startRow: cell.row,
+    startCol: cell.col,
+    endRow: cell.row,
+    endCol: cell.col,
+  };
+}
+
 export async function insertRowAboveSelection(deps: ActionDependencies): Promise<ActionResult> {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
@@ -83,6 +92,9 @@ export async function insertRowAboveSelection(deps: ActionDependencies): Promise
     }
     throw err;
   }
+
+  const nextActiveCell = { row: insertAt, col: activeCell.col };
+  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
 
   return handled();
 }
@@ -105,6 +117,9 @@ export async function insertColumnLeftSelection(deps: ActionDependencies): Promi
     }
     throw err;
   }
+
+  const nextActiveCell = { row: activeCell.row, col: insertAt };
+  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
 
   return handled();
 }
@@ -141,6 +156,9 @@ export async function deleteSelectedRows(deps: ActionDependencies): Promise<Acti
     throw err;
   }
 
+  const nextActiveCell = { row: rows[0], col: activeCell.col };
+  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
+
   return handled();
 }
 
@@ -175,6 +193,9 @@ export async function deleteSelectedColumns(deps: ActionDependencies): Promise<A
     }
     throw err;
   }
+
+  const nextActiveCell = { row: activeCell.row, col: cols[0] };
+  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
 
   return handled();
 }

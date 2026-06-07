@@ -109,6 +109,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         let (value, formula) = match input {
             CellInput::Clear => (CellValue::Null, None),
             CellInput::Literal { text } => (CellValue::Text(text.clone().into()), None),
+            CellInput::Value { value } => (value.clone(), None),
             CellInput::Parse { text } => {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {

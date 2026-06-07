@@ -12,6 +12,7 @@ export function buildAnalysisLineLayers(
   config: ChartConfig,
   encoding: EncodingSpec,
   rows: DataRow[],
+  options: { consumeNativeStockVisual?: boolean } = {},
 ): UnitSpec[] {
   if (!encoding.x || !encoding.y) return [];
   const layers: UnitSpec[] = [];
@@ -20,7 +21,7 @@ export function buildAnalysisLineLayers(
     layers.push(buildDropLineLayer(config, encoding));
   }
 
-  if (isVisibleLine(config.highLowLines)) {
+  if (!options.consumeNativeStockVisual && isVisibleLine(config.highLowLines)) {
     const data = buildHighLowRows(rows, encoding);
     if (data.length > 0) {
       layers.push(buildRangeRuleLayer(config, encoding, data, config.highLowLines));
@@ -34,7 +35,7 @@ export function buildAnalysisLineLayers(
     }
   }
 
-  if (config.upDownBars) {
+  if (!options.consumeNativeStockVisual && config.upDownBars) {
     const data = buildUpDownRows(config, rows, encoding);
     layers.push(...buildUpDownBarLayers(config, encoding, data));
   }

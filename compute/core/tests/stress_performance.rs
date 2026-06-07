@@ -119,7 +119,7 @@ fn test_no_leaked_state_200_edits() {
 // Test 3: Cycle detection scoping
 //
 // 100 formula chain (no cycles) A1..A100 via init_from_snapshot.
-// Plus separate cycle B1="=C1+1", C1="=B1+1" (divergent, always-converge path).
+// Plus separate cycle B1="=C1+1", C1="=B1+1" (divergent, numeric cache preserved).
 // Re-set B1 to "=C1+1" via set_cell. Assert changed_cells is small (< 10).
 // The 100-cell chain should NOT be affected since it doesn't depend on B1/C1.
 // ---------------------------------------------------------------------------
@@ -201,9 +201,8 @@ fn test_cycle_recalc_scope_isolation() {
     assert_mirror_number(&mirror, 0, 0, 0, 1.0); // A1
     assert_mirror_number(&mirror, 0, 99, 0, 100.0); // A100
 
-    // B1 and C1 are in a divergent cycle — they will be Numbers (always-converge)
-    let _b1 = read_mirror_number(&mirror, 0, 0, 1);
-    let _c1 = read_mirror_number(&mirror, 0, 0, 2);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 2, 0.0);
 
     // Now re-set B1 to same formula via set_cell (incremental path).
     // set_cell detects cycle → B1 gets #REF!, but the chain should NOT be recalculated.
@@ -307,7 +306,7 @@ fn test_100_cell_convergent_ring() {
 //
 // Divergent cycle A1="=B1+1", B1="=A1+1" with max_iterations=10.
 // Assert metrics.iterative_iterations == 10 (or close — hit the cap).
-// The values will be Numbers from the always-converge path after only 10 iters.
+// The values will be Numbers from the iterative solver after only 10 iters.
 // Assert A1 and B1 are Numbers and self-consistent.
 // ---------------------------------------------------------------------------
 #[test]
@@ -344,7 +343,7 @@ fn test_divergent_cycle_capped_at_max_iterations() {
         result.metrics.iterative_iterations
     );
 
-    // Both cells should be Numbers (always-converge produces Numbers, not errors)
+    // Both cells should be Numbers (iterative solver produces Numbers, not errors)
     let _a1 = read_mirror_number(&mirror, 0, 0, 0);
     let b1 = read_mirror_number(&mirror, 0, 0, 1);
 

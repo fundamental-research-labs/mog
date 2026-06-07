@@ -179,6 +179,23 @@ export function MinimizableDialog({
     dispatchAction('COMPLETE_RANGE_SELECTION');
   };
 
+  useEffect(() => {
+    if (!open || !isDialogMinimized || sourceDialogId !== dialogId) return;
+
+    const handleRangeSelectionKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== 'Escape') return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      dispatchAction(event.key === 'Enter' ? 'COMPLETE_RANGE_SELECTION' : 'CANCEL_RANGE_SELECTION');
+    };
+
+    window.addEventListener('keydown', handleRangeSelectionKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleRangeSelectionKeyDown, { capture: true });
+    };
+  }, [open, isDialogMinimized, sourceDialogId, dialogId, dispatchAction]);
+
   // When minimized as the SOURCE dialog, show the minimized bar
   if (isDialogMinimized && sourceDialogId === dialogId) {
     return (

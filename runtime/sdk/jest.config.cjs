@@ -7,6 +7,8 @@ module.exports = {
     ...preset.moduleNameMapper,
     // Mock napi-loader to avoid import.meta.url (ESM-only) in Jest CJS mode
     '.*napi-loader.*': '<rootDir>/__mocks__/napi-loader-mock.js',
+    '^@mog-sdk/chart-raster-wasm$':
+      '<rootDir>/../../compute/chart-render-wasm/npm/compute_chart_render_wasm.js',
   },
   transform: {
     '^.+\\.tsx?$': [

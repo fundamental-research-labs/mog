@@ -223,6 +223,12 @@ function createMockCtx(): any {
     writeGate: {
       assertWritable: jest.fn(),
     },
+    awaitMaterialized: jest.fn().mockResolvedValue(undefined),
+    getMaterializationState: jest.fn(() => ({
+      phase: 'AllSheetsReady',
+      isDeferred: false,
+      isMaterialized: true,
+    })),
     computeBridge: {
       getSheetProtectionOptions: jest.fn().mockResolvedValue(null),
       hasSheetProtectionPassword: jest.fn().mockResolvedValue(false),
@@ -287,6 +293,7 @@ function createMockCtx(): any {
       isRowHiddenQuery: jest.fn().mockResolvedValue(false),
       isColHiddenQuery: jest.fn().mockResolvedValue(false),
       getFiltersInSheet: jest.fn().mockResolvedValue([]),
+      getFilterHeaderInfo: jest.fn().mockResolvedValue([]),
       applyFilter: jest.fn().mockResolvedValue(undefined),
       setColumnFilter: jest.fn().mockResolvedValue(undefined),
       clearColumnFilter: jest.fn().mockResolvedValue(undefined),
@@ -622,6 +629,194 @@ describe('WorksheetImpl Extended Methods', () => {
           filterKind: 'autoFilter',
           range: { startRow: 0, startCol: 0, endRow: 9, endCol: 3 },
           columnFilters: {},
+        },
+      ]);
+    });
+
+    it('listSummaries returns compact range and activity metadata', async () => {
+      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+        {
+          id: 'f1',
+          type: 'autoFilter',
+          headerStartCellId: 'c-start',
+          headerEndCellId: 'c-end',
+          dataEndCellId: 'c-data-end',
+          columnFilters: { 'c-b': { type: 'values', values: ['KeepCo'], includeBlanks: false } },
+        },
+      ]);
+      ctx.computeBridge.getCellPosition
+        .mockResolvedValueOnce({ row: 0, col: 0 })
+        .mockResolvedValueOnce({ row: 0, col: 3 })
+        .mockResolvedValueOnce({ row: 11, col: 3 });
+
+      const result = await ws.filters.listSummaries();
+
+      expect(ctx.awaitMaterialized).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toEqual([
+        {
+          id: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
+          activeColumnCount: 1,
+          hasActiveCriteria: true,
+          hasActiveFilter: true,
+          clearable: true,
+          detailsReady: true,
+          capability: 'supported',
+          unsupportedReasons: [],
+        },
+      ]);
+    });
+
+    it('listSummaries treats unsupported imported shell header state as active and clearable', async () => {
+      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+        {
+          id: 'f1',
+          type: 'autoFilter',
+          headerStartCellId: 'c-start',
+          headerEndCellId: 'c-end',
+          dataEndCellId: 'c-data-end',
+          columnFilters: {},
+        },
+      ]);
+      ctx.computeBridge.getFilterHeaderInfo.mockResolvedValue([
+        {
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
+          row: 0,
+          col: 2,
+          headerCellId: 'c-vendor',
+          hasActiveFilter: true,
+          sourceType: 'sheetAutoFilter',
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
+        },
+      ]);
+      ctx.computeBridge.getCellPosition
+        .mockResolvedValueOnce({ row: 0, col: 0 })
+        .mockResolvedValueOnce({ row: 0, col: 3 })
+        .mockResolvedValueOnce({ row: 11, col: 3 });
+
+      const result = await ws.filters.listSummaries();
+
+      expect(result).toEqual([
+        {
+          id: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 3 },
+          activeColumnCount: 0,
+          hasActiveCriteria: true,
+          hasActiveFilter: true,
+          clearable: true,
+          detailsReady: true,
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
+        },
+      ]);
+    });
+
+    it('listHeaderInfo returns renderer-ready header entries', async () => {
+      ctx.computeBridge.getFilterHeaderInfo.mockResolvedValue([
+        {
+          id: 'f1',
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          row: 0,
+          col: 0,
+          headerCellId: 'c-start',
+          hasActiveFilter: false,
+          sourceType: 'sheetAutoFilter',
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
+          buttonVisible: false,
+          hiddenButton: true,
+          showButton: false,
+        },
+        {
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          row: 0,
+          col: 1,
+          headerCellId: 'c-b',
+          hasActiveFilter: true,
+          sourceType: 'sheetAutoFilter',
+          capability: 'supported',
+          unsupportedReasons: [],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
+        },
+        {
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          row: 0,
+          col: 2,
+          headerCellId: 'c-end',
+          hasActiveFilter: false,
+          sourceType: 'sheetAutoFilter',
+          capability: 'supported',
+          unsupportedReasons: [],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
+        },
+      ]);
+
+      const result = await ws.filters.listHeaderInfo();
+
+      expect(ctx.computeBridge.getFilterHeaderInfo).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toEqual([
+        {
+          row: 0,
+          col: 0,
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          headerCellId: 'c-start',
+          hasActiveFilter: false,
+          sourceType: 'sheetAutoFilter',
+          capability: 'unsupported',
+          unsupportedReasons: ['iconFilterUnsupported'],
+          buttonVisible: false,
+          hiddenButton: true,
+          showButton: false,
+        },
+        {
+          row: 0,
+          col: 1,
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          headerCellId: 'c-b',
+          hasActiveFilter: true,
+          sourceType: 'sheetAutoFilter',
+          capability: 'supported',
+          unsupportedReasons: [],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
+        },
+        {
+          row: 0,
+          col: 2,
+          filterId: 'f1',
+          filterKind: 'autoFilter',
+          range: { startRow: 0, startCol: 0, endRow: 11, endCol: 2 },
+          headerCellId: 'c-end',
+          hasActiveFilter: false,
+          sourceType: 'sheetAutoFilter',
+          capability: 'supported',
+          unsupportedReasons: [],
+          buttonVisible: true,
+          hiddenButton: false,
+          showButton: true,
         },
       ]);
     });

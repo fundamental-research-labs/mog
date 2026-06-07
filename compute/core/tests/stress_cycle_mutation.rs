@@ -163,7 +163,7 @@ fn test_make_convergent_divergent() {
     )];
     let r2 = core.set_cells(&mut mirror, &edits, true).unwrap();
 
-    // After edit with skip_cycle_check=true, the always-converge path runs.
+    // After edit with skip_cycle_check=true, the iterative solver runs.
     // Both cells should still be Numbers (divergent cycle capped at max_iterations).
     let a1 = read_mirror_number(&mirror, 0, 0, 0);
     let b1 = read_mirror_number(&mirror, 0, 0, 1);

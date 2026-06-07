@@ -193,11 +193,15 @@ export const TOGGLE_STRIKETHROUGH: AsyncActionHandler = async (deps) =>
   toggleFormatProperty(deps, 'strikethrough');
 export const TOGGLE_WRAP_TEXT: AsyncActionHandler = async (deps) => {
   const { ranges } = getSelectionContext(deps);
-  const result = await toggleFormatProperty(deps, 'wrapText');
+  let result: ActionResult = handled();
 
-  // Re-fit affected rows after both enabling and disabling word wrap.
-  // Disabling wrap should shrink rows that were previously auto-grown.
-  await autoFitRowsForRangeChange(deps, ranges);
+  await deps.workbook.undoGroup(async () => {
+    result = await toggleFormatProperty(deps, 'wrapText');
+
+    // Re-fit affected rows after both enabling and disabling word wrap.
+    // Disabling wrap should shrink rows that were previously auto-grown.
+    await autoFitRowsForRangeChange(deps, ranges);
+  });
 
   return result;
 };

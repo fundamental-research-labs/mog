@@ -12,7 +12,7 @@ use value_types::{CellError, CellValue, FiniteF64};
 // ---------------------------------------------------------------------------
 // Test 01: apply_changes creating cycle (skip_cycle_check=true)
 // Empty sheet. Apply A1="=B1+1" and B1="=A1+1" with skip=true.
-// Cycle goes through always-converge. Both cells are Numbers.
+// Cycle diagnostics are emitted. Numeric cached edit values are preserved.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_apply_changes_creates_cycle() {
@@ -45,21 +45,8 @@ fn test_apply_changes_creates_cycle() {
         "Cycle should be detected with skip_cycle_check=true"
     );
 
-    // Both cells should be Numbers (always-converge path, not errors)
-    let a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
-
-    // Self-consistency: A1's formula is "=B1+1", so A1 ≈ B1 + 1.
-    // With single-pass evaluation (non-iterative), the gap can be up to 1 iteration off.
-    assert_cycle_self_consistent(
-        &mirror,
-        0,
-        0,
-        1,                                             // B1
-        || read_mirror_number(&mirror, 0, 0, 0) + 1.0, // B1 ≈ A1 + 1
-        3.0,
-        "B1 should ≈ A1+1 in divergent cycle",
-    );
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +90,8 @@ fn test_apply_changes_breaks_cycle() {
 
 // ---------------------------------------------------------------------------
 // Test 03: skip_cycle_check comparison
-// skip=false: last edit gets #REF!. skip=true: always-converge.
+// skip=false: last edit gets #REF!. skip=true: cycle reaches non-iterative
+// materialization because parsed formulas do not carry numeric cached values.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_skip_cycle_check_comparison() {
@@ -185,20 +173,20 @@ fn test_skip_cycle_check_comparison() {
     ];
     let r2 = core2.set_cells(&mut mirror2, &edits_skip, true).unwrap();
 
-    // With skip=true, cycle goes through always-converge: circular diagnostics emitted
+    // With skip=true, circular diagnostics are emitted and non-numeric cycle
+    // cells materialize as #CIRC.
     assert!(
         has_any_circular_error(&r2),
-        "With skip=true, should detect circular refs via always-converge"
+        "With skip=true, should detect circular refs"
     );
-    // Both cells should be Numbers (not errors)
-    let _a1 = read_mirror_number(&mirror2, 0, 0, 0);
-    let _b1 = read_mirror_number(&mirror2, 0, 0, 1);
+    assert_mirror_error(&mirror2, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror2, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------
 // Test 04: Interleaved set_cell and apply_changes
 // set_cell A1="=B1+1" (no cycle). Then apply_changes B1="=A1+1".
-// Test both skip=false (B1=#REF!) and skip=true (always-converge).
+// Test both skip=false (B1=#REF!) and skip=true (numeric cached values preserved).
 // ---------------------------------------------------------------------------
 #[test]
 fn test_interleaved_set_cell_and_apply_changes() {
@@ -242,7 +230,7 @@ fn test_interleaved_set_cell_and_apply_changes() {
         );
     }
 
-    // --- Path B: skip=true → always-converge ---
+    // --- Path B: skip=true → numeric cached cycle values preserved ---
     {
         let mut core = ComputeCore::new();
         let mut mirror = CellMirror::default();
@@ -266,19 +254,8 @@ fn test_interleaved_set_cell_and_apply_changes() {
             has_any_circular_error(&r2),
             "Should detect circular refs with skip=true"
         );
-        // Both cells are Numbers in always-converge path
-        let a1 = read_mirror_number(&mirror, 0, 0, 0);
-        let b1 = read_mirror_number(&mirror, 0, 0, 1);
-        // With single-pass evaluation, the gap can be up to 1 iteration off
-        assert_cycle_self_consistent(
-            &mirror,
-            0,
-            0,
-            1,           // B1
-            || a1 + 1.0, // B1 ≈ A1 + 1
-            3.0,
-            "B1 should ≈ A1+1 in divergent cycle",
-        );
+        assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+        assert_mirror_number(&mirror, 0, 0, 1, 0.0);
     }
 }
 
@@ -314,7 +291,7 @@ fn test_undo_via_apply_changes() {
 // ---------------------------------------------------------------------------
 // Test 06: Redo simulation
 // After undo (B1=Null, A1=1), re-apply B1="=A1+1" via apply_changes(skip=true).
-// Always-converge path. Assert circular refs detected.
+// Numeric cached cycle values are preserved. Assert circular refs detected.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_redo_via_apply_changes() {
@@ -337,7 +314,7 @@ fn test_redo_via_apply_changes() {
     assert_mirror_null(&mirror, 0, 0, 1);
     assert_mirror_number(&mirror, 0, 0, 0, 1.0);
 
-    // Redo: re-apply B1="=A1+1" with skip=true → always-converge
+    // Redo: re-apply B1="=A1+1" with skip=true.
     let redo_edits = vec![make_edit(
         0,
         0,
@@ -350,11 +327,10 @@ fn test_redo_via_apply_changes() {
     // Circular diagnostics emitted
     assert!(
         has_any_circular_error(&r4),
-        "Redo should detect circular refs via always-converge"
+        "Redo should detect circular refs"
     );
-    // Both cells should be Numbers (always-converge path)
-    let _a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let _b1 = read_mirror_number(&mirror, 0, 0, 1);
+    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,8 +387,8 @@ fn test_large_batch_50_edits() {
         has_any_circular_error(&result),
         "Cycle among A1,B1 should be detected"
     );
-    let _a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let _b1 = read_mirror_number(&mirror, 0, 0, 1);
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
 }
 
 // ---------------------------------------------------------------------------

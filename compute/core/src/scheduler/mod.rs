@@ -72,6 +72,7 @@ use value_types::{CellError, CellValue, ComputeError};
 mod agg_prepass;
 pub(crate) mod ast_transform;
 mod cf_eval;
+mod cycle_feedback;
 mod cycles;
 mod data_table_prepass;
 mod dep_extract;
@@ -81,6 +82,7 @@ mod init;
 pub(crate) mod input;
 mod level_eval;
 mod recalc;
+mod region_guard;
 mod resolvers;
 mod schema_validation;
 mod solver_methods;
@@ -113,8 +115,8 @@ use resolvers::ConcurrentIdentityResolver;
 use resolvers::{CoreIdentityResolver, CoreResolver};
 use value_utils::{truncate_chars, values_equal};
 
-/// Stream A′ trust marker — see `edit::WriteTrust` for full docs.
-pub use edit::WriteTrust;
+/// Stream A′ trust marker — see `region_guard::WriteTrust` for full docs.
+pub use region_guard::WriteTrust;
 
 // ---------------------------------------------------------------------------
 // AstEntry — cached formula AST with metadata flags
@@ -458,7 +460,6 @@ impl ComputeCore {
             .collect();
 
         mirror.add_sheet(snapshot)?;
-        self.seed_cell_formula_text(&formula_cells);
 
         // Maintain sheet_order — initialized at init_from_snapshot but
         // never updated for dynamically added sheets, so without this the
@@ -475,9 +476,14 @@ impl ComputeCore {
         self.sheet_order.insert(sheet_id, next_pos);
         self.rebuild_ordered_sheets_cache();
 
-        // Parse formulas for the new sheet using bulk parallel parsing.
-        // These are new cells with no prior edges, so set_precedents_fresh is safe.
-        self.bulk_parse_and_register(mirror, formula_cells);
+        // Parse formulas for the new sheet into the existing live graph.
+        // `bulk_parse_and_register` owns the full-graph init path and replaces
+        // the graph with the formulas it was handed. A live sheet add must
+        // append edges for the new sheet without dropping existing sheets'
+        // dependency edges.
+        for (cell_id, sheet_id, formula) in formula_cells {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, true);
+        }
 
         Ok(())
     }
@@ -562,8 +568,7 @@ impl ComputeCore {
 
         for (cell_id, formula) in authored_formula_text {
             let updated = replace_sheet_name_in_a1_formula(&formula, &old_name, name);
-            self.cell_formula_text.insert(cell_id, updated.clone());
-            self.formula_strings.insert(cell_id, updated);
+            self.cell_formula_text.insert(cell_id, updated);
         }
     }
 

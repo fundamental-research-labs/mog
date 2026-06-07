@@ -4,9 +4,9 @@ import {
   createStandaloneBrowserHostBackedCollaborationDocument,
   createStandaloneBrowserHostBackedDocument,
   createStandaloneBrowserShellHost,
-  importStandaloneBrowserHostBackedDocument,
 } from '../../host-adapters/standalone-browser-host';
 import { createDocumentManager } from './create-document-manager';
+import { importInteractiveHostBackedDocument } from './import-interactive-host-backed-document';
 
 jest.mock(
   '@mog-sdk/kernel',
@@ -24,7 +24,10 @@ jest.mock('../../host-adapters/standalone-browser-host', () => ({
   createStandaloneBrowserShellHost: jest.fn(),
   createStandaloneBrowserHostBackedDocument: jest.fn(),
   createStandaloneBrowserHostBackedCollaborationDocument: jest.fn(),
-  importStandaloneBrowserHostBackedDocument: jest.fn(),
+}));
+
+jest.mock('./import-interactive-host-backed-document', () => ({
+  importInteractiveHostBackedDocument: jest.fn(),
 }));
 
 function deferred<T = void>() {
@@ -72,7 +75,7 @@ describe('createDocumentManager import identity', () => {
       dispose: jest.fn(),
     };
     jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
-    jest.mocked(importStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+    jest.mocked(importInteractiveHostBackedDocument).mockResolvedValue(handle);
 
     const manager = createDocumentManager();
     const source = { type: 'bytes', data: new Uint8Array([1, 2, 3]) } as const;
@@ -86,7 +89,7 @@ describe('createDocumentManager import identity', () => {
       operation: 'import',
       importBytes: source.data,
     });
-    expect(importStandaloneBrowserHostBackedDocument).toHaveBeenCalledWith(hostResult);
+    expect(importInteractiveHostBackedDocument).toHaveBeenCalledWith(hostResult);
     expect(manager.getDocument('file-xlsx')).toBe(handle);
   });
 
@@ -96,7 +99,7 @@ describe('createDocumentManager import identity', () => {
       dispose: jest.fn(),
     };
     jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
-    jest.mocked(importStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+    jest.mocked(importInteractiveHostBackedDocument).mockResolvedValue(handle);
 
     const manager = createDocumentManager({
       runtimeAssets: {
@@ -175,7 +178,7 @@ describe('createDocumentManager import identity', () => {
   it('rejects and does not cache a host-backed import whose handle id differs', async () => {
     const handle = makeHandle('generated-doc-id');
     jest.mocked(createStandaloneBrowserShellHost).mockReturnValue({ dispose: jest.fn() } as never);
-    jest.mocked(importStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+    jest.mocked(importInteractiveHostBackedDocument).mockResolvedValue(handle);
 
     const manager = createDocumentManager();
     const source = { type: 'bytes', data: new Uint8Array([1]) } as const;
@@ -277,7 +280,7 @@ describe('createDocumentManager import identity', () => {
       dispose: jest.fn(),
     };
     jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
-    jest.mocked(importStandaloneBrowserHostBackedDocument).mockReturnValue(loadDeferred.promise);
+    jest.mocked(importInteractiveHostBackedDocument).mockReturnValue(loadDeferred.promise);
 
     const manager = createDocumentManager();
     const source = { type: 'bytes', data: new Uint8Array([1]) } as const;
@@ -302,7 +305,7 @@ describe('createDocumentManager import identity', () => {
       dispose: jest.fn(),
     };
     jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
-    jest.mocked(importStandaloneBrowserHostBackedDocument).mockReturnValue(loadDeferred.promise);
+    jest.mocked(importInteractiveHostBackedDocument).mockReturnValue(loadDeferred.promise);
 
     const manager = createDocumentManager();
     const source = { type: 'bytes', data: new Uint8Array([1]) } as const;

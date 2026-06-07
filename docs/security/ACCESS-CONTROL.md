@@ -104,7 +104,7 @@ the `ComputeService` session state.
 ### TypeScript
 
 ```ts
-import type { AccessPrincipal, Workbook } from '@mog-sdk/node';
+import type { AccessPrincipal, Workbook } from '@mog-sdk/sdk';
 
 await wb.setActivePrincipal(['agent:copilot']);           // flat tag list
 await wb.setActivePrincipal({ tags: ['agent:copilot'] }); // envelope form

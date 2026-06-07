@@ -5,6 +5,7 @@ import type {
   ChartSeriesData,
   SingleAxisData,
 } from './compute-types.gen';
+import type { ChartSeriesStockRole, StockSourceComposition } from '@mog-sdk/contracts/data/charts';
 import {
   chartPointCachePointsInsideCardinality,
   hasRenderableChartPointCache,
@@ -13,9 +14,13 @@ import {
 export type ImportNormalizableChart = {
   chartType?: string;
   subType?: string;
+  displayBlanksAs?: unknown;
   axis?: AxisData;
   axes?: AxisData;
   chartStyleContext?: ChartStyleContextData;
+  highLowLines?: unknown;
+  upDownBars?: unknown;
+  stockSourceComposition?: StockSourceComposition;
   ooxml?: unknown;
   rt?: {
     chartGroupsMeta?: ChartGroupMeta[];
@@ -102,6 +107,29 @@ function normalizeImportedChartStyleContext<T extends ImportNormalizableChart>(c
   return chartStyleContext ? { ...chart, chartStyleContext } : chart;
 }
 
+export type ImportedDisplayBlanksAs = 'gap' | 'span' | 'zero';
+
+export function normalizeImportedDisplayBlanksAsValue(
+  value: unknown,
+): ImportedDisplayBlanksAs | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized === 'gap' || normalized === 'span' || normalized === 'zero'
+    ? normalized
+    : undefined;
+}
+
+function normalizeImportedDisplayBlanksAs<T extends ImportNormalizableChart>(chart: T): T {
+  const normalized = normalizeImportedDisplayBlanksAsValue(chart.displayBlanksAs);
+  if (normalized === chart.displayBlanksAs) return chart;
+  if (normalized !== undefined) return { ...chart, displayBlanksAs: normalized } as T;
+  if (!Object.prototype.hasOwnProperty.call(chart, 'displayBlanksAs')) return chart;
+
+  const rest = { ...chart };
+  delete rest.displayBlanksAs;
+  return rest;
+}
+
 function chartTypeForImportedGroups(groups: readonly ChartGroupMeta[]): string | null {
   if (groups.length === 0) return null;
   const chartTypes = groups.map((group) => group.chartType).filter(Boolean);
@@ -186,6 +214,96 @@ function importedStockVolumeSubType(
   if (stockIndices.length + volumeIndices.length !== series.length) return null;
 
   return stockIndices.length === 4 ? 'volume-ohlc' : 'volume-hlc';
+}
+
+function stockSourceCompositionForImportedChart(
+  chart: ImportNormalizableChart,
+  groups: readonly ChartGroupMeta[],
+  series: readonly ChartSeriesData[] | undefined,
+  stockVolumeSubType: 'volume-hlc' | 'volume-ohlc' | null,
+  resolvedChartType: string | null | undefined,
+  resolvedSubType: string | undefined,
+): StockSourceComposition | undefined {
+  if (!series?.length) {
+    return chart.stockSourceComposition
+      ? stockSourceCompositionWithImportedSemanticEvidence(chart.stockSourceComposition)
+      : undefined;
+  }
+  const explicitRoleOrder = stockRoleOrderFromSeries(series);
+  if (chart.stockSourceComposition) {
+    return stockSourceCompositionWithImportedSemanticEvidence(chart.stockSourceComposition);
+  }
+  if (!explicitRoleOrder) return undefined;
+  const hasVolume = explicitRoleOrder.includes('volume');
+  const volumeSeries = series.find((entry) => entry.stockRole === 'volume');
+  const separateVolumeAxis =
+    stockVolumeSubType !== null || (hasVolume && isVolumeSeriesType(volumeSeries?.type));
+  const isStockChart =
+    resolvedChartType === 'stock' ||
+    chart.chartType === 'stock' ||
+    resolvedSubType === 'hlc' ||
+    resolvedSubType === 'ohlc' ||
+    resolvedSubType === 'volume-hlc' ||
+    resolvedSubType === 'volume-ohlc';
+  if (!isStockChart) return undefined;
+
+  return {
+    sourceKind: separateVolumeAxis
+      ? 'comboVolumeBarStockChart'
+      : groups.length === 0 || groups.every((group) => group.chartType === 'stock')
+        ? 'singleStockChart'
+        : 'modeled',
+    sourceRoleOrder: explicitRoleOrder,
+    sourceRoleSemanticStatus: 'verifiedDefault',
+    sourceRoleSemanticSource: 'importedStockChartOrder',
+    sourceRoleSemanticReason: separateVolumeAxis
+      ? 'volumeAndPriceRolesFromImportedStockChartGroups'
+      : 'priceRolesFromImportedStockChartGroup',
+    highLowLines: visibleStockLineFeature(chart.highLowLines),
+    upDownBars: chart.upDownBars !== undefined,
+    volumeAxisPolicy: separateVolumeAxis ? 'separateVolumeAxis' : 'stockValueAxis',
+  };
+}
+
+function stockSourceCompositionWithImportedSemanticEvidence(
+  composition: StockSourceComposition,
+): StockSourceComposition {
+  if (composition.sourceRoleSemanticStatus) return composition;
+  if (composition.sourceKind === 'modeled') {
+    return {
+      ...composition,
+      sourceRoleSemanticStatus: 'approximate',
+      sourceRoleSemanticSource: 'modeledStockComposition',
+      sourceRoleSemanticReason: 'stockRoleOrderNotProvenByImportedStockChartGroup',
+    };
+  }
+  return {
+    ...composition,
+    sourceRoleSemanticStatus: 'verifiedDefault',
+    sourceRoleSemanticSource: 'importedStockChartOrder',
+    sourceRoleSemanticReason: 'rolesPreservedFromImportedStockChartComposition',
+  };
+}
+
+function stockRoleOrderFromSeries(
+  series: readonly ChartSeriesData[],
+): ChartSeriesStockRole[] | undefined {
+  const roles: ChartSeriesStockRole[] = [];
+  const seen = new Set<ChartSeriesStockRole>();
+  for (const entry of series) {
+    const role = entry.stockRole as ChartSeriesStockRole | undefined;
+    if (!role) return undefined;
+    if (seen.has(role)) return undefined;
+    roles.push(role);
+    seen.add(role);
+  }
+  if (!seen.has('high') || !seen.has('low') || !seen.has('close')) return undefined;
+  return roles;
+}
+
+function visibleStockLineFeature(value: unknown): boolean {
+  const record = asRecord(value);
+  return record?.visible !== false;
 }
 
 function axisDataFor(chart: ImportNormalizableChart): AxisData | undefined {
@@ -307,43 +425,54 @@ function normalizeSeriesAxisBindings<T extends ImportNormalizableChart>(
 
 export function normalizeImportedComboChart<T extends ImportNormalizableChart>(chart: T): T {
   const chartWithStyleContext = normalizeImportedChartStyleContext(chart);
-  const groups = chart.rt?.chartGroupsMeta ?? [];
+  const chartWithNormalizedBlanks = normalizeImportedDisplayBlanksAs(chartWithStyleContext);
+  const groups = chartWithNormalizedBlanks.rt?.chartGroupsMeta ?? [];
   const assignments =
-    groups.length > 1 && chartWithStyleContext.series
-      ? seriesTypeAssignments(groups, chartWithStyleContext.series)
+    groups.length > 1 && chartWithNormalizedBlanks.series
+      ? seriesTypeAssignments(groups, chartWithNormalizedBlanks.series)
       : null;
   const typedSeries = assignments
-    ? chartWithStyleContext.series?.map((entry, index) => {
+    ? chartWithNormalizedBlanks.series?.map((entry, index) => {
         if (entry.type) return entry;
         const chartType = assignments.get(index);
         return chartType ? { ...entry, type: chartType } : entry;
       })
-    : chartWithStyleContext.series;
-  const series = normalizeSeriesAxisBindings(chartWithStyleContext, typedSeries);
+    : chartWithNormalizedBlanks.series;
+  const series = normalizeSeriesAxisBindings(chartWithNormalizedBlanks, typedSeries);
   const chartWithNormalizedSeries =
-    series === chartWithStyleContext.series
-      ? chartWithStyleContext
-      : { ...chartWithStyleContext, series };
+    series === chartWithNormalizedBlanks.series
+      ? chartWithNormalizedBlanks
+      : { ...chartWithNormalizedBlanks, series };
   const stockVolumeSubType = importedStockVolumeSubType(chartWithNormalizedSeries, groups, series);
   const chartType =
     (stockVolumeSubType ? 'stock' : null) ??
     (groups.length > 1 ? chartTypeForImportedGroups(groups) : null) ??
     chartTypeForUniformSeries(chartWithNormalizedSeries) ??
-    chartWithStyleContext.chartType;
-  const subType = stockVolumeSubType ?? chartWithStyleContext.subType;
+    chartWithNormalizedBlanks.chartType;
+  const subType = stockVolumeSubType ?? chartWithNormalizedBlanks.subType;
+  const stockSourceComposition = stockSourceCompositionForImportedChart(
+    chartWithNormalizedSeries,
+    groups,
+    series,
+    stockVolumeSubType,
+    chartType,
+    subType,
+  );
 
   if (
-    chartType === chartWithStyleContext.chartType &&
-    series === chartWithStyleContext.series &&
-    subType === chartWithStyleContext.subType
+    chartType === chartWithNormalizedBlanks.chartType &&
+    series === chartWithNormalizedBlanks.series &&
+    subType === chartWithNormalizedBlanks.subType &&
+    stockSourceComposition === chartWithNormalizedBlanks.stockSourceComposition
   ) {
-    return chartWithStyleContext;
+    return chartWithNormalizedBlanks;
   }
 
   return {
-    ...chartWithStyleContext,
+    ...chartWithNormalizedBlanks,
     ...(chartType ? { chartType } : {}),
     ...(subType ? { subType } : {}),
     ...(series ? { series } : {}),
+    ...(stockSourceComposition ? { stockSourceComposition } : {}),
   };
 }

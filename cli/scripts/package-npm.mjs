@@ -92,7 +92,7 @@ function npmManifest(packageVersion) {
       access: 'public',
     },
     dependencies: {
-      '@mog-sdk/node': packageVersion,
+      '@mog-sdk/sdk': packageVersion,
     },
   };
 }
@@ -102,7 +102,7 @@ function releasePackageVersion() {
   const sdkPackageJson = readJson(resolve(repoRoot, 'runtime', 'sdk', 'package.json'));
   if (packageJson.version !== sdkPackageJson.version) {
     throw new Error(
-      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/node version ${sdkPackageJson.version}`,
+      `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/sdk version ${sdkPackageJson.version}`,
     );
   }
   return packageJson.version;

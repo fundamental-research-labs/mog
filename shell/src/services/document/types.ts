@@ -119,8 +119,8 @@ export interface CreateDocumentOptions {
 export interface LoadDocumentOptions {
   /**
    * File format. Determines which DocumentFactory entry point is used.
-   *   - 'xlsx' (default): `DocumentFactory.createFromXlsx` — the original
-   *     Excel-binary path.
+   *   - 'xlsx' (default): internal host-backed interactive XLSX import for
+   *     browser first paint.
    *   - 'csv': `DocumentFactory.createFromCsv` — UTF-8 text path with BOM
    *     stripping, replacement-char tolerance, and binary-blob rejection.
    *

@@ -37,6 +37,7 @@ import { HostContextConstructionError } from './errors';
 
 const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set([
   'browser-wasm-worker',
+  'headless-wasm',
   'node-napi',
   'tauri-native',
   'test',
@@ -44,6 +45,7 @@ const SUPPORTED_RUNTIME_KINDS: ReadonlySet<string> = new Set([
 
 const RUNTIME_TRANSPORT_KIND: Readonly<Record<string, string>> = {
   'browser-wasm-worker': 'browser',
+  'headless-wasm': 'headless',
   'node-napi': 'headless',
   'tauri-native': 'tauri',
   test: 'test',

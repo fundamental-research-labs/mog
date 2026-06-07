@@ -13,12 +13,15 @@ import type {
   FilterDetailInfo,
   FilterDropdownColumnType,
   FilterDropdownData,
+  FilterHeaderInfoEntry,
   FilterKind,
   FilterSortState,
   FilterState,
+  FilterSummaryInfo,
   SheetId,
   WorksheetFilters,
 } from '@mog-sdk/contracts/api';
+import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import type { ColumnFilterCriteria, DynamicFilterRule } from '@mog-sdk/contracts/filter';
 import { sheetId as toSheetId, type CellValue } from '@mog-sdk/contracts/core';
 import type { FilterCriteria } from '@mog/table-engine';
@@ -26,6 +29,7 @@ import { isDateFormat } from '@mog/spreadsheet-utils/number-formats';
 
 import type {
   ColumnFilter as ComputeColumnFilter,
+  FilterHeaderInfo as ComputeFilterHeaderInfo,
   FilterState as ComputeFilterState,
 } from '../../bridges/compute/compute-types.gen';
 import {
@@ -41,6 +45,17 @@ import {
   assertFilterMutationAllowed,
   assertNoProtectedTableFilterCreation,
 } from './protected-table-operations';
+
+type FilterMaterializationScope = 'sheetLocal' | 'complete';
+type FilterCompactReadScope = 'available' | FilterMaterializationScope;
+
+type FilterListOptions = {
+  readonly scope?: FilterMaterializationScope;
+};
+
+type FilterCompactListOptions = {
+  readonly scope?: FilterCompactReadScope;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,6 +111,41 @@ async function toFilterDetail(
     };
   }
   return detail;
+}
+
+async function toFilterSummary(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  filter: ComputeFilterState,
+  headerEntries: ComputeFilterHeaderInfo[] = [],
+): Promise<FilterSummaryInfo> {
+  const range = await resolveFilterRange(ctx, sheetId, filter);
+  const activeColumnCount = Object.keys(filter.columnFilters ?? {}).length;
+  const headerHasActiveFilter = headerEntries.some((entry) => entry.hasActiveFilter);
+  const hasAdvancedFilter = Boolean(
+    filter.advancedFilter?.criteriaRange || filter.advancedFilter?.uniqueRecordsOnly,
+  );
+  const hasActiveFilter = activeColumnCount > 0 || hasAdvancedFilter || headerHasActiveFilter;
+  const capability = headerEntries.some((entry) => entry.capability === 'unsupported')
+    ? 'unsupported'
+    : (headerEntries.find((entry) => entry.capability)?.capability ?? 'supported');
+  const unsupportedReasons = Array.from(
+    new Set(headerEntries.flatMap((entry) => entry.unsupportedReasons ?? [])),
+  );
+  const summary: FilterSummaryInfo = {
+    id: filter.id,
+    filterKind: filter.type,
+    range,
+    activeColumnCount,
+    hasActiveCriteria: hasActiveFilter,
+    hasActiveFilter,
+    clearable: hasActiveFilter,
+    detailsReady: true,
+    capability,
+    unsupportedReasons,
+  };
+  if (filter.tableId) summary.tableId = filter.tableId;
+  return summary;
 }
 
 const EMPTY_FILTER_DROPDOWN_DATA: FilterDropdownData = {
@@ -200,6 +250,30 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private async awaitSheetMaterialized(): Promise<void> {
+    await this.ctx.awaitMaterialized?.(this.sheetId);
+  }
+
+  private async awaitAllMaterialized(): Promise<void> {
+    await this.ctx.awaitMaterialized?.('allSheets');
+  }
+
+  private async awaitFilterListScope(
+    options: { readonly scope?: FilterCompactReadScope } | undefined,
+    defaultScope: FilterCompactReadScope,
+    allowAvailable = false,
+  ): Promise<void> {
+    const scope = options?.scope ?? defaultScope;
+    if (scope === 'available' && allowAvailable) {
+      return;
+    }
+    if (scope === 'complete') {
+      await this.awaitAllMaterialized();
+      return;
+    }
+    await this.awaitSheetMaterialized();
+  }
+
   /**
    * Resolve a filterId parameter: use the provided ID directly, or fall back
    * to the first auto-filter in the sheet.
@@ -228,6 +302,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
    */
   async applyAdvanced(options: AdvancedFilterOptions): Promise<AdvancedFilterResult> {
     this._ensureWritable('filters.applyAdvanced');
+    await this.awaitAllMaterialized();
     const result = await this.ctx.computeBridge.applyAdvancedFilter(this.sheetId, {
       listRange: options.listRange,
       criteriaRange: options.criteriaRange ?? undefined,
@@ -255,16 +330,19 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
    * row using the resolved effective format.
    */
   async byColor(col: number, opts: FilterByColorOptions): Promise<void> {
+    await this.awaitAllMaterialized();
     const resolvedId = await this.resolveFilterId(opts.filterId);
     const criteria: ColumnFilterCriteria = {
       type: 'color',
       colorFilter: { type: opts.colorType, color: opts.color },
     };
     await this.setColumnFilter(col, criteria, resolvedId);
+    await this.apply(resolvedId);
   }
 
   /** Standard alias for {@link getAutoFilter}. */
   async get(): Promise<FilterState | null> {
+    await this.awaitSheetMaterialized();
     return this.getAutoFilter();
   }
 
@@ -275,6 +353,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   /** @deprecated Use {@link add} instead. */
   async setAutoFilter(range: string | CellRange): Promise<AutoFilterSetReceipt> {
+    await this.awaitAllMaterialized();
     if (typeof range === 'string') {
       const parsed = parseCellRange(range);
       if (!parsed) throw new KernelError('COMPUTE_ERROR', `Invalid range: "${range}"`);
@@ -314,6 +393,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   /** @deprecated Use {@link clear} instead. */
   async clearAutoFilter(): Promise<AutoFilterClearReceipt> {
+    await this.awaitAllMaterialized();
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     for (const filter of filters) {
       await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.remove', filter.id);
@@ -326,6 +406,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   /** @deprecated Use {@link get} instead. */
   async getAutoFilter(): Promise<FilterState | null> {
+    await this.awaitSheetMaterialized();
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     if (filters.length === 0) return null;
     const filter = filters[0];
@@ -343,6 +424,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   async getForRange(
     range: string | CellRange,
   ): Promise<{ id: string; filterKind: FilterKind } | null> {
+    await this.awaitSheetMaterialized();
     let resolved: CellRange;
     if (typeof range === 'string') {
       const parsed = parseCellRange(range);
@@ -372,6 +454,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async remove(filterId: string): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.remove', filterId);
     await this.ctx.computeBridge.deleteFilter(this.sheetId, filterId);
   }
@@ -381,6 +464,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     criteria: ColumnFilterCriteria,
     filterId?: string,
   ): Promise<void> {
+    await this.awaitAllMaterialized();
     const resolvedId = await this.resolveFilterId(filterId);
     await assertFilterMutationAllowed(
       this.ctx,
@@ -394,15 +478,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       col,
       columnFilterCriteriaToCompute(criteria),
     );
-    // Apply the filter so hidden-row state is actually updated.
-    // The Rust mutation handlers (compute_apply_filter,
-    // compute_set_column_filter) emit full-viewport-binary patches that
-    // capture post-filter row visibility — Rust visibility pipeline moved the
-    // viewport refresh from the kernel to the Rust patch channel.
-    await this.ctx.computeBridge.applyFilter(this.sheetId, resolvedId);
   }
 
   async applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void> {
+    await this.awaitAllMaterialized();
     const resolvedId = await this.resolveFilterId(filterId);
     await assertFilterMutationAllowed(
       this.ctx,
@@ -450,13 +529,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       col,
       columnFilterCriteriaToCompute(criteria),
     );
-    // Apply the filter so hidden-row state is actually updated. The Rust
-    // mutation handler emits a full-viewport-binary patch that includes
-    // post-filter row visibility (Rust visibility pipeline).
-    await this.ctx.computeBridge.applyFilter(this.sheetId, resolvedId);
   }
 
   async clearColumnFilter(col: number, filterId?: string): Promise<void> {
+    await this.awaitAllMaterialized();
     let resolvedId: string;
     if (filterId) {
       resolvedId = filterId;
@@ -475,6 +551,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async getUniqueValues(col: number, filterId?: string): Promise<any[]> {
+    await this.awaitSheetMaterialized();
     if (filterId) {
       return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filterId, col);
     }
@@ -484,6 +561,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async getFilterDropdownData(col: number, filterId?: string): Promise<FilterDropdownData> {
+    await this.awaitSheetMaterialized();
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     const filter = filterId ? filters.find((candidate) => candidate.id === filterId) : filters[0];
     if (!filter) return EMPTY_FILTER_DROPDOWN_DATA;
@@ -535,11 +613,21 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       currentFilter,
       composeVisibility(otherBitmaps),
     );
-    return { ...dropdownData, columnType };
+    const headerInfo = await this.headerInfoForColumn(filter.id, range.startRow, col);
+    const unsupportedPreserved = headerInfo?.capability === 'unsupported';
+    return {
+      ...dropdownData,
+      columnType,
+      ...(unsupportedPreserved ? { unsupportedPreserved: true } : {}),
+      ...(headerInfo?.unsupportedReasons?.length
+        ? { unsupportedReasons: headerInfo.unsupportedReasons }
+        : {}),
+    };
   }
 
   /** @deprecated Use {@link setColumnFilter} instead. */
   async setCriteria(filterId: string, col: number, criteria: ColumnFilterCriteria): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.setColumnFilter', filterId);
     await this.ctx.computeBridge.setColumnFilter(
       this.sheetId,
@@ -547,13 +635,11 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       col,
       columnFilterCriteriaToCompute(criteria),
     );
-    // Apply the filter so hidden-row state is updated. Full-viewport
-    // patches now flow from the Rust mutation handler (Rust visibility pipeline).
-    await this.ctx.computeBridge.applyFilter(this.sheetId, filterId);
   }
 
   /** @deprecated Use {@link clearColumnFilter} instead. */
   async clearCriteria(filterId: string, col: number): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(
       this.ctx,
       this.sheetId,
@@ -561,12 +647,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       filterId,
     );
     await this.ctx.computeBridge.clearColumnFilter(this.sheetId, filterId, col);
-    // Apply the filter so hidden-row state is updated. Full-viewport
-    // patches now flow from the Rust mutation handler (Rust visibility pipeline).
-    await this.ctx.computeBridge.applyFilter(this.sheetId, filterId);
   }
 
   async clearAllCriteria(filterId: string): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(
       this.ctx,
       this.sheetId,
@@ -577,11 +661,19 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async apply(filterId: string): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.apply', filterId);
     await this.ctx.computeBridge.applyFilter(this.sheetId, filterId);
   }
 
-  async getInfo(filterId: string): Promise<FilterDetailInfo | null> {
+  async reapply(filterId: string): Promise<void> {
+    await this.awaitAllMaterialized();
+    await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.reapply', filterId);
+    await this.ctx.computeBridge.reapplyFilter(this.sheetId, filterId);
+  }
+
+  async getInfo(filterId: string, options?: FilterListOptions): Promise<FilterDetailInfo | null> {
+    await this.awaitFilterListScope(options, 'complete');
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     const filter = filters.find((f) => f.id === filterId);
     if (!filter) return null;
@@ -590,21 +682,70 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
   /** @deprecated Use {@link getUniqueValues} instead. */
   async getFilterUniqueValues(filterId: string, col: number): Promise<any[]> {
+    await this.awaitSheetMaterialized();
     return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filterId, col);
   }
 
-  async list(): Promise<FilterDetailInfo[]> {
+  async list(options?: FilterListOptions): Promise<FilterDetailInfo[]> {
+    await this.awaitFilterListScope(options, 'complete');
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
     return Promise.all(filters.map((filter) => toFilterDetail(this.ctx, this.sheetId, filter)));
   }
 
+  async listSummaries(options?: FilterCompactListOptions): Promise<FilterSummaryInfo[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal', true);
+    const [filters, headerEntries] = await Promise.all([
+      this.ctx.computeBridge.getFiltersInSheet(this.sheetId),
+      this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId),
+    ]);
+    const headerEntriesByFilterId = new Map<string, ComputeFilterHeaderInfo[]>();
+    for (const entry of headerEntries) {
+      const entries = headerEntriesByFilterId.get(entry.filterId) ?? [];
+      entries.push(entry);
+      headerEntriesByFilterId.set(entry.filterId, entries);
+    }
+    return Promise.all(
+      filters.map((filter) =>
+        toFilterSummary(this.ctx, this.sheetId, filter, headerEntriesByFilterId.get(filter.id)),
+      ),
+    );
+  }
+
+  async listHeaderInfo(options?: FilterCompactListOptions): Promise<FilterHeaderInfoEntry[]> {
+    await this.awaitFilterListScope(options, 'sheetLocal', true);
+    const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
+    return entries.map((entry) => {
+      const mapped: FilterHeaderInfoEntry = {
+        row: entry.row,
+        col: entry.col,
+        filterId: entry.filterId,
+        filterKind: entry.filterKind,
+        range: entry.range,
+        headerCellId: toCellId(entry.headerCellId),
+        hasActiveFilter: entry.hasActiveFilter,
+        sourceType: entry.sourceType,
+        capability: entry.capability,
+        unsupportedReasons: entry.unsupportedReasons,
+        buttonVisible: entry.buttonVisible,
+        hiddenButton: entry.hiddenButton,
+        showButton: entry.showButton,
+      };
+      if (entry.tableId) mapped.tableId = entry.tableId;
+      return mapped;
+    });
+  }
+
   async isEnabled(): Promise<boolean> {
+    await this.awaitSheetMaterialized();
     return (await this.ctx.computeBridge.getFiltersInSheet(this.sheetId)).length > 0;
   }
 
   async isDataFiltered(): Promise<boolean> {
-    const filters = await this.list();
-    return filters.some((f) => Object.keys(f.columnFilters ?? {}).length > 0);
+    const filters = await this.listSummaries();
+    return filters.some((filter) => {
+      const activeColumnCount = filter.activeColumnCount ?? 0;
+      return filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
+    });
   }
 
   /** @deprecated Use list() instead. */
@@ -613,6 +754,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async getSortState(filterId: string): Promise<FilterSortState | null> {
+    await this.awaitSheetMaterialized();
     try {
       const sortState = await this.ctx.computeBridge.getFilterSortState(this.sheetId, filterId);
       if (!sortState) return null;
@@ -626,6 +768,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   async setSortState(filterId: string, state: FilterSortState): Promise<void> {
+    await this.awaitAllMaterialized();
     await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.setSortState', filterId);
     await this.ctx.computeBridge.setFilterSortState(this.sheetId, filterId, {
       columnCellId: String(state.column),
@@ -692,5 +835,16 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     }
 
     return { values, columnType: classifyDropdownColumnType(counts) };
+  }
+
+  private async headerInfoForColumn(
+    filterId: string,
+    headerRow: number,
+    col: number,
+  ): Promise<ComputeFilterHeaderInfo | undefined> {
+    const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
+    return entries.find(
+      (entry) => entry.filterId === filterId && entry.row === headerRow && entry.col === col,
+    );
   }
 }

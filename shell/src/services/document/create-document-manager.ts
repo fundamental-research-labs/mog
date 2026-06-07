@@ -18,7 +18,6 @@ import {
   createStandaloneBrowserHostBackedCollaborationDocument,
   createStandaloneBrowserHostBackedDocument,
   createStandaloneBrowserShellHost,
-  importStandaloneBrowserHostBackedDocument,
 } from '../../host-adapters/standalone-browser-host';
 import type { StandaloneBrowserShellResult } from '../../host-adapters/standalone-browser-host';
 import {
@@ -41,6 +40,7 @@ import {
   attachImportedPivotMetadata,
   extractImportedPivotMetadata,
 } from './imported-pivot-metadata';
+import { importInteractiveHostBackedDocument } from './import-interactive-host-backed-document';
 
 /**
  * Create a DocumentManager instance.
@@ -348,7 +348,7 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
       });
 
       try {
-        const handle = await importStandaloneBrowserHostBackedDocument(hostResult);
+        const handle = await importInteractiveHostBackedDocument(hostResult);
         if (handle.documentId !== fileId) {
           throw new Error(
             `Document identity mismatch: fileId=${fileId}, documentId=${handle.documentId}`,

@@ -54,7 +54,7 @@ pub(in crate::storage::engine) fn apply_cell_changes(
 ) -> Result<RecalcResult, ComputeError> {
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)> =
         Vec::with_capacity(changes.len());
-    let mut removed_cells = Vec::new();
+    let mut removed_cells: Vec<(SheetId, CellId, Option<SheetPos>)> = Vec::new();
 
     let mut observer_old_values: std::collections::HashMap<String, CellValue> =
         std::collections::HashMap::new();
@@ -161,26 +161,38 @@ pub(in crate::storage::engine) fn apply_cell_changes(
                 // In that case, remove this cell from mirror/grid without
                 // emitting a Null viewport patch (the winner's Modified
                 // change will write the correct value at the shared position).
-                let evicted = mirror
-                    .resolve_position(cell_id)
-                    .and_then(|pos| {
-                        stores
-                            .storage
-                            .read_cell_id_at_pos(sheet_id, pos.row(), pos.col())
-                    })
-                    .is_some_and(|winner| winner != *cell_id);
+                //
+                // If yrs still maps the position back to this CellId, the
+                // removed cell map is only a value clear. Metadata such as
+                // notes or cell properties still anchors to the identity, so
+                // clear the value but preserve mirror/grid identity.
+                let current_owner = mirror.resolve_position(cell_id).and_then(|pos| {
+                    stores
+                        .storage
+                        .read_cell_id_at_pos(sheet_id, pos.row(), pos.col())
+                        .map(|winner| (winner, pos))
+                });
 
-                if evicted {
-                    // Position is owned by another cell — evict silently.
-                    mirror.remove_cell(cell_id);
-                    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-                        grid.remove_cell(cell_id);
+                match current_owner {
+                    Some((winner, _)) if winner != *cell_id => {
+                        // Position is owned by another cell — evict silently.
+                        mirror.remove_cell(cell_id);
+                        if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+                            grid.remove_cell(cell_id);
+                        }
                     }
-                } else {
-                    // Defer mirror/grid removal — clear_cells() needs position
-                    // info from the mirror to generate viewport patches. We
-                    // remove from mirror and grid_indexes AFTER clear_cells().
-                    removed_cells.push((*sheet_id, *cell_id));
+                    Some((_, pos)) => {
+                        // Defer value clearing — clear_cells() needs position
+                        // info from the mirror to generate viewport patches.
+                        // Preserve mirror/grid identity after clear_cells().
+                        removed_cells.push((*sheet_id, *cell_id, Some(pos)));
+                    }
+                    None => {
+                        // Defer mirror/grid removal — clear_cells() needs position
+                        // info from the mirror to generate viewport patches. We
+                        // remove from mirror and grid_indexes AFTER clear_cells().
+                        removed_cells.push((*sheet_id, *cell_id, None));
+                    }
                 }
             }
         }
@@ -204,14 +216,21 @@ pub(in crate::storage::engine) fn apply_cell_changes(
 
         // Also handle removed cells
         if !removed_cells.is_empty() {
-            let cell_ids: Vec<CellId> = removed_cells.iter().map(|(_, id)| *id).collect();
+            let cell_ids: Vec<CellId> = removed_cells.iter().map(|(_, id, _)| *id).collect();
             let clear_result = stores.compute.clear_cells(mirror, &cell_ids)?;
 
             // NOW remove from mirror and grid_indexes (after clear_cells used position info)
-            for (sheet_id, cell_id) in &removed_cells {
-                mirror.remove_cell(cell_id);
-                if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-                    grid.remove_cell(cell_id);
+            for (sheet_id, cell_id, preserve_pos) in &removed_cells {
+                if let Some(pos) = preserve_pos {
+                    mirror.apply_edit(sheet_id, *cell_id, *pos, CellValue::Null, None);
+                    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+                        grid.register_cell(*cell_id, pos.row(), pos.col());
+                    }
+                } else {
+                    mirror.remove_cell(cell_id);
+                    if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+                        grid.remove_cell(cell_id);
+                    }
                 }
             }
 
@@ -221,15 +240,22 @@ pub(in crate::storage::engine) fn apply_cell_changes(
         }
     } else if !removed_cells.is_empty() {
         let clear_result = {
-            let cell_ids: Vec<CellId> = removed_cells.iter().map(|(_, id)| *id).collect();
+            let cell_ids: Vec<CellId> = removed_cells.iter().map(|(_, id, _)| *id).collect();
             stores.compute.clear_cells(mirror, &cell_ids)?
         };
 
         // NOW remove from mirror and grid_indexes (after clear_cells used position info)
-        for (sheet_id, cell_id) in &removed_cells {
-            mirror.remove_cell(cell_id);
-            if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
-                grid.remove_cell(cell_id);
+        for (sheet_id, cell_id, preserve_pos) in &removed_cells {
+            if let Some(pos) = preserve_pos {
+                mirror.apply_edit(sheet_id, *cell_id, *pos, CellValue::Null, None);
+                if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+                    grid.register_cell(*cell_id, pos.row(), pos.col());
+                }
+            } else {
+                mirror.remove_cell(cell_id);
+                if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
+                    grid.remove_cell(cell_id);
+                }
             }
         }
 

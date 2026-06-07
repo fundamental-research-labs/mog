@@ -1,4 +1,4 @@
-import type { ChartConfig } from '@mog/charts';
+import { isImportedStandardOoxmlChart, type ChartConfig } from '@mog/charts';
 import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
 
 type ResolvedSnapshotSeries = ResolvedChartSpecSnapshot['resolved']['series'];
@@ -28,7 +28,7 @@ export function comboScatterSeriesDiagnostics(
   }
 
   for (const item of series) {
-    if (item.type && item.renderLayerCount === 0) {
+    if (item.type && item.renderLayerCount === 0 && !isSupportedStockSeries(config, item)) {
       diagnostics.push(
         `series ${item.sourceSeriesIndex} uses unsupported chart type "${item.type}" and is not rendered as a combo layer`,
       );
@@ -54,6 +54,42 @@ export function comboScatterSeriesDiagnostics(
   }
 
   return diagnostics;
+}
+
+export function colorAuthorityDiagnostics(
+  config: ChartConfig,
+  series: ResolvedSnapshotSeries,
+): string[] {
+  if (!isImportedStandardOoxmlChart(config)) return [];
+
+  const defaultFallbackSeries = series
+    .filter((item) => {
+      const authority = item.colorAuthority;
+      return (
+        authority?.fallback === true &&
+        (authority.source === 'defaultPalette' || authority.source === 'unknown')
+      );
+    })
+    .map((item) => item.sourceSeriesIndex);
+  if (defaultFallbackSeries.length === 0) return [];
+
+  return [
+    `imported series color authority fell back to the default palette for source series ${defaultFallbackSeries.join(
+      ', ',
+    )}`,
+  ];
+}
+
+function isSupportedStockSeries(
+  config: ChartConfig,
+  series: ResolvedSnapshotSeries[number],
+): boolean {
+  return (
+    config.type === 'stock' ||
+    series.type === 'stock' ||
+    series.stockRole !== undefined ||
+    series.stockValues !== undefined
+  );
 }
 
 export function hasSourceLinkedDataLabelFormatWithoutModeledFormat(config: ChartConfig): boolean {

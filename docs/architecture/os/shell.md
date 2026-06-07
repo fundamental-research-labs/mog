@@ -6,7 +6,7 @@
 > as `reserved`. It is used inside the monorepo and by the trusted
 > `@mog-sdk/spreadsheet-app` bundle composition path. External hosts should
 > use public runtime packages such as `@mog-sdk/spreadsheet-app`,
-> `@mog-sdk/embed`, `@mog-sdk/sheet-view`, or `@mog-sdk/node` instead of
+> `@mog-sdk/embed`, `@mog-sdk/sheet-view`, or `@mog-sdk/sdk` instead of
 > importing `@mog/shell` directly.
 
 The shell package owns workspace app hosting, shell-level bootstrap services,

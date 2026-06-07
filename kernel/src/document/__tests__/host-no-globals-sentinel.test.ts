@@ -173,6 +173,20 @@ describe('mapHostRuntimeToTransportConfig: no-globals sentinel', () => {
     expect(trapState.triggered).toEqual([]);
   });
 
+  it('headless-wasm maps to environment=headless with explicit WASM transport', () => {
+    const runtime = makeRuntime({
+      kind: 'headless-wasm',
+      wasmModulePolicy: 'host-provided',
+      executionPolicy: 'same-thread',
+    });
+
+    const config = mapHostRuntimeToTransportConfig(runtime);
+
+    expect(config.environment).toBe('headless');
+    expect(config.explicitRuntime).toBe('wasm');
+    expect(trapState.triggered).toEqual([]);
+  });
+
   it('tauri-native maps to environment=browser with explicit IPC namespace', () => {
     const runtime = makeRuntime({
       kind: 'tauri-native',
@@ -254,6 +268,11 @@ describe('mapHostRuntimeToTransportConfig: no-globals sentinel', () => {
         kind: 'node-napi',
         addonResolution: 'public-platform-package',
         workerPolicy: 'main-thread',
+      },
+      {
+        kind: 'headless-wasm',
+        wasmModulePolicy: 'host-provided',
+        executionPolicy: 'same-thread',
       },
       {
         kind: 'tauri-native',

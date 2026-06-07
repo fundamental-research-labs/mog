@@ -652,7 +652,9 @@ impl YrsComputeEngine {
                     // Mirror IdentityFormula.template strings just changed; the
                     // A1 display cache used by `get_formula` reads from those,
                     // so it needs regenerating.
-                    self.stores.compute.regenerate_formula_strings(&self.mirror);
+                    self.stores
+                        .compute
+                        .regenerate_formula_strings_and_cell_formula_text(&self.mirror);
                 }
                 if let Some(mut recalc) = recalc_result {
                     self.prepare_recalc_for_flush(&mut recalc);

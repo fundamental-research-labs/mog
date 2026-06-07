@@ -15,7 +15,14 @@
  * Pure functions - no side effects, no framework dependencies.
  */
 
-import type { ChartSpec, DataRow } from '../grammar/spec';
+import { BUBBLE_SIZE_FIELD, RAW_BUBBLE_SIZE_FIELD } from '../core/config-to-spec/fields';
+import {
+  isLayerSpec,
+  type ChartSpec,
+  type DataRow,
+  type EncodingSpec,
+  type UnitSpec,
+} from '../grammar/spec';
 import type { ExportOptions, OOXMLExportResult } from './ooxml-types';
 
 // Import all chart generators
@@ -25,6 +32,7 @@ import { ImageFallbackError, shouldUseImageFallback } from './ooxml/image-fallba
 import { generateLineChartXML, generateStockChartXML } from './ooxml/line-chart-xml';
 import { generateDoughnutChartXML, generatePieChartXML } from './ooxml/pie-chart-xml';
 import { generateBubbleChartXML, generateScatterChartXML } from './ooxml/scatter-chart-xml';
+import { isDoughnutRingLayerSpec } from './ooxml/pie-layer-detection';
 import { isNativeStockLayerSpec } from './ooxml/stock-layer-detection';
 
 // =============================================================================
@@ -80,6 +88,17 @@ export function toOOXML(
     return generateStockChartXML(spec, data, options);
   }
 
+  if (isDoughnutRingLayerSpec(spec)) {
+    return generateDoughnutChartXML(spec, data, options);
+  }
+
+  const layeredXYSpec = layeredXYExportSpec(spec, data);
+  if (layeredXYSpec) {
+    return isBubbleExportSpec(layeredXYSpec)
+      ? generateBubbleChartXML(layeredXYSpec, data, options)
+      : generateScatterChartXML(layeredXYSpec, data, options);
+  }
+
   // Check if image fallback is required
   if (shouldUseImageFallback(spec)) {
     throw new ImageFallbackError(`Chart type requires image fallback for Excel export`, spec);
@@ -120,7 +139,7 @@ export function toOOXML(
     case 'point':
     case 'circle':
       // Check for bubble chart (has size encoding)
-      if (spec.encoding?.size?.field) {
+      if (isBubbleExportSpec(spec)) {
         return generateBubbleChartXML(spec, data, options);
       }
       return generateScatterChartXML(spec, data, options);
@@ -134,6 +153,9 @@ export function toOOXML(
 
     case 'rule':
       // Rule marks are used for stock charts (OHLC high-low wicks)
+      return generateStockChartXML(spec, data, options);
+
+    case 'stockGlyph':
       return generateStockChartXML(spec, data, options);
 
     case 'boxplot':
@@ -189,9 +211,60 @@ export * from './ooxml';
 export {
   ChartImageExportOptionsError,
   normalizeImageExportOptions,
+  rasterOptionsForRequest,
+  type ChartImageFittingMode,
+  type ChartImageFrame,
+  type ChartRasterImageExportFormat,
+  type ChartVectorImageExportFormat,
+  type NormalizedChartImageExportOptions,
+  type NormalizedChartRasterOptions,
   type NormalizedImageExportOptions,
+  type NormalizedRasterImageExportOptions,
+  type NormalizedVectorImageExportOptions,
+  type NormalizeImageExportFrameInput,
   type SupportedImageExportFormat,
 } from './image-options';
+export {
+  ChartMarkImageExporter,
+  type ChartMarkImageExporterOptions,
+} from './chart-mark-image-exporter';
+export {
+  serializeChartMark,
+  serializeChartMarks,
+  translateSerializableChartMarks,
+  type SerializableChartArcMark,
+  type SerializableChartMark,
+  type SerializableChartMarkBase,
+  type SerializableChartMarkClip,
+  type SerializableChartMarkStyle,
+  type SerializableChartMarkType,
+  type SerializableChartPathMark,
+  type SerializableChartRectMark,
+  type SerializableChartSymbolMark,
+  type SerializableChartSymbolShape,
+  type SerializableChartTextMark,
+} from './mark-serialization';
+export {
+  assertChartRasterBackendSupports,
+  resolveChartRasterBackend,
+  type ChartRasterBackend,
+  type ChartRasterBackendResolver,
+  type ChartRasterRequest,
+  type ChartRasterResult,
+} from './raster-backend';
+export {
+  createWasmChartRasterBackend,
+  type WasmChartRasterBackendOptions,
+  type WasmChartRasterImageResult,
+  type WasmChartRasterModule,
+  type WasmChartRasterModuleSource,
+} from './wasm-raster-backend';
+export {
+  renderChartMarksSvg,
+  type ChartSvgRenderRequest,
+  type ChartSvgRenderResult,
+} from './svg-renderer';
+export { bytesToBase64, bytesToDataUrl, utf8ToBase64 } from './data-url';
 
 // =============================================================================
 // Convenience Functions
@@ -218,6 +291,15 @@ export function getOOXMLChartElement(spec: ChartSpec): string | null {
     return 'stockChart';
   }
 
+  if (isDoughnutRingLayerSpec(spec)) {
+    return 'doughnutChart';
+  }
+
+  const layeredXYSpec = layeredXYExportSpec(spec);
+  if (layeredXYSpec) {
+    return isBubbleExportSpec(layeredXYSpec) ? 'bubbleChart' : 'scatterChart';
+  }
+
   const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;
 
   // Check for radar (linear-closed interpolation)
@@ -242,19 +324,75 @@ export function getOOXMLChartElement(spec: ChartSpec): string | null {
       return 'pieChart';
     case 'point':
     case 'circle':
-      if (spec.encoding?.size?.field) {
+      if (isBubbleExportSpec(spec)) {
         return 'bubbleChart';
       }
       return 'scatterChart';
     case 'area':
       return 'areaChart';
     case 'rule':
+    case 'stockGlyph':
       return 'stockChart';
     case 'boxplot':
       return 'barChart'; // Box whisker uses extended bar chart format
     default:
       return null;
   }
+}
+
+function isBubbleExportSpec(spec: ChartSpec): boolean {
+  return spec.encoding?.size?.field === BUBBLE_SIZE_FIELD;
+}
+
+function layeredXYExportSpec(spec: ChartSpec, data?: DataRow[]): UnitSpec | undefined {
+  if (!isLayerSpec(spec)) return undefined;
+  const hasBubbleSizeRows =
+    data === undefined || data.some((row) => row[RAW_BUBBLE_SIZE_FIELD] !== undefined);
+  const unitLayers = spec.layer.filter(isUnitSpecLayer);
+  const bubbleLayer = unitLayers.find((layer) => {
+    const type = markType(layer);
+    return (
+      hasBubbleSizeRows &&
+      (type === 'point' || type === 'circle') &&
+      layer.encoding?.size?.field === BUBBLE_SIZE_FIELD
+    );
+  });
+  const scatterLayer =
+    bubbleLayer ??
+    unitLayers.find((layer) => {
+      const type = markType(layer);
+      return type === 'point' || type === 'circle' || type === 'line';
+    });
+  if (!scatterLayer) return undefined;
+
+  return {
+    ...scatterLayer,
+    width: spec.width,
+    height: spec.height,
+    data: scatterLayer.data ?? spec.data,
+    title: scatterLayer.title ?? spec.title,
+    config: { ...(spec.config ?? {}), ...(scatterLayer.config ?? {}) },
+    encoding: mergeExportEncoding(spec.encoding, scatterLayer.encoding),
+    transform: scatterLayer.transform ?? spec.transform,
+  };
+}
+
+function isUnitSpecLayer(layer: ChartSpec): layer is UnitSpec {
+  return !isLayerSpec(layer);
+}
+
+function markType(spec: ChartSpec): string | undefined {
+  return typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;
+}
+
+function mergeExportEncoding(
+  shared: EncodingSpec | undefined,
+  layer: EncodingSpec | undefined,
+): EncodingSpec {
+  return {
+    ...(shared ?? {}),
+    ...(layer ?? {}),
+  };
 }
 
 /**

@@ -77,6 +77,13 @@ function hasRendererCapabilities(coordinator: unknown): coordinator is {
   );
 }
 
+function getChartIdFromPayloadOrSelectedObject(
+  deps: ActionDependencies,
+  payload: { chartId?: string } | undefined,
+): string | null {
+  return payload?.chartId ?? deps.accessors.object.getFirstSelectedId();
+}
+
 /**
  * Get smart chart position that ensures visibility.
  *
@@ -123,8 +130,8 @@ async function getSmartChartPosition(
  */
 export const EDIT_CHART: ActionHandler = (deps, payload): ActionResult => {
   // Payload may be absent when triggered by keyboard shortcut (Enter in objectSelected context).
-  // Fall back to the chart accessor to get the currently selected chart ID.
-  const chartId = payload?.chartId ?? deps.accessors.chart.getSelectedChartId();
+  // Use the object accessor because chart selection is synced asynchronously from object selection.
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -142,7 +149,7 @@ export const EDIT_CHART: ActionHandler = (deps, payload): ActionResult => {
  * This is triggered by F2 key when chart is selected.
  */
 export const EDIT_CHART_TITLE: ActionHandler = (deps, payload): ActionResult => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -529,13 +536,13 @@ export const TOGGLE_CHART_SELECTION: ActionHandler = (deps, payload): ActionResu
  * BRING_CHART_TO_FRONT - Bring a chart to the front (highest z-index).
  * Payload: { chartId: string }
  *
- * Uses Mutations layer for z-order operations.
+ * Uses the chart z-order API so the request reaches the compute z-index path.
  */
 export const BRING_CHART_TO_FRONT: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -544,7 +551,7 @@ export const BRING_CHART_TO_FRONT: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'front' });
+    await ws.charts.bringToFront(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -555,13 +562,13 @@ export const BRING_CHART_TO_FRONT: AsyncActionHandler = async (
  * SEND_CHART_TO_BACK - Send a chart to the back (lowest z-index).
  * Payload: { chartId: string }
  *
- * Uses Mutations layer for z-order operations.
+ * Uses the chart z-order API so the request reaches the compute z-index path.
  */
 export const SEND_CHART_TO_BACK: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -570,7 +577,7 @@ export const SEND_CHART_TO_BACK: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'back' });
+    await ws.charts.sendToBack(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -581,13 +588,13 @@ export const SEND_CHART_TO_BACK: AsyncActionHandler = async (
  * BRING_CHART_FORWARD - Bring a chart forward by one layer.
  * Payload: { chartId: string }
  *
- * Uses Mutations layer for z-order operations.
+ * Uses the chart z-order API so the request reaches the compute z-index path.
  */
 export const BRING_CHART_FORWARD: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -596,7 +603,7 @@ export const BRING_CHART_FORWARD: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'forward' });
+    await ws.charts.bringForward(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }
@@ -607,13 +614,13 @@ export const BRING_CHART_FORWARD: AsyncActionHandler = async (
  * SEND_CHART_BACKWARD - Send a chart backward by one layer.
  * Payload: { chartId: string }
  *
- * Uses Mutations layer for z-order operations.
+ * Uses the chart z-order API so the request reaches the compute z-index path.
  */
 export const SEND_CHART_BACKWARD: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
@@ -622,7 +629,7 @@ export const SEND_CHART_BACKWARD: AsyncActionHandler = async (
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    await ws.charts.update(chartId, { zOrder: 'backward' });
+    await ws.charts.sendBackward(chartId);
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }

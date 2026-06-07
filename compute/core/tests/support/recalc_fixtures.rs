@@ -1,7 +1,7 @@
 use compute_core::mirror::CellMirror;
 use compute_core::scheduler::ComputeCore;
 use compute_core::snapshot::{CellData, RecalcResult, SheetSnapshot, WorkbookSnapshot};
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 /// Deterministic UUID-like string from sheet index.
 pub(crate) fn sheet_uuid(idx: u32) -> String {
@@ -123,6 +123,26 @@ pub(crate) fn assert_cell_number(
         None => panic!(
             "Cell ({},{},{}) not in changed_cells (expected Number({}))",
             sheet_idx, row, col, expected
+        ),
+    }
+}
+
+pub(crate) fn assert_cell_circular_error(
+    result: &RecalcResult,
+    sheet_idx: u32,
+    row: u32,
+    col: u32,
+) {
+    let val = find_changed_value(result, sheet_idx, row, col);
+    match val {
+        Some(CellValue::Error(CellError::Circ, None)) => {}
+        Some(other) => panic!(
+            "Cell ({},{},{}) expected #CIRC!, got {:?}",
+            sheet_idx, row, col, other
+        ),
+        None => panic!(
+            "Cell ({},{},{}) not in changed_cells (expected #CIRC!)",
+            sheet_idx, row, col
         ),
     }
 }

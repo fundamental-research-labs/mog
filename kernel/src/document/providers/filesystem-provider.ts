@@ -1,5 +1,5 @@
 /**
- * FilesystemProvider — durable `Provider` for the Node SDK.
+ * FilesystemProvider — durable `Provider` for the `@mog-sdk/sdk/node` entry.
  *
  * Persists yrs updates to the local filesystem using an append-log + snapshot
  * layout. Serves as the default durable provider for headless / CLI / SDK

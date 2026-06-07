@@ -3,7 +3,7 @@ use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::mutation::CellInput;
 use cell_types::{SheetId, SheetPos};
 use snapshot_types::{RecalcOptions, SheetSnapshot, WorkbookSnapshot};
-use value_types::CellValue;
+use value_types::{CellError, CellValue};
 
 const SHEET_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -40,6 +40,16 @@ fn number_at(engine: &YrsComputeEngine, row: u32, col: u32) -> f64 {
     {
         Some(CellValue::Number(n)) => n.get(),
         other => panic!("expected numeric value at ({row}, {col}), got {other:?}"),
+    }
+}
+
+fn assert_circular_error_at(engine: &YrsComputeEngine, row: u32, col: u32) {
+    match engine
+        .mirror()
+        .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
+    {
+        Some(CellValue::Error(CellError::Circ, None)) => {}
+        other => panic!("expected circular error at ({row}, {col}), got {other:?}"),
     }
 }
 
@@ -118,6 +128,52 @@ fn set_workbook_settings_returns_workbook_settings_change() {
     assert_eq!(
         change.settings.get("themeId").and_then(|v| v.as_str()),
         Some("dark")
+    );
+}
+
+#[test]
+fn set_custom_setting_returns_workbook_settings_change() {
+    let mut engine = build_engine();
+    let active_sheet = sheet_id().to_uuid_string();
+
+    let (_patches, result) = engine
+        .set_custom_setting("mog.activeSheetId", Some(active_sheet.clone()))
+        .expect("set custom setting");
+    assert_eq!(result.workbook_settings_changes.len(), 1);
+    let change = &result.workbook_settings_changes[0];
+    assert_eq!(change.kind, ChangeKind::Set);
+    assert!(
+        change.changed_keys.iter().any(|k| k == "customSettings"),
+        "changed_keys must include customSettings; got {:?}",
+        change.changed_keys
+    );
+    assert_eq!(
+        change
+            .settings
+            .get("customSettings")
+            .and_then(|v| v.get("mog.activeSheetId"))
+            .and_then(|v| v.as_str()),
+        Some(active_sheet.as_str())
+    );
+
+    let (_patches, result) = engine
+        .set_custom_setting("mog.activeSheetId", None)
+        .expect("delete custom setting");
+    assert_eq!(result.workbook_settings_changes.len(), 1);
+    let change = &result.workbook_settings_changes[0];
+    assert_eq!(change.kind, ChangeKind::Set);
+    assert!(
+        change.changed_keys.iter().any(|k| k == "customSettings"),
+        "changed_keys must include customSettings after delete; got {:?}",
+        change.changed_keys
+    );
+    assert!(
+        change
+            .settings
+            .get("customSettings")
+            .and_then(|v| v.get("mog.activeSheetId"))
+            .is_none(),
+        "deleted custom setting must be absent from emitted workbook settings"
     );
 }
 
@@ -205,10 +261,8 @@ fn set_calculation_settings_marks_dirty_for_existing_circular_recalc() {
     engine
         .recalculate_with_options(&RecalcOptions::default())
         .expect("non-iterative recalc should run");
-    assert!(
-        (number_at(&engine, 0, 0) - 2.0).abs() > 0.01,
-        "test setup should leave A1 non-converged before iterative calc is enabled"
-    );
+    assert_circular_error_at(&engine, 0, 0);
+    assert_circular_error_at(&engine, 0, 1);
 
     engine
         .set_calculation_settings(CalculationSettings {

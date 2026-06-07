@@ -181,6 +181,74 @@ describe('Host-backed document construction integration', () => {
       }
     });
 
+    it('accepts headless-wasm host bindings with headless transport config', () => {
+      const host = createDeterministicDocumentHost();
+      const bindings = adaptBindings(host.bindings);
+      const wasmModule = {} as WebAssembly.Module;
+      const lifecycleInput = validateKernelHostContextForDocument(
+        {
+          ...host.kernelContext,
+          runtime: {
+            kind: 'headless-wasm',
+            wasmModulePolicy: 'host-provided',
+            executionPolicy: 'same-thread',
+          },
+        },
+        {
+          ...bindings,
+          transportBindings: {
+            has: (runtimeKind) => runtimeKind === 'headless-wasm',
+            resolve: (runtimeKind) => ({
+              runtimeKind,
+              createTransportConfig: () => ({
+                kind: 'headless',
+                explicitRuntime: 'wasm',
+                wasmModule,
+              }),
+            }),
+          },
+        },
+      );
+
+      expect(lifecycleInput.runtime.config.kind).toBe('headless-wasm');
+      expect(lifecycleInput.runtime.transportConfig).toMatchObject({
+        kind: 'headless',
+        explicitRuntime: 'wasm',
+        wasmModule,
+      });
+    });
+
+    it('rejects headless-wasm bindings with non-headless transport config', () => {
+      const host = createDeterministicDocumentHost();
+      const bindings = adaptBindings(host.bindings);
+
+      expect(() =>
+        validateKernelHostContextForDocument(
+          {
+            ...host.kernelContext,
+            runtime: {
+              kind: 'headless-wasm',
+              wasmModulePolicy: 'host-provided',
+              executionPolicy: 'same-thread',
+            },
+          },
+          {
+            ...bindings,
+            transportBindings: {
+              has: () => true,
+              resolve: (runtimeKind) => ({
+                runtimeKind,
+                createTransportConfig: () => ({
+                  kind: 'browser',
+                  explicitRuntime: 'wasm',
+                }),
+              }),
+            },
+          },
+        ),
+      ).toThrow();
+    });
+
     it('rejects missing storage with a structured construction error', () => {
       const host = createDeterministicDocumentHost();
       const bindings = adaptBindings(host.bindings);

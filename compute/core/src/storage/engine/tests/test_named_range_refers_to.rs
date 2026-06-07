@@ -30,9 +30,9 @@ use value_types::{CellValue, FiniteF64};
 /// Helper: insert a `DefinedName` into Yrs with a caller-supplied
 /// `refers_to` byte string. Bypasses `set_named_range`'s canonicalization
 /// so the test can plant a pre-W5-shaped entry directly.
-fn plant_refers_to(engine: &YrsComputeEngine, name: &str, refers_to: String) {
+fn plant_refers_to_with_id(engine: &YrsComputeEngine, id: u64, name: &str, refers_to: String) {
     let defined_name = DefinedName {
-        id: format!("{:032x}", 0x7357_0000u64),
+        id: format!("{id:032x}"),
         name: name.to_string(),
         refers_to,
         raw_refers_to: None,
@@ -57,6 +57,10 @@ fn plant_refers_to(engine: &YrsComputeEngine, name: &str, refers_to: String) {
         engine.storage().workbook_map(),
         &defined_name,
     );
+}
+
+fn plant_refers_to(engine: &YrsComputeEngine, name: &str, refers_to: String) {
+    plant_refers_to_with_id(engine, 0x7357_0000u64, name, refers_to);
 }
 
 fn raw_a1_defined_name_replay_snapshot() -> WorkbookSnapshot {
@@ -192,6 +196,50 @@ fn w5_malformed_json_refers_to_is_rejected() {
         "JSON that is not a valid IdentityFormula must be rejected — the \
          deleted fallback arm would have silently wrapped it as a \
          template-only entry."
+    );
+}
+
+#[test]
+fn w5_multiple_invalid_refers_to_entries_do_not_hide_canonical_entries() {
+    let snap = simple_snapshot();
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    plant_refers_to_with_id(
+        &engine,
+        0x7357_0001u64,
+        "RawRange",
+        "Sheet1!$A$1:$A$10".to_string(),
+    );
+    plant_refers_to_with_id(
+        &engine,
+        0x7357_0002u64,
+        "Malformed",
+        r#"{"not_identity_formula": true}"#.to_string(),
+    );
+
+    let identity = IdentityFormula {
+        template: "\"canonical-constant\"".to_string(),
+        refs: vec![],
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    };
+    plant_refers_to_with_id(
+        &engine,
+        0x7357_0003u64,
+        "Canonical",
+        serde_json::to_string(&identity).expect("serialize"),
+    );
+
+    let wire = engine.get_all_named_ranges_wire();
+    assert!(
+        wire.iter()
+            .all(|dn| dn.name != "RawRange" && dn.name != "Malformed"),
+        "invalid raw/malformed entries must still be omitted by the single-format reader"
+    );
+    assert!(
+        wire.iter().any(|dn| dn.name == "Canonical"),
+        "invalid entries must not prevent canonical IdentityFormula entries from reaching the wire"
     );
 }
 

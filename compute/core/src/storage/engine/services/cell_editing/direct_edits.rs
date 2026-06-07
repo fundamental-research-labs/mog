@@ -9,7 +9,21 @@ use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 
-use super::{find_cell_id_at, write_cell_to_yrs};
+use super::{cell_id_for_region_guard, find_cell_id_at, write_cell_to_yrs};
+
+fn validate_cell_input_before_write(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    input: &CellInput,
+) -> Result<(), ComputeError> {
+    let cell_id = cell_id_for_region_guard(stores, mirror, sheet_id, row, col);
+    stores
+        .compute
+        .validate_region_partial_writes(mirror, &[(*sheet_id, cell_id, row, col, input.clone())])
+}
 
 pub(in crate::storage::engine) fn set_cell_value_parsed(
     stores: &mut EngineStores,
@@ -20,6 +34,11 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
     col: u32,
     raw_input: &str,
 ) -> Result<RecalcResult, ComputeError> {
+    let input = CellInput::Parse {
+        text: raw_input.to_string(),
+    };
+    validate_cell_input_before_write(stores, mirror, sheet_id, row, col, &input)?;
+
     // Snapshot old value from mirror BEFORE the cell_values write updates it.
     // Try to resolve cell_id from grid index; for new cells, old value is Null.
     let pre_cell_id = stores
@@ -48,9 +67,6 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
         // The dispatcher inside `cell_values::set_cell_value` classifies
         // exactly once via `CellWrite::from_user_string`; no downstream
         // consumer re-sniffs `starts_with('=')`.
-        let input = CellInput::Parse {
-            text: raw_input.to_string(),
-        };
         cell_values::set_cell_value(
             storage_ref,
             doc,
@@ -59,7 +75,7 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
             sheet_id,
             row,
             col,
-            input,
+            input.clone(),
             &stores.grid_id_alloc,
             grid_index,
         );
@@ -152,7 +168,7 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
         };
         let mut result = stores
             .compute
-            .set_cell_with_target(mirror, sheet_id, cell_id, row, col, raw_input, target)?;
+            .set_cell_with_target(mirror, sheet_id, cell_id, row, col, input, target)?;
 
         // Patch old_value onto the seed change for this direct edit.
         let cell_id_str = cell_id.to_uuid_string();
@@ -184,6 +200,16 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
     col: u32,
     value: &str,
 ) -> Result<RecalcResult, ComputeError> {
+    let input = if value.is_empty() {
+        CellInput::Clear
+    } else {
+        let stored = value.strip_prefix('\'').unwrap_or(value);
+        CellInput::Literal {
+            text: stored.to_string(),
+        }
+    };
+    validate_cell_input_before_write(stores, mirror, sheet_id, row, col, &input)?;
+
     // Snapshot old value from mirror BEFORE the write updates it.
     let pre_cell_id = stores
         .grid_indexes
@@ -202,14 +228,6 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
             mutation.observer.set_suppressed(false);
             return Ok(RecalcResult::empty());
         };
-        let input = if value.is_empty() {
-            CellInput::Clear
-        } else {
-            let stored = value.strip_prefix('\'').unwrap_or(value);
-            CellInput::Literal {
-                text: stored.to_string(),
-            }
-        };
         cell_values::set_cell_value(
             storage_ref,
             doc,
@@ -218,7 +236,7 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
             sheet_id,
             row,
             col,
-            input,
+            input.clone(),
             &stores.grid_id_alloc,
             grid_index,
         );
@@ -232,7 +250,7 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
         }
         let mut result = stores
             .compute
-            .set_cell(mirror, sheet_id, cell_id, row, col, value)?;
+            .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
 
         // Patch old_value onto the seed change for this direct edit.
         let cell_id_str = cell_id.to_uuid_string();
@@ -260,9 +278,14 @@ pub(in crate::storage::engine) fn set_cell(
     input: &crate::storage::engine::mutation::CellInput,
 ) -> Result<RecalcResult, ComputeError> {
     use crate::storage::engine::mutation::CellInput;
+    stores
+        .compute
+        .validate_region_partial_writes(mirror, &[(*sheet_id, cell_id, row, col, input.clone())])?;
+
     let (value, formula) = match input {
         CellInput::Clear => (CellValue::Null, None),
         CellInput::Literal { text } => (CellValue::Text(text.clone().into()), None),
+        CellInput::Value { value } => (value.clone(), None),
         CellInput::Parse { text } => {
             let trimmed = text.trim();
             if trimmed.is_empty() {

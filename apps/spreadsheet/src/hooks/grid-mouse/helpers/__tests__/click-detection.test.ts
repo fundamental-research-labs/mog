@@ -4,6 +4,8 @@
  * Tests for pure click detection helper functions.
  */
 
+import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
+
 import {
   COMMENT_INDICATOR,
   FILTER_BUTTON,
@@ -223,6 +225,19 @@ describe('getSelectedColumnsOrSingle', () => {
     expect(getSelectedColumnsOrSingle(3, ranges)).toEqual([3, 4, 5, 6]); // start edge
     expect(getSelectedColumnsOrSingle(6, ranges)).toEqual([3, 4, 5, 6]); // end edge
   });
+
+  it('bounds a select-all resize to used range columns', () => {
+    const ranges = [{ startCol: 0, endCol: MAX_COLS - 1, isFullRow: true }];
+    const usedRange = { startRow: 0, startCol: 0, endRow: 24, endCol: 3 };
+
+    expect(getSelectedColumnsOrSingle(0, ranges, usedRange)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('falls back to the clicked column for select-all resize without a used range', () => {
+    const ranges = [{ startCol: 0, endCol: MAX_COLS - 1, isFullRow: true }];
+
+    expect(getSelectedColumnsOrSingle(7, ranges, null)).toEqual([7]);
+  });
 });
 
 // =============================================================================
@@ -272,5 +287,20 @@ describe('getSelectedRowsOrSingle', () => {
     expect(result.length).toBe(100);
     expect(result[0]).toBe(0);
     expect(result[99]).toBe(99);
+  });
+
+  it('bounds a select-all resize to used range rows', () => {
+    const ranges = [{ startRow: 0, endRow: MAX_ROWS - 1, isFullColumn: true }];
+    const usedRange = { startRow: 0, startCol: 0, endRow: 24, endCol: 3 };
+
+    expect(getSelectedRowsOrSingle(0, ranges, usedRange)).toEqual(
+      Array.from({ length: 25 }, (_, row) => row),
+    );
+  });
+
+  it('falls back to the clicked row for select-all resize without a used range', () => {
+    const ranges = [{ startRow: 0, endRow: MAX_ROWS - 1, isFullColumn: true }];
+
+    expect(getSelectedRowsOrSingle(12, ranges, null)).toEqual([12]);
   });
 });

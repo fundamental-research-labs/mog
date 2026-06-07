@@ -14,13 +14,23 @@
  * All config state lives in Rust — the former PivotStore has been deleted.
  */
 
-import type { IPivotBridge, PivotCacheStats } from '@mog-sdk/contracts/bridges';
+import type {
+  ImportedPivotViewRecord,
+  IPivotBridge,
+  PivotCacheStats,
+} from '@mog-sdk/contracts/bridges';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
-import type { PivotEvent, PivotUpdateOptions } from '@mog-sdk/contracts/events';
+import type {
+  CellChangedEvent,
+  CellsBatchChangedEvent,
+  PivotEvent,
+  PivotUpdateOptions,
+} from '@mog-sdk/contracts/events';
 import type {
   AggregateFunction as ApiAggregateFunction,
   CalculatedFieldId,
   PivotFieldArea as ApiPivotFieldArea,
+  PivotExpansionState,
   PivotField,
   PivotFieldItems,
   PivotKernelMutationReceipt,
@@ -40,6 +50,7 @@ import type {
   PivotFieldItems as ComputePivotFieldItems,
   PivotFieldPlacementFlat as ComputePivotFieldPlacementFlat,
   PivotHeader as ComputePivotHeader,
+  ImportedPivotViewRecord as ComputeImportedPivotViewRecord,
   PivotItemInfo as ComputePivotItemInfo,
   PivotMeasureDescriptor as ComputePivotMeasureDescriptor,
   PivotMemberKey as ComputePivotMemberKey,
@@ -52,6 +63,11 @@ import type {
 import type { DocumentContext } from '../context/types';
 import { normalizeCellValue } from '../api/internal/value-conversions';
 import { getOrder as getSheetOrder } from '../domain/sheets/sheet-meta';
+import { cleanPivotFormula, displayPivotFormula } from '../domain/pivots/identifiers';
+import {
+  automaticPivotValuePlacementDisplayName,
+  valuePlacementWithAggregate,
+} from '../domain/pivots/value-labels';
 import { extractMutationData } from './compute/compute-core';
 
 type PublicPivotPlacement = PivotTableConfig['placements'][number];
@@ -84,6 +100,11 @@ type PivotBridgeInternalPlacementPatch = PivotBridgePlacementPatch &
 type ComputePivotPlacementWithTransportFields = ComputePivotFieldPlacementFlat & {
   placementId?: string;
   calculatedFieldId?: string;
+};
+type ComputeSortByValueWithPlacement = NonNullable<
+  ComputePivotFieldPlacementFlat['sortByValue']
+> & {
+  valuePlacementId?: string;
 };
 type ComputePivotHeaderWithPlacement = ComputePivotHeader & { axisPlacementId?: string };
 type ComputePivotItemWithPlacement = ComputePivotItemInfo & { axisPlacementId?: string };
@@ -119,6 +140,20 @@ function pivotUsesSourceSheet(
     return pivot.sourceSheetId === sourceSheetId;
   }
   return sourceName !== null && pivot.sourceSheetName === sourceName;
+}
+
+function sourceChangesAffectPivot(
+  changes: readonly { row: number; col: number }[] | undefined,
+  pivot: PivotTableConfig,
+): boolean {
+  if (!changes) {
+    return true;
+  }
+  const range = pivot.sourceRange;
+  return changes.some(
+    ({ row, col }) =>
+      row >= range.startRow && row <= range.endRow && col >= range.startCol && col <= range.endCol,
+  );
 }
 
 function placementId(value: string): PlacementId {
@@ -184,10 +219,34 @@ function normalizePlacementPatch(
 ): Partial<PublicPivotPlacement> {
   const { sortOrder, ...rest } = patch;
   const normalized: Partial<PublicPivotPlacement> = { ...rest };
-  if (sortOrder !== undefined) {
+  if ('sortOrder' in patch) {
     normalized.sortOrder = toPublicSortOrder(sortOrder);
   }
   return normalized;
+}
+
+function placementsInArea(
+  placements: readonly PublicPivotPlacement[],
+  area: ApiPivotFieldArea,
+): PublicPivotPlacement[] {
+  return placements
+    .map((placement, originalIndex) => ({ placement, originalIndex }))
+    .filter(({ placement }) => placement.area === area)
+    .sort(
+      (left, right) =>
+        left.placement.position - right.placement.position ||
+        left.originalIndex - right.originalIndex,
+    )
+    .map(({ placement }) => ({ ...placement }));
+}
+
+function renumberPlacements(placements: PublicPivotPlacement[]): PublicPivotPlacement[] {
+  return placements.map((placement, position) => ({ ...placement, position }));
+}
+
+function clampPlacementPosition(position: number, length: number): number {
+  if (!Number.isFinite(position)) return length;
+  return Math.max(0, Math.min(Math.trunc(position), length));
 }
 
 function toComputePivotField(field: PivotField): ComputePivotField {
@@ -219,7 +278,7 @@ function toComputeCalculatedField(field: PublicCalculatedField): ComputeCalculat
   return {
     fieldId,
     name: field.name,
-    formula: field.formula,
+    formula: cleanPivotFormula(field.formula),
   };
 }
 
@@ -228,7 +287,7 @@ function toPublicCalculatedField(field: ComputeCalculatedField): PublicCalculate
   const converted: PublicCalculatedField = {
     fieldId: source.fieldId,
     name: source.name,
-    formula: source.formula,
+    formula: displayPivotFormula(source.formula),
   };
   if (source.calculatedFieldId) {
     converted.calculatedFieldId = calculatedFieldId(source.calculatedFieldId);
@@ -265,11 +324,15 @@ function toComputePivotPlacement(placement: PublicPivotPlacement): ComputePivotF
     computePlacement.customSortList = placement.customSortList;
   }
   if (placement.sortByValue) {
-    computePlacement.sortByValue = {
+    const sortByValue: ComputeSortByValueWithPlacement = {
       valueFieldId: placement.sortByValue.valueFieldId,
       order: placement.sortByValue.order,
       columnKey: placement.sortByValue.columnKey ?? placement.sortByValue.columnTupleKey,
     };
+    if (placement.sortByValue.valuePlacementId) {
+      sortByValue.valuePlacementId = placement.sortByValue.valuePlacementId;
+    }
+    computePlacement.sortByValue = sortByValue;
   }
   if (placement.dateGrouping) {
     computePlacement.dateGrouping = placement.dateGrouping;
@@ -315,14 +378,13 @@ function toPublicPivotPlacement(placement: ComputePivotFieldPlacementFlat): Publ
     converted.customSortList = source.customSortList;
   }
   if (source.sortByValue) {
+    const sortByValue = source.sortByValue as ComputeSortByValueWithPlacement;
     converted.sortByValue = {
-      valueFieldId: source.sortByValue.valueFieldId,
-      valuePlacementId: placementId(source.sortByValue.valueFieldId),
-      order: source.sortByValue.order,
-      columnKey: source.sortByValue.columnKey,
-      columnTupleKey: source.sortByValue.columnKey
-        ? pivotTupleKey(source.sortByValue.columnKey)
-        : undefined,
+      valueFieldId: sortByValue.valueFieldId,
+      valuePlacementId: placementId(sortByValue.valuePlacementId ?? sortByValue.valueFieldId),
+      order: sortByValue.order,
+      columnKey: sortByValue.columnKey,
+      columnTupleKey: sortByValue.columnKey ? pivotTupleKey(sortByValue.columnKey) : undefined,
     };
   }
   if (source.dateGrouping) {
@@ -364,6 +426,7 @@ function toComputePivotConfig(config: PivotTableConfig): ComputePivotTableConfig
     sourceSheetId: config.sourceSheetId,
     sourceSheetName: config.sourceSheetName,
     sourceRange: config.sourceRange,
+    outputSheetId: config.outputSheetId,
     outputSheetName: config.outputSheetName,
     outputLocation: config.outputLocation,
     fields,
@@ -379,9 +442,13 @@ function toComputePivotConfig(config: PivotTableConfig): ComputePivotTableConfig
     autoFormat: config.autoFormat,
     preserveFormatting: config.preserveFormatting,
     cacheId: config.cacheId,
+    dataOnRows: config.dataOnRows,
     refRange: config.refRange,
     firstDataRow: config.firstDataRow,
+    firstHeaderRow: config.firstHeaderRow,
     firstDataCol: config.firstDataCol,
+    rowsPerPage: config.rowsPerPage,
+    colsPerPage: config.colsPerPage,
     rowItems: config.rowItems ?? [],
     colItems: config.colItems ?? [],
   };
@@ -395,6 +462,7 @@ function toPublicPivotConfig(config: ComputePivotTableConfig): PivotTableConfig 
     sourceSheetId: config.sourceSheetId,
     sourceSheetName: config.sourceSheetName,
     sourceRange: config.sourceRange,
+    outputSheetId: config.outputSheetId,
     outputSheetName: config.outputSheetName,
     outputLocation: config.outputLocation,
     fields: config.fields.map(toPublicPivotField),
@@ -410,9 +478,13 @@ function toPublicPivotConfig(config: ComputePivotTableConfig): PivotTableConfig 
     autoFormat: config.autoFormat,
     preserveFormatting: config.preserveFormatting,
     cacheId: config.cacheId,
+    dataOnRows: config.dataOnRows,
     refRange: config.refRange,
     firstDataRow: config.firstDataRow,
+    firstHeaderRow: config.firstHeaderRow,
     firstDataCol: config.firstDataCol,
+    rowsPerPage: config.rowsPerPage,
+    colsPerPage: config.colsPerPage,
     rowItems: config.rowItems,
     colItems: config.colItems,
   };
@@ -635,6 +707,25 @@ function toPublicPivotTableResult(result: ComputePivotTableResult): PivotTableRe
   };
 }
 
+function toPublicImportedPivotViewRecord(
+  record: ComputeImportedPivotViewRecord,
+): ImportedPivotViewRecord {
+  const sourceKind =
+    record.sourceKind === 'promotedImport' ? 'promotedImport' : 'unsupportedImport';
+  return {
+    sourceKind,
+    status: record.status,
+    importIdentity: record.importIdentity,
+    outputSheetId: record.outputSheetId,
+    sourceSheetId: record.sourceSheetId,
+    config: toPublicPivotConfig(record.config),
+    result: record.result ? toPublicPivotTableResult(record.result) : undefined,
+    capabilities: record.capabilities,
+    unsupportedReason: record.unsupportedReason,
+    renderedRange: record.renderedRange,
+  };
+}
+
 function toPublicPivotItem(item: ComputePivotItemInfo): PublicPivotItem | null {
   if (item.area === 'value') {
     return null;
@@ -801,6 +892,11 @@ export class PivotBridge implements IPivotBridge {
     return configs.map(toPublicPivotConfig);
   }
 
+  async getImportedPivotViewRecords(sheetId: SheetId): Promise<ImportedPivotViewRecord[]> {
+    const records = await this.ctx.computeBridge.pivotGetImportedViewRecords(sheetId);
+    return records.map(toPublicImportedPivotViewRecord);
+  }
+
   /**
    * Update a pivot table configuration by merging partial updates.
    *
@@ -861,7 +957,11 @@ export class PivotBridge implements IPivotBridge {
       (spec.source?.type === 'field' ? spec.source.fieldId : undefined) ??
       getPlacementCalculatedFieldId(spec);
     if (!fieldId) throw new Error('addPlacement: fieldId is required');
-    const position = spec.position ?? config.placements.filter((p) => p.area === spec.area).length;
+    const areaPlacements = placementsInArea(config.placements, spec.area);
+    const position = clampPlacementPosition(
+      spec.position ?? areaPlacements.length,
+      areaPlacements.length,
+    );
     const placement: PublicPivotPlacement = {
       placementId:
         spec.placementId ??
@@ -885,17 +985,25 @@ export class PivotBridge implements IPivotBridge {
     if (spec.displayName) {
       placement.displayName = spec.displayName;
     }
+    if (spec.area === 'value') {
+      placement.displayName = automaticPivotValuePlacementDisplayName({
+        config,
+        placement,
+        aggregateFunction,
+        displayName: spec.displayName,
+      });
+    }
     if (spec.showValuesAs) {
       placement.showValuesAs = spec.showValuesAs;
     }
     if (spec.numberFormat) {
       placement.numberFormat = spec.numberFormat;
     }
-    const placements = [...config.placements, placement].map((p) => ({ ...p }));
-    let nextPosition = 0;
-    for (const p of placements) {
-      if (p.area === spec.area) p.position = nextPosition++;
-    }
+    areaPlacements.splice(position, 0, placement);
+    const placements = [
+      ...config.placements.filter((p) => p.area !== spec.area).map((p) => ({ ...p })),
+      ...renumberPlacements(areaPlacements),
+    ];
     await this.updatePivot(
       sheetId,
       pivotId,
@@ -917,9 +1025,20 @@ export class PivotBridge implements IPivotBridge {
   ): Promise<PivotKernelMutationReceipt> {
     const { sheetId, config } = await this.findPivotLocation(pivotId);
     const normalizedPatch = normalizePlacementPatch(patch);
-    const placements = config.placements.map((p) =>
-      getBridgePlacementId(p) === placementId ? { ...p, ...normalizedPatch } : p,
-    );
+    const placements = config.placements.map((p) => {
+      if (getBridgePlacementId(p) !== placementId) return p;
+      if (normalizedPatch.aggregateFunction && p.area === 'value') {
+        return {
+          ...valuePlacementWithAggregate({
+            config,
+            placement: p,
+            aggregateFunction: normalizedPatch.aggregateFunction,
+          }),
+          ...normalizedPatch,
+        };
+      }
+      return { ...p, ...normalizedPatch };
+    });
     await this.updatePivot(
       sheetId,
       pivotId,
@@ -964,19 +1083,27 @@ export class PivotBridge implements IPivotBridge {
     const moving = config.placements.find((p) => getBridgePlacementId(p) === placementId);
     if (!moving) throw new Error(`Pivot placement "${placementId}" not found`);
     const remaining = config.placements.filter((p) => getBridgePlacementId(p) !== placementId);
-    remaining.push({ ...moving, area: toArea, position: toPosition });
-    for (const area of [moving.area, toArea]) {
-      let nextPosition = 0;
-      for (const p of remaining
-        .filter((p) => p.area === area)
-        .sort((a, b) => a.position - b.position)) {
-        p.position = nextPosition++;
-      }
-    }
+    const targetPlacements = placementsInArea(remaining, toArea);
+    const targetPosition = clampPlacementPosition(toPosition, targetPlacements.length);
+    targetPlacements.splice(targetPosition, 0, {
+      ...moving,
+      placementId: moving.placementId ?? placementId,
+      area: toArea,
+      position: targetPosition,
+    });
+
+    const affectedAreas = new Set<ApiPivotFieldArea>([moving.area, toArea]);
+    const placements = [
+      ...remaining.filter((p) => !affectedAreas.has(p.area)).map((p) => ({ ...p })),
+      ...(moving.area === toArea
+        ? []
+        : renumberPlacements(placementsInArea(remaining, moving.area))),
+      ...renumberPlacements(targetPlacements),
+    ];
     await this.updatePivot(
       sheetId,
       pivotId,
-      { placements: remaining },
+      { placements },
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
     return buildPivotBridgeReceipt(pivotId, 'movePlacement', placementId);
@@ -1022,16 +1149,35 @@ export class PivotBridge implements IPivotBridge {
     valuePlacementId: PlacementId,
     config: { order: SortOrder; columnKey?: string } | null,
   ): Promise<PivotKernelMutationReceipt> {
+    const { config: pivotConfig } = await this.findPivotLocation(pivotId);
+    const axisPlacement = pivotConfig.placements.find(
+      (placement) => getBridgePlacementId(placement) === axisPlacementId,
+    );
+    if (!axisPlacement) throw new Error(`Pivot placement "${axisPlacementId}" not found`);
+    if (axisPlacement.area !== 'row' && axisPlacement.area !== 'column') {
+      throw new Error('setSortByValue: Axis placement must be in the row or column area');
+    }
+
+    let sortByValue: PublicPivotPlacement['sortByValue'];
+    if (config) {
+      const valuePlacement = pivotConfig.placements.find(
+        (placement) => getBridgePlacementId(placement) === valuePlacementId,
+      );
+      if (!valuePlacement) throw new Error(`Pivot placement "${valuePlacementId}" not found`);
+      if (valuePlacement.area !== 'value') {
+        throw new Error('setSortByValue: Value placement must be in the value area');
+      }
+      sortByValue = {
+        valueFieldId: valuePlacement.fieldId,
+        valuePlacementId,
+        order: config.order === 'none' ? 'asc' : config.order,
+        columnKey: config.columnKey,
+        columnTupleKey: config.columnKey ? pivotTupleKey(config.columnKey) : undefined,
+      };
+    }
+
     return this.updatePlacement(pivotId, axisPlacementId, {
-      sortByValue: config
-        ? {
-            valueFieldId: valuePlacementId,
-            valuePlacementId,
-            order: config.order === 'none' ? 'asc' : config.order,
-            columnKey: config.columnKey,
-            columnTupleKey: config.columnKey ? pivotTupleKey(config.columnKey) : undefined,
-          }
-        : undefined,
+      sortByValue,
     });
   }
 
@@ -1070,6 +1216,30 @@ export class PivotBridge implements IPivotBridge {
       ...buildPivotBridgeReceipt(pivotId, 'setExpansion', axisPlacementId),
       mutationResult: { action: 'setExpansion', expanded },
     };
+  }
+
+  async toggleExpanded(
+    sheetId: SheetId,
+    pivotId: string,
+    headerKey: string,
+    isRow: boolean,
+  ): Promise<boolean> {
+    const provider = this.ctx.pivotExpansionProvider;
+    if (!provider) return true;
+    return provider.toggleExpanded(pivotId, headerKey, isRow, sheetId);
+  }
+
+  async setAllExpanded(pivotId: string, expanded: boolean): Promise<void> {
+    this.ctx.pivotExpansionProvider?.setAllExpanded(pivotId, expanded);
+  }
+
+  async getExpansionState(pivotId: string): Promise<PivotExpansionState> {
+    return (
+      this.ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
+        expandedRows: {},
+        expandedColumns: {},
+      }
+    );
   }
 
   /**
@@ -1197,8 +1367,16 @@ export class PivotBridge implements IPivotBridge {
     const dataVersion = this.getDataVersion(sheetId);
 
     try {
+      const mutationHandler = this.ctx.computeBridge.getMutationHandler();
+      const materialize = () =>
+        this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null);
       const result = toPublicPivotTableResult(
-        await this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null),
+        mutationHandler
+          ? await mutationHandler.withPivotUpdateOptions(
+              { reason: 'sourceRangeChanged', refreshPolicy: 'refreshAndMaterialize' },
+              materialize,
+            )
+          : await materialize(),
       );
       await this.ctx.computeBridge.forceRefreshAllViewports();
 
@@ -1220,7 +1398,10 @@ export class PivotBridge implements IPivotBridge {
   /**
    * Refresh all pivot tables that depend on a sheet's data.
    */
-  async refreshDependentPivots(sourceSheetId: SheetId): Promise<void> {
+  async refreshDependentPivots(
+    sourceSheetId: SheetId,
+    changes?: readonly { row: number; col: number }[],
+  ): Promise<void> {
     // Increment data version for this sheet
     const currentVersion = this.dataVersions.get(sourceSheetId) ?? 0;
     this.dataVersions.set(sourceSheetId, currentVersion + 1);
@@ -1234,9 +1415,23 @@ export class PivotBridge implements IPivotBridge {
       const pivots = await this.ctx.computeBridge.pivotGetAll(sheetId);
       for (const pivot of pivots) {
         const publicPivot = toPublicPivotConfig(pivot);
-        if (pivotUsesSourceSheet(publicPivot, sourceSheetId, sourceName)) {
-          await this.compute(sheetId, pivot.id);
+        if (
+          pivotUsesSourceSheet(publicPivot, sourceSheetId, sourceName) &&
+          sourceChangesAffectPivot(changes, publicPivot)
+        ) {
+          await this.refresh(sheetId, pivot.id);
         }
+      }
+    }
+  }
+
+  async refreshAllPivots(): Promise<void> {
+    const sheetIds = await this.ctx.computeBridge.getAllSheetIds();
+    for (const sheetIdValue of sheetIds) {
+      const sheetId = toSheetId(sheetIdValue as string);
+      const pivots = await this.ctx.computeBridge.pivotGetAll(sheetId);
+      for (const pivot of pivots) {
+        await this.refresh(sheetId, pivot.id);
       }
     }
   }
@@ -1506,9 +1701,15 @@ export class PivotBridge implements IPivotBridge {
       this.ctx.eventBus.on('pivot:created', handlePivotChange),
       this.ctx.eventBus.on('pivot:updated', handlePivotChange),
       this.ctx.eventBus.on('pivot:deleted', handlePivotChange),
+      this.ctx.eventBus.on('cell:changed', (event: CellChangedEvent) => {
+        void this.refreshDependentPivots(toSheetId(event.sheetId), [
+          { row: event.row, col: event.col },
+        ]);
+      }),
+      this.ctx.eventBus.on('cells:batch-changed', (event: CellsBatchChangedEvent) => {
+        void this.refreshDependentPivots(toSheetId(event.sheetId), event.changes);
+      }),
     );
-
-    // Data change observation is handled by EventBus / MutationResultHandler.
   }
 
   private notifySubscribers(

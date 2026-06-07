@@ -20,6 +20,7 @@ fn make_regression_config(
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: crate::types::CellRange::new(0, 0, 8, 4),
+        output_sheet_id: None,
         output_sheet_name: "sheet1".to_string(),
         output_location: crate::types::OutputLocation { row: 0, col: 0 },
         fields,

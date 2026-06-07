@@ -4,10 +4,19 @@ import {
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
 } from '../../core/config-to-spec/fields';
-import { isLayerSpec, type ChartSpec, type EncodingSpec, type MarkSpec } from '../../grammar/spec';
+import {
+  isLayerSpec,
+  type ChartSpec,
+  type EncodingSpec,
+  type MarkSpec,
+  type StockGlyphVisualSpec,
+} from '../../grammar/spec';
 
 export function isNativeStockLayerSpec(spec: ChartSpec): boolean {
+  if (markType(spec) === 'stockGlyph') return true;
   if (!isLayerSpec(spec)) return false;
+
+  if (spec.layer.some((layer) => markType(layer) === 'stockGlyph')) return true;
 
   const hasWick = spec.layer.some(
     (layer) =>
@@ -24,6 +33,19 @@ export function isNativeStockLayerSpec(spec: ChartSpec): boolean {
 }
 
 export function stockLayerUsesOpenClose(spec: ChartSpec): boolean | undefined {
+  const stockGlyph = stockGlyphSpec(spec);
+  if (stockGlyph) {
+    const mark = stockGlyph.mark;
+    const markSpec = typeof mark === 'object' ? mark : undefined;
+    if (markSpec?.stockSubType === 'ohlc' || markSpec?.stockSubType === 'volume-ohlc') {
+      return true;
+    }
+    if (markSpec?.stockSubType === 'hlc' || markSpec?.stockSubType === 'volume-hlc') {
+      return false;
+    }
+    if (markSpec?.stockOpenField !== undefined) return true;
+  }
+
   if (!isLayerSpec(spec)) return undefined;
 
   return spec.layer.some(
@@ -35,6 +57,8 @@ export function stockLayerUsesOpenClose(spec: ChartSpec): boolean | undefined {
 }
 
 export function stockLayerEncoding(spec: ChartSpec): EncodingSpec | undefined {
+  const stockGlyph = stockGlyphSpec(spec);
+  if (stockGlyph?.encoding) return stockGlyph.encoding;
   if (!isLayerSpec(spec)) return spec.encoding;
 
   const priceLayer =
@@ -55,6 +79,18 @@ export function stockLayerEncoding(spec: ChartSpec): EncodingSpec | undefined {
     );
 
   return priceLayer?.encoding ?? spec.encoding;
+}
+
+export function stockLayerVisual(spec: ChartSpec): StockGlyphVisualSpec | undefined {
+  const stockGlyph = stockGlyphSpec(spec);
+  const mark = stockGlyph?.mark;
+  return typeof mark === 'object' ? mark.stockVisual : undefined;
+}
+
+function stockGlyphSpec(spec: ChartSpec): ChartSpec | undefined {
+  if (markType(spec) === 'stockGlyph') return spec;
+  if (!isLayerSpec(spec)) return undefined;
+  return spec.layer.find((layer) => markType(layer) === 'stockGlyph');
 }
 
 function markType(spec: ChartSpec): string | undefined {

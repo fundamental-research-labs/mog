@@ -38,6 +38,11 @@ import {
   normalizeFloatingObjectForStorage,
   normalizeFloatingObjectUpdateForStorage,
 } from './floating-object-geometry-normalization';
+import {
+  splitTableHeaderWritesForSetCells,
+  type PositionedCellInput,
+  type TableHeaderRename,
+} from './table-header-write-intercept';
 
 // Generated types — source of truth from Rust snapshot-types
 import type {
@@ -78,8 +83,11 @@ import type {
   FloatingObjectChange,
   GroupDefinition,
   GroupingChange,
+  ImportDiagnostic as WireImportDiagnostic,
   MergeChange,
   MutationResult,
+  RuntimeDiagnosticsOptions as WireRuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage as WireRuntimeDiagnosticsPage,
   RustWorkbookSettingsPatch,
   NamedRangeChange,
   OutlineLevel,
@@ -105,6 +113,8 @@ import type {
   RecalcValidationAnnotation,
   RecalcValidationError,
   RemoveDuplicatesResult,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
   Scenario,
   ScenarioCreateInput,
   ScenarioCreateResult,
@@ -217,6 +227,8 @@ export type {
   RecalcValidationAnnotation,
   RecalcValidationError,
   RemoveDuplicatesResult,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
   Scenario,
   ScenarioCreateInput,
   ScenarioCreateResult,
@@ -639,6 +651,23 @@ export class ComputeBridge extends GeneratedBridgeBase {
   override async freezeColumns(sheetId: SheetId, count: number): Promise<MutationResult> {
     const current = await this.getFrozenPanesQuery(sheetId);
     return this.setFrozenPanes(sheetId, current.rows, count);
+  }
+
+  override completeDeferredHydration(): Promise<MutationResult> {
+    const run = () =>
+      this.core.mutate(
+        this.core.transport.call<[Uint8Array, MutationResult]>(
+          'compute_complete_deferred_hydration',
+          { docId: this.core.docId },
+        ),
+      );
+    const mutationHandler = this.core.getMutationHandler();
+    return mutationHandler
+      ? mutationHandler.withPivotUpdateOptions(
+          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+          run,
+        )
+      : run();
   }
 
   setCellMetadataCache(cache: CellMetadataCache | null): void {
@@ -1498,6 +1527,59 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.applyChanges(edits, true);
   }
 
+  async setCellValueParsed(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    rawInput: string,
+  ): Promise<MutationResult> {
+    const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(this, sheetId, [
+      { row, col, input: { kind: 'parse', text: rawInput } },
+    ]);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
+    return super.setCellValueParsed(sheetId, row, col, rawInput);
+  }
+
+  async setCellValuesParsed(
+    sheetId: SheetId,
+    updates: [number, number, string][],
+  ): Promise<MutationResult> {
+    const edits = updates.map(
+      ([row, col, text]) => ({ row, col, input: { kind: 'parse', text } }) as const,
+    );
+    const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(
+      this,
+      sheetId,
+      edits,
+    );
+    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
+    return super.setCellValuesParsed(
+      sheetId,
+      normalEdits.map((edit) => {
+        if (edit.input.kind !== 'parse') {
+          throw new Error(`Expected parsed cell input, got ${edit.input.kind}`);
+        }
+        return [edit.row, edit.col, edit.input.text] as [number, number, string];
+      }),
+    );
+  }
+
+  async setCellValueAsText(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    value: string,
+  ): Promise<MutationResult> {
+    const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(this, sheetId, [
+      { row, col, input: { kind: 'literal', text: value } },
+    ]);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
+    return super.setCellValueAsText(sheetId, row, col, value);
+  }
+
   /** Set cells by position. Converts to tuples for generated batchSetCellsByPosition.
    *
    * Passes `skip_cycle_check: true` — this is a trusted bulk path (ws.setCells,
@@ -1508,9 +1590,20 @@ export class ComputeBridge extends GeneratedBridgeBase {
    */
   async setCellsByPosition(
     sheetId: SheetId,
-    edits: Array<{ row: number; col: number; input: CellInput }>,
+    edits: PositionedCellInput[],
   ): Promise<MutationResult> {
-    const tuples: [SheetId, number, number, CellInput][] = edits.map(
+    const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(
+      this,
+      sheetId,
+      edits,
+    );
+    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+
+    if (normalEdits.length === 0) {
+      return headerResult ?? emptyMutationResult();
+    }
+
+    const tuples: [SheetId, number, number, CellInput][] = normalEdits.map(
       (e) => [sheetId, e.row, e.col, e.input] as [SheetId, number, number, CellInput],
     );
     const result = await this.core.mutate(
@@ -1522,14 +1615,28 @@ export class ComputeBridge extends GeneratedBridgeBase {
           skipCycleCheck: true,
         },
       ),
-      edits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
+      normalEdits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
     );
-    return this.applyDateFormulaFormatCompatibility(sheetId, edits, result);
+    return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
+  }
+
+  private async applyTableHeaderRenames(
+    headerRenames: TableHeaderRename[],
+  ): Promise<MutationResult | null> {
+    let headerResult: MutationResult | null = null;
+    for (const rename of headerRenames) {
+      headerResult = await this.renameTableColumn(
+        rename.tableName,
+        rename.columnIndex,
+        rename.newName,
+      );
+    }
+    return headerResult;
   }
 
   private async applyDateFormulaFormatCompatibility(
     sheetId: SheetId,
-    edits: Array<{ row: number; col: number; input: CellInput }>,
+    edits: PositionedCellInput[],
     result: MutationResult,
   ): Promise<MutationResult> {
     const dateFormulaEdits = edits.filter((edit) => isParsedTopLevelDateFormula(edit.input));
@@ -1565,6 +1672,27 @@ export class ComputeBridge extends GeneratedBridgeBase {
   async patchWorkbookSettings(settings: RustWorkbookSettingsPatch): Promise<MutationResult> {
     this.core.ensureInitialized();
     return super.patchWorkbookSettings(settings);
+  }
+
+  getImportDiagnostics(): Promise<WireImportDiagnostic[]> {
+    this.core.ensureInitialized();
+    return this.core.query(
+      this.core.transport.call<WireImportDiagnostic[]>('compute_get_import_diagnostics', {
+        docId: this.core.docId,
+      }),
+    );
+  }
+
+  getRuntimeDiagnostics(
+    options: WireRuntimeDiagnosticsOptions = {},
+  ): Promise<WireRuntimeDiagnosticsPage> {
+    this.core.ensureInitialized();
+    return this.core.query(
+      this.core.transport.call<WireRuntimeDiagnosticsPage>('compute_get_runtime_diagnostics', {
+        docId: this.core.docId,
+        options,
+      }),
+    );
   }
 
   // resetWorkbookSettings, renameTableColumn, setCalculatedColumnFormula,

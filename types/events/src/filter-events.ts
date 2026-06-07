@@ -6,10 +6,34 @@
 
 import type { CellRange } from '@mog/types-core';
 import type { BaseEvent, StructureChangeSource } from '@mog/types-commands/event-base';
+import type { RuntimeOperationDiagnostic } from '@mog/types-data/data/diagnostics';
 
 export type FilterKind = 'autoFilter' | 'tableFilter' | 'advancedFilter';
 
-export interface FilterCreatedEvent extends BaseEvent {
+export type FilterCapability = 'supported' | 'unsupported';
+
+export type ImportFilterUnsupportedReason =
+  | 'unknownDynamicType'
+  | 'unknownCustomOperator'
+  | 'dateGroupUnsupported'
+  | 'dynamicTemporalContextUnsupported'
+  | 'valueTokenUnresolved'
+  | 'valueTypeUnsupported'
+  | 'colorDxfUnresolved'
+  | 'iconFilterUnsupported'
+  | 'unknownExtension'
+  | 'tableFilterShapeUnsupported';
+
+export interface FilterEventMetadata {
+  tableId?: string;
+  capability?: FilterCapability;
+  unsupportedReasons?: readonly ImportFilterUnsupportedReason[];
+  hasActiveFilter?: boolean;
+  clearable?: boolean;
+  diagnostics?: readonly RuntimeOperationDiagnostic[];
+}
+
+export interface FilterCreatedEvent extends BaseEvent, FilterEventMetadata {
   type: 'filter:created';
   sheetId: string;
   filterId: string;
@@ -19,7 +43,7 @@ export interface FilterCreatedEvent extends BaseEvent {
   source: StructureChangeSource;
 }
 
-export interface FilterUpdatedEvent extends BaseEvent {
+export interface FilterUpdatedEvent extends BaseEvent, FilterEventMetadata {
   type: 'filter:updated';
   sheetId: string;
   filterId: string;
@@ -30,7 +54,7 @@ export interface FilterUpdatedEvent extends BaseEvent {
   source: StructureChangeSource;
 }
 
-export interface FilterAppliedEvent extends BaseEvent {
+export interface FilterAppliedEvent extends BaseEvent, FilterEventMetadata {
   type: 'filter:applied';
   sheetId: string;
   filterId: string;
@@ -40,7 +64,7 @@ export interface FilterAppliedEvent extends BaseEvent {
   source?: StructureChangeSource;
 }
 
-export interface FilterDeletedEvent extends BaseEvent {
+export interface FilterDeletedEvent extends BaseEvent, FilterEventMetadata {
   type: 'filter:deleted';
   sheetId: string;
   filterId: string;
@@ -48,7 +72,7 @@ export interface FilterDeletedEvent extends BaseEvent {
   source: StructureChangeSource;
 }
 
-export interface FilterClearedEvent extends BaseEvent {
+export interface FilterClearedEvent extends BaseEvent, FilterEventMetadata {
   type: 'filter:cleared';
   sheetId: string;
   filterId: string;

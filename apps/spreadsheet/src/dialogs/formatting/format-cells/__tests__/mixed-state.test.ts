@@ -7,7 +7,8 @@
  * show as mixed.
  * - Properties NOT in the defaults table normalize to `undefined` on both
  * sides — so e.g. an undefined `gradientFill` on every cell is "agreed".
- * - The merged format strips ResolvedCellFormat's null-for-absent fields too.
+ * - The merged format materializes default-backed null-for-absent fields when
+ *   they are not mixed, so controls do not confuse default with indeterminate.
  */
 
 import type { CellFormat } from '@mog-sdk/contracts/core';
@@ -123,11 +124,34 @@ describe('buildMergedFormat', () => {
     expect(merged.fontSize).toBe(12);
   });
 
-  it('strips ResolvedCellFormat null-for-absent fields too', () => {
-    const base = { bold: null, fontSize: 12 } as unknown as Partial<CellFormat>;
+  it('materializes default-backed ResolvedCellFormat null-for-absent fields', () => {
+    const base = {
+      bold: null,
+      shrinkToFit: null,
+      horizontalAlign: null,
+      fontSize: 12,
+    } as unknown as Partial<CellFormat>;
     const merged = buildMergedFormat(base, new Set());
-    expect(merged.bold).toBeUndefined();
+    expect(merged.bold).toBe(false);
+    expect(merged.shrinkToFit).toBe(false);
+    expect(merged.horizontalAlign).toBe('general');
     expect(merged.fontSize).toBe(12);
+  });
+
+  it('keeps mixed default-backed properties undefined while materializing agreed siblings', () => {
+    const base = {
+      wrapText: null,
+      shrinkToFit: null,
+    } as unknown as Partial<CellFormat>;
+    const merged = buildMergedFormat(base, new Set(['wrapText']));
+    expect(merged.wrapText).toBeUndefined();
+    expect(merged.shrinkToFit).toBe(false);
+  });
+
+  it('still strips null fields that have no declared default', () => {
+    const base = { fontColor: null } as unknown as Partial<CellFormat>;
+    const merged = buildMergedFormat(base, new Set());
+    expect(merged.fontColor).toBeUndefined();
   });
 
   it('preserves agreed properties unchanged', () => {

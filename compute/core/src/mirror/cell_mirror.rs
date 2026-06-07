@@ -134,8 +134,8 @@ impl CellMirror {
     /// `None` if no CSE anchor covers the position.
     ///
     /// Dynamic-array spill anchors (which are NOT in `cse_anchors`)
-    /// return `None` here; their members may receive blocker writes
-    /// without rejection (Excel `#SPILL!` semantics).
+    /// return `None` here; use [`Self::dynamic_spill_member_covering`]
+    /// for their read-only member guard.
     pub fn cse_anchor_covering(
         &self,
         sheet: &SheetId,
@@ -147,6 +147,30 @@ impl CellMirror {
             return None;
         }
         let anchor_pos = self.resolve_position(&source)?;
+        Some((source, anchor_pos))
+    }
+
+    /// Returns the dynamic-array spill anchor whose extent covers
+    /// `(sheet, row, col)` as a non-anchor member.
+    ///
+    /// Pre-existing real cells can still block a dynamic-array formula when
+    /// the formula evaluates. Once a projection exists, however, its
+    /// materialized members are not independently editable; user edits must be
+    /// rejected before a blocker cell is created.
+    pub fn dynamic_spill_member_covering(
+        &self,
+        sheet: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> Option<(CellId, SheetPos)> {
+        let (source, _, _) = self.projection_registry.resolve(sheet, row, col)?;
+        if self.cse_anchors.contains(&source) {
+            return None;
+        }
+        let anchor_pos = self.resolve_position(&source)?;
+        if anchor_pos.row() == row && anchor_pos.col() == col {
+            return None;
+        }
         Some((source, anchor_pos))
     }
 

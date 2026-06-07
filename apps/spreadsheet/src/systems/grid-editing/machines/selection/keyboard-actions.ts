@@ -179,9 +179,10 @@ const extendSelection = assign(
  * Move the picked formula reference without moving the cell being edited.
  *
  * Formula point-mode visually moves the highlighted reference range (B1, C1,
- * etc.) while the dark active cell and typing destination remain the original
- * editing cell. The normal moveActiveCell action cannot be reused here because
- * it replaces activeCell with the referenced cell.
+ * etc.) while the editor machine keeps the typing destination in
+ * context.editingCell. The normal moveActiveCell action cannot be reused here
+ * because formula point-mode also replaces the active formula token instead of
+ * navigating/committing.
  */
 const moveFormulaRange = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -198,6 +199,7 @@ const moveFormulaRange = assign(
     return {
       pendingRange: singleCellRange(newCell),
       committedRanges: [],
+      activeCell: newCell,
       anchor: newCell,
       direction: 'down-right' as const,
       tabOriginCol: null,
@@ -224,6 +226,7 @@ const extendFormulaRange = assign(
     return {
       pendingRange: rangeFromAnchorAndCell(anchor, newEnd),
       committedRanges: [],
+      activeCell: newEnd,
       anchor,
       direction: computeDirection(anchor, newEnd),
       tabOriginCol: null,

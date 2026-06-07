@@ -9,6 +9,7 @@
 
 import { isLayerSpec, type ChartSpec, type DataRow, type MarkType } from '../../grammar/spec';
 import type { ExportOptions, ImageFallbackResult } from '../ooxml-types';
+import { isDoughnutRingLayerSpec } from './pie-layer-detection';
 import { isNativeStockLayerSpec } from './stock-layer-detection';
 
 // =============================================================================
@@ -38,7 +39,12 @@ const CONDITIONAL_FALLBACK_TYPES: MarkType[] = ['rect']; // Heatmap may or may n
 export function shouldUseImageFallback(spec: ChartSpec): boolean {
   // Check for complex layered charts (more than 2 layers is risky)
   // This check comes first because layered charts may not have a direct mark
-  if (isLayerSpec(spec) && spec.layer.length > 2 && !isNativeStockLayerSpec(spec)) {
+  if (
+    isLayerSpec(spec) &&
+    spec.layer.length > 2 &&
+    !isNativeStockLayerSpec(spec) &&
+    !isDoughnutRingLayerSpec(spec)
+  ) {
     return true;
   }
 
@@ -94,7 +100,12 @@ export function getImageFallbackReason(spec: ChartSpec): string | null {
     return 'Violin plots have no Excel equivalent';
   }
 
-  if (isLayerSpec(spec) && spec.layer.length > 2 && !isNativeStockLayerSpec(spec)) {
+  if (
+    isLayerSpec(spec) &&
+    spec.layer.length > 2 &&
+    !isNativeStockLayerSpec(spec) &&
+    !isDoughnutRingLayerSpec(spec)
+  ) {
     return 'Complex layered charts cannot be represented in Excel';
   }
 
@@ -256,6 +267,8 @@ export function generateImageRelationshipXML(relId: string, imagePath: string): 
  * Get the Excel chart type equivalent for a ChartSpec, or null if no equivalent.
  */
 export function getExcelChartType(spec: ChartSpec): string | null {
+  if (isDoughnutRingLayerSpec(spec)) return 'doughnutChart';
+
   const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark?.type;
 
   switch (markType) {

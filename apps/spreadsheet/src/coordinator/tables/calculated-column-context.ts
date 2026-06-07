@@ -37,6 +37,14 @@ export interface CalculatedColumnCellContext {
   calculatedFormula?: string;
 }
 
+export interface TableHeaderCellContext {
+  table: TableInfo;
+  tableId: string;
+  tableName: string;
+  columnIndex: number;
+  columnName: string;
+}
+
 /**
  * Resolve the calculated-column context for a table data body cell.
  *
@@ -73,6 +81,41 @@ export async function resolveCalculatedColumnCellContext(
     columnIndex,
     columnName: column.name,
     calculatedFormula: column.calculatedFormula,
+  };
+}
+
+/**
+ * Resolve the table-header context for a cell edit.
+ *
+ * Table header display is sourced from table column metadata. Interactive edits
+ * to a header cell must therefore rename the table column instead of writing a
+ * plain cell value.
+ */
+export async function resolveTableHeaderCellContext(
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  workbook: Workbook,
+): Promise<TableHeaderCellContext | undefined> {
+  const ws = workbook.getSheetById(sheetId);
+  const table = await ws.tables.getAtCell(row, col);
+  if (!table?.hasHeaderRow) return undefined;
+
+  const parsed = parseTableA1Range(table.range);
+  if (!parsed) return undefined;
+  if (row !== parsed.startRow) return undefined;
+  if (col < parsed.startCol || col > parsed.endCol) return undefined;
+
+  const columnIndex = col - parsed.startCol;
+  const column = table.columns?.[columnIndex];
+  if (!column) return undefined;
+
+  return {
+    table,
+    tableId: table.name,
+    tableName: table.name,
+    columnIndex,
+    columnName: column.name,
   };
 }
 

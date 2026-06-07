@@ -244,8 +244,8 @@ impl ComputeCore {
 
     /// Ultra-minimal init for deferred-hydration XLSX import.
     /// Seeds formula text for materialized cells but defers graph construction.
-    /// Builds CellMirror from only the first sheet (viewport-visible),
-    /// deferring the remaining sheets to complete_deferred_hydration.
+    /// Builds CellMirror from the sparse first-paint snapshot, which includes
+    /// all sheet headers but only the critical sheet's materialized cells.
     pub fn init_from_snapshot_viewport_only(
         &mut self,
         mirror: &mut CellMirror,
@@ -268,37 +268,19 @@ impl ComputeCore {
         self.rebuild_ordered_sheets_cache();
         let deferred_snapshot = snapshot.clone();
 
-        // Build CellMirror from only the first sheet to minimize critical path.
-        // Named ranges, tables, pivot tables still come from the full snapshot.
-        let first_sheet_snapshot = WorkbookSnapshot {
-            sheets: if snapshot.sheets.is_empty() {
-                vec![]
-            } else {
-                vec![snapshot.sheets[0].clone()]
-            },
-            named_ranges: snapshot.named_ranges,
-            tables: snapshot.tables,
-            pivot_tables: snapshot.pivot_tables,
-            data_table_regions: snapshot.data_table_regions,
-            iterative_calc: snapshot.iterative_calc,
-            max_iterations: snapshot.max_iterations,
-            max_change: snapshot.max_change,
-            calculation_settings: snapshot.calculation_settings,
-        };
-        let first_sheet_formula_cells =
-            Self::extract_formula_cells_from_snapshot(&first_sheet_snapshot);
+        let materialized_formula_cells = Self::extract_formula_cells_from_snapshot(&snapshot);
         self.cell_formula_text = FxHashMap::with_capacity_and_hasher(
-            first_sheet_formula_cells.len(),
+            materialized_formula_cells.len(),
             Default::default(),
         );
-        self.seed_cell_formula_text(&first_sheet_formula_cells);
+        self.seed_cell_formula_text(&materialized_formula_cells);
 
         // Store the viewport-only marker so graph/recalc callers can reject
         // partial workbook graph construction until full hydration completes.
         // Readback does not depend on this marker.
         self.deferred_snapshot = Some(deferred_snapshot);
 
-        *mirror = CellMirror::from_snapshot(first_sheet_snapshot)?;
+        *mirror = CellMirror::from_snapshot(snapshot)?;
 
         Ok(RecalcResult::empty())
     }
@@ -324,17 +306,27 @@ impl ComputeCore {
             self.register_all_variables(mirror);
             return Ok(());
         }
+        self.ensure_graph_construction_ready()?;
+
+        Ok(())
+    }
+
+    pub(crate) fn ensure_graph_construction_ready(&self) -> Result<(), ComputeError> {
         // Viewport-only XLSX import does not carry complete workbook graph
         // context: cross-sheet references, names, and later-sheet cells can be
         // absent. Formula readback is seeded separately, but graph construction
         // must wait for full deferred hydration.
         if self.deferred_snapshot.is_some() {
-            return Err(ComputeError::InvalidInput {
-                message: "dependency graph construction requires deferred XLSX hydration to complete before reading a viewport-only workbook snapshot".to_string(),
-            });
+            return Err(Self::deferred_graph_construction_error());
         }
 
         Ok(())
+    }
+
+    fn deferred_graph_construction_error() -> ComputeError {
+        ComputeError::InvalidInput {
+            message: "dependency graph construction requires deferred XLSX hydration to complete before reading a viewport-only workbook snapshot".to_string(),
+        }
     }
 
     pub(super) fn seed_cell_formula_text(&mut self, formula_cells: &[(CellId, SheetId, String)]) {
@@ -480,6 +472,7 @@ impl ComputeCore {
                                 (
                                     cell_id,
                                     Ok((
+                                        sheet_id,
                                         ast,
                                         extracted.value_deps,
                                         extracted.formula_text_deps,
@@ -513,6 +506,7 @@ impl ComputeCore {
             for (cell_id, result) in compiled {
                 match result {
                     Ok((
+                        sheet_id,
                         ast,
                         deps,
                         formula_text_deps,
@@ -522,6 +516,12 @@ impl ComputeCore {
                         is_dynamic_array,
                         range_keys,
                     )) => {
+                        let rendered_formula = Self::rendered_formula_string_or_fallback(
+                            mirror,
+                            sheet_id,
+                            identity_formula.as_ref(),
+                            &formula,
+                        );
                         mirror.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, deps));
                         self.formula_text_deps.replace(cell_id, formula_text_deps);
@@ -535,7 +535,7 @@ impl ComputeCore {
                                 is_dynamic_array,
                             },
                         );
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         if !range_keys.is_empty() {
                             self.cell_range_keys.insert(cell_id, range_keys);
@@ -641,6 +641,12 @@ impl ComputeCore {
                             plan.into_iter().collect::<Vec<_>>()
                         };
 
+                        let rendered_formula = Self::rendered_formula_string_or_fallback(
+                            mirror,
+                            sheet_id,
+                            identity_formula.as_ref(),
+                            &formula,
+                        );
                         mirror.set_formula(&cell_id, identity_formula);
                         graph_edges.push((cell_id, extracted.value_deps));
                         self.formula_text_deps
@@ -655,7 +661,7 @@ impl ComputeCore {
                                 is_dynamic_array,
                             },
                         );
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         if !range_keys.is_empty() {
                             self.cell_range_keys.insert(cell_id, range_keys);

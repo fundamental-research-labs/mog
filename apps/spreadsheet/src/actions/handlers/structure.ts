@@ -46,6 +46,10 @@ import {
   insertColumnLeftSelection,
   insertRowAboveSelection,
 } from './structure-row-column';
+import {
+  getAutofitColumnsForSelection,
+  getAutofitRowsForSelection,
+} from '../../systems/grid-editing/features/autofit/selection-targets';
 
 // =============================================================================
 // Type Helpers
@@ -147,6 +151,35 @@ function getSelectedColsOrActive(
 ): number[] {
   const cols = getSelectedCols(ranges);
   return cols.length > 0 ? cols : [activeCell.col];
+}
+
+function getHiddenIndexesForUnhideSelection(
+  ranges: CellRange[],
+  activeCell: { row: number; col: number },
+  hiddenIndexes: Iterable<number>,
+  axis: 'row' | 'col',
+): number[] {
+  const targetRanges = getRangesOrActiveCell(ranges, activeCell);
+  const insideTargets = new Set<number>();
+  const adjacentTargets = new Set<number>();
+
+  for (const hiddenIndex of hiddenIndexes) {
+    for (const range of targetRanges) {
+      const start = axis === 'row' ? range.startRow : range.startCol;
+      const end = axis === 'row' ? range.endRow : range.endCol;
+      if (hiddenIndex >= start && hiddenIndex <= end) {
+        insideTargets.add(hiddenIndex);
+        break;
+      }
+      if ((start > 0 && hiddenIndex === start - 1) || hiddenIndex === end + 1) {
+        adjacentTargets.add(hiddenIndex);
+        break;
+      }
+    }
+  }
+
+  const targets = insideTargets.size > 0 ? insideTargets : adjacentTargets;
+  return Array.from(targets).sort((a, b) => a - b);
 }
 
 // =============================================================================
@@ -286,19 +319,25 @@ export const UNHIDE_ROW: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const rows = getSelectedRowsOrActive(ranges, activeCell);
-  if (rows.length > 0) {
-    return withProtectionFeedback(deps, async () => {
-      for (const sheetId of targetSheetIds) {
-        const ws = deps.workbook.getSheetById(sheetId);
-        for (const row of rows) {
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      const hiddenRows =
+        typeof ws.layout.getHiddenRowsBitmap === 'function'
+          ? await ws.layout.getHiddenRowsBitmap()
+          : new Set<number>();
+      const rows =
+        hiddenRows.size > 0
+          ? getHiddenIndexesForUnhideSelection(ranges, activeCell, hiddenRows, 'row')
+          : [];
+      const targetRows = rows.length > 0 ? rows : getSelectedRowsOrActive(ranges, activeCell);
+      if (targetRows.length > 0) {
+        for (const row of targetRows) {
           await ws.layout.setRowVisible(row, true);
         }
       }
-    });
-  }
-
-  return handled();
+    }
+  });
 };
 
 // =============================================================================
@@ -340,19 +379,25 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const cols = getSelectedColsOrActive(ranges, activeCell);
-  if (cols.length > 0) {
-    return withProtectionFeedback(deps, async () => {
-      for (const sheetId of targetSheetIds) {
-        const ws = deps.workbook.getSheetById(sheetId);
-        for (const col of cols) {
+  return withProtectionFeedback(deps, async () => {
+    for (const sheetId of targetSheetIds) {
+      const ws = deps.workbook.getSheetById(sheetId);
+      const hiddenCols =
+        typeof ws.layout.getHiddenColumnsBitmap === 'function'
+          ? await ws.layout.getHiddenColumnsBitmap()
+          : new Set<number>();
+      const cols =
+        hiddenCols.size > 0
+          ? getHiddenIndexesForUnhideSelection(ranges, activeCell, hiddenCols, 'col')
+          : [];
+      const targetCols = cols.length > 0 ? cols : getSelectedColsOrActive(ranges, activeCell);
+      if (targetCols.length > 0) {
+        for (const col of targetCols) {
           await ws.layout.setColumnVisible(col, true);
         }
       }
-    });
-  }
-
-  return handled();
+    }
+  });
 };
 
 // =============================================================================
@@ -371,14 +416,15 @@ export const UNHIDE_COLUMN: AsyncActionHandler = async (deps) => {
 export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const { activeCell, ranges } = getSelectionContext(deps);
-  const rows = getSelectedRowsOrActive(ranges, activeCell);
+  const ws = deps.workbook.getSheetById(sheetId);
+  const usedRange = await ws.getUsedRange();
+  const rows = getAutofitRowsForSelection(ranges, activeCell, usedRange);
 
   const [{ autoFitRows }, { getTextMeasurementService }] = await Promise.all([
     import('../../systems/grid-editing/features/autofit'),
     import('@mog/grid-renderer'),
   ]);
   const textMeasurement = getTextMeasurementService();
-  const ws = deps.workbook.getSheetById(sheetId);
   return withProtectionFeedback(deps, () =>
     autoFitRows(
       sheetId,
@@ -397,14 +443,15 @@ export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
 export const AUTO_FIT_COLUMN_WIDTH: AsyncActionHandler = async (deps) => {
   const sheetId = deps.getActiveSheetId();
   const { activeCell, ranges } = getSelectionContext(deps);
-  const cols = getSelectedColsOrActive(ranges, activeCell);
+  const ws = deps.workbook.getSheetById(sheetId);
+  const usedRange = await ws.getUsedRange();
+  const cols = getAutofitColumnsForSelection(ranges, activeCell, usedRange);
 
   const [{ autoFitColumns }, { getTextMeasurementService }] = await Promise.all([
     import('../../systems/grid-editing/features/autofit'),
     import('@mog/grid-renderer'),
   ]);
   const textMeasurement = getTextMeasurementService();
-  const ws = deps.workbook.getSheetById(sheetId);
   return withProtectionFeedback(deps, () =>
     autoFitColumns(
       sheetId,

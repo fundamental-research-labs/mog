@@ -4,7 +4,7 @@ use super::*;
 pub(in crate::storage::engine) fn from_xlsx_bytes(
     xlsx_data: &[u8],
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_xlsx(xlsx_data)?;
+    let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
 
     let (mirror, compute, recalc_result) = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import", "mirror_compute_rebuild");
@@ -25,6 +25,13 @@ pub(in crate::storage::engine) fn from_xlsx_bytes(
     };
 
     let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
+    engine.import_report = import_report;
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::FullHydration,
+    );
 
     // Register physical phantom cells (created during hydration for merges and
     // hyperlinks on cells with no data) in the GridIndex so position-based
@@ -49,8 +56,16 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes(
     xlsx_data: &[u8],
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_xlsx(xlsx_data)?;
+    let (storage, workbook_snap, phantom_cells, import_report) = parse_and_hydrate_xlsx(xlsx_data)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
+    engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::FullHydration,
+    );
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);
@@ -88,6 +103,7 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         );
         parsed
     };
+    let import_report = parsed.import_report;
     let parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
@@ -306,5 +322,5 @@ pub(in crate::storage::engine) fn parse_and_hydrate_xlsx(
         (storage, id_map)
     };
 
-    Ok((storage, workbook_snap, id_map.phantom_cells))
+    Ok((storage, workbook_snap, id_map.phantom_cells, import_report))
 }

@@ -7,7 +7,7 @@ canvas/rendering packages, and workspace-internal file I/O.
 
 For public setup, start from the shipped package guides instead of importing
 the kernel or implementation packages directly. Current public entry points are
-`@mog-sdk/node`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`,
+`@mog-sdk/sdk`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`,
 `@mog-sdk/sheet-view`, `@mog-sdk/contracts`, and the `@mog-sdk/wasm`/native
 binary wrapper packages. `@mog-sdk/kernel`, `@mog/transport`, `file-io/*`,
 `canvas/*`, `charts`, `table-engine`, and most `@mog/*` packages are

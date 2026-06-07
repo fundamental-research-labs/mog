@@ -80,7 +80,7 @@ DocumentFactory.create()
 ```
 
 Shipped public package consumers should use the public runtime facade that
-matches their host, such as `createWorkbook(...)` from `@mog-sdk/node`,
+matches their host, such as `createWorkbook(...)` from `@mog-sdk/sdk`,
 `@mog-sdk/embed`, or `@mog-sdk/spreadsheet-app`. `@mog-sdk/kernel` is
 `private: true`; its `DocumentFactory` is a workspace-internal document
 lifecycle surface used by the app, SDK boot path, and tests. A workspace
@@ -119,7 +119,7 @@ Common domain areas include:
 The low-level namespace facade in `kernel/src/api/index.ts` currently exposes
 experimental workspace `Cells`, `Sheets`, and `Records` namespaces. The stable
 high-level public Node entry point is the workbook API created by
-`createWorkbook(...)` from `@mog-sdk/node`; the kernel `createWorkbook(...)` is
+`createWorkbook(...)` from `@mog-sdk/sdk`; the kernel `createWorkbook(...)` is
 the workspace implementation behind that SDK surface.
 
 ## Mutation Pipeline

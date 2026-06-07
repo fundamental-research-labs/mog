@@ -18,14 +18,32 @@ import type {
 } from '@mog/types-core/core';
 import type { CFResult } from '@mog/types-formatting/conditional-format/rules';
 import type { SlicerSource, SlicerStyle, TimelineLevel } from '@mog/types-data/data/slicers';
-import type { ColumnFilterCriteria } from '@mog/types-data/data/filter';
 import type {
+  ColumnFilterCriteria,
+  FilterCapability,
+  FilterHeaderInfo,
+  ImportFilterUnsupportedReason,
+} from '@mog/types-data/data/filter';
+import type {
+  AggregateFunction,
+  CalculatedField,
+  CalculatedFieldId,
   DataSourceType,
   PlacementId,
+  PivotExpansionState,
+  PivotFieldArea,
   PivotFieldItems,
+  PivotFilter,
+  PivotKernelMutationReceipt,
+  PivotPlacementMutationReceipt,
   PivotMemberRef,
+  PivotTableConfig as DataPivotTableConfig,
+  PivotTableLayout,
+  PivotTableResult,
+  PivotTableStyle,
   PivotValueRecord,
   ShowValuesAsConfig,
+  SortOrder,
 } from '@mog/types-data/data/pivot';
 import type { TotalFunction } from '@mog/types-data/data/tables';
 import type { SpreadsheetEvent as InternalSpreadsheetEvent } from '@mog/types-events/events';
@@ -624,6 +642,8 @@ export interface GoalSeekResult {
   found: boolean;
   /** The value found for the changing cell (if found) */
   value?: number;
+  /** The target cell value achieved by the proposed changing-cell value */
+  achievedValue?: number;
   /** Number of iterations performed */
   iterations?: number;
 }
@@ -830,6 +850,28 @@ export interface PivotValueField {
   label?: string;
 }
 
+/** Placement-first field insertion spec for a pivot table handle. */
+export interface PivotHandlePlacementSpec {
+  placementId?: PlacementId;
+  fieldId?: string;
+  area: PivotFieldArea;
+  position?: number;
+  source?:
+    | { type: 'field'; fieldId: string }
+    | { type: 'calculatedField'; calculatedFieldId: CalculatedFieldId };
+  aggregateFunction?: AggregateFunction;
+  sortOrder?: SortOrder;
+  displayName?: string;
+  showValuesAs?: ShowValuesAsConfig;
+  numberFormat?: string;
+}
+
+/** Sort a row/column axis by a value placement. */
+export interface PivotValueSortConfig {
+  order: SortOrder;
+  columnKey?: string;
+}
+
 /**
  * Handle for interacting with an existing pivot table.
  *
@@ -837,32 +879,105 @@ export interface PivotValueField {
  * and modify the pivot table's field configuration.
  */
 export interface PivotTableHandle {
-  /** Unique pivot table identifier (readonly) */
-  readonly id: string;
   /** Get the pivot table name */
   getName(): string;
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
+  /** Update the pivot table data configuration. */
+  update(updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>): Promise<void>;
+  /** Delete the pivot table. */
+  delete(): Promise<boolean>;
+  /** Subscribe to computed result updates for this pivot. */
+  subscribeResult(callback: (result: PivotTableResult | null, error?: string) => void): () => void;
+  /** Compute this pivot table result. */
+  compute(forceRefresh?: boolean): Promise<PivotTableResult | null>;
+  /** Get the full range occupied by the rendered pivot table. */
+  getRange(): Promise<CellRange | null>;
   /** Add a field to the row, column, or filter area */
-  /** @deprecated Legacy facade. Prefer placement-id-first pivot mutators. */
-  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): void;
+  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): Promise<void>;
   /** Add a value field with aggregation */
-  /** @deprecated Legacy facade. Prefer placement-id-first pivot mutators. */
-  addValueField(field: string, aggregation: PivotValueField['aggregation'], label?: string): void;
+  addValueField(
+    field: string,
+    aggregation: PivotValueField['aggregation'],
+    label?: string,
+  ): Promise<void>;
+  /** Add a placement to a row, column, value, or filter area. */
+  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotPlacementMutationReceipt>;
   /** Remove a field by name */
-  removeField(fieldName: string): void;
+  removeField(fieldName: string, area?: PivotFieldArea): Promise<void>;
+  /** Remove a specific placement by stable placement ID. */
+  removePlacement(placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
+  /** Move a field to a different area or position. */
+  moveField(
+    fieldName: string,
+    fromArea: PivotFieldArea,
+    toArea: PivotFieldArea,
+    toPosition: number,
+  ): Promise<void>;
+  /** Move a specific placement to a different area or ordered position. */
+  movePlacement(
+    placementId: PlacementId,
+    toArea: PivotFieldArea,
+    toPosition: number,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Change the aggregation function of a value field */
-  changeAggregation(valueFieldLabel: string, newAggregation: PivotValueField['aggregation']): void;
+  changeAggregation(
+    valueFieldLabel: string,
+    newAggregation: PivotValueField['aggregation'],
+  ): Promise<void>;
+  /** Change the aggregation function of a specific value placement. */
+  setPlacementAggregateFunction(
+    placementId: PlacementId,
+    aggregateFunction: AggregateFunction,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Rename a value field's display label */
-  renameValueField(currentLabel: string, newLabel: string): void;
+  renameValueField(currentLabel: string, newLabel: string): Promise<void>;
+  /** Rename a value placement by stable placement ID. */
+  renameValuePlacement(
+    placementId: PlacementId,
+    displayName: string | null,
+  ): Promise<PivotKernelMutationReceipt>;
   /** Refresh the pivot table from its data source */
   refresh(): Promise<void>;
   /** Get all items for all non-value fields */
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */
-  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): void;
+  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
+  /** Set the sort order for a row or column field. */
+  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;
+  /** Set the sort order for a row or column placement. */
+  setPlacementSortOrder(
+    placementId: PlacementId,
+    sortOrder: SortOrder | null,
+  ): Promise<PivotKernelMutationReceipt>;
+  /** Set or clear value sorting on a row or column axis placement. */
+  setSortByValue(
+    axisPlacementId: PlacementId,
+    valuePlacementId: PlacementId,
+    config: PivotValueSortConfig | null,
+  ): Promise<PivotKernelMutationReceipt>;
+  /** Set a filter on a field. */
+  setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
+  /** Remove a filter from a field. */
+  removeFilter(fieldId: string): Promise<void>;
+  /** Set layout options. */
+  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;
+  /** Set style options. */
+  setStyle(style: Partial<PivotTableStyle>): Promise<void>;
+  /** Toggle expansion state for a header. */
+  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;
+  /** Set expansion state for all headers. */
+  setAllExpanded(expanded: boolean): Promise<void>;
+  /** Read expansion state. */
+  getExpansionState(): Promise<PivotExpansionState>;
+  /** Get drill-down data for a pivot cell. */
+  getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;
+  /** Add a calculated field to this pivot. */
+  addCalculatedField(
+    field: CalculatedField,
+  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
   /** Set item visibility by value string -> boolean map */
-  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): void;
+  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;
   /** Get the data source type (range, table, or external). */
   getDataSourceType(): DataSourceType;
   /** Change the source data range without refreshing/materializing. */
@@ -1685,6 +1800,65 @@ export interface FilterDetailInfo {
   tableId?: string;
   /** Advanced Filter metadata, present for advanced filters. */
   advancedFilter?: AdvancedFilterDetailInfo;
+}
+
+/** Compact filter information for UI controls that only need identity and activity. */
+export interface FilterSummaryInfo {
+  /** Filter ID */
+  id: string;
+  /** Filter kind. */
+  filterKind: FilterKind;
+  /** Resolved numeric range of the filter */
+  range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  /** Table ID if this filter is associated with a table. */
+  tableId?: string;
+  /** Number of columns with active criteria. */
+  activeColumnCount: number;
+  /** Whether this filter has any active criteria. */
+  hasActiveCriteria: boolean;
+  /** Whether this filter has active runtime or preserved lossless criteria. */
+  hasActiveFilter?: boolean;
+  /** Whether the active criteria can be cleared through the worksheet filter API. */
+  clearable?: boolean;
+  /** Whether complete filter details are ready without all-sheet materialization. */
+  detailsReady?: boolean;
+  /** Whether the filter is fully owned by the production evaluator. */
+  capability?: FilterCapability;
+  /** Unsupported imported features preserved in lossless metadata. */
+  unsupportedReasons?: readonly ImportFilterUnsupportedReason[];
+}
+
+/** Renderer-ready filter-header entry keyed by sheet row/column. */
+export interface FilterHeaderInfoEntry extends FilterHeaderInfo {
+  /** Header row index, zero-based. */
+  row: number;
+  /** Header column index, zero-based. */
+  col: number;
+  /** Filter kind. */
+  filterKind: FilterKind;
+  /** Resolved numeric range of the filter. */
+  range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  /** Table ID if this filter is associated with a table. */
+  tableId?: string;
+  /** Source object that owns this header button. */
+  sourceType?: 'sheetAutoFilter' | 'tableAutoFilter';
+  /** Whether this filter is fully owned by the production evaluator. */
+  capability?: 'supported' | 'unsupported';
+  /** Unsupported imported features preserved in lossless metadata. */
+  unsupportedReasons?: readonly (
+    | 'unknownDynamicType'
+    | 'unknownCustomOperator'
+    | 'dateGroupUnsupported'
+    | 'dynamicTemporalContextUnsupported'
+    | 'valueTokenUnresolved'
+    | 'valueTypeUnsupported'
+    | 'colorDxfUnresolved'
+    | 'iconFilterUnsupported'
+    | 'unknownExtension'
+    | 'tableFilterShapeUnsupported'
+  )[];
+  /** Normalized button visibility after hiddenButton/showButton are applied. */
+  buttonVisible?: boolean;
 }
 
 // Group 5: Slicer state (returned by getSlicerState bridge — enriched runtime data)

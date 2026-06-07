@@ -338,6 +338,7 @@ fn compute_with_show_values_as_invalid_config_returns_error() {
         source_sheet_id: None,
         source_sheet_name: String::new(),
         source_range: CellRange::new(0, 0, 0, 0),
+        output_sheet_id: None,
         output_sheet_name: String::new(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![],

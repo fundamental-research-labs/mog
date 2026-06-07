@@ -1,9 +1,26 @@
 //! Formula parsing, registration, and variable DAG management.
 
 use super::*;
+use crate::storage::cells::structured_ref_updater::{
+    replace_column_name_in_formula, template_contains_column_ref, template_contains_table_ref,
+};
 use crate::storage::engine::mutation::CellInput;
 
 impl ComputeCore {
+    pub(super) fn rendered_formula_string_or_fallback(
+        mirror: &CellMirror,
+        sheet_id: SheetId,
+        identity_formula: Option<&IdentityFormula>,
+        fallback: &str,
+    ) -> String {
+        identity_formula
+            .map(|formula| {
+                let lookup = MirrorPositionLookup::new(mirror, sheet_id);
+                compute_parser::to_a1_string(formula, &lookup)
+            })
+            .unwrap_or_else(|| fallback.to_string())
+    }
+
     // -----------------------------------------------------------------------
     // Internal: input processing
     // -----------------------------------------------------------------------
@@ -108,7 +125,10 @@ impl ComputeCore {
         }
 
         match input {
-            CellInput::Clear => {
+            CellInput::Clear
+            | CellInput::Value {
+                value: CellValue::Null,
+            } => {
                 // Clear the cell
                 mirror.apply_edit(
                     sheet_id,
@@ -129,6 +149,18 @@ impl ComputeCore {
                 // Store the exact text — no coercion, no trimming, no formula parsing.
                 let value = CellValue::Text(text.clone().into());
                 mirror.apply_edit(sheet_id, cell_id, SheetPos::new(row, col), value, None);
+                self.clear_formula_deps(mirror, cell_id);
+            }
+            CellInput::Value { value } => {
+                // Store the already-typed value verbatim. This is the same
+                // lossless path as process_value_input's value arm.
+                mirror.apply_edit(
+                    sheet_id,
+                    cell_id,
+                    SheetPos::new(row, col),
+                    value.clone(),
+                    None,
+                );
                 self.clear_formula_deps(mirror, cell_id);
             }
             CellInput::Parse { text } => {
@@ -183,8 +215,9 @@ impl ComputeCore {
                         .is_some_and(|v| matches!(v, CellValue::Error(..)));
                     let same_formula = !current_is_error
                         && self
-                            .formula_strings
+                            .cell_formula_text
                             .get(&cell_id)
+                            .or_else(|| self.formula_strings.get(&cell_id))
                             .is_some_and(|existing| *existing == formula_str);
                     if !same_formula {
                         mirror.apply_edit(
@@ -288,8 +321,9 @@ impl ComputeCore {
                     .is_some_and(|v| matches!(v, CellValue::Error(..)));
                 let same_formula = !current_is_error
                     && self
-                        .formula_strings
+                        .cell_formula_text
                         .get(&cell_id)
+                        .or_else(|| self.formula_strings.get(&cell_id))
                         .is_some_and(|existing| *existing == formula_str);
                 if !same_formula {
                     mirror.apply_edit(
@@ -482,6 +516,12 @@ impl ComputeCore {
                 };
 
                 // Step 3: Store IdentityFormula in CellEntry
+                let rendered_formula = Self::rendered_formula_string_or_fallback(
+                    mirror,
+                    sheet_id,
+                    identity_formula.as_ref(),
+                    &formula,
+                );
                 mirror.set_formula(&cell_id, identity_formula);
 
                 // Step 4: Extract dependencies and check volatility in a single AST walk
@@ -517,7 +557,7 @@ impl ComputeCore {
                         self.formula_text_deps.clear_formula(&cell_id);
                         self.ast_cache.remove(&cell_id);
                         self.cell_range_keys.remove(&cell_id);
-                        self.formula_strings.insert(cell_id, formula.clone());
+                        self.formula_strings.insert(cell_id, rendered_formula);
                         self.cell_formula_text.insert(cell_id, formula);
                         return;
                     }
@@ -560,7 +600,7 @@ impl ComputeCore {
                         is_dynamic_array,
                     },
                 );
-                self.formula_strings.insert(cell_id, formula.clone());
+                self.formula_strings.insert(cell_id, rendered_formula);
                 self.cell_formula_text.insert(cell_id, formula);
             }
             Err(_parse_err) => {
@@ -574,6 +614,63 @@ impl ComputeCore {
                 self.cell_formula_text.insert(cell_id, formula);
             }
         }
+    }
+
+    /// Rewrite and re-register runtime formula text after a table column rename.
+    ///
+    /// Yrs persistence is handled by `structured_ref_updater`; this keeps the
+    /// live scheduler caches and dependency graph aligned within the same
+    /// mutation so API reads observe renamed structured references immediately.
+    pub(crate) fn rewrite_table_column_rename_formula_texts(
+        &mut self,
+        mirror: &mut CellMirror,
+        table_name: &str,
+        old_column_name: &str,
+        new_column_name: &str,
+    ) -> RecalcResult {
+        if table_name.is_empty()
+            || old_column_name.is_empty()
+            || new_column_name.is_empty()
+            || old_column_name == new_column_name
+        {
+            return RecalcResult::empty();
+        }
+
+        let updates: Vec<(CellId, SheetId, String)> = self
+            .cell_formula_text
+            .iter()
+            .filter_map(|(cell_id, formula)| {
+                if !template_contains_table_ref(formula, table_name)
+                    || !template_contains_column_ref(formula, old_column_name)
+                {
+                    return None;
+                }
+                let rewritten = replace_column_name_in_formula(
+                    formula,
+                    table_name,
+                    old_column_name,
+                    new_column_name,
+                );
+                if rewritten == *formula {
+                    return None;
+                }
+                let sheet_id = mirror.sheet_for_cell(cell_id)?;
+                Some((*cell_id, sheet_id, rewritten))
+            })
+            .collect();
+
+        if updates.is_empty() {
+            return RecalcResult::empty();
+        }
+
+        let mut dirty = Vec::with_capacity(updates.len());
+        for (cell_id, sheet_id, formula) in updates {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, false);
+            dirty.push(cell_id);
+        }
+
+        self.recalc(mirror, &dirty)
+            .unwrap_or_else(|_| RecalcResult::empty())
     }
 
     // -----------------------------------------------------------------------

@@ -41,6 +41,7 @@ pub use mutation::{
     GroupingChange, MergeChange, MutationResult, NamedRangeChange, PageBreakChange,
     PivotTableChange, PolicyPreservedParseOutcome, PolicyPreservedParseSummary, PrintAreaChange,
     PrintSettingsChange, PrintTitlesChange, PropertyChange, RangeChange, RangeChangeKind,
+    RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, RuntimeOperationDiagnostic,
     ScrollPositionChange, SheetChange, SheetChangeField, SheetLifecycleRuntimeHint,
     SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType, SortingChange,
     SparklineChange, SplitConfigChange, StructureChangeResult, StructureChangeType, TableChange,

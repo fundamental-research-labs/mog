@@ -362,8 +362,10 @@ function seriesScopedOwnerKeyCandidates(
   sourceSeriesIndex: number,
 ): string[] {
   const seriesIndex = config.series?.findIndex((series) => series.idx === sourceSeriesIndex) ?? -1;
+  const series = config.series?.[sourceSeriesIndex];
   return [
     `${owner}(seriesIdx=${sourceSeriesIndex})`,
+    typeof series?.idx === 'number' ? `${owner}(seriesIdx=${series.idx})` : undefined,
     `${owner}(series=${sourceSeriesIndex})`,
     seriesIndex >= 0 ? `${owner}(series=${seriesIndex})` : undefined,
   ].filter(Boolean) as string[];
@@ -376,8 +378,12 @@ function pointOwnerKeyCandidates(
   pointIndex: number,
 ): string[] {
   const seriesIndex = config.series?.findIndex((series) => series.idx === sourceSeriesIndex) ?? -1;
+  const series = config.series?.[sourceSeriesIndex];
   return [
     `${owner}(seriesIdx=${sourceSeriesIndex},pointIdx=${pointIndex})`,
+    typeof series?.idx === 'number'
+      ? `${owner}(seriesIdx=${series.idx},pointIdx=${pointIndex})`
+      : undefined,
     `${owner}(series=${sourceSeriesIndex},point=${pointIndex})`,
     seriesIndex >= 0 ? `${owner}(series=${seriesIndex},point=${pointIndex})` : undefined,
     seriesIndex >= 0 ? `${owner}(${seriesIndex},${pointIndex})` : undefined,

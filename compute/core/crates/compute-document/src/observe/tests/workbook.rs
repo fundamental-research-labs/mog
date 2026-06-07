@@ -1,9 +1,58 @@
 use super::super::CellChangeKind;
-use super::fixtures::new_observer;
-use super::fixtures::setup_doc;
-use crate::schema::{KEY_NAMED_RANGES, KEY_RANGE_BINDINGS, KEY_TABLES};
+use super::fixtures::{make_sheet_id, new_observer, setup_doc};
+use crate::schema::{KEY_NAMED_RANGES, KEY_RANGE_BINDINGS, KEY_SLICERS, KEY_TABLES};
+use domain_types::domain::slicer::{
+    CrossFilterMode, SlicerSortOrder, SlicerSource, SlicerStyle, StoredSlicer,
+};
 use std::sync::Arc;
 use yrs::{Any, Map, MapPrelim, MapRef, Out, Transact};
+
+fn table_slicer(id: &str, sheet_id: &str) -> StoredSlicer {
+    StoredSlicer {
+        id: id.to_string(),
+        sheet_id: sheet_id.to_string(),
+        source: SlicerSource::Table {
+            table_id: "table-1".to_string(),
+            column_cell_id: "region".to_string(),
+        },
+        cache_name: None,
+        cache_uid: None,
+        caption: "Region".to_string(),
+        name: None,
+        style: SlicerStyle {
+            preset: None,
+            custom: None,
+            column_count: 1,
+            button_height: 30,
+            show_selection_indicator: true,
+            cross_filter: CrossFilterMode::ShowItemsWithDataAtTop,
+            custom_list_sort: true,
+            show_items_with_no_data: true,
+            sort_order: SlicerSortOrder::Ascending,
+        },
+        table_column_index: None,
+        pivot_cache_id: None,
+        pivot_table_tab_id: None,
+        pivot_tabular_items: vec![],
+        row_height: None,
+        level: 0,
+        uid: None,
+        ext_lst_xml: None,
+        cache_ext_lst_xml: None,
+        position: None,
+        anchor_object_id: None,
+        anchor_macro_name: None,
+        anchor_nv_ext_lst_xml: None,
+        z_index: 0,
+        locked: false,
+        show_header: true,
+        start_item: None,
+        multi_select: true,
+        selected_values: Vec::new(),
+        created_at: None,
+        updated_at: None,
+    }
+}
 
 #[test]
 fn test_workbook_table_change() {
@@ -45,6 +94,11 @@ fn test_workbook_table_change() {
 #[test]
 fn test_workbook_table_range_binding_change() {
     let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(1);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
 
     // Table metadata is now persisted primarily in workbook.rangeBindings
     // using table:<name> keys. The observer must route those entries through
@@ -66,7 +120,7 @@ fn test_workbook_table_range_binding_change() {
             bindings.insert(
                 &mut txn,
                 "table:SalesData",
-                Any::String(Arc::from(r#"{"name":"SalesData"}"#)),
+                Any::String(Arc::from(table_json)),
             );
             bindings.insert(
                 &mut txn,
@@ -79,7 +133,150 @@ fn test_workbook_table_range_binding_change() {
     let changes = observer.drain_all_changes();
     assert_eq!(changes.tables.len(), 1);
     assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
     assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+}
+
+#[test]
+fn test_workbook_table_range_binding_removal_carries_sheet_id() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapRef = workbook.insert(
+            &mut txn,
+            KEY_RANGE_BINDINGS,
+            MapPrelim::from([] as [(&str, Any); 0]),
+        );
+        bindings.insert(
+            &mut txn,
+            "table:SalesData",
+            Any::String(Arc::from(table_json)),
+        );
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        if let Some(Out::YMap(bindings)) = workbook.get(&txn, KEY_RANGE_BINDINGS) {
+            bindings.remove(&mut txn, "table:SalesData");
+        }
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
+}
+
+#[test]
+fn test_workbook_table_range_bindings_map_insert_carries_table_details() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:SalesData",
+            Any::String(Arc::from(table_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "table:SalesData");
+    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+}
+
+#[test]
+fn test_workbook_table_range_bindings_map_removal_emits_domain_reset() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(2);
+    let table_json = format!(
+        r#"{{"name":"SalesData","id":"tbl1","sheetId":"{}","startRow":0,"startCol":0,"endRow":2,"endCol":1,"columns":[{{"name":"Name","index":0}},{{"name":"Amount","index":1}}]}}"#,
+        sheet_id.to_uuid_string()
+    );
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:SalesData",
+            Any::String(Arc::from(table_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        workbook.remove(&mut txn, KEY_RANGE_BINDINGS);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.tables.len(), 1);
+    assert_eq!(changes.tables[0].key, "");
+    assert_eq!(changes.tables[0].sheet_id, None);
+    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
+}
+
+#[test]
+fn test_workbook_slicer_change() {
+    let (doc, sheets, workbook) = setup_doc();
+    let sheet_id = make_sheet_id(3);
+
+    {
+        let mut txn = doc.transact_mut();
+        let _: MapRef = workbook.insert(
+            &mut txn,
+            KEY_SLICERS,
+            MapPrelim::from([] as [(&str, Any); 0]),
+        );
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        if let Some(Out::YMap(slicers)) = workbook.get(&txn, KEY_SLICERS) {
+            let slicer = table_slicer("slicer-1", &sheet_id.to_uuid_string());
+            let entries = domain_types::yrs_schema::slicer::to_yrs_prelim(&slicer);
+            let nested: MapPrelim = entries.into_iter().collect();
+            slicers.insert(&mut txn, "slicer-1", nested);
+        }
+    }
+
+    let changes = observer.drain_all_changes();
+    assert_eq!(changes.slicers.len(), 1);
+    assert_eq!(changes.slicers[0].slicer_id, "slicer-1");
+    assert_eq!(changes.slicers[0].sheet_id, Some(sheet_id));
+    assert_eq!(changes.slicers[0].kind, CellChangeKind::Modified);
+    assert_eq!(
+        changes.slicers[0]
+            .data
+            .as_ref()
+            .map(|slicer| slicer.id.as_str()),
+        Some("slicer-1")
+    );
 }
 
 #[test]

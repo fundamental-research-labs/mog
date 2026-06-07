@@ -1,4 +1,15 @@
-import { seriesSourceIndex, type ChartConfig, type ChartData } from '@mog/charts';
+import {
+  seriesSourceIndex,
+  type BarGeometryTrace,
+  type CartesianGeometryTrace,
+  type ChartConfig,
+  type ChartData,
+  type LegendTrace,
+  type PieDoughnutLabelLayoutTrace,
+  type SurfaceApproximationTrace,
+  type StockGlyphTrace,
+  type ThreeDApproximationTrace,
+} from '@mog/charts';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   ChartExportOptionsSnapshot,
@@ -7,9 +18,30 @@ import type {
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
 import type { ResolvedChartRangeReferences } from '../chart-range-references';
+import {
+  primaryValueAxisForModel,
+  secondarySemanticCategoryAxisForModel,
+  secondaryValueAxisForModel,
+  semanticCategoryAxisForModel,
+  xValueAxisForModel,
+  yValueAxisForModel,
+} from './axis-role';
 import { sourceLinkedAxisNumberFormatDiagnostics } from './chart-render-data-normalizer';
-import { snapshotBarGeometry } from './resolved-spec-plot-snapshot';
+import {
+  buildChartFamilySupportSnapshot,
+  familySupportCompilerDiagnostics,
+} from './chart-family-support';
+import { withComboLayerAuthoritySnapshot } from './combo-layer-authority';
+import {
+  snapshotBarGeometry,
+  snapshotCartesianGeometry,
+  snapshotPieDoughnutGeometry,
+  snapshotSurfaceApproximation,
+  snapshotStockGlyphGeometry,
+  snapshotThreeDApproximation,
+} from './resolved-spec-plot-snapshot';
 import { hashJson, snapshotScalar } from './resolved-spec-primitives';
+import { snapshotRadarProjection } from './resolved-spec-radar-projection';
 import {
   chartGapDepth,
   snapshotPackageAuthority,
@@ -47,6 +79,13 @@ export function buildResolvedChartSpecSnapshot(input: {
   renderFrame?: ResolvedChartSpecSnapshot['renderFrame'];
   chartArea?: ResolvedChartSpecSnapshot['chartArea'];
   plotArea?: ResolvedChartSpecSnapshot['plotArea'] | null;
+  barGeometryTrace?: BarGeometryTrace;
+  cartesianGeometryTrace?: CartesianGeometryTrace;
+  stockGlyphTrace?: StockGlyphTrace;
+  legendTrace?: LegendTrace;
+  pieDoughnutLabelLayoutTrace?: PieDoughnutLabelLayoutTrace;
+  threeDApproximationTrace?: ThreeDApproximationTrace;
+  surfaceApproximationTrace?: SurfaceApproximationTrace;
   pageContext?: ResolvedChartSpecSnapshot['pageContext'];
   packageAuthority?: ResolvedChartSpecSnapshot['packageAuthority'];
 }): ResolvedChartSpecSnapshot {
@@ -59,7 +98,13 @@ export function buildResolvedChartSpecSnapshot(input: {
   const seriesReferencesByIndex = new Map(
     input.resolvedRanges.seriesReferences.map((reference) => [reference.index, reference]),
   );
-  const series = input.chartData.series.map((dataSeries, index) =>
+  const baseCartesianGeometry = snapshotCartesianGeometry(
+    input.config,
+    input.chartData,
+    input.layout ?? null,
+    input.cartesianGeometryTrace,
+  );
+  const seriesWithoutGeometry = input.chartData.series.map((dataSeries, index) =>
     snapshotSeries(
       dataSeries,
       index,
@@ -69,9 +114,89 @@ export function buildResolvedChartSpecSnapshot(input: {
       seriesReferencesByIndex.get(seriesSourceIndex(dataSeries, index)),
     ),
   );
-  const legend = snapshotLegend(input.config, series, input.chartData);
-  const seriesProjection = snapshotSeriesProjection(input.config, input.chartData, series);
-
+  const series = baseCartesianGeometry
+    ? withSeriesGeometry(seriesWithoutGeometry, baseCartesianGeometry)
+    : seriesWithoutGeometry;
+  const stockGlyphGeometry = snapshotStockGlyphGeometry(input.config, input.stockGlyphTrace);
+  const seriesProjection = snapshotSeriesProjection(
+    input.config,
+    input.chartData,
+    series,
+    seriesReferencesByIndex,
+    stockGlyphGeometry,
+  );
+  const legend = snapshotLegend(
+    input.config,
+    series,
+    input.chartData,
+    seriesProjection,
+    input.legendTrace,
+  );
+  const barGeometry = snapshotBarGeometry(
+    input.config,
+    input.chartData,
+    input.layout ?? null,
+    input.barGeometryTrace,
+  );
+  const cartesianGeometry = withComboLayerAuthoritySnapshot({
+    config: input.config,
+    chartData: input.chartData,
+    legend,
+    barGeometry,
+    cartesianGeometry: baseCartesianGeometry,
+  });
+  const radarProjection = snapshotRadarProjection({
+    config: input.config,
+    chartData: input.chartData,
+    layout: input.layout ?? null,
+    chartArea: input.chartArea,
+    renderFrame: input.renderFrame,
+  });
+  const pieDoughnutGeometry = snapshotPieDoughnutGeometry({
+    config: input.config,
+    chartData: input.chartData,
+    layout: input.layout ?? null,
+    chartArea: input.chartArea,
+    renderFrame: input.renderFrame,
+    legend,
+    legendTrace: input.legendTrace,
+    labelTrace: input.pieDoughnutLabelLayoutTrace,
+  });
+  const familySupport = buildChartFamilySupportSnapshot({
+    chart: input.chart,
+    config: input.config,
+    chartData: input.chartData,
+    legend,
+    seriesProjection,
+    barGeometry,
+    pieDoughnutGeometry,
+    cartesianGeometry,
+    radarProjection,
+  });
+  const threeDApproximation = snapshotThreeDApproximation({
+    config: input.config,
+    chartData: input.chartData,
+    familySupport,
+    trace: input.threeDApproximationTrace,
+  });
+  const surfaceApproximation = snapshotSurfaceApproximation({
+    config: input.config,
+    chartData: input.chartData,
+    familySupport,
+    trace: input.surfaceApproximationTrace,
+  });
+  const unsupportedFeatures = uniqueDiagnostics([
+    ...unsupportedFeatureDiagnostics({
+      chart: input.chart,
+      config: input.config,
+      series,
+      layout: input.layout ?? null,
+      hasRenderableChartExData: hasRenderableChartExData(input.config),
+      sourceLinkedAxisNumberFormatDiagnostics: sourceLinkedAxisNumberFormatDiagnostics(
+        input.config,
+      ),
+    }),
+  ]);
   return {
     schemaVersion: 1,
     chartId: input.chart.id,
@@ -97,6 +222,7 @@ export function buildResolvedChartSpecSnapshot(input: {
     implementation: {
       renderAuthority: 'chartBridge',
       renderStatus: 'renderable',
+      familySupport,
       compilerPathId: input.compilerPathId,
       compilerInputHash: input.compilerInputHash,
       compilerVersion: 1,
@@ -111,12 +237,11 @@ export function buildResolvedChartSpecSnapshot(input: {
       },
       legend,
       axes: {
-        category: snapshotAxis(input.config.axis?.categoryAxis ?? input.config.axis?.xAxis),
-        value: snapshotAxis(input.config.axis?.valueAxis ?? input.config.axis?.yAxis),
-        secondaryCategory: snapshotAxis(input.config.axis?.secondaryCategoryAxis),
-        secondaryValue: snapshotAxis(
-          input.config.axis?.secondaryValueAxis ?? input.config.axis?.secondaryYAxis,
-        ),
+        category: snapshotAxis(semanticCategoryAxisForModel(input.config)),
+        value: snapshotAxis(primaryValueAxisForModel(input.config)),
+        ...snapshotXYValueAxes(input.config),
+        secondaryCategory: snapshotAxis(secondarySemanticCategoryAxisForModel(input.config)),
+        secondaryValue: snapshotAxis(secondaryValueAxisForModel(input.config)),
         series: snapshotAxis(input.config.axis?.seriesAxis),
       },
       series,
@@ -125,12 +250,18 @@ export function buildResolvedChartSpecSnapshot(input: {
       categoryLevels,
       layout: input.layout ?? undefined,
       plot: {
-        displayBlanksAs: input.config.displayBlanksAs,
+        ...(input.config.displayBlanksAs ? { displayBlanksAs: input.config.displayBlanksAs } : {}),
         plotVisibleOnly: input.config.plotVisibleOnly,
         gapWidth: input.config.gapWidth,
         gapDepth: chartGapDepth(input.config),
         overlap: input.config.overlap,
-        barGeometry: snapshotBarGeometry(input.config, input.chartData, input.layout ?? null),
+        barGeometry,
+        cartesianGeometry,
+        pieDoughnutGeometry,
+        stockGlyphGeometry,
+        radarProjection,
+        threeDApproximation,
+        surfaceApproximation,
       },
       ranges: {
         dataRange: snapshotRange(input.resolvedRanges.dataRange),
@@ -163,17 +294,68 @@ export function buildResolvedChartSpecSnapshot(input: {
       compiler: [
         ...input.resolvedRanges.diagnostics.map((diagnostic) => diagnostic.message),
         ...renderAuthorityDiagnostics(series),
+        ...familySupportCompilerDiagnostics(familySupport),
+        ...approximationEvidenceCompilerDiagnostics({
+          threeDApproximation,
+          surfaceApproximation,
+        }),
       ],
-      unsupportedFeatures: unsupportedFeatureDiagnostics({
-        chart: input.chart,
-        config: input.config,
-        series,
-        layout: input.layout ?? null,
-        hasRenderableChartExData: hasRenderableChartExData(input.config),
-        sourceLinkedAxisNumberFormatDiagnostics: sourceLinkedAxisNumberFormatDiagnostics(
-          input.config,
-        ),
-      }),
+      unsupportedFeatures,
     },
   };
+}
+
+function snapshotXYValueAxes(
+  config: ChartConfig,
+): Pick<ResolvedChartSpecSnapshot['resolved']['axes'], 'xValue' | 'yValue'> {
+  const xValue = snapshotAxis(xValueAxisForModel(config));
+  const yValue = snapshotAxis(yValueAxisForModel(config));
+  return {
+    ...(xValue ? { xValue } : {}),
+    ...(yValue ? { yValue } : {}),
+  };
+}
+
+function approximationEvidenceCompilerDiagnostics(input: {
+  threeDApproximation?: ResolvedChartSpecSnapshot['resolved']['plot']['threeDApproximation'];
+  surfaceApproximation?: ResolvedChartSpecSnapshot['resolved']['plot']['surfaceApproximation'];
+}): string[] {
+  const diagnostics: string[] = [];
+  if (input.threeDApproximation?.geometryStatus === 'traceMissing') {
+    diagnostics.push('3-D approximation trace is missing');
+  }
+  if (input.surfaceApproximation?.geometryStatus === 'traceMissing') {
+    diagnostics.push('surface approximation trace is missing');
+  }
+  return diagnostics;
+}
+
+function uniqueDiagnostics(diagnostics: readonly string[]): string[] {
+  return Array.from(new Set(diagnostics.filter((diagnostic) => diagnostic.trim().length > 0)));
+}
+
+function withSeriesGeometry(
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  cartesianGeometry: NonNullable<
+    ResolvedChartSpecSnapshot['resolved']['plot']['cartesianGeometry']
+  >,
+): ResolvedChartSpecSnapshot['resolved']['series'] {
+  const geometryBySeriesIndex = new Map(
+    cartesianGeometry.series.map((item) => [item.seriesIndex, item]),
+  );
+  return series.map((item) => {
+    const geometry = geometryBySeriesIndex.get(item.index);
+    if (!geometry) return item;
+    return {
+      ...item,
+      geometry: {
+        xMode: geometry.xMode,
+        xRole: geometry.xRole,
+        axisGroup: geometry.axisGroup,
+        stackGroup: geometry.stackGroup,
+        markerLayer: geometry.markerLayer,
+        bubbleSizeAuthority: geometry.bubbleSizeAuthority,
+      },
+    };
+  });
 }

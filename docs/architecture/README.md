@@ -7,7 +7,7 @@ A data operating system built on spreadsheet primitives.
 ## System Layers
 
 ```
-Runtime         Public facades and host setup (@mog-sdk/node, @mog-sdk/embed, @mog-sdk/spreadsheet-app)
+Runtime         Public facades and host setup (@mog-sdk/sdk, @mog-sdk/embed, @mog-sdk/spreadsheet-app)
 Apps            Workspace React apps own product chrome and workflows
 Shell/UI        Workspace chrome, focus, session/app composition, and shared UI
 Views           Reusable view packages (SheetView shipped; other view packages reserved)
@@ -198,10 +198,10 @@ Details: [Binary Wire Pipeline](../internals/spreadsheet/renderer/binary-wire-pi
 
 ### 5. Document Lifecycle & Three-Tier State
 
-Public Node consumers create workbooks through `@mog-sdk/node`, which wraps kernel bootstrap and host/runtime setup:
+Public Node consumers create workbooks through `@mog-sdk/sdk`, which wraps kernel bootstrap and host/runtime setup:
 
 ```ts
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: 'UTC' });
 const ws = wb.activeSheet;
@@ -267,7 +267,7 @@ Details: [XState Patterns](../internals/spreadsheet/renderer/xstate.md) | [State
 All programmatic access — browser, headless, LLM-generated code, OS apps — goes through `Workbook`/`Worksheet`:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -418,7 +418,7 @@ Details: [Foundations](../internals/spreadsheet/foundations.md)
 
 ### Runtime
 
-- **sdk** (`runtime/sdk/`): Published as `@mog-sdk/node` — public Node.js SDK wrapping the headless engine.
+- **sdk** (`runtime/sdk/`): Published as `@mog-sdk/sdk` — unified public headless SDK. The root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes, with explicit `./node`, `./wasm`, and `./workerd` subpaths.
 - **embed** (`runtime/embed/`): Published as `@mog-sdk/embed` — public embed facade with React, web component, and config entry points.
 - **spreadsheet-app** (`runtime/spreadsheet-app/`): Published as `@mog-sdk/spreadsheet-app` — public full-app composition package; its internal use of app/shell/kernel code is declaration-boundary checked.
 - **wasm** (`compute/wasm/npm/`): Published as `@mog-sdk/wasm` — public WebAssembly binary wrapper used by browser transports.

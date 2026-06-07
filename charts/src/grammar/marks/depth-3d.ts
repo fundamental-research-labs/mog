@@ -9,6 +9,8 @@ export interface Depth3DOptions {
   sideShade?: number;
 }
 
+export type Depth3DFaceRole = 'front' | 'back' | 'top' | 'side' | 'connector' | 'outer' | 'inner';
+
 type Point = {
   x: number;
   y: number;
@@ -26,7 +28,7 @@ export function depthEnhanceLinePathMark(mark: PathMark, options: Depth3DOptions
   const endpoints = pathEndpoints(mark.path);
   const translatedPath = translatePath(mark.path, depth.x, depth.y);
   const marks: PathMark[] = translatedPath
-    ? [translatedPathMark(mark, translatedPath, sideStyle(mark.style, options))]
+    ? [translatedPathMark(mark, translatedPath, sideStyle(mark.style, options), 'back')]
     : [];
 
   if (endpoints) {
@@ -36,7 +38,7 @@ export function depthEnhanceLinePathMark(mark: PathMark, options: Depth3DOptions
     );
   }
 
-  if (options.includeTop !== false) marks.push(mark);
+  if (options.includeTop !== false) marks.push(withDepthFace(mark, 'front'));
   return marks;
 }
 
@@ -52,7 +54,7 @@ export function depthEnhanceAreaPathMark(mark: PathMark, options: Depth3DOptions
   const points = pathPolygonPoints(mark.path);
   const translatedPath = translatePath(mark.path, depth.x, depth.y);
   const marks: PathMark[] = translatedPath
-    ? [translatedPathMark(mark, translatedPath, sideFillStyle(mark.style, options))]
+    ? [translatedPathMark(mark, translatedPath, sideFillStyle(mark.style, options), 'back')]
     : [];
 
   for (let i = 0; i < points.length; i += 1) {
@@ -61,7 +63,7 @@ export function depthEnhanceAreaPathMark(mark: PathMark, options: Depth3DOptions
     marks.push(areaDepthFace(mark, points[i], next, depth, options));
   }
 
-  if (options.includeTop !== false) marks.push(mark);
+  if (options.includeTop !== false) marks.push(withDepthFace(mark, 'front'));
   return marks;
 }
 
@@ -88,7 +90,7 @@ export function depthEnhanceArcMark(mark: ArcMark, options: Depth3DOptions = {})
   }
 
   if (options.includeTop !== false) {
-    marks.push(arcTopPathMark(mark, arc));
+    marks.push(withDepthFace(arcTopPathMark(mark, arc), 'front'));
   }
 
   return marks;
@@ -110,12 +112,20 @@ function depthVector(options: Depth3DOptions): Point {
   };
 }
 
-function translatedPathMark(mark: PathMark, path: string, style: MarkStyle): PathMark {
-  return {
-    ...mark,
-    path,
-    style,
-  };
+function translatedPathMark(
+  mark: PathMark,
+  path: string,
+  style: MarkStyle,
+  face: Depth3DFaceRole,
+): PathMark {
+  return withDepthFace(
+    {
+      ...mark,
+      path,
+      style,
+    },
+    face,
+  );
 }
 
 function lineDepthConnector(
@@ -124,16 +134,19 @@ function lineDepthConnector(
   depth: Point,
   options: Depth3DOptions,
 ): PathMark {
-  return {
-    type: 'path',
-    x: mark.x,
-    y: mark.y,
-    path: `M${formatNumber(point.x)},${formatNumber(point.y)} L${formatNumber(
-      point.x + depth.x,
-    )},${formatNumber(point.y + depth.y)}`,
-    datum: mark.datum,
-    style: sideStyle(mark.style, options),
-  };
+  return withDepthFace(
+    {
+      type: 'path',
+      x: mark.x,
+      y: mark.y,
+      path: `M${formatNumber(point.x)},${formatNumber(point.y)} L${formatNumber(
+        point.x + depth.x,
+      )},${formatNumber(point.y + depth.y)}`,
+      datum: mark.datum,
+      style: sideStyle(mark.style, options),
+    },
+    'connector',
+  );
 }
 
 function areaDepthFace(
@@ -143,17 +156,20 @@ function areaDepthFace(
   depth: Point,
   options: Depth3DOptions,
 ): PathMark {
-  return {
-    type: 'path',
-    x: mark.x,
-    y: mark.y,
-    path: polygonPath([a, b, offsetPoint(b, depth), offsetPoint(a, depth)]),
-    datum: mark.datum,
-    style: {
-      ...sideFillStyle(mark.style, options),
-      strokeWidth: mark.style.strokeWidth ?? 0.5,
+  return withDepthFace(
+    {
+      type: 'path',
+      x: mark.x,
+      y: mark.y,
+      path: polygonPath([a, b, offsetPoint(b, depth), offsetPoint(a, depth)]),
+      datum: mark.datum,
+      style: {
+        ...sideFillStyle(mark.style, options),
+        strokeWidth: mark.style.strokeWidth ?? 0.5,
+      },
     },
-  };
+    'side',
+  );
 }
 
 function arcTopPathMark(mark: ArcMark, arc: NormalizedArc): PathMark {
@@ -177,20 +193,23 @@ function arcOuterDepthFace(
   const end = polarPoint(mark, mark.outerRadius, arc.endAngle);
   const startBack = offsetPoint(start, depth);
   const endBack = offsetPoint(end, depth);
-  return {
-    type: 'path',
-    x: 0,
-    y: 0,
-    path: [
-      `M${pointString(start)}`,
-      arcCommand(mark.outerRadius, arc.span, true, end),
-      `L${pointString(endBack)}`,
-      arcCommand(mark.outerRadius, arc.span, false, startBack),
-      'Z',
-    ].join(' '),
-    datum: mark.datum,
-    style: sideFillStyle(mark.style, options),
-  };
+  return withDepthFace(
+    {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: [
+        `M${pointString(start)}`,
+        arcCommand(mark.outerRadius, arc.span, true, end),
+        `L${pointString(endBack)}`,
+        arcCommand(mark.outerRadius, arc.span, false, startBack),
+        'Z',
+      ].join(' '),
+      datum: mark.datum,
+      style: sideFillStyle(mark.style, options),
+    },
+    'outer',
+  );
 }
 
 function arcInnerDepthFace(
@@ -203,20 +222,23 @@ function arcInnerDepthFace(
   const end = polarPoint(mark, mark.innerRadius, arc.endAngle);
   const startBack = offsetPoint(start, depth);
   const endBack = offsetPoint(end, depth);
-  return {
-    type: 'path',
-    x: 0,
-    y: 0,
-    path: [
-      `M${pointString(end)}`,
-      arcCommand(mark.innerRadius, arc.span, false, start),
-      `L${pointString(startBack)}`,
-      arcCommand(mark.innerRadius, arc.span, true, endBack),
-      'Z',
-    ].join(' '),
-    datum: mark.datum,
-    style: sideFillStyle(mark.style, options),
-  };
+  return withDepthFace(
+    {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: [
+        `M${pointString(end)}`,
+        arcCommand(mark.innerRadius, arc.span, false, start),
+        `L${pointString(startBack)}`,
+        arcCommand(mark.innerRadius, arc.span, true, endBack),
+        'Z',
+      ].join(' '),
+      datum: mark.datum,
+      style: sideFillStyle(mark.style, options),
+    },
+    'inner',
+  );
 }
 
 function arcEndDepthFace(
@@ -228,14 +250,17 @@ function arcEndDepthFace(
   const outer = polarPoint(mark, mark.outerRadius, angle);
   const inner =
     mark.innerRadius > 0 ? polarPoint(mark, mark.innerRadius, angle) : { x: mark.x, y: mark.y };
-  return {
-    type: 'path',
-    x: 0,
-    y: 0,
-    path: polygonPath([inner, outer, offsetPoint(outer, depth), offsetPoint(inner, depth)]),
-    datum: mark.datum,
-    style: sideFillStyle(mark.style, options),
-  };
+  return withDepthFace(
+    {
+      type: 'path',
+      x: 0,
+      y: 0,
+      path: polygonPath([inner, outer, offsetPoint(outer, depth), offsetPoint(inner, depth)]),
+      datum: mark.datum,
+      style: sideFillStyle(mark.style, options),
+    },
+    'connector',
+  );
 }
 
 function arcSlicePath(mark: ArcMark, startAngle: number, endAngle: number): string {
@@ -483,6 +508,24 @@ function pointString(point: Point): string {
 
 function samePoint(a: Point, b: Point): boolean {
   return Math.abs(a.x - b.x) <= EPSILON && Math.abs(a.y - b.y) <= EPSILON;
+}
+
+function withDepthFace<T extends PathMark>(mark: T, face: Depth3DFaceRole): T {
+  const datum =
+    mark.datum != null && typeof mark.datum === 'object' && !Array.isArray(mark.datum)
+      ? {
+          ...(mark.datum as Record<string, unknown>),
+          chart3dDepthFace: face,
+        }
+      : {
+          sourceDatum: mark.datum,
+          chart3dDepthFace: face,
+        };
+
+  return {
+    ...mark,
+    datum,
+  };
 }
 
 function isFinitePositive(value: unknown): value is number {

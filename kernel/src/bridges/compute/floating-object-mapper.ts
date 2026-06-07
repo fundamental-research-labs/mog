@@ -28,12 +28,16 @@ import type {
   DiagramObject,
   OleObjectObject,
 } from '@mog-sdk/contracts/floating-objects';
+import type { ChartConfig } from '@mog-sdk/contracts/data/charts';
 import type { DrawingObject, StrokeId, InkStroke, RecognitionResult } from '@mog-sdk/contracts/ink';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import { getAllDefaultToolSettings } from '../../domain/drawing/ink/ink-tool-defaults';
 import { getEquationStyleDefaults } from '../../domain/equations/equation-defaults';
-import { normalizeImportedComboChart } from './chart-import-normalization';
+import {
+  normalizeImportedComboChart,
+  normalizeImportedDisplayBlanksAsValue,
+} from './chart-import-normalization';
 
 import type {
   FloatingObject as WireFloatingObject,
@@ -81,6 +85,7 @@ const EMU_PER_PT = 12700;
 const DEFAULT_OUTLINE_WIDTH_PT = 0.75;
 
 type UnknownRecord = Record<string, unknown>;
+type SurfaceBandFormat = NonNullable<ChartConfig['surfaceBandFormats']>[number];
 
 function asRecord(value: unknown): UnknownRecord | undefined {
   return value != null && typeof value === 'object' ? (value as UnknownRecord) : undefined;
@@ -109,6 +114,87 @@ function normalizeHexColor(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const hex = value.trim().replace(/^#/, '');
   return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : undefined;
+}
+
+function extractSurfaceBandFormatsFromChartDefinition(
+  definition: unknown,
+): ChartConfig['surfaceBandFormats'] | undefined {
+  const formats: NonNullable<ChartConfig['surfaceBandFormats']> = [];
+  collectSurfaceBandFormats(definition, formats, new Set<object>());
+  return formats.length > 0 ? formats : undefined;
+}
+
+function collectSurfaceBandFormats(
+  value: unknown,
+  formats: NonNullable<ChartConfig['surfaceBandFormats']>,
+  seen: Set<object>,
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectSurfaceBandFormats(item, formats, seen);
+    return;
+  }
+
+  const record = asRecord(value);
+  if (!record || seen.has(record)) return;
+  seen.add(record);
+
+  const bandFmts = readAny(record, 'band_fmts', 'bandFmts');
+  if (Array.isArray(bandFmts)) {
+    for (const item of bandFmts) {
+      const band = surfaceBandFormatFromOoxml(item);
+      if (band) formats.push(band);
+    }
+  }
+
+  for (const child of Object.values(record)) {
+    if (child === bandFmts) continue;
+    collectSurfaceBandFormats(child, formats, seen);
+  }
+}
+
+function surfaceBandFormatFromOoxml(value: unknown): SurfaceBandFormat | undefined {
+  const record = asRecord(value);
+  const index = integerNumber(readAny(record, 'idx', 'index'));
+  if (index === undefined) return undefined;
+
+  const spPr = readAny(record, 'sp_pr', 'spPr');
+  const fillColor = solidFillColorFromShapeProperties(spPr);
+  return {
+    index,
+    ...(fillColor ? { fillColor } : {}),
+    hasFormatting: asRecord(spPr) !== undefined || fillColor !== undefined,
+    source: 'ooxmlBandFmt',
+  };
+}
+
+function solidFillColorFromShapeProperties(value: unknown): string | undefined {
+  const spPr = asRecord(value);
+  if (!spPr) return undefined;
+
+  const fill = readAny(spPr, 'fill', 'solidFill', 'solid_fill');
+  const fillRecord = asRecord(fill);
+  const solid =
+    readAny(fillRecord, 'Solid', 'solid') ??
+    (readAny(fillRecord, 'type') === 'solid' || readAny(fillRecord, 'type') === 'Solid'
+      ? fillRecord
+      : undefined);
+  const solidRecord = asRecord(solid);
+  return drawingColorHex(readAny(solidRecord, 'color') ?? solidRecord);
+}
+
+function drawingColorHex(value: unknown): string | undefined {
+  const color = asRecord(value);
+  if (!color) return undefined;
+
+  const explicit =
+    normalizeHexColor(readAny(color, 'val')) ??
+    normalizeHexColor(readAny(color, 'last_clr', 'lastClr'));
+  if (!explicit) return undefined;
+  return explicit;
+}
+
+function integerNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function alphaTransparency(transforms: unknown): number | undefined {
@@ -723,6 +809,10 @@ function toChartObject(d: WireChart): ChartObject {
     chart.title != null && chart.title !== 'undefined' ? chart.title : undefined;
   const sanitizedSubtitle =
     chart.subtitle != null && chart.subtitle !== 'undefined' ? chart.subtitle : undefined;
+  const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(chart.displayBlanksAs);
+  const surfaceBandFormats =
+    (chart as { surfaceBandFormats?: ChartConfig['surfaceBandFormats'] }).surfaceBandFormats ??
+    extractSurfaceBandFormatsFromChartDefinition(chart.ooxml?.definition);
 
   const chartConfig: Record<string, unknown> = {
     subType: chart.subType,
@@ -739,7 +829,7 @@ function toChartObject(d: WireChart): ChartObject {
     axis: chart.axis,
     colors: chart.colors,
     series: chart.series,
-    displayBlanksAs: chart.displayBlanksAs,
+    ...(displayBlanksAs ? { displayBlanksAs } : {}),
     plotVisibleOnly: chart.plotVisibleOnly,
     gapWidth: chart.gapWidth,
     gapDepth: chart.gapDepth,
@@ -775,6 +865,7 @@ function toChartObject(d: WireChart): ChartObject {
     bubble3dEffect: chart.bubble3dEffect,
     wireframe: chart.wireframe,
     surfaceTopView: chart.surfaceTopView,
+    surfaceBandFormats,
     colorScheme: chart.colorScheme,
     style: chart.style,
     roundedCorners: chart.roundedCorners,
@@ -792,6 +883,11 @@ function toChartObject(d: WireChart): ChartObject {
     highLowLines: chart.highLowLines,
     seriesLines: chart.seriesLines,
     upDownBars: chart.upDownBars,
+    stockSourceComposition: (
+      chart as {
+        stockSourceComposition?: ChartConfig['stockSourceComposition'];
+      }
+    ).stockSourceComposition,
     barShape: chart.barShape,
     view3d: chart.view3d,
     floorFormat: chart.floorFormat,

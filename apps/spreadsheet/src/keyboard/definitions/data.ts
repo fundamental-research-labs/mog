@@ -103,7 +103,7 @@ export const DATA_SHORTCUTS: KeyboardShortcut[] = [
     enabled: true,
     priority: 'medium',
     category: 'data',
-    contexts: ['grid'],
+    contexts: ['grid', 'enterMode', 'editMode'],
     muscleMemory: 'occasional',
     matchBy: 'code',
   },

@@ -128,7 +128,12 @@ pub(in crate::storage::engine) fn parse_and_hydrate_csv(
     };
     eprintln!("[construction] csv hydrate: {}ms", t2.elapsed().as_millis());
 
-    Ok((storage, workbook_snap, id_map.phantom_cells))
+    Ok((
+        storage,
+        workbook_snap,
+        id_map.phantom_cells,
+        domain_types::ImportReport::default(),
+    ))
 }
 
 /// Construct a `YrsComputeEngine` from raw CSV bytes without recalculation.
@@ -136,13 +141,15 @@ pub(in crate::storage::engine) fn from_csv_bytes(
     csv_data: &[u8],
     options: &csv_parser::CsvImportOptions,
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
-    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_csv(csv_data, options)?;
+    let (storage, workbook_snap, phantom_cells, import_report) =
+        parse_and_hydrate_csv(csv_data, options)?;
 
     let mut mirror = CellMirror::from_snapshot(workbook_snap.clone())?;
     let mut compute = ComputeCore::new();
     let recalc_result = compute.init_from_snapshot_no_recalc(&mut mirror, workbook_snap.clone())?;
 
     let mut engine = assemble_engine(storage, mirror, compute, &workbook_snap)?;
+    engine.import_report = import_report;
 
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
@@ -160,8 +167,11 @@ pub(in crate::storage::engine) fn import_from_csv_bytes(
     options: &csv_parser::CsvImportOptions,
     do_recalc: bool,
 ) -> Result<RecalcResult, ComputeError> {
-    let (storage, workbook_snap, phantom_cells) = parse_and_hydrate_csv(csv_data, options)?;
+    let (storage, workbook_snap, phantom_cells, import_report) =
+        parse_and_hydrate_csv(csv_data, options)?;
     let result = rebuild_engine_from_snapshot(engine, storage, workbook_snap, do_recalc)?;
+    engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
     for (sheet_id, cell_id, row, col) in phantom_cells {
         if let Some(grid) = engine.stores.grid_indexes.get_mut(&sheet_id) {
             grid.register_cell(cell_id, row, col);

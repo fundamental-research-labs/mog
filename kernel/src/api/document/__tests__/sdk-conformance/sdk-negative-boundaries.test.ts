@@ -93,7 +93,7 @@ describe('SDK negative boundaries — source declarations', () => {
   });
 
   it('does not include createAppKernelAPI on the public DocumentHandle interface', () => {
-    const source = readFileSync(new URL('../../document-factory.ts', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('../../document-handle-types.ts', import.meta.url), 'utf8');
     const documentHandleBlock = source.match(/export interface DocumentHandle \{[\s\S]*?\n\}/)?.[0];
     expect(documentHandleBlock).toBeDefined();
     expect(documentHandleBlock).not.toMatch(/\bcreateAppKernelAPI\s*\(/);

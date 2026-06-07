@@ -1,4 +1,4 @@
-# @mog-sdk/node
+# @mog-sdk/sdk
 
 Headless spreadsheet engine for Node.js. 582 spreadsheet formula functions, XLSX import/export, charts, tables, pivots, and conditional formatting, all powered by a native Rust engine.
 
@@ -7,7 +7,7 @@ Headless spreadsheet engine for Node.js. 582 spreadsheet formula functions, XLSX
 This SDK includes a built-in introspection API. Use it to explore the full API surface programmatically — no need to read type definitions:
 
 ```typescript
-import { api } from '@mog-sdk/node';
+import { api } from '@mog-sdk/sdk';
 
 // Overview: list all methods and sub-APIs
 api.describe()
@@ -35,7 +35,7 @@ Paths use `wb.*` for workbook and `ws.*` for worksheet. Sub-APIs are accessed as
 ## Quick Start
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -62,7 +62,7 @@ await wb.dispose();
 ## Open & Save XLSX
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 // Open from file path or buffer
 const wb = await createWorkbook('data.xlsx');

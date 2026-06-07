@@ -10,6 +10,12 @@
  * @see use-grid-mouse.ts - Main hook that uses these helpers
  */
 
+import {
+  getAutofitColumnsForResize,
+  getAutofitRowsForResize,
+  type AutofitUsedRange,
+} from '../../../systems/grid-editing/features/autofit/selection-targets';
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -183,6 +189,8 @@ export interface SelectionRange {
   endCol: number;
   startRow: number;
   endRow: number;
+  isFullRow?: boolean;
+  isFullColumn?: boolean;
 }
 
 /**
@@ -210,21 +218,10 @@ export interface SelectionRange {
  */
 export function getSelectedColumnsOrSingle(
   col: number,
-  ranges: readonly Pick<SelectionRange, 'startCol' | 'endCol'>[],
+  ranges: readonly Pick<SelectionRange, 'startCol' | 'endCol' | 'isFullRow'>[],
+  usedRange?: AutofitUsedRange | null,
 ): number[] {
-  // Check if any selected range spans multiple columns including this one
-  for (const range of ranges) {
-    if (col >= range.startCol && col <= range.endCol) {
-      // Return all columns in the selection
-      const cols: number[] = [];
-      for (let c = range.startCol; c <= range.endCol; c++) {
-        cols.push(c);
-      }
-      return cols;
-    }
-  }
-  // Not in selection, just auto-fit this single column
-  return [col];
+  return getAutofitColumnsForResize(col, ranges, usedRange);
 }
 
 /**
@@ -252,19 +249,8 @@ export function getSelectedColumnsOrSingle(
  */
 export function getSelectedRowsOrSingle(
   row: number,
-  ranges: readonly Pick<SelectionRange, 'startRow' | 'endRow'>[],
+  ranges: readonly Pick<SelectionRange, 'startRow' | 'endRow' | 'isFullColumn'>[],
+  usedRange?: AutofitUsedRange | null,
 ): number[] {
-  // Check if any selected range spans multiple rows including this one
-  for (const range of ranges) {
-    if (row >= range.startRow && row <= range.endRow) {
-      // Return all rows in the selection
-      const rows: number[] = [];
-      for (let r = range.startRow; r <= range.endRow; r++) {
-        rows.push(r);
-      }
-      return rows;
-    }
-  }
-  // Not in selection, just auto-fit this single row
-  return [row];
+  return getAutofitRowsForResize(row, ranges, usedRange);
 }

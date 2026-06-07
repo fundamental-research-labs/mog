@@ -7,7 +7,7 @@ use stress_common::*;
 use cell_types::SheetPos;
 use compute_core::mirror::CellMirror;
 use compute_core::scheduler::ComputeCore;
-use value_types::{CellError, CellValue};
+use value_types::{CellError, CellValue, ComputeError};
 
 fn init_empty() -> (ComputeCore, CellMirror) {
     let mut core = ComputeCore::new();
@@ -127,7 +127,7 @@ fn split_spill_shrink_grow_and_dependents_recalculate() {
 }
 
 #[test]
-fn split_blocked_spill_and_editing_member_preserves_anchor_formula() {
+fn split_blocked_spill_and_member_write_is_rejected_preserves_anchor_formula() {
     let (mut core, mut mirror) = init_empty();
 
     let _ = set(&mut core, &mut mirror, 0, 0, 1, "blocker");
@@ -139,13 +139,26 @@ fn split_blocked_spill_and_editing_member_preserves_anchor_formula() {
     assert_pos_text(&mirror, 0, 0, "a");
     assert_pos_text(&mirror, 0, 1, "b");
 
-    let _ = set(&mut core, &mut mirror, 0, 0, 1, "typed");
-    assert_pos_error(&mirror, 0, 0, CellError::Spill);
+    let member_write = core.set_cell(&mut mirror, &sid(0), cid(0, 0, 1), 0, 1, "typed");
+    match member_write {
+        Err(ComputeError::PartialArrayWrite {
+            row,
+            col,
+            anchor_row,
+            anchor_col,
+            ..
+        }) => {
+            assert_eq!((row, col), (0, 1));
+            assert_eq!((anchor_row, anchor_col), (0, 0));
+        }
+        Err(other) => panic!("expected PartialArrayWrite, got {other:?}"),
+        Ok(_) => panic!("expected PartialArrayWrite for SPLIT spill member write"),
+    }
     assert_eq!(
         core.get_formula(&cid(0, 0, 0)),
         Some(r#"=SPLIT("a,b",",")"#)
     );
-    assert_pos_text(&mirror, 0, 1, "typed");
+    assert_pos_text(&mirror, 0, 1, "b");
 }
 
 #[test]

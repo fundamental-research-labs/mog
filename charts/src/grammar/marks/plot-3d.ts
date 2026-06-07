@@ -37,31 +37,42 @@ export function with3DMetadata<T extends PathMark>(
   face: Plot3DFace,
   extras: Record<string, unknown> = {},
 ): T {
+  const sourceDatum: Record<string, unknown> =
+    mark.datum != null && typeof mark.datum === 'object' && !Array.isArray(mark.datum)
+      ? { ...(mark.datum as Record<string, unknown>) }
+      : { sourceDatum: mark.datum };
+  const taggedFace = plot3DFace(sourceDatum.chart3dDepthFace) ?? face;
+  delete sourceDatum.chart3dDepthFace;
   const metadata = {
     family: spec?.family,
-    face,
+    face: taggedFace,
     orientation: spec?.orientation,
     shape: spec?.barShape,
     gapDepth: spec?.gapDepth,
     ...extras,
   };
-  const datum =
-    mark.datum != null && typeof mark.datum === 'object' && !Array.isArray(mark.datum)
-      ? {
-          ...(mark.datum as Record<string, unknown>),
-          chart3d: metadata,
-          __mogClipToPlotArea: false,
-        }
-      : {
-          sourceDatum: mark.datum,
-          chart3d: metadata,
-          __mogClipToPlotArea: false,
-        };
+  const datum = {
+    ...sourceDatum,
+    chart3d: metadata,
+    __mogClipToPlotArea: false,
+  };
 
   return {
     ...mark,
     datum,
   };
+}
+
+function plot3DFace(value: unknown): Plot3DFace | undefined {
+  return value === 'front' ||
+    value === 'back' ||
+    value === 'top' ||
+    value === 'side' ||
+    value === 'connector' ||
+    value === 'outer' ||
+    value === 'inner'
+    ? value
+    : undefined;
 }
 
 export function shadeColor(color: unknown, amount: number): string | undefined {

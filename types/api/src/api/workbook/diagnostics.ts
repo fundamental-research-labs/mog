@@ -1,4 +1,21 @@
 import type { ImageExportOptions, LinkId, ResolvedChartSpecSnapshot, SheetId } from '../types';
+import type {
+  ImportDiagnosticDto,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+} from '@mog/types-data/data/diagnostics';
+export type {
+  ImportDiagnosticDetails,
+  ImportDiagnosticDto,
+  ImportDiagnosticLocation,
+  ImportDiagnosticPhase,
+  ImportDiagnosticRecoverability,
+  ImportDiagnosticSeverity,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
+} from '@mog/types-data/data/diagnostics';
+export type { ImportFilterUnsupportedReason } from '@mog/types-data/data/filter';
 
 export type CellId = string;
 
@@ -15,6 +32,36 @@ export interface WorkbookDiagnostics {
   getResolvedChartSpec(
     options: ResolvedChartSpecDiagnosticsOptions,
   ): Promise<ResolvedChartSpecSnapshot>;
+
+  /** Current deferred-import materialization state. */
+  materialization(): Promise<MaterializationState>;
+
+  /** Historical diagnostics produced during the most recent workbook import. */
+  import(): Promise<readonly ImportDiagnosticDto[]>;
+
+  /** Runtime operation diagnostics emitted by recent workbook commands. */
+  runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;
+}
+
+export type MaterializationPhase =
+  | 'MetadataParsed'
+  | 'CriticalSheetHydrating'
+  | 'CriticalSheetReady'
+  | 'AllSheetsHydrating'
+  | 'AllSheetsReady'
+  | 'MaterializationFailed';
+
+export interface MaterializationState {
+  readonly phase: MaterializationPhase;
+  readonly isDeferred: boolean;
+  readonly isMaterialized: boolean;
+  readonly pendingScope?: SheetId | 'allSheets';
+  readonly initialActiveSheetId?: SheetId;
+  readonly error?: {
+    readonly code: string;
+    readonly message: string;
+    readonly scope?: SheetId | 'allSheets';
+  };
 }
 
 export interface ResolvedChartSpecDiagnosticsOptions {

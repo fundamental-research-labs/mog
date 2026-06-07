@@ -29,7 +29,7 @@ Status words in this page use the following meanings:
 
 ## Does Mog send workbook data to Mog-operated servers?
 
-Not by the shipped public SDK/runtime surfaces on their own. `@mog-sdk/node`,
+Not by the shipped public SDK/runtime surfaces on their own. `@mog-sdk/sdk`,
 `@mog-sdk/wasm`, `@mog-sdk/spreadsheet-app`, and the public-experimental
 `@mog-sdk/embed` entrypoints run in the customer process or page; the host owns
 persistence callbacks, network policy, and any service integration.
@@ -106,7 +106,7 @@ Claim class: **Not claimed**.
 
 ## Is the headless HTTP server safe to expose to enterprise users?
 
-No. `@mog-sdk/node` is a public, shipped same-process automation SDK; it is not
+No. `@mog-sdk/sdk` is a public, shipped same-process automation SDK; it is not
 a hosted HTTP service or a hostile-client boundary. The public workspace does
 not ship a supported `runtime/server` package, service binary, container image,
 OpenAPI contract, or enterprise authentication and authorization boundary.

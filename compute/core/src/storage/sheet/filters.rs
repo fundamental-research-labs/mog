@@ -31,6 +31,7 @@
 
 // Keep this file as the compatibility facade for `storage::sheet::filters`.
 // New implementation logic belongs in the focused submodules below.
+mod bindings;
 mod bridge;
 mod codec;
 mod crud;
@@ -41,11 +42,21 @@ mod tests;
 
 pub use domain_types::domain::filter::{
     AdvancedFilterCriteriaRange, AdvancedFilterMode, AdvancedFilterRequest, AdvancedFilterResult,
-    AdvancedFilterState, ColumnFilter, DynamicFilterRule, FilterCondition, FilterEvaluationResult,
-    FilterHeaderInfo, FilterKind, FilterLogic, FilterOperator, FilterRecordCount, FilterSortState,
-    FilterState, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
+    AdvancedFilterState, ColumnFilter, DynamicFilterRule, FilterButtonMetadata, FilterCapability,
+    FilterCondition, FilterEvaluationResult, FilterHeaderInfo, FilterHeaderRange,
+    FilterHeaderSourceType, FilterKind, FilterLogic, FilterMetadataBinding,
+    FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterOperator, FilterRecordCount,
+    FilterShellMetadata, FilterSortState, FilterState, ImportFilterUnsupportedReason,
+    LosslessCriterionDescriptor, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
 };
 
+pub use bindings::{
+    clear_filter_metadata_bindings, delete_filter_metadata_binding,
+    delete_filter_metadata_binding_with_origin,
+    delete_stale_filter_metadata_bindings_for_source_key_with_origin, get_filter_metadata_binding,
+    get_filter_metadata_bindings_in_sheet, upsert_filter_metadata_binding,
+    upsert_filter_metadata_binding_with_origin, upsert_import_filter_metadata_binding,
+};
 pub use bridge::convert_dynamic_rule;
 pub use codec::write_filter_state_to_ymap;
 pub use crud::{
@@ -53,6 +64,7 @@ pub use crud::{
     create_filter_in_txn, delete_filter, delete_filter_in_txn, get_active_filter_count,
     get_active_filters, get_filter, get_filter_count, get_filter_sort_state, get_filters_in_sheet,
     get_table_filter, set_column_filter, set_filter_sort_state, upsert_filter_state,
+    upsert_filter_state_with_origin, upsert_import_filter_state,
 };
 pub use evaluation::{evaluate_filter, get_filtered_record_count, get_unique_values};
 

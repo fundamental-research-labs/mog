@@ -2,7 +2,7 @@ import type { RectMark, TextMark } from '../../primitives/types';
 import type { ChartConfig, ChartData } from '../../types';
 import { compile } from '../../grammar/compiler';
 import { configToSpec } from '../config-to-spec';
-import { SERIES_FILL_FIELD } from '../config-to-spec/fields';
+import { PIE_COLOR_KEY_FIELD, SERIES_FILL_FIELD } from '../config-to-spec/fields';
 
 function importedBarConfig(): ChartConfig {
   return {
@@ -92,7 +92,7 @@ describe('configToSpec bar series colors', () => {
     expect(rects.every((rect) => rect.datum[SERIES_FILL_FIELD] === rect.style.fill)).toBe(true);
   });
 
-  it('renders imported single-series vary-by-category columns with category legend entries', () => {
+  it('renders imported single-series vary-by-category columns with a series legend entry', () => {
     const data: ChartData = {
       categories: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
       series: [
@@ -156,7 +156,16 @@ describe('configToSpec bar series colors', () => {
       legend: {
         orient: 'right',
         title: null,
-        values: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
+        entries: [
+          {
+            value: 'Category A',
+            label: 'Measure',
+            symbolType: 'area',
+            seriesIndex: 0,
+            sourceSeriesIndex: 0,
+            sourceSeriesKey: 'series:0',
+          },
+        ],
       },
     });
 
@@ -174,19 +183,66 @@ describe('configToSpec bar series colors', () => {
       '#8064A2',
       '#4BACC6',
     ]);
-    expect(legendLabels).toEqual([
-      'Category A',
-      'Category B',
-      'Category C',
-      'Category D',
-      'Category E',
-    ]);
+    expect(legendLabels).toEqual(['Measure']);
     for (const rect of rects) {
       const category = String(rect.datum.category);
       const categoryX = result.scales.x?.(category) as number;
       const bandwidth = result.scales.x?.bandwidth?.() ?? 0;
       expect(rect.x + rect.width / 2).toBeCloseTo(categoryX + bandwidth / 2, 5);
     }
+  });
+
+  it('keeps point legend entries for pie-like varied-color charts', () => {
+    const data: ChartData = {
+      categories: ['Category A', 'Category B', 'Category C'],
+      series: [
+        {
+          name: 'Measure',
+          data: [
+            { x: 'Category A', y: 50 },
+            { x: 'Category B', y: 40 },
+            { x: 'Category C', y: 30 },
+          ],
+        },
+      ],
+    };
+    const config: ChartConfig = {
+      type: 'doughnut',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 8,
+      height: 5,
+      legend: { show: true, visible: true, position: 'right' },
+      workbookTheme: {
+        colors: [
+          { name: 'accent1', color: '#4F81BD' },
+          { name: 'accent2', color: '#C0504D' },
+          { name: 'accent3', color: '#9BBB59' },
+        ],
+        colorScheme: {
+          accent1: { type: 'SrgbClr', val: '4F81BD', transforms: [] },
+          accent2: { type: 'SrgbClr', val: 'C0504D', transforms: [] },
+          accent3: { type: 'SrgbClr', val: '9BBB59', transforms: [] },
+        },
+      },
+    };
+
+    const spec = configToSpec(config, data);
+    expect(spec.encoding?.color).toMatchObject({
+      field: PIE_COLOR_KEY_FIELD,
+      type: 'nominal',
+      legend: {
+        orient: 'right',
+        values: ['point-0', 'point-1', 'point-2'],
+      },
+    });
+
+    const result = compile(spec, undefined, { width: 640, height: 360 });
+    const legendLabels = result.legends
+      .filter((mark): mark is TextMark => mark.type === 'text')
+      .map((mark) => mark.text);
+
+    expect(legendLabels).toEqual(['Category A', 'Category B', 'Category C']);
   });
 
   it('matches Excel horizontal clustered bar series order and data-label slots', () => {

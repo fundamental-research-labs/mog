@@ -16,7 +16,7 @@ import type { CellId } from '@mog/types-core/cell-identity';
 import type { RichText } from '@mog/types-core/rich-text';
 import type { SheetId } from '@mog/types-core';
 
-export type ComposeCommentType = 'note' | 'threadedComment';
+export type ComposeCommentType = 'threadedComment';
 
 // =============================================================================
 // STATE TYPE (minimal version for selectors)

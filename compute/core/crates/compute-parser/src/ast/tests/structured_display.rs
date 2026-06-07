@@ -9,7 +9,7 @@ fn test_display_structured_ref_simple() {
             name: "Col1".to_string(),
         }],
     };
-    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[[Col1]]");
+    assert_eq!(format!("{}", ASTNode::StructuredRef(sr)), "Table1[Col1]");
 }
 
 #[test]

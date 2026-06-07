@@ -188,14 +188,7 @@ export function FormatCellsDialog() {
         ranges[0].startCol === ranges[0].endCol;
 
       if (isSingleCell || ranges.length === 0) {
-        // Strip nulls (ResolvedCellFormat uses null for absent fields) so tabs
-        // see only `undefined` for "not set", consistent with multi-cell mode.
-        const merged: Partial<CellFormat> = {};
-        for (const [k, v] of Object.entries(base ?? {})) {
-          if (v !== null && v !== undefined) {
-            (merged as Record<string, unknown>)[k] = v;
-          }
-        }
+        const merged = buildMergedFormat((base ?? {}) as Partial<CellFormat>, new Set());
         return { merged, sample };
       }
 

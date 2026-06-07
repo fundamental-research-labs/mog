@@ -304,6 +304,96 @@ fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
         .unwrap_or(context.workbook_order + 1)
 }
 
+#[derive(Debug, Clone)]
+pub(super) enum SheetParseSelection {
+    All,
+    Prefix(usize),
+    EditableIndices(std::collections::BTreeSet<usize>),
+    WorkbookIndices(std::collections::BTreeSet<u32>),
+    InitialActiveVisible,
+}
+
+impl SheetParseSelection {
+    fn compact_selected_only(&self) -> bool {
+        matches!(self, Self::WorkbookIndices(_))
+    }
+
+    fn selected_indices(
+        &self,
+        sheet_package_contexts: &[SheetPackageContext],
+        workbook_sheet_inventory: &[domain_types::WorkbookSheetPackageInfo],
+        workbook_views: &[ooxml_types::workbook::BookView],
+    ) -> std::collections::BTreeSet<usize> {
+        match self {
+            Self::All => (0..sheet_package_contexts.len()).collect(),
+            Self::Prefix(max_sheets) => {
+                (0..sheet_package_contexts.len().min(*max_sheets)).collect()
+            }
+            Self::EditableIndices(indices) => indices
+                .iter()
+                .copied()
+                .filter(|idx| *idx < sheet_package_contexts.len())
+                .collect(),
+            Self::WorkbookIndices(indices) => workbook_sheet_inventory
+                .iter()
+                .filter(|entry| indices.contains(&entry.workbook_order))
+                .filter_map(|entry| entry.editable_sheet_index)
+                .filter(|idx| *idx < sheet_package_contexts.len())
+                .collect(),
+            Self::InitialActiveVisible => select_initial_active_visible_editable_index(
+                workbook_sheet_inventory,
+                workbook_views,
+            )
+            .into_iter()
+            .collect(),
+        }
+    }
+}
+
+fn select_initial_active_visible_editable_index(
+    workbook_sheet_inventory: &[domain_types::WorkbookSheetPackageInfo],
+    workbook_views: &[ooxml_types::workbook::BookView],
+) -> Option<usize> {
+    let active_workbook_order = workbook_views
+        .first()
+        .map(|view| view.active_tab as usize)
+        .unwrap_or(0);
+
+    let visible_editable = |entry: &&domain_types::WorkbookSheetPackageInfo| {
+        entry.editable_sheet_index.is_some()
+            && entry.visibility == ooxml_types::workbook::SheetState::Visible
+    };
+
+    if let Some(entry) = workbook_sheet_inventory.iter().find(|entry| {
+        visible_editable(entry) && entry.workbook_order as usize == active_workbook_order
+    }) {
+        return entry.editable_sheet_index;
+    }
+
+    if let Some(entry) = workbook_sheet_inventory.iter().find(visible_editable) {
+        return entry.editable_sheet_index;
+    }
+
+    None
+}
+
+fn compact_inventory_to_selected_sheets(
+    inventory: &mut [domain_types::WorkbookSheetPackageInfo],
+    sheets: &[FullParsedSheet],
+) {
+    let compact_index_by_editable_index: std::collections::BTreeMap<usize, usize> = sheets
+        .iter()
+        .enumerate()
+        .map(|(compact_index, sheet)| (sheet.index, compact_index))
+        .collect();
+
+    for entry in inventory {
+        entry.editable_sheet_index = entry
+            .editable_sheet_index
+            .and_then(|idx| compact_index_by_editable_index.get(&idx).copied());
+    }
+}
+
 /// Parse an XLSX file from raw bytes and return a full structured result.
 ///
 /// This is the core parse pipeline shared between WASM entry points and native
@@ -326,7 +416,7 @@ fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
 pub(super) fn parse_xlsx_full_native_impl(
     xlsx_data: &[u8],
     timings: Option<&mut ParseTimings>,
-    max_sheets: Option<usize>,
+    sheet_selection: SheetParseSelection,
 ) -> Result<FullParseResult, String> {
     // Validate input
     if xlsx_data.is_empty() {
@@ -524,7 +614,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         &content_type_defaults,
         &content_type_overrides,
     );
-    let workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
+    let mut workbook_sheet_inventory = workbook::build_workbook_sheet_inventory(
         &sheet_infos,
         &workbook_relationships,
         parsed_content_types.as_ref(),
@@ -595,11 +685,31 @@ pub(super) fn parse_xlsx_full_native_impl(
     // non-worksheet sheet kinds and invalid tabs without turning them into
     // editable worksheet payloads.
     let sheet_count = sheet_package_contexts.len();
-    // When max_sheets is set, only parse cell data for the first N sheets.
-    let parse_cell_count = match max_sheets {
-        Some(n) => sheet_count.min(n),
-        None => sheet_count,
-    };
+    let selected_sheet_indices = sheet_selection.selected_indices(
+        &sheet_package_contexts,
+        &workbook_sheet_inventory,
+        &workbook_views,
+    );
+    if matches!(sheet_selection, SheetParseSelection::InitialActiveVisible)
+        && selected_sheet_indices.is_empty()
+    {
+        return Err("XLSX workbook has no visible editable worksheet for deferred import".into());
+    }
+    let selected_sheet_contexts: Vec<(usize, &SheetPackageContext)> = sheet_package_contexts
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| selected_sheet_indices.contains(idx))
+        .collect();
+    let parsed_workbook_sheet_indices: std::collections::BTreeSet<u32> =
+        if sheet_selection.compact_selected_only() {
+            selected_sheet_contexts
+                .iter()
+                .map(|(_, context)| context.workbook_order as u32)
+                .collect()
+        } else {
+            Default::default()
+        };
+    let parse_cell_count = selected_sheet_contexts.len();
     let mut total_cells: u32 = 0;
 
     let mut worksheet_timings = WorksheetTimingAccumulators::default();
@@ -642,11 +752,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         }
 
         let mut pre_sheets: Vec<PreDecompressed> = Vec::with_capacity(parse_cell_count);
-        for (sheet_idx, sheet_context) in sheet_package_contexts
-            .iter()
-            .take(parse_cell_count)
-            .enumerate()
-        {
+        for (sheet_idx, sheet_context) in selected_sheet_contexts.iter().copied() {
             let sheet_num = legacy_sheet_num_for_context(sheet_context);
             let sheet_name = sheet_context.sheet_name.clone();
             let sheet_path = sheet_context.owner_part_path.as_deref().ok_or_else(|| {
@@ -818,7 +924,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         // Fall through to sequential path when profiling is enabled
         parse_sheets_sequential(
             &archive,
-            &sheet_package_contexts[..parse_cell_count],
+            &selected_sheet_contexts,
             &shared_strings,
             &pivot_caches,
             &mut ctx,
@@ -834,7 +940,7 @@ pub(super) fn parse_xlsx_full_native_impl(
     #[cfg(not(all(not(target_arch = "wasm32"), feature = "parallel")))]
     let mut sheets: Vec<FullParsedSheet> = parse_sheets_sequential(
         &archive,
-        &sheet_package_contexts[..parse_cell_count],
+        &selected_sheet_contexts,
         &shared_strings,
         &pivot_caches,
         &mut ctx,
@@ -855,15 +961,16 @@ pub(super) fn parse_xlsx_full_native_impl(
     }
     ensure_no_archive_safety_error(&archive)?;
 
-    if parse_cell_count < sheet_count {
+    if parse_cell_count < sheet_count && !sheet_selection.compact_selected_only() {
         append_metadata_only_sheets(
             &archive,
             &mut sheets,
             &mut sheet_ext_namespaces,
-            &sheet_infos,
-            parse_cell_count,
-            sheet_count,
+            &sheet_package_contexts,
         )?;
+    }
+    if sheet_selection.compact_selected_only() {
+        compact_inventory_to_selected_sheets(&mut workbook_sheet_inventory, &sheets);
     }
 
     let t5 = tick(&timings);
@@ -1026,6 +1133,7 @@ pub(super) fn parse_xlsx_full_native_impl(
         workbook_relationships,
         sheet_workbook_r_ids: sheet_infos.iter().map(|si| si.r_id.clone()).collect(),
         workbook_sheet_inventory: workbook_sheet_inventory.clone(),
+        parsed_workbook_sheet_indices,
         imported_media_parts,
         imported_ole_parts,
         raw_metadata_xml,
@@ -1517,7 +1625,7 @@ fn process_sheet_parallel(
 /// Sequential worksheet loop with per-sheet profiling support.
 fn parse_sheets_sequential(
     archive: &XlsxArchive,
-    sheet_package_contexts: &[SheetPackageContext],
+    sheet_package_contexts: &[(usize, &SheetPackageContext)],
     shared_strings: &[String],
     pivot_caches: &std::collections::HashMap<u32, crate::domain::pivot::types::ParsedPivotCache>,
     ctx: &mut ParseContext,
@@ -1530,7 +1638,7 @@ fn parse_sheets_sequential(
 ) -> Result<Vec<FullParsedSheet>, String> {
     let mut sheets: Vec<FullParsedSheet> = Vec::with_capacity(sheet_package_contexts.len());
 
-    for (sheet_idx, sheet_context) in sheet_package_contexts.iter().enumerate() {
+    for (sheet_idx, sheet_context) in sheet_package_contexts.iter().copied() {
         let sheet_num = legacy_sheet_num_for_context(sheet_context);
         let sheet_path = sheet_context.owner_part_path.as_deref().ok_or_else(|| {
             format!(

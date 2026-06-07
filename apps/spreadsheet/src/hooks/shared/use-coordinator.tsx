@@ -26,7 +26,11 @@ import {
   SheetCoordinator,
   createSheetCoordinator as createFullCoordinator,
 } from '../../coordinator';
-import type { ClipboardDependencies, EditorDependencies } from '../../coordinator/types';
+import type {
+  ClipboardDependencies,
+  EditorDependencies,
+  SheetSwitchImportDurabilityGate,
+} from '../../coordinator/types';
 import type { Platform } from '@mog-sdk/contracts/platform';
 import type { Metric } from '../../systems/shared/types';
 import type { UIState } from '../../ui-store';
@@ -49,6 +53,8 @@ export interface SheetCoordinatorConfig {
   onMetric?: (metric: Metric) => void;
   /** UI store API for sheet switch coordination (per-sheet view state) */
   uiStoreApi?: StoreApi<UIState>;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
   /** Editor dependencies for commit coordination and schema lookup */
   editorDependencies?: EditorDependencies;
   /**
@@ -84,7 +90,9 @@ export function createSheetCoordinator(config: SheetCoordinatorConfig): SheetCoo
     platform: config.platform,
     onMetric: config.onMetric,
     // Pass sheet switch dependencies if uiStoreApi is provided
-    sheetSwitchDependencies: config.uiStoreApi ? { uiStoreApi: config.uiStoreApi } : undefined,
+    sheetSwitchDependencies: config.uiStoreApi
+      ? { uiStoreApi: config.uiStoreApi, importDurability: config.importDurability }
+      : undefined,
     // Pass toolbar dependencies (independent of sheet switch) if uiStoreApi is provided
     toolbarDependencies: config.uiStoreApi ? { uiStoreApi: config.uiStoreApi } : undefined,
     // Inject browser confirm dialog for destructive operations (H4: testable coordinator)
@@ -128,6 +136,8 @@ export interface CoordinatorProviderProps {
   onMetric?: (metric: Metric) => void;
   /** UI store API for sheet switch coordination (per-sheet view state) */
   uiStoreApi?: StoreApi<UIState>;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
   /** Editor dependencies for commit coordination and schema lookup */
   editorDependencies?: EditorDependencies;
   /**
@@ -177,6 +187,7 @@ export function CoordinatorProvider({
   platform,
   onMetric,
   uiStoreApi,
+  importDurability,
   editorDependencies,
   enableKeyboard,
   onUIAction,
@@ -195,6 +206,7 @@ export function CoordinatorProvider({
       platform,
       onMetric,
       uiStoreApi,
+      importDurability,
       editorDependencies,
       enableKeyboard,
       onUIAction,

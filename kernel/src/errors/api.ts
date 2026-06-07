@@ -9,6 +9,10 @@
 
 import { KernelError } from './kernel-error';
 
+type OperationFailedOptions = {
+  readonly cause?: unknown;
+};
+
 /**
  * Create an invalid cell address error
  */
@@ -172,9 +176,14 @@ export function columnOutOfBounds(col: number, maxCol: number): KernelError {
 /**
  * Create a generic operation failed error
  */
-export function operationFailed(operation: string, reason: string): KernelError {
+export function operationFailed(
+  operation: string,
+  reason: string,
+  options?: OperationFailedOptions,
+): KernelError {
   return new KernelError('OPERATION_FAILED', `Operation "${operation}" failed: ${reason}`, {
     context: { operation, reason },
+    ...(options && 'cause' in options ? { cause: options.cause } : {}),
   });
 }
 

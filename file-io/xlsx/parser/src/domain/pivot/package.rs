@@ -249,15 +249,21 @@ pub fn parse_pivot_tables_for_sheet_v2(
     let mut results = Vec::new();
 
     let rels_path = format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_num);
-    let pivot_paths = if let Ok(rels_xml) = archive.read_file(&rels_path) {
-        extract_pivot_table_paths_for_sheet(sheet_num, &rels_xml)
+    let pivot_links = if let Ok(rels_xml) = archive.read_file(&rels_path) {
+        extract_pivot_table_links_for_sheet(sheet_num, &rels_xml)
     } else {
         Vec::new()
     };
 
-    for full_path in &pivot_paths {
+    for link in &pivot_links {
+        let full_path = &link.definition_part_path;
         if let Ok(pivot_xml) = archive.read_file(full_path) {
             let mut pt = parse_pivot_table(&pivot_xml);
+            pt.ooxml_preservation.output_worksheet_part_path =
+                Some(format!("xl/worksheets/sheet{}.xml", sheet_num));
+            pt.ooxml_preservation.output_worksheet_relationship_id =
+                Some(link.relationship_id.clone());
+            pt.ooxml_preservation.definition_part_path = Some(full_path.clone());
             pt.ooxml_preservation.relationship =
                 discover_pivot_table_cache_relationship(archive, full_path, pt.cache_id);
             let cache = pivot_caches
@@ -274,6 +280,13 @@ pub fn parse_pivot_tables_for_sheet_v2(
     }
 
     results
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PivotTableWorksheetLink {
+    pub relationship_id: String,
+    pub relationship_target: String,
+    pub definition_part_path: String,
 }
 
 fn discover_pivot_table_cache_relationship(
@@ -548,6 +561,16 @@ pub(crate) fn extract_pivot_table_paths_for_sheet(
     sheet_num: usize,
     rels_xml: &[u8],
 ) -> Vec<String> {
+    extract_pivot_table_links_for_sheet(sheet_num, rels_xml)
+        .into_iter()
+        .map(|link| link.definition_part_path)
+        .collect()
+}
+
+pub(crate) fn extract_pivot_table_links_for_sheet(
+    sheet_num: usize,
+    rels_xml: &[u8],
+) -> Vec<PivotTableWorksheetLink> {
     let relationships = parse_owned_relationships(
         PackageOwner::Worksheet {
             sheet_index: sheet_num,
@@ -558,7 +581,13 @@ pub(crate) fn extract_pivot_table_paths_for_sheet(
     WorksheetRelationships::new(&relationships)
         .pivot_tables()
         .into_iter()
-        .filter_map(|rel| rel.target.path().map(ToOwned::to_owned))
+        .filter_map(|rel| {
+            rel.target.path().map(|path| PivotTableWorksheetLink {
+                relationship_id: rel.id.clone(),
+                relationship_target: rel.target.raw().to_string(),
+                definition_part_path: path.to_string(),
+            })
+        })
         .collect()
 }
 

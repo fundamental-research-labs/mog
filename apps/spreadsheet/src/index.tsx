@@ -364,6 +364,7 @@ export default function SpreadsheetApp({
 
       setContextValue({
         ...runtime,
+        importDurability: handle!,
         ...configRef.current,
       });
       contextHandleRef.current = handle!;

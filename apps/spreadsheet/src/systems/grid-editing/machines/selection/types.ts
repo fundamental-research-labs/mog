@@ -237,10 +237,22 @@ export interface SelectionContext {
  * means either the viewport silently stops following (false-no-emit) or a
  * non-user event yanks the viewport (false-emit).
  */
+export type SelectionScrollIntent =
+  | {
+      type: 'page';
+      axis: 'horizontal' | 'vertical';
+      direction: 'previous' | 'next';
+    }
+  | {
+      type: 'origin';
+      axis: 'horizontal' | 'both';
+    };
+
 export type SelectionEmitted = {
   type: 'userSelectionChanged';
   activeCell: CellCoord;
   followCell: CellCoord;
+  scrollIntent?: SelectionScrollIntent;
 };
 
 // =============================================================================

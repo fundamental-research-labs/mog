@@ -13,7 +13,10 @@
 
 import type { HostDiagnosticsSink } from '@mog-sdk/types-host/diagnostics';
 import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
-import { createHostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
+import {
+  createHostByteFingerprint,
+  createHostCanonicalFingerprint,
+} from '@mog-sdk/types-host/fingerprints';
 import type {
   HostDocumentRef,
   HostSourceContentIdentity,
@@ -123,10 +126,7 @@ function canonicalJsonStringify(value: unknown): string {
 function byteContentIdentity(bytes: Uint8Array): HostSourceContentIdentity {
   return {
     kind: 'immutable-byte-handle',
-    handleFingerprint: createHostCanonicalFingerprint({
-      bytes: Array.from(bytes),
-      sizeBytes: bytes.byteLength,
-    }),
+    handleFingerprint: createHostByteFingerprint(bytes),
     sizeBytes: bytes.byteLength,
   };
 }

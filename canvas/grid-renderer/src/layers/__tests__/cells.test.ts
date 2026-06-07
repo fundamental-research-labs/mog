@@ -18,8 +18,14 @@ import { jest } from '@jest/globals';
 
 import type { FrameContext, RenderRegion, TextMeasurer } from '@mog/canvas-engine';
 import type { CellFormat, FormattedText } from '@mog-sdk/contracts/core';
-import { asFormattedText } from '@mog-sdk/contracts/core';
-import type { GridRegionMeta, SelectionDataSource } from '@mog-sdk/contracts/rendering';
+import { asFormattedText, toCellId } from '@mog-sdk/contracts/core';
+import type {
+  CellDataSource,
+  GridRegionMeta,
+  InteractiveElement,
+  InteractiveElementCollector,
+  SelectionDataSource,
+} from '@mog-sdk/contracts/rendering';
 
 import { ViewportMergeIndex } from '../../coordinates/viewport-merge-index';
 import { ViewportPositionIndex } from '../../coordinates/viewport-position-index';
@@ -37,6 +43,7 @@ function makeMainRegion(opts: {
   sheetId: string;
   viewportId?: string;
   bounds?: { x: number; y: number; width: number; height: number };
+  cellRange?: GridRegionMeta['cellRange'];
 }): RenderRegion<GridRegionMeta> {
   return {
     id: opts.viewportId ?? 'main',
@@ -46,7 +53,7 @@ function makeMainRegion(opts: {
     zoom: 1.0,
     metadata: {
       sheetId: opts.sheetId,
-      cellRange: { startRow: 0, startCol: 0, endRow: 30, endCol: 20 },
+      cellRange: opts.cellRange ?? { startRow: 0, startCol: 0, endRow: 30, endCol: 20 },
       isFrozen: false,
       scrollBehavior: 'free',
       viewportId: opts.viewportId ?? 'main',
@@ -232,10 +239,10 @@ function createMockReader(cells: Map<string, MockCellData>): BinaryCellReader {
   };
 }
 
-function createPositionIndex(rows = 100, cols = 26): ViewportPositionIndex {
-  const pi = new ViewportPositionIndex(25, 100);
+function createPositionIndex(rows = 100, cols = 26, rowHeight = 25): ViewportPositionIndex {
+  const pi = new ViewportPositionIndex(rowHeight, 100);
   const rowPositions = new Float64Array(rows);
-  for (let i = 0; i < rows; i++) rowPositions[i] = i * 25;
+  for (let i = 0; i < rows; i++) rowPositions[i] = i * rowHeight;
   const colPositions = new Float64Array(cols);
   for (let i = 0; i < cols; i++) colPositions[i] = i * 100;
   pi.setPositions(rowPositions, colPositions, 0, 0);
@@ -349,6 +356,20 @@ function createLayerConfig(overrides: Partial<CellsLayerConfig> = {}): CellsLaye
     mergeIndex: new ViewportMergeIndex(),
     textMeasurer: createTextMeasurer(),
     ...overrides,
+  };
+}
+
+function createInteractiveElementCollector(): InteractiveElementCollector {
+  const elements = new Map<string, InteractiveElement>();
+  return {
+    clear: jest.fn(() => {
+      elements.clear();
+    }),
+    add: jest.fn((element: InteractiveElement) => {
+      elements.set(element.id, element);
+    }),
+    getAll: () => Array.from(elements.values()),
+    subscribe: () => () => undefined,
   };
 }
 
@@ -483,6 +504,78 @@ describe('CellsLayer', () => {
     // covered by canvas/grid-canvas/src/renderer/__tests__/viewport-to-region-layout.test.ts.)
   });
 
+  describe('interactive element collection', () => {
+    it('accumulates interactive elements across multiple regions in one frame', () => {
+      const sheetId = 'sheet-interactions';
+      const cells = new Map<string, MockCellData>([
+        ['0,2', { valueType: 2, displayText: 'Vendor' }],
+        [
+          '1,0',
+          {
+            valueType: 3,
+            numberValue: 1,
+            displayText: 'TRUE',
+            isCheckbox: true,
+            hasComment: true,
+          },
+        ],
+      ]);
+      const reader = createMockReader(cells);
+      const collector = createInteractiveElementCollector();
+      const cellData: CellDataSource = {
+        ...NULL_CELL_DATA_SOURCE,
+        getFilterHeaderInfo: (_sheetId, cell) =>
+          cell.row === 0 && cell.col === 2
+            ? {
+                filterId: 'auto-filter-1',
+                headerCellId: toCellId('header-c'),
+                hasActiveFilter: true,
+              }
+            : undefined,
+      };
+      const layer = createCellsLayer(
+        createLayerConfig({
+          binaryCellReader: reader,
+          cellData,
+          interactiveElements: collector,
+          positionIndex: createPositionIndex(),
+        }),
+      );
+      const ctx = createMockContext();
+      const frame = createFrame();
+      const frozenHeaderRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'frozen-row',
+        cellRange: { startRow: 0, startCol: 2, endRow: 0, endCol: 2 },
+      });
+      const mainRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'main',
+        cellRange: { startRow: 1, startCol: 0, endRow: 1, endCol: 0 },
+      });
+
+      layer.beginFrame(frame);
+      layer.render(ctx, frozenHeaderRegion, frame);
+      expect(collector.getAll().map((element) => element.id)).toContain(
+        `filter-button:${sheetId}:0,2`,
+      );
+
+      layer.render(ctx, mainRegion, frame);
+
+      expect(
+        collector
+          .getAll()
+          .map((element) => element.id)
+          .sort(),
+      ).toEqual([
+        `checkbox:${sheetId}:1,0`,
+        `comment-indicator:${sheetId}:1,0`,
+        `filter-button:${sheetId}:0,2`,
+      ]);
+      expect(collector.clear).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ===========================================================================
   // UNIT: Binary reader data extraction
   // ===========================================================================
@@ -544,6 +637,22 @@ describe('CellsLayer', () => {
       const ctx = createMockContext();
       layer.render(ctx, createRegionWithViewport(), createFrame());
       expect(getRenderedTexts(ctx)).toContain('Hello World');
+    });
+
+    it('renders explicit line breaks as separate lines without wrapText format', () => {
+      const reader = createMockReader(
+        new Map([['0,0', { valueType: 2, displayText: 'Line 1\nLine 2\nLine 3' }]]),
+      );
+      const layer = createLayerWithReader(reader, {
+        positionIndex: createPositionIndex(100, 26, 60),
+      });
+      const ctx = createMockContext();
+
+      layer.render(ctx, createRegionWithViewport(), createFrame());
+
+      const texts = getRenderedTexts(ctx);
+      expect(texts).toEqual(expect.arrayContaining(['Line 1', 'Line 2', 'Line 3']));
+      expect(texts).not.toContain('Line 1\nLine 2\nLine 3');
     });
 
     it('renders multiple cells', () => {

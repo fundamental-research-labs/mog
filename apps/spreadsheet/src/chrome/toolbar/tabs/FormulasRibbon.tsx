@@ -15,26 +15,17 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  dispatch,
-  useActionDependencies,
-  useActiveSheetId,
-  useSheetViewOptions,
-  useUIStore,
-  useWorkbook,
-} from '../../../internal-api';
+import { dispatch, useActionDependencies, useUIStore, useWorkbook } from '../../../internal-api';
 
 import { ChevronDownSvg } from '@mog/icons';
 import type { CalculationSettings } from '@mog-sdk/contracts/core';
 import {
   CALCULATION_COLLAPSE_CONFIG,
   DEFINED_NAMES_COLLAPSE_CONFIG,
-  FORMULA_AUDITING_COLLAPSE_CONFIG,
   FUNCTION_LIBRARY_COLLAPSE_CONFIG,
 } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useWorkbookSettings } from '../../../hooks/settings/use-workbook-settings';
-import { useTraceArrows } from '../../../hooks/view/use-trace-arrows';
 import { keyTipRegistry } from '../keytips';
 
 import {
@@ -50,19 +41,14 @@ import {
   CreateFromSelectionIcon,
   DateTimeFunctionIcon,
   DefineNameIcon,
-  ErrorCheckingIcon,
-  EvaluateFormulaIcon,
   FinancialFunctionIcon,
-  FormulaReferencesIcon,
   LogicalFunctionIcon,
   LookupFunctionIcon,
   MathTrigFunctionIcon,
   MoreFunctionsIcon,
   RecentlyUsedIcon,
-  RemoveArrowsIcon,
   TextFunctionIcon,
   UseInFormulaIcon,
-  WatchWindowIcon,
 } from '../primitives/FormulasIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
 import {
@@ -77,579 +63,10 @@ import {
   CalculateIcon,
   FunctionIcon,
   NameManagerIcon,
-  ShowFormulasIcon,
-  TraceDependentsIcon,
-  TracePrecedentsIcon,
 } from '../primitives/ToolbarIcons';
 import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
-
-// =============================================================================
-// Function Category Data
-// =============================================================================
-
-/** All implemented functions per category for the dropdown menus */
-const FUNCTION_CATEGORIES = {
-  financial: {
-    label: 'Financial',
-    functions: [
-      // Time Value of Money (6)
-      'PMT',
-      'FV',
-      'PV',
-      'NPER',
-      'RATE',
-      'FVSCHEDULE',
-      // Investment Analysis (5)
-      'NPV',
-      'IRR',
-      'XNPV',
-      'XIRR',
-      'MIRR',
-      // Payment Breakdown (5)
-      'IPMT',
-      'PPMT',
-      'CUMIPMT',
-      'CUMPRINC',
-      'ISPMT',
-      // Depreciation (7)
-      'SLN',
-      'SYD',
-      'DB',
-      'DDB',
-      'VDB',
-      'AMORLINC',
-      'AMORDEGRC',
-      // Securities & Bonds (12)
-      'PRICE',
-      'YIELD',
-      'DURATION',
-      'MDURATION',
-      'ACCRINT',
-      'ACCRINTM',
-      'COUPDAYS',
-      'COUPDAYBS',
-      'COUPDAYSNC',
-      'COUPNUM',
-      'COUPPCD',
-      'COUPNCD',
-      // Treasury Bills (3)
-      'TBILLPRICE',
-      'TBILLYIELD',
-      'TBILLEQ',
-      // Discount Securities (7)
-      'DISC',
-      'INTRATE',
-      'RECEIVED',
-      'PRICEDISC',
-      'PRICEMAT',
-      'YIELDDISC',
-      'YIELDMAT',
-      // Conversion (7)
-      'EFFECT',
-      'NOMINAL',
-      'RRI',
-      'PDURATION',
-      'DOLLARDE',
-      'DOLLARFR',
-      'EUROCONVERT',
-    ],
-  },
-  logical: {
-    label: 'Logical',
-    functions: [
-      'IF',
-      'IFS',
-      'SWITCH',
-      'AND',
-      'OR',
-      'NOT',
-      'XOR',
-      'IFERROR',
-      'IFNA',
-      'TRUE',
-      'FALSE',
-    ],
-  },
-  text: {
-    label: 'Text',
-    functions: [
-      // Core (10)
-      'CONCAT',
-      'CONCATENATE',
-      'TEXTJOIN',
-      'LEFT',
-      'RIGHT',
-      'MID',
-      'LEN',
-      'TRIM',
-      'CLEAN',
-      'T',
-      // Case (3)
-      'UPPER',
-      'LOWER',
-      'PROPER',
-      // Search & Replace (4)
-      'FIND',
-      'SEARCH',
-      'SUBSTITUTE',
-      'REPLACE',
-      // Conversion (8)
-      'TEXT',
-      'VALUE',
-      'CHAR',
-      'CODE',
-      'UNICHAR',
-      'UNICODE',
-      'DOLLAR',
-      'FIXED',
-      // Joining (2)
-      'REPT',
-      'EXACT',
-      // Modern Excel 365 (5)
-      'TEXTBEFORE',
-      'TEXTAFTER',
-      'TEXTSPLIT',
-      'ARRAYTOTEXT',
-      'VALUETOTEXT',
-      // Byte Operations (7)
-      'LEFTB',
-      'RIGHTB',
-      'MIDB',
-      'LENB',
-      'FINDB',
-      'SEARCHB',
-      'REPLACEB',
-      // CJK (4)
-      'ASC',
-      'DBCS',
-      'JIS',
-      'PHONETIC',
-      // Other (2)
-      'NUMBERVALUE',
-      'TRIMRANGE',
-    ],
-  },
-  dateTime: {
-    label: 'Date & Time',
-    functions: [
-      // Core (11)
-      'TODAY',
-      'NOW',
-      'DATE',
-      'TIME',
-      'YEAR',
-      'MONTH',
-      'DAY',
-      'HOUR',
-      'MINUTE',
-      'SECOND',
-      'WEEKDAY',
-      // Date Math (2)
-      'EDATE',
-      'EOMONTH',
-      // Parsing (2)
-      'DATEVALUE',
-      'TIMEVALUE',
-      // Calculation (3)
-      'DATEDIF',
-      'DAYS',
-      'DAYS360',
-      // Week Info (2)
-      'WEEKNUM',
-      'ISOWEEKNUM',
-      // Workday Functions (4)
-      'WORKDAY',
-      'WORKDAY.INTL',
-      'NETWORKDAYS',
-      'NETWORKDAYS.INTL',
-      // Financial (1)
-      'YEARFRAC',
-    ],
-  },
-  lookup: {
-    label: 'Lookup & Reference',
-    functions: [
-      // Classic Lookup (3)
-      'VLOOKUP',
-      'HLOOKUP',
-      'LOOKUP',
-      // Modern Lookup (2)
-      'XLOOKUP',
-      'XMATCH',
-      // Index/Match (3)
-      'INDEX',
-      'MATCH',
-      'CHOOSE',
-      // Reference (8)
-      'ROW',
-      'COLUMN',
-      'ROWS',
-      'COLUMNS',
-      'ADDRESS',
-      'INDIRECT',
-      'OFFSET',
-      'AREAS',
-      // Dynamic Arrays (5)
-      'FILTER',
-      'SORT',
-      'SORTBY',
-      'UNIQUE',
-      'SEQUENCE',
-      // Array Manipulation (6)
-      'TRANSPOSE',
-      'TAKE',
-      'DROP',
-      'CHOOSEROWS',
-      'CHOOSECOLS',
-      'EXPAND',
-      // Array Stacking (6)
-      'HSTACK',
-      'VSTACK',
-      'WRAPCOLS',
-      'WRAPROWS',
-      'TOCOL',
-      'TOROW',
-      // Miscellaneous (3)
-      'HYPERLINK',
-      'FORMULATEXT',
-      'GETPIVOTDATA',
-    ],
-  },
-  mathTrig: {
-    label: 'Math & Trig',
-    functions: [
-      // Basic Aggregation (10)
-      'SUM',
-      'AVERAGE',
-      'COUNT',
-      'COUNTA',
-      'COUNTBLANK',
-      'MAX',
-      'MIN',
-      'PRODUCT',
-      'SUBTOTAL',
-      'AGGREGATE',
-      // Conditional Aggregation (7)
-      'SUMIF',
-      'SUMIFS',
-      'COUNTIF',
-      'COUNTIFS',
-      'AVERAGEIF',
-      'AVERAGEIFS',
-      'SUMPRODUCT',
-      // Basic Math (8)
-      'ABS',
-      'SIGN',
-      'MOD',
-      'POWER',
-      'SQRT',
-      'SQRTPI',
-      'PI',
-      'QUOTIENT',
-      // Rounding (15)
-      'ROUND',
-      'ROUNDUP',
-      'ROUNDDOWN',
-      'INT',
-      'TRUNC',
-      'MROUND',
-      'EVEN',
-      'ODD',
-      'CEILING',
-      'CEILING.MATH',
-      'CEILING.PRECISE',
-      'ISO.CEILING',
-      'FLOOR',
-      'FLOOR.MATH',
-      'FLOOR.PRECISE',
-      // Trigonometric (13)
-      'SIN',
-      'COS',
-      'TAN',
-      'ASIN',
-      'ACOS',
-      'ATAN',
-      'ATAN2',
-      'COT',
-      'ACOT',
-      'SEC',
-      'CSC',
-      'DEGREES',
-      'RADIANS',
-      // Hyperbolic (10)
-      'SINH',
-      'COSH',
-      'TANH',
-      'ASINH',
-      'ACOSH',
-      'ATANH',
-      'COTH',
-      'ACOTH',
-      'SECH',
-      'CSCH',
-      // Logarithmic (4)
-      'EXP',
-      'LN',
-      'LOG',
-      'LOG10',
-      // Random (3)
-      'RAND',
-      'RANDBETWEEN',
-      'RANDARRAY',
-      // Combinatorics (9)
-      'FACT',
-      'FACTDOUBLE',
-      'COMBIN',
-      'COMBINA',
-      'PERMUT',
-      'PERMUTATIONA',
-      'GCD',
-      'LCM',
-      'MULTINOMIAL',
-      // Matrix (4)
-      'MMULT',
-      'MDETERM',
-      'MINVERSE',
-      'MUNIT',
-      // Sum of Squares (4)
-      'SUMSQ',
-      'SUMX2MY2',
-      'SUMX2PY2',
-      'SUMXMY2',
-      // Conversion (4)
-      'BASE',
-      'DECIMAL',
-      'ROMAN',
-      'ARABIC',
-    ],
-  },
-  more: {
-    statistical: [
-      // Central Tendency
-      'AVERAGE',
-      'MEDIAN',
-      'MODE',
-      'MODE.SNGL',
-      'MODE.MULT',
-      'GEOMEAN',
-      'HARMEAN',
-      'TRIMMEAN',
-      'AVERAGEA',
-      // Dispersion
-      'STDEV',
-      'STDEV.S',
-      'STDEV.P',
-      'STDEVP',
-      'STDEVA',
-      'STDEVPA',
-      'VAR',
-      'VAR.S',
-      'VAR.P',
-      'VARP',
-      'VARA',
-      'VARPA',
-      'AVEDEV',
-      'DEVSQ',
-      // Percentile/Quartile
-      'PERCENTILE',
-      'PERCENTILE.INC',
-      'PERCENTILE.EXC',
-      'QUARTILE',
-      'QUARTILE.INC',
-      'QUARTILE.EXC',
-      'PERCENTRANK',
-      'PERCENTRANK.INC',
-      'PERCENTRANK.EXC',
-      // Ranking
-      'RANK',
-      'RANK.EQ',
-      'RANK.AVG',
-      'LARGE',
-      'SMALL',
-      // Extremes
-      'MAXA',
-      'MINA',
-      'MAXIFS',
-      'MINIFS',
-      // Correlation
-      'CORREL',
-      'PEARSON',
-      'COVAR',
-      'COVARIANCE.P',
-      'COVARIANCE.S',
-      'FISHER',
-      'FISHERINV',
-      // Regression
-      'SLOPE',
-      'INTERCEPT',
-      'RSQ',
-      'STEYX',
-      'LINEST',
-      'LOGEST',
-      'TREND',
-      'GROWTH',
-      'FORECAST',
-      'FORECAST.LINEAR',
-      'FORECAST.ETS',
-      'FORECAST.ETS.CONFINT',
-      'FORECAST.ETS.SEASONALITY',
-      'FORECAST.ETS.STAT',
-      // Shape
-      'KURT',
-      'SKEW',
-      'SKEW.P',
-      'FREQUENCY',
-      'PROB',
-      // Distributions
-      'NORM.DIST',
-      'NORM.INV',
-      'NORM.S.DIST',
-      'NORM.S.INV',
-      'NORMDIST',
-      'NORMINV',
-      'NORMSDIST',
-      'NORMSINV',
-      'STANDARDIZE',
-      'BINOM.DIST',
-      'BINOM.INV',
-      'BINOMDIST',
-      'CRITBINOM',
-      'BINOM.DIST.RANGE',
-      'POISSON',
-      'POISSON.DIST',
-      'EXPON.DIST',
-      'EXPONDIST',
-      'LOGNORM.DIST',
-      'LOGNORM.INV',
-      'LOGNORMDIST',
-      'LOGINV',
-      'NEGBINOM.DIST',
-      'NEGBINOMDIST',
-      // Hypothesis Testing
-      'Z.TEST',
-      'ZTEST',
-      'T.TEST',
-      'TTEST',
-      'T.DIST',
-      'T.DIST.2T',
-      'T.DIST.RT',
-      'T.INV',
-      'T.INV.2T',
-      'F.TEST',
-      'FTEST',
-      'F.DIST',
-      'F.DIST.RT',
-      'F.INV',
-      'F.INV.RT',
-      'CHISQ.TEST',
-      'CHITEST',
-      'CHISQ.DIST',
-      'CHISQ.DIST.RT',
-      'CHISQ.INV',
-      'CHISQ.INV.RT',
-      'CHIDIST',
-      'CHIINV',
-    ],
-    engineering: [
-      // Number System Conversion (12)
-      'BIN2DEC',
-      'BIN2HEX',
-      'BIN2OCT',
-      'DEC2BIN',
-      'DEC2HEX',
-      'DEC2OCT',
-      'HEX2BIN',
-      'HEX2DEC',
-      'HEX2OCT',
-      'OCT2BIN',
-      'OCT2DEC',
-      'OCT2HEX',
-      // Bitwise (5)
-      'BITAND',
-      'BITOR',
-      'BITXOR',
-      'BITLSHIFT',
-      'BITRSHIFT',
-      // Complex Numbers (20)
-      'COMPLEX',
-      'IMABS',
-      'IMAGINARY',
-      'IMARGUMENT',
-      'IMCONJUGATE',
-      'IMCOS',
-      'IMCOSH',
-      'IMCOT',
-      'IMCSC',
-      'IMCSCH',
-      'IMDIV',
-      'IMEXP',
-      'IMLN',
-      'IMLOG10',
-      'IMLOG2',
-      'IMPOWER',
-      'IMPRODUCT',
-      'IMREAL',
-      'IMSEC',
-      'IMSECH',
-      'IMSIN',
-      'IMSINH',
-      'IMSQRT',
-      'IMSUB',
-      'IMSUM',
-      'IMTAN',
-      // Bessel (4)
-      'BESSELI',
-      'BESSELJ',
-      'BESSELK',
-      'BESSELY',
-      // Error Functions (4)
-      'ERF',
-      'ERF.PRECISE',
-      'ERFC',
-      'ERFC.PRECISE',
-      // Other (2)
-      'CONVERT',
-      'DELTA',
-      'GESTEP',
-    ],
-    information: [
-      'ISBLANK',
-      'ISERROR',
-      'ISERR',
-      'ISNA',
-      'ISNUMBER',
-      'ISTEXT',
-      'ISLOGICAL',
-      'ISNONTEXT',
-      'ISREF',
-      'ISEVEN',
-      'ISODD',
-      'ISFORMULA',
-      'TYPE',
-      'ERROR.TYPE',
-      'N',
-      'NA',
-      'CELL',
-      'INFO',
-      'SHEET',
-      'SHEETS',
-    ],
-    database: [
-      'DSUM',
-      'DAVERAGE',
-      'DCOUNT',
-      'DCOUNTA',
-      'DMAX',
-      'DMIN',
-      'DGET',
-      'DPRODUCT',
-      'DSTDEV',
-      'DSTDEVP',
-      'DVAR',
-      'DVARP',
-    ],
-  },
-};
+import { FormulaAuditingGroup } from './formulas/FormulaAuditingGroup';
+import { FUNCTION_CATEGORIES } from './formulas/function-categories';
 
 // =============================================================================
 // Component
@@ -658,8 +75,6 @@ const FUNCTION_CATEGORIES = {
 export function FormulasRibbon() {
   // Action dependencies for unified action system
   const deps = useActionDependencies();
-  const activeSheetId = useActiveSheetId();
-  const { viewOptions } = useSheetViewOptions(activeSheetId);
   const { settings: workbookSettings } = useWorkbookSettings();
 
   // UI Store - READ ONLY selectors (mutations go through dispatch)
@@ -681,33 +96,18 @@ export function FormulasRibbon() {
   };
   const calculationMode = calculationSettings.calcMode === 'manual' ? 'manual' : 'auto';
   const iterativeCalculationEnabled = calculationSettings.enableIterativeCalculation === true;
-  const showFormulas = viewOptions.showFormulas;
 
   // Workbook API for recalculation
   const wb = useWorkbook();
   const mruFunctions = useUIStore((s) => s.mruFunctions);
-  const setSidePanelContent = useUIStore((s) => s.setSidePanelContent);
-  const setSidePanelVisible = useUIStore((s) => s.setSidePanelVisible);
 
   // AutoSum dispatch hook
   const dispatchAction = useDispatch();
-
-  // Trace Arrows hook
-  const {
-    tracePrecedents,
-    traceDependents,
-    removeAllArrows,
-    removePrecedentArrows,
-    removeDependentArrows,
-    hasArrows,
-  } = useTraceArrows();
 
   // Dropdown states (F1)
   const [autoSumOpen, setAutoSumOpen] = useState(false);
   const [recentlyUsedOpen, setRecentlyUsedOpen] = useState(false);
 
-  // Remove Arrows dropdown state (B2.5)
-  const [removeArrowsOpen, setRemoveArrowsOpen] = useState(false);
   const [lookupOpen, setLookupOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [useInFormulaOpen, setUseInFormulaOpen] = useState(false);
@@ -787,28 +187,6 @@ export function FormulasRibbon() {
     dispatchAction('AUTO_SUM');
   }, [dispatchAction]);
 
-  // Handle Show Formulas toggle - uses unified action system
-  const handleShowFormulas = useCallback(() => {
-    dispatch('TOGGLE_SHOW_FORMULAS', deps);
-  }, [deps]);
-
-  const handleErrorChecking = useCallback(() => {
-    dispatch('OPEN_ERROR_CHECKING_DIALOG', deps);
-  }, [deps]);
-
-  const handleEvaluateFormula = useCallback(() => {
-    dispatch('OPEN_EVALUATE_FORMULA_DIALOG', deps);
-  }, [deps]);
-
-  const handleFormulaReferences = useCallback(() => {
-    setSidePanelContent('formula-references');
-    setSidePanelVisible(true);
-  }, [setSidePanelContent, setSidePanelVisible]);
-
-  const handleWatchWindow = useCallback(() => {
-    dispatch('OPEN_WATCH_WINDOW', deps);
-  }, [deps]);
-
   // Handle Calculation Mode change - uses unified action system
   const handleCalculationModeChange = useCallback(
     (mode: string) => {
@@ -868,34 +246,6 @@ export function FormulasRibbon() {
     },
     [deps],
   );
-
-  // Handle Trace Precedents click (F3) -
-  const handleTracePrecedents = useCallback(() => {
-    tracePrecedents();
-  }, [tracePrecedents]);
-
-  // Handle Trace Dependents click (F3) -
-  const handleTraceDependents = useCallback(() => {
-    traceDependents();
-  }, [traceDependents]);
-
-  // Handle Remove Arrows click (F3) -
-  const handleRemoveArrows = useCallback(() => {
-    removeAllArrows();
-    setRemoveArrowsOpen(false);
-  }, [removeAllArrows]);
-
-  // Handle Remove Precedent Arrows (B2.5)
-  const handleRemovePrecedentArrows = useCallback(() => {
-    removePrecedentArrows();
-    setRemoveArrowsOpen(false);
-  }, [removePrecedentArrows]);
-
-  // Handle Remove Dependent Arrows (B2.5)
-  const handleRemoveDependentArrows = useCallback(() => {
-    removeDependentArrows();
-    setRemoveArrowsOpen(false);
-  }, [removeDependentArrows]);
 
   // Render function items for a category dropdown. `data-value` carries
   // the function name so the harness can locate a specific function
@@ -1427,137 +777,7 @@ export function FormulasRibbon() {
         </div>
       </ToolbarGroup>
 
-      {/* Formula Auditing Group - F3: Formula Auditing */}
-      <ToolbarGroup
-        label="Formula Auditing"
-        collapseConfig={FORMULA_AUDITING_COLLAPSE_CONFIG}
-        dropdownIcon={<TracePrecedentsIcon />}
-      >
-        <div className="flex items-center gap-[var(--ribbon-group-items-gap)]">
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="narrow"
-            icon={<TracePrecedentsIcon />}
-            label="Precedents"
-            onClick={handleTracePrecedents}
-            title="Trace Precedents - Show cells that affect selected cell"
-            aria-label="Trace Precedents"
-            visibilityKey="tracePrecedents"
-          />
-
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="narrow"
-            icon={<TraceDependentsIcon />}
-            label="Dependents"
-            onClick={handleTraceDependents}
-            title="Trace Dependents - Show cells affected by selected cell"
-            aria-label="Trace Dependents"
-            visibilityKey="traceDependents"
-          />
-
-          {/* F3: Remove Arrows Dropdown (B2.5) */}
-          <RibbonDropdown
-            open={removeArrowsOpen}
-            onOpenChange={setRemoveArrowsOpen}
-            menuTestId="ribbon-dropdown-menu-remove-arrows"
-            trigger={
-              <RibbonButton
-                layout="vertical"
-                height="full"
-                width="narrow"
-                data-testid="ribbon-dropdown-remove-arrows"
-                icon={<RemoveArrowsIcon />}
-                label="Remove"
-                hasDropdown
-                dropdownPosition="inline"
-                isOpen={removeArrowsOpen}
-                disabled={!hasArrows}
-                title="Remove Arrows - Remove trace arrows"
-                aria-label="Remove Arrows"
-                visibilityKey="removeArrows"
-              />
-            }
-            width="auto"
-            menuLabel="Remove arrows options"
-          >
-            <RibbonDropdownItem dataValue="all" onClick={handleRemoveArrows}>
-              Remove Arrows
-            </RibbonDropdownItem>
-            <RibbonDropdownItem dataValue="precedent" onClick={handleRemovePrecedentArrows}>
-              Remove Precedent Arrows
-            </RibbonDropdownItem>
-            <RibbonDropdownItem dataValue="dependent" onClick={handleRemoveDependentArrows}>
-              Remove Dependent Arrows
-            </RibbonDropdownItem>
-          </RibbonDropdown>
-
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            icon={<ShowFormulasIcon />}
-            label={'Show\nFormulas'}
-            onClick={handleShowFormulas}
-            isOpen={showFormulas}
-            title={`Show Formulas (Ctrl+\`) - ${showFormulas ? 'ON' : 'OFF'}`}
-            aria-label="Show Formulas"
-            aria-pressed={showFormulas}
-            visibilityKey="showFormulas"
-          />
-
-          {/* F3: Error Checking */}
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            icon={<ErrorCheckingIcon />}
-            label={'Error\nChecking'}
-            onClick={handleErrorChecking}
-            title="Error Checking - Check formulas for errors"
-            aria-label="Error Checking"
-            visibilityKey="errorChecking"
-          />
-
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            icon={<EvaluateFormulaIcon />}
-            label={'Evaluate\nFormula'}
-            onClick={handleEvaluateFormula}
-            title="Evaluate Formula - Step through selected formula"
-            aria-label="Evaluate Formula"
-            visibilityKey="evaluateFormula"
-          />
-
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            icon={<FormulaReferencesIcon />}
-            label={'Formula\nReferences'}
-            onClick={handleFormulaReferences}
-            title="Formula References - Inspect formula reference links"
-            aria-label="Formula References"
-            visibilityKey="formulaReferences"
-          />
-
-          <RibbonButton
-            layout="vertical"
-            height="full"
-            width="normal"
-            icon={<WatchWindowIcon />}
-            label={'Watch\nWindow'}
-            onClick={handleWatchWindow}
-            title="Watch Window - Monitor selected cells"
-            aria-label="Watch Window"
-            visibilityKey="watchWindow"
-          />
-        </div>
-      </ToolbarGroup>
+      <FormulaAuditingGroup />
 
       {/* Calculation Group - F4: Add Calculate Sheet */}
       <ToolbarGroup

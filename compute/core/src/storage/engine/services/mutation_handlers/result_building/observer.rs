@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cell_types::{CellId, SheetId};
 
@@ -7,23 +7,95 @@ use crate::snapshot::{
     Axis, CellPosition, CfChange, ChangeKind, CommentChange, DimensionChange, FilterChange,
     FloatingObjectChange, FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult,
     NamedRangeChange, PivotTableChange, PropertyChange, RecalcResult, SheetChange,
-    SheetChangeField, SheetSettingsChange, SortingChange, SparklineChange, TableChange,
-    VisibilityChange, WorkbookSettingsChange,
+    SheetChangeField, SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType,
+    SortingChange, SparklineChange, TableChange, VisibilityChange, WorkbookSettingsChange,
 };
 use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{
-    dimensions, pivots, properties, settings, sparklines, view, visibility,
+    comments as sheet_comments, dimensions, pivots, properties, settings, sparklines, view,
+    visibility,
 };
 use crate::storage::workbook;
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::observe::{CellChangeKind, DocumentChanges};
+use yrs::{Map, Transact};
 
 use super::super::{
     observer_kind_to_change_kind, resolve_col_id_to_index, resolve_row_id_to_index,
 };
 use super::sheet_hydration::build_sheet_hydration_changes;
+
+fn parse_cell_ref(cell_ref: &str) -> Option<CellId> {
+    hex_to_id(cell_ref)
+        .map(CellId::from_raw)
+        .or_else(|| CellId::from_uuid_str(cell_ref).ok())
+}
+
+fn slicer_source_metadata(
+    source: &domain_types::domain::slicer::SlicerSource,
+) -> (SlicerSourceType, String) {
+    match source {
+        domain_types::domain::slicer::SlicerSource::Table { table_id, .. } => {
+            (SlicerSourceType::Table, table_id.clone())
+        }
+        domain_types::domain::slicer::SlicerSource::Pivot { pivot_id, .. } => {
+            (SlicerSourceType::Pivot, pivot_id.clone())
+        }
+    }
+}
+
+fn current_slicer_state(
+    stores: &EngineStores,
+    slicer_id: &str,
+) -> Option<domain_types::domain::slicer::StoredSlicer> {
+    let txn = stores.storage.doc().transact();
+    let workbook = stores.storage.workbook_map();
+    let slicers_map = match workbook.get(&txn, compute_document::schema::KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return None,
+    };
+    match slicers_map.get(&txn, slicer_id) {
+        Some(yrs::Out::YMap(map)) => domain_types::yrs_schema::slicer::from_yrs_map(&map, &txn),
+        _ => None,
+    }
+}
+
+fn current_comment_cell_ref(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    comment_id: &str,
+) -> Option<String> {
+    sheet_comments::get_comment(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        comment_id,
+    )
+    .map(|comment| comment.cell_ref)
+}
+
+fn push_table_change_once(
+    result: &mut MutationResult,
+    name: String,
+    sheet_id: String,
+    kind: ChangeKind,
+) {
+    if result.table_changes.iter().any(|change| {
+        change.name.eq_ignore_ascii_case(&name)
+            && change.sheet_id == sheet_id
+            && change.kind == kind
+    }) {
+        return;
+    }
+
+    result.table_changes.push(TableChange {
+        name,
+        sheet_id,
+        kind,
+    });
+}
 
 // ---------------------------------------------------------------------------
 // build_mutation_result_from_changes
@@ -271,23 +343,112 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     }
 
     // --- Comment changes ---
+    //
+    // A structured comment row can emit both the top-level comment entry event
+    // and field-level map events in the same observer drain, especially during
+    // undo/redo. Public mutation results are cell-anchor invalidations, so
+    // collapse raw comment-row churn to one `(sheet, cell)` change.
+    let mut raw_comment_refs_by_key = HashMap::new();
+    for cch in &changes.comments {
+        if let Some(cell_ref) = cch.cell_ref.as_ref() {
+            raw_comment_refs_by_key.insert((cch.sheet_id, cch.key.clone()), cell_ref.clone());
+        }
+    }
+    let mut seen_comment_cells = HashSet::new();
     for cch in &changes.comments {
         let sheet_id_str = cch.sheet_id.to_uuid_string();
-        let kind = observer_kind_to_change_kind(cch.kind);
-        let cell_id = hex_to_id(&cch.key)
-            .map(CellId::from_raw)
-            .unwrap_or_else(|| CellId::from_raw(0));
+        let cell_ref = cch
+            .cell_ref
+            .clone()
+            .or_else(|| {
+                raw_comment_refs_by_key
+                    .get(&(cch.sheet_id, cch.key.clone()))
+                    .cloned()
+            })
+            .or_else(|| current_comment_cell_ref(stores, &cch.sheet_id, &cch.key))
+            .unwrap_or_else(|| cch.key.clone());
+        if !seen_comment_cells.insert((cch.sheet_id, cell_ref.clone())) {
+            continue;
+        }
+        let kind = if sheet_comments::has_comments(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            &cch.sheet_id,
+            &cell_ref,
+        ) {
+            ChangeKind::Set
+        } else {
+            ChangeKind::Removed
+        };
+        let cell_id = parse_cell_ref(&cell_ref).unwrap_or_else(|| CellId::from_raw(0));
         let position = stores
             .grid_indexes
             .get(&cch.sheet_id)
             .and_then(|g| g.cell_position(&cell_id))
+            .or_else(|| {
+                mirror
+                    .resolve_position(&cell_id)
+                    .map(|pos| (pos.row(), pos.col()))
+            })
             .map(|(row, col)| CellPosition { row, col });
 
         result.comment_changes.push(CommentChange {
             sheet_id: sheet_id_str,
-            cell_id: cch.key.clone(),
+            cell_id: cell_ref,
             position,
             kind,
+        });
+    }
+
+    // --- Slicer changes ---
+    let mut raw_slicer_data_by_id = HashMap::new();
+    for sch in &changes.slicers {
+        let entry = raw_slicer_data_by_id
+            .entry(sch.slicer_id.clone())
+            .or_insert_with(|| (sch.sheet_id, sch.data.clone()));
+        if entry.1.is_none() && sch.data.is_some() {
+            *entry = (sch.sheet_id, sch.data.clone());
+        }
+    }
+    let mut seen_slicers = HashSet::new();
+    for sch in &changes.slicers {
+        if !seen_slicers.insert(sch.slicer_id.clone()) {
+            continue;
+        }
+        let current_data = current_slicer_state(stores, &sch.slicer_id);
+        let (raw_sheet_id, raw_data) = raw_slicer_data_by_id
+            .get(&sch.slicer_id)
+            .cloned()
+            .unwrap_or((sch.sheet_id, sch.data.clone()));
+        let kind = if current_data.is_some() {
+            SlicerChangeKind::Updated
+        } else {
+            SlicerChangeKind::Deleted
+        };
+        let data = current_data.or(raw_data);
+        let sheet_id = sch
+            .sheet_id
+            .map(|sid| sid.to_uuid_string())
+            .or_else(|| raw_sheet_id.map(|sid| sid.to_uuid_string()))
+            .or_else(|| data.as_ref().map(|slicer| slicer.sheet_id.clone()))
+            .unwrap_or_default();
+        let (source_type, source_id) = data
+            .as_ref()
+            .map(|slicer| slicer_source_metadata(&slicer.source))
+            .map_or((None, None), |(source_type, source_id)| {
+                (Some(source_type), Some(source_id))
+            });
+
+        result.slicer_changes.push(SlicerChange {
+            sheet_id,
+            slicer_id: sch.slicer_id.clone(),
+            kind,
+            source_type,
+            source_id,
+            updated_fields: Vec::new(),
+            selected_values: None,
+            selection_change_type: None,
+            data,
         });
     }
 
@@ -298,6 +459,12 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
             sheet_id: sheet_id_str,
             filter_id: fch.key.clone().unwrap_or_default(),
             filter_kind: None,
+            table_id: None,
+            capability: None,
+            unsupported_reasons: Vec::new(),
+            has_active_filter: None,
+            clearable: None,
+            diagnostics: Vec::new(),
             action: Some(
                 match observer_kind_to_change_kind(fch.kind) {
                     ChangeKind::Set => "updated",
@@ -314,11 +481,32 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     // --- Table changes ---
     for tch in &changes.tables {
         let kind = observer_kind_to_change_kind(tch.kind);
-        result.table_changes.push(TableChange {
-            name: tch.key.clone(),
-            sheet_id: String::new(),
-            kind,
-        });
+        if tch.key.is_empty() {
+            if kind == ChangeKind::Set {
+                for table in mirror.all_tables() {
+                    push_table_change_once(
+                        &mut result,
+                        table.name.clone(),
+                        table.sheet_id.clone(),
+                        kind,
+                    );
+                }
+            }
+            continue;
+        }
+
+        let table_name = tch.key.strip_prefix("table:").unwrap_or(&tch.key);
+        let current_table = mirror.get_table(table_name);
+        let kind = if current_table.is_some() {
+            ChangeKind::Set
+        } else {
+            ChangeKind::Removed
+        };
+        let sheet_id = current_table
+            .map(|table| table.sheet_id.clone())
+            .or_else(|| tch.sheet_id.map(|sheet_id| sheet_id.to_uuid_string()))
+            .unwrap_or_default();
+        push_table_change_once(&mut result, table_name.to_string(), sheet_id, kind);
     }
 
     // --- Floating object changes ---

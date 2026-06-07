@@ -193,7 +193,7 @@ export function WorkbookStatisticsDialog() {
     {
       label: 'PivotTables',
       sheet: formatStatValue(stats?.sheet.pivotTables),
-      workbook: formatStatValue(stats?.workbook.pivotTables),
+      workbook: formatStatValue(stats?.workbook['pivotTables']),
     },
     {
       label: 'Formulas',

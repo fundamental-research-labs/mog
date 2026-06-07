@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 import {
   AUTO_SUM,
+  CLEAR_AND_EDIT,
   CLEAR_CONTENTS,
   COMMIT_ACTION_FOR,
   COMMIT_IN_PLACE,
@@ -182,6 +183,98 @@ describe('CLEAR_CONTENTS protection feedback', () => {
     expect(clear).toHaveBeenCalledWith(range, 'contents');
     expect(setSelectionError).toHaveBeenCalledWith('protection', error.message);
     expect(showProtectionAlert).toHaveBeenCalledWith(error.message);
+  });
+});
+
+describe('CLEAR_AND_EDIT multi-cell Backspace', () => {
+  test('clears selected ranges and enters empty edit mode at the active cell', async () => {
+    const range = { startRow: 1, startCol: 1, endRow: 3, endCol: 2 };
+    const clear = jest.fn().mockResolvedValue(undefined as never);
+    const beginEditSession = jest.fn().mockResolvedValue({ success: true } as never);
+    const undoGroup = jest.fn(async (fn: () => Promise<void>) => {
+      await fn();
+    });
+    const deps = {
+      getActiveSheetId: jest.fn().mockReturnValue('sheet1'),
+      workbook: {
+        getSheetById: jest.fn().mockReturnValue({
+          clear,
+          tables: { list: jest.fn().mockResolvedValue([] as never) },
+        }),
+        undoGroup,
+      },
+      coordinator: {
+        grid: { beginEditSession },
+      },
+      accessors: {
+        selection: {
+          getActiveCell: jest.fn().mockReturnValue({ row: 1, col: 1 }),
+          getRanges: jest.fn().mockReturnValue([range]),
+        },
+        clipboard: {
+          hasCut: jest.fn().mockReturnValue(false),
+          getData: jest.fn(),
+        },
+      },
+      commands: {
+        selection: { exitAllModes: jest.fn() },
+      },
+    } as any;
+
+    await expect(CLEAR_AND_EDIT(deps)).resolves.toEqual({ handled: true });
+
+    expect(clear).toHaveBeenCalledWith(range, 'contents');
+    expect(beginEditSession).toHaveBeenCalledWith({
+      sheetId: 'sheet1',
+      cell: { row: 1, col: 1 },
+      entryMode: 'typing',
+      initialTextHint: '',
+    });
+  });
+
+  test('removes exact selected table range without clearing its values or entering edit mode', async () => {
+    const range = { startRow: 1, startCol: 1, endRow: 3, endCol: 2 };
+    const clear = jest.fn().mockResolvedValue(undefined as never);
+    const remove = jest.fn().mockResolvedValue(undefined as never);
+    const beginEditSession = jest.fn().mockResolvedValue({ success: true } as never);
+    const undoGroup = jest.fn(async (fn: () => Promise<void>) => {
+      await fn();
+    });
+    const deps = {
+      getActiveSheetId: jest.fn().mockReturnValue('sheet1'),
+      workbook: {
+        getSheetById: jest.fn().mockReturnValue({
+          clear,
+          tables: {
+            list: jest.fn().mockResolvedValue([{ name: 'Table1', range: 'B2:C4' }] as never),
+            remove,
+          },
+        }),
+        undoGroup,
+      },
+      coordinator: {
+        grid: { beginEditSession },
+      },
+      accessors: {
+        selection: {
+          getActiveCell: jest.fn().mockReturnValue({ row: 1, col: 1 }),
+          getRanges: jest.fn().mockReturnValue([range]),
+        },
+        clipboard: {
+          hasCut: jest.fn().mockReturnValue(false),
+          getData: jest.fn(),
+        },
+      },
+      commands: {
+        selection: { exitAllModes: jest.fn() },
+      },
+    } as any;
+
+    await expect(CLEAR_AND_EDIT(deps)).resolves.toEqual({ handled: true });
+
+    expect(remove).toHaveBeenCalledWith('Table1');
+    expect(clear).not.toHaveBeenCalled();
+    expect(beginEditSession).not.toHaveBeenCalled();
   });
 });
 

@@ -4,6 +4,7 @@ pub(in crate::storage::engine) type XlsxHydrateResult = (
     YrsStorage,
     WorkbookSnapshot,
     Vec<(SheetId, CellId, u32, u32)>,
+    domain_types::ImportReport,
 );
 
 /// Data stored for deferred Yrs CRDT hydration.
@@ -29,4 +30,5 @@ pub(in crate::storage::engine) struct DeferredHydrationCompletion {
     pub(in crate::storage::engine) settings: EngineSettings,
     pub(in crate::storage::engine) phantom_cells: Vec<(SheetId, CellId, u32, u32)>,
     pub(in crate::storage::engine) calculation: domain_types::CalculationProperties,
+    pub(in crate::storage::engine) import_report: domain_types::ImportReport,
 }

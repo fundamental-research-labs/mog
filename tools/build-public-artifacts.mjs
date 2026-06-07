@@ -479,6 +479,7 @@ if (!needsWasmArtifact) {
   console.log(`  SKIP WASM build (not required by selected ship-public packages)`);
 }
 let kernelArtifactBuilt = false;
+let sdkArtifactBuilt = false;
 
 for (const name of shipPublicNames) {
   const pkg = workspacePackages.get(name);
@@ -492,7 +493,7 @@ for (const name of shipPublicNames) {
     continue;
   }
 
-  if (name === '@mog-sdk/node' && !kernelArtifactBuilt) {
+  if (name === '@mog-sdk/sdk' && !kernelArtifactBuilt) {
     buildKernelArtifact(errors);
     kernelArtifactBuilt = true;
   }
@@ -500,6 +501,9 @@ for (const name of shipPublicNames) {
   if (!skipTsBuild) {
     try {
       run('pnpm', ['--filter', name, 'build']);
+      if (name === '@mog-sdk/sdk') {
+        sdkArtifactBuilt = true;
+      }
     } catch (error) {
       errors.push(`${name}: ${error.message}`);
       continue;
@@ -517,6 +521,15 @@ if (shipPublicNames.includes('@mog-sdk/contracts') && !skipTsBuild) {
     run('pnpm', ['--filter', '@mog-sdk/contracts', 'build']);
   } catch (error) {
     errors.push(`@mog-sdk/contracts finalization: ${error.message}`);
+  }
+}
+
+if (sdkArtifactBuilt && !skipTsBuild) {
+  console.log('\n=== SDK artifact verification ===');
+  try {
+    run('pnpm', ['--filter', '@mog-sdk/sdk', 'verify-build']);
+  } catch (error) {
+    errors.push(`@mog-sdk/sdk: ${error.message}`);
   }
 }
 

@@ -193,7 +193,7 @@ export function wireToSeriesConfigArray(w: ChartSeriesData[]): SeriesConfig[] {
 
 /** Convert contract SeriesConfig to wire ChartSeriesData. */
 export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
-  return {
+  return omitUndefinedDeep({
     name: c.name,
     nameRef: c.nameRef,
     type: c.type,
@@ -240,18 +240,29 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     pivotSeriesKey: c.pivotSeriesKey,
     pivotDataFieldIndex: c.pivotDataFieldIndex,
     projectionAuthority: c.projectionAuthority,
-    // projectionDiagnostics is intentionally NOT emitted: it maps to a non-Option
-    // Vec on the Rust side, and a present-but-undefined value (which is what it
-    // always is — the field is never populated) makes serde_wasm_bindgen fail the
-    // entire series-array deserialization, silently dropping every series update.
+    projectionDiagnostics: c.projectionDiagnostics,
     showShadow: c.showShadow,
     showConnectorLines: c.showConnectorLines,
     leaderLineFormat: chartFormatToWire(c.leaderLineFormat),
     showLeaderLines: c.showLeaderLines,
-  };
+  });
 }
 
 /** Convert contract SeriesConfig[] to wire ChartSeriesData[]. */
 export function seriesConfigArrayToWire(c: SeriesConfig[]): ChartSeriesData[] {
   return c.map(seriesConfigToWire);
+}
+
+function omitUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => omitUndefinedDeep(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (child !== undefined) out[key] = omitUndefinedDeep(child);
+    }
+    return out as T;
+  }
+  return value;
 }

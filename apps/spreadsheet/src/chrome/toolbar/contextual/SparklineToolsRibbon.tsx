@@ -11,22 +11,21 @@
  * - Group: Group, Ungroup, Clear sparklines
  */
 
-import { useCallback, useState } from 'react';
-import { useDocumentContext } from '../../../internal-api';
+import { useCallback, useMemo, useState } from 'react';
+import { useActiveCell, useActiveSheetId, useSparklineManager } from '../../../internal-api';
 
 import { Checkbox } from '@mog/shell';
-import { useActionDependencies } from '../../../hooks/toolbar/use-action-dependencies';
+import type {
+  Sparkline,
+  SparklineGroup,
+  SparklineType,
+  SparklineVisualSettings,
+} from '@mog-sdk/contracts/sparklines';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownItem, RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { DeleteIcon } from '../primitives/ToolbarIcons';
 import type { ContextualTabProps } from './contextual-tab-registry';
-
-// =============================================================================
-// Types
-// =============================================================================
-
-type SparklineType = 'line' | 'column' | 'winLoss';
 
 interface SparklineTypeOption {
   type: SparklineType;
@@ -42,6 +41,31 @@ const SPARKLINE_TYPES: SparklineTypeOption[] = [
   { type: 'column', label: 'Column' },
   { type: 'winLoss', label: 'Win/Loss' },
 ];
+
+const DEFAULT_VISUAL: SparklineVisualSettings = {
+  color: '#4472C4',
+};
+
+const DEFAULT_NEGATIVE_COLOR = '#C00000';
+const DEFAULT_HIGH_POINT_COLOR = '#00B050';
+const DEFAULT_LOW_POINT_COLOR = '#FF0000';
+const DEFAULT_FIRST_POINT_COLOR = '#4472C4';
+const DEFAULT_LAST_POINT_COLOR = '#4472C4';
+
+type SparklinePointColorKey =
+  | 'negativeColor'
+  | 'highPointColor'
+  | 'lowPointColor'
+  | 'firstPointColor'
+  | 'lastPointColor';
+
+const DEFAULT_POINT_COLORS: Record<SparklinePointColorKey, string> = {
+  negativeColor: DEFAULT_NEGATIVE_COLOR,
+  highPointColor: DEFAULT_HIGH_POINT_COLOR,
+  lowPointColor: DEFAULT_LOW_POINT_COLOR,
+  firstPointColor: DEFAULT_FIRST_POINT_COLOR,
+  lastPointColor: DEFAULT_LAST_POINT_COLOR,
+};
 
 // =============================================================================
 // Icons (inline until added to ToolbarIcons.tsx)
@@ -138,49 +162,107 @@ const UngroupIcon = () => (
 // =============================================================================
 
 export function SparklineToolsRibbon(_props: ContextualTabProps) {
-  const deps = useActionDependencies();
-  useDocumentContext();
+  const { activeCell } = useActiveCell();
+  const activeSheetId = useActiveSheetId();
+  const { sparklineManager } = useSparklineManager();
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [sparklineRevision, setSparklineRevision] = useState(0);
 
-  // TODO: Get selected sparkline state from hooks when sparkline selection is implemented
-  const selectedSparklineId: string | null = null;
-  const currentType: SparklineType = 'line';
+  const { selectedSparkline, selectedGroup } = useMemo(() => {
+    const sparkline =
+      sparklineManager.getSparklineAtCell(activeSheetId, activeCell.row, activeCell.col) ?? null;
+    const group =
+      sparkline?.groupId != null
+        ? (sparklineManager.getSparklineGroup(sparkline.groupId) ?? null)
+        : null;
+    return { selectedSparkline: sparkline, selectedGroup: group };
+  }, [activeCell.col, activeCell.row, activeSheetId, sparklineManager, sparklineRevision]);
 
-  // Show options state (will be connected to sparkline data)
-  const [showHighPoint, setShowHighPoint] = useState(false);
-  const [showLowPoint, setShowLowPoint] = useState(false);
-  const [showFirstPoint, setShowFirstPoint] = useState(false);
-  const [showLastPoint, setShowLastPoint] = useState(false);
-  const [showNegativePoints, setShowNegativePoints] = useState(false);
-  const [showMarkers, setShowMarkers] = useState(false);
+  const currentType: SparklineType = selectedGroup?.type ?? selectedSparkline?.type ?? 'line';
+  const currentVisual: SparklineVisualSettings =
+    selectedGroup?.visual ?? selectedSparkline?.visual ?? DEFAULT_VISUAL;
+  const canEditSparkline = selectedSparkline != null;
+  const canUngroupSparkline = selectedSparkline?.groupId != null;
+
+  const showHighPoint = Boolean(currentVisual.highPointColor);
+  const showLowPoint = Boolean(currentVisual.lowPointColor);
+  const showFirstPoint = Boolean(currentVisual.firstPointColor);
+  const showLastPoint = Boolean(currentVisual.lastPointColor);
+  const showNegativePoints = Boolean(currentVisual.negativeColor);
+  const showMarkers = currentVisual.showMarkers === true;
 
   // ==========================================================================
   // Handlers
   // ==========================================================================
 
-  const handleChangeType = useCallback(
-    (type: SparklineType) => {
-      // TODO: Implement when sparkline type change action is added
-      console.log('Change sparkline type to:', type);
-      setTypeDropdownOpen(false);
+  const updateSelectedSparkline = useCallback(
+    async (updates: Pick<Partial<Sparkline>, 'type' | 'visual'>) => {
+      if (!selectedSparkline) {
+        return;
+      }
+
+      if (selectedGroup) {
+        await sparklineManager.updateSparklineGroup(
+          selectedGroup.id,
+          updates as Pick<Partial<SparklineGroup>, 'type' | 'visual'>,
+        );
+      } else {
+        await sparklineManager.updateSparkline(selectedSparkline.id, updates);
+      }
+
+      setSparklineRevision((revision) => revision + 1);
     },
-    [selectedSparklineId, deps],
+    [selectedGroup, selectedSparkline, sparklineManager],
   );
 
-  const handleGroup = useCallback(() => {
-    // TODO: Implement sparkline group action
-    console.log('Group sparklines');
-  }, [deps]);
+  const handleChangeType = useCallback(
+    (type: SparklineType) => {
+      void updateSelectedSparkline({ type });
+      setTypeDropdownOpen(false);
+    },
+    [updateSelectedSparkline],
+  );
+
+  const handleTogglePointColor = useCallback(
+    (key: SparklinePointColorKey, checked: boolean) => {
+      const nextVisual: SparklineVisualSettings = {
+        ...currentVisual,
+        [key]: checked ? (currentVisual[key] ?? DEFAULT_POINT_COLORS[key]) : undefined,
+      };
+      void updateSelectedSparkline({ visual: nextVisual });
+    },
+    [currentVisual, updateSelectedSparkline],
+  );
+
+  const handleToggleMarkers = useCallback(
+    (checked: boolean) => {
+      void updateSelectedSparkline({
+        visual: {
+          ...currentVisual,
+          showMarkers: checked,
+        },
+      });
+    },
+    [currentVisual, updateSelectedSparkline],
+  );
 
   const handleUngroup = useCallback(() => {
-    // TODO: Implement sparkline ungroup action
-    console.log('Ungroup sparklines');
-  }, [deps]);
+    if (!selectedSparkline?.groupId) {
+      return;
+    }
+    void sparklineManager.ungroupSparklines(selectedSparkline.groupId).then(() => {
+      setSparklineRevision((revision) => revision + 1);
+    });
+  }, [selectedSparkline?.groupId, sparklineManager]);
 
   const handleClear = useCallback(() => {
-    // TODO: Implement sparkline clear action
-    console.log('Clear sparklines');
-  }, [deps]);
+    if (!selectedSparkline) {
+      return;
+    }
+    void sparklineManager.deleteSparkline(selectedSparkline.id).then(() => {
+      setSparklineRevision((revision) => revision + 1);
+    });
+  }, [selectedSparkline, sparklineManager]);
 
   // ==========================================================================
   // Render
@@ -208,6 +290,7 @@ export function SparklineToolsRibbon(_props: ContextualTabProps) {
               }
               label="Type"
               onClick={() => setTypeDropdownOpen(!typeDropdownOpen)}
+              disabled={!canEditSparkline}
               title="Change sparkline type"
               aria-label="Change sparkline type"
               aria-haspopup="listbox"
@@ -240,42 +323,48 @@ export function SparklineToolsRibbon(_props: ContextualTabProps) {
             <Checkbox
               id="sparkline-high-point"
               checked={showHighPoint}
-              onChange={(checked) => setShowHighPoint(checked)}
+              onChange={(checked) => handleTogglePointColor('highPointColor', checked)}
               label="High Point"
+              disabled={!canEditSparkline}
             />
             <Checkbox
               id="sparkline-low-point"
               checked={showLowPoint}
-              onChange={(checked) => setShowLowPoint(checked)}
+              onChange={(checked) => handleTogglePointColor('lowPointColor', checked)}
               label="Low Point"
+              disabled={!canEditSparkline}
             />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="sparkline-first-point"
               checked={showFirstPoint}
-              onChange={(checked) => setShowFirstPoint(checked)}
+              onChange={(checked) => handleTogglePointColor('firstPointColor', checked)}
               label="First Point"
+              disabled={!canEditSparkline}
             />
             <Checkbox
               id="sparkline-last-point"
               checked={showLastPoint}
-              onChange={(checked) => setShowLastPoint(checked)}
+              onChange={(checked) => handleTogglePointColor('lastPointColor', checked)}
               label="Last Point"
+              disabled={!canEditSparkline}
             />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="sparkline-negative-points"
               checked={showNegativePoints}
-              onChange={(checked) => setShowNegativePoints(checked)}
+              onChange={(checked) => handleTogglePointColor('negativeColor', checked)}
               label="Negative Points"
+              disabled={!canEditSparkline}
             />
             <Checkbox
               id="sparkline-markers"
               checked={showMarkers}
-              onChange={(checked) => setShowMarkers(checked)}
+              onChange={handleToggleMarkers}
               label="Markers"
+              disabled={!canEditSparkline}
             />
           </div>
         </div>
@@ -290,9 +379,10 @@ export function SparklineToolsRibbon(_props: ContextualTabProps) {
             height="full"
             icon={<GroupIcon />}
             label="Group"
-            onClick={handleGroup}
+            disabled
             title="Group selected sparklines"
             aria-label="Group sparklines"
+            role="button"
           />
           <RibbonButton
             id="sparkline-ungroup"
@@ -301,8 +391,10 @@ export function SparklineToolsRibbon(_props: ContextualTabProps) {
             icon={<UngroupIcon />}
             label="Ungroup"
             onClick={handleUngroup}
+            disabled={!canUngroupSparkline}
             title="Ungroup selected sparklines"
             aria-label="Ungroup sparklines"
+            role="button"
           />
           <RibbonButton
             id="sparkline-clear"
@@ -311,8 +403,10 @@ export function SparklineToolsRibbon(_props: ContextualTabProps) {
             icon={<DeleteIcon />}
             label="Clear"
             onClick={handleClear}
+            disabled={!canEditSparkline}
             title="Clear selected sparklines"
             aria-label="Clear sparklines"
+            role="button"
           />
         </div>
       </ToolbarGroup>

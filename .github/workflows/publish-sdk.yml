@@ -141,7 +141,7 @@ jobs:
             "@mog-sdk/sheet-view"
             "@mog-sdk/spreadsheet-app"
             "@mog-sdk/embed"
-            "@mog-sdk/node"
+            "@mog-sdk/sdk"
           )
           for pkg in "${packages[@]}"; do
             if npm view "$pkg@$VERSION" version 2>/dev/null; then
@@ -489,7 +489,7 @@ jobs:
             NPM_TAG_ARGS=(--tag "${{ steps.npm-tag.outputs.tag }}")
           fi
           VERSION="${{ needs.version.outputs.version }}"
-          for dir in artifacts/public-packages/mog-sdk__contracts artifacts/public-packages/mog-sdk__sheet-view artifacts/public-packages/mog-sdk__spreadsheet-app artifacts/public-packages/mog-sdk__embed artifacts/public-packages/mog-sdk__node; do
+          for dir in artifacts/public-packages/mog-sdk__contracts artifacts/public-packages/mog-sdk__sheet-view artifacts/public-packages/mog-sdk__spreadsheet-app artifacts/public-packages/mog-sdk__embed artifacts/public-packages/mog-sdk__sdk; do
             PACKAGE_NAME=$(node -p "require('./$dir/package.json').name")
             if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
               echo "$PACKAGE_NAME@$VERSION already published; skipping."
@@ -519,7 +519,7 @@ jobs:
             "@mog-sdk/sheet-view"
             "@mog-sdk/spreadsheet-app"
             "@mog-sdk/embed"
-            "@mog-sdk/node"
+            "@mog-sdk/sdk"
           )
           missing=("${packages[@]}")
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
@@ -564,7 +564,7 @@ jobs:
           PY_VERSION="${{ needs.version.outputs.py-version }}"
           echo "## SDK Publish Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**TypeScript SDK:** \`@mog-sdk/node@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**TypeScript SDK:** \`@mog-sdk/sdk@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
             echo "**Python SDK:** \`mog-sdk==${PY_VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -583,7 +583,7 @@ jobs:
           echo "- \`@mog-sdk/sheet-view@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/spreadsheet-app@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/embed@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- \`@mog-sdk/node@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/sdk@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
             echo "### Published PyPI packages" >> "$GITHUB_STEP_SUMMARY"
@@ -622,7 +622,7 @@ jobs:
             exit 0
           fi
           gh release create "${{ needs.version.outputs.tag }}" \
-            --title "@mog-sdk/node v${{ needs.version.outputs.version }}" \
+            --title "@mog-sdk/sdk v${{ needs.version.outputs.version }}" \
             --generate-notes \
             --latest
         env:

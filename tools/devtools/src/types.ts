@@ -408,6 +408,15 @@ export interface DevToolsConsoleAPI {
   clear(): void;
 
   /**
+   * Clear retained actor/machine snapshots.
+   *
+   * `clear()` is step-scoped and intentionally preserves the last-known
+   * machine state for assertions. Use this at document/runtime boundaries
+   * after the old document has been disposed.
+   */
+  clearActorState(): void;
+
+  /**
    * Dispatch an action through the spreadsheet's unified action
    * system, routed through the wired `KeyboardCoordinator` so the
    * handler runs with the same `ActionDependencies` real keyboard
@@ -450,13 +459,10 @@ export interface DevToolsConsoleAPI {
   ): Promise<Record<string, ProgrammaticCellValue>>;
 
   /**
-   * Read CF-resolved displayed format properties for a batch of cells via
-   * the compute bridge (production read path —
-   * `bridge.getDisplayedRangeProperties` + per-cell fallback). Used by
-   * snapshot capture to surface conditional-formatting backgrounds for
-   * cells the rendered viewport hasn't evaluated. Returns a sparse map
-   * keyed by `"<row>,<col>"` containing only cells that actually have
-   * displayed-format properties.
+   * Read displayed format properties for a batch of cells via the compute
+   * bridge (production read path — `bridge.getDisplayedRangeProperties` +
+   * per-cell fallback). Supports cells outside the rendered viewport and
+   * returns the same normalized format keys as `getCellFormat`.
    */
   getDisplayedFormatsForCells(
     cells: ReadonlyArray<{ row: number; col: number }>,

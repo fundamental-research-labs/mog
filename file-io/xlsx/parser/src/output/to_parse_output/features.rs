@@ -6,11 +6,10 @@ use std::collections::HashMap;
 
 use crate::infra::opc::opc_target_to_zip_path;
 use domain_types::domain::floating_object::{
-    AnchorMode, ChartDrawingFrameOoxmlProps, ConnectorBinding, ConnectorData, ConnectorOoxmlProps,
-    FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
-    FormControlData, FormControlOoxmlProps, OleObjectData, OleObjectOoxmlProps,
-    OleObjectPackageIdentity, OleObjectPreviewIdentity, PictureData, PictureOoxmlProps, ShapeData,
-    ShapeOoxmlProps,
+    AnchorMode, ConnectorBinding, ConnectorData, ConnectorOoxmlProps, FloatingObject,
+    FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData, FormControlData,
+    FormControlOoxmlProps, OleObjectData, OleObjectOoxmlProps, OleObjectPackageIdentity,
+    OleObjectPreviewIdentity, PictureData, PictureOoxmlProps, ShapeData, ShapeOoxmlProps,
 };
 use domain_types::{
     AxisBound, AxisBoundLabel, CFCellRange, CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar,
@@ -20,8 +19,7 @@ use domain_types::{
     RichTextRun, Sparkline as DtSparkline, SparklineAxisSettings, SparklineCellAddress,
     SparklineDataRange, SparklineGroup as DtSparklineGroup, SparklineType as DtSparklineType,
     SparklineVisualSettings, TableColumnSpec, TableSpec, TotalsFunction, ValidationOperator,
-    ValidationRule, ValidationSpec,
-    chart::{AnchorPosition, ObjectSize},
+    ValidationRule, ValidationSpec, chart::ObjectSize,
 };
 
 use crate::domain::drawings::{Anchor as DrawingAnchor, Drawing, DrawingContent};

@@ -11,7 +11,7 @@ import type { ActorRefFrom, SnapshotFrom } from 'xstate';
 
 import type { SheetViewHandle } from '@mog-sdk/sheet-view';
 import type { focusMachine } from '@mog/shell';
-import type { CellFormat, SheetViewOptions } from '@mog-sdk/contracts/core';
+import type { CellFormat, SheetId, SheetViewOptions } from '@mog-sdk/contracts/core';
 import type { ViewportReader } from '@mog-sdk/contracts/api';
 import type {
   CellCoord,
@@ -286,6 +286,15 @@ export interface ShellCoordinatorState {
 export interface SheetSwitchDependencies {
   /** UI store API for subscribing to activeSheetId changes and accessing view state methods */
   uiStoreApi: import('zustand').StoreApi<import('../ui-store').UIState>;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
+}
+
+export interface SheetSwitchImportDurabilityGate {
+  readonly isImportDurabilityPending: boolean;
+  scheduleDeferredHydration?(): Promise<void>;
+  awaitMaterialized?(scope?: SheetId | 'allSheets'): Promise<void>;
+  awaitImportDurability(): Promise<void>;
 }
 
 /**

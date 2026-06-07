@@ -120,6 +120,9 @@ export function Checkbox({
   // Map our checked prop to Radix's checked prop
   // Radix accepts: true | false | 'indeterminate'
   const radixChecked = checked;
+  const accessibleLabel =
+    ariaLabel ??
+    (typeof label === 'string' || typeof label === 'number' ? String(label) : undefined);
 
   // Handle change from Radix (receives boolean | 'indeterminate')
   const handleCheckedChange = (state: boolean | 'indeterminate') => {
@@ -158,7 +161,7 @@ export function Checkbox({
       required={required}
       className={checkboxClasses}
       data-testid={dataTestId}
-      aria-label={ariaLabel}
+      aria-label={accessibleLabel}
     >
       <RadixCheckbox.Indicator className="flex items-center justify-center">
         {radixChecked === 'indeterminate' ? (

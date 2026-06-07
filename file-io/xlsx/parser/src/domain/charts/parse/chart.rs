@@ -135,7 +135,7 @@ pub(super) fn parse_display_options(xml: &[u8], chart_start: usize) -> DisplayOp
 
     if let Some(start) = find_tag_simd(xml, b"dispBlanksAs", chart_start) {
         if let Some(val) = attrs::parse_string_attr(&xml[start..], b"val=\"") {
-            opts.disp_blanks_as = DisplayBlanksAs::from_ooxml(&val);
+            opts.disp_blanks_as = Some(DisplayBlanksAs::from_ooxml(&val));
         }
     }
 

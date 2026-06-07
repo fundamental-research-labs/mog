@@ -11,10 +11,11 @@ import {
   SERIES_STROKE_FIELD,
   SERIES_STROKE_WIDTH_FIELD,
 } from '../../core/chart-ir/fields';
+import { barBaselineValueForDomain } from '../../core/chart-ir/bar-geometry';
 import type { RectMark } from '../../primitives/types';
 import type { AnyScale, ScaleMap } from '../encoding-resolver';
 import { resolveEncodings } from '../encoding-resolver';
-import type { ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
+import type { BarGeometrySpec, ConfigSpec, DataRow, EncodingSpec, Layout, MarkSpec } from '../spec';
 import { barSlotForDatum, createBarSlotContext } from './bar-slot';
 import { definedStyle, renderableDataRows } from './helpers';
 
@@ -81,6 +82,11 @@ export function generateBarMarks(
   let percentDomainMin = 0;
   let percentDomainMax = 100;
   if (isPercentStacked) {
+    const geometryPercentDomain = config?.barGeometry?.percentDomain;
+    if (geometryPercentDomain) {
+      percentDomainMin = geometryPercentDomain[0];
+      percentDomainMax = geometryPercentDomain[1];
+    }
     if (catField && valField) {
       const totals = new Map<string, { positive: number; negativeMagnitude: number }>();
       for (const d of renderData) {
@@ -110,9 +116,11 @@ export function generateBarMarks(
         }
         return { ...d, [valField]: 0 };
       });
-      percentDomainMin = hasNegative ? -100 : 0;
-      percentDomainMax = hasPositive ? 100 : 0;
-      if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
+      if (!geometryPercentDomain) {
+        percentDomainMin = hasNegative ? -100 : 0;
+        percentDomainMax = hasPositive ? 100 : 0;
+        if (percentDomainMin === percentDomainMax) percentDomainMax = percentDomainMin + 100;
+      }
     }
   }
 
@@ -145,8 +153,16 @@ export function generateBarMarks(
   const posPercentAccumulators = new Map<string, number>();
   const negPercentAccumulators = new Map<string, number>();
 
-  // Compute the zero position for the value axis (for proper baseline)
-  const zeroPos = isHorizontal ? (effectiveXScale(0) as number) : (effectiveYScale(0) as number);
+  const baselinePos = valueBaselinePosition({
+    geometry: config?.barGeometry,
+    scale: isHorizontal ? effectiveXScale : effectiveYScale,
+    fallbackValue: 0,
+    pixelMin: isHorizontal ? layout.plotArea.x : layout.plotArea.y,
+    pixelMax: isHorizontal
+      ? layout.plotArea.x + layout.plotArea.width
+      : layout.plotArea.y + layout.plotArea.height,
+    fallbackPixel: isHorizontal ? layout.plotArea.x : layout.plotArea.y + layout.plotArea.height,
+  });
 
   const slotContext = createBarSlotContext(normalizedData, encoding, config, scales);
   const processOrder = slotContext?.processOrder ?? normalizedData.map((_, i) => i);
@@ -177,7 +193,7 @@ export function generateBarMarks(
       const rangeStartX = finitePosition(x2Value);
       const scaledX2 =
         rangeStartX !== undefined ? (effectiveXScale(rangeStartX) as number) : undefined;
-      const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.x;
+      const baseline = Number.isFinite(baselinePos) ? baselinePos : layout.plotArea.x;
 
       if (isNaN(barY) || isNaN(scaledX) || !isFinite(scaledX) || !isFinite(barY)) {
         x = layout.plotArea.x;
@@ -249,7 +265,9 @@ export function generateBarMarks(
       const rangeStartY = finitePosition(y2Value);
       const y2Pos =
         rangeStartY !== undefined ? (effectiveYScale(rangeStartY) as number) : undefined;
-      const baseline = !isNaN(zeroPos) ? zeroPos : layout.plotArea.y + layout.plotArea.height;
+      const baseline = Number.isFinite(baselinePos)
+        ? baselinePos
+        : layout.plotArea.y + layout.plotArea.height;
 
       if (isNaN(barX) || isNaN(yPos) || !isFinite(yPos) || !isFinite(barX)) {
         x = isNaN(barX) || !isFinite(barX) ? layout.plotArea.x : barX + groupOffset;
@@ -358,4 +376,31 @@ export function generateBarMarks(
   }
 
   return marks;
+}
+
+function valueBaselinePosition(input: {
+  geometry: BarGeometrySpec | undefined;
+  scale: AnyScale;
+  fallbackValue: number;
+  pixelMin: number;
+  pixelMax: number;
+  fallbackPixel: number;
+}): number {
+  const scaleDomain = typeof input.scale.domain === 'function' ? input.scale.domain() : undefined;
+  const domain =
+    Array.isArray(scaleDomain) && scaleDomain.length >= 2
+      ? scaleDomain
+      : (input.geometry?.percentDomain ?? input.geometry?.valueAxisDomain);
+  const baselineValue = domain
+    ? (barBaselineValueForDomain(input.geometry, domain) ?? input.geometry?.baselineValue)
+    : input.geometry?.baselineValue;
+  const scaled = input.scale(baselineValue ?? input.fallbackValue);
+  if (typeof scaled !== 'number' || !Number.isFinite(scaled)) {
+    return input.fallbackPixel;
+  }
+  return clamp(
+    scaled,
+    Math.min(input.pixelMin, input.pixelMax),
+    Math.max(input.pixelMin, input.pixelMax),
+  );
 }

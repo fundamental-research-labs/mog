@@ -23,6 +23,11 @@
       "types": "./dist/data/charts.d.ts",
       "import": "./dist/data/charts.js"
     },
+    "./data/diagnostics": {
+      "development": "./src/data/diagnostics.ts",
+      "types": "./dist/data/diagnostics.d.ts",
+      "import": "./dist/data/diagnostics.js"
+    },
     "./data/filter": {
       "development": "./src/data/filter.ts",
       "types": "./dist/data/filter.d.ts",

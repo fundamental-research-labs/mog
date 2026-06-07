@@ -18,6 +18,7 @@ import type {
 } from '@mog-sdk/contracts/actions';
 import type { ColumnFilterCriteria, FilterCondition } from '@mog-sdk/contracts/filter';
 
+import { recordFilterReadinessError } from '../../infra/diagnostics/filter-readiness-errors';
 import { guardBridgeMutation } from './bridge-error-guard';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
@@ -840,18 +841,35 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
+  const sheetId = deps.getActiveSheetId();
+  let operation = 'filters.listSummaries';
 
-  const allFilters = await ws.filters.list();
+  try {
+    const allFilters = await ws.filters.listSummaries();
+    const clearableFilters = allFilters.filter((filter) => {
+      const hasActiveFilter = filter.hasActiveFilter ?? filter.hasActiveCriteria;
+      return filter.clearable ?? hasActiveFilter;
+    });
 
-  if (!allFilters || allFilters.length === 0) {
-    return handled(); // No filters to clear
+    if (clearableFilters.length === 0) {
+      return handled(); // No filters to clear
+    }
+
+    operation = 'filters.clearAllCriteria';
+    for (const filter of clearableFilters) {
+      await ws.filters.clearAllCriteria(filter.id);
+    }
+
+    return handled();
+  } catch (error) {
+    recordFilterReadinessError({
+      source: 'dataTabClear',
+      sheetId,
+      operation,
+      error,
+    });
+    throw error;
   }
-
-  for (const filter of allFilters) {
-    await ws.filters.clearAllCriteria(filter.id);
-  }
-
-  return handled();
 };
 
 /**
@@ -866,29 +884,51 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
   const ws = getWs(deps);
+  const sheetId = deps.getActiveSheetId();
+  let operation = 'filters.listSummaries';
 
-  const allFilters = await ws.filters.list();
+  try {
+    const allFilters = await ws.filters.listSummaries();
 
-  if (!allFilters || allFilters.length === 0) {
-    return handled(); // No filters to reapply
-  }
-
-  for (const filter of allFilters) {
-    if (filter.filterKind === 'advancedFilter') {
-      if (!filter.advancedFilter?.active) continue;
-      await ws.filters.applyAdvanced({
-        listRange: rangeToA1Notation(filter.range),
-        criteriaRange: filter.advancedFilter.criteriaRange
-          ? rangeToA1Notation(filter.advancedFilter.criteriaRange)
-          : undefined,
-        mode: 'inPlace',
-        uniqueRecordsOnly: filter.advancedFilter.uniqueRecordsOnly,
-        filterId: filter.id,
-      });
-    } else {
-      await ws.filters.apply(filter.id);
+    if (!allFilters || allFilters.length === 0) {
+      return handled(); // No filters to reapply
     }
-  }
 
-  return handled();
+    operation = 'filters.apply';
+    for (const filter of allFilters) {
+      if (filter.filterKind === 'advancedFilter') {
+        const hasActiveFilter =
+          filter.hasActiveFilter ?? filter.hasActiveCriteria ?? (filter.activeColumnCount ?? 0) > 0;
+        if (!hasActiveFilter) continue;
+
+        operation = 'filters.getInfo';
+        const details = await ws.filters.getInfo(filter.id);
+        if (!details?.advancedFilter?.active) continue;
+
+        operation = 'filters.applyAdvanced';
+        await ws.filters.applyAdvanced({
+          listRange: rangeToA1Notation(details.range),
+          criteriaRange: details.advancedFilter.criteriaRange
+            ? rangeToA1Notation(details.advancedFilter.criteriaRange)
+            : undefined,
+          mode: 'inPlace',
+          uniqueRecordsOnly: details.advancedFilter.uniqueRecordsOnly,
+          filterId: filter.id,
+        });
+      } else {
+        operation = 'filters.reapply';
+        await ws.filters.reapply(filter.id);
+      }
+    }
+
+    return handled();
+  } catch (error) {
+    recordFilterReadinessError({
+      source: 'dataTabReapply',
+      sheetId,
+      operation,
+      error,
+    });
+    throw error;
+  }
 };

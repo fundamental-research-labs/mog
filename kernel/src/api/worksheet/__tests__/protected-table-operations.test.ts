@@ -102,6 +102,7 @@ function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}
     applyFilter: jest.fn().mockResolvedValue(undefined),
     resizeTable: jest.fn().mockResolvedValue(undefined),
     addTableColumn: jest.fn().mockResolvedValue(undefined),
+    renameTableColumn: jest.fn().mockResolvedValue(undefined),
     removeTableColumn: jest.fn().mockResolvedValue(undefined),
     toggleTotalsRow: jest.fn().mockResolvedValue(undefined),
     toggleHeaderRow: jest.fn().mockResolvedValue(undefined),
@@ -160,6 +161,8 @@ describe('protected sheet table operation policy', () => {
 
     await expect(tables.rename('Sales', 'NewSales')).rejects.toThrow(KernelError);
     expect(ctx.computeBridge.renameTable).not.toHaveBeenCalled();
+    await expect(tables.renameColumn('Sales', 1, 'Rep Name')).rejects.toThrow(KernelError);
+    expect(ctx.computeBridge.renameTableColumn).not.toHaveBeenCalled();
     await expect(tables.convertToRange('Sales')).rejects.toThrow(KernelError);
     expect(ctx.computeBridge.convertTableToRange).not.toHaveBeenCalled();
 
@@ -168,6 +171,22 @@ describe('protected sheet table operation policy', () => {
     } catch (error) {
       expectProtected(error, 'tables.convertToRange');
     }
+  });
+
+  it('renames table columns when table definition edits are allowed', async () => {
+    const ctx = createCtx(null);
+    const tables = new WorksheetTablesImpl(ctx, SHEET_ID);
+
+    await tables.renameColumn('Sales', 1, 'Rep Name');
+
+    expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Rep Name');
+    expect(ctx.eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'table:updated',
+        sheetId: SHEET_ID,
+        tableId: 'Sales',
+      }),
+    );
   });
 
   it('allows table style mutations only with formatCells', async () => {

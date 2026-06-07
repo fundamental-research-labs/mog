@@ -15,11 +15,20 @@ import * as RangeOps from '../range-operations';
 // ---------------------------------------------------------------------------
 
 function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
+  const order: string[] = [];
   return {
+    order,
+    awaitMaterialized: jest.fn().mockImplementation(async (scope: string) => {
+      order.push(`await:${scope}`);
+    }),
     computeBridge: {
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
-      setCellsByPosition: jest.fn().mockResolvedValue(undefined),
-      clearRangeByPosition: jest.fn().mockResolvedValue(undefined),
+      setCellsByPosition: jest.fn().mockImplementation(async () => {
+        order.push('setCellsByPosition');
+      }),
+      clearRangeByPosition: jest.fn().mockImplementation(async () => {
+        order.push('clearRangeByPosition');
+      }),
       ...overrides,
     },
   };
@@ -44,6 +53,7 @@ describe('clearRange', () => {
 
     expect(result.cellCount).toBe(12);
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(SHEET_ID, 0, 0, 2, 3);
+    expect(ctx.order).toEqual(['await:allSheets', 'clearRangeByPosition']);
   });
 
   it('throws on swapped range bounds (startRow > endRow)', async () => {
@@ -121,10 +131,11 @@ describe('setRange', () => {
     // value goes through `toCellInput` — no \x00 sentinel.
     expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
       { row: 0, col: 0, input: { kind: 'parse', text: 'hello' } },
-      { row: 0, col: 1, input: { kind: 'parse', text: '42' } },
-      { row: 1, col: 0, input: { kind: 'parse', text: 'true' } },
+      { row: 0, col: 1, input: { kind: 'value', value: 42 } },
+      { row: 1, col: 0, input: { kind: 'value', value: true } },
       { row: 1, col: 1, input: { kind: 'clear' } },
     ]);
+    expect(ctx.order).toEqual(['await:allSheets', 'setCellsByPosition']);
   });
 
   it('empty-string and null both clear (Excel convention via ergonomic helper)', async () => {
@@ -159,5 +170,6 @@ describe('setRange', () => {
     const ctx = createMockCtx();
     await RangeOps.setRange(ctx, SHEET_ID, 0, 0, []);
     expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
+    expect(ctx.awaitMaterialized).not.toHaveBeenCalled();
   });
 });

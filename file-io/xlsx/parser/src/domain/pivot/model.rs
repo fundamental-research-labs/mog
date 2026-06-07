@@ -9,6 +9,8 @@ pub struct PivotTable {
     pub cache_id: u32,
     /// Whether data fields are on rows (true) or columns (false)
     pub data_on_rows: bool,
+    /// Caption for the data field area (OOXML `dataCaption`).
+    pub data_caption: Option<String>,
     /// Location of the pivot table in the worksheet
     pub location: PivotLocation,
     /// Row fields in the pivot table
@@ -57,6 +59,7 @@ impl Default for PivotTable {
             name: String::new(),
             cache_id: 0,
             data_on_rows: false,
+            data_caption: None,
             location: PivotLocation::default(),
             row_fields: Vec::new(),
             col_fields: Vec::new(),

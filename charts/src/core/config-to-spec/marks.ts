@@ -24,6 +24,18 @@ import { SERIES_FILL_FIELD, SERIES_STROKE_FIELD, SERIES_STROKE_WIDTH_FIELD } fro
 import { resolveSubTypeMarkProps } from './subtypes';
 import { linePointsToCanvasPx } from './units';
 import { barOrientationForChartType } from './bar-geometry';
+import {
+  RADAR_DEFAULT_FILLED_OPACITY,
+  radarBlankPolicyFromDisplayBlanksAs,
+} from '../radar-semantics';
+import {
+  defaultPieLikeExplosionPercent,
+  doughnutInnerRadiusRatio,
+  firstSliceAngleRadians,
+  isDoughnutLikeChartType,
+  isExplodedPieLikeChartType,
+  isPie3DLikeChartType,
+} from './pie-like';
 
 export { applyImportedBarOutline } from './mark-format';
 
@@ -32,14 +44,36 @@ export { applyImportedBarOutline } from './mark-format';
  * These are consumed by the OOXML exporter for per-slice explosion.
  */
 export function applyPieSliceExplosion(mark: MarkSpec, config: ChartConfig): void {
-  if (!config.pieSlice) return;
-  const pieSlice = config.pieSlice as typeof config.pieSlice & { explodedIndex?: number };
-  const explodedIndex = pieSlice.explodedIndex ?? pieSlice.explosion;
+  const pieSlice = config.pieSlice as
+    | (typeof config.pieSlice & { explodedIndex?: number })
+    | undefined;
+  if (!pieSlice && !isExplodedPieLikeChartType(config.type)) return;
+
+  const explodedIndex = pieSlice?.explodedIndex;
   if (explodedIndex !== undefined) {
     mark._explodedIndex = explodedIndex;
   }
-  if (pieSlice.explodedIndices !== undefined && pieSlice.explodedIndices.length > 0) {
+  if (pieSlice?.explodedIndices !== undefined && pieSlice.explodedIndices.length > 0) {
     mark._explodedIndices = pieSlice.explodedIndices;
+  }
+  const explosionOffset = defaultPieLikeExplosionPercent(
+    config,
+    explodedIndex ?? pieSlice?.explodedIndices?.[0] ?? 0,
+  );
+  if (explosionOffset !== undefined && explosionOffset > 0) {
+    mark._explosionOffset = explosionOffset;
+  }
+  if (
+    pieSlice?.explodeAll === true ||
+    isExplodedPieLikeChartType(config.type) ||
+    (pieSlice?.explodeOffset !== undefined &&
+      explodedIndex === undefined &&
+      (!pieSlice.explodedIndices || pieSlice.explodedIndices.length === 0)) ||
+    (pieSlice?.explosion !== undefined &&
+      explodedIndex === undefined &&
+      (!pieSlice.explodedIndices || pieSlice.explodedIndices.length === 0))
+  ) {
+    mark._explodeAll = true;
   }
 }
 
@@ -97,7 +131,7 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     return mark;
   }
 
-  if (config.type === 'pie3d' || config.type === 'pie3dExploded') {
+  if (isPie3DLikeChartType(config.type)) {
     const mark: MarkSpec = {
       type: 'arc3d',
       chart3d: { family: 'pie', view3d: config.view3d },
@@ -106,9 +140,6 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     };
     applyPrimarySeriesFormat(mark, config);
     applyPointStyleFields(mark, config);
-    if (config.pieSlice?.explodeOffset) {
-      mark.padAngle = config.pieSlice.explodeOffset;
-    }
     applyPieSliceExplosion(mark, config);
     return mark;
   }
@@ -122,30 +153,26 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     };
     applyPrimarySeriesFormat(mark, config);
     applyPointStyleFields(mark, config);
+    applyPieSliceExplosion(mark, config);
     return mark;
   }
 
   // Doughnut: arc with innerRadius
-  if (config.type === 'doughnut') {
+  if (isDoughnutLikeChartType(config.type)) {
     const mark: MarkSpec = {
       type: 'arc',
-      innerRadius: doughnutInnerRadius(config),
+      innerRadius: doughnutInnerRadiusRatio(config),
       startAngle: firstSliceAngleRadians(config),
       ...(subProps || {}),
     };
     applyPrimarySeriesFormat(mark, config);
     applyPointStyleFields(mark, config);
-    // Pie slice explosion
-    if (config.pieSlice?.explodeOffset) {
-      mark.padAngle = config.pieSlice.explodeOffset;
-    }
-    // Attach explosion indices as metadata for OOXML export
     applyPieSliceExplosion(mark, config);
     return mark;
   }
 
   // Pie: arc (no innerRadius)
-  if (config.type === 'pie') {
+  if (config.type === 'pie' || config.type === 'pieExploded') {
     const mark: MarkSpec = {
       type: 'arc',
       startAngle: firstSliceAngleRadians(config),
@@ -153,10 +180,6 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
     };
     applyPrimarySeriesFormat(mark, config);
     applyPointStyleFields(mark, config);
-    if (config.pieSlice?.explodeOffset) {
-      mark.padAngle = config.pieSlice.explodeOffset;
-    }
-    // Attach explosion indices as metadata for OOXML export
     applyPieSliceExplosion(mark, config);
     return mark;
   }
@@ -192,9 +215,10 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
       fillField: SERIES_FILL_FIELD,
       strokeField: SERIES_STROKE_FIELD,
       strokeWidthField: SERIES_STROKE_WIDTH_FIELD,
+      radarBlankPolicy: radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs).blankPolicy,
     };
     if (radarFilled) {
-      mark.fillOpacity = 0.22;
+      mark.fillOpacity = RADAR_DEFAULT_FILLED_OPACITY;
     }
     if (radarMarkers) {
       mark.point = true;
@@ -277,32 +301,6 @@ export function buildMark(config: ChartConfig): MarkType | MarkSpec {
 
   // Simple mark type string
   return baseType;
-}
-
-function doughnutInnerRadius(config: ChartConfig): number {
-  const holeSize =
-    finitePercent(
-      config.series?.find((series) => series.doughnutHoleSize !== undefined)?.doughnutHoleSize,
-    ) ?? finitePercent(config.doughnutHoleSize);
-  return holeSize !== undefined ? holeSize / 100 : 0.5;
-}
-
-function finitePercent(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(0, Math.min(100, value))
-    : undefined;
-}
-
-function firstSliceAngleRadians(config: ChartConfig): number {
-  const angle =
-    finiteDegrees(
-      config.series?.find((series) => series.firstSliceAngle !== undefined)?.firstSliceAngle,
-    ) ?? finiteDegrees(config.firstSliceAngle);
-  return angle !== undefined ? (angle * Math.PI) / 180 : 0;
-}
-
-function finiteDegrees(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function resolveBar3DShape(

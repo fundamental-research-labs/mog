@@ -143,7 +143,7 @@ export function setupChartCoordination(config: ChartCoordinationConfig): ChartCo
         ? workbook.getSheetById(toSheetId(getActiveSheetId()))
         : workbook.activeSheet;
       const activeSheetId = String(ws.sheetId);
-      void ws.charts.list().then((allCharts) => {
+      void ws.charts.list({ materialization: 'available' }).then((allCharts) => {
         // Drop the result if a later emission has already been applied —
         // out-of-order async resolves must not overwrite the latest state.
         if (seq <= lastAppliedSeq) return;

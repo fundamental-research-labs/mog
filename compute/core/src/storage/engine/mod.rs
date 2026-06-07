@@ -30,6 +30,7 @@ mod bridge_imports;
 mod cell_bridge;
 mod cell_semantics;
 mod sync_bridge;
+mod table_result_merge;
 mod undo_bridge;
 mod workbook_theme;
 pub use cell_semantics::CellInfo;
@@ -38,6 +39,7 @@ mod data_table_formula;
 mod delegations;
 mod export;
 mod features;
+mod filter_import_diagnostics;
 mod format_inference;
 mod formatting;
 mod grid_indexing;
@@ -48,6 +50,7 @@ mod objects;
 mod queries;
 mod query_serialization;
 mod recalc_postprocess;
+mod runtime_diagnostics;
 mod screenshot;
 pub mod search;
 mod security;
@@ -115,6 +118,18 @@ pub struct YrsComputeEngine {
     /// poll this buffer.
     pub(crate) security_events: std::sync::Arc<security_events::SecurityEventBuffer>,
 
+    /// Last canonical import report for this engine instance.
+    ///
+    /// This is runtime-only diagnostic state: it is replaced on workbook import,
+    /// not persisted in Yrs, and not exported back to XLSX.
+    pub(crate) import_report: domain_types::ImportReport,
+
+    /// Runtime operation diagnostics emitted by user/session commands.
+    ///
+    /// This is engine-local state: it is retained only in memory, not persisted
+    /// in Yrs, and not exported back to XLSX.
+    pub(crate) runtime_diagnostics: runtime_diagnostics::RuntimeDiagnosticsStore,
+
     /// Yrs `update_v1` buffer.
     ///
     /// One observer is installed at engine construction; every committed
@@ -165,6 +180,17 @@ impl YrsComputeEngine {
         for sheet_id in &sheet_ids {
             self.refresh_cf_cache(sheet_id);
         }
+    }
+
+    pub(crate) fn assign_and_record_runtime_diagnostics(
+        &mut self,
+        diagnostics: &mut [crate::snapshot::RuntimeOperationDiagnostic],
+    ) {
+        self.runtime_diagnostics.assign_and_record(diagnostics);
+    }
+
+    pub(crate) fn clear_runtime_diagnostics(&mut self) {
+        self.runtime_diagnostics.clear();
     }
 }
 

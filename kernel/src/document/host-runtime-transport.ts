@@ -66,6 +66,12 @@ export function mapHostRuntimeToTransportConfig(
         // sniffed from require() or process globals.
       };
 
+    case 'headless-wasm':
+      return {
+        environment: 'headless',
+        explicitRuntime: 'wasm',
+      };
+
     case 'tauri-native': {
       const config = runtime.config;
       return {

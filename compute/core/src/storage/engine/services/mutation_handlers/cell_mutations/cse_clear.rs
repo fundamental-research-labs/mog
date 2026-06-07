@@ -30,10 +30,16 @@ pub(super) fn push_resolved_clear_target(
     resolved: &mut Vec<(u32, u32, CellId)>,
     direct_edit_old_values: &mut HashMap<CellId, CellValue>,
     seen_cell_ids: &mut HashSet<CellId>,
+    sheet_id: &SheetId,
     row: u32,
     col: u32,
     cell_id: CellId,
 ) {
+    if let Some((anchor_id, _)) = mirror.dynamic_spill_member_covering(sheet_id, row, col)
+        && seen_cell_ids.contains(&anchor_id)
+    {
+        return;
+    }
     if seen_cell_ids.insert(cell_id) {
         let old_val = mirror
             .get_cell_value(&cell_id)
@@ -62,7 +68,7 @@ fn projection_fully_covered_by_range(
         && end_col >= projection_end_col
 }
 
-pub(super) fn cse_anchor_clear_targets_for_range(
+pub(super) fn projection_anchor_clear_targets_for_range(
     mirror: &CellMirror,
     sheet_id: SheetId,
     start_row: u32,
@@ -81,24 +87,36 @@ pub(super) fn cse_anchor_clear_targets_for_range(
         end_row_exclusive,
         end_col_exclusive,
     ) {
-        if !mirror.is_cse_anchor(&projection.source) {
-            continue;
-        }
-
         let Some(anchor_pos) = mirror.resolve_position(&projection.source) else {
             continue;
         };
 
-        if !projection_fully_covered_by_range(
-            projection.origin_row,
-            projection.origin_col,
-            projection.rows,
-            projection.cols,
-            start_row,
-            start_col,
-            end_row,
-            end_col,
-        ) {
+        if mirror.is_cse_anchor(&projection.source) {
+            if !projection_fully_covered_by_range(
+                projection.origin_row,
+                projection.origin_col,
+                projection.rows,
+                projection.cols,
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            ) {
+                let row = start_row.max(projection.origin_row);
+                let col = start_col.max(projection.origin_col);
+                return Err(ComputeError::PartialArrayWrite {
+                    sheet_id: sheet_id.to_uuid_string(),
+                    row,
+                    col,
+                    anchor_row: anchor_pos.row(),
+                    anchor_col: anchor_pos.col(),
+                });
+            }
+        } else if anchor_pos.row() < start_row
+            || anchor_pos.row() > end_row
+            || anchor_pos.col() < start_col
+            || anchor_pos.col() > end_col
+        {
             let row = start_row.max(projection.origin_row);
             let col = start_col.max(projection.origin_col);
             return Err(ComputeError::PartialArrayWrite {

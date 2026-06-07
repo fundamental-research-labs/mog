@@ -24,6 +24,8 @@ import type {
   ISlicerBridge,
   ISpreadsheetKernelContext,
 } from '@mog-sdk/contracts/kernel';
+import type { MaterializationState } from '@mog-sdk/contracts/api';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import type { IKernelServices } from '@mog-sdk/contracts/services';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
@@ -107,6 +109,10 @@ export interface DocumentContextOptions {
   workbookLinkResolver?: WorkbookLinkResolver;
   /** Trusted host/runtime identity for the current open workbook session. */
   workbookLinkScope?: WorkbookLinkStatusScope;
+  /** Lifecycle-backed XLSX materialization barrier. Defaults to a resolved noop. */
+  awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
+  /** Lifecycle-backed XLSX materialization state. Defaults to all-sheets ready. */
+  getMaterializationState?: () => MaterializationState;
 }
 
 // =============================================================================
@@ -355,6 +361,10 @@ export function createDocumentContext(
     locale,
     charts,
     computeBridge: wrappedComputeBridge,
+    awaitMaterialized: options.awaitMaterialized ?? (() => Promise.resolve()),
+    getMaterializationState:
+      options.getMaterializationState ??
+      (() => ({ phase: 'AllSheetsReady', isDeferred: false, isMaterialized: true })),
     inkRecognition: createInkRecognitionBridge(),
     textEffectsRendering,
     equationBridge,

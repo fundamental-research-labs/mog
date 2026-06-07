@@ -185,7 +185,7 @@ export interface ISpreadsheetKernelContext extends IKernelContext<SpreadsheetEve
 
   /**
    * Chart image exporter — injected by the platform host.
-   * Browser hosts use their canvas exporter; the Node SDK uses its native
+   * Browser hosts use their canvas exporter; `@mog-sdk/sdk/node` uses its native
    * headless raster backend. If omitted, exportImage() fails with an explicit
    * operation error.
    */

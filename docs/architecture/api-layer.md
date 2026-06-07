@@ -1,8 +1,9 @@
 # API Layer Architecture
 
 > **Status: architecture reference.** Public consumers should start with
-> `@mog-sdk/node` for headless Node.js usage and the embed packages for browser
-> usage. `@mog-sdk/kernel`, `@mog/transport`, and `infra/rust-bridge/*` are
+> `@mog-sdk/sdk` for headless workbook automation in Node, Workers, and
+> WASM-capable hosts, and the embed packages for browser UI usage.
+> `@mog-sdk/kernel`, `@mog/transport`, and `infra/rust-bridge/*` are
 > workspace-internal implementation packages in the current manifests, even
 > though they define most of the API-layer mechanics described here.
 
@@ -11,7 +12,7 @@ TypeScript kernel, generated bridge methods, and platform-specific transports.
 
 ```
 Public SDK / runtime facade        Workspace TS kernel              Bridge + transport                Rust engine
-@mog-sdk/node                      @mog-sdk/kernel (private)        @mog/transport (private)          compute-api / compute-core
+@mog-sdk/sdk                      @mog-sdk/kernel (private)        @mog/transport (private)          compute-api / compute-core
 runtime/sdk/src/boot.ts      ->    kernel/src/api/            ->    BridgeTransport.call(...)   ->    ComputeService
 createWorkbook()                   Workbook / Worksheet             N-API / Tauri / WASM              YrsComputeEngine
 
@@ -24,7 +25,7 @@ types/api/src/api/*                kernel/src/bridges/compute/*.gen.ts
 
 | Package or path | Current status | Role |
 | --- | --- | --- |
-| `runtime/sdk` (`@mog-sdk/node`) | public shipped | Headless Node.js SDK. Exports `createWorkbook`, contract types, SDK errors/events, `MogDocumentFactory`, and API introspection metadata. |
+| `runtime/sdk` (`@mog-sdk/sdk`) | public shipped | Unified headless SDK. The root import resolves to native N-API in Node and WASM in Workers/web-standard runtimes; exports `createWorkbook`, contract types, SDK errors/events, `MogDocumentFactory`, and API introspection metadata. |
 | `contracts` (`@mog-sdk/contracts`) | public shipped | Public type and small runtime-value barrel for workbook, worksheet, events, core cell types, document, SDK, and app contracts. |
 | `runtime/embed` (`@mog-sdk/embed`) | public shipped | Read-only sheet/view embed package. |
 | `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) | public shipped | Full spreadsheet app embed for trusted same-origin hosts. |
@@ -34,12 +35,12 @@ types/api/src/api/*                kernel/src/bridges/compute/*.gen.ts
 | `infra/rust-bridge/*` | workspace-internal | Rust proc macros, bridge IR, target generators, and the TypeScript bridge client interface. |
 | `compute/pyo3` (`mog-sdk`, import `mog`) | public-experimental source | Native Python SDK source exists and is marked alpha in `pyproject.toml`; release status should be confirmed before documenting it as shipped. |
 
-## Public Node Path
+## Public SDK Path
 
-The current copy-paste public API path is `@mog-sdk/node`:
+The current copy-paste public API path is the root `@mog-sdk/sdk` import:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: 'UTC' });
 const ws = wb.activeSheet;
@@ -52,11 +53,17 @@ console.log(await ws.getValue('A2')); // 84
 wb.dispose();
 ```
 
-The Node SDK accepts blank workbooks, `Uint8Array` XLSX bytes, file paths, and
-an options object. Internally it creates a host-backed headless document,
-loads the N-API addon through the optional platform packages, registers the
-Node chart exporter, asks the document handle for its cached workbook, and
-chains workbook disposal to document and host disposal.
+In Node, the SDK accepts blank workbooks, `Uint8Array` XLSX bytes, file paths,
+and an options object. Internally the Node entry creates a host-backed headless
+document, loads the N-API addon through the optional platform packages,
+registers the native chart exporter, asks the document handle for its cached
+workbook, and chains workbook disposal to document and host disposal.
+
+In Workers/web-standard runtimes, package export conditions select the WASM
+entry before Node-only modules are loaded. Explicit subpaths
+`@mog-sdk/sdk/node`, `@mog-sdk/sdk/wasm`, and `@mog-sdk/sdk/workerd` are escape
+hatches for hosts that need to force a binding. WASM-capable entries accept a
+host-provided `wasmModule`; file-path I/O is Node-only.
 
 External SDK users should prefer this public facade. Direct imports from
 `@mog-sdk/kernel` are monorepo/workspace integration points, not a published npm
@@ -114,7 +121,7 @@ labels:
 The primary implementation path is the unified API:
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -424,7 +431,7 @@ binary layout details.
    formula evaluation, recalculation, identity-aware structural edits, and
    workbook serialization.
 2. Public JavaScript consumers should enter through public runtime facades such
-   as `@mog-sdk/node`, not private workspace packages.
+   as `@mog-sdk/sdk`, not private workspace packages.
 3. The TypeScript kernel owns the workbook/worksheet object model, lifecycle
    wrappers, event surfaces, state mirror, services, and bridge composition.
 4. Generated bridge artifacts keep Rust wire methods and TypeScript transport

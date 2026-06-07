@@ -21,10 +21,12 @@ export function buildAnnotationLayers(
   data: ChartData,
   encoding: EncodingSpec,
   rows: DataRow[],
-  options: { includeMarkers?: boolean } = {},
+  options: { includeMarkers?: boolean; consumeNativeStockVisual?: boolean } = {},
 ): ChartSpec[] {
   return [
-    ...buildAnalysisLineLayers(config, encoding, rows),
+    ...buildAnalysisLineLayers(config, encoding, rows, {
+      consumeNativeStockVisual: options.consumeNativeStockVisual,
+    }),
     ...(hasRowFlag(rows, ERROR_BAR_VISIBLE_FIELD) ? buildErrorBarLayers(encoding, rows) : []),
     ...buildTrendlineLayers(config, data, encoding, rows),
     ...(hasRowFlag(rows, DATA_LABEL_LEADER_VISIBLE_FIELD)

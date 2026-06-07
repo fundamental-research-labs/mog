@@ -5,7 +5,8 @@
  * properties agree across the selection (show the active cell's value) and
  * which disagree (show indeterminate / placeholder / empty). We compute that
  * once at dialog open via `detectMixedProperties` and pass tabs a merged
- * `Partial<CellFormat>` where mixed properties are stripped to undefined.
+ * `Partial<CellFormat>` where mixed properties are stripped to undefined and
+ * agreed default-backed properties are materialized to their normalized value.
  *
  * Both `base` (active cell, returned by `ws.formats.get`) and the per-cell
  * entries (returned by `ws.formats.getCellProperties`) are 5-layer-cascade
@@ -129,22 +130,35 @@ export function detectMixedProperties(
 
 /**
  * Build the merged format passed to tabs as `initialFormat`. Mixed properties
- * are stripped (left undefined); agreed properties keep the base's value.
+ * are stripped (left undefined); agreed properties keep the base's value, or
+ * the normalized default when the resolved format represents "absent" as
+ * null/undefined.
  */
 export function buildMergedFormat(
   base: Partial<CellFormat>,
   mixed: ReadonlySet<keyof CellFormat>,
 ): Partial<CellFormat> {
-  const merged: Partial<CellFormat> = { ...base };
-  for (const key of mixed) {
-    delete (merged as Record<string, unknown>)[key];
+  const merged: Partial<CellFormat> = {};
+
+  // Preserve non-null base values for every non-mixed property, including
+  // properties not tracked by mixed-state detection (for example borders and
+  // numberFormat).
+  for (const key of Object.keys(base) as (keyof CellFormat)[]) {
+    if (mixed.has(key)) continue;
+    const value = (base as Record<string, unknown>)[key];
+    if (value !== null && value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
   }
-  // ResolvedCellFormat carries `null` for absent fields. Tabs distinguish
-  // mixed (undefined) from "explicitly absent" (null) — convert null to
-  // undefined too so tabs don't try to render "null" as a real value.
-  for (const key of Object.keys(merged) as (keyof CellFormat)[]) {
-    if ((merged as Record<string, unknown>)[key] === null) {
-      delete (merged as Record<string, unknown>)[key];
+
+  // Materialize normalized defaults for tracked properties that are not mixed.
+  // Without this, a resolved `null`/absent shrinkToFit becomes `undefined`,
+  // which tabs correctly interpret as mixed/indeterminate.
+  for (const key of TRACKED_PROPERTIES) {
+    if (mixed.has(key)) continue;
+    if ((merged as Record<string, unknown>)[key] !== undefined) continue;
+    if (Object.prototype.hasOwnProperty.call(FORMAT_DEFAULTS, key)) {
+      (merged as Record<string, unknown>)[key] = FORMAT_DEFAULTS[key];
     }
   }
   return merged;

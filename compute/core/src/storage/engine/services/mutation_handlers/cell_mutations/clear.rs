@@ -11,47 +11,9 @@ use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
 use super::cse_clear::{
-    collect_materialized_cells_in_range, cse_anchor_clear_targets_for_range,
+    collect_materialized_cells_in_range, projection_anchor_clear_targets_for_range,
     push_resolved_clear_target,
 };
-use super::position_resolution::mutation_set_cells_by_position;
-
-fn single_dynamic_projection_member(
-    stores: &EngineStores,
-    mirror: &CellMirror,
-    sheet_id: SheetId,
-    start_row: u32,
-    start_col: u32,
-    end_row: u32,
-    end_col: u32,
-) -> Option<(u32, u32)> {
-    if start_row != end_row || start_col != end_col {
-        return None;
-    }
-
-    if stores
-        .grid_indexes
-        .get(&sheet_id)
-        .and_then(|grid| grid.cell_id_at(start_row, start_col))
-        .is_some()
-    {
-        return None;
-    }
-
-    let (source, _, _) = mirror
-        .projection_registry
-        .resolve(&sheet_id, start_row, start_col)?;
-    if mirror.is_cse_anchor(&source) {
-        return None;
-    }
-
-    let source_pos = mirror.resolve_position(&source)?;
-    if source_pos.row() == start_row && source_pos.col() == start_col {
-        return None;
-    }
-
-    Some((start_row, start_col))
-}
 
 pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     stores: &mut EngineStores,
@@ -66,36 +28,22 @@ pub(in crate::storage::engine) fn mutation_clear_range_by_position(
     use crate::storage::infra::cell_iter;
     use compute_document::hex::id_to_hex;
 
-    if let Some((row, col)) = single_dynamic_projection_member(
-        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
-    ) {
-        return mutation_set_cells_by_position(
-            stores,
-            mirror,
-            mutation,
-            vec![(
-                sheet_id,
-                row,
-                col,
-                CellInput::Literal {
-                    text: String::new(),
-                },
-            )],
-            false,
-        );
-    }
-
     // 0. Resolve all (row, col, CellId) tuples via the authoritative
     //    sparse in-memory grid index. Empty positions have no CellId, so
     //    full-row/full-column/full-sheet clears are proportional to the
     //    number of materialized cells, not to the selected area.
-    let mut resolved = cse_anchor_clear_targets_for_range(
+    let mut resolved = projection_anchor_clear_targets_for_range(
         mirror, sheet_id, start_row, start_col, end_row, end_col,
     )?;
     let mut seen_cell_ids: HashSet<CellId> = resolved.iter().map(|(_, _, id)| *id).collect();
     for (row, col, cell_id) in collect_materialized_cells_in_range(
         stores, &sheet_id, start_row, start_col, end_row, end_col,
     ) {
+        if let Some((anchor_id, _)) = mirror.dynamic_spill_member_covering(&sheet_id, row, col)
+            && seen_cell_ids.contains(&anchor_id)
+        {
+            continue;
+        }
         if seen_cell_ids.insert(cell_id) {
             resolved.push((row, col, cell_id));
         }
@@ -211,15 +159,25 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
             .find_map(|(sid, grid)| grid.cell_position(&cell_id).map(|_| *sid));
 
         if let Some(sheet_id) = sheet_id {
-            stores.storage.remove_cell_with_origin(
-                mirror,
-                &sheet_id,
-                &cell_id,
-                Some(ORIGIN_USER_EDIT),
-            );
+            let preserve_identity = stores
+                .storage
+                .remove_cell_value_with_origin_preserving_metadata(
+                    &sheet_id,
+                    &cell_id,
+                    Some(ORIGIN_USER_EDIT),
+                );
 
-            if let Some(grid) = stores.grid_indexes.get_mut(&sheet_id) {
-                grid.remove_cell(&cell_id);
+            if preserve_identity {
+                if let Some(pos) = mirror.resolve_position(&cell_id)
+                    && let Some(grid) = stores.grid_indexes.get_mut(&sheet_id)
+                {
+                    grid.register_cell(cell_id, pos.row(), pos.col());
+                }
+            } else {
+                mirror.remove_cell(&cell_id);
+                if let Some(grid) = stores.grid_indexes.get_mut(&sheet_id) {
+                    grid.remove_cell(&cell_id);
+                }
             }
         }
     }
@@ -250,25 +208,6 @@ pub(in crate::storage::engine) fn mutation_clear_range(
     use crate::storage::infra::cell_iter;
     use compute_document::hex::id_to_hex;
 
-    if let Some((row, col)) = single_dynamic_projection_member(
-        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
-    ) {
-        return mutation_set_cells_by_position(
-            stores,
-            mirror,
-            mutation,
-            vec![(
-                sheet_id,
-                row,
-                col,
-                CellInput::Literal {
-                    text: String::new(),
-                },
-            )],
-            false,
-        );
-    }
-
     // 0. Resolve (row, col, CellId) tuples via the authoritative in-memory
     //    grid index. CSE arrays are atomic: a range clear may tear down the
     //    array only when the selected range fully covers the CSE rectangle.
@@ -277,7 +216,7 @@ pub(in crate::storage::engine) fn mutation_clear_range(
     let mut direct_edit_old_values: HashMap<CellId, CellValue> = HashMap::new();
     let mut seen_cell_ids: HashSet<CellId> = HashSet::new();
 
-    for (row, col, cell_id) in cse_anchor_clear_targets_for_range(
+    for (row, col, cell_id) in projection_anchor_clear_targets_for_range(
         mirror, sheet_id, start_row, start_col, end_row, end_col,
     )? {
         push_resolved_clear_target(
@@ -285,6 +224,7 @@ pub(in crate::storage::engine) fn mutation_clear_range(
             &mut resolved,
             &mut direct_edit_old_values,
             &mut seen_cell_ids,
+            &sheet_id,
             row,
             col,
             cell_id,
@@ -299,6 +239,7 @@ pub(in crate::storage::engine) fn mutation_clear_range(
             &mut resolved,
             &mut direct_edit_old_values,
             &mut seen_cell_ids,
+            &sheet_id,
             row,
             col,
             cell_id,

@@ -24,8 +24,9 @@ pub(in crate::storage::engine) fn apply_grid_index_changes(
     changes: &[compute_document::observe::GridIndexCellChange],
 ) {
     use crate::storage::infra::grid_helpers;
-    use compute_document::hex::id_to_hex;
+    use compute_document::hex::{id_to_hex, parse_cell_id};
     use compute_document::observe::CellChangeKind;
+    use compute_document::schema::{KEY_GRID_INDEX, KEY_GRID_POS_TO_ID};
     use yrs::{Array, Map, Out, Transact};
 
     if changes.is_empty() {
@@ -59,6 +60,21 @@ pub(in crate::storage::engine) fn apply_grid_index_changes(
         let (Some(row), Some(col)) = (row, col) else {
             continue;
         };
+        let pos_key = format!("{}:{}", change.row_hex, change.col_hex);
+        let current_owner = sheet_map
+            .get(&txn, KEY_GRID_INDEX)
+            .and_then(|out| match out {
+                Out::YMap(grid_index_map) => grid_index_map.get(&txn, KEY_GRID_POS_TO_ID),
+                _ => None,
+            })
+            .and_then(|out| match out {
+                Out::YMap(pos_to_id) => pos_to_id.get(&txn, pos_key.as_str()),
+                _ => None,
+            })
+            .and_then(|out| match out {
+                Out::Any(yrs::Any::String(cell_hex)) => parse_cell_id(cell_hex.as_ref()),
+                _ => None,
+            });
 
         match change.kind {
             CellChangeKind::Modified => {
@@ -68,6 +84,11 @@ pub(in crate::storage::engine) fn apply_grid_index_changes(
             }
             CellChangeKind::Removed => {
                 if let Some(grid) = stores.grid_indexes.get_mut(&change.sheet_id) {
+                    if current_owner == Some(change.cell_id) {
+                        grid.register_cell(change.cell_id, row, col);
+                        continue;
+                    }
+
                     // Guard: only remove if the cell is still at the vacated position.
                     // A preceding Modified event in the same observer batch may have
                     // already moved the cell to its new position — blindly removing

@@ -4,7 +4,7 @@
 > **Scope**: Public table contracts/API plus workspace-internal table engines,
 > bridges, renderer/app integration, and XLSX-facing data models.
 > **Surface status**: TypeScript worksheet/workbook table APIs are public through
-> `@mog-sdk/contracts` and `@mog-sdk/node`; `@mog/table-engine`,
+> `@mog-sdk/contracts` and `@mog-sdk/sdk`; `@mog/table-engine`,
 > `@mog-sdk/kernel`, and the Rust `compute-table` crate are workspace-internal
 > (`private: true` or `publish = false`). The Python `ws.tables` sub-API is
 > currently generated but not production-backed.

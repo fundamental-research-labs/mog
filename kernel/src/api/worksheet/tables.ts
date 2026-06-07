@@ -582,6 +582,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     }
 
     await assertTableFilterCriteriaAllowed(this.ctx, this.sheetId, 'tables.filter.clear', table);
+    await this.ctx.awaitMaterialized?.('allSheets');
     await this.ctx.computeBridge.clearAllColumnFilters(this.sheetId, filter.id);
   }
 
@@ -638,6 +639,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       },
     };
 
+    await this.ctx.awaitMaterialized?.('allSheets');
     await this.ctx.computeBridge.setColumnFilter(
       this.sheetId,
       filter.id,
@@ -703,6 +705,20 @@ export class WorksheetTablesImpl implements WorksheetTables {
     }
     this.emitTableUpdated(name);
     return { kind: 'tableAddColumn', tableName: name, columnName, position: actualPosition };
+  }
+
+  async renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void> {
+    const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.renameColumn',
+      name,
+      table.range,
+    );
+    await this.ctx.computeBridge.renameTableColumn(name, columnIndex, newColumnName);
+    this.emitTableUpdated(name);
   }
 
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
@@ -1452,6 +1468,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   // ---------------------------------------------------------------------------
 
   async getAutoFilter(tableName: string): Promise<FilterInfo | null> {
+    await this.ctx.awaitMaterialized?.(this.sheetId);
     const table = await this.get(tableName);
     if (!table) return null;
 

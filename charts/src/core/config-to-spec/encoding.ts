@@ -1,5 +1,10 @@
 import type { ChannelSpec, EncodingSpec, LegendSpec } from '../../grammar/spec';
-import type { ChartConfig, ChartData, SingleAxisConfig } from '../../types';
+import type { ChartConfig, ChartData, ChartDataPoint, SingleAxisConfig } from '../../types';
+import {
+  radarBlankPolicyFromDisplayBlanksAs,
+  resolveRadarValueScale,
+  type RadarBlankPolicy,
+} from '../radar-semantics';
 import {
   applyAutoValueAxisTicks,
   buildAxisScaleSpec,
@@ -22,19 +27,34 @@ import {
   applyCategoryAxisLabels,
   applyStackedValueDomain,
 } from './encoding-adjustments';
+import { applyBarColumnAxisLayout } from './bar-axis-layout';
 import { effectiveBarGeometry, shouldReverseImportedHorizontalBarSeries } from './bar-geometry';
+import { applyPathChartAxisLayout } from './path-axis-layout';
+import {
+  applyExcelCartesianValueScales,
+  applyExcelCategoryPointScale,
+  chartValueValues,
+  excelChartValueAxisIncludesZero,
+  usesExcelCartesianGeometry,
+} from './excel-cartesian-geometry';
+import { maxRenderableBubbleMagnitude } from './data-point-values';
 import { hasSecondaryYAxis } from './secondary-axis';
 import {
   buildCategoryLegendDomain,
   buildColorEncoding,
   buildLegendSpec,
+  buildPiePointLegendDomain,
   buildSeriesLegendDomain,
+  isLegendShown,
   legendSymbolType,
+  usesPointLegendEntries,
   visibleLegendDomain,
 } from './legend';
-import { BUBBLE_SIZE_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
+import { BUBBLE_SIZE_FIELD, PIE_COLOR_KEY_FIELD, SCATTER_X_FIELD, VALUE_FIELD } from './fields';
 import { isNoFillNoLineSeries, resolvedCategoryColors, variesColorsByCategory } from './style';
 import { resolveStackMode } from './subtypes';
+import { isPieLikeChartType } from './pie-like';
+import { pieDoughnutColorDomain } from './pie-doughnut-geometry';
 
 /**
  * Build the main encoding spec for a chart.
@@ -51,32 +71,32 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   const hasMultipleSeries = data.series.length > 1;
 
   // --- Pie / Doughnut / Pie3D / OfPie: theta + color instead of x/y ---
-  if (
-    chartType === 'pie' ||
-    chartType === 'doughnut' ||
-    chartType === 'pie3d' ||
-    chartType === 'ofPie'
-  ) {
+  if (isPieLikeChartType(chartType)) {
     encoding.theta = {
       field: 'value',
       type: 'quantitative',
     };
     encoding.color = {
-      field: 'category',
+      field: PIE_COLOR_KEY_FIELD,
       type: 'nominal',
     };
     const categoryColors = resolvedCategoryColors(config, data);
-    if (categoryColors) {
-      encoding.color.scale = { range: categoryColors };
+    const legendDomain = buildPiePointLegendDomain(config, data);
+    const colorDomain = pieDoughnutColorDomain(config, data);
+    if (categoryColors || colorDomain.length > 0) {
+      encoding.color.scale = {
+        ...(colorDomain.length > 0 ? { domain: colorDomain } : {}),
+        ...(categoryColors ? { range: categoryColors } : {}),
+      };
     }
-    // Apply legend config to color channel.
-    if (config.legend) {
-      const legendDomain = buildCategoryLegendDomain(config, data);
+    if (isLegendShown(config.legend)) {
       encoding.color.legend = buildLegendSpec(config.legend, config, {
         reverse: Boolean(resolveStackMode(config)),
         entries: legendDomain?.entries,
         values: legendDomain?.values,
       });
+    } else {
+      encoding.color.legend = null;
     }
     return encoding;
   }
@@ -109,6 +129,12 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   if (chartType === 'radar') {
+    const categoryAxis = config.axis
+      ? resolveAxisConfigForChannel(config.axis, 'x', false)
+      : undefined;
+    const categoryAxisSpec = categoryAxis
+      ? mapAxisConfigToAxisSpec(categoryAxis, config, 'categoryAxis')
+      : undefined;
     const valueAxis = config.axis
       ? resolveAxisConfigForChannel(config.axis, 'y', false)
       : undefined;
@@ -116,18 +142,41 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       ? mapAxisConfigToAxisSpec(valueAxis, config, 'valueAxis')
       : undefined;
     const valueScaleSpec = valueAxis ? buildAxisScaleSpec(valueAxis, false) : undefined;
+    const radarValueScale = resolveRadarValueScale({
+      values: renderableRadarValues(data, config),
+      explicitMin: valueAxis?.min,
+      explicitMax: valueAxis?.max,
+      explicitMajorUnit: valueAxis?.majorUnit,
+      includeZero: true,
+    });
     encoding.x = {
       field: 'category',
       type: 'nominal',
       axis: null,
+      radarAxis: categoryAxisSpec,
       scale: data.categories.length > 0 ? { domain: data.categories } : undefined,
     };
     encoding.y = {
       field: VALUE_FIELD,
       type: 'quantitative',
       axis: null,
+      radarAxis: valueAxisSpec,
       format: valueAxisSpec?.format,
-      scale: { zero: true, nice: true, ...(valueScaleSpec ?? {}) },
+      scale: {
+        zero: true,
+        ...(valueScaleSpec ?? {}),
+        ...(radarValueScale
+          ? {
+              domain: [radarValueScale.domain.min, radarValueScale.domain.max],
+              nice: false,
+              radarTickValues: radarValueScale.ticks,
+              ...(radarValueScale.tickStep !== undefined
+                ? { radarTickStep: radarValueScale.tickStep }
+                : {}),
+              radarValueDomainAuthority: radarValueScale.authority,
+            }
+          : { nice: true }),
+      },
     };
     const seriesLegendDomain = buildSeriesLegendDomain(config, data);
     const colorChannel = buildColorEncoding({
@@ -149,7 +198,9 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   // --- X/Y encoding for all other chart types ---
   // Excel column charts are vertical; Excel bar charts are horizontal.
   const isHorizontal = isHorizontalBarType(chartType);
-  const isXYChart = chartType === 'scatter' || chartType === 'bubble';
+  const isXYChart =
+    chartType === 'scatter' || chartType === 'bubble' || chartType === 'bubble3DEffect';
+  const useExcelCartesian = usesExcelCartesianGeometry(config);
   const useDateSerialCategoryAxis = shouldUseDateSerialCategoryAxis(config, data, isHorizontal);
   const useStableCategoryKeys = shouldUseStableCategoryKeys(
     config,
@@ -182,13 +233,15 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
       scale: { zero: false, nice: true },
     };
     encoding.y = valueChannel;
-    if (chartType === 'bubble') {
+    if (chartType === 'bubble' || chartType === 'bubble3DEffect') {
+      const sizeScale = {
+        range: [0, bubbleMaxArea(config)],
+        ...(useExcelCartesian ? { domain: [0, maxRenderableBubbleMagnitude(data, config)] } : {}),
+      };
       encoding.size = {
         field: BUBBLE_SIZE_FIELD,
         type: 'quantitative',
-        scale: {
-          range: [0, bubbleMaxArea(config)],
-        },
+        scale: sizeScale,
         legend: null,
       };
     }
@@ -225,8 +278,15 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applySecondaryCategoryAxis(config, encoding, isHorizontal);
-  applyBarCategorySpacingScale(config, encoding, isHorizontal);
+  applyBarCategorySpacingScale(config, data, encoding, isHorizontal);
   if (!isXYChart) {
+    if (chartType !== 'combo') {
+      applyExcelCategoryPointScale(isHorizontal ? encoding.y : encoding.x, config, data, {
+        isHorizontal,
+        useDateSerialCategoryAxis,
+        useStableCategoryKeys,
+      });
+    }
     applyCategoryAxisLabels(
       data,
       encoding,
@@ -237,30 +297,36 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   if (variesColorsByCategory(config, data)) {
+    const categoryValues = data.categories.map((category) => String(category));
     const categoryLegendDomain = buildCategoryLegendDomain(config, data);
+    const seriesLegendDomain = buildSeriesLegendDomain(config, data, {
+      entryValueForSeries: ({ renderedIndex }) =>
+        categoryValues[renderedIndex] ?? categoryValues[0],
+    });
     const categoryColors = resolvedCategoryColors(config, data);
+    const usePointLegendEntries = usesPointLegendEntries(config);
     encoding.color = {
       field: 'category',
       type: 'nominal',
-      ...(data.categories.length > 0 || (categoryColors && categoryColors.length > 0)
+      ...(categoryValues.length > 0 || (categoryColors && categoryColors.length > 0)
         ? {
             scale: {
-              ...(data.categories.length > 0
-                ? { domain: data.categories.map((category) => String(category)) }
-                : {}),
+              ...(categoryValues.length > 0 ? { domain: categoryValues } : {}),
               ...(categoryColors && categoryColors.length > 0 ? { range: categoryColors } : {}),
             },
           }
         : {}),
-      ...(config.legend
-        ? {
-            legend: buildLegendSpec(config.legend, config, {
-              symbolType: categoryLegendSymbolType(config),
-              entries: categoryLegendDomain?.entries,
-              values: categoryLegendDomain?.values,
-            }),
-          }
-        : {}),
+      legend: isLegendShown(config.legend)
+        ? buildLegendSpec(config.legend, config, {
+            symbolType: usePointLegendEntries
+              ? categoryLegendSymbolType(config)
+              : legendSymbolType(config, data),
+            entries: usePointLegendEntries
+              ? categoryLegendDomain?.entries
+              : (seriesLegendDomain?.entries ?? []),
+            values: usePointLegendEntries ? categoryLegendDomain?.values : undefined,
+          })
+        : null,
     };
   } else {
     // Color encoding for multi-series.
@@ -292,24 +358,22 @@ export function buildEncoding(config: ChartConfig, data: ChartData): EncodingSpe
   }
 
   applyStackedValueDomain(config, data, encoding);
-  applyCartesianValueAxisDefaults(encoding, { includeZero: !isXYChart });
-  if (!isXYChart && !hasSecondaryYAxis(config, data)) {
+  applyBarColumnAxisLayout(config, data, encoding);
+  applyPathChartAxisLayout(config, data, encoding);
+  applyCartesianValueAxisDefaults(encoding, {
+    includeZero: useExcelCartesian ? excelChartValueAxisIncludesZero(config) : !isXYChart,
+  });
+  if (useExcelCartesian) {
+    if (chartType !== 'combo') {
+      applyExcelCartesianValueScales(config, data, encoding, { isHorizontal, isXYChart });
+    }
+  } else if (!isXYChart && !hasSecondaryYAxis(config, data)) {
     const valueChannel = isHorizontal ? encoding.x : encoding.y;
-    applyMogAutoValueAxisScale(valueChannel, valueValues(data), { includeZero: true });
+    applyMogAutoValueAxisScale(valueChannel, chartValueValues(data), { includeZero: true });
   }
   applyAutomaticCategoryAxisCrossing(encoding);
 
   return encoding;
-}
-
-function valueValues(data: ChartData): number[] {
-  const values: number[] = [];
-  for (const series of data.series) {
-    for (const point of series.data) {
-      if (typeof point?.y === 'number' && Number.isFinite(point.y)) values.push(point.y);
-    }
-  }
-  return values;
 }
 
 function applyCartesianValueAxisDefaults(
@@ -327,6 +391,7 @@ function applyCartesianValueAxisDefaults(
 }
 
 function shouldReverseSeriesLegend(config: ChartConfig): boolean {
+  if (config.type === 'area' && resolveStackMode(config) !== undefined) return true;
   const barGeometry = effectiveBarGeometry(config);
   return barGeometry ? shouldReverseImportedHorizontalBarSeries(config, barGeometry) : false;
 }
@@ -337,8 +402,32 @@ function bubbleMaxArea(config: ChartConfig): number {
 }
 
 function categoryLegendSymbolType(config: ChartConfig): LegendSpec['symbolType'] | undefined {
-  if (config.type === 'bubble' || config.type === 'scatter') return 'circle';
+  if (config.type === 'bubble' || config.type === 'bubble3DEffect' || config.type === 'scatter') {
+    return 'circle';
+  }
   return undefined;
+}
+
+function renderableRadarValues(data: ChartData, config: ChartConfig): number[] {
+  const values: number[] = [];
+  const { blankPolicy } = radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs);
+  for (const series of data.series) {
+    for (const point of series.data) {
+      const value = renderableRadarValue(point, blankPolicy);
+      if (value !== undefined) values.push(value);
+    }
+  }
+  return values;
+}
+
+function renderableRadarValue(
+  point: ChartDataPoint | undefined,
+  blankPolicy: RadarBlankPolicy,
+): number | undefined {
+  if (!point || point.valueState === 'hidden') return undefined;
+  if (point.valueState === 'blank') return blankPolicy === 'zero' ? 0 : undefined;
+  if (point.valueState && point.valueState !== 'value') return undefined;
+  return typeof point.y === 'number' && Number.isFinite(point.y) ? point.y : undefined;
 }
 
 function applySecondaryCategoryAxis(

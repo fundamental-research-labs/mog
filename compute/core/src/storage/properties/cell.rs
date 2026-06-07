@@ -282,12 +282,33 @@ pub fn set_cell_formats(
     cell_ids: &[&str],
     format: &CellFormat,
 ) {
+    set_cell_formats_with_origin(
+        doc,
+        workbook,
+        sheets,
+        sheet_id,
+        cell_ids,
+        format,
+        ORIGIN_USER_EDIT,
+    );
+}
+
+/// Set format on multiple cells in a single Yrs transaction with an explicit undo origin.
+pub fn set_cell_formats_with_origin(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[&str],
+    format: &CellFormat,
+    origin: &'static [u8],
+) {
     let existing: Vec<CellProperties> = cell_ids
         .iter()
         .map(|cid| get_properties(doc, workbook, sheets, sheet_id, cid).unwrap_or_default())
         .collect();
 
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
     if let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) {
         for (i, cid) in cell_ids.iter().enumerate() {
             let mut props = existing[i].clone();

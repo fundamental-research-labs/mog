@@ -2,6 +2,7 @@ import type { ChartConfig, ChartData } from '@mog/charts';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { ResolvedChartSpecSnapshot } from '@mog-sdk/contracts/data/charts';
 
+import { buildChartFamilySupportSnapshot } from '../bridge/chart-family-support';
 import {
   groupingFor,
   snapshotAxis,
@@ -13,6 +14,7 @@ import {
 import type { ResolvedChartRangeReference } from '../chart-range-references';
 
 type SeriesSnapshot = ResolvedChartSpecSnapshot['resolved']['series'][number];
+type SeriesProjectionSnapshot = ResolvedChartSpecSnapshot['resolved']['seriesProjection'];
 
 function chartConfig(overrides: Partial<ChartConfig> = {}): ChartConfig {
   return {
@@ -45,6 +47,20 @@ function seriesSnapshot(name: string, index: number, sourceSeriesIndex = index):
     pointCount: 0,
     renderedPointCount: 0,
     dataHash: `hash-${sourceSeriesIndex}`,
+  };
+}
+
+function seriesProjectionSnapshot(
+  overrides: Partial<SeriesProjectionSnapshot> = {},
+): SeriesProjectionSnapshot {
+  return {
+    authority: 'explicitSeries',
+    expectedImportedSeriesCount: 0,
+    projectedSeriesCount: 0,
+    renderedSeriesCount: 0,
+    renderedPointCountBySourceSeriesKey: {},
+    droppedSeries: [],
+    ...overrides,
   };
 }
 
@@ -205,7 +221,61 @@ describe('resolved spec structure snapshot helpers', () => {
         'Deleted by source index',
         'No fill no line',
       ],
+      entryItems: [
+        {
+          text: 'Visible',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+        {
+          text: 'Deleted by rendered index',
+          index: 1,
+          visible: false,
+          deleted: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 7,
+          sourceSeriesKey: 'series-7',
+        },
+        {
+          text: 'Deleted by source index',
+          index: 2,
+          visible: false,
+          deleted: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 4,
+          sourceSeriesKey: 'series-4',
+        },
+        {
+          text: 'No fill no line',
+          index: 3,
+          visible: false,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 3,
+          sourceSeriesKey: 'series-3',
+        },
+      ],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
       visibleEntries: ['Visible'],
+      visibleEntryItems: [
+        {
+          text: 'Visible',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+      ],
     });
     expect(
       snapshotLegend(chartConfig({ legend: { show: true, visible: true, position: 'none' } }), [
@@ -216,11 +286,16 @@ describe('resolved spec structure snapshot helpers', () => {
       visible: false,
       position: 'none',
       entries: [],
+      entryItems: [],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
       visibleEntries: [],
+      visibleEntryItems: [],
     });
   });
 
-  it('snapshots category legend entries for vary-by-category charts', () => {
+  it('snapshots series legend entries for non-point vary-by-category charts', () => {
     const config = chartConfig({
       varyByCategories: true,
       legend: {
@@ -232,7 +307,75 @@ describe('resolved spec structure snapshot helpers', () => {
     });
     const data: ChartData = {
       categories: ['Category A', 'Category B', 'Category C'],
-      series: [{ name: 'Measure', data: [] }],
+      series: [
+        {
+          name: 'Measure',
+          data: [
+            { x: 'Category A', y: 10 },
+            { x: 'Category B', y: 20 },
+            { x: 'Category C', y: 30 },
+          ],
+        },
+      ],
+    };
+
+    expect(snapshotLegend(config, [seriesSnapshot('Measure', 0)], data)).toEqual({
+      present: true,
+      visible: true,
+      position: 'right',
+      entries: ['Measure'],
+      entryItems: [
+        {
+          text: 'Measure',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+      ],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
+      visibleEntries: ['Measure'],
+      visibleEntryItems: [
+        {
+          text: 'Measure',
+          index: 0,
+          visible: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+      ],
+    });
+  });
+
+  it('snapshots point legend entries for pie-like charts', () => {
+    const config = chartConfig({
+      type: 'pie',
+      varyByCategories: false,
+      legend: {
+        show: true,
+        visible: true,
+        position: 'right',
+        entries: [{ idx: 1, delete: true }],
+      },
+    });
+    const data: ChartData = {
+      categories: ['Category A', 'Category B', 'Category C'],
+      series: [
+        {
+          name: 'Measure',
+          data: [
+            { x: 'Category A', y: 10 },
+            { x: 'Category B', y: 20 },
+            { x: 'Category C', y: 30 },
+          ],
+        },
+      ],
     };
 
     expect(snapshotLegend(config, [seriesSnapshot('Measure', 0)], data)).toEqual({
@@ -240,7 +383,184 @@ describe('resolved spec structure snapshot helpers', () => {
       visible: true,
       position: 'right',
       entries: ['Category A', 'Category B', 'Category C'],
+      entryItems: [
+        {
+          text: 'Category A',
+          index: 0,
+          visible: true,
+          vocabulary: 'point',
+          indexKind: 'point',
+          pointIndex: 0,
+          pointKey: 'series:0:point-0',
+          legendKey: 'point-0',
+          colorKey: 'point-0',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+        {
+          text: 'Category B',
+          index: 1,
+          visible: false,
+          deleted: true,
+          vocabulary: 'point',
+          indexKind: 'point',
+          pointIndex: 1,
+          pointKey: 'series:0:point-1',
+          legendKey: 'point-1',
+          colorKey: 'point-1',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+        {
+          text: 'Category C',
+          index: 2,
+          visible: true,
+          vocabulary: 'point',
+          indexKind: 'point',
+          pointIndex: 2,
+          pointKey: 'series:0:point-2',
+          legendKey: 'point-2',
+          colorKey: 'point-2',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+      ],
+      entryVocabulary: 'point',
+      entryIndexKind: 'point',
+      entryLayer: 'rendered',
       visibleEntries: ['Category A', 'Category C'],
+      visibleEntryItems: [
+        {
+          text: 'Category A',
+          index: 0,
+          visible: true,
+          vocabulary: 'point',
+          indexKind: 'point',
+          pointIndex: 0,
+          pointKey: 'series:0:point-0',
+          legendKey: 'point-0',
+          colorKey: 'point-0',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+        {
+          text: 'Category C',
+          index: 2,
+          visible: true,
+          vocabulary: 'point',
+          indexKind: 'point',
+          pointIndex: 2,
+          pointKey: 'series:0:point-2',
+          legendKey: 'point-2',
+          colorKey: 'point-2',
+          seriesIndex: 0,
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series:0',
+        },
+      ],
+    });
+  });
+
+  it('keeps imported bubble legends in the source series domain', () => {
+    const config = chartConfig({
+      type: 'bubble',
+      varyByCategories: true,
+      extra: { sourceDialect: 'ooxml' },
+      legend: {
+        show: true,
+        visible: true,
+        position: 'right',
+        entries: [{ idx: 0, delete: true }],
+      },
+    });
+    const data: ChartData = {
+      categories: [1, 2, 3],
+      series: [
+        {
+          name: 'Products',
+          data: [
+            { x: 1, y: 10, size: 100 },
+            { x: 2, y: 20, size: 200 },
+            { x: 3, y: 30, size: 300 },
+          ],
+        },
+      ],
+    };
+
+    expect(snapshotLegend(config, [seriesSnapshot('Products', 0)], data)).toEqual({
+      present: true,
+      visible: true,
+      position: 'right',
+      entries: ['Products'],
+      entryItems: [
+        {
+          text: 'Products',
+          index: 0,
+          visible: false,
+          deleted: true,
+          vocabulary: 'series',
+          indexKind: 'series',
+          sourceSeriesIndex: 0,
+          sourceSeriesKey: 'series-0',
+        },
+      ],
+      entryVocabulary: 'series',
+      entryIndexKind: 'series',
+      entryLayer: 'rendered',
+      visibleEntries: [],
+      visibleEntryItems: [],
+    });
+  });
+
+  it('requires cartesian geometry evidence before imported bubble support can be exact', () => {
+    const config = chartConfig({
+      type: 'bubble',
+      varyByCategories: true,
+      extra: { sourceDialect: 'ooxml' },
+      legend: { show: true, visible: true, position: 'right' },
+    });
+    const data: ChartData = {
+      categories: [1, 2],
+      series: [
+        {
+          name: 'Products',
+          data: [
+            { x: 1, y: 10, size: 100 },
+            { x: 2, y: 20, size: 200 },
+          ],
+        },
+      ],
+    };
+    const legend = snapshotLegend(config, [seriesSnapshot('Products', 0)], data);
+
+    expect(
+      buildChartFamilySupportSnapshot({
+        chart: { chartType: 'bubble' } as any,
+        config,
+        chartData: data,
+        legend,
+        seriesProjection: seriesProjectionSnapshot(),
+      }),
+    ).toMatchObject({
+      supportLevel: 'approximate',
+      reason: 'xyCartesianGeometryEvidenceMissing',
+      renderedAs: 'bubble',
+    });
+    expect(
+      buildChartFamilySupportSnapshot({
+        chart: { chartType: 'bubble' } as any,
+        config,
+        chartData: data,
+        legend: { ...legend, entryVocabulary: 'category' },
+        seriesProjection: seriesProjectionSnapshot(),
+      }),
+    ).toMatchObject({
+      supportLevel: 'approximate',
+      reason: 'xyCartesianGeometryEvidenceMissing',
     });
   });
 });

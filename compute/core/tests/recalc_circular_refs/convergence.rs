@@ -1,6 +1,6 @@
 use crate::support::recalc_fixtures::{
-    assert_cell_number, build_iterative_snapshot, build_snapshot, find_changed_value,
-    has_any_circular_error, has_circular_error, run_snapshot,
+    assert_cell_circular_error, assert_cell_number, build_iterative_snapshot, build_snapshot,
+    find_changed_value, has_any_circular_error, has_circular_error, run_snapshot,
 };
 use value_types::CellValue;
 
@@ -221,7 +221,7 @@ fn test_parallel_convergence_loop_contractive() {
 
 /// A1 = =A1*0.5+1, iterative_calc = false.
 /// Same as Test 5 but with iterative_calc = false.
-/// With always-converge, should converge to 2.0 (fixed point of x = 0.5*x + 1).
+/// Should materialize #CIRC without running iterative convergence.
 #[test]
 fn test_contractive_no_iterative_flag() {
     let snapshot = build_snapshot(vec![(
@@ -241,20 +241,7 @@ fn test_contractive_no_iterative_flag() {
         println!("  cell_id={} value={:?}", cc.cell_id, cc.value);
     }
 
-    // Should produce a Number close to 2.0
-    let val = find_changed_value(&result, 0, 0, 0);
-    match val {
-        Some(CellValue::Number(n)) => {
-            println!("  A1 converged to {}", n.get());
-            assert!(
-                n.get() >= 1.0,
-                "A1 expected at least 1.0 from convergence, got {}",
-                n.get()
-            );
-        }
-        Some(other) => panic!("A1 expected Number, got {:?}", other),
-        None => panic!("A1 not in changed_cells"),
-    }
+    assert_cell_circular_error(&result, 0, 0, 0);
 
     // Circular reference diagnostic should be emitted
     assert!(
@@ -264,9 +251,8 @@ fn test_contractive_no_iterative_flag() {
 }
 
 /// Verifies that circular reference diagnostics are emitted in result.errors
-/// even when the convergence loop successfully computes values.
+/// when non-iterative cycle cells are materialized as #CIRC.
 /// A1 = =B1*0.5, B1 = =A1*0.5, iterative_calc = false.
-/// Both converge to 0.0, but diagnostics should still be present.
 #[test]
 fn test_circular_ref_diagnostics_always_emitted() {
     let snapshot = build_snapshot(vec![(
@@ -291,14 +277,12 @@ fn test_circular_ref_diagnostics_always_emitted() {
         println!("  error: cell_id={} error={}", e.cell_id, e.error);
     }
 
-    // Both cells should be Numbers (converged to 0.0)
-    assert_cell_number(&result, 0, 0, 0, 0.0);
-    assert_cell_number(&result, 0, 0, 1, 0.0);
+    assert_cell_circular_error(&result, 0, 0, 0);
+    assert_cell_circular_error(&result, 0, 0, 1);
 
-    // Diagnostics should be emitted even though values are computed correctly
     assert!(
         has_any_circular_error(&result),
-        "Expected circular reference diagnostics even for converged cycle"
+        "Expected circular reference diagnostics for materialized cycle"
     );
 }
 

@@ -30,6 +30,10 @@ import { KernelError } from '../../errors';
 // Re-export filter types for consumers
 export type { ColumnFilterCriteria, FilterState } from '@mog-sdk/contracts/filter';
 
+async function awaitFilterMutationMaterialized(ctx: DocumentContext): Promise<void> {
+  await ctx.awaitMaterialized?.('allSheets');
+}
+
 // =============================================================================
 // Types (kept for backward compatibility)
 // =============================================================================
@@ -102,6 +106,7 @@ export async function createFilter(
   _origin: StructureChangeSource = 'user',
   tableId?: string,
 ): Promise<FilterState> {
+  await awaitFilterMutationMaterialized(ctx);
   await ctx.computeBridge.createFilter(sheetId, {
     startRow: range.startRow,
     startCol: range.startCol,
@@ -132,6 +137,7 @@ export async function deleteFilter(
   filterId: string,
   _origin: StructureChangeSource = 'user',
 ): Promise<void> {
+  await awaitFilterMutationMaterialized(ctx);
   await ctx.computeBridge.deleteFilter(sheetId, filterId);
 }
 
@@ -149,6 +155,7 @@ export function setColumnFilter(
   _origin: StructureChangeSource = 'user',
 ): Promise<void> {
   return (async () => {
+    await awaitFilterMutationMaterialized(ctx);
     const pos = await ctx.computeBridge.getCellPosition(sheetId, headerCellId);
     if (!pos) return;
     await ctx.computeBridge.setColumnFilter(
@@ -173,6 +180,7 @@ export function clearColumnFilter(
   _origin: StructureChangeSource = 'user',
 ): Promise<void> {
   return (async () => {
+    await awaitFilterMutationMaterialized(ctx);
     const pos = await ctx.computeBridge.getCellPosition(sheetId, headerCellId);
     if (!pos) return;
     await ctx.computeBridge.clearColumnFilter(sheetId, filterId, pos.col);
@@ -190,7 +198,10 @@ export function clearAllColumnFilters(
   filterId: string,
   _origin: StructureChangeSource = 'user',
 ): Promise<void> {
-  return ctx.computeBridge.clearAllColumnFilters(sheetId, filterId).then(() => undefined);
+  return (async () => {
+    await awaitFilterMutationMaterialized(ctx);
+    await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
+  })();
 }
 
 // =============================================================================
@@ -302,7 +313,10 @@ export async function evaluateFilter(
   // Rust handles evaluation internally via applyFilter.
   // Return empty array; callers that need per-row results should
   // check hidden row state instead.
-  void ctx.computeBridge.applyFilter(sheetId, filterId);
+  void (async () => {
+    await awaitFilterMutationMaterialized(ctx);
+    await ctx.computeBridge.applyFilter(sheetId, filterId);
+  })();
   return [];
 }
 
@@ -321,6 +335,7 @@ export async function applyFilter(
   _origin?: StructureChangeSource,
   _options?: FilterEvaluationOptions,
 ): Promise<void> {
+  await awaitFilterMutationMaterialized(ctx);
   await ctx.computeBridge.applyFilter(sheetId, filterId);
 }
 

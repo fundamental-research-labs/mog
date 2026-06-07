@@ -597,6 +597,7 @@ function createPointScale(
       if (value === undefined || value === null) return NaN;
       const index = uniqueValues.indexOf(String(value));
       if (index === -1) return NaN;
+      if (n === 1) return rangeStart + absExtent / 2;
       return rangeStart + padding * step + index * step;
     },
     {
@@ -741,7 +742,10 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   }
 
   const values = extractNumericValues(data, field);
-  const max = values.length > 0 ? safeMax(values) : 1;
+  const explicitMin = numericDomainBound(channel.scale?.domain, 0);
+  const explicitMax = numericDomainBound(channel.scale?.domain, 1);
+  const min = explicitMin ?? 0;
+  const max = explicitMax ?? (values.length > 0 ? safeMax(values) : 1);
 
   // Size range is symbol area in pixels.
   const minSize = numericDomainBound(channel.scale?.range, 0) ?? 0;
@@ -752,14 +756,21 @@ function createSizeScale(channel: ChannelSpec, data: DataRow[]): ChartScale {
   // which is the standard bubble chart encoding (area proportional to value).
   const scaleFactor = max > 0 ? maxSize / max : 1;
 
-  return Object.assign((value: unknown): number => {
-    const v = typeof value === 'number' ? value : parseFloat(String(value));
-    if (!isFinite(v) || v <= 0) return minSize;
-    // Use pure linear mapping for positive values to preserve proportionality.
-    // Do NOT clamp to a minimum -- the linear relationship must hold exactly
-    // so that size(a)/size(b) = a/b for any pair of positive values.
-    return v * scaleFactor;
-  }, {});
+  return Object.assign(
+    (value: unknown): number => {
+      const v = typeof value === 'number' ? value : parseFloat(String(value));
+      if (!isFinite(v) || v <= 0) return minSize;
+      // Use pure linear mapping for positive values to preserve proportionality.
+      // Do NOT clamp to a minimum -- the linear relationship must hold exactly
+      // so that size(a)/size(b) = a/b for any pair of positive values.
+      return v * scaleFactor;
+    },
+    {
+      domain: () => [min, max],
+      range: () => [minSize, maxSize],
+      copy: () => createSizeScale(channel, data),
+    },
+  );
 }
 
 /**

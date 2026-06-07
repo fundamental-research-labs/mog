@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig([
   {
-    entry: { 'index.browser': 'src/index.browser.ts' },
+    entry: { 'index.browser': 'src/index.browser.ts', 'index.wasm': 'src/index.wasm.ts' },
     format: 'esm',
     target: 'es2022',
     platform: 'browser',

@@ -45,6 +45,18 @@ pub(super) fn any_filter_hides_row<T: yrs::ReadTxn>(
     })
 }
 
+pub(super) fn filter_hides_row<T: yrs::ReadTxn>(
+    filter_hidden_rows_map: &MapRef,
+    txn: &T,
+    filter_id: &str,
+    row_id: &str,
+) -> bool {
+    matches!(
+        filter_hidden_rows_map.get(txn, filter_id),
+        Some(Out::YMap(owner_map)) if map_has_true(&owner_map, txn, row_id)
+    )
+}
+
 pub(super) fn effective_hidden_by_row_id<T: yrs::ReadTxn>(
     manual_hidden_rows_map: Option<&MapRef>,
     filter_hidden_rows_map: Option<&MapRef>,

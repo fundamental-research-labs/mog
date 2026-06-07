@@ -32,6 +32,7 @@ import type { IEventBus } from '@mog-sdk/contracts/events';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import { PivotExpansionManager } from '../../pivot/pivot-expansion-manager';
 import {
+  type ImportDurabilityGate,
   resolveInitialActiveSheetId,
   subscribeActiveSheetPersistence,
 } from '../document-active-sheet';
@@ -58,6 +59,8 @@ export interface DocumentContextValue {
   uiStore: StoreApi<any>;
   /** Per-document event bus for cross-component communication */
   eventBus: IEventBus;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: ImportDurabilityGate;
   /** When true, all human UI editing is blocked. Agent mutations via OSExecutionContext are unaffected. */
   readOnly: boolean;
   /** When true, the ribbon/toolbar is hidden. Independent of readOnly. */
@@ -385,6 +388,7 @@ export function DocumentProvider({
             workbook,
             uiStore,
             eventBus: handle.eventBus,
+            importDurability: handle,
             readOnly: false,
             hideRibbon: false,
             featureGates: {},

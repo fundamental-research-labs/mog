@@ -9,6 +9,8 @@
 
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
+import type { SheetId } from '@mog-sdk/contracts/core';
+import type { MaterializationState } from '@mog-sdk/contracts/api';
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
 import type { WriteGate } from '../document/write-gate';
 import type { MaybeHostOperationGate } from '../document/host-operation-gate';
@@ -54,6 +56,16 @@ export interface DocumentContext extends ISpreadsheetKernelContext {
   // ===========================================================================
 
   readonly computeBridge: ComputeBridge;
+
+  /**
+   * Await XLSX import materialization for APIs whose production read/write
+   * path can touch deferred workbook state. Sheet-scoped callers may pass a
+   * sheet id; writes and full-workbook dependencies pass "allSheets".
+   */
+  awaitMaterialized(scope?: SheetId | 'allSheets'): Promise<void>;
+
+  /** Return the current XLSX materialization state without forcing hydration. */
+  getMaterializationState(): MaterializationState;
 
   // ===========================================================================
   // Selection Undo/Redo Checkpointing

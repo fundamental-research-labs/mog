@@ -8,6 +8,7 @@ import type {
   PivotTableWithResult,
 } from '@mog-sdk/contracts/pivot';
 import type { ImportedPivotMetadataSet, ImportedPivotTableMetadata } from '@mog/shell';
+import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 export interface ImportedPivotRuntime {
   getRenderedImportedPivots(sheetId: SheetId): Promise<ImportedPivotTableMetadata[]>;
@@ -30,7 +31,11 @@ export interface WorkbookWithImportedPivots extends WorkbookInternal {
   readonly importedPivots?: ImportedPivotRuntime;
 }
 
-function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableConfig {
+function toSyntheticPivotConfig(
+  pivot: ImportedPivotTableMetadata,
+  outputSheetId: SheetId,
+): PivotTableConfig {
+  const parsedSourceRange = pivot.sourceRange ? parseCellRange(pivot.sourceRange) : null;
   const fields = pivot.fields.map((field, index) => ({
     id: field.id,
     name: field.name,
@@ -57,14 +62,22 @@ function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableCo
     schemaVersion: 1,
     id: pivot.id,
     name: pivot.name,
-    sourceSheetName: pivot.sourceRange?.split('!')[0]?.replace(/^'|'$/g, '') ?? pivot.sheetName,
-    sourceRange: {
-      startRow: 0,
-      startCol: 0,
-      endRow: 0,
-      endCol: Math.max(0, fields.length - 1),
-    },
+    sourceSheetName: parsedSourceRange?.sheetName ?? pivot.sheetName,
+    sourceRange: parsedSourceRange
+      ? {
+          startRow: parsedSourceRange.startRow,
+          startCol: parsedSourceRange.startCol,
+          endRow: parsedSourceRange.endRow,
+          endCol: parsedSourceRange.endCol,
+        }
+      : {
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: Math.max(0, fields.length - 1),
+        },
     outputSheetName: pivot.sheetName,
+    outputSheetId,
     outputLocation: { row: pivot.range.startRow, col: pivot.range.startCol },
     fields,
     placements,
@@ -74,11 +87,14 @@ function toSyntheticPivotConfig(pivot: ImportedPivotTableMetadata): PivotTableCo
   };
 }
 
-function toSyntheticPivotWithResult(pivot: ImportedPivotTableMetadata): PivotTableWithResult {
+function toSyntheticPivotWithResult(
+  pivot: ImportedPivotTableMetadata,
+  outputSheetId: SheetId,
+): PivotTableWithResult {
   const totalRows = pivot.range.endRow - pivot.range.startRow + 1;
   const totalCols = pivot.range.endCol - pivot.range.startCol + 1;
   return {
-    config: toSyntheticPivotConfig(pivot),
+    config: toSyntheticPivotConfig(pivot, outputSheetId),
     result: {
       columnHeaders: [],
       rows: [],
@@ -142,12 +158,12 @@ export function installImportedPivotRuntime(
     async getRenderedImportedPivotConfig(sheetId, pivotId) {
       await hydrateSheetMap();
       const pivot = (bySheetId.get(sheetId) ?? []).find((candidate) => candidate.id === pivotId);
-      return pivot ? toSyntheticPivotConfig(pivot) : null;
+      return pivot ? toSyntheticPivotConfig(pivot, sheetId) : null;
     },
     async getRenderedImportedPivotWithResult(sheetId, pivotId) {
       await hydrateSheetMap();
       const pivot = (bySheetId.get(sheetId) ?? []).find((candidate) => candidate.id === pivotId);
-      return pivot ? toSyntheticPivotWithResult(pivot) : null;
+      return pivot ? toSyntheticPivotWithResult(pivot, sheetId) : null;
     },
   };
 

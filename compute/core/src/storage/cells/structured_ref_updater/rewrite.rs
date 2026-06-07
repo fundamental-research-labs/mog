@@ -32,7 +32,11 @@ pub fn template_contains_column_ref(template: &str, column_name: &str) -> bool {
         return false;
     }
 
-    let pattern = format!(r"(?i)\[[@#]?{}\]", escape_regex(column_name));
+    let pattern = format!(
+        r"(?i)(?:\[[@#]?{}\]|\[@\[{}\]\])",
+        escape_regex(column_name),
+        escape_regex(column_name)
+    );
     Regex::new(&pattern).is_ok_and(|re| re.is_match(template))
 }
 
@@ -58,21 +62,101 @@ pub fn replace_table_name_in_formula(
 /// Replace a column name in a formula string for a specific table.
 pub fn replace_column_name_in_formula(
     formula: &str,
-    _table_name: &str,
+    table_name: &str,
     old_column_name: &str,
     new_column_name: &str,
 ) -> String {
-    if formula.is_empty() || old_column_name.is_empty() {
+    if formula.is_empty() || table_name.is_empty() || old_column_name.is_empty() {
         return formula.to_string();
+    }
+
+    let pattern = format!(r"(?i)\b{}\[", escape_regex(table_name));
+    let Ok(table_re) = Regex::new(&pattern) else {
+        return formula.to_string();
+    };
+
+    let mut result = String::with_capacity(formula.len());
+    let mut cursor = 0;
+    for table_match in table_re.find_iter(formula) {
+        if table_match.start() < cursor {
+            continue;
+        }
+
+        let open_bracket = table_match.end() - 1;
+        let Some(close_bracket) = find_matching_bracket(formula, open_bracket) else {
+            continue;
+        };
+
+        result.push_str(formula.get(cursor..table_match.start()).unwrap_or_default());
+        result.push_str(
+            formula
+                .get(table_match.start()..open_bracket)
+                .unwrap_or_default(),
+        );
+        let table_ref = formula
+            .get(open_bracket..=close_bracket)
+            .unwrap_or_default();
+        result.push_str(&replace_column_name_in_table_ref(
+            table_ref,
+            old_column_name,
+            new_column_name,
+        ));
+        cursor = close_bracket + 1;
+    }
+
+    result.push_str(formula.get(cursor..).unwrap_or_default());
+    result
+}
+
+fn find_matching_bracket(value: &str, open_bracket: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (offset, ch) in value.get(open_bracket..)?.char_indices() {
+        match ch {
+            '[' => depth += 1,
+            ']' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(open_bracket + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn replace_column_name_in_table_ref(
+    table_ref: &str,
+    old_column_name: &str,
+    new_column_name: &str,
+) -> String {
+    let mut result = table_ref.to_string();
+
+    let pattern = format!(r"(?i)\[@\[{}\]\]", escape_regex(old_column_name));
+    if let Ok(re) = Regex::new(&pattern) {
+        let replacement = format!("[@[{}]]", new_column_name);
+        result = re
+            .replace_all(&result, NoExpand(replacement.as_str()))
+            .to_string();
+    }
+
+    let pattern = format!(r"(?i)\[@{}\]", escape_regex(old_column_name));
+    if let Ok(re) = Regex::new(&pattern) {
+        let replacement = format!("[@{}]", new_column_name);
+        result = re
+            .replace_all(&result, NoExpand(replacement.as_str()))
+            .to_string();
     }
 
     let pattern = format!(r"(?i)\[{}\]", escape_regex(old_column_name));
     if let Ok(re) = Regex::new(&pattern) {
-        re.replace_all(formula, format!("[{}]", new_column_name).as_str())
-            .to_string()
-    } else {
-        formula.to_string()
+        let replacement = format!("[{}]", new_column_name);
+        result = re
+            .replace_all(&result, NoExpand(replacement.as_str()))
+            .to_string();
     }
+
+    result
 }
 
 /// Replace a table reference with `#REF!` in a formula.
@@ -184,6 +268,10 @@ mod tests {
         assert!(template_contains_column_ref("Sales[Amount]", "Amount"));
         assert!(template_contains_column_ref("Sales[@Amount]", "Amount"));
         assert!(template_contains_column_ref(
+            "Sales[@[Amount Due]]",
+            "Amount Due"
+        ));
+        assert!(template_contains_column_ref(
             "Sales[[#Headers],[Amount]]",
             "Amount"
         ));
@@ -227,14 +315,35 @@ mod tests {
     }
 
     #[test]
-    fn replace_column_name_is_currently_table_agnostic() {
+    fn replace_column_name_is_scoped_to_table_ref() {
         assert_eq!(
             replace_column_name_in_formula("Sales[Amount]", "Sales", "Amount", "Revenue"),
             "Sales[Revenue]"
         );
         assert_eq!(
+            replace_column_name_in_formula("Sales[@Amount]", "Sales", "Amount", "Revenue"),
+            "Sales[@Revenue]"
+        );
+        assert_eq!(
+            replace_column_name_in_formula("Sales[@[Amount Due]]", "Sales", "Amount Due", "Due"),
+            "Sales[@[Due]]"
+        );
+        assert_eq!(
             replace_column_name_in_formula("Sales[Amount]+Tax[Amount]", "Sales", "Amount", "Total"),
-            "Sales[Total]+Tax[Total]"
+            "Sales[Total]+Tax[Amount]"
+        );
+        assert_eq!(
+            replace_column_name_in_formula("Tax[Amount]", "Sales", "Amount", "Revenue"),
+            "Tax[Amount]"
+        );
+        assert_eq!(
+            replace_column_name_in_formula(
+                "Sales[[#Headers],[Amount]]",
+                "Sales",
+                "Amount",
+                "Revenue"
+            ),
+            "Sales[[#Headers],[Revenue]]"
         );
         assert_eq!(
             replace_column_name_in_formula("Sales[amount]", "Sales", "Amount", "Revenue"),

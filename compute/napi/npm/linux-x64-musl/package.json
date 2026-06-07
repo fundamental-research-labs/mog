@@ -14,7 +14,7 @@
   "files": [
     "compute-core-napi.node"
   ],
-  "description": "Native binary for @mog-sdk/node (Linux x64, musl)",
+  "description": "Native binary for @mog-sdk/sdk Node runtime (Linux x64, musl)",
   "license": "MIT",
   "engines": {
     "node": ">= 18"

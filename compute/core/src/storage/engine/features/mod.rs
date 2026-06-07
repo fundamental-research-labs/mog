@@ -85,6 +85,14 @@ impl YrsComputeEngine {
         filters::get_filters_in_sheet(self, sheet_id)
     }
 
+    #[bridge::read(scope = "sheet")]
+    pub fn get_filter_header_info(
+        &self,
+        sheet_id: &SheetId,
+    ) -> Vec<sheet_filters::FilterHeaderInfo> {
+        filters::get_filter_header_info(self, sheet_id)
+    }
+
     /// Apply an Excel Advanced Filter from raw user-visible range strings.
     #[bridge::write(scope = "sheet")]
     pub fn apply_advanced_filter(
@@ -117,6 +125,15 @@ impl YrsComputeEngine {
         filter_id: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         filters::apply_filter(self, sheet_id, filter_id)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn reapply_filter(
+        &mut self,
+        sheet_id: &SheetId,
+        filter_id: &str,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        filters::reapply_filter(self, sheet_id, filter_id)
     }
 
     /// Get unique values in a filter column for populating the filter dropdown.

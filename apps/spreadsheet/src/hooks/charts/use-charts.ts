@@ -436,7 +436,7 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
 
     // Fetch all charts via Worksheet API and sort by z-order
     const fetchCharts = async () => {
-      const allCharts = await ws.charts.list();
+      const allCharts = await ws.charts.list({ materialization: 'available' });
       if (cancelled) return;
       // Sort by z-order (matching getChartsInZOrder behavior)
       const sortedCharts = [...(allCharts as SerializedChart[])].sort((a, b) => {
@@ -458,7 +458,7 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
     // Listen to all chart CRUD events to refresh chart list
     const chartHandler = () => {
       void (async () => {
-        const allCharts = await ws.charts.list();
+        const allCharts = await ws.charts.list({ materialization: 'available' });
         if (cancelled) return;
         const sortedCharts = [...(allCharts as SerializedChart[])].sort((a, b) => {
           const zA = a.zIndex ?? 0;

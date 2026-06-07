@@ -11,6 +11,7 @@ pub(super) fn make_reorder_config(placements: Vec<PivotFieldPlacement>) -> Pivot
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: CellRange::new(0, 0, 10, 5),
+        output_sheet_id: None,
         output_sheet_name: "sheet2".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![],
@@ -112,6 +113,7 @@ pub(super) fn make_test_config_with_fields() -> PivotTableConfig {
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: CellRange::new(0, 0, 100, 3),
+        output_sheet_id: None,
         output_sheet_name: "sheet2".to_string(),
         output_location: OutputLocation { row: 5, col: 2 },
         fields: vec![

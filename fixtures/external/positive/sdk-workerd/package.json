@@ -1,0 +1,14 @@
+{
+  "name": "fixture-sdk-workerd",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mog-sdk/sdk": "TARBALL_PATH"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

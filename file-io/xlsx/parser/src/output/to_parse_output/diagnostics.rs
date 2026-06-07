@@ -88,6 +88,9 @@ fn degraded_object_diagnostic(
         recoverability: status.recoverability,
         message: diagnostic_message_for_status(status),
         reference: Some(reference),
+        details: None,
+        import_phases: Vec::new(),
+        first_import_phase: None,
     })
 }
 
@@ -259,6 +262,9 @@ fn compatibility_acknowledgement(
             object_id: Some(source_id.to_string()),
             ..domain_types::ImportDiagnosticRef::default()
         }),
+        details: None,
+        import_phases: Vec::new(),
+        first_import_phase: None,
     }
 }
 

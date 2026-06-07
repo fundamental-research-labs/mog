@@ -41,7 +41,12 @@ function createMockWorkbook(
     getSheetId: () => sheetId,
     getUsedRange: async () =>
       cells.length > 0
-        ? `A1:${String.fromCharCode(65 + Math.max(...cells.map((c) => c.col)))}${Math.max(...cells.map((c) => c.row)) + 1}`
+        ? {
+            startRow: Math.min(...cells.map((c) => c.row)),
+            startCol: Math.min(...cells.map((c) => c.col)),
+            endRow: Math.max(...cells.map((c) => c.row)),
+            endCol: Math.max(...cells.map((c) => c.col)),
+          }
         : null,
     getRangeWithIdentity: async () =>
       cells.map((c) => ({
@@ -52,9 +57,16 @@ function createMockWorkbook(
         displayString: c.value,
         formulaText: null,
       })),
-    setCell: jest.fn().mockResolvedValue(undefined),
+    setCell: jest.fn().mockImplementation(async (row: number, col: number, value: string) => {
+      const cell = cells.find((c) => c.row === row && c.col === col);
+      if (cell) {
+        cell.value = value;
+      }
+    }),
     setCells: jest.fn().mockResolvedValue({ updatedCount: 0 }),
-    getDisplayValue: jest.fn().mockImplementation(async () => ''),
+    getDisplayValue: jest.fn().mockImplementation(async (row: number, col: number) => {
+      return cells.find((c) => c.row === row && c.col === col)?.value ?? '';
+    }),
     layout: {
       getHiddenRowsBitmap: jest.fn().mockResolvedValue(new Set<number>()),
       getHiddenColumnsBitmap: jest.fn().mockResolvedValue(new Set<number>()),
@@ -125,6 +137,26 @@ async function waitForState(
   const finalSnap = actor.getSnapshot();
   throw new Error(
     `Timed out waiting for state '${stateName}'. Current state value: ${JSON.stringify(finalSnap.value)}`,
+  );
+}
+
+async function waitForFindReplace(
+  system: GridEditingSystem,
+  predicate: (snapshot: any) => boolean,
+  maxWait = 2000,
+): Promise<void> {
+  const actor = system.access.actors.findReplace;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWait) {
+    const snap = actor.getSnapshot();
+    if (predicate(snap)) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+
+  const finalSnap = actor.getSnapshot();
+  throw new Error(
+    `Timed out waiting for find/replace condition. Current context: ${JSON.stringify(finalSnap.context)}`,
   );
 }
 
@@ -256,7 +288,58 @@ describe('Find-Replace Wiring (Bug #28)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 4: Without coordination wired, search hangs (documents the dep)
+  // Test 4: Replace can target the first result before explicit navigation
+  // ---------------------------------------------------------------------------
+
+  it('single replace targets the first result when a replacement query has no selected match', async () => {
+    const mockWorkbook = createMockWorkbook(sheetId('sheet-1'), [
+      { row: 0, col: 0, value: 'Apple', cellId: 'cell-1' },
+      { row: 1, col: 0, value: 'Banana', cellId: 'cell-2' },
+    ]);
+
+    system = new GridEditingSystem({
+      initialSheetId: 'sheet-1',
+      workbook: mockWorkbook,
+    });
+    system.start();
+
+    cleanupFindReplace = wireFindReplace(system, mockWorkbook, 'sheet-1');
+
+    const actor = system.access.actors.findReplace;
+
+    actor.send({ type: 'OPEN', showReplace: true });
+    actor.send({ type: 'SET_QUERY', query: 'Apple' });
+    actor.send({ type: 'SEARCH' });
+    await waitForFindReplace(
+      system,
+      (snap) => snap.matches('hasResults' as any) && snap.context.query === 'Apple',
+    );
+
+    actor.send({ type: 'SET_QUERY', query: 'Banana' });
+    actor.send({ type: 'SEARCH' });
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.matches('hasResults' as any) &&
+        snap.context.query === 'Banana' &&
+        snap.context.results.length === 1 &&
+        snap.context.currentIndex === -1,
+    );
+
+    actor.send({ type: 'SET_REPLACEMENT', replacement: 'Mango' });
+    const worksheet = mockWorkbook.getSheetById(sheetId('sheet-1')) as any;
+    actor.send({ type: 'REPLACE' });
+
+    await waitForFindReplace(
+      system,
+      (snap) => worksheet.setCell.mock.calls.length > 0 && !snap.matches('replacing' as any),
+    );
+
+    expect(worksheet.setCell).toHaveBeenCalledWith(1, 0, 'Mango');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 5: Without coordination wired, search hangs (documents the dep)
   // ---------------------------------------------------------------------------
 
   it('without coordination wired, search stays in searching', async () => {

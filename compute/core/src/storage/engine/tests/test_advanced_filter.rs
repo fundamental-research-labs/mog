@@ -118,6 +118,47 @@ fn manual_unhide_keeps_rows_hidden_by_advanced_filter() {
 }
 
 #[test]
+fn clear_all_column_filters_clears_advanced_filter_activity() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
+    let sid = test_sheet_id();
+
+    engine.hide_rows(&sid, &[1]).unwrap();
+
+    let (_, apply_result) = engine
+        .apply_advanced_filter(
+            &sid,
+            advanced_filter_request(filters::AdvancedFilterMode::InPlace),
+        )
+        .unwrap();
+    let filter_id = apply_result
+        .filter_changes
+        .first()
+        .expect("filter change")
+        .filter_id
+        .clone();
+    assert_eq!(engine.get_hidden_rows(&sid), vec![1, 2, 4]);
+
+    let (_, clear_result) = engine
+        .clear_all_column_filters(&sid, &filter_id)
+        .expect("clear advanced filter criteria");
+
+    assert_eq!(engine.get_hidden_rows(&sid), vec![1]);
+    let filter = engine
+        .get_filters_in_sheet(&sid)
+        .into_iter()
+        .find(|filter| filter.id == filter_id)
+        .expect("advanced filter structure remains");
+    assert_eq!(filter.filter_kind, filters::FilterKind::AdvancedFilter);
+    assert!(filter.column_filters.is_empty());
+    assert!(filter.advanced_filter.is_none());
+
+    let clear_change = clear_result.filter_changes.first().expect("clear change");
+    assert_eq!(clear_change.filter_kind.as_deref(), Some("advancedFilter"));
+    assert_eq!(clear_change.action.as_deref(), Some("cleared"));
+    assert_eq!(clear_change.has_active_filter, Some(false));
+}
+
+#[test]
 fn advanced_filter_copy_to_writes_matching_rows_without_hiding_source() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(advanced_filter_snapshot()).unwrap();
     let sid = test_sheet_id();

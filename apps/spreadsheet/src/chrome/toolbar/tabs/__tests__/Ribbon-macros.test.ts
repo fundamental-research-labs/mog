@@ -48,6 +48,26 @@ describe('removed ribbon tabs', () => {
   });
 });
 
+describe('removed Help ribbon affordances', () => {
+  test("Help ribbon does not expose a What's New command", () => {
+    const source = readFileSync(new URL('../HelpRibbon.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain("What's New");
+    expect(source).not.toContain('whatsNew');
+    expect(source).not.toContain('OPEN_HELP_WHATS_NEW');
+  });
+
+  test("help URL utilities do not ship a What's New release-note target", () => {
+    const source = readFileSync(
+      new URL('../../../../infra/utils/help.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).not.toContain('whatsNew');
+    expect(source).not.toContain('changelog');
+  });
+});
+
 describe('unsupported Data ribbon affordances', () => {
   test('Data ribbon does not expose connection controls before connections are supported', () => {
     const source = readFileSync(new URL('../DataRibbon.tsx', import.meta.url), 'utf8');

@@ -10,6 +10,7 @@ import {
 describe('resolved spec snapshot helpers', () => {
   it('builds default export options from requested dimensions', () => {
     expect(defaultExportOptionsForSize(320.4, 179.6)).toEqual({
+      kind: 'raster',
       format: 'png',
       width: 320.4,
       height: 179.6,
@@ -17,6 +18,15 @@ describe('resolved spec snapshot helpers', () => {
       physicalWidth: 320,
       physicalHeight: 180,
       backgroundColor: '#ffffff',
+      fittingMode: 'fill',
+      frame: {
+        exportWidth: 320.4,
+        exportHeight: 179.6,
+        contentX: 0,
+        contentY: 0,
+        contentWidth: 320.4,
+        contentHeight: 179.6,
+      },
     });
     expect(defaultExportOptionsForSize(0, -5)).toMatchObject({
       physicalWidth: 1,
@@ -140,6 +150,7 @@ describe('resolved spec snapshot helpers', () => {
         ],
       },
       exportOptions: {
+        kind: 'raster',
         format: 'png',
         width: 320,
         height: 180,
@@ -147,6 +158,15 @@ describe('resolved spec snapshot helpers', () => {
         physicalWidth: 320,
         physicalHeight: 180,
         backgroundColor: '#ffffff',
+        fittingMode: 'fill',
+        frame: {
+          exportWidth: 320,
+          exportHeight: 180,
+          contentX: 0,
+          contentY: 0,
+          contentWidth: 320,
+          contentHeight: 180,
+        },
       },
       compilerPathId: 'ts-grammar',
       compilerInputHash: 'input-hash',
@@ -226,10 +246,70 @@ describe('resolved spec snapshot helpers', () => {
         message: 'Unknown sheet "Missing"',
       },
     ]);
-    expect(snapshot.diagnostics.compiler).toEqual(['Unknown sheet "Missing"']);
+    expect(snapshot.diagnostics.compiler).toEqual([
+      'Unknown sheet "Missing"',
+      'surface approximation trace is missing',
+    ]);
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([]);
     expect(snapshot.resolved.dataHashes.categoriesHash).toMatch(/^[0-9a-f]{16}$/);
     expect(snapshot.resolved.series[0].dataHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('includes imported cartesian point and path geometry in resolved snapshots', () => {
+    const sheetId = toSheetId('sheet-1');
+    const snapshot = buildResolvedChartSpecSnapshot({
+      chart: {
+        id: 'chart-1',
+        name: 'Chart 1',
+        anchor: { anchorRow: 0, anchorCol: 0 },
+        widthCells: 4,
+        heightCells: 5,
+      } as any,
+      sheetId,
+      config: {
+        type: 'area',
+        subType: 'percentStacked',
+        anchorRow: 0,
+        anchorCol: 0,
+        width: 4,
+        height: 5,
+        extra: { sourceDialect: 'ooxml' },
+      },
+      chartData: {
+        categories: ['A', 'B'],
+        series: [
+          {
+            name: 'Series 1',
+            data: [
+              { x: 'A', y: 5 },
+              { x: 'B', y: 10 },
+            ],
+          },
+        ],
+      },
+      resolvedRanges: {
+        dataRange: null,
+        categoryRange: null,
+        seriesRange: null,
+        seriesReferences: [],
+        diagnostics: [],
+      },
+      exportOptions: defaultExportOptionsForSize(320, 180),
+      compilerPathId: 'ts-grammar',
+      compilerInputHash: 'input-hash',
+    });
+
+    expect(snapshot.resolved.plot.cartesianGeometry?.area).toMatchObject({
+      stackMode: 'normalize',
+      baseline: 0,
+      percentDomain: [0, 100],
+    });
+    expect(snapshot.resolved.series[0].geometry).toMatchObject({
+      xMode: 'categoryPoint',
+      xRole: 'category',
+      axisGroup: 'primary',
+      stackGroup: 'area:0:category',
+    });
   });
 
   it.each([
@@ -940,11 +1020,11 @@ describe('resolved spec snapshot helpers', () => {
 
     expect(snapshot.diagnostics.unsupportedFeatures).toEqual([
       'pivot chart field buttons are preserved but not rendered (showAllFieldButtons, showAxisFieldButtons, showValueFieldButtons)',
-      'manual plot layout is preserved but not rendered',
-      'manual title layout is preserved but not rendered',
-      'manual legend layout is preserved but not rendered',
-      'manual data-label layout is preserved but not rendered',
-      'chart data table is preserved but not rendered',
+      'manual plot layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual title layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual legend layout is preserved-only; compiler layout snapshot is unavailable',
+      'manual data-label layout is preserved-only; no rendered data-label bounds were reported',
+      'chart data table is preserved-only; no rendered data-table bounds were reported',
       'view3D camera/depth is preserved but rendered as a 2-D approximation',
       'floor/sideWall/backWall surfaces are preserved but not rendered',
     ]);

@@ -12,6 +12,7 @@ import {
   pivotFieldButtonDiagnostic,
 } from './resolved-spec-diagnostics-features';
 import {
+  colorAuthorityDiagnostics,
   comboScatterSeriesDiagnostics,
   hasPictureMarkers,
   hasSourceLinkedDataLabelFormatWithoutModeledFormat,
@@ -20,7 +21,7 @@ import {
   barShapeDiagnostics,
   isSurfaceFamilyConfig,
   isSurfaceTopViewConfig,
-  surfaceFamilyDiagnostics,
+  surfaceUnsupportedFeatureDiagnostics,
 } from './resolved-spec-diagnostics-surface';
 import {
   importStatusUnsupportedDiagnostics,
@@ -60,7 +61,7 @@ export function unsupportedFeatureDiagnostics(input: {
       unsupported.push('3-D chart rendering is approximated by the 2-D chart backend');
     }
   }
-  unsupported.push(...surfaceFamilyDiagnostics(config));
+  unsupported.push(...surfaceUnsupportedFeatureDiagnostics(config, series));
   if (config.type === 'regionMap')
     unsupported.push('region map rendering uses placeholder geometry');
   if (config.type === 'treemap')
@@ -80,18 +81,29 @@ export function unsupportedFeatureDiagnostics(input: {
   }
   if (!layout) {
     if (hasManualPlotLayout(config))
-      unsupported.push('manual plot layout is preserved but not rendered');
+      unsupported.push(
+        'manual plot layout is preserved-only; compiler layout snapshot is unavailable',
+      );
     if (hasManualTitleLayout(config))
-      unsupported.push('manual title layout is preserved but not rendered');
+      unsupported.push(
+        'manual title layout is preserved-only; compiler layout snapshot is unavailable',
+      );
     if (hasManualLegendLayout(config))
-      unsupported.push('manual legend layout is preserved but not rendered');
+      unsupported.push(
+        'manual legend layout is preserved-only; compiler layout snapshot is unavailable',
+      );
   }
   if (hasManualDataLabelLayout(config) && !layout?.dataLabels)
-    unsupported.push('manual data-label layout is preserved but not rendered');
+    unsupported.push(
+      'manual data-label layout is preserved-only; no rendered data-label bounds were reported',
+    );
   if (config.dataTable && !layout?.dataTable)
-    unsupported.push('chart data table is preserved but not rendered');
+    unsupported.push(
+      'chart data table is preserved-only; no rendered data-table bounds were reported',
+    );
   if (hasPictureMarkers(config))
     unsupported.push('picture markers are preserved for export but rendered as standard symbols');
+  unsupported.push(...colorAuthorityDiagnostics(config, series));
   unsupported.push(...comboScatterSeriesDiagnostics(config, series));
   if (hasSourceLinkedDataLabelFormatWithoutModeledFormat(config))
     unsupported.push(

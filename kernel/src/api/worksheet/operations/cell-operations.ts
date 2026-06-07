@@ -37,6 +37,7 @@ import { invalidateWorksheetValidationCache } from '../validation-cache';
 import { calendarPartsInTz } from './calendar-tz';
 import { type CellInput, toCellInput } from './cell-input';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
+import { assertUnprotectedTableDefinition } from '../protected-table-operations';
 
 // =============================================================================
 // Cell Read Operations
@@ -267,6 +268,63 @@ async function reapplyActiveFiltersAfterWrite(
   }
 }
 
+async function awaitAllSheetsBeforeCellWrite(ctx: DocumentContext): Promise<void> {
+  await ctx.awaitMaterialized?.('allSheets');
+}
+
+interface TableHeaderWrite {
+  tableName: string;
+  columnIndex: number;
+  currentName: string;
+  newName: string;
+}
+
+function tableHeaderText(value: CellValuePrimitive | Date): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+async function resolveTableHeaderWrite(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: CellValuePrimitive | Date,
+): Promise<TableHeaderWrite | null> {
+  const table = await ctx.computeBridge.getTableAtCell(sheetId, row, col);
+  if (!table?.hasHeaderRow) return null;
+
+  const { range } = table;
+  if (row !== range.startRow || col < range.startCol || col > range.endCol) return null;
+
+  const columnIndex = col - range.startCol;
+  const column = table.columns?.[columnIndex];
+  if (!column) return null;
+
+  return {
+    tableName: table.name,
+    columnIndex,
+    currentName: column.name,
+    newName: tableHeaderText(value),
+  };
+}
+
+async function applyTableHeaderWrite(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  write: TableHeaderWrite,
+  alreadyMaterialized = false,
+): Promise<boolean> {
+  if (write.currentName === write.newName) return false;
+  if (!alreadyMaterialized) {
+    await awaitAllSheetsBeforeCellWrite(ctx);
+  }
+  await assertUnprotectedTableDefinition(ctx, sheetId, 'tables.renameColumn', write.tableName);
+  await ctx.computeBridge.renameTableColumn(write.tableName, write.columnIndex, write.newName);
+  return true;
+}
+
 /**
  * Set a cell's value.
  *
@@ -298,6 +356,16 @@ export async function setCell(
   if (!isValidAddress(row, col)) {
     throw KernelError.from(null, 'COMPUTE_ERROR', `Invalid cell address: row=${row}, col=${col}`);
   }
+
+  const tableHeaderWrite = await resolveTableHeaderWrite(ctx, sheetId, row, col, value);
+  if (tableHeaderWrite) {
+    if (await applyTableHeaderWrite(ctx, sheetId, tableHeaderWrite)) {
+      await reapplyActiveFiltersAfterWrite(ctx, sheetId);
+    }
+    return;
+  }
+
+  await awaitAllSheetsBeforeCellWrite(ctx);
 
   // Tell the change accumulator which cells are being directly written
   ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits([{ sheetId, row, col }]);
@@ -433,6 +501,7 @@ export async function setCells(
   // Date values take a separate path (bridge.setDateValue) so they get a date
   // serial + date format, not String(Date).
   const dateWrites = new Map<string, { row: number; col: number; date: Date }>();
+  const tableHeaderWrites = new Map<string, TableHeaderWrite>();
 
   for (const c of cells) {
     let row: number | undefined = c.row;
@@ -463,12 +532,21 @@ export async function setCells(
 
     const value = c.value;
     const key = `${row},${col}`;
+    const tableHeaderWrite = await resolveTableHeaderWrite(ctx, sheetId, row, col, value);
+
+    if (tableHeaderWrite) {
+      deduped.delete(key);
+      dateWrites.delete(key);
+      tableHeaderWrites.set(key, tableHeaderWrite);
+      continue;
+    }
 
     if (value instanceof Date) {
       // Last-write-wins across both paths: a later date overwrites an earlier
       // string write at the same coord (and vice versa).
       await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
       deduped.delete(key);
+      tableHeaderWrites.delete(key);
       dateWrites.set(key, { row, col, date: value });
       continue;
     }
@@ -479,20 +557,32 @@ export async function setCells(
 
     // Last-write-wins: later entries overwrite earlier ones for the same position
     dateWrites.delete(key);
+    tableHeaderWrites.delete(key);
     deduped.set(key, { row, col, input });
   }
 
   const edits = Array.from(deduped.values());
   const dates = Array.from(dateWrites.values());
-  const duplicatesRemoved = cells.length - errors.length - edits.length - dates.length;
+  const headerWrites = Array.from(tableHeaderWrites.values());
+  const duplicatesRemoved =
+    cells.length - errors.length - edits.length - dates.length - headerWrites.length;
 
-  if (edits.length > 0 || dates.length > 0) {
+  if (edits.length > 0 || dates.length > 0 || headerWrites.length > 0) {
+    await awaitAllSheetsBeforeCellWrite(ctx);
+
     // --- Tell the change accumulator which cells are being directly written ---
     const allCoords = [
       ...edits.map((e) => ({ sheetId, row: e.row, col: e.col })),
       ...dates.map((d) => ({ sheetId, row: d.row, col: d.col })),
     ];
-    ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits(allCoords);
+    if (allCoords.length > 0) {
+      ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits(allCoords);
+    }
+
+    let wroteHeader = false;
+    for (const headerWrite of headerWrites) {
+      wroteHeader = (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true)) || wroteHeader;
+    }
 
     // --- Use the mutation pipeline path for primitives ---
     if (edits.length > 0) {
@@ -515,12 +605,14 @@ export async function setCells(
         parts.day,
       );
     }
-    await reapplyActiveFiltersAfterWrite(ctx, sheetId);
+    if (edits.length > 0 || dates.length > 0 || wroteHeader) {
+      await reapplyActiveFiltersAfterWrite(ctx, sheetId);
+    }
   }
 
   // --- Build result ---
   const result: SetCellsResult = {
-    cellsWritten: edits.length + dates.length,
+    cellsWritten: edits.length + dates.length + headerWrites.length,
     errors: errors.length > 0 ? errors : null,
   };
   if (duplicatesRemoved > 0) {
@@ -555,6 +647,7 @@ export async function setDateValue(
   col: number,
   date: { year: number; month: number; day: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
@@ -577,6 +670,7 @@ export async function setTimeValue(
   col: number,
   time: { hours: number; minutes: number; seconds: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.setTimeValue(sheetId, row, col, time.hours, time.minutes, time.seconds);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
@@ -608,6 +702,7 @@ export async function relocateCells(
   source: CellRange,
   target: { row: number; col: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.relocateCellsYrs(
     sheetId,
     source.startRow,

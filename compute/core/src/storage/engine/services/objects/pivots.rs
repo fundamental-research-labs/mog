@@ -3,9 +3,11 @@ use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::pivots;
 use cell_types::SheetId;
+use compute_document::undo::ORIGIN_USER_EDIT;
 use compute_pivot::PivotTableDefExt;
 use domain_types::domain::pivot::PivotTableConfig;
 use value_types::ComputeError;
+use yrs::{Origin, Transact};
 
 pub(in crate::storage::engine) fn pivot_create_with_sheet_inner(
     stores: &mut EngineStores,
@@ -75,14 +77,19 @@ pub(in crate::storage::engine) fn pivot_delete(
     sheet_id: &SheetId,
     pivot_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    let deleted = pivots::delete_pivot(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        pivot_id,
-    );
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let deleted =
+        pivots::delete_pivot_in_txn(&mut txn, stores.storage.sheets(), sheet_id, pivot_id);
     let mut result = MutationResult::empty();
     if deleted {
+        crate::storage::workbook::imported_pivots::mark_native_pivot_deleted_in_txn(
+            &mut txn,
+            stores.storage.workbook_map(),
+            pivot_id,
+        );
         result.pivot_changes.push(PivotTableChange {
             sheet_id: sheet_id.to_uuid_string(),
             pivot_id: pivot_id.to_string(),
@@ -140,10 +147,16 @@ pub(in crate::storage::engine) fn pivot_register_def(
         first_data_col,
         num_data_cols: 0,
     };
-    let output_sheet_id = mirror
-        .sheet_by_name(&config.output_sheet_name)
+    let output_sheet_id = config
+        .output_sheet_id
+        .as_deref()
+        .and_then(|sheet_id| SheetId::from_uuid_str(sheet_id).ok())
+        .or_else(|| mirror.sheet_by_name(&config.output_sheet_name))
         .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: config.output_sheet_name.clone(),
+            sheet_id: config
+                .output_sheet_id
+                .clone()
+                .unwrap_or_else(|| config.output_sheet_name.clone()),
         })?;
 
     let engine_config =

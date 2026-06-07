@@ -22,6 +22,52 @@ use super::order::append_object_id_if_missing;
 use super::sheet_map::get_sheet_submap;
 use super::units::{json_i64_alias, px_to_emu};
 
+fn json_number_to_i64(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_f64().map(|v| v.round() as i64))
+}
+
+fn nested_or_flat_u32(
+    anchor_obj: Option<&serde_json::Map<String, serde_json::Value>>,
+    config_obj: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Option<u32> {
+    anchor_obj
+        .and_then(|a| a.get(key))
+        .and_then(|v| v.as_u64())
+        .or_else(|| config_obj.get(key).and_then(|v| v.as_u64()))
+        .map(|v| v as u32)
+}
+
+fn nested_or_flat_str<'a>(
+    anchor_obj: Option<&'a serde_json::Map<String, serde_json::Value>>,
+    config_obj: &'a serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Option<&'a str> {
+    anchor_obj
+        .and_then(|a| a.get(key))
+        .and_then(|v| v.as_str())
+        .or_else(|| config_obj.get(key).and_then(|v| v.as_str()))
+}
+
+fn nested_or_flat_i64_alias(
+    anchor_obj: Option<&serde_json::Map<String, serde_json::Value>>,
+    config_obj: &serde_json::Map<String, serde_json::Value>,
+    canonical: &str,
+    legacy: &str,
+) -> Option<i64> {
+    anchor_obj
+        .and_then(|a| a.get(canonical))
+        .and_then(json_number_to_i64)
+        .or_else(|| {
+            anchor_obj
+                .and_then(|a| a.get(legacy))
+                .and_then(json_number_to_i64)
+        })
+        .or_else(|| json_i64_alias(config_obj, canonical, legacy))
+}
+
 pub fn create_shape_from_config(
     doc: &Doc,
     sheets: &MapRef,
@@ -179,25 +225,32 @@ pub fn create_chart_object(
         .count();
 
     let config_obj = config.as_object().cloned().unwrap_or_default();
+    let anchor_obj = config_obj.get("anchor").and_then(|v| v.as_object());
 
-    // Extract common fields from config.
-    let anchor_row = config_obj
-        .get("anchorRow")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
-    let anchor_col = config_obj
-        .get("anchorCol")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0) as u32;
+    // Accept both the canonical nested anchor contract and legacy flat fields.
+    let anchor_row = nested_or_flat_u32(anchor_obj, &config_obj, "anchorRow").unwrap_or(0);
+    let anchor_col = nested_or_flat_u32(anchor_obj, &config_obj, "anchorCol").unwrap_or(0);
     let x_offset_emu = if let Some(px) = config_obj.get("xOffset").and_then(|v| v.as_f64()) {
         px_to_emu(px)
     } else {
-        json_i64_alias(&config_obj, KEY_ANCHOR_COL_OFFSET_EMU, "anchorColOffset").unwrap_or(0)
+        nested_or_flat_i64_alias(
+            anchor_obj,
+            &config_obj,
+            KEY_ANCHOR_COL_OFFSET_EMU,
+            "anchorColOffset",
+        )
+        .unwrap_or(0)
     };
     let y_offset_emu = if let Some(px) = config_obj.get("yOffset").and_then(|v| v.as_f64()) {
         px_to_emu(px)
     } else {
-        json_i64_alias(&config_obj, KEY_ANCHOR_ROW_OFFSET_EMU, "anchorRowOffset").unwrap_or(0)
+        nested_or_flat_i64_alias(
+            anchor_obj,
+            &config_obj,
+            KEY_ANCHOR_ROW_OFFSET_EMU,
+            "anchorRowOffset",
+        )
+        .unwrap_or(0)
     };
     let width = config_obj
         .get("width")
@@ -207,10 +260,8 @@ pub fn create_chart_object(
         .get("height")
         .and_then(|v| v.as_f64())
         .unwrap_or(300.0);
-    let anchor_mode_str = config_obj
-        .get("anchorMode")
-        .and_then(|v| v.as_str())
-        .unwrap_or("oneCell");
+    let anchor_mode_str =
+        nested_or_flat_str(anchor_obj, &config_obj, "anchorMode").unwrap_or("oneCell");
     let anchor_mode = match anchor_mode_str {
         "twoCell" => AnchorMode::TwoCell,
         "absolute" => AnchorMode::Absolute,
@@ -255,20 +306,34 @@ pub fn create_chart_object(
                 anchor_mode,
                 absolute_x: config_obj.get("absoluteXEmu").and_then(|v| v.as_i64()),
                 absolute_y: config_obj.get("absoluteYEmu").and_then(|v| v.as_i64()),
-                end_row: config_obj
-                    .get("endRow")
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as u32),
-                end_col: config_obj
-                    .get("endCol")
-                    .and_then(|v| v.as_u64())
-                    .map(|v| v as u32),
-                end_row_offset: json_i64_alias(&config_obj, KEY_END_ROW_OFFSET_EMU, "endRowOffset"),
-                end_col_offset: json_i64_alias(&config_obj, KEY_END_COL_OFFSET_EMU, "endColOffset"),
-                extent_cx: json_i64_alias(&config_obj, KEY_EXTENT_CX_EMU, "extentCx")
-                    .or_else(|| Some(px_to_emu(width))),
-                extent_cy: json_i64_alias(&config_obj, KEY_EXTENT_CY_EMU, "extentCy")
-                    .or_else(|| Some(px_to_emu(height))),
+                end_row: nested_or_flat_u32(anchor_obj, &config_obj, "endRow"),
+                end_col: nested_or_flat_u32(anchor_obj, &config_obj, "endCol"),
+                end_row_offset: nested_or_flat_i64_alias(
+                    anchor_obj,
+                    &config_obj,
+                    KEY_END_ROW_OFFSET_EMU,
+                    "endRowOffset",
+                ),
+                end_col_offset: nested_or_flat_i64_alias(
+                    anchor_obj,
+                    &config_obj,
+                    KEY_END_COL_OFFSET_EMU,
+                    "endColOffset",
+                ),
+                extent_cx: nested_or_flat_i64_alias(
+                    anchor_obj,
+                    &config_obj,
+                    KEY_EXTENT_CX_EMU,
+                    "extentCx",
+                )
+                .or_else(|| Some(px_to_emu(width))),
+                extent_cy: nested_or_flat_i64_alias(
+                    anchor_obj,
+                    &config_obj,
+                    KEY_EXTENT_CY_EMU,
+                    "extentCy",
+                )
+                .or_else(|| Some(px_to_emu(height))),
             },
             width,
             height,

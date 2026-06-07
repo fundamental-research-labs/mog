@@ -492,14 +492,19 @@ for (const pkg of workspacePackages) {
 }
 
 // 10. Native binary wrapper consistency.
-// The Node SDK optional dependencies, compute/napi package mappings, native
+// The SDK optional dependencies, compute/napi package mappings, native
 // package inventory, and publish matrix must describe the same public set.
 const nativeInventory = new Set(
   Object.entries(inventory)
-    .filter(([name, entry]) => entry.disposition === 'binary-wrapper' && name !== '@mog-sdk/wasm')
+    .filter(
+      ([name, entry]) =>
+        entry.disposition === 'binary-wrapper' &&
+        name !== '@mog-sdk/wasm' &&
+        name !== '@mog-sdk/chart-raster-wasm',
+    )
     .map(([name]) => name),
 );
-const nodeSdk = workspaceByName.get('@mog-sdk/node')?.manifest;
+const nodeSdk = workspaceByName.get('@mog-sdk/sdk')?.manifest;
 const nodeOptional = new Set(
   nodeSdk
     ? dependencyNames(nodeSdk, 'optionalDependencies').filter((name) =>
@@ -532,7 +537,7 @@ if (existsSync(publishWorkflowPath)) {
 
 const nativeSets = [
   ['inventory binary-wrapper entries', nativeInventory],
-  ['@mog-sdk/node optionalDependencies', nodeOptional],
+  ['@mog-sdk/sdk optionalDependencies', nodeOptional],
   ['compute/napi napi.package mappings', napiPackageMap],
   ['compute/napi optionalDependencies', napiOptional],
   ['publish-sdk native package paths', publishNativePackages],
@@ -572,8 +577,8 @@ for (const inventoryName of Object.keys(inventory)) {
 
 // 7. Verify public/semi-public packages do not export host-adapters/* subpaths.
 //    Host adapters are product-internal composition roots and must never leak
-//    into the public API surface of shell, @mog-sdk/node, or @mog-sdk/embed.
-const HOST_ADAPTER_EXPORT_BAN = ['@mog/shell', '@mog-sdk/node', '@mog-sdk/embed'];
+//    into the public API surface of shell, @mog-sdk/sdk, or @mog-sdk/embed.
+const HOST_ADAPTER_EXPORT_BAN = ['@mog/shell', '@mog-sdk/sdk', '@mog-sdk/embed'];
 for (const pkgName of HOST_ADAPTER_EXPORT_BAN) {
   const entry = workspaceByName.get(pkgName);
   if (!entry) continue;

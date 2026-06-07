@@ -407,12 +407,9 @@ function StatusBarComponent({ className = '' }: StatusBarProps) {
   const updateFilterInfo = useCallback(() => {
     void wb
       .getSheetById(sheetId)
-      .filters.list()
+      .filters.listSummaries({ scope: 'available' })
       .then((filters) => {
-        const filterCount = filters.reduce(
-          (n, f) => n + Object.keys(f.columnFilters ?? {}).length,
-          0,
-        );
+        const filterCount = filters.reduce((n, f) => n + (f.activeColumnCount ?? 0), 0);
         setFilterInfo(filterCount > 0 ? { visible: 0, total: 0, filterCount } : null);
       })
       .catch(() => setFilterInfo(null));

@@ -16,7 +16,7 @@
 import { assign } from 'xstate';
 import { singleCellRange } from '../../../shared/types';
 import type { SelectionContext, SelectionEvent } from './types';
-import { buildExtendUpdate, moveTo } from './helpers';
+import { buildExtendUpdate } from './helpers';
 
 // =============================================================================
 // FORMULA RANGE MODE ACTIONS
@@ -65,7 +65,14 @@ const exitRangeSelectionMode = assign(() => ({
 const setFormulaRange = assign(
   ({ event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_DOWN') return {};
-    return moveTo(event.cell);
+    return {
+      pendingRange: singleCellRange(event.cell),
+      committedRanges: [],
+      activeCell: event.cell,
+      anchor: event.cell,
+      direction: 'down-right' as const,
+      tabOriginCol: null,
+    };
   },
 );
 
@@ -75,7 +82,7 @@ const setFormulaRange = assign(
 const updateFormulaRange = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_MOVE' || !context.anchor) return {};
-    return buildExtendUpdate(context.anchor, event.cell);
+    return buildExtendUpdate(context.anchor, event.cell, event.cell);
   },
 );
 

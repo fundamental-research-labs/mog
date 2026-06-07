@@ -138,6 +138,7 @@ fn config_to_pivot_table_def_agg_labels_in_data_field_names() {
             source_sheet_id: None,
             source_sheet_name: "s1".to_string(),
             source_range: CellRange::new(0, 0, 10, 1),
+            output_sheet_id: None,
             output_sheet_name: "s2".to_string(),
             output_location: OutputLocation { row: 0, col: 0 },
             fields: vec![PivotField {
@@ -202,6 +203,7 @@ fn config_to_pivot_table_def_unknown_field_shows_question_mark() {
         source_sheet_id: None,
         source_sheet_name: "s1".to_string(),
         source_range: CellRange::new(0, 0, 10, 1),
+        output_sheet_id: None,
         output_sheet_name: "s2".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![], // no fields!

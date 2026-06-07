@@ -10,7 +10,14 @@ import { applyDataLabelToRow } from './data-label-row';
 export interface PieLabelGeometry {
   cos: number;
   sin: number;
+  centerX: number;
+  centerY: number;
   innerRadiusRatio: number;
+  outerRadiusRatio: number;
+  sliceAngle: number;
+  maxWidth: number;
+  lineHeight: number;
+  leaderVisible: boolean;
 }
 
 export function applyDataLabel(

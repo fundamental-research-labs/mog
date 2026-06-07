@@ -102,6 +102,26 @@ export function setupViewportFollowCoordination(
     if (!viewport) return;
 
     const followCell = event.followCell ?? event.activeCell;
+    const scrollIntent = event.scrollIntent;
+
+    if (scrollIntent?.type === 'page') {
+      rendererActor.send({
+        type: 'SCROLL_PAGE',
+        axis: scrollIntent.axis,
+        direction: scrollIntent.direction,
+        cell: followCell,
+      });
+      return;
+    }
+
+    if (scrollIntent?.type === 'origin') {
+      rendererActor.send({
+        type: 'SCROLL_TO_ORIGIN',
+        axis: scrollIntent.axis,
+        cell: followCell,
+      });
+      return;
+    }
 
     // getScrollToCell returns null when the cell is already visible
     const scrollTarget = viewport.getScrollToCell(followCell);

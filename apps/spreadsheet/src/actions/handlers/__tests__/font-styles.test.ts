@@ -3,7 +3,7 @@ import { jest } from '@jest/globals';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
-import { SET_FONT_SIZE } from '../formatting/font-styles';
+import { SET_FONT_SIZE, TOGGLE_WRAP_TEXT } from '../formatting/font-styles';
 
 const activeSheetId = 'sheet1' as SheetId;
 
@@ -11,6 +11,12 @@ function createMockDeps(ranges: CellRange[]) {
   const calls: string[] = [];
 
   const worksheet = {
+    viewport: {
+      getCellData: jest.fn(() => ({
+        displayText: 'wrapped text',
+        format: { wrapText: false },
+      })),
+    },
     formats: {
       setRanges: jest.fn(async () => {
         calls.push('setRanges');
@@ -44,6 +50,8 @@ function createMockDeps(ranges: CellRange[]) {
       },
       editor: {
         isRichTextEditing: jest.fn().mockReturnValue(false),
+        isEditing: jest.fn().mockReturnValue(false),
+        hasSelection: jest.fn().mockReturnValue(false),
       },
     },
     getActiveSheetId: () => activeSheetId,
@@ -62,6 +70,19 @@ describe('font style formatting actions', () => {
     expect(result.handled).toBe(true);
     expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
     expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { fontSize: 24 });
+    expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([0]);
+    expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
+  });
+
+  it('applies TOGGLE_WRAP_TEXT and row auto-fit in one undo group', async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const { deps, workbook, worksheet, calls } = createMockDeps([range]);
+
+    const result = await TOGGLE_WRAP_TEXT(deps);
+
+    expect(result.handled).toBe(true);
+    expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
+    expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { wrapText: true });
     expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([0]);
     expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
   });

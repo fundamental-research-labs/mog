@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useActiveSheetId, useUIStore, useWorkbook } from '../../internal-api';
+import { findPivotAtCell } from '../../pivot/pivot-view-records';
 import { PivotContextMenu } from '../pivot/PivotContextMenu';
 import { CellContextMenu } from './CellContextMenu';
 import { ObjectContextMenu } from './ObjectContextMenu';
@@ -27,26 +28,8 @@ export function GridContextMenuContent() {
     let cancelled = false;
     const { targetRow, targetCol } = contextMenuState;
     void (async () => {
-      try {
-        const worksheet = wb.getSheetById(activeSheetId);
-        const pivots = await wb.pivot.getAllPivots(activeSheetId);
-        for (const pivot of pivots) {
-          const range = await worksheet.pivots.getRange(pivot.name).catch(() => null);
-          if (
-            range &&
-            targetRow >= range.startRow &&
-            targetRow <= range.endRow &&
-            targetCol >= range.startCol &&
-            targetCol <= range.endCol
-          ) {
-            if (!cancelled) setPivotId(pivot.id);
-            return;
-          }
-        }
-      } catch {
-        // Use the ordinary cell context menu when pivot lookup is unavailable.
-      }
-      if (!cancelled) setPivotId(null);
+      const nextPivotId = await findPivotAtCell(wb, activeSheetId, targetRow, targetCol);
+      if (!cancelled) setPivotId(nextPivotId);
     })();
 
     return () => {

@@ -47,6 +47,7 @@ mod range_styles;
 mod runtime;
 mod sheet_import;
 mod snapshots;
+mod table_auto_filter_projection;
 mod types;
 mod xlsx;
 
@@ -76,6 +77,7 @@ pub(super) use runtime::{
 pub(super) use sheet_import::import_sheets_from_xlsx;
 pub use snapshots::build_workbook_snapshot_from_yrs;
 pub(super) use snapshots::{build_sheet_snapshot_from_yrs, build_workbook_snapshot};
+pub(in crate::storage::engine) use table_auto_filter_projection::materialize_table_auto_filters_from_preserved_specs;
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
 

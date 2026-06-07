@@ -100,6 +100,7 @@ import * as RangeOps from './operations/range-operations';
 import * as RangeQueryOps from './operations/range-query-operations';
 import * as DescribeOps from './operations/describe-operations';
 import * as SortOps from './operations/sort-operations';
+import { deletePivotsContainedByClearRange } from './pivot-clear';
 import { createViewportReader } from './viewport-reader';
 
 // Sub-API imports
@@ -160,6 +161,7 @@ import { WorksheetCommentsImpl } from './comments';
 import { WorksheetConditionalFormattingImpl } from './conditional-formats';
 import { WorksheetCustomPropertiesImpl } from './custom-properties';
 import { WorksheetFiltersImpl } from './filters';
+import { formControlLinkedCellResetValue } from './form-control-linked-cell-reset';
 import { WorksheetFormControlsImpl } from './form-controls';
 import { WorksheetFormatsImpl } from './formats';
 import { WorksheetHyperlinksImpl } from './hyperlinks';
@@ -1129,6 +1131,7 @@ export class WorksheetImpl implements Worksheet {
             return parsed;
           })();
     await this.ensureRangeEditable(bounds.startRow, bounds.startCol, bounds.endRow, bounds.endCol);
+    await deletePivotsContainedByClearRange(this.ctx, this.sheetId, bounds, applyTo ?? 'all');
     this._invalidateActiveCellEditSourceForRange(bounds);
     return RangeQueryOps.clearWithMode(
       this.ctx,
@@ -1149,7 +1152,7 @@ export class WorksheetImpl implements Worksheet {
     const linkedCells: Array<{
       row: number;
       col: number;
-      controlType: 'checkbox' | 'comboBox' | 'listBox' | 'button';
+      resetValue?: CellValuePrimitive;
     }> = [];
 
     const controls = this.formControls.list();
@@ -1178,7 +1181,11 @@ export class WorksheetImpl implements Worksheet {
           pos.col >= startCol &&
           pos.col <= endCol
         ) {
-          linkedCells.push({ row: pos.row, col: pos.col, controlType: control.type });
+          linkedCells.push({
+            row: pos.row,
+            col: pos.col,
+            resetValue: formControlLinkedCellResetValue(control),
+          });
         }
       }
     }
@@ -1187,13 +1194,11 @@ export class WorksheetImpl implements Worksheet {
     await this.clear(range, 'contents');
 
     // Reset linked cells to their default values
-    for (const { row, col, controlType } of linkedCells) {
-      if (controlType === 'checkbox') {
-        await CellOps.setCell(this.ctx, this.sheetId, row, col, false);
-      } else if (controlType === 'comboBox' || controlType === 'listBox') {
-        await CellOps.setCell(this.ctx, this.sheetId, row, col, '');
+    for (const { row, col, resetValue } of linkedCells) {
+      if (resetValue !== undefined) {
+        await CellOps.setCell(this.ctx, this.sheetId, row, col, resetValue);
       }
-      // Buttons have no value to reset
+      // Buttons have no value to reset.
     }
   }
 
@@ -1514,6 +1519,7 @@ export class WorksheetImpl implements Worksheet {
     col: number,
     direction: 'up' | 'down' | 'left' | 'right',
   ): Promise<{ row: number; col: number }> {
+    await this.ctx.awaitMaterialized?.(this.sheetId);
     return this.ctx.computeBridge.findDataEdge(this.sheetId, row, col, direction);
   }
 

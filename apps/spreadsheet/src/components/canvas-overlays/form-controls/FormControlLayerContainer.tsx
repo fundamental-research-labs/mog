@@ -39,16 +39,34 @@ export function FormControlLayerContainer() {
 
   const [resolvedControls, setResolvedControls] = useState<ResolvedFormControl[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const geometryRefreshFrameRef = useRef<number | null>(null);
 
-  const geometry = getGeometry();
-  const viewport = getViewport();
   const sheetId = ws.getSheetId();
+
+  const refreshNow = useCallback(() => {
+    setRefreshVersion((version) => version + 1);
+  }, []);
+
+  const scheduleGeometryRefresh = useCallback(() => {
+    if (typeof window === 'undefined') {
+      refreshNow();
+      return;
+    }
+    if (geometryRefreshFrameRef.current !== null) return;
+
+    geometryRefreshFrameRef.current = window.requestAnimationFrame(() => {
+      geometryRefreshFrameRef.current = null;
+      refreshNow();
+    });
+  }, [refreshNow]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RESOLVE POSITIONS AND VALUES
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
+    const geometry = getGeometry();
+    const viewport = getViewport();
     const controls = ws.formControls.list();
 
     if (!geometry || !isReady || controls.length === 0) {
@@ -64,25 +82,55 @@ export function FormControlLayerContainer() {
     return () => {
       cancelled = true;
     };
-  }, [geometry, isReady, refreshVersion, sheetId, viewport, ws]);
+  }, [getGeometry, getViewport, isReady, refreshVersion, sheetId, ws]);
 
   // Form controls are managed below the React state tree. Subscribe to the
   // manager events so creates/updates immediately re-resolve DOM overlays.
   useEffect(() => {
-    const bump = () => setRefreshVersion((version) => version + 1);
     const disposers = [
-      ws.on('formControl:created', bump),
-      ws.on('formControl:updated', bump),
-      ws.on('formControl:deleted', bump),
-      ws.on('cellChanged', bump),
-      ws.on('row:height-changed', bump),
-      ws.on('column:width-changed', bump),
+      ws.on('formControl:created', refreshNow),
+      ws.on('formControl:updated', refreshNow),
+      ws.on('formControl:deleted', refreshNow),
+      ws.on('cellChanged', refreshNow),
+      ws.on('row:height-changed', scheduleGeometryRefresh),
+      ws.on('column:width-changed', scheduleGeometryRefresh),
     ];
 
     return () => {
       for (const dispose of disposers) dispose();
     };
-  }, [sheetId, ws]);
+  }, [refreshNow, scheduleGeometryRefresh, sheetId, ws]);
+
+  // Row/column dimension events can fire before SheetView has rebuilt its
+  // position index. Refresh from view geometry events as well, which are emitted
+  // after the renderer has applied the updated coordinates.
+  useEffect(() => {
+    if (!isReady) return;
+
+    const sheetViewEvents = coordinator.renderer.getSheetView()?.events.subscribe((event) => {
+      if (
+        event.type === 'geometry-change' ||
+        event.type === 'visible-range-change' ||
+        event.type === 'scroll-position-reset' ||
+        event.type === 'zoom-change'
+      ) {
+        scheduleGeometryRefresh();
+      }
+    });
+
+    return () => {
+      sheetViewEvents?.dispose();
+    };
+  }, [coordinator, isReady, scheduleGeometryRefresh, sheetId]);
+
+  useEffect(() => {
+    return () => {
+      if (geometryRefreshFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(geometryRefreshFrameRef.current);
+        geometryRefreshFrameRef.current = null;
+      }
+    };
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CELL VALUE CHANGE HANDLER
@@ -94,12 +142,7 @@ export function FormControlLayerContainer() {
       const control = controls.find((c) => c.id === controlId);
       if (!control) return;
 
-      const linkedCellId =
-        control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox'
-          ? control.linkedCellId
-          : control.type === 'button'
-            ? control.linkedCellId
-            : undefined;
+      const linkedCellId = getLinkedCellId(control);
 
       if (!linkedCellId) return;
 
@@ -117,6 +160,7 @@ export function FormControlLayerContainer() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
+    const viewport = getViewport();
     if (!viewport || !isReady) return;
 
     const syncScroll = () => {
@@ -132,13 +176,13 @@ export function FormControlLayerContainer() {
     const unsubscribe = inputCoordinator.onScrollChange(syncScroll);
 
     return unsubscribe;
-  }, [viewport, coordinator, isReady]);
+  }, [getViewport, coordinator, isReady]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // EARLY RETURNS - After all hooks have been called
   // ═══════════════════════════════════════════════════════════════════════════
 
-  if (!isReady || !geometry) {
+  if (!isReady || !getGeometry()) {
     return null;
   }
 
@@ -183,6 +227,19 @@ interface WorksheetLike {
 
 type WritableCellValue = string | number | boolean | null | Date;
 
+function getLinkedCellId(control: FormControl): string | undefined {
+  if ('linkedCellId' in control) {
+    return control.linkedCellId;
+  }
+  return undefined;
+}
+
+function isListControl(
+  control: FormControl,
+): control is Extract<FormControl, { type: 'comboBox' | 'listBox' }> {
+  return control.type === 'comboBox' || control.type === 'listBox';
+}
+
 function toWritableCellValue(value: unknown): WritableCellValue {
   if (value == null) return null;
   if (value instanceof Date) return value;
@@ -224,22 +281,17 @@ async function resolveControlPositions(
     let linkedCellPosition: { row: number; col: number } | undefined;
     let resolvedItems: string[] | undefined;
 
-    if (control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox') {
-      const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
+    const linkedCellId = getLinkedCellId(control);
+    if (linkedCellId) {
+      const linkedPosition = await ws._internal.getCellPosition(linkedCellId);
       if (linkedPosition) {
         linkedCellPosition = linkedPosition;
         const cell = await ws.getCell(linkedPosition.row, linkedPosition.col);
         cellValue = cell.value;
       }
 
-      if (control.type === 'comboBox' || control.type === 'listBox') {
+      if (isListControl(control)) {
         resolvedItems = await resolveListItems(control, ws);
-      }
-    } else if (control.type === 'button' && control.linkedCellId) {
-      const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
-      if (linkedPosition) {
-        const cell = await ws.getCell(linkedPosition.row, linkedPosition.col);
-        cellValue = cell.value;
       }
     }
 

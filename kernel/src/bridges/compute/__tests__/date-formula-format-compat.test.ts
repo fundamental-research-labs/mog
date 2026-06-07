@@ -49,6 +49,9 @@ describe('ComputeBridge DATE formula format compatibility', () => {
     };
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async (command: string) => {
+        if (command === 'compute_get_table_at_cell') {
+          return null;
+        }
         if (command === 'compute_batch_set_cells_by_position') {
           return [new Uint8Array(), primary];
         }
@@ -95,6 +98,9 @@ describe('ComputeBridge DATE formula format compatibility', () => {
   ])('does not apply fallback for %s', async (_name, input, resolvedFormat, value) => {
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async (command: string) => {
+        if (command === 'compute_get_table_at_cell') {
+          return null;
+        }
         if (command === 'compute_batch_set_cells_by_position') {
           return [new Uint8Array(), mutationResult()];
         }
@@ -117,6 +123,106 @@ describe('ComputeBridge DATE formula format compatibility', () => {
     expect(transport.call).not.toHaveBeenCalledWith(
       'compute_set_format_for_ranges',
       expect.anything(),
+    );
+  });
+});
+
+describe('ComputeBridge table header writes', () => {
+  it('routes single-cell writes to visible table headers through table column rename', async () => {
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_get_table_at_cell') {
+          return {
+            id: 'Table2',
+            name: 'Table2',
+            sheetId: 'sheet-1',
+            range: { startRow: 0, startCol: 3, endRow: 2, endCol: 4 },
+            hasHeaderRow: true,
+            hasTotalsRow: false,
+            columns: [
+              { id: 'col-1', name: 'Region', index: 0 },
+              { id: 'col-2', name: 'Revenue', index: 1 },
+            ],
+            style: 'TableStyleMedium2',
+            bandedRows: true,
+            bandedColumns: false,
+            emphasizeFirstColumn: false,
+            emphasizeLastColumn: false,
+            showFilterButtons: true,
+            autoExpand: true,
+            autoCalculatedColumns: true,
+          };
+        }
+        if (command === 'compute_rename_table_column') {
+          return [new Uint8Array(), mutationResult()];
+        }
+        if (command === 'compute_batch_set_cells_by_position') {
+          throw new Error('header writes should not use cell batch writer');
+        }
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const bridge = createStartedBridge(transport);
+
+    await bridge.setCellsByPosition(sheetId('sheet-1'), [
+      { row: 0, col: 3, input: { kind: 'parse', text: 'Area' } },
+    ]);
+
+    expect(transport.call).toHaveBeenCalledWith(
+      'compute_rename_table_column',
+      expect.objectContaining({
+        tableName: 'Table2',
+        columnIndex: 0,
+        newColumnName: 'Area',
+      }),
+    );
+  });
+
+  it('routes parsed single-cell header writes through table column rename', async () => {
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_get_table_at_cell') {
+          return {
+            id: 'Table2',
+            name: 'Table2',
+            sheetId: 'sheet-1',
+            range: { startRow: 0, startCol: 3, endRow: 2, endCol: 4 },
+            hasHeaderRow: true,
+            hasTotalsRow: false,
+            columns: [
+              { id: 'col-1', name: 'Region', index: 0 },
+              { id: 'col-2', name: 'Revenue', index: 1 },
+            ],
+            style: 'TableStyleMedium2',
+            bandedRows: true,
+            bandedColumns: false,
+            emphasizeFirstColumn: false,
+            emphasizeLastColumn: false,
+            showFilterButtons: true,
+            autoExpand: true,
+            autoCalculatedColumns: true,
+          };
+        }
+        if (command === 'compute_rename_table_column') {
+          return [new Uint8Array(), mutationResult()];
+        }
+        if (command === 'compute_set_cell_value_parsed') {
+          throw new Error('header writes should not use parsed cell writer');
+        }
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const bridge = createStartedBridge(transport);
+
+    await bridge.setCellValueParsed(sheetId('sheet-1'), 0, 3, 'Area');
+
+    expect(transport.call).toHaveBeenCalledWith(
+      'compute_rename_table_column',
+      expect.objectContaining({
+        tableName: 'Table2',
+        columnIndex: 0,
+        newColumnName: 'Area',
+      }),
     );
   });
 });

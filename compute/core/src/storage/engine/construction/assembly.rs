@@ -48,6 +48,12 @@ pub(in crate::storage::engine) fn from_yrs_state(
         compute_document::schema::guard_schema_version(&txn, storage.workbook_map())?;
     }
 
+    crate::storage::workbook::imported_pivots::normalize_imported_pivot_associations(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+    )?;
+
     // Use the Doc's unique client_id to partition the ID space.
     // Each collaborative engine gets a non-overlapping region of the u128 space:
     //   IDs = (client_id << 64) | counter
@@ -237,6 +243,8 @@ fn assemble_engine_inner(
         settings,
         security,
         security_events,
+        import_report: domain_types::ImportReport::default(),
+        runtime_diagnostics: Default::default(),
         update_buffer,
         _update_subscription: update_subscription,
         scenario_session: crate::what_if::scenarios::ScenarioSessionState::default(),
@@ -245,6 +253,12 @@ fn assemble_engine_inner(
 
     load_custom_cell_styles(&mut engine.stores);
     load_custom_table_styles(&mut engine.stores);
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        None,
+        domain_types::ImportPhase::FullHydration,
+    );
     engine.init_cf_caches();
     normalize_named_range_refs(&mut engine);
     sync_enable_calculation_flags(&mut engine);
@@ -348,6 +362,14 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     );
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
+
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        None,
+        domain_types::ImportPhase::FullHydration,
+    );
+    engine.update_buffer.clear();
 
     // Recreate observer + undo, derive settings, clear viewport
     let (observer, undo_manager) = create_observer_and_undo(&engine.stores.storage);

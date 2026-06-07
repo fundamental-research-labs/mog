@@ -2,7 +2,11 @@ import type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,
+  ImportDiagnosticDto,
   ResolvedChartSpecDiagnosticsOptions,
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic,
   WorkbookDiagnostics,
 } from '@mog-sdk/contracts/api';
 import { normalizeImageExportOptions } from '@mog/charts/export';
@@ -17,8 +21,11 @@ import type {
   FormulaReferenceDiagnostic as BridgeFormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions as BridgeFormulaReferenceDiagnosticsOptions,
   ExternalLinkStatusSnapshot,
+  RuntimeOperationDiagnostic as BridgeRuntimeOperationDiagnostic,
 } from '../../bridges/compute/compute-types.gen';
 import { chartNotFound, operationFailed } from '../../errors/api';
+import type { MaterializationState } from '@mog-sdk/contracts/api';
+import { projectImportDiagnostic } from '../document/import-diagnostics';
 
 export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   constructor(private readonly ctx: DocumentContext) {}
@@ -63,6 +70,32 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
     return snapshot.resolvedChartSpec;
   }
 
+  async materialization(): Promise<MaterializationState> {
+    return this.ctx.getMaterializationState();
+  }
+
+  async import(): Promise<readonly ImportDiagnosticDto[]> {
+    const diagnostics = await this.ctx.computeBridge.getImportDiagnostics();
+    return diagnostics.map(projectImportDiagnostic);
+  }
+
+  async runtime(options: RuntimeDiagnosticsOptions = {}): Promise<RuntimeDiagnosticsPage> {
+    const getRuntimeDiagnostics = this.ctx.computeBridge.getRuntimeDiagnostics?.bind(
+      this.ctx.computeBridge,
+    );
+    if (getRuntimeDiagnostics) {
+      const page = await getRuntimeDiagnostics(options);
+      return {
+        diagnostics: page.diagnostics.map(projectRuntimeOperationDiagnostic),
+        nextSequence: page.nextSequence,
+        truncated: page.truncated,
+      };
+    }
+
+    const mutationHandler = this.ctx.computeBridge.getMutationHandler?.();
+    return mutationHandler?.getRuntimeDiagnostics(options) ?? { diagnostics: [], truncated: false };
+  }
+
   private externalLinkSnapshot(): ExternalLinkStatusSnapshot {
     const scope = this.ctx.workbookLinkScope();
     const records = this.ctx.workbookLinks.list().map((link) => {
@@ -82,6 +115,25 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   }
 }
 
+function projectRuntimeOperationDiagnostic(
+  diagnostic: BridgeRuntimeOperationDiagnostic,
+): RuntimeOperationDiagnostic {
+  return {
+    ...diagnostic,
+    severity: diagnostic.severity === 'error' ? 'error' : 'warning',
+    filterKind: projectRuntimeFilterKind(diagnostic.filterKind),
+  };
+}
+
+function projectRuntimeFilterKind(
+  value: string | undefined,
+): RuntimeOperationDiagnostic['filterKind'] {
+  if (value === 'autoFilter' || value === 'tableFilter' || value === 'advancedFilter') {
+    return value;
+  }
+  return undefined;
+}
+
 function projectDiagnostic(
   diagnostic: BridgeFormulaReferenceDiagnostic,
 ): FormulaReferenceDiagnostic {
@@ -91,7 +143,20 @@ function projectDiagnostic(
 function exportOptionsSnapshot(
   normalized: ReturnType<typeof normalizeImageExportOptions>,
 ): ChartExportOptionsSnapshot {
+  if (normalized.kind === 'vector') {
+    return {
+      kind: normalized.kind,
+      format: normalized.format,
+      width: normalized.width,
+      height: normalized.height,
+      backgroundColor: normalized.backgroundColor,
+      fittingMode: normalized.fittingMode,
+      frame: normalized.frame,
+    };
+  }
+
   return {
+    kind: normalized.kind,
     format: normalized.format,
     width: normalized.width,
     height: normalized.height,
@@ -100,5 +165,7 @@ function exportOptionsSnapshot(
     physicalHeight: normalized.physicalHeight,
     backgroundColor: normalized.backgroundColor,
     quality: normalized.quality,
+    fittingMode: normalized.fittingMode,
+    frame: normalized.frame,
   };
 }

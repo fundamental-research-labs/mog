@@ -33,6 +33,7 @@ members = [
     "compute/core/crates/compute-text-measurement",
     "compute/core/crates/compute-screenshot",
     "compute/core/crates/compute-security",
+    "compute/chart-render-wasm",
     "compute/wasm",
     "compute/napi",
     "compute/pyo3",

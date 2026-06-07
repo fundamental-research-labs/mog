@@ -14,7 +14,12 @@
  */
 
 import { renderMarks } from '@mog/charts';
-import { normalizeImageExportOptions } from '@mog/charts/export';
+import {
+  normalizeImageExportOptions,
+  renderChartMarksSvg,
+  serializeChartMarks,
+  translateSerializableChartMarks,
+} from '@mog/charts/export';
 import type { ChartImageExporter } from '@mog-sdk/contracts/api';
 import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import type { SheetId } from '@mog-sdk/contracts/core';
@@ -27,7 +32,7 @@ export class ChartImageExporterImpl implements ChartImageExporter {
     sheetId: string,
     chartId: string,
     options?: ImageExportOptions,
-  ): Promise<string | null> {
+  ): Promise<string> {
     const normalized = normalizeImageExportOptions(options);
 
     // 1. Compile marks at the target export dimensions.
@@ -36,8 +41,8 @@ export class ChartImageExporterImpl implements ChartImageExporter {
     const marks = await this.chartBridge.getMarksAtSize(
       sheetId as SheetId,
       chartId,
-      normalized.width,
-      normalized.height,
+      normalized.frame.contentWidth,
+      normalized.frame.contentHeight,
     );
 
     // ChartError has a 'code' field; mark arrays do not.
@@ -48,12 +53,21 @@ export class ChartImageExporterImpl implements ChartImageExporter {
       throw new Error('Chart mark compilation returned no marks');
     }
 
+    if (normalized.kind === 'vector') {
+      const serializedMarks = translateSerializableChartMarks(
+        serializeChartMarks(marks),
+        normalized.frame.contentX,
+        normalized.frame.contentY,
+      );
+      return renderChartMarksSvg({ marks: serializedMarks, options: normalized }).dataUrl;
+    }
+
     // 2. Create off-screen canvas at the physical pixel dimensions
     const canvas = document.createElement('canvas');
     canvas.width = normalized.physicalWidth;
     canvas.height = normalized.physicalHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
+    if (!ctx) throw new Error('Chart canvas 2D context is unavailable');
 
     // 3. Scale for pixel ratio so mark coordinates remain in CSS pixels
     ctx.scale(normalized.pixelRatio, normalized.pixelRatio);
@@ -64,6 +78,7 @@ export class ChartImageExporterImpl implements ChartImageExporter {
 
     // 5. Render marks using the charts library renderer
     try {
+      ctx.translate(normalized.frame.contentX, normalized.frame.contentY);
       renderMarks(ctx, marks as Parameters<typeof renderMarks>[1]);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

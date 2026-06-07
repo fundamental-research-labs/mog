@@ -7,9 +7,8 @@ import {
   FUNNEL_X_FIELD,
   FUNNEL_Y2_FIELD,
   FUNNEL_Y_FIELD,
-  SERIES_INDEX_FIELD,
-  VALUE_FIELD,
 } from '../fields';
+import { categoryValueRows, positiveValue } from './category-value-rows';
 
 const DEFAULT_FUNNEL_COLORS = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948'];
 
@@ -42,7 +41,7 @@ export function buildFunnelLayers(
 }
 
 export function buildFunnelRows(config: ChartConfig, rows: DataRow[]): DataRow[] {
-  const sourceRows = firstSeriesRows(rows);
+  const sourceRows = categoryValueRows(rows);
   const maxValue = sourceRows.reduce((max, row) => Math.max(max, positiveValue(row)), 0);
   const rowCount = sourceRows.length;
   if (rowCount === 0) return [];
@@ -64,15 +63,6 @@ export function buildFunnelRows(config: ChartConfig, rows: DataRow[]): DataRow[]
       [FUNNEL_FILL_FIELD]: funnelColor(config, index),
     };
   });
-}
-
-function firstSeriesRows(rows: DataRow[]): DataRow[] {
-  return rows.filter((row) => row[SERIES_INDEX_FIELD] === 0 && positiveValue(row) > 0);
-}
-
-function positiveValue(row: DataRow): number {
-  const value = row[VALUE_FIELD];
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function funnelColor(config: ChartConfig, index: number): string {

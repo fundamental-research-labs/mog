@@ -2,15 +2,17 @@
 //!
 //! **Engine cycle behavior:**
 //!
-//! 1. `init_from_snapshot` / `full_recalc` — "always-converge" semantics. Cycles
-//!    produce Numbers (divergent cycles cap at max_iterations). Circular diagnostics
-//!    are emitted in `result.errors`. `metrics.has_circular_refs=true`.
+//! 1. `init_from_snapshot` / `full_recalc` — non-iterative cycles preserve
+//!    numeric cached values and materialize non-numeric cycle cells as
+//!    `CellError::Circ`. Circular diagnostics are emitted in `result.errors`.
+//!    `metrics.has_circular_refs=true`.
 //!
 //! 2. `set_cell` (incremental) — per-edge cycle detection. Cycle-creating cells get
 //!    `CellError::Ref` and their deps are NOT registered.
 //!
 //! 3. `set_cells(skip_cycle_check=true)` / `apply_changes(skip_cycle_check=true)` —
-//!    per-edge detection skipped. Cycles hit always-converge path.
+//!    per-edge detection skipped. Cycles reach the non-iterative circular path
+//!    unless workbook iterative calculation is enabled.
 
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::mirror::CellMirror;
@@ -414,7 +416,7 @@ pub fn assert_result_number(result: &RecalcResult, si: u32, row: u32, col: u32, 
 }
 
 /// Assert self-consistency for a divergent cycle cell.
-/// For a cycle loaded via init_from_snapshot, the "always-converge" engine produces
+/// For a cycle loaded with iterative calculation enabled, the solver produces
 /// Numbers. We verify the formula relationship approximately holds (within `slack`).
 /// E.g. if A1's formula is "=B1+1", verify that A1 ≈ B1+1.
 pub fn assert_cycle_self_consistent(

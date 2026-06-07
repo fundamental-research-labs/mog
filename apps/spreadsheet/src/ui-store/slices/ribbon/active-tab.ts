@@ -1,8 +1,10 @@
 /**
  * Active Ribbon Tab UI Store Slice (visible-tabs ownership — visible-tabs ownership)
  *
- * Owns three closely-related fields:
+ * Owns closely-related ribbon tab fields:
  * - `activeRibbonTab`: the currently-selected ribbon tab.
+ * - `activeRibbonTabSelectionSource`: whether the active tab was last
+ * selected by a user gesture/keytip or by system policy.
  * - `visibleBaseTabs`: the gates-filtered base tab id set (pushed in
  * from `FeatureGatesProvider` via `setRibbonGates`).
  * - `contextualTabIds`: the selection-driven contextual tab id set
@@ -83,6 +85,12 @@ function filterBaseTabsByGates(
 // Slice
 // =============================================================================
 
+export type RibbonTabSelectionSource = 'system' | 'user';
+
+export interface SetActiveRibbonTabOptions {
+  source?: RibbonTabSelectionSource;
+}
+
 export interface ActiveRibbonTabSlice {
   /**
    * Currently active ribbon tab. Defaults to `'home'`. Updated by the
@@ -90,6 +98,18 @@ export interface ActiveRibbonTabSlice {
    * through `setActiveRibbonTab`.
    */
   activeRibbonTab: RibbonTabId;
+  /**
+   * Source of the current active tab selection. Mouse tab clicks and
+   * keytip tab switches write `'user'`; contextual auto-promotion and
+   * invalid-tab repair write `'system'`.
+   */
+  activeRibbonTabSelectionSource: RibbonTabSelectionSource;
+  /**
+   * Contextual tab set signature present when the last user tab
+   * selection happened. This makes "user selected Home while contextual
+   * tabs are visible" explicit state rather than inferred from the tab id.
+   */
+  activeRibbonTabUserSelectionContextualKey: string | null;
   /**
    * Gates-filtered base tab ids in render order. Pushed in by
    * `FeatureGatesProvider` via `setRibbonGates`.
@@ -106,7 +126,7 @@ export interface ActiveRibbonTabSlice {
    * devtools breadcrumb so the silent path is observable in the
    * diagnoser instead of being misclassified as a noop handler.
    */
-  setActiveRibbonTab: (tabId: RibbonTabId) => void;
+  setActiveRibbonTab: (tabId: RibbonTabId, options?: SetActiveRibbonTabOptions) => void;
   /**
    * Replace the gates-filtered base tab list. Called by
    * `FeatureGatesProvider` when `gates.tabs` changes. If the change
@@ -125,7 +145,13 @@ export interface ActiveRibbonTabSlice {
    * Replace the contextual tab id list. Performs an **atomic two-field
    * transition** in a single `set()` call: writes the new id list and
    * — if the current active tab is now outside `[...visibleBaseTabs,
-   * ...ids]` — resets `activeRibbonTab` to `'home'` in the same update.
+   * ...ids]` — repairs `activeRibbonTab` in the same update.
+   *
+   * Contextual promotion is intentionally limited to two cases: initial
+   * contextual entry while Home is active, and invalid active-tab repair.
+   * Once a user explicitly selects Home while contextual tabs remain
+   * visible, repeated writes of the same contextual set do not promote
+   * Home again.
    *
    * This is intentionally NOT implemented as a slice subscription that
    * watches `contextualTabIds` and writes `activeRibbonTab` on change.
@@ -152,12 +178,14 @@ export const createActiveRibbonTabSlice: StateCreator<
   ActiveRibbonTabSlice
 > = (set, get) => ({
   activeRibbonTab: 'home',
+  activeRibbonTabSelectionSource: 'system',
+  activeRibbonTabUserSelectionContextualKey: null,
   // Default: all base tabs visible (no gates applied yet). The
   // `FeatureGatesProvider` pushes the real gated set on mount.
   visibleBaseTabs: filterBaseTabsByGates(undefined, undefined),
   contextualTabIds: [],
 
-  setActiveRibbonTab: (tabId) => {
+  setActiveRibbonTab: (tabId, options) => {
     const state = get();
     const visible = selectVisibleRibbonTabs(state);
     if (!visible.includes(tabId)) {
@@ -188,7 +216,13 @@ export const createActiveRibbonTabSlice: StateCreator<
       }
       return;
     }
-    set({ activeRibbonTab: tabId });
+    const source = options?.source ?? 'system';
+    set({
+      activeRibbonTab: tabId,
+      activeRibbonTabSelectionSource: source,
+      activeRibbonTabUserSelectionContextualKey:
+        source === 'user' ? contextualTabKey(state.contextualTabIds) : null,
+    });
   },
 
   setRibbonGates: (gates, ribbonVisibility) => {
@@ -218,14 +252,45 @@ export const createActiveRibbonTabSlice: StateCreator<
       if (arrayShallowEqual(state.contextualTabIds, ids)) {
         return state;
       }
+      const nextContextualKey = contextualTabKey(ids);
       const nextVisible = new Set<RibbonTabId>([...state.visibleBaseTabs, ...ids]);
-      if (nextVisible.has(state.activeRibbonTab)) {
-        // Active tab still valid; only contextualTabIds changes.
-        return { contextualTabIds: ids };
+      if (!nextVisible.has(state.activeRibbonTab)) {
+        const repairedTab = ids[0] ?? 'home';
+        return {
+          contextualTabIds: ids,
+          activeRibbonTab: repairedTab,
+          activeRibbonTabSelectionSource: 'system',
+          activeRibbonTabUserSelectionContextualKey: null,
+        };
       }
-      // Active tab is no longer in the visible set — reset to 'home'
-      // in the SAME `set()` so subscribers see one transition, not two.
-      return { contextualTabIds: ids, activeRibbonTab: 'home' };
+
+      const userHomeOverrideContextChanged =
+        state.activeRibbonTab === 'home' &&
+        state.activeRibbonTabSelectionSource === 'user' &&
+        state.activeRibbonTabUserSelectionContextualKey !== null &&
+        state.activeRibbonTabUserSelectionContextualKey !== nextContextualKey;
+      if (userHomeOverrideContextChanged) {
+        return {
+          contextualTabIds: ids,
+          activeRibbonTab: ids[0] ?? 'home',
+          activeRibbonTabSelectionSource: 'system',
+          activeRibbonTabUserSelectionContextualKey: null,
+        };
+      }
+
+      const isInitialContextualEntry = state.contextualTabIds.length === 0 && ids.length > 0;
+      if (isInitialContextualEntry && state.activeRibbonTab === 'home') {
+        return {
+          contextualTabIds: ids,
+          activeRibbonTab: ids[0],
+          activeRibbonTabSelectionSource: 'system',
+          activeRibbonTabUserSelectionContextualKey: null,
+        };
+      }
+
+      // Active tab is still valid and this is not initial contextual
+      // entry from Home; only contextualTabIds changes.
+      return { contextualTabIds: ids };
     });
   },
 });
@@ -238,4 +303,8 @@ function arrayShallowEqual<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+function contextualTabKey(ids: ReadonlyArray<RibbonTabId>): string | null {
+  return ids.length === 0 ? null : ids.join('\u001f');
 }

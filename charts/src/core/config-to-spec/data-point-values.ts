@@ -1,6 +1,10 @@
 import type { ChartConfig, ChartData, ChartDataPoint, SeriesConfig } from '../../types';
 import { toFiniteNumber } from './category-axis';
 import { seriesConfigForDataSeries } from '../series-identity';
+import { radarBlankPolicyFromDisplayBlanksAs } from '../radar-semantics';
+import { isRenderableStockPoint, stockSubTypeFromConfig } from '../stock-semantics';
+
+type BlankPolicy = 'gap' | 'span' | 'zero';
 
 export function isQuantitativeXSeries(
   config: ChartConfig | undefined,
@@ -45,7 +49,9 @@ export function shouldIncludePointInRows(
   seriesConfig?: SeriesConfig,
 ): boolean {
   if (point.valueState === 'hidden') return false;
-  if (config?.type === 'stock' && !isRenderableStockPoint(point, config)) return false;
+  if (config?.type === 'stock' && !isRenderableStockPoint(point, stockSubTypeFromConfig(config))) {
+    return false;
+  }
   const isQuantitativeX = isQuantitativeXSeries(config, seriesConfig);
   if (isQuantitativeX && toFiniteNumber(point.x) === undefined) return false;
   if (isBubbleSeries(config, seriesConfig)) {
@@ -56,9 +62,20 @@ export function shouldIncludePointInRows(
   if (isQuantitativeX && point.valueState) return false;
   if (!point.valueState || point.valueState === 'value') return true;
   if (point.valueState === 'blank') {
-    return config?.displayBlanksAs === 'zero';
+    return effectiveBlankPolicyForRows(config) === 'zero';
   }
   return false;
+}
+
+export function renderedPointValueForRows(
+  point: ChartDataPoint | undefined,
+  config?: ChartConfig,
+  seriesConfig?: SeriesConfig,
+): number | null {
+  if (!point || !shouldIncludePointInRows(point, config, seriesConfig)) return null;
+  return point.valueState === 'blank' && effectiveBlankPolicyForRows(config) === 'zero'
+    ? 0
+    : point.y;
 }
 
 export function shouldEmitBlankRow(
@@ -67,7 +84,8 @@ export function shouldEmitBlankRow(
   seriesConfig?: SeriesConfig,
 ): boolean {
   if (isQuantitativeXSeries(config, seriesConfig)) return false;
-  if (config?.displayBlanksAs !== 'gap' && config?.displayBlanksAs !== 'span') return false;
+  const blankPolicy = effectiveBlankPolicyForRows(config);
+  if (blankPolicy !== 'gap' && blankPolicy !== 'span') return false;
   if (!point) return true;
   return point.valueState === 'blank';
 }
@@ -79,7 +97,7 @@ export function shouldBreakScatterLineAtPoint(
 ): boolean {
   if (!isQuantitativeXSeries(config, seriesConfig)) return false;
   if ((seriesConfig?.showLines ?? config?.showLines) !== true) return false;
-  if (config?.displayBlanksAs !== 'gap') return false;
+  if (effectiveBlankPolicyForRows(config) !== 'gap') return false;
   return !point || !shouldIncludePointInRows(point, config, seriesConfig);
 }
 
@@ -99,21 +117,17 @@ export function maxRenderableBubbleMagnitude(data: ChartData, config?: ChartConf
   return max;
 }
 
-function isScatterLikeChart(config?: ChartConfig): boolean {
-  return config?.type === 'scatter' || config?.type === 'bubble';
+export function effectiveBlankPolicyForRows(config?: ChartConfig): BlankPolicy | undefined {
+  if (config?.type === 'radar') {
+    return radarBlankPolicyFromDisplayBlanksAs(config.displayBlanksAs).blankPolicy;
+  }
+  return isBlankPolicy(config?.displayBlanksAs) ? config.displayBlanksAs : undefined;
 }
 
-function isRenderableStockPoint(point: ChartDataPoint, config: ChartConfig): boolean {
-  const hasHighLowClose =
-    toFiniteNumber(point.high) !== undefined &&
-    toFiniteNumber(point.low) !== undefined &&
-    toFiniteNumber(point.close) !== undefined;
-  if (hasHighLowClose) {
-    return (
-      (config.subType !== 'ohlc' && config.subType !== 'volume-ohlc') ||
-      toFiniteNumber(point.open) !== undefined
-    );
-  }
+function isBlankPolicy(value: unknown): value is BlankPolicy {
+  return value === 'gap' || value === 'span' || value === 'zero';
+}
 
-  return toFiniteNumber(point.open) !== undefined && toFiniteNumber(point.close) !== undefined;
+function isScatterLikeChart(config?: ChartConfig): boolean {
+  return config?.type === 'scatter' || config?.type === 'bubble';
 }

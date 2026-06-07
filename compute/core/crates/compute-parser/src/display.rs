@@ -28,6 +28,16 @@ pub(crate) fn render_identity_formula(
     style: RefStyle,
     always_qualify: bool,
 ) -> String {
+    render_identity_formula_with_qualifier_flags(formula, lookup, style, always_qualify, &[])
+}
+
+pub(crate) fn render_identity_formula_with_qualifier_flags(
+    formula: &IdentityFormula,
+    lookup: &dyn WorkbookLookup,
+    style: RefStyle,
+    always_qualify: bool,
+    force_qualified_refs: &[bool],
+) -> String {
     let template = formula.template.as_bytes();
     let len = template.len();
     let mut out = String::with_capacity(len + 8);
@@ -39,7 +49,13 @@ pub(crate) fn render_identity_formula(
             && let Some((index, end)) = parse_placeholder(template, i)
         {
             if let Some(ref_) = formula.refs.get(index) {
-                format_ref(ref_, lookup, style, always_qualify, &mut out);
+                format_ref(
+                    ref_,
+                    lookup,
+                    style,
+                    always_qualify || force_qualified_refs.get(index).copied().unwrap_or(false),
+                    &mut out,
+                );
             } else {
                 // Index out of bounds — shouldn't happen with well-formed templates.
                 out.push_str("#REF!");

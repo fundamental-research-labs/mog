@@ -66,7 +66,7 @@ export async function createTransport(config?: TransportConfig): Promise<BridgeT
       case 'tauri':
         return createBytesTupleNormalizingTransport(createTauriTransport());
       case 'wasm': {
-        await loadWasmModule(config.wasmInitFns);
+        await loadWasmModule({ initFns: config.wasmInitFns, wasmModule: config.wasmModule });
         const computeBase = createWasmTransport(() => getWasmModule()!);
         const computeTimed = createTimeInjectingTransport(
           computeBase,
@@ -99,7 +99,7 @@ export async function createTransport(config?: TransportConfig): Promise<BridgeT
   }
 
   // Web: load single @mog-sdk/wasm module (serves both compute and xlsx commands)
-  await loadWasmModule(config?.wasmInitFns);
+  await loadWasmModule({ initFns: config?.wasmInitFns, wasmModule: config?.wasmModule });
 
   const computeBase = createWasmTransport(() => getWasmModule()!);
   const computeTimed = createTimeInjectingTransport(

@@ -46,7 +46,7 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  const barGeometry = effectiveBarGeometry(config);
+  const barGeometry = effectiveBarGeometry(config, data);
   if (barGeometry) {
     configSpec.barGeometry = shouldReverseImportedHorizontalBarSeries(config, barGeometry)
       ? { ...barGeometry, seriesSlotOrder: 'reverse' }
@@ -61,7 +61,7 @@ export function buildConfigSpec(
     hasConfig = true;
   }
 
-  if (config.type === 'bubble') {
+  if (config.type === 'bubble' || config.type === 'bubble3DEffect') {
     if (typeof config.bubbleScale === 'number') {
       configSpec.bubbleScale = config.bubbleScale;
       hasConfig = true;

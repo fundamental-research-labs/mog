@@ -4,6 +4,7 @@ import { MARK_TYPE_MAP } from '../constants';
 import { SERIES_INDEX_FIELD } from '../fields';
 import { buildSeriesMark } from '../marks';
 import { resolveSubTypeMarkProps } from '../subtypes';
+import { withExcelCartesianGeometryMark } from '../excel-cartesian-geometry';
 
 export function shouldBuildPerSeriesLineLayers(config: ChartConfig, data: ChartData): boolean {
   if (!isSimpleLineChartType(config.type)) return false;
@@ -42,7 +43,7 @@ export function buildPerSeriesLineLayers(
     if (seriesConfig?.smooth === true) mark.interpolate = 'monotone';
 
     layers.push({
-      mark,
+      mark: withExcelCartesianGeometryMark(mark, config, { yChannel: encoding.y }),
       encoding: {
         x: encoding.x,
         y: encoding.y,

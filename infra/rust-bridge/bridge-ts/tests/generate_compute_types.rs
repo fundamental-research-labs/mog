@@ -805,6 +805,8 @@ fn generate_combined() {
         // item.rs and result.rs remain in pivot-types (not moved to domain-types)
         format!("{pivot_base}/item.rs"),
         format!("{pivot_base}/result.rs"),
+        // Imported PivotTable persisted view model for the compute bridge.
+        format!("{manifest_dir}/../../../compute/core/src/storage/workbook/imported_pivots.rs"),
         // NOTE: expansion.rs skipped — PivotExpansionState has custom serde (HashSet as array)
         // that the parser can't handle. Kept in @mog-sdk/contracts/pivot for now.
         format!("{manifest_dir}/../../../domain-types/src/domain/slicer/source.rs"),

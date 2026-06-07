@@ -10,7 +10,6 @@
 import type {
   PivotCommandReceipt,
   PivotKernelMutationReceipt,
-  PivotPlacementMutationReceipt,
   PivotReadbackRevision,
   PivotRefreshReceipt,
 } from '../mutation-receipt';
@@ -81,18 +80,8 @@ export interface PivotPlacementSpec {
   numberFormat?: string;
 }
 
-export type PivotPlacementPatch = Partial<
-  Omit<PivotPlacementSpec, 'placementId' | 'area' | 'source'>
->;
-
-export interface PivotCalculatedFieldSpec {
-  calculatedFieldId?: CalculatedFieldId;
-  name: string;
-  formula: string;
-}
-
 export interface PivotSemanticTargetBase {
-  pivotId: string;
+  pivotName: string;
 }
 
 export type PivotSemanticTarget =
@@ -176,8 +165,8 @@ export interface PivotSurfaceReadback {
 
 export interface PivotUiStateReadback {
   revision: PivotReadbackRevision;
-  selectedPivotId?: string;
-  editingPivotId?: string;
+  selectedPivotName?: string;
+  editingPivotName?: string;
   openDialogs: string[];
   fieldPanelZones: Record<string, unknown>;
   filterMenuOptions: Record<string, unknown>;
@@ -185,6 +174,41 @@ export interface PivotUiStateReadback {
   validationMessages: string[];
   selectedAggregateControls: Record<string, unknown>;
   activeSemanticTarget?: PivotSemanticTarget;
+}
+
+export type ImportedPivotSourceKind = 'promotedImport' | 'unsupportedImport';
+export type ImportedPivotAssociationStatus = 'promoted' | 'unsupported' | 'deleted';
+
+export interface ImportedPivotCapabilities {
+  canEditFields: boolean;
+  canReorderFields: boolean;
+  canRemoveFields: boolean;
+  canChangeAggregate: boolean;
+  canRefresh: boolean;
+  canDelete: boolean;
+  canExport: boolean;
+  unsupportedReason?: string;
+}
+
+export interface ImportedPivotRenderedRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+  ref?: string;
+}
+
+export interface ImportedPivotViewRecord {
+  sourceKind: ImportedPivotSourceKind;
+  status: ImportedPivotAssociationStatus;
+  importIdentity: string;
+  outputSheetId: string;
+  sourceSheetId?: string;
+  config: PivotTableConfig;
+  result?: PivotTableResult;
+  capabilities: ImportedPivotCapabilities;
+  unsupportedReason?: string;
+  renderedRange?: ImportedPivotRenderedRange;
 }
 
 /** Sub-API for pivot table operations on a worksheet. */
@@ -223,6 +247,19 @@ export interface WorksheetPivots {
   ): Promise<{ sheetId: string; config: PivotTableConfig }>;
 
   /**
+   * List full pivot configs rendered on this worksheet.
+   */
+  getAll(): Promise<PivotTableConfig[]>;
+
+  /**
+   * List imported pivot view records rendered on this worksheet.
+   *
+   * Promoted imports include their native config; unsupported imports include
+   * read-only preserved OOXML metadata and capabilities.
+   */
+  getImportedViewRecords(): Promise<ImportedPivotViewRecord[]>;
+
+  /**
    * Remove a pivot table by name.
    *
    * @param name - Pivot table name
@@ -256,6 +293,7 @@ export interface WorksheetPivots {
    * @returns A handle for the pivot table, or null if not found
    */
   get(name: string): Promise<PivotTableHandle | null>;
+  get(config: PivotTableConfig): Promise<PivotTableHandle | null>;
 
   /**
    * Get plain data information about a pivot table by name.
@@ -283,44 +321,8 @@ export interface WorksheetPivots {
    */
   getCount(): Promise<number>;
 
-  // ===========================================================================
-  // Field Placement
-  // ===========================================================================
-
-  addPlacement(pivotId: string, spec: PivotPlacementSpec): Promise<PivotPlacementMutationReceipt>;
-
-  updatePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    patch: PivotPlacementPatch,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  removePlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
-
-  movePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    toArea: PivotFieldArea,
-    toPosition: number,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  renameValuePlacement(
-    pivotId: string,
-    placementId: PlacementId,
-    displayName: string | null,
-  ): Promise<PivotKernelMutationReceipt>;
-
-  setSortByValue(
-    pivotId: string,
-    axisPlacementId: PlacementId,
-    valuePlacementId: PlacementId,
-    config: { order: SortOrder; columnKey?: string } | null,
-  ): Promise<PivotKernelMutationReceipt>;
-
   /**
    * Add a field to a pivot table area, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `addPlacement(pivotId, spec)`.
    *
    * @param name - Pivot table name
    * @param fieldId - Field ID to add
@@ -343,8 +345,6 @@ export interface WorksheetPivots {
   /**
    * Remove a field from a pivot table area, resolved by pivot name.
    *
-   * @deprecated Legacy facade. Prefer `removePlacement(pivotId, placementId)`.
-   *
    * @param name - Pivot table name
    * @param fieldId - Field ID to remove
    * @param area - Area to remove the field from
@@ -353,8 +353,6 @@ export interface WorksheetPivots {
 
   /**
    * Move a field to a different area or position, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `movePlacement(pivotId, placementId, toArea, toPosition)`.
    *
    * @param name - Pivot table name
    * @param fieldId - Field ID to move
@@ -374,87 +372,44 @@ export interface WorksheetPivots {
   // Field Configuration
   // ===========================================================================
 
-  setAggregateFunction(
-    pivotId: string,
-    placementId: PlacementId,
-    aggregateFunction: AggregateFunction,
-  ): Promise<PivotKernelMutationReceipt>;
   /**
-   * @deprecated Legacy facade. Prefer `setAggregateFunction(pivotId, placementId, aggregateFunction)`.
+   * Set the aggregate function for a value placement.
+   *
+   * `pivot` must be an unambiguous pivot name.
+   * `fieldOrPlacement` may be an unambiguous field name/ID, display label, or
+   * stable placement ID. Ambiguous references throw before mutating.
    */
   setAggregateFunction(
-    name: string,
-    fieldId: string,
+    pivot: string,
+    fieldOrPlacement: string,
     aggregateFunction: AggregateFunction,
-  ): Promise<void>;
-
-  setShowValuesAs(
-    pivotId: string,
-    placementId: PlacementId,
-    showValuesAs: ShowValuesAsConfig | null,
   ): Promise<PivotKernelMutationReceipt>;
+
   /**
-   * @deprecated Legacy facade. Prefer `setShowValuesAs(pivotId, placementId, showValuesAs)`.
+   * Set the "Show Values As" calculation for a value placement.
+   *
+   * `pivot` must be an unambiguous pivot name.
+   * `fieldOrPlacement` may be an unambiguous field name/ID, display label, or
+   * stable placement ID. Pass null to clear.
    */
   setShowValuesAs(
-    name: string,
-    fieldId: string,
+    pivot: string,
+    fieldOrPlacement: string,
     showValuesAs: ShowValuesAsConfig | null,
-  ): Promise<void>;
+  ): Promise<PivotKernelMutationReceipt>;
 
+  /**
+   * Set the sort order for a row or column placement.
+   *
+   * `pivot` must be an unambiguous pivot name.
+   * `fieldOrPlacement` may be an unambiguous field name/ID, display label, or
+   * stable placement ID.
+   */
   setSortOrder(
-    pivotId: string,
-    placementId: PlacementId,
+    pivot: string,
+    fieldOrPlacement: string,
     sortOrder: SortOrder | null,
   ): Promise<PivotKernelMutationReceipt>;
-  /**
-   * @deprecated Legacy facade. Prefer `setSortOrder(pivotId, placementId, sortOrder)`.
-   */
-  setSortOrder(name: string, fieldId: string, sortOrder: SortOrder): Promise<void>;
-
-  resetPlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
-
-  /**
-   * Set the aggregate function for a value field, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `setAggregateFunction(pivotId, placementId, aggregateFunction)`.
-   *
-   * @param name - Pivot table name
-   * @param fieldId - Field ID (must be in the 'value' area)
-   * @param aggregateFunction - New aggregation function
-   */
-  setAggregateFunctionLegacy(
-    name: string,
-    fieldId: string,
-    aggregateFunction: AggregateFunction,
-  ): Promise<void>;
-
-  /**
-   * Set the "Show Values As" calculation for a value field.
-   * Only applies to fields in the 'value' area. Pass null to clear.
-   *
-   * @deprecated Legacy facade. Prefer `setShowValuesAs(pivotId, placementId, showValuesAs)`.
-   *
-   * @param name - Pivot table name
-   * @param fieldId - Field ID (must be in the 'value' area)
-   * @param showValuesAs - ShowValuesAs configuration, or null to clear
-   */
-  setShowValuesAsLegacy(
-    name: string,
-    fieldId: string,
-    showValuesAs: ShowValuesAsConfig | null,
-  ): Promise<void>;
-
-  /**
-   * Set the sort order for a row or column field, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `setSortOrder(pivotId, placementId, sortOrder)`.
-   *
-   * @param name - Pivot table name
-   * @param fieldId - Field ID (must be in 'row' or 'column' area)
-   * @param sortOrder - Sort order ('asc', 'desc', or 'none')
-   */
-  setSortOrderLegacy(name: string, fieldId: string, sortOrder: SortOrder): Promise<void>;
 
   /**
    * Set (add or update) a filter on a field, resolved by pivot name.
@@ -475,8 +430,6 @@ export interface WorksheetPivots {
 
   /**
    * Reset a field placement to defaults, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `resetPlacement(pivotId, placementId)`.
    *
    * @param name - Pivot table name
    * @param fieldId - Field ID to reset
@@ -567,80 +520,15 @@ export interface WorksheetPivots {
   // Calculated Fields
   // ===========================================================================
 
-  addCalculatedField(
-    pivotId: string,
-    field: PivotCalculatedFieldSpec,
-  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
-  /**
-   * @deprecated Legacy facade. Prefer define-only `addCalculatedField(pivotId, spec)`.
-   */
   addCalculatedField(name: string, field: CalculatedField): Promise<void>;
 
-  addCalculatedFieldAndPlace(
-    pivotId: string,
-    field: PivotCalculatedFieldSpec,
-    placement: Omit<PivotPlacementSpec, 'source' | 'fieldId'>,
-  ): Promise<
-    PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; placementId: PlacementId }
-  >;
-
-  updateCalculatedField(
-    pivotId: string,
-    calculatedFieldId: CalculatedFieldId,
-    updates: Partial<Pick<PivotCalculatedFieldSpec, 'name' | 'formula'>>,
-  ): Promise<PivotKernelMutationReceipt>;
-  /**
-   * @deprecated Legacy facade. Prefer `updateCalculatedField(pivotId, calculatedFieldId, patch)`.
-   */
   updateCalculatedField(
     name: string,
     fieldId: string,
     updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
   ): Promise<void>;
 
-  removeCalculatedField(
-    pivotId: string,
-    calculatedFieldId: CalculatedFieldId,
-  ): Promise<PivotKernelMutationReceipt>;
-  /**
-   * @deprecated Legacy facade. Prefer `removeCalculatedField(pivotId, calculatedFieldId)`.
-   */
   removeCalculatedField(name: string, fieldId: string): Promise<void>;
-
-  /**
-   * Add a calculated field to a pivot table, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer define-only `addCalculatedField(pivotId, spec)`.
-   *
-   * @param name - Pivot table name
-   * @param field - Calculated field definition (fieldId, name, formula)
-   */
-  addCalculatedFieldLegacy(name: string, field: CalculatedField): Promise<void>;
-
-  /**
-   * Remove a calculated field from a pivot table, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `removeCalculatedField(pivotId, calculatedFieldId)`.
-   *
-   * @param name - Pivot table name
-   * @param fieldId - Calculated field ID to remove
-   */
-  removeCalculatedFieldLegacy(name: string, fieldId: string): Promise<void>;
-
-  /**
-   * Update a calculated field on a pivot table, resolved by pivot name.
-   *
-   * @deprecated Legacy facade. Prefer `updateCalculatedField(pivotId, calculatedFieldId, patch)`.
-   *
-   * @param name - Pivot table name
-   * @param fieldId - Calculated field ID to update
-   * @param updates - Partial updates (name and/or formula)
-   */
-  updateCalculatedFieldLegacy(
-    name: string,
-    fieldId: string,
-    updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
-  ): Promise<void>;
 
   // ===========================================================================
   // Sub-Range Access

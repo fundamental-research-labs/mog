@@ -270,6 +270,12 @@ pub struct PivotTableConfig {
     pub source_sheet_name: String,
     /// Range of cells in the source sheet that provide data.
     pub source_range: CellRange,
+    /// Stable ID of the sheet where the pivot table is rendered.
+    ///
+    /// Authoritative when present. `output_sheet_name` is retained as derived
+    /// display metadata and as a legacy migration key for older configs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_sheet_id: Option<String>,
     /// Name of the sheet where the pivot table is rendered.
     pub output_sheet_name: String,
     /// Top-left cell of the pivot table output.
@@ -439,7 +445,11 @@ pub fn validate_pivot_config_json(value: &serde_json::Value) -> Result<(), Strin
     let mut missing = Vec::new();
     let mut wrong_type = Vec::new();
 
-    match (obj.get("sourceSheetId"), obj.get("sourceSheetName")) {
+    let source_sheet_id = obj.get("sourceSheetId");
+    let source_sheet_name = obj.get("sourceSheetName");
+    let effective_source_sheet_id = source_sheet_id.filter(|val| !val.is_null());
+
+    match (effective_source_sheet_id, source_sheet_name) {
         (None, None) => {
             missing.push(
                 "  - sourceSheetId or sourceSheetName (string): stable source sheet ID preferred; sourceSheetName accepted for legacy configs".to_string(),
@@ -458,6 +468,16 @@ pub fn validate_pivot_config_json(value: &serde_json::Value) -> Result<(), Strin
             ));
         }
         _ => {}
+    }
+
+    if let Some(val) = obj.get("outputSheetId")
+        && !val.is_null()
+        && !val.is_string()
+    {
+        wrong_type.push(format!(
+            "  - outputSheetId: expected string, got {}",
+            json_type_for_error(val)
+        ));
     }
 
     for &(field, expected_type, description) in REQUIRED_FIELDS {
@@ -737,5 +757,66 @@ mod tests {
                 "aggregateFunction": "sum"
             })
         );
+    }
+
+    #[test]
+    fn pivot_config_validation_accepts_null_optional_sheet_ids() {
+        let json = serde_json::json!({
+            "id": "pivot-1",
+            "name": "Pivot",
+            "sourceSheetId": null,
+            "sourceSheetName": "Data",
+            "sourceRange": {"startRow": 0, "startCol": 0, "endRow": 4, "endCol": 2},
+            "outputSheetId": null,
+            "outputSheetName": "Pivot",
+            "outputLocation": {"row": 0, "col": 0},
+            "fields": [],
+            "placements": [],
+            "filters": []
+        });
+
+        validate_pivot_config_json(&json).expect("null optional sheet ids are absent");
+        let config: PivotTableConfig = serde_json::from_value(json).expect("deserialize config");
+        assert_eq!(config.source_sheet_id, None);
+        assert_eq!(config.output_sheet_id, None);
+    }
+
+    #[test]
+    fn pivot_config_validation_still_rejects_bad_optional_sheet_id_types() {
+        let json = serde_json::json!({
+            "id": "pivot-1",
+            "name": "Pivot",
+            "sourceSheetId": 123,
+            "sourceSheetName": "Data",
+            "sourceRange": {"startRow": 0, "startCol": 0, "endRow": 4, "endCol": 2},
+            "outputSheetId": false,
+            "outputSheetName": "Pivot",
+            "outputLocation": {"row": 0, "col": 0},
+            "fields": [],
+            "placements": [],
+            "filters": []
+        });
+
+        let err = validate_pivot_config_json(&json).expect_err("bad id types rejected");
+        assert!(err.contains("sourceSheetId: expected string, got number 123"));
+        assert!(err.contains("outputSheetId: expected string, got boolean false"));
+    }
+
+    #[test]
+    fn pivot_config_validation_requires_source_name_when_source_id_is_null() {
+        let json = serde_json::json!({
+            "id": "pivot-1",
+            "name": "Pivot",
+            "sourceSheetId": null,
+            "sourceRange": {"startRow": 0, "startCol": 0, "endRow": 4, "endCol": 2},
+            "outputSheetName": "Pivot",
+            "outputLocation": {"row": 0, "col": 0},
+            "fields": [],
+            "placements": [],
+            "filters": []
+        });
+
+        let err = validate_pivot_config_json(&json).expect_err("missing source identity rejected");
+        assert!(err.contains("sourceSheetId or sourceSheetName"));
     }
 }

@@ -3,7 +3,7 @@
  *
  * Provides action handlers for the pivot table context menu.
  * Routes actions through appropriate channels:
- * - Pivot operations: ws.pivots.* (unified API -> bridge -> Rust)
+ * - Pivot operations: PivotTableHandle methods from the worksheet API
  * - Dialog state: UIStore
  *
  * Architecture notes:
@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   AggregateFunction,
+  CalculatedField,
   PivotFieldItems,
   PivotFilter,
   PivotTableLayout,
@@ -26,8 +27,8 @@ import type {
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
 
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
-import { useDispatch } from '../toolbar/use-action-dependencies';
+import { useActiveSheetId, useUIStore } from '../../infra/context';
+import type { PivotCapabilities } from '../../pivot/pivot-capabilities';
 
 import { usePivotTables } from './use-pivot-tables';
 
@@ -109,6 +110,10 @@ export interface UsePivotContextMenuActionsReturn {
   pivotFilterFields: PivotFilterFieldOption[];
   /** Set include/exclude filter criteria for a pivot field */
   setPivotFilter: (fieldId: string, filter: Omit<PivotFilter, 'fieldId'>) => void;
+  /** Change the pivot data source through the selected pivot handle. */
+  setDataSource: (dataSource: string) => void;
+  /** Add a calculated field through the selected pivot handle. */
+  addCalculatedField: (field: CalculatedField) => void;
 
   // Group/Ungroup operations
   /** Group selected items */
@@ -133,6 +138,8 @@ export interface UsePivotContextMenuActionsReturn {
   hasFieldContext: boolean;
   /** The current pivot table (if any) */
   pivotConfig: ReturnType<typeof usePivotTables>['pivotTables'][0]['config'] | null;
+  /** Operation capabilities for the current pivot table. */
+  pivotCapabilities: PivotCapabilities | null;
 }
 
 // =============================================================================
@@ -145,7 +152,6 @@ export function usePivotContextMenuActions(
   const { pivotId, headerKey, fieldId } = options;
 
   const activeSheetId = useActiveSheetId();
-  const dispatchAction = useDispatch();
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
   const startEditingPivot = useUIStore((s) => s.startEditingPivot);
 
@@ -158,12 +164,11 @@ export function usePivotContextMenuActions(
     setAllExpanded,
     setSortOrder,
     setAggregateFunction: setAggregate,
+    setShowValuesAs: setPivotShowValuesAs,
+    setLayout,
+    setFilter,
     removeFieldFromArea,
   } = usePivotTables({ sheetId: activeSheetId });
-
-  // Get worksheet for expansion state queries via ws.pivots
-  const wb = useWorkbook();
-  const ws = useMemo(() => wb.getSheetById(activeSheetId), [wb, activeSheetId]);
 
   // ==========================================================================
   // Computed Values
@@ -174,43 +179,47 @@ export function usePivotContextMenuActions(
   const hasFieldContext = !!pivotId && !!fieldId;
 
   // Get the current pivot table config
-  const pivotConfig = useMemo(() => {
+  const pivot = useMemo(() => {
     if (!pivotId) return null;
-    const pivot = pivotTables.find((p) => p.config.id === pivotId);
-    return pivot?.config ?? null;
+    return pivotTables.find((p) => p.config.id === pivotId) ?? null;
   }, [pivotId, pivotTables]);
+  const pivotConfig = pivot?.config ?? null;
+  const pivotCapabilities = pivot?.capabilities ?? null;
+  const canEditFields = pivotCapabilities?.canEditFields ?? false;
+  const canRemoveFields = pivotCapabilities?.canRemoveFields ?? false;
+  const canChangeAggregate = pivotCapabilities?.canChangeAggregate ?? false;
+  const canRefresh = pivotCapabilities?.canRefresh ?? false;
+  const canDelete = pivotCapabilities?.canDelete ?? false;
 
   const effectiveValueFieldId = useMemo(() => {
     if (fieldId) return fieldId;
     return pivotConfig?.placements.find((p) => p.area === 'value')?.fieldId;
   }, [fieldId, pivotConfig]);
 
-  // Get expansion state for the header
-  // ws.pivots.getExpansionState is async, so we use local state
+  // Get expansion state for the header through the selected pivot handle.
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [pivotItems, setPivotItems] = useState<PivotFieldItems[]>([]);
   useEffect(() => {
-    if (!pivotId || !headerKey) {
+    if (!pivotConfig || !headerKey || !canEditFields) {
       setIsHeaderExpanded(false);
       return;
     }
-    const name = pivotConfig?.name ?? pivotId;
-    void ws.pivots.getExpansionState(name).then((expansionState) => {
+    void pivot?.handle?.getExpansionState().then((expansionState) => {
       const expanded =
         expansionState.expandedRows[headerKey] ?? expansionState.expandedColumns[headerKey] ?? true;
       setIsHeaderExpanded(expanded);
     });
-  }, [pivotId, pivotConfig, headerKey, ws]);
+  }, [pivot, pivotConfig, headerKey, canEditFields]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!pivotConfig) {
+    if (!pivotConfig || !canEditFields) {
       setPivotItems([]);
       return;
     }
 
-    void ws.pivots
-      .getAllPivotItems(pivotConfig.name)
+    void pivot?.handle
+      ?.getAllItems()
       .then((items) => {
         if (!cancelled) setPivotItems(items);
       })
@@ -221,7 +230,7 @@ export function usePivotContextMenuActions(
     return () => {
       cancelled = true;
     };
-  }, [pivotConfig, ws]);
+  }, [pivot, pivotConfig, canEditFields]);
 
   // Get current sort order for the field
   const currentSortOrder = useMemo(() => {
@@ -258,78 +267,96 @@ export function usePivotContextMenuActions(
   }, [pivotId, startEditingPivot, closeContextMenu]);
 
   const refreshPivot = useCallback(() => {
-    if (pivotId) {
+    if (pivotId && canRefresh) {
       refreshPivotTable(pivotId);
       closeContextMenu();
     }
-  }, [pivotId, refreshPivotTable, closeContextMenu]);
+  }, [pivotId, canRefresh, refreshPivotTable, closeContextMenu]);
 
   const deletePivot = useCallback(() => {
-    if (pivotId) {
+    if (pivotId && canDelete) {
       deletePivotTable(pivotId);
       closeContextMenu();
     }
-  }, [pivotId, deletePivotTable, closeContextMenu]);
+  }, [pivotId, canDelete, deletePivotTable, closeContextMenu]);
+
+  const setDataSource = useCallback(
+    (dataSource: string) => {
+      if (!pivot?.handle || !canEditFields) return;
+      void pivot.handle.setDataSource(dataSource);
+      closeContextMenu();
+    },
+    [pivot, canEditFields, closeContextMenu],
+  );
+
+  const addCalculatedField = useCallback(
+    (field: CalculatedField) => {
+      if (!pivot?.handle || !canEditFields) return;
+      void pivot.handle.addCalculatedField(field).then(() => pivot.handle?.refresh());
+      closeContextMenu();
+    },
+    [pivot, canEditFields, closeContextMenu],
+  );
 
   // ==========================================================================
   // Expand/Collapse Operations
   // ==========================================================================
 
   const expandHeader = useCallback(() => {
-    if (pivotId && headerKey) {
+    if (pivotId && headerKey && canEditFields) {
       // For now, we use row expansion (most common case)
       // The expand/collapse logic actually toggles, so we call it
       toggleRowExpanded(pivotId, headerKey);
       closeContextMenu();
     }
-  }, [pivotId, headerKey, toggleRowExpanded, closeContextMenu]);
+  }, [pivotId, headerKey, canEditFields, toggleRowExpanded, closeContextMenu]);
 
   const collapseHeader = useCallback(() => {
-    if (pivotId && headerKey) {
+    if (pivotId && headerKey && canEditFields) {
       // Same as expand - it's a toggle
       toggleRowExpanded(pivotId, headerKey);
       closeContextMenu();
     }
-  }, [pivotId, headerKey, toggleRowExpanded, closeContextMenu]);
+  }, [pivotId, headerKey, canEditFields, toggleRowExpanded, closeContextMenu]);
 
   const expandAll = useCallback(() => {
-    if (pivotId) {
+    if (pivotId && canEditFields) {
       setAllExpanded(pivotId, true);
       closeContextMenu();
     }
-  }, [pivotId, setAllExpanded, closeContextMenu]);
+  }, [pivotId, canEditFields, setAllExpanded, closeContextMenu]);
 
   const collapseAll = useCallback(() => {
-    if (pivotId) {
+    if (pivotId && canEditFields) {
       setAllExpanded(pivotId, false);
       closeContextMenu();
     }
-  }, [pivotId, setAllExpanded, closeContextMenu]);
+  }, [pivotId, canEditFields, setAllExpanded, closeContextMenu]);
 
   // ==========================================================================
   // Sort Operations
   // ==========================================================================
 
   const sortAscending = useCallback(() => {
-    if (pivotId && fieldId) {
+    if (pivotId && fieldId && canEditFields) {
       setSortOrder(pivotId, fieldId, 'asc');
       closeContextMenu();
     }
-  }, [pivotId, fieldId, setSortOrder, closeContextMenu]);
+  }, [pivotId, fieldId, canEditFields, setSortOrder, closeContextMenu]);
 
   const sortDescending = useCallback(() => {
-    if (pivotId && fieldId) {
+    if (pivotId && fieldId && canEditFields) {
       setSortOrder(pivotId, fieldId, 'desc');
       closeContextMenu();
     }
-  }, [pivotId, fieldId, setSortOrder, closeContextMenu]);
+  }, [pivotId, fieldId, canEditFields, setSortOrder, closeContextMenu]);
 
   const clearSort = useCallback(() => {
-    if (pivotId && fieldId) {
+    if (pivotId && fieldId && canEditFields) {
       setSortOrder(pivotId, fieldId, 'none');
       closeContextMenu();
     }
-  }, [pivotId, fieldId, setSortOrder, closeContextMenu]);
+  }, [pivotId, fieldId, canEditFields, setSortOrder, closeContextMenu]);
 
   // ==========================================================================
   // Aggregate Operations
@@ -337,12 +364,12 @@ export function usePivotContextMenuActions(
 
   const setAggregateFunction = useCallback(
     (aggregateFunction: AggregateFunction) => {
-      if (pivotId && effectiveValueFieldId) {
+      if (pivotId && effectiveValueFieldId && canChangeAggregate) {
         setAggregate(pivotId, effectiveValueFieldId, aggregateFunction);
         closeContextMenu();
       }
     },
-    [pivotId, effectiveValueFieldId, setAggregate, closeContextMenu],
+    [pivotId, effectiveValueFieldId, canChangeAggregate, setAggregate, closeContextMenu],
   );
 
   // ==========================================================================
@@ -359,19 +386,14 @@ export function usePivotContextMenuActions(
 
   const setShowValuesAs = useCallback(
     (calculationType: ShowValuesAsType) => {
-      if (pivotConfig && effectiveValueFieldId) {
+      if (pivotId && effectiveValueFieldId && canChangeAggregate) {
         const showValuesAs: ShowValuesAsConfig | null =
           calculationType === 'noCalculation' ? null : { type: calculationType };
-        dispatchAction('PIVOT_SET_SHOW_VALUES_AS', {
-          sheetId: activeSheetId,
-          pivotName: pivotConfig.name,
-          fieldId: effectiveValueFieldId,
-          showValuesAs,
-        });
+        setPivotShowValuesAs(pivotId, effectiveValueFieldId, showValuesAs);
         closeContextMenu();
       }
     },
-    [activeSheetId, pivotConfig, effectiveValueFieldId, dispatchAction, closeContextMenu],
+    [pivotId, effectiveValueFieldId, canChangeAggregate, setPivotShowValuesAs, closeContextMenu],
   );
 
   // ==========================================================================
@@ -383,17 +405,12 @@ export function usePivotContextMenuActions(
 
   const setGrandTotals = useCallback(
     (layout: Pick<PivotTableLayout, 'showRowGrandTotals' | 'showColumnGrandTotals'>) => {
-      if (pivotConfig) {
-        dispatchAction('PIVOT_SET_GRAND_TOTALS', {
-          sheetId: activeSheetId,
-          pivotName: pivotConfig.name,
-          showRowGrandTotals: layout.showRowGrandTotals,
-          showColumnGrandTotals: layout.showColumnGrandTotals,
-        });
+      if (pivotId && canEditFields) {
+        setLayout(pivotId, layout);
         closeContextMenu();
       }
     },
-    [activeSheetId, pivotConfig, dispatchAction, closeContextMenu],
+    [pivotId, canEditFields, setLayout, closeContextMenu],
   );
 
   // ==========================================================================
@@ -412,16 +429,11 @@ export function usePivotContextMenuActions(
 
   const setPivotFilter = useCallback(
     (targetFieldId: string, filter: Omit<PivotFilter, 'fieldId'>) => {
-      if (!pivotConfig) return;
-      dispatchAction('PIVOT_SET_FILTER', {
-        sheetId: activeSheetId,
-        pivotName: pivotConfig.name,
-        fieldId: targetFieldId,
-        filter,
-      });
+      if (!pivotId || !canEditFields) return;
+      setFilter(pivotId, targetFieldId, filter);
       closeContextMenu();
     },
-    [activeSheetId, pivotConfig, dispatchAction, closeContextMenu],
+    [pivotId, canEditFields, setFilter, closeContextMenu],
   );
 
   // ==========================================================================
@@ -444,11 +456,11 @@ export function usePivotContextMenuActions(
   // ==========================================================================
 
   const removeField = useCallback(() => {
-    if (pivotId && fieldId && fieldArea) {
+    if (pivotId && fieldId && fieldArea && canRemoveFields) {
       removeFieldFromArea(pivotId, fieldId, fieldArea);
       closeContextMenu();
     }
-  }, [pivotId, fieldId, fieldArea, removeFieldFromArea, closeContextMenu]);
+  }, [pivotId, fieldId, fieldArea, canRemoveFields, removeFieldFromArea, closeContextMenu]);
 
   // ==========================================================================
   // Return
@@ -488,6 +500,8 @@ export function usePivotContextMenuActions(
       showColumnGrandTotals,
       pivotFilterFields,
       setPivotFilter,
+      setDataSource,
+      addCalculatedField,
 
       // Group/Ungroup
       groupItems,
@@ -503,6 +517,7 @@ export function usePivotContextMenuActions(
       hasHeaderContext,
       hasFieldContext,
       pivotConfig,
+      pivotCapabilities,
     }),
     [
       editPivot,
@@ -526,6 +541,8 @@ export function usePivotContextMenuActions(
       showColumnGrandTotals,
       pivotFilterFields,
       setPivotFilter,
+      setDataSource,
+      addCalculatedField,
       groupItems,
       ungroupItems,
       canGroup,
@@ -535,6 +552,7 @@ export function usePivotContextMenuActions(
       hasHeaderContext,
       hasFieldContext,
       pivotConfig,
+      pivotCapabilities,
     ],
   );
 }

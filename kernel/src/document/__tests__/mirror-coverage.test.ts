@@ -470,6 +470,8 @@ const mutationResultDispatcherCoverage: Record<keyof MutationResult, string> = {
     'handlePolicyPreservedParseOutcomes — emits workbook:policy-preserved details with summary',
   policyPreservedParseSummary:
     'handlePolicyPreservedParseOutcomes — emits workbook:policy-preserved when summary is present',
+  diagnostics:
+    'recordRuntimeDiagnostics — retains runtime diagnostic side-channel for workbook diagnostics queries',
   undoDescription: 'handleUndoDescription — forwards to onUndoDescription callback for undo UI',
   // Side-channels — declared in mutationResultDispatcherExclusions below.
   data: '__excluded__',

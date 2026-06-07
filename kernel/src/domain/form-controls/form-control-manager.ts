@@ -14,7 +14,6 @@
  * @see contracts/src/editor/form-controls.ts - Type contracts
  */
 
-import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import {
   DEFAULT_COL_WIDTH_MACOS,
@@ -30,50 +29,58 @@ import type {
   FormControl,
   IFormControlManager,
   ListBoxControl,
+  ScrollBarControl,
+  SliderControl,
+  SpinnerControl,
 } from '@mog-sdk/contracts/form-controls';
 import { parseCellAddress, parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { DocumentContext } from '../../context/types';
-import type {
-  FloatingObject as ComputeFloatingObject,
-  FormControlOoxmlProps,
-  MutationResult,
-} from '../../bridges/compute/compute-types.gen';
+import type { FloatingObject as ComputeFloatingObject } from '../../bridges/compute/compute-types.gen';
+import {
+  importedControlEnabled,
+  importedControlOrientation,
+  numericControlBounds,
+} from './imported-numeric-controls';
+import {
+  buildFormControlOoxmlProps,
+  controlOffsetToPx,
+  DEFAULT_BUTTON_HEIGHT,
+  DEFAULT_BUTTON_WIDTH,
+  DEFAULT_CHECKBOX_HEIGHT,
+  DEFAULT_CHECKBOX_WIDTH,
+  DEFAULT_COMBOBOX_HEIGHT,
+  DEFAULT_COMBOBOX_WIDTH,
+  DEFAULT_LISTBOX_HEIGHT,
+  DEFAULT_LISTBOX_WIDTH,
+  DEFAULT_SCROLLBAR_HEIGHT,
+  DEFAULT_SCROLLBAR_WIDTH,
+  DEFAULT_SLIDER_HEIGHT,
+  DEFAULT_SLIDER_WIDTH,
+  DEFAULT_SPINNER_HEIGHT,
+  DEFAULT_SPINNER_WIDTH,
+  formControlCellId,
+  hasLinkedCell,
+  isFormControlObject,
+  mutationResultCellId,
+  mutationResultCreatedObject,
+  mutationResultObjectId,
+  normalizeControlReference,
+  normalizeControlType,
+  omitUndefined,
+  parseItemsSourceRefJson,
+  pxToEmu,
+  type ComputeFormControlObject,
+  type FormControlCellId,
+  type FormControlRangeRef,
+} from './form-control-manager-helpers';
 
-type FormControlCellId = FormControl['anchor']['cellId'];
 type FormControlCellAnchor = FormControl['anchor'];
-type FormControlRangeRef = NonNullable<ComboBoxControl['itemsSourceRef']>;
-type ComputeFormControlObject = Extract<ComputeFloatingObject, { type: 'formControl' }>;
 type FloatingObjectEventLike = {
   sheetId: string;
   objectId: string;
   objectType?: unknown;
 };
-
-function formControlCellId(id: string): FormControlCellId {
-  return toCellId(id) as unknown as FormControlCellId;
-}
-
-function mutationResultCellId(data: unknown): FormControlCellId {
-  if (typeof data !== 'string') {
-    throw new Error('Expected getOrCreateCellId mutation result data to be a CellId string');
-  }
-  return formControlCellId(data);
-}
-
-function mutationResultObjectId(result: MutationResult): string {
-  const objectId =
-    result.floatingObjectChanges?.find((change) => change.kind.type === 'created')?.objectId ??
-    (typeof result.data === 'string' ? result.data : undefined);
-  if (!objectId) {
-    throw new Error('Expected createFloatingObject mutation result to include an object ID');
-  }
-  return objectId;
-}
-
-function mutationResultCreatedObject(result: MutationResult): ComputeFloatingObject | undefined {
-  return result.floatingObjectChanges?.find((change) => change.kind.type === 'created')?.data;
-}
 
 type FormControlMutationKind = 'created' | 'updated' | 'deleted';
 type FormControlMutationEvent = {
@@ -86,138 +93,6 @@ type FormControlMutationEvent = {
   control?: FormControl;
   previousControl?: FormControl;
 };
-
-// =============================================================================
-// Constants
-// =============================================================================
-
-/** Default checkbox dimensions (pixels) */
-const DEFAULT_CHECKBOX_WIDTH = 16;
-const DEFAULT_CHECKBOX_HEIGHT = 16;
-
-/** Default button dimensions (pixels) */
-const DEFAULT_BUTTON_WIDTH = 80;
-const DEFAULT_BUTTON_HEIGHT = 28;
-
-/** Default comboBox dimensions (pixels) */
-const DEFAULT_COMBOBOX_WIDTH = 140;
-const DEFAULT_COMBOBOX_HEIGHT = 28;
-
-/** Default listBox dimensions (pixels) */
-const DEFAULT_LISTBOX_WIDTH = 140;
-const DEFAULT_LISTBOX_HEIGHT = 80;
-
-const EMU_PER_PX = 9525;
-
-function pxToEmu(px: number): number {
-  return Math.round(px * EMU_PER_PX);
-}
-
-function emuToPx(emu: number | undefined): number {
-  return (emu ?? 0) / EMU_PER_PX;
-}
-
-function controlOffsetToPx(value: number | undefined): number {
-  const raw = value ?? 0;
-  // Imported VML controls historically arrive through fields named *Emu
-  // while carrying pixel offsets. Authored controls carry true EMUs.
-  return Math.abs(raw) < EMU_PER_PX ? raw : emuToPx(raw);
-}
-
-function isFormControlObject(value: unknown): value is ComputeFormControlObject {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    (value as { type?: unknown }).type === 'formControl'
-  );
-}
-
-function normalizeControlType(type: string): string {
-  return type.replace(/\s+/g, '').toLowerCase();
-}
-
-function normalizeControlReference(ref: string | undefined): string | undefined {
-  let normalized = ref?.trim();
-  if (!normalized) return undefined;
-  if (
-    (normalized.startsWith('"') && normalized.endsWith('"')) ||
-    (normalized.startsWith("'") && normalized.endsWith("'"))
-  ) {
-    normalized = normalized.slice(1, -1);
-  }
-  if (normalized.startsWith('=')) {
-    normalized = normalized.slice(1);
-  }
-  return normalized.trim() || undefined;
-}
-
-function parseItemsSourceRefJson(inputRange: string | undefined): FormControlRangeRef | undefined {
-  if (!inputRange?.startsWith('{')) return undefined;
-  try {
-    const parsed = JSON.parse(inputRange) as Partial<FormControlRangeRef>;
-    if (parsed.type === 'range' && parsed.startId && parsed.endId) {
-      return {
-        type: 'range',
-        startId: formControlCellId(parsed.startId),
-        endId: formControlCellId(parsed.endId),
-        startRowAbsolute: parsed.startRowAbsolute ?? true,
-        startColAbsolute: parsed.startColAbsolute ?? true,
-        endRowAbsolute: parsed.endRowAbsolute ?? true,
-        endColAbsolute: parsed.endColAbsolute ?? true,
-      };
-    }
-  } catch {
-    // Non-JSON input ranges are valid OOXML-style form-control metadata.
-  }
-  return undefined;
-}
-
-function omitUndefined(obj: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
-}
-
-function buildFormControlOoxmlProps(items: string[]): FormControlOoxmlProps {
-  return {
-    shapeId: 0,
-    altText: null,
-    fmlaGroup: null,
-    fmlaTxbx: null,
-    checked: null,
-    val: null,
-    sel: null,
-    min: null,
-    max: null,
-    inc: null,
-    page: null,
-    dropLines: null,
-    dropStyle: null,
-    dx: null,
-    horiz: false,
-    colored: false,
-    noThreeD: false,
-    noThreeD2: false,
-    firstButton: false,
-    lockText: false,
-    selType: null,
-    multiSel: null,
-    textHAlign: null,
-    textVAlign: null,
-    editVal: null,
-    multiLine: false,
-    verticalBar: false,
-    passwordEdit: false,
-    justLastX: false,
-    widthMin: null,
-    items,
-    macroName: null,
-    anchorSource: '',
-    moveWithCells: true,
-    sizeWithCells: true,
-    vmlExtras: {},
-    controlPrAttrs: {},
-    vmlShape: null,
-  };
-}
 
 // =============================================================================
 // ID Generation
@@ -618,8 +493,7 @@ export class FormControlManager implements IFormControlManager {
     const control = this.controls.get(controlId);
     if (!control) return false;
 
-    // Check if the control type has a linkedCellId
-    if (control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox') {
+    if (hasLinkedCell(control)) {
       return control.linkedCellId !== undefined && control.linkedCellId !== '';
     }
     if (control.type === 'button') {
@@ -848,12 +722,7 @@ export class FormControlManager implements IFormControlManager {
             ? control.label
             : undefined),
     });
-    if (
-      control.type === 'checkbox' ||
-      control.type === 'comboBox' ||
-      control.type === 'listBox' ||
-      control.type === 'button'
-    ) {
+    if (hasLinkedCell(control)) {
       updates.cellLink = control.linkedCellId;
     }
     if (control.type === 'comboBox' || control.type === 'listBox') {
@@ -960,7 +829,7 @@ export class FormControlManager implements IFormControlManager {
         xOffset: controlOffsetToPx(object.anchor.anchorColOffsetEmu),
         yOffset: controlOffsetToPx(object.anchor.anchorRowOffsetEmu),
       },
-      enabled: true,
+      enabled: importedControlEnabled(object),
       zIndex: object.zIndex,
       name: object.name || undefined,
       createdAt: object.createdAt,
@@ -1015,6 +884,59 @@ export class FormControlManager implements IFormControlManager {
         items: object.ooxml?.items,
         itemsSourceRef: await this.parseItemsSourceRef(sheetId, object.inputRange),
         multiSelect: object.ooxml?.multiSel ?? undefined,
+      };
+      return control;
+    }
+    if (controlType === 'scroll' || controlType === 'scrollbar') {
+      const linkedCellId = await this.resolveCellLink(sheetId, object.cellLink);
+      if (!linkedCellId) return null;
+      const dimensions = this.resolveImportedDimensions(object, {
+        width: DEFAULT_SCROLLBAR_WIDTH,
+        height: DEFAULT_SCROLLBAR_HEIGHT,
+      });
+      const control: ScrollBarControl = {
+        ...base,
+        ...dimensions,
+        ...numericControlBounds(object),
+        type: 'scrollBar',
+        linkedCellId,
+        orientation: importedControlOrientation(object),
+      };
+      return control;
+    }
+    if (controlType === 'spin' || controlType === 'spinner') {
+      const linkedCellId = await this.resolveCellLink(sheetId, object.cellLink);
+      if (!linkedCellId) return null;
+      const dimensions = this.resolveImportedDimensions(object, {
+        width: DEFAULT_SPINNER_WIDTH,
+        height: DEFAULT_SPINNER_HEIGHT,
+      });
+      const { min, max, step } = numericControlBounds(object);
+      const control: SpinnerControl = {
+        ...base,
+        ...dimensions,
+        type: 'spinner',
+        linkedCellId,
+        min,
+        max,
+        step,
+      };
+      return control;
+    }
+    if (controlType === 'slider') {
+      const linkedCellId = await this.resolveCellLink(sheetId, object.cellLink);
+      if (!linkedCellId) return null;
+      const dimensions = this.resolveImportedDimensions(object, {
+        width: DEFAULT_SLIDER_WIDTH,
+        height: DEFAULT_SLIDER_HEIGHT,
+      });
+      const control: SliderControl = {
+        ...base,
+        ...dimensions,
+        ...numericControlBounds(object),
+        type: 'slider',
+        linkedCellId,
+        orientation: importedControlOrientation(object),
       };
       return control;
     }

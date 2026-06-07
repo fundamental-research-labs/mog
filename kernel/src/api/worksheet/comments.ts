@@ -386,12 +386,14 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     if (!text || text.trim().length === 0) {
       throw new KernelError('COMPUTE_ERROR', 'Comment text cannot be empty');
     }
+    const replyParent =
+      parent.commentType === 'note' ? await this.convertNoteToThread(commentId) : parent;
     const comment = await this.ctx.computeBridge.addComment(
       this.sheetId,
-      parent.cellRef,
+      replyParent.cellRef,
       text,
       author,
-      { parentId: commentId, commentType: 'threadedComment' },
+      { parentId: replyParent.id, commentType: 'threadedComment' },
     );
     return normalizeComment(comment);
   }

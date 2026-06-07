@@ -10,20 +10,21 @@ Try it live at [mog.shortcut.ai](https://mog.shortcut.ai/).
 | I want to... | Start here | Useful command |
 | --- | --- | --- |
 | Build Mog from source | [Develop Mog](#develop-mog) | `pnpm typecheck` |
-| Use Mog in my agent or app | [Use Mog as a library](#use-mog-as-a-library) | `pnpm add @mog-sdk/node` |
+| Use Mog in my agent or app | [Use Mog as a library](#use-mog-as-a-library) | `pnpm add @mog-sdk/sdk` |
 | Contribute or navigate the repo | [Develop Mog](#develop-mog) | `pnpm check:publish-readiness:fast` |
 
 ## Use Mog As A Library
 
-Use `@mog-sdk/node` for headless workbook automation in Node.js and agent
-workflows.
+Use `@mog-sdk/sdk` for headless workbook automation in Node.js and agent
+workflows. Import `@mog-sdk/sdk/node` when a consumer needs to force the native
+Node entry.
 
 ```bash
-pnpm add @mog-sdk/node
+pnpm add @mog-sdk/sdk
 ```
 
 ```ts
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -37,7 +38,7 @@ await wb.dispose();
 
 Use `@mog-sdk/embed` for browser, React, and Web Component embeds. See:
 
-- [Node SDK](runtime/sdk/README.md)
+- [Unified SDK](runtime/sdk/README.md)
 - [React embed](docs/guides/embed-react.md)
 - [Web Component embed](docs/guides/embed-web-component.md)
 - [Full spreadsheet app embed](docs/guides/spreadsheet-app-embed.md)
@@ -61,7 +62,7 @@ cargo test -p compute-core --locked
 Common package checks:
 
 ```bash
-pnpm --filter @mog-sdk/node test
+pnpm --filter @mog-sdk/sdk test
 pnpm --filter @mog-sdk/embed test
 pnpm --filter @mog-sdk/sheet-view test
 pnpm check:publish-readiness:fast
@@ -78,7 +79,7 @@ If you are a coding agent, read [AGENTS.md](AGENTS.md) before editing code.
 | Area | Paths |
 | --- | --- |
 | Spreadsheet app | `runtime/spreadsheet-app`, `apps/spreadsheet`, `shell` |
-| Node SDK | `runtime/sdk` |
+| Unified SDK | `runtime/sdk` |
 | Embeds | `runtime/embed`, `views/sheet-view` |
 | Rust compute engine | `compute/core` |
 | Public TypeScript contracts | `contracts` |

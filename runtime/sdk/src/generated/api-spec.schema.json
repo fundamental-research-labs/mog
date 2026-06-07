@@ -53,8 +53,7 @@
     "sourceLocation": {
       "type": "object",
       "required": [
-        "file",
-        "line"
+        "file"
       ],
       "additionalProperties": false,
       "properties": {

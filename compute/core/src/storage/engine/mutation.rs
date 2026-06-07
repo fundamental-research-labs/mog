@@ -21,12 +21,14 @@ use value_types::CellValue;
 /// Dispatched by `storage::cells::values::set_cell_value` → resolves into
 /// `scheduler::input::CellWrite` (for the `Parse` arm) → leaf write helpers.
 ///
-/// The three variants encode the three intents the SDK expresses today:
+/// The variants encode the write intents the SDK expresses today:
 /// - `Clear`: remove the cell. `setCell(A1, '')` or `setCell(A1, null)`.
 /// - `Literal { text }`: store the text verbatim. No coercion, no formula
 ///   parsing, no whitespace trimming. Empty `text` stores `Text("")`.
 /// - `Parse { text }`: classify with Excel semantics (`=…` formula, `'…`
 ///   forced-text, scalar coercion, fallback text).
+/// - `Value { value }`: store an already-typed value verbatim. No parser,
+///   formula detection, or number-format-aware coercion.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum CellInput {
@@ -44,9 +46,24 @@ pub enum CellInput {
     ///   else  → number / bool / date / text via the classifier.
     #[serde(rename = "parse")]
     Parse { text: String },
+    /// Store this typed value exactly. `Value(Null)` is accepted as a clear
+    /// intent for engine-internal symmetry, though SDK helpers should emit
+    /// `Clear` for null/undefined/empty-string ergonomic input.
+    #[serde(rename = "value")]
+    Value { value: CellValue },
 }
 
 impl CellInput {
+    pub fn is_clear_intent(&self) -> bool {
+        matches!(
+            self,
+            CellInput::Clear
+                | CellInput::Value {
+                    value: CellValue::Null
+                }
+        )
+    }
+
     /// Build a `CellInput` from a `CellValue` for internal engine callers
     /// (copy/paste, autofill, sort, relocate, range sync, etc.).
     ///
@@ -62,26 +79,14 @@ impl CellInput {
             CellValue::Text(s) => CellInput::Literal {
                 text: s.to_string(),
             },
-            CellValue::Number(n) => CellInput::Parse {
-                text: format!("{}", n),
-            },
-            CellValue::Boolean(b) => CellInput::Parse {
-                text: if *b {
-                    "TRUE".to_string()
-                } else {
-                    "FALSE".to_string()
-                },
-            },
-            CellValue::Error(error, _) => CellInput::Parse {
-                text: error.as_str().to_string(),
-            },
+            CellValue::Number(_) | CellValue::Boolean(_) | CellValue::Error(..) => {
+                CellInput::Value {
+                    value: value.clone(),
+                }
+            }
             CellValue::Array(_) => CellInput::Clear,
-            CellValue::Control(c) => CellInput::Parse {
-                text: if c.value {
-                    "TRUE".to_string()
-                } else {
-                    "FALSE".to_string()
-                },
+            CellValue::Control(_) => CellInput::Value {
+                value: value.clone(),
             },
             CellValue::Image(image) => CellInput::Literal {
                 text: image.fallback_text().to_string(),

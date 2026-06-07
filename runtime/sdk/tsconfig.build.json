@@ -6,7 +6,8 @@
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
-    "noEmit": false
+    "noEmit": false,
+    "outDir": "./dist"
   },
   "references": []
 }

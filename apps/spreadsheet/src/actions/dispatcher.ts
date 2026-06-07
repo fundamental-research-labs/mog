@@ -115,8 +115,6 @@ import * as PrintExportHandlers from './handlers/print-export';
 
 import * as TableHandlers from './handlers/table';
 
-import * as PivotHandlers from './handlers/pivot';
-
 // Slicer Context Menu handlers
 import * as SlicerHandlers from './handlers/slicer';
 
@@ -656,11 +654,6 @@ export const HANDLER_MAP: Record<ActionType, AnyActionHandler> = {
 
   // Pivot Table Dialog
   OPEN_PIVOT_DIALOG: UIHandlers.OPEN_PIVOT_DIALOG,
-  PIVOT_SET_SHOW_VALUES_AS: PivotHandlers.PIVOT_SET_SHOW_VALUES_AS,
-  PIVOT_SET_GRAND_TOTALS: PivotHandlers.PIVOT_SET_GRAND_TOTALS,
-  PIVOT_SET_DATA_SOURCE: PivotHandlers.PIVOT_SET_DATA_SOURCE,
-  PIVOT_SET_FILTER: PivotHandlers.PIVOT_SET_FILTER,
-  PIVOT_ADD_CALCULATED_FIELD: PivotHandlers.PIVOT_ADD_CALCULATED_FIELD,
 
   // Data Tab Dialogs (Architecture Alignment)
   OPEN_SUBTOTAL_DIALOG: UIHandlers.OPEN_SUBTOTAL_DIALOG,

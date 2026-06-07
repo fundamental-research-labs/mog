@@ -3,7 +3,7 @@
 > **Status: architecture reference.** The `kernel` workspace package is
 > `@mog-sdk/kernel`, but its package manifest is `private: true` and the package
 > inventory classifies the root package as workspace-internal. Public headless
-> Node consumers should use the shipped `@mog-sdk/node` facade; browser hosts
+> Node consumers should use the shipped `@mog-sdk/sdk` facade; browser hosts
 > should use shipped public packages such as `@mog-sdk/embed`,
 > `@mog-sdk/spreadsheet-app`, or `@mog-sdk/sheet-view`.
 
@@ -41,11 +41,11 @@ kernel/
 
 `createWorkbook()` is the stable implementation entry point used by public
 facades and monorepo integrations. In the current public package set, the
-copy-paste supported headless entry point is `@mog-sdk/node`, not a direct
+copy-paste supported headless entry point is `@mog-sdk/sdk`, not a direct
 runtime dependency on `@mog-sdk/kernel`.
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook({ userTimezone: 'UTC' });
 const ws = wb.activeSheet;
@@ -105,8 +105,8 @@ These functions take an `IKernelContext`. `Sheets` is primarily metadata and vie
 `DocumentFactory` creates document handles and contexts for monorepo lifecycle
 code. In the kernel API barrel it is documented as internal; the root barrel
 exports a narrowed facade that omits the host-context bypass. Public SDK
-consumers should normally use `@mog-sdk/node` `createWorkbook()` or the public
-`MogDocumentFactory` facade from `@mog-sdk/node`. Direct `DocumentFactory` usage
+consumers should normally use `@mog-sdk/sdk` `createWorkbook()` or the public
+`MogDocumentFactory` facade from `@mog-sdk/sdk`. Direct `DocumentFactory` usage
 is an advanced workspace integration path, not the primary published npm
 contract.
 

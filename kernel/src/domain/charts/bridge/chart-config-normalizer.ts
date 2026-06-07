@@ -7,7 +7,11 @@ import type {
 } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
-import { normalizeImportedComboChart } from '../../../bridges/compute/chart-import-normalization';
+import {
+  normalizeImportedComboChart,
+  normalizeImportedDisplayBlanksAsValue,
+} from '../../../bridges/compute/chart-import-normalization';
+import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,
   wireToDataLabelConfig,
@@ -80,7 +84,7 @@ function isStandardXYValueAxisPair(
   axis: NonNullable<ChartConfig['axis']>,
   chartType: ChartConfig['type'] | undefined,
 ): boolean {
-  if (chartType !== 'scatter' && chartType !== 'bubble') return false;
+  if (!isXYValueAxisChartType(chartType)) return false;
   if (axis.categoryAxis || axis.xAxis) return false;
   return Boolean(axis.valueAxis && (axis.secondaryValueAxis || axis.secondaryYAxis));
 }
@@ -166,18 +170,94 @@ type ChartWithPivotProjection = ChartFloatingObject & {
 type ChartRenderExtra = {
   imported: true;
   sourceDialect: 'ooxml' | 'ooxml-chart-ex';
+  isChartEx?: boolean;
+  sourceChartType?: string;
+  sourceFamily?: string;
+  chartGroupTypes?: string[];
+  standardChartProvenance?: {
+    projectionSchemaVersion?: number;
+    hasProjectionFingerprint?: boolean;
+    relationshipCount?: number;
+    auxiliaryPathCount?: number;
+  };
 };
 
 function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
-  if (chart.ooxml) {
-    return {
-      imported: true,
-      sourceDialect: chart.ooxml.isChartEx ? 'ooxml-chart-ex' : 'ooxml',
-    } satisfies ChartRenderExtra;
+  const ooxml = recordValue(chart.ooxml);
+  if (!ooxml && !chart.importStatus) return undefined;
+
+  const sourceChartType = stringValue(chart.chartType);
+  const chartGroupTypes = chartGroupTypesFromChart(chart);
+  const sourceFamily = sourceFamilyFromMetadata(sourceChartType, chartGroupTypes);
+  const standardChartProvenance = standardChartProvenanceSnapshot(ooxml?.standardChartProvenance);
+
+  return {
+    imported: true,
+    sourceDialect: ooxml?.isChartEx === true ? 'ooxml-chart-ex' : 'ooxml',
+    ...(ooxml?.isChartEx === true ? { isChartEx: true } : {}),
+    ...(sourceChartType ? { sourceChartType } : {}),
+    ...(sourceFamily ? { sourceFamily } : {}),
+    ...(chartGroupTypes.length > 0 ? { chartGroupTypes } : {}),
+    ...(standardChartProvenance ? { standardChartProvenance } : {}),
+  } satisfies ChartRenderExtra;
+}
+
+function chartGroupTypesFromChart(chart: ChartFloatingObject): string[] {
+  const groups = (chart as { rt?: { chartGroupsMeta?: unknown } }).rt?.chartGroupsMeta;
+  if (!Array.isArray(groups)) return [];
+  const types = groups
+    .map((group) => stringValue(recordValue(group)?.chartType))
+    .filter((value): value is string => value !== undefined);
+  return Array.from(new Set(types));
+}
+
+function sourceFamilyFromMetadata(
+  sourceChartType: string | undefined,
+  chartGroupTypes: readonly string[],
+): string | undefined {
+  if (sourceChartType) return sourceChartType;
+  if (chartGroupTypes.length === 1) return chartGroupTypes[0];
+  if (chartGroupTypes.length > 1) return 'combo';
+  return undefined;
+}
+
+function standardChartProvenanceSnapshot(
+  value: unknown,
+): ChartRenderExtra['standardChartProvenance'] | undefined {
+  const record = recordValue(value);
+  if (!record) return undefined;
+
+  const snapshot: NonNullable<ChartRenderExtra['standardChartProvenance']> = {};
+  const projectionSchemaVersion = numberValue(record.projectionSchemaVersion);
+  if (projectionSchemaVersion !== undefined) {
+    snapshot.projectionSchemaVersion = projectionSchemaVersion;
   }
-  return chart.importStatus
-    ? ({ imported: true, sourceDialect: 'ooxml' } satisfies ChartRenderExtra)
+  const projectionFingerprint = stringValue(record.projectionFingerprint);
+  if (projectionFingerprint !== undefined) {
+    snapshot.hasProjectionFingerprint = true;
+  }
+  if (Array.isArray(record.relationships)) {
+    snapshot.relationshipCount = record.relationships.length;
+  }
+  if (Array.isArray(record.auxiliaryPaths)) {
+    snapshot.auxiliaryPathCount = record.auxiliaryPaths.length;
+  }
+
+  return Object.keys(snapshot).length > 0 ? snapshot : undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -193,6 +273,9 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const sizeRepresents = wireToSizeRepresents(normalizedChart.sizeRepresents);
   const layoutAuthority = (normalizedChart as ChartWithLayoutAuthority).layoutAuthority;
   const pivotProjection = (normalizedChart as ChartWithPivotProjection).pivotProjection;
+  const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(normalizedChart.displayBlanksAs) as
+    | ChartConfig['displayBlanksAs']
+    | undefined;
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
@@ -238,7 +321,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     boxplot: wireToBoxplotConfig(normalizedChart.boxplot),
     hierarchy: wireToHierarchyChartConfig(normalizedChart.hierarchy),
     regionMap: wireToRegionMapConfig(normalizedChart.regionMap),
-    displayBlanksAs: normalizedChart.displayBlanksAs as ChartConfig['displayBlanksAs'],
+    ...(displayBlanksAs ? { displayBlanksAs } : {}),
     plotVisibleOnly: normalizedChart.plotVisibleOnly,
     gapWidth: normalizedChart.gapWidth,
     gapDepth: normalizedChart.gapDepth,
@@ -274,6 +357,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     highLowLines: wireToChartLineSettings(normalizedChart.highLowLines),
     seriesLines: wireToChartLineSettings(normalizedChart.seriesLines),
     upDownBars: wireToUpDownBarsConfig(normalizedChart.upDownBars),
+    stockSourceComposition: (
+      normalizedChart as {
+        stockSourceComposition?: ChartConfig['stockSourceComposition'];
+      }
+    ).stockSourceComposition,
     barShape: normalizedChart.barShape as ChartConfig['barShape'],
     heightPt: normalizedChart.heightPt,
     widthPt: normalizedChart.widthPt,

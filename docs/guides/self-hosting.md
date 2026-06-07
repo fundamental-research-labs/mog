@@ -7,14 +7,14 @@
 Mog can be used inside a customer's security boundary through shipped public
 packages, but that is different from a supported self-hosted Mog service. Today,
 server-side workbook automation is same-process trusted automation through the
-public [Node SDK](node-sdk.md), and browser integration is host-owned through
+public [SDK](sdk.md), and browser integration is host-owned through
 the public embed packages. Authentication, persistence, tenant boundaries, and
 network exposure remain responsibilities of the host application or customer
 deployment.
 
 ## What Exists Today
 
-- `@mog-sdk/node` is a shipped public package for headless workbook creation,
+- `@mog-sdk/sdk` is a shipped public package for headless workbook creation,
   compute, and XLSX file I/O inside your own Node.js process. It does not start
   or document an HTTP service.
 - `@mog-sdk/embed` and `@mog-sdk/spreadsheet-app` are shipped public browser
@@ -69,7 +69,7 @@ deployment path. Until then, these topics are reserved:
 
 ## Related Docs
 
-- [Node SDK](node-sdk.md) - shipped public same-process server-side package
+- [SDK](sdk.md) - shipped public same-process server-side package
 - [Embed: React](embed-react.md) and [Embed: Web Component](embed-web-component.md) - shipped public same-page embeds
 - [HTTP Service](http-service.md) - reserved service API status
 - [Security and Governance](security-and-governance.md) - trust boundaries

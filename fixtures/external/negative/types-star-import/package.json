@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@mog-sdk/node": "TARBALL_PATH"
+    "@mog-sdk/sdk": "TARBALL_PATH"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

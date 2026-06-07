@@ -618,8 +618,8 @@ fn test_agent_builds_financial_model() {
     let a1_val = read_mirror_value(&mirror, 0, 0, 0);
     match &a1_val {
         Some(CellValue::Error(CellError::Ref, _)) => {
-            // Cycle detected in incremental mode → #REF!
-            // Use set_cells with skip_cycle_check to go through always-converge
+            // Cycle detected in incremental mode -> #REF!
+            // Use set_cells with skip_cycle_check to reach the iterative solver.
             let edits = vec![
                 (
                     sid(0),

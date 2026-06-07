@@ -12,17 +12,23 @@ import { buildAnnotationLayers, composePrimaryAndAnnotationLayers } from './anno
 import { buildConfigSpec } from './config-spec';
 import { chartDataToRows } from './data-rows';
 import { buildEncoding } from './encoding';
+import { withExcelCartesianGeometryMark } from './excel-cartesian-geometry';
 import { buildComboLayers } from './layers/combo';
 import { buildDataLabelLayer } from './layers/data-labels';
 import { buildDataTableLayers } from './layers/data-table';
+import { buildDoughnutRingLayers, shouldBuildDoughnutRingLayers } from './layers/doughnut-rings';
 import { buildFunnelLayers } from './layers/funnel';
 import { buildParetoLayers } from './layers/pareto';
 import { buildPerSeriesLineLayers, shouldBuildPerSeriesLineLayers } from './layers/series-lines';
 import { buildStockLayers, hasStockVolumeLayer } from './layers/stock';
 import { buildSurface3DSpec, shouldRenderSurface3D } from './layers/surface-3d';
 import { buildSurfaceContourSpec, shouldRenderSurfaceContour } from './layers/surface-contour';
+import { buildTreemapLayers } from './layers/treemap';
 import { buildWaterfallLayers } from './layers/waterfall';
 import { buildMark } from './marks';
+import { buildPieDoughnutGeometry, pieDoughnutRowsFromGeometry } from './pie-doughnut-geometry';
+import { isPieLikeChartType } from './pie-like';
+import { buildColorEncoding, buildStockSourceLegendDomain } from './legend';
 import { buildResolve, hasSecondaryYAxis } from './secondary-axis';
 import {
   buildChartDimensions,
@@ -34,6 +40,7 @@ import { asStockConfig, shouldRenderStockChart } from '../stock-semantics';
 import { resolveStackMode, resolveSubTypeMarkProps } from './subtypes';
 import { buildTitle } from './title';
 import { buildTrendlineTransform, buildWaterfallTransforms } from './transforms';
+import { isNoFillNoLineSeries } from './style';
 
 export {
   buildConfigSpec,
@@ -47,6 +54,7 @@ export {
   buildStockLayers,
   buildSurface3DSpec,
   buildSurfaceContourSpec,
+  buildTreemapLayers,
   buildTitle,
   buildTrendlineTransform,
   buildWaterfallLayers,
@@ -58,16 +66,45 @@ export {
   shouldRenderSurfaceContour,
   shouldRenderSurface3D,
 };
+export {
+  buildPieDoughnutGeometry,
+  maxEffectivePieDoughnutExplosionPercent,
+  pieColorKey,
+  pieDisplayLabel,
+  pieDoughnutColorDomain,
+  pieDoughnutLayoutHintsForConfig,
+  pieDoughnutRowsFromGeometry,
+  pieLegendKey,
+  piePointKey,
+  type PieDoughnutGeometry,
+  type PieDoughnutGeometryFamily,
+  type PieDoughnutGeometryInput,
+  type PieDoughnutGeometryRing,
+  type PieDoughnutGeometrySlice,
+} from './pie-doughnut-geometry';
 
 /**
  * Convert ChartConfig + ChartData to ChartSpec format.
  * LOSSLESS: maps every ChartConfig field to the appropriate ChartSpec construct.
  */
 export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
-  const renderConfig = shouldRenderStockChart(config, data) ? asStockConfig(config) : config;
+  const renderConfig = shouldRenderStockChart(config, data) ? asStockConfig(config, data) : config;
 
   // 1. Convert data
-  const rows = chartDataToRows(data, renderConfig);
+  const baseRows = chartDataToRows(data, renderConfig);
+  const pieDoughnutGeometry = isPieLikeChartType(renderConfig.type)
+    ? buildPieDoughnutGeometry({
+        config: renderConfig,
+        data,
+        chartWidth: 2,
+        chartHeight: 2,
+        plotArea: { x: 0, y: 0, width: 2, height: 2 },
+        includeSeries: ({ seriesConfig }) => !isNoFillNoLineSeries(seriesConfig),
+      })
+    : undefined;
+  const rows = pieDoughnutGeometry
+    ? pieDoughnutRowsFromGeometry(pieDoughnutGeometry, baseRows)
+    : baseRows;
 
   // 2. Build title
   const title = buildTitle(renderConfig);
@@ -76,7 +113,10 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   const encoding = buildEncoding(renderConfig, data);
 
   // 4. Build mark
-  const mark = buildMark(renderConfig);
+  const mark = withExcelCartesianGeometryMark(buildMark(renderConfig), renderConfig, {
+    yChannel: encoding.y,
+    data,
+  });
 
   // 5. Build config (stacking, colors)
   const configSpec = buildConfigSpec(renderConfig, encoding, data);
@@ -112,7 +152,24 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       mark,
       encoding,
       title,
-      config: withRadarDefaultChartBackground(configSpec),
+      config: withOpaqueChartBackground(configSpec),
+      transforms,
+    });
+  }
+
+  if (isLayeredXYPointChart(renderConfig.type)) {
+    const layers = buildComboLayers(renderConfig, data, rows);
+    layers.push(
+      ...buildAnnotationLayers(renderConfig, data, encoding, rows, { includeMarkers: false }),
+    );
+
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers,
+      encoding: sharedLayerEncodingForLegend(encoding, renderConfig.legend),
+      title,
+      config: configSpec,
       transforms,
     });
   }
@@ -138,8 +195,27 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   if (renderConfig.type === 'stock') {
-    const layers = buildStockLayers(renderConfig, data, rows);
-    layers.push(...buildAnnotationLayers(renderConfig, data, encoding, rows));
+    const layers = buildStockLayers(renderConfig, data, rows, encoding.x);
+    const stockLegendDomain = buildStockSourceLegendDomain(renderConfig, data, rows);
+    const stockLegendColorEncoding = stockLegendDomain
+      ? buildColorEncoding({
+          hasMultipleSeries: true,
+          legend: renderConfig.legend,
+          colors: stockLegendDomain.colors,
+          reverseLegend: false,
+          legendDomain: stockLegendDomain.values,
+          symbolType: 'line',
+          legendEntries: stockLegendDomain.entries,
+          config: renderConfig,
+          forceColorEncoding: stockLegendDomain.forceColorEncoding,
+          legendValues: stockLegendDomain.values,
+        })
+      : undefined;
+    layers.push(
+      ...buildAnnotationLayers(renderConfig, data, encoding, rows, {
+        consumeNativeStockVisual: true,
+      }),
+    );
     const resolve = hasStockVolumeLayer(renderConfig, rows)
       ? {
           scale: { y: 'independent' as const },
@@ -150,6 +226,9 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       dimensions,
       rows,
       layers,
+      encoding: stockLegendColorEncoding
+        ? sharedLayerEncodingForLegend({ color: stockLegendColorEncoding }, renderConfig.legend)
+        : undefined,
       title,
       config: configSpec,
       resolve,
@@ -163,7 +242,18 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
       rows: funnel.rows,
       layers: funnel.layers,
       title,
-      config: configSpec,
+      config: withOpaqueChartBackground(configSpec),
+    });
+  }
+
+  if (renderConfig.type === 'treemap') {
+    const treemap = buildTreemapLayers(renderConfig, rows);
+    return buildLayerSpec({
+      dimensions,
+      rows: treemap.rows,
+      layers: treemap.layers,
+      title,
+      config: withOpaqueChartBackground(configSpec),
     });
   }
 
@@ -206,6 +296,21 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
   }
 
   const annotationLayers = buildAnnotationLayers(renderConfig, data, encoding, rows);
+  if (shouldBuildDoughnutRingLayers(renderConfig, data)) {
+    return buildLayerSpec({
+      dimensions,
+      rows,
+      layers: [
+        ...buildDoughnutRingLayers({ config: renderConfig, data, mark, encoding }),
+        ...annotationLayers,
+      ],
+      encoding: sharedLayerEncodingForLegend(encoding, renderConfig.legend),
+      title,
+      config: configSpec,
+      transforms,
+    });
+  }
+
   if (shouldBuildPerSeriesLineLayers(renderConfig, data)) {
     const layers: ChartSpec[] = [
       ...buildPerSeriesLineLayers(renderConfig, data, encoding),
@@ -253,10 +358,14 @@ export function configToSpec(config: ChartConfig, data: ChartData): ChartSpec {
 }
 
 function isPreservedOnlyChartExFamily(type: ChartConfig['type']): boolean {
-  return type === 'treemap' || type === 'sunburst' || type === 'regionMap';
+  return type === 'sunburst' || type === 'regionMap';
 }
 
-function withRadarDefaultChartBackground(config: ConfigSpec | undefined): ConfigSpec {
+function isLayeredXYPointChart(type: ChartConfig['type']): boolean {
+  return type === 'scatter' || type === 'bubble';
+}
+
+function withOpaqueChartBackground(config: ConfigSpec | undefined): ConfigSpec {
   const defaultFill: ChartFrameSpec['fill'] = { type: 'solid', color: '#ffffff' };
   const chartFrame = config?.chartFrame
     ? {

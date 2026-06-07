@@ -25,7 +25,7 @@ Status words in this page use the following meanings:
 
 | Surface | Status | Enterprise interpretation |
 |---------|--------|---------------------------|
-| Node/headless SDK | public, shipped | `@mog-sdk/node` is same-process trusted automation. It does not start or document an HTTP service and is not a hostile-client boundary. |
+| Node/headless SDK | public, shipped | `@mog-sdk/sdk` is same-process trusted automation. It does not start or document an HTTP service and is not a hostile-client boundary. |
 | Same-page sheet embed | public-experimental, shipped | `@mog-sdk/embed`, `./react`, `./web-component`, and `./config` run in the host page origin. Use them only with a trusted host-owned `MogEmbedHostPolicy`; do not treat them as isolation for hostile content. |
 | Full spreadsheet app embed | public, shipped | `@mog-sdk/spreadsheet-app` is a trusted same-origin React package. The host owns authentication, persistence, save/export callbacks, asset hosting, and authorization policy. |
 | iframe embed | reserved | Source-internal iframe and `postMessage` code exists, but `@mog-sdk/embed/iframe` is not a package export and no public iframe child bundle or host page is documented. |
@@ -64,7 +64,7 @@ For an offline or air-gapped customer-controlled deployment, review these source
 ## Configuration Lockdown Checklist
 
 - Confirm whether the distribution is desktop, SDK/headless, same-page sheet embed, full spreadsheet app embed, iframe embed, or self-hosted service.
-- Use public shipped surfaces where they exist: `@mog-sdk/node`, `@mog-sdk/spreadsheet-app`, and the public-experimental `@mog-sdk/embed` entrypoints. Treat iframe, HTTP service, and self-hosting surfaces as reserved or not shipped.
+- Use public shipped surfaces where they exist: `@mog-sdk/sdk`, `@mog-sdk/spreadsheet-app`, and the public-experimental `@mog-sdk/embed` entrypoints. Treat iframe, HTTP service, and self-hosting surfaces as reserved or not shipped.
 - Disable collaboration, thesaurus lookup, external content fetching, REST/provider integrations, scoped app network grants, AI/agent routes, telemetry endpoints, and update checks unless explicitly approved.
 - Define and review CSP, webview, and network allowlists for the exact browser or desktop distribution.
 - Route updates through a customer-approved channel.

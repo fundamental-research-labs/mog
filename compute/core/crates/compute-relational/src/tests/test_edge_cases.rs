@@ -184,6 +184,9 @@ fn test_null_in_grouping_field() {
     // The null row should appear as some group
     assert_eq!(result.filtered_row_count, 3);
     assert_eq!(result.row_tree.len(), 3);
+    assert_eq!(result.row_tree[0].value, CellValue::Null);
+    assert_eq!(result.row_tree[1].value, text("North"));
+    assert_eq!(result.row_tree[2].value, text("South"));
 
     // All values should sum correctly
     let total: f64 = result

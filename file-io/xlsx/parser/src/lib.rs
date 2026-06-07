@@ -97,8 +97,14 @@ pub mod write;
 
 // Native entry point — now crate-private. External consumers use parse_xlsx_to_output().
 // Still accessible within the crate for binaries (crashtest, profile_corpus) and tests.
-pub use pipeline::full_parse::parse_xlsx_full_native;
+pub use pipeline::full_parse::parse_xlsx_full_native_initial_active_visible_sheet;
 pub use pipeline::full_parse::parse_xlsx_full_native_max_sheets;
+pub use pipeline::full_parse::parse_xlsx_full_native_selected_sheets;
+pub use pipeline::full_parse::parse_xlsx_full_native_selected_workbook_sheets;
+pub use pipeline::full_parse::select_initial_active_visible_workbook_index;
+pub use pipeline::full_parse::{
+    DeferredWorkbookMetadata, parse_deferred_workbook_metadata, parse_xlsx_full_native,
+};
 
 // =============================================================================
 // === Core Result Types ===
@@ -282,6 +288,47 @@ pub fn parse_xlsx_to_output_max_sheets(
 ) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
     let result =
         pipeline::full_parse::parse_xlsx_full_native_max_sheets(xlsx_data, None, max_sheets)?;
+    Ok(full_parse_result_to_parse_output(&result))
+}
+
+/// Parse XLSX with full worksheet parsing limited to explicit editable sheet
+/// indices. Unselected worksheets get metadata-only sheet payloads.
+pub fn parse_xlsx_to_output_selected_sheets(
+    xlsx_data: &[u8],
+    selected_sheet_indices: &[usize],
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
+    let result = pipeline::full_parse::parse_xlsx_full_native_selected_sheets(
+        xlsx_data,
+        None,
+        selected_sheet_indices,
+    )?;
+    Ok(full_parse_result_to_parse_output(&result))
+}
+
+/// Parse XLSX with full worksheet parsing limited to explicit workbook-order
+/// sheet indices. Unselected editable worksheets remain inventory-only and do
+/// not get metadata-only `SheetData` placeholders.
+pub fn parse_xlsx_to_output_selected_workbook_sheets(
+    xlsx_data: &[u8],
+    selected_workbook_indices: &[u32],
+    metadata: &DeferredWorkbookMetadata,
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
+    let result = pipeline::full_parse::parse_xlsx_full_native_selected_workbook_sheets(
+        xlsx_data,
+        None,
+        selected_workbook_indices,
+        metadata,
+    )?;
+    Ok(full_parse_result_to_parse_output(&result))
+}
+
+/// Parse XLSX with only the initial active visible worksheet fully parsed.
+/// Other editable worksheets get metadata-only sheet payloads.
+pub fn parse_xlsx_to_output_initial_active_visible_sheet(
+    xlsx_data: &[u8],
+) -> Result<(domain_types::ParseOutput, domain_types::ParseDiagnostics), String> {
+    let result =
+        pipeline::full_parse::parse_xlsx_full_native_initial_active_visible_sheet(xlsx_data, None)?;
     Ok(full_parse_result_to_parse_output(&result))
 }
 

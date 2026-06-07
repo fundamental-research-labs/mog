@@ -110,8 +110,22 @@ function getSymbolBounds(mark: SymbolMark): BoundingBox {
 
 function getTextBounds(mark: TextMark): BoundingBox {
   // Approximate text bounds (actual measurement requires canvas context)
-  const width = mark.text.length * mark.fontSize * 0.6; // Approximate character width
-  const height = mark.fontSize * 1.2;
+  const approximateRawWidth = mark.text.length * mark.fontSize * 0.6;
+  const maxWidth =
+    typeof mark.maxWidth === 'number' && Number.isFinite(mark.maxWidth) && mark.maxWidth > 0
+      ? mark.maxWidth
+      : undefined;
+  const width =
+    maxWidth !== undefined ? Math.min(approximateRawWidth, maxWidth) : approximateRawWidth;
+  const lineCount =
+    maxWidth !== undefined && maxWidth > 0
+      ? Math.max(1, Math.ceil(approximateRawWidth / maxWidth))
+      : 1;
+  const lineHeight =
+    typeof mark.lineHeight === 'number' && Number.isFinite(mark.lineHeight) && mark.lineHeight > 0
+      ? mark.lineHeight
+      : mark.fontSize * 1.2;
+  const height = mark.fontSize + Math.max(0, lineCount - 1) * lineHeight;
 
   let x = mark.x;
   let y = mark.y;

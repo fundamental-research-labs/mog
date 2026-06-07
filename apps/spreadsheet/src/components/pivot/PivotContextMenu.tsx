@@ -38,8 +38,6 @@ import type { ContextMenuTarget } from '../context-menu/types';
 import type { ShowValuesAsType } from '../../hooks/data/use-pivot-context-menu-actions';
 import { usePivotContextMenuActions } from '../../hooks/data/use-pivot-context-menu-actions';
 import { rangeToA1 } from '../../systems/shared/types';
-import { useActiveSheetId } from '../../infra/context';
-import { useDispatch } from '../../hooks/toolbar/use-action-dependencies';
 import {
   Button,
   ContextMenuContent,
@@ -213,8 +211,6 @@ export function PivotContextMenu({
     headerKey,
     fieldId,
   });
-  const activeSheetId = useActiveSheetId();
-  const dispatchAction = useDispatch();
   const [isChangeSourceOpen, setIsChangeSourceOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -223,6 +219,11 @@ export function PivotContextMenu({
   const [calculatedFieldName, setCalculatedFieldName] = useState('');
   const [calculatedFieldFormula, setCalculatedFieldFormula] = useState('=');
   const [calculatedFieldError, setCalculatedFieldError] = useState<string | null>(null);
+  const canEditFields = actions.pivotCapabilities?.canEditFields ?? false;
+  const canRemoveFields = actions.pivotCapabilities?.canRemoveFields ?? false;
+  const canChangeAggregate = actions.pivotCapabilities?.canChangeAggregate ?? false;
+  const canRefresh = actions.pivotCapabilities?.canRefresh ?? false;
+  const canDelete = actions.pivotCapabilities?.canDelete ?? false;
 
   const initialDataSource = useMemo(() => {
     const config = actions.pivotConfig;
@@ -231,10 +232,11 @@ export function PivotContextMenu({
   }, [actions.pivotConfig]);
 
   const openChangeDataSource = useCallback(() => {
+    if (!canEditFields) return;
     setSourceDraft(initialDataSource);
     setSourceError(null);
     setIsChangeSourceOpen(true);
-  }, [initialDataSource]);
+  }, [canEditFields, initialDataSource]);
 
   const closeChangeDataSource = useCallback(() => {
     setIsChangeSourceOpen(false);
@@ -243,7 +245,7 @@ export function PivotContextMenu({
 
   const applyChangeDataSource = useCallback(() => {
     const config = actions.pivotConfig;
-    if (!config) return;
+    if (!config || !canEditFields) return;
 
     const dataSource = normalizeQualifiedDataSource(sourceDraft, config.sourceSheetName);
     if (!dataSource.includes('!')) {
@@ -251,13 +253,9 @@ export function PivotContextMenu({
       return;
     }
 
-    dispatchAction('PIVOT_SET_DATA_SOURCE', {
-      sheetId: activeSheetId,
-      pivotName: config.name,
-      dataSource,
-    });
+    actions.setDataSource(dataSource);
     setIsChangeSourceOpen(false);
-  }, [actions.pivotConfig, activeSheetId, dispatchAction, sourceDraft]);
+  }, [actions, canEditFields, sourceDraft]);
 
   const toggleFilterValue = useCallback(
     (targetFieldId: string, value: string, checked: boolean, currentValues: string[]) => {
@@ -287,11 +285,12 @@ export function PivotContextMenu({
   );
 
   const openCalculatedField = useCallback(() => {
+    if (!canEditFields) return;
     setCalculatedFieldName('');
     setCalculatedFieldFormula('=');
     setCalculatedFieldError(null);
     setIsCalculatedFieldOpen(true);
-  }, []);
+  }, [canEditFields]);
 
   const closeCalculatedField = useCallback(() => {
     setIsCalculatedFieldOpen(false);
@@ -300,7 +299,7 @@ export function PivotContextMenu({
 
   const applyCalculatedField = useCallback(() => {
     const config = actions.pivotConfig;
-    if (!config) return;
+    if (!config || !canEditFields) return;
 
     const name = calculatedFieldName.trim();
     const formula = calculatedFieldFormula.trim();
@@ -313,23 +312,13 @@ export function PivotContextMenu({
       return;
     }
 
-    dispatchAction('PIVOT_ADD_CALCULATED_FIELD', {
-      sheetId: activeSheetId,
-      pivotName: config.name,
-      field: {
-        fieldId: makeCalculatedFieldId(name),
-        name,
-        formula,
-      },
+    actions.addCalculatedField({
+      fieldId: makeCalculatedFieldId(name),
+      name,
+      formula,
     });
     setIsCalculatedFieldOpen(false);
-  }, [
-    actions.pivotConfig,
-    activeSheetId,
-    calculatedFieldFormula,
-    calculatedFieldName,
-    dispatchAction,
-  ]);
+  }, [actions, calculatedFieldFormula, calculatedFieldName, canEditFields]);
 
   const isHeaderTarget = target === 'pivot-row-header' || target === 'pivot-column-header';
   const isValueTarget = target === 'pivot-value';
@@ -346,7 +335,11 @@ export function PivotContextMenu({
         </ContextMenuItemComponent>
 
         {/* Refresh */}
-        <ContextMenuItemComponent icon={<RefreshIcon />} onSelect={actions.refreshPivot}>
+        <ContextMenuItemComponent
+          icon={<RefreshIcon />}
+          onSelect={actions.refreshPivot}
+          disabled={!canRefresh}
+        >
           Refresh
         </ContextMenuItemComponent>
 
@@ -355,6 +348,7 @@ export function PivotContextMenu({
             event.preventDefault();
             openChangeDataSource();
           }}
+          disabled={!canEditFields}
         >
           Change Data Source...
         </ContextMenuItemComponent>
@@ -364,6 +358,7 @@ export function PivotContextMenu({
             event.preventDefault();
             openCalculatedField();
           }}
+          disabled={!canEditFields}
         >
           Calculated Field...
         </ContextMenuItemComponent>
@@ -376,6 +371,7 @@ export function PivotContextMenu({
             <ContextMenuItemComponent
               icon={actions.isHeaderExpanded ? <CollapseIcon /> : <ExpandIcon />}
               onSelect={actions.isHeaderExpanded ? actions.collapseHeader : actions.expandHeader}
+              disabled={!canEditFields}
             >
               {actions.isHeaderExpanded ? 'Collapse' : 'Expand'}
             </ContextMenuItemComponent>
@@ -385,11 +381,19 @@ export function PivotContextMenu({
         )}
 
         {/* Expand All / Collapse All */}
-        <ContextMenuItemComponent icon={<ExpandIcon />} onSelect={actions.expandAll}>
+        <ContextMenuItemComponent
+          icon={<ExpandIcon />}
+          onSelect={actions.expandAll}
+          disabled={!canEditFields}
+        >
           Expand All
         </ContextMenuItemComponent>
 
-        <ContextMenuItemComponent icon={<CollapseIcon />} onSelect={actions.collapseAll}>
+        <ContextMenuItemComponent
+          icon={<CollapseIcon />}
+          onSelect={actions.collapseAll}
+          disabled={!canEditFields}
+        >
           Collapse All
         </ContextMenuItemComponent>
 
@@ -398,11 +402,19 @@ export function PivotContextMenu({
           <>
             <ContextMenuSeparator />
 
-            <ContextMenuItemComponent icon={<SortAscIcon />} onSelect={actions.sortAscending}>
+            <ContextMenuItemComponent
+              icon={<SortAscIcon />}
+              onSelect={actions.sortAscending}
+              disabled={!canEditFields}
+            >
               Sort A to Z
             </ContextMenuItemComponent>
 
-            <ContextMenuItemComponent icon={<SortDescIcon />} onSelect={actions.sortDescending}>
+            <ContextMenuItemComponent
+              icon={<SortDescIcon />}
+              onSelect={actions.sortDescending}
+              disabled={!canEditFields}
+            >
               Sort Z to A
             </ContextMenuItemComponent>
           </>
@@ -414,12 +426,15 @@ export function PivotContextMenu({
             <ContextMenuSeparator />
 
             <ContextMenuSub>
-              <ContextMenuSubTrigger icon={<SumIcon />}>Summarize Values By</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger icon={<SumIcon />} disabled={!canChangeAggregate}>
+                Summarize Values By
+              </ContextMenuSubTrigger>
               <ContextMenuSubContent>
                 {AGGREGATE_FUNCTIONS.map((agg) => (
                   <ContextMenuItemComponent
                     key={agg.type}
                     onSelect={() => actions.setAggregateFunction(agg.type)}
+                    disabled={!canChangeAggregate}
                     className={
                       actions.currentAggregateFunction === agg.type
                         ? 'bg-ss-primary-light text-ss-primary'
@@ -435,6 +450,7 @@ export function PivotContextMenu({
             {/* Show Values As Submenu */}
             <ContextMenuSub>
               <ContextMenuSubTrigger
+                disabled={!canChangeAggregate}
                 icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z" />
@@ -448,7 +464,7 @@ export function PivotContextMenu({
                   <ContextMenuItemComponent
                     key={opt.type}
                     onSelect={() => actions.setShowValuesAs(opt.type)}
-                    disabled={opt.disabled}
+                    disabled={opt.disabled || !canChangeAggregate}
                     className={
                       (actions.currentShowValuesAs ?? 'noCalculation') === opt.type
                         ? 'bg-ss-primary-light text-ss-primary'
@@ -466,7 +482,7 @@ export function PivotContextMenu({
         <ContextMenuSeparator />
 
         <ContextMenuSub>
-          <ContextMenuSubTrigger>Grand Totals</ContextMenuSubTrigger>
+          <ContextMenuSubTrigger disabled={!canEditFields}>Grand Totals</ContextMenuSubTrigger>
           <ContextMenuSubContent>
             {GRAND_TOTAL_OPTIONS.map((opt) => {
               const selected =
@@ -481,6 +497,7 @@ export function PivotContextMenu({
                       showColumnGrandTotals: opt.showColumnGrandTotals,
                     })
                   }
+                  disabled={!canEditFields}
                   className={selected ? 'bg-ss-primary-light text-ss-primary' : ''}
                 >
                   {opt.label}
@@ -495,14 +512,16 @@ export function PivotContextMenu({
             <ContextMenuSeparator />
 
             <ContextMenuSub>
-              <ContextMenuSubTrigger>Filter</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger disabled={!canEditFields}>Filter</ContextMenuSubTrigger>
               <ContextMenuSubContent className="max-h-[360px] overflow-y-auto min-w-[220px]">
                 {actions.pivotFilterFields.map((filterField) => {
                   const currentValues = currentVisibleFilterValues(filterField);
                   const selected = new Set(filterDrafts[filterField.fieldId] ?? currentValues);
                   return (
                     <ContextMenuSub key={filterField.fieldId}>
-                      <ContextMenuSubTrigger>{filterField.fieldName}</ContextMenuSubTrigger>
+                      <ContextMenuSubTrigger disabled={!canEditFields}>
+                        {filterField.fieldName}
+                      </ContextMenuSubTrigger>
                       <ContextMenuSubContent className="max-h-[320px] overflow-y-auto min-w-[220px]">
                         <div
                           className="px-2 py-1"
@@ -522,6 +541,7 @@ export function PivotContextMenu({
                                   className="h-3.5 w-3.5"
                                   aria-label={`Pivot filter ${filterField.fieldName}: ${label}`}
                                   checked={selected.has(value)}
+                                  disabled={!canEditFields}
                                   onChange={(event) =>
                                     toggleFilterValue(
                                       filterField.fieldId,
@@ -539,6 +559,7 @@ export function PivotContextMenu({
                         <ContextMenuSeparator />
                         <ContextMenuItemComponent
                           onSelect={() => applyFilterDraft(filterField.fieldId)}
+                          disabled={!canEditFields}
                         >
                           Apply Filter
                         </ContextMenuItemComponent>
@@ -556,7 +577,11 @@ export function PivotContextMenu({
           <>
             <ContextMenuSeparator />
 
-            <ContextMenuItemComponent icon={<RemoveIcon />} onSelect={actions.removeField}>
+            <ContextMenuItemComponent
+              icon={<RemoveIcon />}
+              onSelect={actions.removeField}
+              disabled={!canRemoveFields}
+            >
               Remove Field
             </ContextMenuItemComponent>
           </>
@@ -565,7 +590,12 @@ export function PivotContextMenu({
         <ContextMenuSeparator />
 
         {/* Delete Pivot */}
-        <ContextMenuItemComponent icon={<DeleteIcon />} onSelect={actions.deletePivot} destructive>
+        <ContextMenuItemComponent
+          icon={<DeleteIcon />}
+          onSelect={actions.deletePivot}
+          disabled={!canDelete}
+          destructive
+        >
           Delete Pivot Table
         </ContextMenuItemComponent>
       </ContextMenuContent>

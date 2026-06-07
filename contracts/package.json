@@ -586,6 +586,11 @@
       "types": "./dist/data/charts.d.ts",
       "import": "./dist/data/charts.js"
     },
+    "./data/diagnostics": {
+      "development": "./src/data/diagnostics.ts",
+      "types": "./dist/data/diagnostics.d.ts",
+      "import": "./dist/data/diagnostics.js"
+    },
     "./utils": {
       "development": "./src/utils/index.ts",
       "types": "./dist/utils/index.d.ts",
@@ -1178,6 +1183,10 @@
       "./data/charts": {
         "types": "./dist/data/charts.d.ts",
         "import": "./dist/data/charts.js"
+      },
+      "./data/diagnostics": {
+        "types": "./dist/data/diagnostics.d.ts",
+        "import": "./dist/data/diagnostics.js"
       },
       "./utils": {
         "types": "./dist/utils/index.d.ts",

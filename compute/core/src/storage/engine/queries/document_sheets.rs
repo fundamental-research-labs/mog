@@ -344,42 +344,61 @@ pub(in crate::storage::engine) fn get_all_named_ranges_wire(
     engine: &YrsComputeEngine,
 ) -> Vec<crate::engine_types::queries::DefinedNameWire> {
     let raw = services::queries::get_all_named_ranges_wire(&engine.stores);
-    raw.into_iter()
-        .filter_map(|dn| {
-            let scope = match dn.scope {
-                Some(ref hex) => match hex_to_id(hex) {
-                    Some(raw) => formula_types::Scope::Sheet(SheetId::from_raw(raw)),
-                    None => formula_types::Scope::Workbook,
-                },
-                None => formula_types::Scope::Workbook,
-            };
+    let mut result = Vec::with_capacity(raw.len());
+    let mut invalid_refers_to_count = 0usize;
+    let mut invalid_refers_to_samples = Vec::new();
 
-            let refers_to = match serde_json::from_str::<formula_types::IdentityFormula>(
-                &dn.refers_to,
-            ) {
-                Ok(identity) => identity,
-                Err(e) => {
-                    tracing::warn!(
-                        name = %dn.name,
-                        error = %e,
-                        "Yrs DefinedName.refers_to is not a valid IdentityFormula JSON; \
-                         omitting from wire response. Typed formula boundary: made IdentityFormula \
-                         JSON the single canonical on-disk format."
-                    );
-                    return None;
+    for dn in raw {
+        let trimmed_refers_to = dn.refers_to.trim_start();
+        if !trimmed_refers_to.starts_with('{') {
+            invalid_refers_to_count += 1;
+            if invalid_refers_to_samples.len() < 5 {
+                invalid_refers_to_samples.push(format!("{}: expected JSON object", dn.name));
+            }
+            continue;
+        }
+
+        let refers_to = match serde_json::from_str::<formula_types::IdentityFormula>(&dn.refers_to)
+        {
+            Ok(identity) => identity,
+            Err(e) => {
+                invalid_refers_to_count += 1;
+                if invalid_refers_to_samples.len() < 5 {
+                    invalid_refers_to_samples.push(format!("{}: {e}", dn.name));
                 }
-            };
+                continue;
+            }
+        };
 
-            Some(crate::engine_types::queries::DefinedNameWire {
-                id: dn.id,
-                name: dn.name,
-                refers_to,
-                scope,
-                comment: dn.comment,
-                visible: dn.visible,
-            })
-        })
-        .collect()
+        let scope = match dn.scope {
+            Some(ref hex) => match hex_to_id(hex) {
+                Some(raw) => formula_types::Scope::Sheet(SheetId::from_raw(raw)),
+                None => formula_types::Scope::Workbook,
+            },
+            None => formula_types::Scope::Workbook,
+        };
+
+        result.push(crate::engine_types::queries::DefinedNameWire {
+            id: dn.id,
+            name: dn.name,
+            refers_to,
+            scope,
+            comment: dn.comment,
+            visible: dn.visible,
+        });
+    }
+
+    if invalid_refers_to_count > 0 {
+        tracing::warn!(
+            invalid_refers_to_count,
+            samples = ?invalid_refers_to_samples,
+            "Yrs DefinedName.refers_to contains entries that are not valid IdentityFormula JSON; \
+             omitted invalid entries from wire response. Typed formula boundary: IdentityFormula \
+             JSON is the single canonical on-disk format."
+        );
+    }
+
+    result
 }
 
 pub(in crate::storage::engine) fn get_dependents(

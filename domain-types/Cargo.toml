@@ -21,6 +21,7 @@ ooxml-types = { path = "../file-io/ooxml/types" }
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+uuid = { workspace = true, features = ["v5"] }
 # Schema description derive macro (DescribeSchema)
 bridge-types = { path = "../infra/rust-bridge/bridge-types" }
 # Observability — Yrs read paths log unknown OOXML tokens (round-D follow-up)

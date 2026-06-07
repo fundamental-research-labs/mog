@@ -34,7 +34,7 @@ Status words in this page use the following meanings:
 | Area | Status | Current truth |
 |------|--------|---------------|
 | Rust policy engine | shipped | The compute security crate implements principals, ordered access levels, workbook/sheet/column targets, policy resolution, redaction, and diagnostic events. |
-| TypeScript contracts and Node SDK session APIs | public, shipped | Public types live in `contracts/src/security/types.ts`; the Node SDK exports workbook security types and forwards session methods such as `setActivePrincipal`, `makePrincipal`, and `securityActive`. |
+| TypeScript contracts and SDK session APIs | public, shipped | Public types live in `contracts/src/security/types.ts`; the SDK exports workbook security types and forwards session methods such as `setActivePrincipal`, `makePrincipal`, and `securityActive`. |
 | Python workbook security APIs | public, shipped | Python exposes `set_active_principal`, `make_principal`, `security_active`, `drain_security_events`, and `wb.security.*` policy operations. It does not currently implement an `active_principal()` workbook method, even though generated metadata contains an `activePrincipal` mapping. |
 | Host-backed workbook construction | workspace-internal, shipped | The workspace-internal host adapter validates the host handoff and projects a host principal into the compute session. Public principal mutation APIs are then blocked on host-backed workbooks by the operation gate. |
 | Reserved engine tags | reserved | `mog:owner` and `mog:non-owner` are engine-reserved tags. Treat all `mog:*` tags as trusted-host/service input only. |

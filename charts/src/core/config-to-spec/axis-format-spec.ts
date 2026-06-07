@@ -87,9 +87,15 @@ export function mapAxisConfigToAxisSpec(
     if (labelPosition === 'none') spec.labels = false;
   }
   const tickLabelSkip = positiveInteger(axisConf.tickLabelSpacing);
-  if (tickLabelSkip !== undefined) spec.tickLabelSkip = tickLabelSkip;
+  if (tickLabelSkip !== undefined) {
+    spec.tickLabelSkip = tickLabelSkip;
+    spec.tickLabelSkipSource = 'explicit';
+  }
   const tickMarkSkip = positiveInteger(axisConf.tickMarkSpacing);
-  if (tickMarkSkip !== undefined) spec.tickMarkSkip = tickMarkSkip;
+  if (tickMarkSkip !== undefined) {
+    spec.tickMarkSkip = tickMarkSkip;
+    spec.tickMarkSkipSource = 'explicit';
+  }
   const displayUnitFactor = resolveDisplayUnitFactor(axisConf);
   if (displayUnitFactor !== undefined) spec.displayUnitFactor = displayUnitFactor;
   if (axisConf.displayUnitLabel) spec.displayUnitLabel = axisConf.displayUnitLabel;

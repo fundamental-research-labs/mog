@@ -32,7 +32,7 @@ customer-facing boundary unless the row below says that control is shipped.
 
 | Mode | Current status | Trust boundary | Claim class | Notes |
 |------|----------------|----------------|-------------|-------|
-| Node SDK | `@mog-sdk/node` is shipped public | Customer process and runtime environment | Verified for package/API surface; Deployment-controlled for process security | The SDK is same-process trusted automation. It does not isolate hostile users, agents, plugins, or code running in the same process. |
+| SDK | `@mog-sdk/sdk` is shipped public | Customer process and runtime environment | Verified for package/API surface; Deployment-controlled for process security | The SDK is same-process trusted automation. It does not isolate hostile users, agents, plugins, or code running in the same process. |
 | Same-page sheet embed | `@mog-sdk/embed` is shipped public; root, `./react`, `./web-component`, and `./config` are public-experimental | Host web application origin and trusted `MogEmbedHostPolicy` | Deployment-controlled | The host resolves opaque source refs, authorized bytes, effective mode/capability/save state, and callbacks. Same-page embeds run in the host page's JavaScript context and are not isolation for hostile workbook content. |
 | Full spreadsheet app embed | `@mog-sdk/spreadsheet-app` is shipped public | Trusted same-origin host page and host authority callbacks | Deployment-controlled | The package is a public bundle-composition facade over private app/shell/kernel code. The host owns authentication, storage, page chrome, lifecycle policy, and browser hardening. |
 | Desktop/Tauri host integration | Workspace-internal adapter, transport, and provider code are present; packaged desktop distribution is not shipped here | Shipping host app, local OS user account, Tauri/webview configuration, customer OS policy | Deployment-controlled; Not claimed for packaged controls | Tauri transport/platform helpers and shell adapters are reviewable, but backend capabilities, CSP, installer, updater, entitlements, crash collection, and final OS storage paths are distribution-specific. |
@@ -59,7 +59,7 @@ Customer security boundary
   +-- Trusted desktop app / host page / Node process
       |
       +-- Public facade or trusted adapter
-      |     - Node SDK, same-page embed, full app embed, or host-backed adapter
+      |     - SDK, same-page embed, full app embed, or host-backed adapter
       |     - owns UI, host callbacks, source materialization, and principal forwarding
       |     - does not create a hostile-client or tenant boundary by itself
       |

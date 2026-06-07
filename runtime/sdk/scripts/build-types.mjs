@@ -26,6 +26,8 @@ const DIST = resolve(SDK_ROOT, 'dist');
 const PUBLIC_DECLARATIONS = new Set([
   'index.d.ts',
   'index.d.cts',
+  'wasm.d.ts',
+  'workerd.d.ts',
   'api-describe.d.ts',
   'boot.d.ts',
   'collaborative-engine.d.ts',
@@ -276,7 +278,7 @@ copyFileSync(esmDeclaration, cjsDeclaration);
 
 for (const filepath of [esmDeclaration, cjsDeclaration]) {
   const source = readFileSync(filepath, 'utf-8');
-  const normalized = canonicalizeSharedContracts(source.replace(/@mog\/sdk/g, '@mog-sdk/node'));
+  const normalized = canonicalizeSharedContracts(source.replace(/@mog\/sdk/g, '@mog-sdk/sdk'));
   if (normalized !== source) {
     writeFileSync(filepath, normalized);
   }

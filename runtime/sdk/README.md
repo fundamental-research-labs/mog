@@ -1,11 +1,12 @@
-# @mog-sdk/node
+# @mog-sdk/sdk
 
-Shortcut Data OS SDK — headless spreadsheet engine for Node.js. Runs the real kernel + Rust compute-core without a browser.
+Shortcut Data OS SDK — headless spreadsheet engine for Node.js, Workers, and
+WASM-capable hosts. Runs the real kernel + Rust compute-core without a browser.
 
 ## Quick Start
 
 ```typescript
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk';
 
 const wb = await createWorkbook();
 const ws = wb.activeSheet;
@@ -18,17 +19,36 @@ const val = await ws.getValue('A3'); // 100
 await wb.dispose();
 ```
 
-Three lines to a running spreadsheet engine. No addon injection, no context threading, no active-sheet callbacks.
+Three lines to a running spreadsheet engine. No context threading, no
+active-sheet callbacks. In Node, the package root resolves to the native N-API
+entry; in Workers/web-standard runtimes it resolves to a WASM entry through
+package export conditions.
 
 ## Install
 
 ```bash
 # Monorepo — already available as workspace dependency
-pnpm add @mog-sdk/node
+pnpm add @mog-sdk/sdk
 
-# The native Rust addon must be built first
+# Node/native path: the native Rust addon must be built first in source checkouts
 cd compute-core-napi && pnpm build
 ```
+
+## Runtime Entries
+
+```typescript
+import { createWorkbook } from '@mog-sdk/sdk';
+import { createWorkbook as createNodeWorkbook } from '@mog-sdk/sdk/node';
+import { createWorkbook as createWasmWorkbook } from '@mog-sdk/sdk/wasm';
+import { createWorkbook as createWorkerWorkbook } from '@mog-sdk/sdk/workerd';
+```
+
+Use the package root for normal consumers. Use `./node`, `./wasm`, or
+`./workerd` only when a host or test needs to force a binding.
+
+WASM-capable entries accept a host-provided `wasmModule`. Workers/workerd hosts
+should pass a bundler/runtime-provided `WebAssembly.Module`; file-path workbook
+I/O remains Node-only.
 
 ## API Reference
 
@@ -225,7 +245,7 @@ export default async function (wb: Workbook) {
 
 ## Public Surface
 
-`@mog-sdk/node` exposes the workbook/document facade from its package root.
+`@mog-sdk/sdk` exposes the workbook/document facade from its package root.
 Raw NAPI boot helpers, Yrs boot paths, and collaboration coordinator wrappers
 are internal implementation surfaces; package consumers should use
 `createWorkbook()` or `MogDocumentFactory`.
@@ -236,15 +256,30 @@ are internal implementation surfaces; package consumers should use
 createWorkbook()
   └─ DocumentFactory.create({ environment: 'headless' })
        └─ DocumentLifecycleSystem (XState machine)
-            ├─ createTransport() → auto-detects NAPI
-            │    └─ LazyNapiTransport → compute-core-napi.node (Rust)
+            ├─ createTransport() → package-selected native N-API or WASM
+            │    ├─ LazyNapiTransport → compute-core-napi.node (Rust)
+            │    └─ WasmTransport → @mog-sdk/wasm or host WebAssembly.Module
             ├─ ComputeBridge (async cell ops, recalc)
             └─ DocumentContext (kernel services, event bus)
                  ├─ Workbook / Worksheet (unified API)
-                 └─ NodeChartImageExporter → native mark raster backend
+                 └─ ChartImageExporter → portable SVG + runtime raster backend
 ```
 
-The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no WASM, no IPC, full native speed. Chart image export is supported in Node for PNG/JPEG through `sheet.charts.exportImage(...)`; chart marks are compiled in TypeScript via the shared chart bridge, then rasterized by the native backend.
+The SDK boots the **same kernel** used by the browser app, with headless stubs for browser-only services (DOM, IndexedDB). Transport goes through napi-rs directly to Rust — no IPC, full native speed. Chart image export is supported through `sheet.charts.exportImage(...)`: SVG uses the shared portable vector renderer, while PNG/JPEG compile chart marks in TypeScript via the shared chart bridge and rasterize through a runtime backend. By default, Node uses the native raster backend lazily. Advanced callers can pass `chartRendering: { rasterBackend }` to provide their own backend or `chartRendering: { rasterModule }` to initialize `@mog-sdk/chart-raster-wasm` from a host-provided `WebAssembly.Module`. The raster backend is required only when exporting PNG/JPEG chart images; ordinary workbook creation, cell operations, formula evaluation, SVG chart export, and non-image exports do not validate that raster function.
+
+```ts
+import { createWorkbook as createWasmWorkbook } from '@mog-sdk/sdk/wasm';
+
+const wb = await createWasmWorkbook({
+  userTimezone: 'UTC',
+  wasmModule: computeWasmModule,
+  chartRendering: {
+    rasterModule: chartRasterWasmModule,
+  },
+});
+```
+
+Use `@mog-sdk/sdk/wasm` to route compute through the WASM transport explicitly. Hosts that disallow package-side WASM compilation can precompile the compute module themselves and pass it as `wasmModule`; PNG/JPEG chart export can do the same with `chartRendering.rasterModule`.
 
 ## Prerequisites
 

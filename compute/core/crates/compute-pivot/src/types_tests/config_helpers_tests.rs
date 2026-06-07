@@ -13,6 +13,7 @@ fn config_get_placements_for_area() {
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: CellRange::new(0, 0, 10, 3),
+        output_sheet_id: None,
         output_sheet_name: "sheet2".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![],
@@ -107,6 +108,7 @@ fn pivot_table_config_serde_roundtrip() {
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: CellRange::new(0, 0, 100, 5),
+        output_sheet_id: None,
         output_sheet_name: "sheet2".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![PivotField {

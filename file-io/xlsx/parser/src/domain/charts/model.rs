@@ -155,7 +155,7 @@ pub struct DisplayOptions {
     /// Plot visible cells only
     pub plot_vis_only: bool,
     /// How to display blank cells
-    pub disp_blanks_as: DisplayBlanksAs,
+    pub disp_blanks_as: Option<DisplayBlanksAs>,
     /// Show data labels over maximum
     pub show_data_lbls_over_max: bool,
 }

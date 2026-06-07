@@ -13,7 +13,7 @@ export default defineConfig({
   shims: true,
   noExternal: [],
   external: [
-    '@mog-sdk/node',
+    '@mog-sdk/sdk',
     '@mog-sdk/darwin-arm64',
     '@mog-sdk/darwin-x64',
     '@mog-sdk/linux-x64-gnu',

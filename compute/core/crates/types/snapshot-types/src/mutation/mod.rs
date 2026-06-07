@@ -17,8 +17,9 @@ pub use cell_grid::{
 };
 pub use features::{
     CfChange, FilterChange, GroupingChange, NamedRangeChange, PivotTableChange, RangeChange,
-    RangeChangeKind, SlicerChange, SlicerChangeKind, SlicerSourceType, SortingChange,
-    StructureChangeResult, StructureChangeType, TableChange,
+    RangeChangeKind, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, RuntimeOperationDiagnostic,
+    SlicerChange, SlicerChangeKind, SlicerSourceType, SortingChange, StructureChangeResult,
+    StructureChangeType, TableChange,
 };
 pub use floating_objects::{FloatingObjectBounds, FloatingObjectChange};
 pub use policy_parse::{

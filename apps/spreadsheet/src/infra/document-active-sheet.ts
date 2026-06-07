@@ -15,6 +15,8 @@ interface ActiveSheetStore<TState extends ActiveSheetStoreState> {
 
 export interface ImportDurabilityGate {
   readonly isImportDurabilityPending: boolean;
+  scheduleDeferredHydration?(): Promise<void>;
+  awaitMaterialized?(scope?: SheetId | 'allSheets'): Promise<void>;
   awaitImportDurability(): Promise<void>;
 }
 
@@ -94,8 +96,11 @@ export function subscribeActiveSheetPersistence<TState extends ActiveSheetStoreS
   const schedulePostImportPersist = (): void => {
     if (!importDurability || pendingPersist) return;
 
-    pendingPersist = importDurability
-      .awaitImportDurability()
+    const waitForBackgroundDurability =
+      importDurability.scheduleDeferredHydration?.bind(importDurability) ??
+      importDurability.awaitImportDurability.bind(importDurability);
+
+    pendingPersist = waitForBackgroundDurability()
       .then(() => {
         const activeSheetId = pendingActiveSheetId;
         pendingActiveSheetId = null;

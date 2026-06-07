@@ -5,5 +5,5 @@
 import { ReactSamePageHost } from '@mog-sdk/embed/host-adapters/react-same-page-host';
 import { IframeChildHost } from '@mog-sdk/embed/host-adapters/iframe-child-host';
 
-// @mog-sdk/node host-adapters must fail
-import { NodeHeadlessHost } from '@mog-sdk/node/host-adapters/node-headless-host';
+// @mog-sdk/sdk host-adapters must fail
+import { NodeHeadlessHost } from '@mog-sdk/sdk/host-adapters/node-headless-host';

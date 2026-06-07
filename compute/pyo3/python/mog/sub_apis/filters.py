@@ -212,6 +212,11 @@ class FiltersAPI:
         raw = self._bridge.apply_filter(self._sheet_id_json, filter_id)
         return deserialize_mutation_result(raw)
 
+    def reapply(self, filter_id: str) -> MutationResult:
+        """Re-evaluate an existing filter from a user reapply command."""
+        raw = self._bridge.reapply_filter(self._sheet_id_json, filter_id)
+        return deserialize_mutation_result(raw)
+
     # ------------------------------------------------------------------
     # Filter listing / info
     # ------------------------------------------------------------------

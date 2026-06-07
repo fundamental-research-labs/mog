@@ -2,10 +2,9 @@
 //!
 //! Two strategies based on the workbook's `iterative_calc` setting:
 //!
-//! - **OFF (default)**: Single-pass evaluation. Each cycle cell is evaluated
-//!   exactly once using its cached/initial value (Null → 0.0). This matches
-//!   Excel's behavior: it evaluates the formula with whatever values the
-//!   dependencies currently have, caches the result, and moves on.
+//! - **OFF (default)**: Circular cells with no current/cached value are marked
+//!   as circular-reference errors. Imported circular cells with cached values
+//!   retain those values, and downstream dependents recalculate from them.
 //!
 //! - **ON**: Iterative convergence. Cycle cells are evaluated repeatedly
 //!   until values converge (delta < max_change) or max_iterations is reached.
@@ -26,7 +25,7 @@ pub(super) struct IterativeResult {
 }
 
 impl ComputeCore {
-    /// Handle cycles: either evaluate iteratively (if enabled) or single-pass.
+    /// Handle cycles: either evaluate iteratively or surface circular errors.
     pub(super) fn handle_cycles_and_recalc(
         &mut self,
         mirror: &mut CellMirror,
@@ -89,7 +88,7 @@ impl ComputeCore {
                 path: if self.iterative_calc {
                     "iterative"
                 } else {
-                    "single_pass"
+                    "circular_error"
                 },
             });
         }
@@ -177,53 +176,44 @@ impl ComputeCore {
             }
         }
 
-        // --- Pass 2: Seed and evaluate cycle cells iteratively ---
+        let cycle_dependents: Vec<CellId> = {
+            let downstream = self
+                .graph
+                .affected_cells(
+                    &cycle_cell_set.iter().copied().collect::<Vec<_>>(),
+                    &*mirror,
+                )
+                .into_value();
+            downstream
+                .into_iter()
+                .filter(|c| non_cycle.contains(c) && self.ast_cache.contains_key(c))
+                .collect()
+        };
 
-        // Seed Null cycle cells to 0.0 (Excel treats uninitialized cells as 0).
-        // Also reset cells previously marked CellError::Circ: that's an
-        // internal "cycle did not resolve" marker from a prior recalc (it
-        // isn't a valid XLSX error code and can't appear in user formulas),
-        // so clearing it lets a fresh pass re-converge instead of treating
-        // the stale marker as a fixed point. Numeric cells keep their
-        // cached value as a warm-start for the next fixed-point iteration.
-        // Other errors (#REF!, #VALUE!, #DIV/0!, #NAME?, #NUM!, #N/A, etc.)
-        // are legitimate formula outputs — from literal error tokens,
-        // upstream cascades, engine-authored results like INDIRECT("bad"),
-        // or XLSX-cached values — and must flow through arithmetic unchanged
-        // to match Excel's error-propagation semantics.
-        for &cell_id in &cycle_cells {
-            let current = mirror
-                .get_cell_value(&cell_id)
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            // Reset Null, Circ, Text, and Bool to 0 — these cannot warm-start
-            // an iterative convergence. Excel always shows 0 for circular refs
-            // regardless of the prior cell type (text, bool, or blank).
-            // Numbers keep their cached value as a warm-start for iterative calc.
-            // Other errors (#REF!, #VALUE!, etc.) are legitimate formula outputs
-            // and must flow through unchanged.
-            let should_reset = matches!(
-                current,
-                CellValue::Null | CellValue::Error(CellError::Circ, _)
-            ) || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
-            if should_reset {
-                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
-            }
-        }
-
-        // Excel-matching behavior: the iterative_calc flag controls whether
-        // cycles iterate to convergence or get a single evaluation pass.
+        // --- Pass 2: Resolve cycle cells ---
         //
-        // - ON:  iterate up to max_iterations, exit early if delta < max_change.
-        // - OFF: evaluate each cycle cell exactly once (cells see seed/cached
-        //        values for back-edge deps). Matches Excel's default behavior
-        //        where cycles produce 0 and a circular reference warning.
+        // Iterative calculation ON: seed non-numeric cycle values to 0 and run
+        // the fixed-point solver.
+        //
+        // Iterative calculation OFF: imported workbooks may carry Excel cached
+        // values for circular formulas. Preserve those values while still
+        // materializing an explicit circular error for genuinely blank cycles
+        // such as newly-authored formulas with no cached value.
         let mut iterative_result: Option<IterativeResult> = None;
         if self.iterative_calc {
+            let iteration_cells =
+                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &cycle_dependents);
+            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &cycle_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+            self.replace_final_changes_for_cells(
+                mirror,
+                &mut changed_cells,
+                &iteration_cells,
+                &cycle_cell_set,
+            );
         } else {
-            self.evaluate_cycles_single_pass(mirror, &cycle_cells)?;
+            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
         }
 
         // Collect final values from cycle cells. Mark genuinely unresolvable
@@ -266,20 +256,6 @@ impl ComputeCore {
         crate::eval::cache::subexpr_cache::clear();
         crate::mirror::clear_caches();
 
-        let cycle_dependents: Vec<CellId> = {
-            let downstream = self
-                .graph
-                .affected_cells(
-                    &cycle_cell_set.iter().copied().collect::<Vec<_>>(),
-                    &*mirror,
-                )
-                .into_value();
-            downstream
-                .into_iter()
-                .filter(|c| non_cycle.contains(c) && self.ast_cache.contains_key(c))
-                .collect()
-        };
-
         if !cycle_dependents.is_empty() {
             let (dep_changes, dep_projections, dep_errors, dep_proj_deltas, dep_nested_cycles) =
                 self.topo_evaluate_pass(
@@ -321,11 +297,26 @@ impl ComputeCore {
                     }
                     let all_cycle_cells: Vec<CellId> = cycle_cell_set.iter().copied().collect();
                     if self.iterative_calc {
+                        let iteration_cells = self.iteration_cells_for_cycles(
+                            &all_cycle_cells,
+                            &cycle_cell_set,
+                            &cycle_dependents,
+                        );
+                        Self::seed_cycle_cells_for_iteration(mirror, &all_cycle_cells);
                         let extra_result =
-                            self.evaluate_cycles_iterative(mirror, &all_cycle_cells, deadline)?;
+                            self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?;
                         iterative_result = Some(extra_result);
+                        self.replace_final_changes_for_cells(
+                            mirror,
+                            &mut changed_cells,
+                            &iteration_cells,
+                            &cycle_cell_set,
+                        );
                     } else {
-                        self.evaluate_cycles_single_pass(mirror, &all_cycle_cells)?;
+                        Self::materialize_blank_cycle_cells_as_circular_errors(
+                            mirror,
+                            &all_cycle_cells,
+                        );
                     }
                 }
             }
@@ -441,7 +432,7 @@ impl ComputeCore {
                 path: if self.iterative_calc {
                     "iterative"
                 } else {
-                    "single_pass"
+                    "circular_error"
                 },
             });
         }
@@ -480,27 +471,37 @@ impl ComputeCore {
         errors.extend(predecessor_result.2);
         all_projection_deltas.extend(predecessor_result.3);
 
-        // --- Pass 2: Seed and evaluate cycle cells ---
-        for &cell_id in &cycle_cells {
-            let current = mirror
-                .get_cell_value(&cell_id)
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            let should_reset = matches!(
-                current,
-                CellValue::Null | CellValue::Error(CellError::Circ, _)
-            ) || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
-            if should_reset {
-                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
-            }
-        }
+        let downstream_levels: Vec<Vec<CellId>> = downstream_levels
+            .into_iter()
+            .map(|level| {
+                level
+                    .into_iter()
+                    .filter(|c| !cycle_cell_set.contains(c) && self.ast_cache.contains_key(c))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|level: &Vec<CellId>| !level.is_empty())
+            .collect();
+        let downstream_cells: Vec<CellId> = downstream_levels
+            .iter()
+            .flat_map(|level| level.iter().copied())
+            .collect();
 
+        // --- Pass 2: Resolve cycle cells ---
         let mut iterative_result: Option<IterativeResult> = None;
         if self.iterative_calc {
+            let iteration_cells =
+                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &downstream_cells);
+            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &cycle_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+            self.replace_final_changes_for_cells(
+                mirror,
+                &mut changed_cells,
+                &iteration_cells,
+                &cycle_cell_set,
+            );
         } else {
-            self.evaluate_cycles_single_pass(mirror, &cycle_cells)?;
+            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
         }
 
         for &cell_id in &cycle_cells {
@@ -529,17 +530,6 @@ impl ComputeCore {
         // Use pre-computed downstream levels instead of recomputing via
         // affected_cells (saves 2 more barrier_topo calls).
         super::recalc::clear_thread_local_caches();
-
-        let downstream_levels: Vec<Vec<CellId>> = downstream_levels
-            .into_iter()
-            .map(|level| {
-                level
-                    .into_iter()
-                    .filter(|c| !cycle_cell_set.contains(c) && self.ast_cache.contains_key(c))
-                    .collect::<Vec<_>>()
-            })
-            .filter(|level: &Vec<CellId>| !level.is_empty())
-            .collect();
 
         if !downstream_levels.is_empty() {
             let downstream_result = self.topo_evaluate_pass_with_levels(
@@ -641,60 +631,45 @@ impl ComputeCore {
         })
     }
 
-    /// Single-pass evaluation: evaluate each cycle cell exactly once.
-    ///
-    /// Matches Excel's behavior when iterative calculation is OFF (default).
-    /// Each formula is evaluated with whatever values its dependencies currently
-    /// have — cached values from the XLSX or results from earlier cells in the
-    /// evaluation order. The formula's natural result (including errors from
-    /// #REF! tokens, type mismatches, etc.) becomes the cell's final value.
-    fn evaluate_cycles_single_pass(
-        &mut self,
+    fn seed_cycle_cells_for_iteration(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+        for &cell_id in cycle_cells {
+            let current = mirror
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            let should_reset = matches!(current, CellValue::Null | CellValue::Error(_, _))
+                || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
+            if should_reset {
+                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+            }
+        }
+    }
+
+    fn materialize_blank_cycle_cells_as_circular_errors(
         mirror: &mut CellMirror,
         cycle_cells: &[CellId],
-    ) -> Result<(), ComputeError> {
-        // Clear caches before the single pass
-        compute_functions::helpers::sorted_cache::clear();
-        compute_functions::helpers::frequency_cache::clear();
-        compute_functions::helpers::bitmask_cache::clear();
-        compute_functions::helpers::column_index::clear();
-        compute_functions::helpers::sumifs_result_cache::clear();
-        crate::eval::cache::subexpr_cache::clear();
-        crate::mirror::clear_caches();
-
+    ) {
         for &cell_id in cycle_cells {
-            let ast = match self.ast_cache.get(&cell_id) {
-                Some(entry) => entry.ast.clone(),
-                None => continue,
-            };
-
-            let sheet_id = match self.find_sheet_for_cell(mirror, &cell_id) {
-                Some(sid) => sid,
-                None => continue,
-            };
-
-            let mut ctx = MirrorContext::new(mirror, cell_id, sheet_id)
-                .with_sumifs_cache_epoch(self.current_sumifs_cache_epoch());
-            ctx.access.formula_text_provider = self.formula_text_provider();
-            #[cfg(feature = "native")]
-            {
-                ctx.workbook_cache = Some(&self.workbook_cache);
+            let current = mirror
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            if matches!(current, CellValue::Null) {
+                mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
             }
-            let mut new_value =
-                match crate::eval::sync_block_on(Evaluator::evaluate(&ast, &ctx, &ctx)) {
-                    Ok(val) => val,
-                    Err(_) => continue,
-                };
-
-            // Excel coercion: a formula whose final result is Null produces Number(0).
-            if matches!(new_value, CellValue::Null) {
-                new_value = CellValue::number(0.0);
-            }
-
-            mirror.set_value_mut(&cell_id, new_value);
         }
+    }
 
-        Ok(())
+    fn seed_error_cells_for_iteration(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+        for &cell_id in cycle_cells {
+            let current = mirror
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            if matches!(current, CellValue::Error(_, _)) {
+                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+            }
+        }
     }
 
     /// Build an optimal evaluation order for cycle cells using a local
@@ -868,6 +843,8 @@ impl ComputeCore {
             compute_functions::helpers::sumifs_result_cache::clear();
             crate::eval::cache::subexpr_cache::clear();
             crate::mirror::clear_caches();
+
+            Self::seed_error_cells_for_iteration(mirror, cycle_cells);
 
             let mut max_delta: f64 = 0.0;
 

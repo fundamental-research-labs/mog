@@ -240,6 +240,78 @@ export class ViewportFetchManager {
     vpState.prefetchDirtyState = { staleCells: new Set(), dirtyRegion: null };
   }
 
+  private resolveForceRefreshTarget(coordinator: ViewportCoordinator): {
+    sheetId: string;
+    fetchBounds: PrefetchBounds;
+    visibleBounds: PrefetchBounds | null;
+  } | null {
+    const bufferBounds = coordinator.base.getBounds();
+    const visibleWindow = coordinator.base.getVisibleWindow();
+
+    if (bufferBounds && coordinator.base.hasBuffer()) {
+      return {
+        sheetId: bufferBounds.sheetId,
+        fetchBounds: this.stripSheetId(bufferBounds),
+        visibleBounds: visibleWindow ? this.stripSheetId(visibleWindow) : null,
+      };
+    }
+
+    if (!visibleWindow) return null;
+
+    const visibleBounds = this.stripSheetId(visibleWindow);
+    const vpState = this.perViewportState.get(coordinator.viewportId);
+    const prefetchConfig = prefetchConfigForMovement(
+      vpState?.scrollBehavior ?? 'free',
+      visibleBounds,
+      vpState?.lastVisibleBounds ?? null,
+    );
+    const sheetDims = { maxRow: 1048576, maxCol: 16384 };
+
+    return {
+      sheetId: visibleWindow.sheetId,
+      fetchBounds: computePrefetchBounds(visibleBounds, sheetDims, prefetchConfig),
+      visibleBounds,
+    };
+  }
+
+  private async forceRefreshCoordinator(coordinator: ViewportCoordinator): Promise<void> {
+    const target = this.resolveForceRefreshTarget(coordinator);
+    if (!target) return;
+
+    const fetchSeq = (this.perViewportFetchSeq.get(coordinator.viewportId) ?? 0) + 1;
+    this.perViewportFetchSeq.set(coordinator.viewportId, fetchSeq);
+
+    const { sheetId, fetchBounds } = target;
+    await this.syncViewportRegistration(coordinator.viewportId, sheetId, fetchBounds);
+    if (this.perViewportFetchSeq.get(coordinator.viewportId) !== fetchSeq) {
+      return;
+    }
+
+    const fetchEpoch = coordinator.startFetch();
+    const buffer: Uint8Array = await this.transport.call<Uint8Array>(
+      'compute_get_viewport_binary',
+      {
+        docId: this.docId,
+        sheetId,
+        startRow: fetchBounds.startRow,
+        startCol: fetchBounds.startCol,
+        endRow: fetchBounds.endRow + 1,
+        endCol: fetchBounds.endCol + 1,
+        showFormulas: this.getShowFormulasForSheet(sheetId),
+      },
+    );
+    if (this.perViewportFetchSeq.get(coordinator.viewportId) !== fetchSeq) {
+      return;
+    }
+    coordinator.commitFetch(buffer, fetchEpoch);
+    this.markForceRefreshedViewportFresh(coordinator);
+
+    const vpState = this.perViewportState.get(coordinator.viewportId);
+    if (vpState && target.visibleBounds) {
+      vpState.lastVisibleBounds = target.visibleBounds;
+    }
+  }
+
   // ===========================================================================
   // Public API (moved from ComputeCore)
   // ===========================================================================
@@ -467,32 +539,7 @@ export class ViewportFetchManager {
     const refreshes: Promise<void>[] = [];
 
     for (const coordinator of coordinators) {
-      // Use the coordinator's current buffer bounds to know what region to re-fetch.
-      const bounds = coordinator.base.getBounds();
-      if (!bounds || !coordinator.base.hasBuffer()) continue;
-
-      refreshes.push(
-        (async () => {
-          await this.syncViewportRegistration(coordinator.viewportId, bounds.sheetId, bounds);
-
-          const fetchEpoch = coordinator.startFetch();
-          // getBounds() returns inclusive endRow/endCol; Rust expects exclusive end.
-          const buffer: Uint8Array = await this.transport.call<Uint8Array>(
-            'compute_get_viewport_binary',
-            {
-              docId: this.docId,
-              sheetId: bounds.sheetId,
-              startRow: bounds.startRow,
-              startCol: bounds.startCol,
-              endRow: bounds.endRow + 1,
-              endCol: bounds.endCol + 1,
-              showFormulas: this.getShowFormulasForSheet(bounds.sheetId),
-            },
-          );
-          coordinator.commitFetch(buffer, fetchEpoch);
-          this.markForceRefreshedViewportFresh(coordinator);
-        })(),
-      );
+      refreshes.push(this.forceRefreshCoordinator(coordinator));
     }
 
     await Promise.all(refreshes);
@@ -509,30 +556,10 @@ export class ViewportFetchManager {
     const refreshes: Promise<void>[] = [];
 
     for (const coordinator of coordinators) {
-      const bounds = coordinator.base.getBounds();
-      if (!bounds || !coordinator.base.hasBuffer() || bounds.sheetId !== sheetId) continue;
+      const target = this.resolveForceRefreshTarget(coordinator);
+      if (!target || target.sheetId !== sheetId) continue;
 
-      refreshes.push(
-        (async () => {
-          await this.syncViewportRegistration(coordinator.viewportId, bounds.sheetId, bounds);
-
-          const fetchEpoch = coordinator.startFetch();
-          const buffer: Uint8Array = await this.transport.call<Uint8Array>(
-            'compute_get_viewport_binary',
-            {
-              docId: this.docId,
-              sheetId: bounds.sheetId,
-              startRow: bounds.startRow,
-              startCol: bounds.startCol,
-              endRow: bounds.endRow + 1,
-              endCol: bounds.endCol + 1,
-              showFormulas: this.getShowFormulasForSheet(bounds.sheetId),
-            },
-          );
-          coordinator.commitFetch(buffer, fetchEpoch);
-          this.markForceRefreshedViewportFresh(coordinator);
-        })(),
-      );
+      refreshes.push(this.forceRefreshCoordinator(coordinator));
     }
 
     await Promise.all(refreshes);

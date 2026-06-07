@@ -12,7 +12,12 @@ export type {
   ChangeTrackOptions,
   WorksheetChanges,
 } from './changes';
-export type { ChartImageExporter, WorksheetCharts } from './charts';
+export type {
+  ChartImageExporter,
+  ChartReadMaterialization,
+  ChartReadOptions,
+  WorksheetCharts,
+} from './charts';
 export type { WorksheetComments } from './comments';
 export type { WorksheetCustomProperties } from './custom-properties';
 export type {
@@ -27,6 +32,12 @@ export type {
   FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
+  FilterCompactListOptions,
+  FilterCompactListScope,
+  FilterHeaderInfoEntry,
+  FilterListOptions,
+  FilterListScope,
+  FilterSummaryInfo,
   WorksheetFilters,
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';
@@ -38,13 +49,7 @@ export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
-export type {
-  PivotCalculatedFieldSpec,
-  PivotCreateConfig,
-  PivotPlacementPatch,
-  PivotPlacementSpec,
-  WorksheetPivots,
-} from './pivots';
+export type { ImportedPivotViewRecord, PivotCreateConfig, WorksheetPivots } from './pivots';
 export type { WorksheetPrint } from './print';
 export type {
   AllowEditRange,

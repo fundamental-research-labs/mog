@@ -132,7 +132,7 @@ fn test_stable_equilibrium_multiple_rows() {
 }
 
 /// Same as Test 9 (PPA pattern) but with iterative_calc = false.
-/// With always-converge, cached values should be preserved regardless of the flag.
+/// Numeric cached cycle values should be preserved when iterative calc is off.
 ///   C1 = 169672, D1 = =E1-C1 (cached 0), E1 = =C1+D1 (cached 169672)
 #[test]
 fn test_stable_equilibrium_no_iterative_flag() {

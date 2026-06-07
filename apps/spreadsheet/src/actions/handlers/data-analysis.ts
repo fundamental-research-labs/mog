@@ -18,7 +18,14 @@ import type {
 import type { SpellingError } from '../../ui-store/slices/dialogs/spelling-dialog';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
 import { guardBridgeMutation } from './bridge-error-guard';
+import { createForecastSheetPlan, uniqueForecastSheetName } from './forecast-sheet';
 import { getUIStore } from './handler-utils';
+
+export {
+  CLOSE_CONSOLIDATE_DIALOG,
+  EXECUTE_CONSOLIDATE,
+  OPEN_CONSOLIDATE_DIALOG,
+} from './data-consolidate';
 
 // =============================================================================
 // Goal Seek Dialog Handlers
@@ -85,21 +92,10 @@ export const EXECUTE_GOAL_SEEK: AsyncActionHandler = async (deps): Promise<Actio
   try {
     const ws = deps.workbook.getSheetById(state.activeSheetId);
     const result = await ws.whatIf.goalSeek(setCell, targetValue, byChangingCell);
-    let achievedValue = result.value;
-    try {
-      const setPos = parseA1(setCell.toUpperCase());
-      const targetCell = await ws.getCell(setPos.row, setPos.col);
-      const targetCellValue = targetCell?.value;
-      if (typeof targetCellValue === 'number' && Number.isFinite(targetCellValue)) {
-        achievedValue = targetCellValue;
-      }
-    } catch {
-      // Keep the solver result if the target cell cannot be read as a finite raw numeric value.
-    }
     state.setGoalSeekResult({
       found: result.found,
       solutionValue: result.value,
-      achievedValue,
+      achievedValue: result.achievedValue ?? result.value,
       iterations: result.iterations ?? 0,
     });
   } catch (err) {
@@ -127,6 +123,7 @@ export const APPLY_GOAL_SEEK_RESULT: AsyncActionHandler = async (deps): Promise<
   if (!result || !result.found || result.solutionValue === undefined) {
     return { handled: true, error: 'No valid solution to apply' };
   }
+  const solutionValue = result.solutionValue;
 
   // Parse changing cell reference
   let changingPos: { row: number; col: number };
@@ -142,7 +139,7 @@ export const APPLY_GOAL_SEEK_RESULT: AsyncActionHandler = async (deps): Promise<
   // Apply the solution value via unified Worksheet API
   const ws = deps.workbook.getSheetById(sheetId);
   const ok = await guardBridgeMutation(() =>
-    ws.setCell(changingPos.row, changingPos.col, String(result.solutionValue)),
+    ws.setCell(changingPos.row, changingPos.col, solutionValue),
   );
   if (!ok) return { handled: true };
 
@@ -165,49 +162,25 @@ export const CANCEL_GOAL_SEEK: ActionHandler = (deps): ActionResult => {
 export const OPEN_FORECAST_SHEET_DIALOG: AsyncActionHandler = async (
   deps,
 ): Promise<ActionResult> => {
-  const activeCell = deps.accessors?.selection?.getActiveCell?.() ?? null;
-  const ranges = deps.accessors?.selection?.getRanges?.() ?? [];
-  const rangeLabel =
-    ranges.length === 1
-      ? `${toA1(ranges[0].startRow, ranges[0].startCol)}:${toA1(ranges[0].endRow, ranges[0].endCol)}`
-      : activeCell
-        ? toA1(activeCell.row, activeCell.col)
-        : 'the selected range';
+  const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
+  const plan = await createForecastSheetPlan(deps, ws);
+
+  if (plan.values.length > 0) {
+    const ok = await guardBridgeMutation(() =>
+      deps.workbook.undoGroup(async () => {
+        const forecastSheetName = await uniqueForecastSheetName(deps.workbook);
+        const forecastSheet = await deps.workbook.sheets.add(forecastSheetName);
+        await forecastSheet.setRange(0, 0, plan.values);
+      }),
+    );
+    if (ok) return { handled: true };
+  }
 
   await deps.platform.dialogs.alert(
-    `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${rangeLabel}.`,
+    `Forecast Sheet needs a selected time series with date/time values and numeric values. Current selection: ${plan.rangeLabel}.`,
     { type: 'info' },
   );
   return { handled: true };
-};
-
-// =============================================================================
-// Consolidate Dialog Handlers
-// =============================================================================
-
-/**
- * Open Consolidate dialog
- */
-export const OPEN_CONSOLIDATE_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().openConsolidateDialog();
-  return { handled: true };
-};
-
-/**
- * Close Consolidate dialog
- */
-export const CLOSE_CONSOLIDATE_DIALOG: ActionHandler = (deps): ActionResult => {
-  getUIStore(deps).getState().closeConsolidateDialog();
-  return { handled: true };
-};
-
-/**
- * Execute Consolidation
- * Note: Actual consolidation would be implemented in a domain module
- */
-export const EXECUTE_CONSOLIDATE: ActionHandler = (_deps): ActionResult => {
-  // TODO: Implement actual consolidation via domain module
-  return { handled: false, reason: 'not_implemented' };
 };
 
 // =============================================================================

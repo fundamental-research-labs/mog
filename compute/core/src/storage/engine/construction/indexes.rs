@@ -359,7 +359,7 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
         .collect();
 
     let mut hidden_rows = dimensions::get_hidden_rows(storage.doc(), storage.sheets(), sheet_id);
-    hidden_rows.extend(grouping::get_rows_hidden_by_collapsed_groups(
+    hidden_rows.extend(grouping::get_rows_hidden_by_structural_groups(
         storage.doc(),
         storage.sheets(),
         sheet_id,
@@ -368,7 +368,7 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
     hidden_rows.dedup();
 
     let mut hidden_cols = dimensions::get_hidden_columns(storage.doc(), storage.sheets(), sheet_id);
-    hidden_cols.extend(grouping::get_columns_hidden_by_collapsed_groups(
+    hidden_cols.extend(grouping::get_columns_hidden_by_structural_groups(
         storage.doc(),
         storage.sheets(),
         sheet_id,

@@ -456,6 +456,7 @@ describe('renderCached — sync paint contract', () => {
     const bridge = new ChartBridge(ctx);
 
     const result = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      kind: 'raster',
       format: 'png',
       width: 600,
       height: 400,
@@ -463,6 +464,15 @@ describe('renderCached — sync paint contract', () => {
       physicalWidth: 600,
       physicalHeight: 400,
       backgroundColor: '#ffffff',
+      fittingMode: 'fill',
+      frame: {
+        exportWidth: 600,
+        exportHeight: 400,
+        contentX: 0,
+        contentY: 0,
+        contentWidth: 600,
+        contentHeight: 400,
+      },
     });
 
     expect('code' in result).toBe(true);
@@ -576,6 +586,7 @@ describe('renderCached — sync paint contract', () => {
     bridge.onCacheUpdate((chartId) => cacheUpdates.push(chartId));
     const dirtyKeysBefore = renderCache.getDirtyChartKeys();
     const exportOptions: ChartExportOptionsSnapshot = {
+      kind: 'raster',
       format: 'png',
       width: 640,
       height: 360,
@@ -583,6 +594,15 @@ describe('renderCached — sync paint contract', () => {
       physicalHeight: 360,
       pixelRatio: 1,
       backgroundColor: '#ffffff',
+      fittingMode: 'fill',
+      frame: {
+        exportWidth: 640,
+        exportHeight: 360,
+        contentX: 0,
+        contentY: 0,
+        contentWidth: 640,
+        contentHeight: 360,
+      },
     };
 
     const marksAtSize = await bridge.getMarksAtSize(SHEET_A, CHART_1, 640, 360);
@@ -1588,6 +1608,7 @@ describe('resolveChartData imported visibility semantics', () => {
     const bridge = new ChartBridge(ctx);
 
     const snapshot = await bridge.getRenderSnapshotAtSize(SHEET_A, CHART_1, 600, 400, {
+      kind: 'raster',
       format: 'png',
       width: 600,
       height: 400,
@@ -1595,6 +1616,15 @@ describe('resolveChartData imported visibility semantics', () => {
       physicalWidth: 600,
       physicalHeight: 400,
       backgroundColor: '#ffffff',
+      fittingMode: 'fill',
+      frame: {
+        exportWidth: 600,
+        exportHeight: 400,
+        contentX: 0,
+        contentY: 0,
+        contentWidth: 600,
+        contentHeight: 400,
+      },
     });
 
     expect('code' in snapshot).toBe(false);

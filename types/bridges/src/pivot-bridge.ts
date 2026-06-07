@@ -23,6 +23,7 @@ import type {
   PivotField,
   PivotFieldItems,
   PivotFieldArea,
+  PivotExpansionState,
   PivotKernelMutationReceipt,
   PivotMemberKey,
   PivotPlacementMutationReceipt,
@@ -79,6 +80,41 @@ export interface PivotCacheStats {
   }>;
 }
 
+export type ImportedPivotSourceKind = 'promotedImport' | 'unsupportedImport';
+export type ImportedPivotAssociationStatus = 'promoted' | 'unsupported' | 'deleted';
+
+export interface ImportedPivotCapabilities {
+  canEditFields: boolean;
+  canReorderFields: boolean;
+  canRemoveFields: boolean;
+  canChangeAggregate: boolean;
+  canRefresh: boolean;
+  canDelete: boolean;
+  canExport: boolean;
+  unsupportedReason?: string;
+}
+
+export interface ImportedPivotRenderedRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+  ref?: string;
+}
+
+export interface ImportedPivotViewRecord {
+  sourceKind: ImportedPivotSourceKind;
+  status: ImportedPivotAssociationStatus;
+  importIdentity: string;
+  outputSheetId: string;
+  sourceSheetId?: string;
+  config: PivotTableConfig;
+  result?: PivotTableResult;
+  capabilities: ImportedPivotCapabilities;
+  unsupportedReason?: string;
+  renderedRange?: ImportedPivotRenderedRange;
+}
+
 // =============================================================================
 // Pivot Bridge Interface
 // =============================================================================
@@ -122,6 +158,14 @@ export interface IPivotBridge {
    * @returns Array of pivot table configurations
    */
   getAllPivots(sheetId: string): Promise<PivotTableConfig[]>;
+
+  /**
+   * Get persisted imported pivot records displayed on a sheet.
+   *
+   * Promoted imports include their live native config and editable capabilities.
+   * Unsupported imports include a preserved read-only config and explicit reason.
+   */
+  getImportedPivotViewRecords(sheetId: SheetId): Promise<ImportedPivotViewRecord[]>;
 
   /**
    * Update a pivot table configuration by merging partial updates.
@@ -319,6 +363,17 @@ export interface IPivotBridge {
     memberPath: PivotMemberKey[],
     expanded: boolean,
   ): Promise<PivotKernelMutationReceipt>;
+
+  toggleExpanded(
+    sheetId: SheetId,
+    pivotId: string,
+    headerKey: string,
+    isRow: boolean,
+  ): Promise<boolean>;
+
+  setAllExpanded(pivotId: string, expanded: boolean): Promise<void>;
+
+  getExpansionState(pivotId: string): Promise<PivotExpansionState>;
 
   // ===========================================================================
   // Pivot Items

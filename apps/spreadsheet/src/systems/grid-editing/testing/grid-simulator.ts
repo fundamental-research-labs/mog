@@ -177,6 +177,9 @@ export interface GridSimulator {
   /** Get the active cell */
   activeCell(): CellCoord;
 
+  /** Get the cell currently owned by the editor */
+  editingCell(): CellCoord | null;
+
   /** Get all selection ranges */
   selectionRanges(): CellRange[];
 
@@ -393,6 +396,10 @@ export function createGridSimulator(options?: SimulatorOptions): GridSimulator {
 
     activeCell() {
       return accessors.selection.getActiveCell()!;
+    },
+
+    editingCell() {
+      return system.access.actors.editor.getSnapshot().context.editingCell;
     },
 
     selectionRanges() {

@@ -71,7 +71,7 @@ describe('Cell click during editing', () => {
     expect(sim.isFormulaEditing()).toBe(true);
     expect(sim.isEditing()).toBe(true);
     expect(sim.editorValue()).toBe('=SUM(D3');
-    // Selection point-mode moves to the referenced cell while editing remains open.
+    expect(sim.editingCell()).toEqual({ row: 0, col: 0 });
     expect(sim.activeCell()).toEqual({ row: 2, col: 3 });
   });
 

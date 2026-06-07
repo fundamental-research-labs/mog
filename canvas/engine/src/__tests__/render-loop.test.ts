@@ -215,6 +215,60 @@ describe('RenderLoop', () => {
     loop.stop();
   });
 
+  it('calls beginFrame once before rendering all per-region passes', () => {
+    const host = createMockCanvasHost(1);
+    const registry = new LayerRegistry();
+    const scheduler = new PriorityScheduler();
+    const loop = new RenderLoop({ host: host as any, registry, scheduler });
+    const callOrder: string[] = [];
+
+    const layer = createMockLayer({
+      id: 'cells',
+      zIndex: 100,
+      canvas: 0,
+      renderMode: 'per-region',
+      beginFrame: jest.fn(() => {
+        callOrder.push('begin');
+      }),
+      render: jest.fn((_ctx, region) => {
+        callOrder.push(`render:${region.id}`);
+      }),
+    });
+    registry.register(layer);
+
+    loop.setLayout({
+      regions: [
+        {
+          id: 'frozen-row',
+          bounds: { x: 0, y: 0, width: 800, height: 25 },
+          viewportOrigin: { x: 0, y: 0 },
+          scrollOffset: { x: 0, y: 0 },
+          zoom: 1,
+          metadata: undefined,
+        },
+        {
+          id: 'main',
+          bounds: { x: 0, y: 25, width: 800, height: 575 },
+          viewportOrigin: { x: 0, y: 25 },
+          scrollOffset: { x: 0, y: 0 },
+          zoom: 1,
+          metadata: undefined,
+        },
+      ],
+      contentSize: { width: 800, height: 600 },
+      maxScroll: { x: 0, y: 0 },
+    });
+
+    loop.start();
+    flushRaf(16.67);
+
+    expect(layer.beginFrame).toHaveBeenCalledTimes(1);
+    expect(layer.render).toHaveBeenCalledTimes(2);
+    expect(callOrder).toEqual(['begin', 'render:frozen-row', 'render:main']);
+
+    loop.stop();
+  });
+
   it('renders once-mode layers without clip', () => {
     const host = createMockCanvasHost(1);
     const registry = new LayerRegistry();

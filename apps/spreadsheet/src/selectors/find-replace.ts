@@ -49,7 +49,5 @@ export const findReplaceSelectors = {
   canNavigate: (state: FindReplaceState): boolean =>
     state.matches('hasResults') && state.context.results.length > 0,
   canReplace: (state: FindReplaceState): boolean =>
-    state.matches('hasResults') &&
-    state.context.results.length > 0 &&
-    state.context.currentIndex >= 0,
+    state.matches('hasResults') && state.context.results.length > 0,
 };

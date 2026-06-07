@@ -39,11 +39,12 @@ import type { CellAnchor } from '@mog/types-objects/objects/floating-objects';
  * - 'button': Click action with optional cell write
  * - 'comboBox': Dropdown selection with cell-stored index
  * - 'listBox': Visible list selection linked to a cell
+ * - 'scrollBar': Numeric range scrollbar linked to a cell
+ * - 'spinner': Numeric increment/decrement control linked to a cell
+ * - 'slider': Numeric range control linked to a cell
  *
  * Future types (not yet implemented):
  * - 'radioButton': Group of mutually exclusive options
- * - 'slider': Numeric range control (different from schema slider)
- * - 'spinner': Numeric increment/decrement control
  */
 export type FormControlType =
   | 'checkbox'
@@ -51,6 +52,7 @@ export type FormControlType =
   | 'comboBox'
   | 'listBox'
   | 'radioButton'
+  | 'scrollBar'
   | 'slider'
   | 'spinner';
 
@@ -317,7 +319,7 @@ export interface RadioButtonControl extends FormControlBase {
 }
 
 // =============================================================================
-// Slider Control (Future)
+// Numeric Controls
 // =============================================================================
 
 /**
@@ -325,8 +327,6 @@ export interface RadioButtonControl extends FormControlBase {
  *
  * Different from schema-based slider (which is an in-cell editor).
  * This is a standalone form control that can be placed anywhere.
- *
- * NOT YET IMPLEMENTED
  */
 export interface SliderControl extends FormControlBase {
   type: 'slider';
@@ -350,14 +350,36 @@ export interface SliderControl extends FormControlBase {
   orientation?: 'horizontal' | 'vertical';
 }
 
-// =============================================================================
-// Spinner Control (Future)
-// =============================================================================
+/**
+ * ScrollBar control - Excel legacy form-control scrollbar.
+ *
+ * The linked cell stores the current numeric value. Imported XLSX controls
+ * populate min/max/step/page/orientation from OOXML control properties.
+ */
+export interface ScrollBarControl extends FormControlBase {
+  type: 'scrollBar';
+
+  /** Cell that holds the numeric value */
+  linkedCellId: CellId;
+
+  /** Minimum value */
+  min: number;
+
+  /** Maximum value */
+  max: number;
+
+  /** Small-change increment */
+  step: number;
+
+  /** Large-change/page increment */
+  page?: number;
+
+  /** Orientation */
+  orientation?: 'horizontal' | 'vertical';
+}
 
 /**
  * Spinner control - numeric increment/decrement.
- *
- * NOT YET IMPLEMENTED
  */
 export interface SpinnerControl extends FormControlBase {
   type: 'spinner';
@@ -382,10 +404,17 @@ export interface SpinnerControl extends FormControlBase {
 /**
  * Union of all implemented form control types.
  *
- * Currently: Checkbox, Button, ComboBox, ListBox
- * Future: RadioButton, Slider, Spinner
+ * Currently: Checkbox, Button, ComboBox, ListBox, ScrollBar, Slider, Spinner
+ * Future: RadioButton
  */
-export type FormControl = CheckboxControl | ButtonControl | ComboBoxControl | ListBoxControl;
+export type FormControl =
+  | CheckboxControl
+  | ButtonControl
+  | ComboBoxControl
+  | ListBoxControl
+  | ScrollBarControl
+  | SliderControl
+  | SpinnerControl;
 
 /**
  * Union of all form control types (including future).
@@ -396,6 +425,7 @@ export type FormControlAny =
   | ComboBoxControl
   | ListBoxControl
   | RadioButtonControl
+  | ScrollBarControl
   | SliderControl
   | SpinnerControl;
 

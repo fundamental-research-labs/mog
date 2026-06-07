@@ -429,6 +429,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
     // Get or create filter for the table
     const tableSheetId = toSheetId(table.sheetId);
+    await this.ctx.awaitMaterialized?.('allSheets');
     let filter = await Filters.getTableFilter(this.ctx, tableSheetId, table.id);
     if (!filter) {
       if (await getActiveProtectionOptions(this.ctx, tableSheetId)) {

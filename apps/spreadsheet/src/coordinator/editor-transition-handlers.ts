@@ -64,7 +64,12 @@ function saveOriginSelectionAfterCommit(
     return;
   }
 
-  const targetCell = moveCell(originCell, prevState.context.commitDirection);
+  const commitKey = prevState.context.commitKey;
+  // Cross-sheet Enter commits return to the edited formula cell; Tab preserves tab navigation.
+  const shouldAdvanceSelection = commitKey === 'tab' || commitKey === 'shift-tab';
+  const targetCell = shouldAdvanceSelection
+    ? moveCell(originCell, prevState.context.commitDirection)
+    : originCell;
   const targetRange = {
     startRow: targetCell.row,
     startCol: targetCell.col,

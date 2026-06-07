@@ -8,15 +8,33 @@ use cell_types::SheetId;
 use crate::hex::{parse_cell_id, parse_sheet_id};
 use crate::schema::{
     KEY_CELL_PROPERTIES, KEY_CELLS, KEY_COL_FORMATS, KEY_COL_WIDTHS, KEY_COMMENTS,
-    KEY_CONDITIONAL_FORMAT, KEY_FILTERS, KEY_FLOATING_OBJECTS, KEY_GROUPING, KEY_HIDDEN_COLS,
-    KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PIVOT_TABLES, KEY_PROPERTIES, KEY_ROW_FORMATS,
-    KEY_ROW_HEIGHTS, KEY_SORTING, KEY_SPARKLINES,
+    KEY_CONDITIONAL_FORMAT, KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS, KEY_FLOATING_OBJECTS,
+    KEY_GROUPING, KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS, KEY_MERGES, KEY_PIVOT_TABLES, KEY_PROPERTIES,
+    KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_SORTING, KEY_SPARKLINES,
 };
 
 use super::changes::*;
 use super::helpers::{
     any_to_cell_value, entry_change_kind, extract_old_value_from_entry, extract_sheet_id,
 };
+
+fn comment_cell_ref_from_out(out: &Out, txn: &TransactionMut) -> Option<String> {
+    match out {
+        Out::YMap(map) => domain_types::yrs_schema::comment::from_yrs_map(map, txn)
+            .map(|comment| comment.cell_ref),
+        _ => None,
+    }
+}
+
+fn comment_cell_ref_from_change(change: &EntryChange, txn: &TransactionMut) -> Option<String> {
+    match change {
+        EntryChange::Inserted(new) => comment_cell_ref_from_out(new, txn),
+        EntryChange::Updated(old, new) => {
+            comment_cell_ref_from_out(new, txn).or_else(|| comment_cell_ref_from_out(old, txn))
+        }
+        EntryChange::Removed(old) => comment_cell_ref_from_out(old, txn),
+    }
+}
 
 pub(super) fn observe_sheets_events(
     buffer: &mut DocumentChanges,
@@ -227,6 +245,7 @@ pub(super) fn observe_sheets_events(
                                 buffer.comments.push(CommentCellChange {
                                     sheet_id,
                                     key: key.to_string(),
+                                    cell_ref: comment_cell_ref_from_change(change, txn),
                                     kind: entry_change_kind(change),
                                 });
                             }
@@ -236,13 +255,14 @@ pub(super) fn observe_sheets_events(
                             buffer.comments.push(CommentCellChange {
                                 sheet_id,
                                 key: k.to_string(),
+                                cell_ref: None,
                                 kind: CellChangeKind::Modified,
                             });
                         }
                     }
 
                     // --- filters ---
-                    k if k == KEY_FILTERS => {
+                    k if k == KEY_FILTERS || k == KEY_FILTER_METADATA_BINDINGS => {
                         push_sheet_level_change(
                             &mut buffer.filters,
                             sheet_id,

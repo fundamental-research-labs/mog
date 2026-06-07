@@ -2,10 +2,18 @@ import {
   collectMarks,
   compile,
   configToSpec,
+  type BarGeometryTrace,
+  type CartesianGeometryTrace,
   type ChartConfig,
   type ChartData,
   type ChartSpec,
   type DataRow,
+  type LegendTrace,
+  type PieDoughnutLabelLayoutTrace,
+  type SurfaceApproximationTrace,
+  type StockGlyphTrace,
+  type TextMeasurementContext,
+  type ThreeDApproximationTrace,
 } from '@mog/charts';
 import type {
   ChartError,
@@ -62,6 +70,13 @@ export interface CompileChartMarksResult {
   plotArea: { width: number; height: number } | null;
   compilerPathId: ChartCompilerPathId;
   compileInput: ChartSpec;
+  barGeometryTrace?: BarGeometryTrace;
+  cartesianGeometryTrace?: CartesianGeometryTrace;
+  stockGlyphTrace?: StockGlyphTrace;
+  legendTrace?: LegendTrace;
+  pieDoughnutLabelLayoutTrace?: PieDoughnutLabelLayoutTrace;
+  threeDApproximationTrace?: ThreeDApproximationTrace;
+  surfaceApproximationTrace?: SurfaceApproximationTrace;
 }
 
 export interface CompileChartRenderSnapshotAtSizeInput {
@@ -169,12 +184,15 @@ function compileChartMarksOutcome(input: CompileChartMarksInput): CompileChartMa
     const spec = configToSpec(input.config, input.chartData);
     stage = 'compile';
     const compileInput = buildCompileInput(spec);
+    const textMeasurementContext = chartTextMeasurementContext();
+    const textMeasurementOption = textMeasurementContext ? { textMeasurementContext } : {};
     const compileResult = input.size
       ? compile(compileInput.spec, undefined, {
           width: input.size.width,
           height: input.size.height,
+          ...textMeasurementOption,
         })
-      : compile(compileInput.spec);
+      : compile(compileInput.spec, undefined, textMeasurementOption);
 
     stage = 'collectMarks';
     const marks = collectMarks(compileResult);
@@ -198,6 +216,13 @@ function compileChartMarksOutcome(input: CompileChartMarksInput): CompileChartMa
           : null,
         compilerPathId: compileInput.compilerPathId,
         compileInput: compileInput.spec,
+        barGeometryTrace: compileResult.barGeometryTrace,
+        cartesianGeometryTrace: compileResult.cartesianGeometry,
+        stockGlyphTrace: compileResult.stockGlyphTrace,
+        legendTrace: compileResult.legendTrace,
+        pieDoughnutLabelLayoutTrace: compileResult.pieDoughnutLabelLayoutTrace,
+        threeDApproximationTrace: compileResult.threeDApproximationTrace,
+        surfaceApproximationTrace: compileResult.surfaceApproximationTrace,
       },
     };
   } catch (cause) {
@@ -275,8 +300,51 @@ export function compileChartRenderSnapshotAtSize(
       renderFrame,
       chartArea: compiled.chartArea,
       plotArea: compiled.plotArea,
+      barGeometryTrace: compiled.barGeometryTrace,
+      cartesianGeometryTrace: compiled.cartesianGeometryTrace,
+      stockGlyphTrace: compiled.stockGlyphTrace,
+      legendTrace: compiled.legendTrace,
+      pieDoughnutLabelLayoutTrace: compiled.pieDoughnutLabelLayoutTrace,
+      threeDApproximationTrace: compiled.threeDApproximationTrace,
+      surfaceApproximationTrace: compiled.surfaceApproximationTrace,
     }),
   };
+}
+
+let cachedTextMeasurementContext: TextMeasurementContext | null | undefined;
+
+function chartTextMeasurementContext(): TextMeasurementContext | undefined {
+  if (cachedTextMeasurementContext !== undefined) {
+    return cachedTextMeasurementContext ?? undefined;
+  }
+
+  cachedTextMeasurementContext = createTextMeasurementContext() ?? null;
+  return cachedTextMeasurementContext ?? undefined;
+}
+
+function createTextMeasurementContext(): TextMeasurementContext | undefined {
+  const offscreenCanvas = (
+    globalThis as {
+      OffscreenCanvas?: new (
+        width: number,
+        height: number,
+      ) => { getContext(type: '2d'): TextMeasurementContext | null };
+    }
+  ).OffscreenCanvas;
+  if (offscreenCanvas) {
+    return new offscreenCanvas(1, 1).getContext('2d') ?? undefined;
+  }
+
+  const documentLike = (
+    globalThis as {
+      document?: {
+        createElement(name: 'canvas'): {
+          getContext(type: '2d'): TextMeasurementContext | null;
+        };
+      };
+    }
+  ).document;
+  return documentLike?.createElement('canvas').getContext('2d') ?? undefined;
 }
 
 function buildCompileInput(spec: ChartSpec): {

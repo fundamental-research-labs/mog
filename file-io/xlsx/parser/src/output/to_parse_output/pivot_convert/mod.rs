@@ -17,7 +17,10 @@ mod source;
 mod value_map;
 
 use crate::domain::pivot::read::{PivotCache, PivotTable};
-use domain_types::domain::pivot::ParsedPivotTable;
+use domain_types::domain::pivot::{
+    ImportedPivotOoxmlIdentityParts, ParsedPivotTable, imported_pivot_ooxml_identity,
+    native_imported_pivot_id,
+};
 use pivot_types::{
     CellRange, FieldId, LayoutForm, OutputLocation, PIVOT_CONFIG_SCHEMA_VERSION,
     PivotFieldPlacementFlat, PivotTableConfig, PivotTableStyle,
@@ -74,7 +77,7 @@ pub(crate) fn parsed_pivot_to_config(
     });
 
     // -- IDs and names --
-    let id = format!("xlsx-pivot-{}", pivot.name);
+    let id = stable_imported_pivot_id(pivot);
     let source_sheet_name = cache
         .source_sheet
         .clone()
@@ -135,6 +138,7 @@ pub(crate) fn parsed_pivot_to_config(
         source_sheet_id: None,
         source_sheet_name,
         source_range,
+        output_sheet_id: None,
         output_sheet_name: sheet_name.to_string(),
         output_location: OutputLocation {
             row: anchor_row,
@@ -190,4 +194,111 @@ pub(crate) fn parsed_pivot_to_config(
         initial_expansion_state,
         ooxml_preservation,
     })
+}
+
+fn stable_imported_pivot_id(pivot: &PivotTable) -> String {
+    let preservation = &pivot.ooxml_preservation;
+    let relationship = preservation.relationship.as_ref();
+
+    let definition_part_path = preservation
+        .definition_part_path
+        .as_deref()
+        .or_else(|| relationship.and_then(|rel| rel.part_path.as_deref()));
+
+    if let Some(import_identity) = imported_pivot_ooxml_identity(ImportedPivotOoxmlIdentityParts {
+        output_worksheet_part_path: preservation.output_worksheet_part_path.as_deref(),
+        output_worksheet_relationship_id: preservation.output_worksheet_relationship_id.as_deref(),
+        definition_part_path,
+        pivot_cache_relationship_id: relationship.and_then(|rel| rel.relationship_id.as_deref()),
+        cache_id: Some(pivot.cache_id),
+    }) {
+        native_imported_pivot_id(&import_identity)
+    } else {
+        let fallback_fingerprint = format!(
+            "missingImportIdentity:outputWorksheetPartPath={};worksheetRelationshipId={};definitionPartPath={};pivotCacheRelationshipId={};cacheId={}",
+            preservation
+                .output_worksheet_part_path
+                .as_deref()
+                .unwrap_or(""),
+            preservation
+                .output_worksheet_relationship_id
+                .as_deref()
+                .unwrap_or(""),
+            definition_part_path.unwrap_or(""),
+            relationship
+                .and_then(|rel| rel.relationship_id.as_deref())
+                .unwrap_or(""),
+            pivot.cache_id,
+        );
+        format!(
+            "xlsx-pivot-missing-import-identity-{:08x}",
+            crc32fast::hash(fallback_fingerprint.as_bytes())
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain_types::domain::pivot::{
+        PivotTableOoxmlPreservation, PivotTableRelationshipPreservation,
+    };
+
+    #[test]
+    fn imported_pivot_id_uses_canonical_ooxml_identity_not_name() {
+        let mut pivot = PivotTable {
+            name: "Pivot A".to_string(),
+            cache_id: 7,
+            ooxml_preservation: PivotTableOoxmlPreservation {
+                output_worksheet_part_path: Some("xl/worksheets/sheet2.xml".to_string()),
+                output_worksheet_relationship_id: Some("rId5".to_string()),
+                definition_part_path: Some("xl/pivotTables/pivotTable3.xml".to_string()),
+                relationship: Some(PivotTableRelationshipPreservation {
+                    relationship_id: Some("rId1".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let id = stable_imported_pivot_id(&pivot);
+        let import_identity = imported_pivot_ooxml_identity(ImportedPivotOoxmlIdentityParts {
+            output_worksheet_part_path: pivot
+                .ooxml_preservation
+                .output_worksheet_part_path
+                .as_deref(),
+            output_worksheet_relationship_id: pivot
+                .ooxml_preservation
+                .output_worksheet_relationship_id
+                .as_deref(),
+            definition_part_path: pivot.ooxml_preservation.definition_part_path.as_deref(),
+            pivot_cache_relationship_id: pivot
+                .ooxml_preservation
+                .relationship
+                .as_ref()
+                .and_then(|rel| rel.relationship_id.as_deref()),
+            cache_id: Some(pivot.cache_id),
+        })
+        .expect("import identity");
+        pivot.name = "Renamed Pivot".to_string();
+
+        assert_eq!(id, stable_imported_pivot_id(&pivot));
+        assert_eq!(id, native_imported_pivot_id(&import_identity));
+    }
+
+    #[test]
+    fn imported_pivot_id_missing_identity_fallback_is_not_name_based() {
+        let mut pivot = PivotTable {
+            name: "Pivot A".to_string(),
+            cache_id: 7,
+            ..Default::default()
+        };
+
+        let id = stable_imported_pivot_id(&pivot);
+        pivot.name = "Renamed Pivot".to_string();
+
+        assert_eq!(id, stable_imported_pivot_id(&pivot));
+        assert!(id.starts_with("xlsx-pivot-missing-import-identity-"));
+    }
 }

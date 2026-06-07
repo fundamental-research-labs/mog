@@ -384,12 +384,24 @@ describe('chart compiler bridge module', () => {
         },
       });
 
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2);
       expect(result.compilerPathId).toBe('wasm-transforms+ts-grammar');
       const compileInput = result.compileInput as LayeredCompileInput;
-      expect(calls[0]?.data).toBe(compileInput.data?.values);
-      expect(compileInput.layer?.[1]?.transform).toBeUndefined();
-      expect(compileInput.layer?.[1]?.data?.values).toBe(transformedTrendlineRows);
+      const regressionCall = calls.find((call) =>
+        Array.isArray(call.transforms)
+          ? call.transforms.some(
+              (transform) =>
+                typeof transform === 'object' && transform !== null && 'regression' in transform,
+            )
+          : false,
+      );
+      const trendlineLayer = compileInput.layer?.find(
+        (layer) =>
+          layer.data && 'values' in layer.data && layer.data.values === transformedTrendlineRows,
+      );
+      expect(regressionCall?.data).toBe(compileInput.data?.values);
+      expect(trendlineLayer?.transform).toBeUndefined();
+      expect(trendlineLayer?.data?.values).toBe(transformedTrendlineRows);
       expect(result.marks.length).toBeGreaterThan(0);
     });
   });

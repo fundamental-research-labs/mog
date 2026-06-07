@@ -21,6 +21,7 @@ fn make_basic_config() -> PivotTableConfig {
         source_sheet_id: None,
         source_sheet_name: "Sheet1".to_string(),
         source_range: CellRange::new(0, 0, 10, 2),
+        output_sheet_id: None,
         output_sheet_name: "PivotSheet".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: vec![

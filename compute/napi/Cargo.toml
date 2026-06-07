@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 compute-core = { path = "../core" }
 # Ergonomic Rust API facade (re-exported for downstream consumers)
 compute-api = { path = "../api" }
+compute-document = { path = "../core/crates/compute-document" }
 formula-types = { path = "../core/crates/types/formula-types" }
 cell-types = { path = "../core/crates/types/cell-types" }
 value-types = { path = "../core/crates/types/value-types" }
@@ -40,6 +41,7 @@ napi-derive = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
+yrs = { workspace = true }
 
 [build-dependencies]
 napi-build = "2"

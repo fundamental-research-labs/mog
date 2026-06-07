@@ -57,7 +57,6 @@ const ALLOWED_DTS_IMPORTS = [
   /['"]@mog-sdk\/contracts(?:\/[^'"]*)?['"]/,
   /['"]@mog-sdk\/kernel['"]/,
   /['"]@mog-sdk\/sheet-view['"]/,
-  /['"]@mog-sdk\/node['"]/,
   /['"]@mog-sdk\/embed(?:\/[^'"]*)?['"]/,
   /['"]@mog-sdk\/wasm['"]/,
 ];

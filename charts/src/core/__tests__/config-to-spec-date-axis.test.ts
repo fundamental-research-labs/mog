@@ -627,7 +627,8 @@ describe('configToSpec imported Excel date category axes', () => {
 
     expect(areaMarks).toHaveLength(2);
     expect(areaMarks.map((mark) => mark.style.fill)).toEqual(['#4472C4', '#ED7D31']);
-    expect(areaMarks.map((mark) => mark.style.opacity)).toEqual([0.75, 0.5]);
+    expect(areaMarks.map((mark) => mark.style.opacity)).toEqual([undefined, undefined]);
+    expect(areaMarks.map((mark) => mark.style.fillPaint?.opacity)).toEqual([0.75, 0.5]);
 
     const plotBottom = result.layout.plotArea.y + result.layout.plotArea.height;
     expect(Math.max(...pathYCoordinates(areaMarks[1].path))).toBeLessThan(plotBottom - 1);
@@ -769,7 +770,8 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(bars.every((mark) => mark.style.fill === '#70AD47')).toBe(true);
     expect(bars.every((mark) => mark.style.stroke === '#000000')).toBe(true);
     expect(area?.style.fill).toBe('#9DC3E6');
-    expect(area?.style.opacity).toBeCloseTo(0.43);
+    expect(area?.style.opacity).toBeUndefined();
+    expect(area?.style.fillPaint?.opacity).toBeCloseTo(0.43);
     expect(line?.style.stroke).toBe('#000000');
     expect(line?.style.strokeWidth).toBe(3);
 

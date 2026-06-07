@@ -91,3 +91,58 @@ fn test_affected_columns() {
         vec![1, 2, 3, 4]
     );
 }
+
+#[test]
+fn test_structural_hidden_rows_include_hidden_groups() {
+    let (s, id) = storage_with_sheet();
+    let mut config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    config.row_groups.push(GroupDefinition {
+        id: "hidden-row-group".to_string(),
+        sheet_id: id.to_uuid_string(),
+        axis: GroupAxis::Row,
+        start: 2,
+        end: 4,
+        level: 1,
+        collapsed: false,
+        parent_id: None,
+        hidden: true,
+        collapsed_on_member: false,
+    });
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    assert_eq!(
+        get_rows_hidden_by_structural_groups(s.doc(), &s.sheets_ref(), &id),
+        vec![2, 3, 4]
+    );
+    assert!(!is_row_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
+}
+
+#[test]
+fn test_structural_hidden_columns_include_hidden_groups() {
+    let (s, id) = storage_with_sheet();
+    let mut config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    config.column_groups.push(GroupDefinition {
+        id: "hidden-column-group".to_string(),
+        sheet_id: id.to_uuid_string(),
+        axis: GroupAxis::Column,
+        start: 1,
+        end: 2,
+        level: 1,
+        collapsed: false,
+        parent_id: None,
+        hidden: true,
+        collapsed_on_member: false,
+    });
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    assert_eq!(
+        get_columns_hidden_by_structural_groups(s.doc(), &s.sheets_ref(), &id),
+        vec![1, 2]
+    );
+    assert!(!is_column_visible_by_groups(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        1
+    ));
+}

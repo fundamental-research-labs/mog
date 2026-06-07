@@ -5,6 +5,7 @@ export function defaultExportOptionsForSize(
   height: number,
 ): ChartExportOptionsSnapshot {
   return {
+    kind: 'raster',
     format: 'png',
     width,
     height,
@@ -12,6 +13,15 @@ export function defaultExportOptionsForSize(
     physicalWidth: Math.max(1, Math.round(width)),
     physicalHeight: Math.max(1, Math.round(height)),
     backgroundColor: '#ffffff',
+    fittingMode: 'fill',
+    frame: {
+      exportWidth: width,
+      exportHeight: height,
+      contentX: 0,
+      contentY: 0,
+      contentWidth: width,
+      contentHeight: height,
+    },
   };
 }
 

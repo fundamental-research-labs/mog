@@ -136,16 +136,25 @@ export interface DialogProps {
 export function isEnterKeyDefaultAction(event: ReactKeyboardEvent<HTMLElement>): boolean {
   if (event.key !== 'Enter') return false;
   if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
-  if (event.defaultPrevented) return false;
 
   const target = event.target as HTMLElement | null;
-  if (!target) return true;
+  if (!target) return !event.defaultPrevented;
 
   const tag = target.tagName;
   if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'A') return false;
   if (target.isContentEditable) return false;
 
   const role = target.getAttribute('role');
+  const isSelectionItem =
+    role === 'option' ||
+    role === 'radio' ||
+    role === 'treeitem' ||
+    target.closest('[role="option"], [role="radio"], [role="treeitem"]') !== null;
+
+  // Radix selection controls may preventDefault while handling roving focus
+  // or checked state. Dialogs still treat Enter on those controls as the
+  // default commit key; keep defaultPrevented suppression for all other targets.
+  if (event.defaultPrevented && !isSelectionItem) return false;
 
   // Tab triggers and menu items: explicit roles where Enter activates the
   // control and should NOT bubble to the dialog. (Radix renders these as
@@ -161,11 +170,6 @@ export function isEnterKeyDefaultAction(event: ReactKeyboardEvent<HTMLElement>):
   }
 
   if (tag === 'BUTTON' || target.closest('[role="button"]')) {
-    const isSelectionItem =
-      role === 'option' ||
-      role === 'radio' ||
-      role === 'treeitem' ||
-      target.closest('[role="option"], [role="radio"], [role="treeitem"]') !== null;
     if (!isSelectionItem) return false;
   }
 

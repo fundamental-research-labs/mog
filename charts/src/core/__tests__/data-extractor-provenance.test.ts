@@ -12,6 +12,8 @@ import {
   SCATTER_X_FIELD,
   STOCK_CLOSE_FIELD,
   STOCK_DIRECTION_FIELD,
+  STOCK_HIGH_LOW_MAX_FIELD,
+  STOCK_HIGH_LOW_MIN_FIELD,
   STOCK_HIGH_FIELD,
   STOCK_LOW_FIELD,
   STOCK_OPEN_FIELD,
@@ -817,18 +819,17 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_DIRECTION_FIELD])).toEqual(['up', 'down', 'up']);
     expect('layer' in spec ? spec.layer : []).toEqual([
       expect.objectContaining({
-        mark: { type: 'rule' },
-        encoding: expect.objectContaining({
-          y: expect.objectContaining({ field: STOCK_LOW_FIELD, type: 'quantitative' }),
-          y2: expect.objectContaining({ field: STOCK_HIGH_FIELD, type: 'quantitative' }),
+        mark: expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'ohlc',
+          stockOpenField: STOCK_OPEN_FIELD,
+          stockHighField: STOCK_HIGH_LOW_MAX_FIELD,
+          stockLowField: STOCK_HIGH_LOW_MIN_FIELD,
+          stockCloseField: STOCK_CLOSE_FIELD,
         }),
-      }),
-      expect.objectContaining({
-        mark: expect.objectContaining({ type: 'rule' }),
         encoding: expect.objectContaining({
-          y: expect.objectContaining({ field: STOCK_OPEN_FIELD, type: 'quantitative' }),
-          y2: expect.objectContaining({ field: STOCK_CLOSE_FIELD, type: 'quantitative' }),
-          color: expect.objectContaining({ field: STOCK_DIRECTION_FIELD, type: 'nominal' }),
+          y: expect.objectContaining({ field: STOCK_HIGH_LOW_MIN_FIELD, type: 'quantitative' }),
+          y2: expect.objectContaining({ field: STOCK_HIGH_LOW_MAX_FIELD, type: 'quantitative' }),
         }),
       }),
     ]);
@@ -869,8 +870,7 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 15]);
     expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([undefined, undefined]);
     expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
-      { type: 'rule' },
-      { type: 'tick' },
+      expect.objectContaining({ type: 'stockGlyph', stockSubType: 'hlc' }),
     ]);
   });
 
@@ -914,11 +914,15 @@ describe('chart data point value provenance', () => {
     expect(data.series[0].data.map((point) => point.close)).toEqual([12, 9, 15]);
     expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
     expect(rows.map((row) => row[STOCK_DIRECTION_FIELD])).toEqual(['up', 'down', 'up']);
-    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
-      { type: 'bar', opacity: 0.3 },
-      { type: 'rule' },
-      expect.objectContaining({ type: 'rule', strokeWidth: expect.any(Number) }),
-    ]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'volume-ohlc',
+          stockVolumeField: STOCK_VOLUME_FIELD,
+        }),
+      ]),
+    );
   });
 
   it('uses stock projection for volume-stock combo configs before kernel normalization', () => {
@@ -957,11 +961,15 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
     expect(rows.map((row) => row[STOCK_OPEN_FIELD])).toEqual([10, 11, 12]);
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
-    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
-      { type: 'bar', opacity: 0.3 },
-      { type: 'rule' },
-      expect.objectContaining({ type: 'rule', strokeWidth: expect.any(Number) }),
-    ]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'volume-ohlc',
+          stockVolumeField: STOCK_VOLUME_FIELD,
+        }),
+      ]),
+    );
   });
 
   it('maps imported volume-HLC stock combo source series by typed roles, not raw order', () => {
@@ -1005,11 +1013,15 @@ describe('chart data point value provenance', () => {
     expect(rows.map((row) => row[STOCK_LOW_FIELD])).toEqual([8, 9, 10]);
     expect(rows.map((row) => row[STOCK_CLOSE_FIELD])).toEqual([12, 9, 15]);
     expect(rows.map((row) => row[STOCK_VOLUME_FIELD])).toEqual([1000, 1500, 1200]);
-    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual([
-      { type: 'bar', opacity: 0.3 },
-      { type: 'rule' },
-      { type: 'tick' },
-    ]);
+    expect('layer' in spec ? spec.layer.map((layer) => layer.mark) : []).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'stockGlyph',
+          stockSubType: 'volume-hlc',
+          stockVolumeField: STOCK_VOLUME_FIELD,
+        }),
+      ]),
+    );
   });
 
   it('maps stock source series by explicit stockRole before order heuristics', () => {

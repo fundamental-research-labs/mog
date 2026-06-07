@@ -119,6 +119,15 @@ impl SheetFilters {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Re-evaluate an existing filter from a user reapply command.
+    pub fn reapply(&self, filter_id: &str) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        let fid = filter_id.to_string();
+        self.dispatch
+            .call_engine(move |e| e.reapply_filter(&sid, &fid).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Apply an Excel Advanced Filter from raw user-visible range strings.
     pub fn apply_advanced(
         &self,

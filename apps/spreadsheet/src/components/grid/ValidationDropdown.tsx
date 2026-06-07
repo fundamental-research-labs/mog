@@ -106,15 +106,14 @@ export function ValidationDropdown({
     return result;
   }, [items]);
 
-  // Filter items based on live search text or current value
+  // Filter only from explicit live-search text. The current cell value should
+  // highlight the matching item, not hide the rest of the validation list.
   // J.5: hasEmptyOption determines if we show the empty option (allowBlank and no active search)
   const filteredItems = useMemo(() => {
-    // Priority: live search text > current value
-    const filter = state.liveSearchText || currentValue;
-    const filterLower = filter.toLowerCase();
+    const filterLower = state.liveSearchText.toLowerCase();
     if (!filterLower) return stringItems;
     return stringItems.filter((item) => item.toLowerCase().includes(filterLower));
-  }, [stringItems, state.liveSearchText, currentValue]);
+  }, [stringItems, state.liveSearchText]);
 
   // J.5: Show empty option only when allowBlank is true and no search filter is active
   const hasEmptyOption = allowBlank && !state.liveSearchText;

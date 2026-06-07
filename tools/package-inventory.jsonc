@@ -18,16 +18,21 @@
   },
 
   // ── ship-public ───────────────────────────────────────────────────────
-  "@mog-sdk/node": {
+  "@mog-sdk/sdk": {
     "disposition": "ship-public",
     "requirePrivate": false,
-    "publicTarget": "@mog-sdk/node",
+    "publicTarget": "@mog-sdk/sdk",
     "forbiddenRuntimeDeps": [
       "@mog-sdk/kernel",
       "@mog-sdk/spreadsheet-contracts",
       "@mog/types-*",
       "@mog/*",
     ],
+    "exports": {
+      "./node": { "disposition": "public-experimental" },
+      "./wasm": { "disposition": "public-experimental" },
+      "./workerd": { "disposition": "public-experimental" },
+    },
   },
   "@mog-sdk/embed": {
     "disposition": "ship-public",
@@ -235,6 +240,7 @@
       "./context-menu": { "disposition": "public-experimental" },
       "./data": { "disposition": "public-experimental" },
       "./data/charts": { "disposition": "public-experimental" },
+      "./data/diagnostics": { "disposition": "public-experimental" },
       "./utils": { "disposition": "public-experimental" },
       "./utils/function-registry": { "disposition": "public-experimental" },
       "./utils/a1": { "disposition": "public-experimental" },
@@ -258,6 +264,15 @@
     "disposition": "binary-wrapper",
     "requirePrivate": false,
     "publicTarget": "@mog-sdk/wasm",
+    "forbiddenRuntimeDeps": [],
+    "exports": {
+      "./wasm": { "disposition": "public-experimental" },
+    },
+  },
+  "@mog-sdk/chart-raster-wasm": {
+    "disposition": "binary-wrapper",
+    "requirePrivate": false,
+    "publicTarget": "@mog-sdk/chart-raster-wasm",
     "forbiddenRuntimeDeps": [],
     "exports": {
       "./wasm": { "disposition": "public-experimental" },
@@ -444,7 +459,7 @@
       "@mog-sdk/kernel",
       "@mog-sdk/sheet-view",
       "@mog-sdk/embed",
-      "@mog-sdk/node",
+      "@mog-sdk/sdk",
     ],
   },
   "@mog-sdk/types-app-platform": {
@@ -455,14 +470,14 @@
       "@mog-sdk/kernel",
       "@mog-sdk/sheet-view",
       "@mog-sdk/embed",
-      "@mog-sdk/node",
+      "@mog-sdk/sdk",
     ],
   },
   "@mog/kernel-host-internal": {
     "disposition": "workspace-internal",
     "requirePrivate": true,
     "publicTarget": null,
-    "forbiddenRuntimeDeps": ["@mog-sdk/embed", "@mog-sdk/node", "@mog-sdk/sheet-view"],
+    "forbiddenRuntimeDeps": ["@mog-sdk/embed", "@mog-sdk/sdk", "@mog-sdk/sheet-view"],
   },
   "@mog/test-host": {
     "disposition": "workspace-internal",
@@ -470,7 +485,7 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": [
       "@mog-sdk/embed",
-      "@mog-sdk/node",
+      "@mog-sdk/sdk",
       "@mog-sdk/sheet-view",
       "@mog-sdk/kernel",
     ],
@@ -609,6 +624,12 @@
   },
 
   // ── private (product apps, native binaries, servers) ──────────────────
+  "@mog-sdk/cli": {
+    "disposition": "private",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
   "@mog/app-spreadsheet": {
     "disposition": "private",
     "requirePrivate": true,

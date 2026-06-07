@@ -1,7 +1,7 @@
 use bridge_core as bridge;
 
 use super::{CsvImportOptions, YrsComputeEngine, construction, services};
-use crate::snapshot::{MutationResult, RecalcResult, WorkbookSnapshot};
+use crate::snapshot::{ChangeKind, MutationResult, RecalcResult, WorkbookSnapshot};
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -127,6 +127,11 @@ impl YrsComputeEngine {
     pub fn complete_deferred_hydration(
         &mut self,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let deferred_filter_created_keys = if self.deferred_hydration.is_some() {
+            collect_deferred_filter_created_keys(self)
+        } else {
+            Default::default()
+        };
         let Some(mut completion) = construction::stage_deferred_hydration(self)? else {
             let result = services::mutation_handlers::build_mutation_result_for_hydration(
                 &self.stores,
@@ -166,10 +171,14 @@ impl YrsComputeEngine {
 
         construction::commit_deferred_hydration(self, completion);
         self.postprocess_import_open_recalc(&mut recalc);
-        let result = services::mutation_handlers::build_mutation_result_for_hydration(
+        let mut result = services::mutation_handlers::build_mutation_result_for_hydration(
             &self.stores,
             &self.mirror,
             recalc,
+        );
+        suppress_deferred_duplicate_filter_created_changes(
+            &mut result,
+            &deferred_filter_created_keys,
         );
         Ok((
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),
@@ -294,4 +303,41 @@ impl YrsComputeEngine {
     ) -> Result<Vec<String>, ComputeError> {
         construction::import_sheets_from_xlsx(self, xlsx_data, &sheet_names, insert_position)
     }
+}
+
+fn collect_deferred_filter_created_keys(
+    engine: &YrsComputeEngine,
+) -> std::collections::HashSet<(String, String)> {
+    engine
+        .stores
+        .grid_indexes
+        .keys()
+        .flat_map(|sheet_id| {
+            let sheet_id_str = sheet_id.to_uuid_string();
+            crate::storage::sheet::filters::get_filters_in_sheet(
+                engine.stores.storage.doc(),
+                engine.stores.storage.sheets(),
+                sheet_id,
+            )
+            .into_iter()
+            .map(move |filter| (sheet_id_str.clone(), filter.id))
+        })
+        .collect()
+}
+
+fn suppress_deferred_duplicate_filter_created_changes(
+    result: &mut MutationResult,
+    deferred_filter_created_keys: &std::collections::HashSet<(String, String)>,
+) {
+    if deferred_filter_created_keys.is_empty() {
+        return;
+    }
+
+    result.filter_changes.retain(|change| {
+        let duplicate_created = change.kind == ChangeKind::Set
+            && change.action.as_deref() == Some("created")
+            && deferred_filter_created_keys
+                .contains(&(change.sheet_id.clone(), change.filter_id.clone()));
+        !duplicate_created
+    });
 }

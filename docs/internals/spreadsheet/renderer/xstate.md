@@ -10,7 +10,7 @@ This is a **workspace-internal** architecture note for `@mog/app-spreadsheet` an
 
 - `@mog/app-spreadsheet` is a private workspace app package.
 - `@mog/shell` is a reserved private package; its focus machine is consumed inside the monorepo.
-- Public setup paths are the facades listed in package inventory, such as `@mog-sdk/sheet-view`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/node`, and `@mog-sdk/contracts`.
+- Public setup paths are the facades listed in package inventory, such as `@mog-sdk/sheet-view`, `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/sdk`, and `@mog-sdk/contracts`.
 - The current spreadsheet app depends on `xstate` `^5.31.1` and `@xstate/react` `^6.1.0`; `pnpm-lock.yaml` currently resolves `xstate@5.31.1`.
 
 ## Why XState

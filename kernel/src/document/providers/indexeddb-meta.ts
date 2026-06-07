@@ -88,15 +88,27 @@ export async function touchDoc(docId: string): Promise<void> {
   try {
     await runTx(db, 'readwrite', async (store) => {
       const list = await wrapRequest<RecentDoc[]>(store.get(KEY_RECENT_DOCS));
+      const previousLastActiveDocId = await wrapRequest<string>(store.get(KEY_LAST_ACTIVE_DOC_ID));
       const now = Date.now();
       const next: RecentDoc[] = [{ docId, lastTouchedAt: now }];
+      let previousLastActiveEntry: RecentDoc | null = null;
       if (Array.isArray(list)) {
         for (const entry of list) {
           if (entry && entry.docId !== docId) {
-            next.push(entry);
-            if (next.length >= RECENT_DOCS_LIMIT) break;
+            if (entry.docId === previousLastActiveDocId) {
+              previousLastActiveEntry = entry;
+            }
+            if (next.length < RECENT_DOCS_LIMIT) {
+              next.push(entry);
+            }
           }
         }
+      }
+      if (
+        previousLastActiveEntry &&
+        !next.some((entry) => entry.docId === previousLastActiveEntry?.docId)
+      ) {
+        next[next.length - 1] = previousLastActiveEntry;
       }
       store.put(next, KEY_RECENT_DOCS);
       store.put(docId, KEY_LAST_ACTIVE_DOC_ID);

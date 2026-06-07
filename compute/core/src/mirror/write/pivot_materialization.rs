@@ -1,4 +1,4 @@
-use cell_types::{SheetId, SheetPos};
+use cell_types::{IdAllocator, SheetId, SheetPos};
 use value_types::CellValue;
 
 use crate::mirror::cell_mirror::CellMirror;
@@ -121,142 +121,135 @@ impl CellMirror {
                 cols_touched.push(col);
             }
 
-            // Write row field labels in the header row. Compact layout collapses
-            // multiple row fields into `first_data_col` visible header columns,
-            // so only write labels that fit before the data region.
-            for (h_idx, name) in row_field_names
-                .iter()
-                .take(first_data_col as usize)
-                .enumerate()
             {
-                if !name.is_empty() {
-                    let row = anchor_row;
-                    let col = anchor_col + h_idx as u32;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (row as usize) < col_vec.len()
-                    {
-                        col_vec[row as usize] = CellValue::from(name.as_str());
+                let mut write_cell = |col: u32, row: u32, value: CellValue| {
+                    let row_index = row as usize;
+                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col) {
+                        if row_index < col_vec.len() {
+                            col_vec[row_index] = value;
+                        }
                     }
-                }
-            }
+                };
 
-            // Write column headers
-            for (_level_idx, col_header) in result.column_headers.iter().enumerate() {
-                let level_idx = _level_idx as u32;
-                let mut data_col_offset: u32 = 0;
-                for header in &col_header.headers {
-                    let row = anchor_row + level_idx;
-                    let col = anchor_col + first_data_col + data_col_offset;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (row as usize) < col_vec.len()
-                    {
-                        col_vec[row as usize] = header.value.clone();
-                    }
-                    data_col_offset += header.span as u32;
-                }
-            }
-
-            // Bug D - column-GT header label at the leftmost column of the GT span.
-            // Aligns with the existing column-GT value writes below, which use
-            // `anchor_col + total_cols - num_value_fields + val_idx`, so the leftmost
-            // value column is at `total_cols - num_value_fields`. At v=0, num_value_fields
-            // collapses to 1 and the label sits in the single GT column.
-            if result.grand_totals.column.is_some() {
-                let gt_label = result
-                    .grand_totals
-                    .row_label
-                    .as_deref()
-                    .unwrap_or("Grand Total");
-                let gt_span = num_value_fields.max(1);
-                let gt_label_col = anchor_col + total_cols - gt_span;
-                if let Some(col_vec) = sheet_mirror.col_data.get_mut(&gt_label_col)
-                    && (anchor_row as usize) < col_vec.len()
+                // Write row field labels in the header row. Compact layout collapses
+                // multiple row fields into `first_data_col` visible header columns,
+                // so only write labels that fit before the data region.
+                for (h_idx, name) in row_field_names
+                    .iter()
+                    .take(first_data_col as usize)
+                    .enumerate()
                 {
-                    col_vec[anchor_row as usize] = CellValue::Text(gt_label.into());
-                }
-            }
-
-            // Write row headers and data values
-            for (row_idx, pivot_row) in result.rows.iter().enumerate() {
-                let row_idx = row_idx as u32;
-                // Row headers. In compact layout the engine still carries the
-                // full ancestor chain, but `first_data_col` is the number of
-                // visible row-header columns. Write the deepest visible headers
-                // so child labels do not get overwritten by data values.
-                let visible_header_count = (first_data_col as usize).min(pivot_row.headers.len());
-                let hidden_prefix = pivot_row.headers.len().saturating_sub(visible_header_count);
-                for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
-                    let row = anchor_row + first_data_row + row_idx;
-                    let col = anchor_col + h_idx as u32;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (row as usize) < col_vec.len()
-                    {
-                        col_vec[row as usize] = header.value.clone();
+                    if !name.is_empty() {
+                        write_cell(
+                            anchor_col + h_idx as u32,
+                            anchor_row,
+                            CellValue::from(name.as_str()),
+                        );
                     }
                 }
-                // Data values
-                for (v_idx, value) in pivot_row.values.iter().enumerate() {
-                    let row = anchor_row + first_data_row + row_idx;
-                    let col = anchor_col + first_data_col + v_idx as u32;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (row as usize) < col_vec.len()
-                    {
-                        col_vec[row as usize] = value.clone();
+
+                // Write column headers
+                for (_level_idx, col_header) in result.column_headers.iter().enumerate() {
+                    let level_idx = _level_idx as u32;
+                    let mut data_col_offset: u32 = 0;
+                    for header in &col_header.headers {
+                        write_cell(
+                            anchor_col + first_data_col + data_col_offset,
+                            anchor_row + level_idx,
+                            header.value.clone(),
+                        );
+                        data_col_offset += header.span as u32;
                     }
                 }
-            }
 
-            // Grand total column (right side)
-            if let Some(ref col_totals) = result.grand_totals.column {
-                for (row_idx, row_totals) in col_totals.iter().enumerate() {
+                // Bug D - column-GT header label at the leftmost column of the GT span.
+                // Aligns with the existing column-GT value writes below, which use
+                // `anchor_col + total_cols - num_value_fields + val_idx`, so the leftmost
+                // value column is at `total_cols - num_value_fields`. At v=0, num_value_fields
+                // collapses to 1 and the label sits in the single GT column.
+                if result.grand_totals.column.is_some() {
+                    let gt_label = result
+                        .grand_totals
+                        .row_label
+                        .as_deref()
+                        .unwrap_or("Grand Total");
+                    let gt_span = num_value_fields.max(1);
+                    write_cell(
+                        anchor_col + total_cols - gt_span,
+                        anchor_row,
+                        CellValue::Text(gt_label.into()),
+                    );
+                }
+
+                // Write row headers and data values
+                for (row_idx, pivot_row) in result.rows.iter().enumerate() {
                     let row_idx = row_idx as u32;
-                    for (val_idx, value) in row_totals.iter().enumerate() {
-                        let row = anchor_row + first_data_row + row_idx;
-                        let col = anchor_col + total_cols - num_value_fields + val_idx as u32;
-                        if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                            && (row as usize) < col_vec.len()
-                        {
-                            col_vec[row as usize] = value.clone();
+                    // Row headers. In compact layout the engine still carries the
+                    // full ancestor chain, but `first_data_col` is the number of
+                    // visible row-header columns. Write the deepest visible headers
+                    // so child labels do not get overwritten by data values.
+                    let visible_header_count =
+                        (first_data_col as usize).min(pivot_row.headers.len());
+                    let hidden_prefix =
+                        pivot_row.headers.len().saturating_sub(visible_header_count);
+                    for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
+                        write_cell(
+                            anchor_col + h_idx as u32,
+                            anchor_row + first_data_row + row_idx,
+                            header.value.clone(),
+                        );
+                    }
+                    // Data values
+                    for (v_idx, value) in pivot_row.values.iter().enumerate() {
+                        write_cell(
+                            anchor_col + first_data_col + v_idx as u32,
+                            anchor_row + first_data_row + row_idx,
+                            value.clone(),
+                        );
+                    }
+                }
+
+                // Grand total column (right side)
+                if let Some(ref col_totals) = result.grand_totals.column {
+                    for (row_idx, row_totals) in col_totals.iter().enumerate() {
+                        let row_idx = row_idx as u32;
+                        for (val_idx, value) in row_totals.iter().enumerate() {
+                            write_cell(
+                                anchor_col + total_cols - num_value_fields + val_idx as u32,
+                                anchor_row + first_data_row + row_idx,
+                                value.clone(),
+                            );
                         }
                     }
                 }
-            }
 
-            // Grand total row (bottom)
-            if let Some(ref row_totals) = result.grand_totals.row {
-                // Label
-                let label = result
-                    .grand_totals
-                    .row_label
-                    .as_deref()
-                    .unwrap_or("Grand Total");
-                let gt_row = anchor_row + total_rows - 1;
-                let label_col = anchor_col;
-                if let Some(col_vec) = sheet_mirror.col_data.get_mut(&label_col)
-                    && (gt_row as usize) < col_vec.len()
-                {
-                    col_vec[gt_row as usize] = CellValue::Text(label.into());
-                }
-                // Values
-                for (v_idx, value) in row_totals.iter().enumerate() {
-                    let col = anchor_col + first_data_col + v_idx as u32;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (gt_row as usize) < col_vec.len()
-                    {
-                        col_vec[gt_row as usize] = value.clone();
+                // Grand total row (bottom)
+                if let Some(ref row_totals) = result.grand_totals.row {
+                    let label = result
+                        .grand_totals
+                        .row_label
+                        .as_deref()
+                        .unwrap_or("Grand Total");
+                    let gt_row = anchor_row + total_rows - 1;
+                    write_cell(anchor_col, gt_row, CellValue::Text(label.into()));
+                    for (v_idx, value) in row_totals.iter().enumerate() {
+                        write_cell(
+                            anchor_col + first_data_col + v_idx as u32,
+                            gt_row,
+                            value.clone(),
+                        );
                     }
                 }
-            }
 
-            // Corner grand total
-            if let Some(ref grand) = result.grand_totals.grand {
-                let gt_row = anchor_row + total_rows - 1;
-                for (val_idx, value) in grand.iter().enumerate() {
-                    let col = anchor_col + total_cols - num_value_fields + val_idx as u32;
-                    if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col)
-                        && (gt_row as usize) < col_vec.len()
-                    {
-                        col_vec[gt_row as usize] = value.clone();
+                // Corner grand total
+                if let Some(ref grand) = result.grand_totals.grand {
+                    let gt_row = anchor_row + total_rows - 1;
+                    for (val_idx, value) in grand.iter().enumerate() {
+                        write_cell(
+                            anchor_col + total_cols - num_value_fields + val_idx as u32,
+                            gt_row,
+                            value.clone(),
+                        );
                     }
                 }
             }
@@ -272,6 +265,36 @@ impl CellMirror {
         for col in cols_touched {
             self.bump_col_version(sheet, col);
             self.dense_cache.invalidate(sheet, col);
+        }
+    }
+
+    /// Materialize a pivot and register every rendered cell as identity-backed.
+    ///
+    /// Pivot output values live in `col_data`, but formulas need a stable
+    /// `CellId` dependency target for references such as `=F3`. Identity-only
+    /// registration gives those rendered cells referenceable identities without
+    /// overwriting the materialized values.
+    pub fn materialize_pivot_with_identities(
+        &mut self,
+        sheet: &SheetId,
+        anchor_row: u32,
+        anchor_col: u32,
+        result: &compute_pivot::types::PivotTableResult,
+        row_field_names: &[String],
+        id_alloc: &IdAllocator,
+    ) {
+        self.materialize_pivot(sheet, anchor_row, anchor_col, result, row_field_names);
+
+        let bounds = &result.rendered_bounds;
+        if bounds.total_rows == 0 || bounds.total_cols == 0 {
+            return;
+        }
+
+        for row_offset in 0..bounds.total_rows {
+            for col_offset in 0..bounds.total_cols {
+                let pos = SheetPos::new(anchor_row + row_offset, anchor_col + col_offset);
+                let _ = self.ensure_cell_id_identity_only(sheet, pos, id_alloc);
+            }
         }
     }
 }

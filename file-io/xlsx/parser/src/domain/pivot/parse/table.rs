@@ -22,6 +22,7 @@ pub fn parse_pivot_table(xml: &[u8]) -> PivotTable {
     pivot.name = parse_string_attr(element, b"name=\"").unwrap_or_default();
     pivot.cache_id = parse_u32_attr(element, b"cacheId=\"").unwrap_or(0);
     pivot.data_on_rows = parse_bool_attr(element, b"dataOnRows=\"");
+    pivot.data_caption = parse_string_attr(element, b"dataCaption=\"");
     pivot.grand_total_caption = parse_string_attr(element, b"grandTotalCaption=\"");
     pivot.row_header_caption = parse_string_attr(element, b"rowHeaderCaption=\"");
     pivot.col_header_caption = parse_string_attr(element, b"colHeaderCaption=\"");
@@ -119,6 +120,7 @@ mod tests {
         assert_eq!(pivot.name, "Sales & Marketing");
         assert_eq!(pivot.cache_id, 1);
         assert!(pivot.data_on_rows);
+        assert_eq!(pivot.data_caption, None);
         assert_eq!(
             pivot.location.ref_.as_ref().map(|r| r.to_a1_string()),
             Some("A3:D10".to_string())
@@ -126,6 +128,22 @@ mod tests {
         assert_eq!(pivot.location.first_header_row, 1);
         assert_eq!(pivot.location.first_data_row, 2);
         assert_eq!(pivot.location.first_data_col, 1);
+    }
+
+    #[test]
+    fn parses_typed_data_caption() {
+        let pivot = parse_pivot_table(
+            br#"<pivotTableDefinition name="Test" cacheId="1" dataCaption="Custom Values"/>"#,
+        );
+
+        assert_eq!(pivot.data_caption.as_deref(), Some("Custom Values"));
+        assert!(
+            pivot
+                .ooxml_preservation
+                .root_attributes
+                .iter()
+                .all(|attr| attr.name != "dataCaption")
+        );
     }
 
     #[test]

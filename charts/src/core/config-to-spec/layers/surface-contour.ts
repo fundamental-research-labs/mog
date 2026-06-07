@@ -1,4 +1,10 @@
-import type { ChartSpec, ContourBandSpec, EncodingSpec, UnitSpec } from '../../../grammar/spec';
+import type {
+  ChartSpec,
+  ContourBandSpec,
+  EncodingSpec,
+  SurfaceBandFormatSpec,
+  UnitSpec,
+} from '../../../grammar/spec';
 import type { ChartConfig, ChartData } from '../../../types';
 import { resolveChartColor } from '../../../utils/chart-colors';
 import { interpolateOklab } from '../../../utils/colors';
@@ -62,6 +68,7 @@ export function buildSurfaceContourSpec(input: {
     mark: {
       type: 'contour',
       contourBands: bands,
+      sourceSurfaceBandFormats: sourceSurfaceBandFormats(input.config),
       contourWireframe:
         input.config.wireframe === true ||
         input.config.type === 'surfaceWireframe' ||
@@ -148,6 +155,26 @@ export function buildSurfaceContourEncoding(
         : undefined,
     },
   };
+}
+
+export function sourceSurfaceBandFormats(config: ChartConfig): SurfaceBandFormatSpec[] | undefined {
+  const formats = (config.surfaceBandFormats ?? []).flatMap((format): SurfaceBandFormatSpec[] => {
+    const index = finiteNumber(format.index);
+    if (index === undefined) return [];
+    const fillColor =
+      typeof format.fillColor === 'string' && format.fillColor.length > 0
+        ? format.fillColor
+        : undefined;
+    return [
+      {
+        index,
+        ...(fillColor ? { fillColor } : {}),
+        hasFormatting: format.hasFormatting === true || fillColor !== undefined,
+        ...(format.source === 'ooxmlBandFmt' ? { source: 'ooxmlBandFmt' as const } : {}),
+      },
+    ];
+  });
+  return formats.length > 0 ? formats : undefined;
 }
 
 function finiteSurfaceValues(data: ChartData): number[] {

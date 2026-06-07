@@ -88,6 +88,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
       error = false,
       placeholder,
       className,
+      id,
       ...props
     },
     ref,
@@ -183,6 +184,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
       <div className="relative">
         <Input
           ref={inputRefToUse}
+          id={id ?? inputId}
           value={value}
           onChange={handleInputChange}
           error={error}

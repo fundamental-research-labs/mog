@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { createWorkbook } from '@mog-sdk/node';
+import { createWorkbook } from '@mog-sdk/sdk/node';
 
 const repoRoot = resolve(import.meta.dirname, '..', '..');
 const cliPath = resolve(repoRoot, 'cli', 'dist', 'mog.cjs');

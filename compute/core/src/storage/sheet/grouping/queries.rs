@@ -90,9 +90,9 @@ pub fn get_affected_columns_by_group(
     (group.start..=group.end).collect()
 }
 
-/// Rows whose effective rendered height is zero because at least one
-/// collapsed row outline group contains them.
-pub fn get_rows_hidden_by_collapsed_groups(
+/// Rows whose effective rendered height is zero because at least one row
+/// outline group contains them and is either collapsed or explicitly hidden.
+pub fn get_rows_hidden_by_structural_groups(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
@@ -100,7 +100,7 @@ pub fn get_rows_hidden_by_collapsed_groups(
     let groups = get_groups(doc, sheets, sheet_id, GroupAxis::Row);
     let mut hidden = BTreeSet::new();
 
-    for group in groups.iter().filter(|g| g.collapsed) {
+    for group in groups.iter().filter(|g| g.collapsed || g.hidden) {
         for row in group.start..=group.end {
             hidden.insert(row);
         }
@@ -109,9 +109,9 @@ pub fn get_rows_hidden_by_collapsed_groups(
     hidden.into_iter().collect()
 }
 
-/// Columns whose effective rendered width is zero because at least one
-/// collapsed column outline group contains them.
-pub fn get_columns_hidden_by_collapsed_groups(
+/// Columns whose effective rendered width is zero because at least one column
+/// outline group contains them and is either collapsed or explicitly hidden.
+pub fn get_columns_hidden_by_structural_groups(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
@@ -119,13 +119,33 @@ pub fn get_columns_hidden_by_collapsed_groups(
     let groups = get_groups(doc, sheets, sheet_id, GroupAxis::Column);
     let mut hidden = BTreeSet::new();
 
-    for group in groups.iter().filter(|g| g.collapsed) {
+    for group in groups.iter().filter(|g| g.collapsed || g.hidden) {
         for col in group.start..=group.end {
             hidden.insert(col);
         }
     }
 
     hidden.into_iter().collect()
+}
+
+/// Compatibility wrapper for older call sites. Production callers should use
+/// `get_rows_hidden_by_structural_groups`.
+pub fn get_rows_hidden_by_collapsed_groups(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+) -> Vec<u32> {
+    get_rows_hidden_by_structural_groups(doc, sheets, sheet_id)
+}
+
+/// Compatibility wrapper for older call sites. Production callers should use
+/// `get_columns_hidden_by_structural_groups`.
+pub fn get_columns_hidden_by_collapsed_groups(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+) -> Vec<u32> {
+    get_columns_hidden_by_structural_groups(doc, sheets, sheet_id)
 }
 
 // =============================================================================

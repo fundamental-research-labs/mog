@@ -5,7 +5,7 @@ import type { DocumentSource } from '@mog-sdk/contracts/document';
 import type { StorageProviderConfig } from '@mog-sdk/contracts/storage';
 import type { SpreadsheetEvent } from '@mog-sdk/contracts/events';
 import type { Command } from '@mog-sdk/contracts/commands';
-import type { Workbook as NodeWorkbook } from '@mog-sdk/node';
+import type { Workbook as NodeWorkbook } from '@mog-sdk/sdk';
 import type { SpreadsheetWorkbookFacade } from '@mog-sdk/spreadsheet-app';
 
 const id: SheetId = sheetId('fixture-sheet');

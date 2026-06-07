@@ -265,6 +265,15 @@ export interface ScaleSpec {
   exponent?: number;
   base?: number;
   scheme?: string;
+  categoryPositionPolicy?: BarCategoryPositionPolicy;
+  radarTickValues?: number[];
+  radarTickStep?: number;
+  radarValueDomainAuthority?: 'explicitAxis' | 'excelAuto' | 'fallback';
+  scaleAuthorityStatus?: StockGlyphVisualContractStatus;
+  scaleAuthority?: string;
+  scaleAuthorityReason?: string;
+  zeroBaselinePolicy?: string;
+  zeroBaselineReason?: string;
 }
 
 // =============================================================================
@@ -278,6 +287,15 @@ export type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
 export type AxisLabelPosition = 'nextTo' | 'low' | 'high' | 'none';
 export type AxisTickMark = 'none' | 'out' | 'in' | 'cross';
 export type AxisCategoryCrossing = 'between' | 'midCat';
+export type AxisTickSkipSource = 'explicit' | 'importedAuto' | 'rendererAuto' | 'none';
+export type AxisPercentLabelPolicy = 'percentFromHundred';
+export type AxisLayoutStatus = 'exact' | 'verifiedDefault' | 'approximate';
+export type AxisValueScaleSource =
+  | 'explicit'
+  | 'percentStackedDefault'
+  | 'excelAutoModel'
+  | 'heuristic'
+  | 'missing';
 
 export type AxisTickIntervalUnit = 'day' | 'month' | 'year';
 
@@ -304,9 +322,11 @@ export interface AxisSpec {
   labelOverlap?: boolean | 'parity' | 'greedy';
   labelPosition?: AxisLabelPosition;
   tickLabelSkip?: number;
+  tickLabelSkipSource?: AxisTickSkipSource;
   ticks?: boolean;
   tickMark?: AxisTickMark;
   tickMarkSkip?: number;
+  tickMarkSkipSource?: AxisTickSkipSource;
   tickCount?: number;
   tickSize?: number;
   tickColor?: string;
@@ -334,6 +354,25 @@ export interface AxisSpec {
   crossesAtValue?: number;
   categoryCrossing?: AxisCategoryCrossing;
   format?: string;
+  percentAxisLabelPolicy?: AxisPercentLabelPolicy;
+  axisLayoutStatus?: AxisLayoutStatus;
+  axisLayoutStatusReason?: string;
+  categoryTickStatus?: AxisLayoutStatus;
+  categoryTickStatusReason?: string;
+  valueAxisScaleSource?: AxisValueScaleSource;
+  valueAxisScaleStatus?: AxisLayoutStatus;
+  valueAxisScaleStatusReason?: string;
+  pathCategoryAxisLayoutStatus?: AxisLayoutStatus;
+  pathCategoryAxisLayoutStatusReason?: string;
+  pathValueAxisLayoutStatus?: AxisLayoutStatus;
+  pathValueAxisLayoutStatusReason?: string;
+  pathAxisLength?: number;
+  pathCategoryPitch?: number;
+  pathLabelBudget?: number;
+  pathProjectedLabelWidth?: number;
+  pathVisibleLabelCount?: number;
+  pathAxisReservationStatus?: AxisLayoutStatus;
+  pathAxisReservationStatusReason?: string;
   displayUnitFactor?: number;
   displayUnitLabel?: string;
   linkNumberFormat?: boolean;
@@ -349,6 +388,10 @@ export interface AxisSpec {
   domain?: boolean;
   domainColor?: string;
   domainWidth?: number;
+  domainOpacity?: number;
+  domainDash?: number[];
+  tickOpacity?: number;
+  tickDash?: number[];
 }
 
 // =============================================================================
@@ -386,12 +429,22 @@ export interface LegendEntrySpec {
   label?: string;
   /** Entry-specific symbol shape, used by mixed-family combo charts. */
   symbolType?: LegendSymbolType;
+  /** Rendered point index for point-domain legends. */
+  pointIndex?: number;
+  /** Source-series-specific point key for point-domain legends. */
+  pointKey?: string;
+  /** Point-index legend key for point-domain legends. */
+  legendKey?: string;
+  /** Category color key for point-domain legends. */
+  colorKey?: string;
   /** Rendered series index for provenance/debugging. */
   seriesIndex?: number;
   /** Source workbook series index, when known. */
   sourceSeriesIndex?: number;
   /** Stable source workbook series key, when known. */
   sourceSeriesKey?: string;
+  /** Source stock role represented by this entry, when known. */
+  stockRole?: 'volume' | 'open' | 'high' | 'low' | 'close';
 }
 
 /**
@@ -480,6 +533,8 @@ export interface ChannelSpec {
   scale?: ScaleSpec | null;
   /** Axis specification (null to hide) */
   axis?: AxisSpec | null;
+  /** Axis styling consumed by non-Cartesian mark generators without drawing a Cartesian axis. */
+  radarAxis?: AxisSpec | null;
   /** Secondary axis sharing this channel's scale. */
   secondaryAxis?: AxisSpec | null;
   /** Legend specification (null to hide) */
@@ -565,6 +620,7 @@ export type MarkType =
   | 'rule'
   | 'text'
   | 'tick'
+  | 'stockGlyph'
   | 'trail'
   | 'boxplot'
   | 'histogram'
@@ -572,6 +628,112 @@ export type MarkType =
   | 'contour'
   | 'radar'
   | 'surface3d';
+
+export type StockGlyphSubType = 'hlc' | 'ohlc' | 'volume-hlc' | 'volume-ohlc';
+
+export type StockGlyphVisualStatus = 'available' | 'incomplete';
+export type StockGlyphVisualContractStatus =
+  | 'exact'
+  | 'verifiedDefault'
+  | 'approximate'
+  | 'missing';
+export type StockGlyphPriceGlyphMode = 'hlcTick' | 'ohlcTick' | 'upDownBody';
+export type StockGlyphVisualRole = 'volume' | 'highLowStem' | 'body' | 'openTick' | 'closeTick';
+export type StockGlyphVisualSource =
+  | 'importedHighLowLines'
+  | 'importedUpDownBars'
+  | 'sourceSeriesFormat'
+  | 'volumeSeriesFormat'
+  | 'chartStyleDefault'
+  | 'excelDefault';
+export type StockGlyphSourceRole = 'volume' | 'open' | 'high' | 'low' | 'close';
+export type StockGlyphVolumeAxisPolicy = 'stockValueAxis' | 'separateVolumeAxis';
+export type StockGlyphSourceRoleLayerMode = 'glyphInputOnly' | 'overlayLayer';
+
+export interface StockGlyphSourceRoleMarkerVisualSpec {
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  shape: string;
+  size: number;
+  source: StockGlyphVisualSource;
+}
+
+export interface StockGlyphSourceRoleVisualSpec {
+  role: StockGlyphSourceRole;
+  sourceSeriesIndex?: number;
+  sourceSeriesKey?: string;
+  layerMode: StockGlyphSourceRoleLayerMode;
+  lineVisible: boolean;
+  lineVisualStatus?: StockGlyphVisualContractStatus;
+  lineVisualStatusReason?: string;
+  markerVisible: boolean;
+  markerVisualStatus?: StockGlyphVisualContractStatus;
+  markerVisualStatusReason?: string;
+  colorAuthorityStatus?: StockGlyphVisualContractStatus;
+  colorAuthoritySource?: string;
+  colorAuthorityReason?: string;
+  line: StockGlyphStrokeVisualSpec;
+  marker: StockGlyphSourceRoleMarkerVisualSpec;
+}
+
+export interface StockGlyphHighLowEndpointPolicySpec {
+  type: 'sourceRoleExtents';
+  roles: StockGlyphSourceRole[];
+}
+
+export interface StockGlyphStrokeVisualSpec {
+  stroke: string;
+  strokeOpacity?: number;
+  strokeWidth: number;
+  strokeDash?: number[];
+  line?: LineStyleSpec;
+  source: StockGlyphVisualSource;
+}
+
+export interface StockGlyphBodyVisualSpec {
+  fill: string;
+  fillOpacity?: number;
+  fillPaint?: PaintSpec;
+  border: string;
+  borderOpacity?: number;
+  borderWidth: number;
+  borderLine?: LineStyleSpec;
+  source: StockGlyphVisualSource;
+}
+
+export interface StockGlyphVolumeVisualSpec extends StockGlyphBodyVisualSpec {
+  visualStatus?: StockGlyphVisualContractStatus;
+  visualStatusReason?: string;
+  gapWidth: number;
+  slotOccupancy: number;
+  surfacePolicy: {
+    type: 'plotFraction';
+    fraction: number;
+  };
+}
+
+export interface StockGlyphVisualSpec {
+  visualStatus: StockGlyphVisualStatus;
+  visualStatusReason?: string;
+  priceGlyphMode: StockGlyphPriceGlyphMode;
+  volumeAxisPolicy?: StockGlyphVolumeAxisPolicy;
+  highLowEndpointPolicy?: StockGlyphHighLowEndpointPolicySpec;
+  gapWidth: number;
+  slotOccupancy: number;
+  drawOrder: StockGlyphVisualRole[];
+  highLowLine: StockGlyphStrokeVisualSpec;
+  openTick: StockGlyphStrokeVisualSpec;
+  closeTick: StockGlyphStrokeVisualSpec;
+  upBody: StockGlyphBodyVisualSpec;
+  downBody: StockGlyphBodyVisualSpec;
+  flatBody: StockGlyphBodyVisualSpec;
+  volume?: StockGlyphVolumeVisualSpec;
+  sourceRoleVisuals?: StockGlyphSourceRoleVisualSpec[];
+  importedHighLowLines?: boolean;
+  importedUpDownBars?: boolean;
+  styleSources: StockGlyphVisualSource[];
+}
 
 /**
  * One filled value band in a top-view surface/contour chart.
@@ -581,6 +743,13 @@ export interface ContourBandSpec {
   max: number;
   label: string;
   color: string;
+}
+
+export interface SurfaceBandFormatSpec {
+  index: number;
+  fillColor?: string;
+  hasFormatting: boolean;
+  source?: 'ooxmlBandFmt';
 }
 
 /**
@@ -619,6 +788,10 @@ export type Interpolate =
   | 'cardinal-open'
   | 'cardinal-closed'
   | 'monotone';
+
+export type PathOrder = 'source' | 'xAscending';
+export type AreaSurfaceExtentPolicy = 'pointCaps' | 'plotEdgeCaps' | 'centeredSingleton';
+export type AreaSurfaceExtentStatus = 'exact' | 'verifiedDefault' | 'approximate' | 'missing';
 
 /**
  * Mark specification with styling options.
@@ -714,10 +887,22 @@ export interface MarkSpec {
   fontSizeField?: string;
   /** Datum field for text rotation angle */
   angleField?: string;
+  /** Text wrapping width in pixels unless resolved by maxWidthField. */
+  maxWidth?: number;
+  /** Datum field for text wrapping width. */
+  maxWidthField?: string;
+  /** Line height in pixels unless resolved by lineHeightField. */
+  lineHeight?: number;
+  /** Datum field for text line height. */
+  lineHeightField?: string;
   /** Align text/rule category coordinates to the clustered bar slot for the datum's series. */
   alignToBarSlot?: boolean;
   /** Line interpolation method */
   interpolate?: Interpolate;
+  /** Point ordering used when constructing line and area paths. */
+  pathOrder?: PathOrder;
+  /** Horizontal cap policy used when closing area surfaces to their baseline/bottom edge. */
+  areaSurfaceExtentPolicy?: AreaSurfaceExtentPolicy;
   /** Line tension (for cardinal interpolation) */
   tension?: number;
   /** Line baseline for areas */
@@ -726,10 +911,30 @@ export interface MarkSpec {
   effects?: EffectSpec;
   /** Show points on lines */
   point?: boolean | { color?: string; size?: number; filled?: boolean };
+  /** Effective blank-cell policy for radar geometry generation. */
+  radarBlankPolicy?: 'gap' | 'span' | 'zero';
   /** Skip point marks whose scaled x/y positions are not finite. */
   skipInvalidPositions?: boolean;
   /** Tick orientation when a tick mark has both x and y encodings. */
   orient?: 'horizontal' | 'vertical';
+  /** Stock glyph subtype rendered by stockGlyph marks. */
+  stockSubType?: StockGlyphSubType;
+  /** Datum field containing stock open values. */
+  stockOpenField?: string;
+  /** Datum field containing stock high values. */
+  stockHighField?: string;
+  /** Datum field containing stock low values. */
+  stockLowField?: string;
+  /** Datum field containing stock close values. */
+  stockCloseField?: string;
+  /** Datum field containing stock volume values. */
+  stockVolumeField?: string;
+  /** Value-axis ownership for stock volume roles. */
+  stockVolumeAxisPolicy?: StockGlyphVolumeAxisPolicy;
+  /** Stock high-low endpoint policy rendered by the glyph stem. */
+  stockHighLowEndpointPolicy?: StockGlyphHighLowEndpointPolicySpec;
+  /** Resolved native stock glyph visual contract. */
+  stockVisual?: StockGlyphVisualSpec;
   /** Inner radius for arc marks (0-1 ratio or pixels) */
   innerRadius?: number;
   /** Outer radius for arc marks */
@@ -744,6 +949,8 @@ export interface MarkSpec {
   density?: boolean;
   /** Filled value bands for top-view surface/contour marks. */
   contourBands?: ContourBandSpec[];
+  /** Source band formatting preserved for surface/contour approximation evidence. */
+  sourceSurfaceBandFormats?: SurfaceBandFormatSpec[];
   /** Render top-view surface chart as contour isolines only. */
   contourWireframe?: boolean;
   /** Projected 3-D view settings for surface marks. */
@@ -770,6 +977,10 @@ export interface MarkSpec {
   _explodedIndex?: number;
   /** Exploded slice indices for pie charts (consumed by OOXML exporter) */
   _explodedIndices?: number[];
+  /** Radial pie/doughnut explosion offset for rendered slices and OOXML export. */
+  _explosionOffset?: number;
+  /** Apply the mark-level pie/doughnut explosion offset to every slice. */
+  _explodeAll?: boolean;
 }
 
 // =============================================================================
@@ -833,11 +1044,38 @@ export interface ManualLayoutSpec {
   h?: number;
 }
 
+export interface AxisReservationSpec {
+  source?: 'excelBarColumn' | 'excelPath';
+  status?: AxisLayoutStatus;
+  statusReason?: string;
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 export type BarGeometryGrouping = 'standard' | 'clustered' | 'stacked' | 'percentStacked';
 
 export type BarGeometryOrientation = 'horizontal' | 'vertical';
 
 export type BarSeriesSlotOrder = 'source' | 'reverse';
+
+export type BarCategoryPositionPolicy = 'between' | 'onCategory' | 'centeredSingleton';
+
+export type BarValueCrossingPolicy = 'automatic' | 'min' | 'max' | 'custom';
+
+export type BarGeometryStatus = 'exact' | 'verifiedDefault' | 'approximate';
+export type BarAxisTickSkipSource = AxisTickSkipSource;
+export type BarPercentAxisLabelPolicy = AxisPercentLabelPolicy;
+export type BarAxisLayoutStatus = BarGeometryStatus;
+export type BarPlotAreaAuthority =
+  | 'manualLayout'
+  | 'excelAutoModel'
+  | 'barPostRenderTrace'
+  | 'rendererAuto'
+  | 'missing';
+export type BarCategoryPitchAuthority = BarPlotAreaAuthority;
+export type BarValueAxisScaleSource = AxisValueScaleSource;
 
 export interface BarGeometrySpec {
   /** Horizontal bars use the y category axis; vertical columns use the x category axis. */
@@ -860,6 +1098,64 @@ export interface BarGeometrySpec {
   seriesIndices?: number[];
   /** Render order for clustered series slots within one category. */
   seriesSlotOrder?: BarSeriesSlotOrder;
+  /** Axis/channel role that owns category placement for this bar group. */
+  categoryAxisRole?: 'x' | 'y';
+  /** Axis/channel role that owns value scaling and the bar baseline for this group. */
+  valueAxisRole?: 'x' | 'y';
+  /** Imported category placement policy consumed by the category scale. */
+  categoryPositionPolicy?: BarCategoryPositionPolicy;
+  /** Effective category-axis label skip consumed before layout and rendering. */
+  categoryTickLabelSkip?: number;
+  /** Effective category-axis tick-mark skip consumed before layout and rendering. */
+  categoryTickMarkSkip?: number;
+  /** Authority for effective category-axis label/tick skip. */
+  categoryTickSkipSource?: BarAxisTickSkipSource;
+  /** Exactness of effective category-axis label/tick cadence. */
+  categoryTickStatus?: BarAxisLayoutStatus;
+  /** Stable diagnostic reason when category tick cadence is approximate. */
+  categoryTickStatusReason?: string;
+  /** Normalized OOXML crossBetween/isBetweenCategories policy. */
+  categoryCrossing?: AxisCategoryCrossing;
+  /** Normalized crossing policy that places the category axis on the value scale. */
+  valueCrossing?: BarValueCrossingPolicy;
+  /** Custom value-scale crossing value when valueCrossing is custom. */
+  valueCrossingValue?: number;
+  /** Baseline value resolved from valueCrossing and the effective value-axis domain. */
+  baselineValue?: number;
+  /** Effective value-axis domain used for stack/baseline diagnostics when known. */
+  valueAxisDomain?: [number, number];
+  /** Effective value-axis major tick step when resolved by imported axis layout. */
+  valueAxisTickStep?: number;
+  /** Effective value-axis major tick count when resolved by imported axis layout. */
+  valueAxisTickCount?: number;
+  /** Effective percent-stack domain when this group normalizes stacks. */
+  percentDomain?: [number, number];
+  /** Percent-stack label policy for the value axis. */
+  percentAxisLabelPolicy?: BarPercentAxisLabelPolicy;
+  /** Source authority for the resolved value-axis domain and major tick step. */
+  valueAxisScaleSource?: BarValueAxisScaleSource;
+  /** Exactness of the resolved value-axis domain and major tick step. */
+  valueAxisScaleStatus?: BarAxisLayoutStatus;
+  /** Stable diagnostic reason when value-axis scale is approximate. */
+  valueAxisScaleStatusReason?: string;
+  /** Whether imported axis-layout geometry was consumed exactly, defaulted, or approximated. */
+  axisLayoutStatus?: BarAxisLayoutStatus;
+  /** Stable diagnostic reason when the axis-layout status is not exact/defaulted. */
+  axisLayoutStatusReason?: string;
+  /** Whether imported geometry was consumed exactly, defaulted, or approximated. */
+  geometryStatus?: BarGeometryStatus;
+  /** Stable diagnostic reason when bar slot geometry is approximate. */
+  geometryStatusReason?: string;
+  /** Plot-area authority available to the geometry resolver. */
+  plotAreaSource?: 'auto' | 'manual';
+  /** Evidence source for the resolved plot area consumed by this bar group. */
+  plotAreaAuthority?: BarPlotAreaAuthority;
+  /** Evidence source for the category pitch consumed by this bar group. */
+  categoryPitchAuthority?: BarCategoryPitchAuthority;
+  /** Exactness of the resolved category slot pitch. */
+  categoryPitchStatus?: BarGeometryStatus;
+  /** Stable diagnostic reason when category slot pitch is approximate. */
+  categoryPitchStatusReason?: string;
 }
 
 /**
@@ -911,6 +1207,7 @@ export interface ConfigSpec {
     /** @deprecated Use side-specific y-axis label widths. */
     yAxisLabelWidth?: number;
     bottomMargin?: number;
+    axisReservations?: AxisReservationSpec;
     /** Category tick labels are drawn next to an in-plot value-axis crossing. */
     xAxisLabelsInsidePlot?: boolean;
     /** Category tick labels are drawn next to an in-plot value-axis crossing. */
@@ -921,6 +1218,50 @@ export interface ConfigSpec {
     dataTable?: {
       rowCount: number;
       height: number;
+    };
+    pieDoughnut?: {
+      outsideLabelPadding?: number;
+      leaderLinePadding?: number;
+      explosionPaddingPx?: number;
+      explosionPaddingPercent?: number;
+      maxExplosionPercent?: number;
+      preferSquareArcPlot?: true;
+      chartFrameBleed?: number;
+      legendEntryCount?: number;
+      legendMaxLabelLength?: number;
+      legendPosition?: 'none' | 'left' | 'right' | 'top' | 'bottom' | 'custom' | 'overlay';
+      labelCount?: number;
+      outsideLabelCount?: number;
+      defaultLabelCount?: number;
+      zeroValueLabelCount?: number;
+      nearZeroValueLabelCount?: number;
+      maxLabelTextLength?: number;
+      hasManualLayout?: boolean;
+      manualLayoutSource?: 'plotLayout' | 'plotAreaLayout' | 'manualLayout';
+      family?: 'pie' | 'doughnut' | 'ofPie' | 'pie3dApproximation';
+      ringCount?: number;
+      holeSize?: number;
+      hasRoundedFrame?: boolean;
+      hasChartFrameShadow?: boolean;
+      hasPlotFrameShadow?: boolean;
+      hasFrameStyleEffect?: boolean;
+      hasSliceStyleEffect?: boolean;
+      styleId?: number;
+      hasBuiltInStyleEffect?: boolean;
+      hasChartStyleContext?: boolean;
+      styleContextStatus?:
+        | 'none'
+        | 'resolvedSimple'
+        | 'modeledReservation'
+        | 'unmodeledFrameFootprint'
+        | 'unmodeledSliceFootprint'
+        | 'unresolvedDrawingMlOrDiagnostics'
+        | 'builtInChartStyleEffect';
+      styleContextReason?: string;
+      styleContextEffectFlags?: string[];
+      unmodeledStyleOwnerKeys?: string[];
+      styleContextReservationMode?: 'none' | 'modeledEffectBleed';
+      modeledStyleContextEffectBleed?: number;
     };
   };
 }

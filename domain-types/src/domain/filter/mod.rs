@@ -24,16 +24,21 @@ pub use advanced::{
     AdvancedFilterCriteriaRange, AdvancedFilterMode, AdvancedFilterRequest, AdvancedFilterResult,
     AdvancedFilterState,
 };
-pub use conversion::{auto_filter_to_filter_state, filter_state_to_auto_filter};
+pub use conversion::{
+    auto_filter_to_filter_state, column_filter_to_ooxml_filter_type, filter_state_to_auto_filter,
+};
 pub use ooxml::{
     AutoFilter, CalendarType, DateGroupItem, DateTimeGrouping, FilterColumn, OoxmlFilterCondition,
     OoxmlFilterType,
 };
 pub use ooxml_sort::{SortCondition, SortConditionBy, SortMethod, SortState};
 pub use runtime::{
-    ColorPosition, ColumnFilter, DynamicFilterRule, FilterCondition, FilterEvaluationResult,
-    FilterHeaderInfo, FilterKind, FilterLogic, FilterOperator, FilterRecordCount, FilterSortState,
-    FilterState, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
+    ColorPosition, ColumnFilter, DynamicFilterRule, FilterButtonMetadata, FilterCapability,
+    FilterCondition, FilterEvaluationResult, FilterHeaderInfo, FilterHeaderRange,
+    FilterHeaderSourceType, FilterKind, FilterLogic, FilterMetadataBinding,
+    FilterMetadataOwnerPath, FilterMetadataSourceKey, FilterOperator, FilterRecordCount,
+    FilterShellMetadata, FilterSortState, FilterState, ImportFilterUnsupportedReason,
+    LosslessCriterionDescriptor, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
 };
 
 /// Monotonic counter for generating unique filter IDs.

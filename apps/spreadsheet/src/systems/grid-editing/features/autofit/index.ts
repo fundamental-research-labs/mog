@@ -9,3 +9,9 @@
 
 export { autoFitColumns, calculateColumnAutoFitWidth } from './column-autofit';
 export { autoFitRows, calculateRowAutoFitHeight } from './row-autofit';
+export {
+  getAutofitColumnsForResize,
+  getAutofitColumnsForSelection,
+  getAutofitRowsForResize,
+  getAutofitRowsForSelection,
+} from './selection-targets';

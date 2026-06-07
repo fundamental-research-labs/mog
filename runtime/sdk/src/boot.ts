@@ -17,7 +17,8 @@
  */
 
 import { createWorkbook as _kernelCreateWorkbook } from '@mog-sdk/kernel';
-import type { Workbook } from '@mog-sdk/contracts/api';
+import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
+import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { CodeExecutionResult, CodeExecutionOptions } from '@mog-sdk/contracts/core';
 import type {
@@ -36,13 +37,30 @@ import {
 } from '@mog/kernel-host-internal';
 import {
   createNodeHeadlessHost,
-  loadNodeSdkNapiAddon,
   type NodeHeadlessHostResult,
 } from './host-adapters/node-headless-host';
-import { createNodeChartImageExporterFactory } from './chart-export/node-chart-image-exporter';
+import {
+  loadNodeSdkNapiAddon,
+  readNodeFileBytes,
+  writeNodeFileBytes,
+} from './host-adapters/native-node-runtime';
+import { createPortableRandomUUID } from './host-adapters/portable-host-crypto';
+import {
+  createChartImageExporterFactory,
+  createNodeChartImageExporterFactory,
+  createNodeWasmChartImageExporterFactory,
+} from './chart-export/node-chart-image-exporter';
+import type { NativeChartRasterAddon } from './chart-export/node-chart-image-exporter';
 
 type KernelCreateWorkbook = (...args: readonly unknown[]) => Promise<Workbook>;
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
+type ChartImageExporterRegistrationHandle = {
+  registerChartImageExporter(factory: (chartBridge: IChartBridge) => ChartImageExporter): void;
+};
+type NativeChartRasterAddonCandidate = Record<string, unknown>;
+type ChartRasterImageExportFormat = 'png' | 'jpeg';
+type ChartRasterBackendRuntime = 'browser-canvas' | 'native-node' | 'wasm' | 'custom';
+type ChartImageFittingMode = 'fill' | 'fit' | 'fitAndCenter';
 type KernelEventBus = IKernelContext['eventBus'];
 type WorkbookLinkStatusScope = {
   readonly requestingDocumentId: string;
@@ -114,6 +132,62 @@ export interface DocumentByteSyncPort {
   currentStateVector(): Promise<Uint8Array>;
 }
 
+export interface ChartImageFrame {
+  readonly exportWidth: number;
+  readonly exportHeight: number;
+  readonly sourceWidth?: number;
+  readonly sourceHeight?: number;
+  readonly contentX: number;
+  readonly contentY: number;
+  readonly contentWidth: number;
+  readonly contentHeight: number;
+}
+
+export interface ChartRasterRequest {
+  readonly version: 1;
+  readonly marks: readonly Record<string, unknown>[];
+  readonly options: {
+    readonly format: ChartRasterImageExportFormat;
+    readonly width: number;
+    readonly height: number;
+    readonly pixelRatio: number;
+    readonly backgroundColor: string;
+    readonly quality?: number;
+    readonly fittingMode: ChartImageFittingMode;
+    readonly frame: ChartImageFrame;
+  };
+}
+
+export interface ChartRasterResult {
+  readonly bytes: Uint8Array;
+  readonly format: ChartRasterImageExportFormat;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface ChartRasterBackend {
+  readonly id: string;
+  readonly runtime: ChartRasterBackendRuntime;
+  readonly supportedFormats: readonly ChartRasterImageExportFormat[];
+  render(request: ChartRasterRequest): Promise<ChartRasterResult> | ChartRasterResult;
+}
+
+export interface ChartRenderingOptions {
+  /**
+   * Explicit raster backend. When present, PNG/JPEG chart export uses this
+   * backend instead of the native Node raster function.
+   */
+  readonly rasterBackend?: ChartRasterBackend;
+  /**
+   * Precompiled chart-raster WASM module. Used by runtimes that must provide
+   * a host-approved WebAssembly.Module instead of compiling bytes at request
+   * time.
+   */
+  readonly rasterModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
+}
+
+export type ChartRenderingConfig = 'auto' | ChartRenderingOptions;
+
 // ---------------------------------------------------------------------------
 // Re-exported createWorkbook types — locally declared so tsup's DTS bundler
 // can inline them (it can't resolve @mog-sdk/kernel/api workspace subpath).
@@ -182,7 +256,7 @@ export interface CreateWorkbookOptions {
    */
   security?: DocumentSecurityConfig;
   /**
-   * Optional diagnostics logger for SDK host/kernel events. The Node SDK is
+   * Optional diagnostics logger for SDK host/kernel events. The SDK is
    * silent by default so embedding CLIs and TUIs keep stdout/stderr under
    * their own control.
    */
@@ -192,6 +266,15 @@ export interface CreateWorkbookOptions {
    * otherwise `console`. Also enabled by MOG_SDK_DEBUG=1/true/yes.
    */
   debug?: boolean;
+  /**
+   * Chart image rendering capability selection.
+   *
+   * Omitted or 'auto' uses the native Node raster backend lazily for PNG/JPEG
+   * and the portable SVG renderer for SVG. Supplying `rasterBackend` overrides
+   * native rasterization. Supplying `rasterModule` initializes
+   * @mog-sdk/chart-raster-wasm lazily for PNG/JPEG export.
+   */
+  chartRendering?: ChartRenderingConfig;
 }
 
 export interface MogSdkLogger {
@@ -228,13 +311,21 @@ export async function createWorkbook(
   arg?: string | Uint8Array | CreateWorkbookOptions | WorkbookConfig,
   importOptions?: DocumentImportOptions,
 ): Promise<Workbook> {
-  // Lazy-load node:fs/promises once — SDK runs exclusively in Node.js.
-  const { readFile, writeFile } = await import('node:fs/promises');
-  const nodeWriteFile = (path: string, data: Uint8Array) => writeFile(path, data);
-
   // WorkbookConfig power-user path — bypass host adapter, delegate directly.
   if (arg && typeof arg === 'object' && 'ctx' in arg && 'eventBus' in arg) {
     return (_kernelCreateWorkbook as unknown as KernelCreateWorkbook)(arg);
+  }
+
+  if (arg && typeof arg === 'object' && !(arg instanceof Uint8Array)) {
+    const runtimeOption = (arg as { readonly runtime?: unknown }).runtime;
+    if (runtimeOption !== undefined) {
+      throw new Error(
+        '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
+      );
+    }
+    if ((arg as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
+      throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
+    }
   }
 
   // Normalize all overloads into a unified CreateWorkbookOptions + optional xlsxBytes.
@@ -243,8 +334,7 @@ export async function createWorkbook(
 
   if (typeof arg === 'string') {
     // String → file path (Node.js SDK only)
-    const buf = await readFile(arg);
-    xlsxBytes = new Uint8Array(buf);
+    xlsxBytes = await readNodeFileBytes(arg);
     opts = { xlsx: xlsxBytes, importOptions };
   } else if (arg instanceof Uint8Array) {
     xlsxBytes = arg;
@@ -254,9 +344,21 @@ export async function createWorkbook(
     xlsxBytes = opts.xlsx;
     if (opts.source?.type === 'bytes') {
       xlsxBytes = opts.source.data;
+    } else if (opts.source?.type === 'path') {
+      xlsxBytes = await readNodeFileBytes(opts.source.path);
     }
   } else {
     opts = {};
+  }
+
+  const runtimeOption = (opts as { readonly runtime?: unknown }).runtime;
+  if (runtimeOption !== undefined) {
+    throw new Error(
+      '[createWorkbook] runtime is selected by @mog-sdk/sdk package exports; use @mog-sdk/sdk/wasm for WASM',
+    );
+  }
+  if ((opts as { readonly wasmModule?: unknown }).wasmModule !== undefined) {
+    throw new Error('[createWorkbook] wasmModule is only valid from the @mog-sdk/sdk/wasm entry');
   }
 
   // Normalize the `principal` shorthand into `security.resolvePrincipal` so
@@ -284,10 +386,12 @@ export async function createWorkbook(
   // raw construction path would bypass source-handle validation, operation
   // gates, and principal/resource binding.
   // -------------------------------------------------------------------------
-  const documentId = opts.documentId ?? crypto.randomUUID();
+  const documentId = opts.documentId ?? createPortableRandomUUID();
   const hostResult: NodeHeadlessHostResult = createNodeHeadlessHost({
     documentId,
     operation: xlsxBytes ? 'import' : 'create',
+    runtime: 'native',
+    loadNapiAddon: loadNodeSdkNapiAddon,
     importBytes: xlsxBytes,
     timezone,
     locale: undefined, // use adapter default (en-US)
@@ -298,11 +402,14 @@ export async function createWorkbook(
 
   let handle: HostBackedDocumentHandle | undefined;
   try {
-    handle = xlsxBytes
-      ? await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
-          importOptions,
-        })
-      : await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    if (xlsxBytes) {
+      const result = await importHostBackedDocument(hostResult.kernelContext, hostResult.bindings, {
+        importOptions,
+      });
+      handle = result.handle;
+    } else {
+      handle = await createHostBackedDocument(hostResult.kernelContext, hostResult.bindings);
+    }
   } catch (error) {
     hostResult.dispose();
     throw error;
@@ -313,7 +420,7 @@ export async function createWorkbook(
   }
   const readyHandle = handle;
 
-  // Node SDK callers expect imported workbooks to be fully queryable when
+  // SDK callers expect imported workbooks to be fully queryable when
   // createWorkbook resolves. Browser hosts may defer this after first paint,
   // but headless imports need charts, objects, and other projections before
   // the caller starts enumerating workbook state.
@@ -321,13 +428,11 @@ export async function createWorkbook(
     await readyHandle.awaitImportDurability();
   }
 
-  readyHandle.registerChartImageExporter(
-    createNodeChartImageExporterFactory(loadNodeSdkNapiAddon()),
-  );
+  installNodeChartImageExporter(readyHandle, loadNodeSdkNapiAddon, opts.chartRendering);
 
   // Create a Workbook from the handle — uses the cached workbook() path
   // which wires context, event bus, and sheet metadata internally.
-  const wb = await readyHandle.workbook();
+  const wb = await readyHandle.workbook({ writeFile: writeNodeFileBytes });
 
   // Chain disposal: workbook.dispose → handle.dispose → host.dispose
   const originalDispose = wb.dispose.bind(wb);
@@ -368,7 +473,10 @@ function logSdkError(
 
 function isSdkDebugEnabled(opts: Pick<CreateWorkbookOptions, 'debug'>): boolean {
   if (opts.debug !== undefined) return opts.debug;
-  const value = process.env.MOG_SDK_DEBUG ?? process.env.MOG_DEBUG;
+  const value =
+    typeof process === 'undefined'
+      ? undefined
+      : (process.env.MOG_SDK_DEBUG ?? process.env.MOG_DEBUG);
   return value === '1' || value === 'true' || value === 'yes';
 }
 
@@ -534,6 +642,7 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this._importWarnings = this.handle.importWarnings;
     this.registerChartImageExporter();
   }
 
@@ -555,14 +664,13 @@ class HeadlessLifecycleSystem {
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,
     } as any);
+    this._importWarnings = this.handle.importWarnings;
     this.registerChartImageExporter();
   }
 
   private registerChartImageExporter(): void {
     if (!this.handle) return;
-    this.handle.registerChartImageExporter(
-      createNodeChartImageExporterFactory(this.options.computeAddon),
-    );
+    installNodeChartImageExporter(this.handle, () => this.options.computeAddon);
   }
 
   /** @internal */
@@ -745,6 +853,49 @@ export function _getDocumentSyncPort(engine: HeadlessEngine): DocumentByteSyncPo
  */
 export function _getComputeBridge(engine: HeadlessEngine): unknown {
   return (engine as unknown as { lifecycle: { computeBridge: unknown } }).lifecycle.computeBridge;
+}
+
+/**
+ * @internal Package-private chart exporter registration helper for regression tests.
+ * Not re-exported from the public package entrypoint.
+ */
+export function installNodeChartImageExporter(
+  handle: ChartImageExporterRegistrationHandle,
+  resolveAddon: () => NativeChartRasterAddonCandidate,
+  chartRendering?: ChartRenderingConfig,
+): void {
+  handle.registerChartImageExporter(
+    createSdkChartImageExporterFactory(resolveAddon, chartRendering),
+  );
+}
+
+function createSdkChartImageExporterFactory(
+  resolveAddon: () => NativeChartRasterAddonCandidate,
+  chartRendering?: ChartRenderingConfig,
+): (chartBridge: IChartBridge) => ChartImageExporter {
+  if (chartRendering === undefined || chartRendering === 'auto') {
+    return createNodeChartImageExporterFactory(() => resolveAddon() as NativeChartRasterAddon);
+  }
+
+  const hasRasterBackend = chartRendering.rasterBackend !== undefined;
+  const hasRasterModule = chartRendering.rasterModule !== undefined;
+  if (hasRasterBackend && hasRasterModule) {
+    throw new Error(
+      '[createWorkbook] chartRendering cannot provide both rasterBackend and rasterModule',
+    );
+  }
+
+  if (hasRasterBackend) {
+    return createChartImageExporterFactory(
+      chartRendering.rasterBackend as unknown as import('@mog/charts/export').ChartRasterBackend,
+    );
+  }
+
+  if (hasRasterModule) {
+    return createNodeWasmChartImageExporterFactory(chartRendering.rasterModule!);
+  }
+
+  return createChartImageExporterFactory();
 }
 
 // =============================================================================

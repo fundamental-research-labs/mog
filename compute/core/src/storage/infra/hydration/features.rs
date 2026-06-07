@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use yrs::{Any, Array, Map, MapPrelim, MapRef};
@@ -391,12 +391,20 @@ pub(super) fn hydrate_hidden_rows_cols(
     row_id_hexes: &[SmallHex],
     row_heights: &[RowDimension],
     col_widths: &[ColDimension],
+    defer_hidden_row_ownership: bool,
+    structural_hidden_rows: &BTreeSet<u32>,
 ) {
     for rh in row_heights {
         if rh.hidden {
-            let key = rh.row.to_string();
-            hidden_rows_map.insert(txn, &*key, Any::Bool(true));
-            if let Some(row_id) = row_id_hexes.get(rh.row as usize) {
+            let structurally_hidden = structural_hidden_rows.contains(&rh.row);
+            if !structurally_hidden {
+                let key = rh.row.to_string();
+                hidden_rows_map.insert(txn, &*key, Any::Bool(true));
+            }
+            if !defer_hidden_row_ownership
+                && !structurally_hidden
+                && let Some(row_id) = row_id_hexes.get(rh.row as usize)
+            {
                 manual_hidden_rows_map.insert(txn, row_id.as_str(), Any::Bool(true));
             }
         }
@@ -911,8 +919,10 @@ pub(super) fn hydrate_floating_objects(
         // Use the object's own ID as the Y.Map key so that get-by-ID lookups
         // (which use `map.get(txn, object_id)`) find the correct entry.
         // Previously this used `fobj-{index}` which only accidentally matched
-        // pictures/shapes (whose IDs are also `fobj-{index}`) but broke charts
-        // (`chart-import-{index}`), form controls, connectors, and OLE objects.
+        // pictures/shapes (whose IDs are also `fobj-{index}`) but broke charts,
+        // form controls, connectors, and OLE objects. Parser-local object IDs
+        // are sheet-qualified here so document-wide caches never collide across
+        // sheets.
         let key = &obj.common.id;
         let entries = yrs_schema::floating_object::to_yrs_prelim(&obj);
         let obj_prelim: MapPrelim = entries.into_iter().collect();
@@ -936,6 +946,8 @@ fn is_parser_local_floating_object_id(id: &str) -> bool {
     } else if let Some(rest) = id.strip_prefix("fobj-ole-") {
         rest
     } else if let Some(rest) = id.strip_prefix("fobj-conn-") {
+        rest
+    } else if let Some(rest) = id.strip_prefix("chart-import-") {
         rest
     } else if let Some(rest) = id.strip_prefix("fobj-") {
         rest
@@ -1026,6 +1038,10 @@ mod tests {
             sheet_unique_floating_object_id("fobj-fc-4", &sheet_id),
             format!("fobj-fc-4-{}", sheet_id.to_uuid_string())
         );
+        assert_eq!(
+            sheet_unique_floating_object_id("chart-import-0", &sheet_id),
+            format!("chart-import-0-{}", sheet_id.to_uuid_string())
+        );
     }
 
     #[test]
@@ -1037,8 +1053,8 @@ mod tests {
             "fobj-1780000000000-a"
         );
         assert_eq!(
-            sheet_unique_floating_object_id("chart-import-0", &sheet_id),
-            "chart-import-0"
+            sheet_unique_floating_object_id("chart-import-alpha", &sheet_id),
+            "chart-import-alpha"
         );
     }
 }

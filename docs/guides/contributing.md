@@ -39,7 +39,7 @@ product surface. `pnpm-workspace.yaml`, the root `Cargo.toml`,
 
 | Area | Status | Paths |
 | --- | --- | --- |
-| Public SDK and embeds | shipped public | `runtime/sdk` (`@mog-sdk/node`), `runtime/embed` (`@mog-sdk/embed`), `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) |
+| Public SDK and embeds | shipped public | `runtime/sdk` (`@mog-sdk/sdk`), `runtime/embed` (`@mog-sdk/embed`), `runtime/spreadsheet-app` (`@mog-sdk/spreadsheet-app`) |
 | Public contracts and view package | shipped public | `contracts` (`@mog-sdk/contracts`), `views/sheet-view` (`@mog-sdk/sheet-view`) |
 | Binary wrappers | shipped public support packages | `compute/wasm/npm` (`@mog-sdk/wasm`), `compute/napi/npm/*` (`@mog-sdk/*` native packages) |
 | Kernel and services | workspace-internal | `kernel`, `kernel/host-internal`, `infra/transport`, `infra/platform` |
@@ -64,7 +64,7 @@ Run the smallest relevant test command for the changed package. Current public
 package examples include:
 
 ```bash
-pnpm --filter @mog-sdk/node test
+pnpm --filter @mog-sdk/sdk test
 pnpm --filter @mog-sdk/embed test
 pnpm --filter @mog-sdk/sheet-view test
 pnpm --filter @mog-sdk/spreadsheet-app test
@@ -137,7 +137,7 @@ Before adding or changing an exported TypeScript surface, check:
 - The package's `tsconfig.json` references.
 - [TypeScript Package Boundaries](../architecture/typescript-package-boundaries.md).
 
-Use shipped public packages in external examples: `@mog-sdk/node`,
+Use shipped public packages in external examples: `@mog-sdk/sdk`,
 `@mog-sdk/embed`, `@mog-sdk/spreadsheet-app`, `@mog-sdk/sheet-view`, and
 `@mog-sdk/contracts`. `@mog-sdk/kernel` is workspace-internal even though some
 monorepo subpaths are classified for controlled internal use. `@mog/shell` and
@@ -198,7 +198,7 @@ then use [Architecture](../architecture/README.md) for detailed subsystem notes.
   `kernel/src/bridges/compute`; the generator lives in
   `infra/rust-bridge/bridge-ts`.
 - Change a public runtime package: start in `runtime/sdk` for
-  `@mog-sdk/node`, `runtime/embed` for lower-level browser embeds,
+  `@mog-sdk/sdk`, `runtime/embed` for lower-level browser embeds,
   `runtime/spreadsheet-app` for the full app embed, or `views/sheet-view` for
   the low-level grid view.
 - Fix a rendering bug: start in `canvas` for drawing/grid internals,

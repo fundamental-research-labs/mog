@@ -90,6 +90,13 @@ export interface TransportConfig {
   wasmInitFns?: WasmInitFn[];
 
   /**
+   * Host-provided WASM module for runtimes that must precompile/bundle the
+   * module outside request-time code. When provided, the loader initializes
+   * @mog-sdk/wasm with this module and does not read Node file bytes.
+   */
+  wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
+
+  /**
    * Override NAPI addon module (optional — auto-loaded if not provided).
    * Only relevant for Node.js environments. When provided, skips the
    * automatic native platform package discovery.

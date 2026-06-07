@@ -28,10 +28,17 @@ import type {
   CellChangedEvent,
   CellFormatChangedEvent,
   CellsBatchChangedEvent,
+  FilterCapability,
   FilterKind,
   IEventBus,
+  ImportFilterUnsupportedReason,
   PivotUpdateOptions,
 } from '@mog-sdk/contracts/events';
+import type {
+  RuntimeDiagnosticsOptions,
+  RuntimeDiagnosticsPage,
+  RuntimeOperationDiagnostic as PublicRuntimeOperationDiagnostic,
+} from '@mog-sdk/contracts/data/diagnostics';
 import type {
   FloatingObject,
   FloatingObjectGroup,
@@ -69,6 +76,7 @@ import type {
   PropertyChange,
   RangeChange,
   RecalcResult,
+  RuntimeOperationDiagnostic as WireRuntimeOperationDiagnostic,
   ScrollPositionChange,
   SheetChange,
   SheetLifecycleRuntimeHint,
@@ -95,9 +103,64 @@ function toEventFilterKind(value: string | undefined): FilterKind | undefined {
   return undefined;
 }
 
+function toEventFilterCapability(value: string | undefined): FilterCapability | undefined {
+  if (value === 'supported' || value === 'unsupported') {
+    return value;
+  }
+  return undefined;
+}
+
+const IMPORT_FILTER_UNSUPPORTED_REASONS = new Set<string>([
+  'unknownDynamicType',
+  'unknownCustomOperator',
+  'dateGroupUnsupported',
+  'dynamicTemporalContextUnsupported',
+  'valueTokenUnresolved',
+  'valueTypeUnsupported',
+  'colorDxfUnresolved',
+  'iconFilterUnsupported',
+  'unknownExtension',
+  'tableFilterShapeUnsupported',
+]);
+
+function toEventUnsupportedReasons(
+  values: string[] | undefined,
+): ImportFilterUnsupportedReason[] | undefined {
+  if (!values?.length) return undefined;
+  const reasons = values.filter((value): value is ImportFilterUnsupportedReason =>
+    IMPORT_FILTER_UNSUPPORTED_REASONS.has(value),
+  );
+  return reasons.length > 0 ? reasons : undefined;
+}
+
+function toPublicRuntimeDiagnostic(
+  diagnostic: WireRuntimeOperationDiagnostic,
+): PublicRuntimeOperationDiagnostic {
+  return {
+    ...diagnostic,
+    severity: diagnostic.severity === 'error' ? 'error' : 'warning',
+    filterKind: toEventFilterKind(diagnostic.filterKind),
+  };
+}
+
+function normalizeRuntimeDiagnosticsLimit(limit: number | undefined): number {
+  if (limit == null || !Number.isFinite(limit)) return RUNTIME_DIAGNOSTIC_RETENTION;
+  return Math.max(0, Math.min(RUNTIME_DIAGNOSTIC_RETENTION, Math.trunc(limit)));
+}
+
+function parseRuntimeDiagnosticSequence(sequence: string | undefined): bigint | null {
+  if (sequence == null || sequence.trim() === '') return null;
+  try {
+    return BigInt(sequence);
+  } catch {
+    return null;
+  }
+}
+
 type ByteLike = Uint8Array | ArrayBuffer | number[] | { type?: string; data?: number[] };
 
 const rangeMetaDecoder = new TextDecoder();
+const RUNTIME_DIAGNOSTIC_RETENTION = 1024;
 
 function bytesFromBridge(value: ByteLike): Uint8Array {
   if (value instanceof Uint8Array) return value;
@@ -234,6 +297,8 @@ export class MutationResultHandler {
   private onUndoDescription?: (description: string) => void;
   private pivotUpdateOptionsStack: PivotUpdateOptions[] = [];
   private sheetRuntimeAdapters = new Map<string, SheetRuntimeAdapter>();
+  private runtimeDiagnostics: PublicRuntimeOperationDiagnostic[] = [];
+  private runtimeDiagnosticsEvicted = false;
 
   /**
    * Kernel state mirror — single sync read view of bounded direct workbook/
@@ -304,6 +369,41 @@ export class MutationResultHandler {
     this.stateMirror = mirror;
   }
 
+  getRuntimeDiagnostics(options: RuntimeDiagnosticsOptions = {}): RuntimeDiagnosticsPage {
+    const limit = normalizeRuntimeDiagnosticsLimit(options.limit);
+    const since = parseRuntimeDiagnosticSequence(options.sinceSequence);
+    const firstRetained = parseRuntimeDiagnosticSequence(this.runtimeDiagnostics[0]?.sequence);
+    const filtered =
+      since == null
+        ? this.runtimeDiagnostics
+        : this.runtimeDiagnostics.filter((diagnostic) => {
+            const sequence = parseRuntimeDiagnosticSequence(diagnostic.sequence);
+            return sequence != null && sequence > since;
+          });
+    const diagnostics = filtered.slice(0, limit);
+    const last = diagnostics.at(-1);
+    const truncated =
+      this.runtimeDiagnosticsEvicted &&
+      (since == null || firstRetained == null || since < firstRetained);
+
+    return {
+      diagnostics,
+      nextSequence: last?.sequence,
+      truncated,
+    };
+  }
+
+  private recordRuntimeDiagnostics(
+    diagnostics: WireRuntimeOperationDiagnostic[] | undefined,
+  ): void {
+    if (!diagnostics?.length) return;
+    this.runtimeDiagnostics.push(...diagnostics.map(toPublicRuntimeDiagnostic));
+    if (this.runtimeDiagnostics.length > RUNTIME_DIAGNOSTIC_RETENTION) {
+      this.runtimeDiagnostics = this.runtimeDiagnostics.slice(-RUNTIME_DIAGNOSTIC_RETENTION);
+      this.runtimeDiagnosticsEvicted = true;
+    }
+  }
+
   registerSheetRuntimeAdapter(ownerKey: string, adapter: SheetRuntimeAdapter): CallableDisposable {
     this.sheetRuntimeAdapters.set(ownerKey, adapter);
     return toDisposable(() => {
@@ -361,6 +461,7 @@ export class MutationResultHandler {
         : [];
 
     this.stateMirror?.apply(result);
+    this.recordRuntimeDiagnostics(result.diagnostics);
 
     if (sheetRuntimeContexts.length > 0) {
       const resultWithHint = result as MutationResultWithSheetLifecycleRuntimeHint;
@@ -915,14 +1016,12 @@ export class MutationResultHandler {
     // Simplified notification: subscribers can query Rust for full data.
     const timestamp = Date.now();
     for (const change of changes) {
-      if (change.kind === 'Set') {
-        this.eventBus.emit({
-          type: 'comments:cleared', // Reuse as a "comments changed" signal
-          timestamp,
-          sheetId: change.sheetId,
-          source: source === 'user' ? 'user' : 'remote',
-        });
-      }
+      this.eventBus.emit({
+        type: 'comments:cleared', // Reuse as a "comments changed" signal
+        timestamp,
+        sheetId: change.sheetId,
+        source: source === 'user' ? 'user' : 'remote',
+      });
     }
   }
 
@@ -952,6 +1051,12 @@ export class MutationResultHandler {
         sheetId: change.sheetId,
         filterId: change.filterId ?? '',
         filterKind: toEventFilterKind(change.filterKind),
+        tableId: change.tableId,
+        capability: toEventFilterCapability(change.capability),
+        unsupportedReasons: toEventUnsupportedReasons(change.unsupportedReasons),
+        hasActiveFilter: change.hasActiveFilter,
+        clearable: change.clearable,
+        diagnostics: change.diagnostics?.map(toPublicRuntimeDiagnostic),
         hiddenRowCount: change.hiddenRowCount,
         visibleRowCount: change.visibleRowCount,
         source: eventSource,

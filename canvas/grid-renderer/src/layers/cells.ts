@@ -235,6 +235,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
   private readonly imageCache = new Map<string, HTMLImageElement | 'loading' | 'error'>();
   private centerAcrossSpanProvider: CenterAcrossSpanProvider | undefined;
   private overflowIndex = new OverflowIndex();
+  private preparedFrame: FrameContext | null = null;
 
   constructor(config: CellsLayerConfig) {
     super({
@@ -326,29 +327,39 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
   // Render
   // ===========================================================================
 
+  beginFrame(frame: FrameContext): void {
+    this.prepareFrame(frame);
+  }
+
+  private prepareFrame(frame: FrameContext): void {
+    if (this.preparedFrame === frame) {
+      return;
+    }
+    this.preparedFrame = frame;
+
+    // Frame-scoped outputs accumulate across every region rendered for this layer.
+    this.clippedCells.clear();
+    this.interactiveElements?.clear();
+
+    // Clear overflow index on full repaint; partial repaints update incrementally.
+    if (!frame.dirtyRects || frame.dirtyRects.length === 0) {
+      this.overflowIndex.clear();
+    }
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     region: RenderRegion<GridRegionMeta>,
     frame: FrameContext,
   ): void {
+    this.prepareFrame(frame);
+
     const meta = region.metadata;
     const sheetId = meta.sheetId;
     const { cellData, sheetData, selectionData, positionIndex, mergeIndex } = this;
     const editorState = selectionData.getEditorState();
     const theme = sheetData.theme;
     const dpr = frame.dpr;
-
-    // Clear clipped cells for this frame
-    this.clippedCells.clear();
-
-    // Clear interactive elements so removed filter buttons / checkboxes etc.
-    // are evicted when they are not re-added in this render pass.
-    this.interactiveElements?.clear();
-
-    // Clear overflow index on full repaint; partial repaints update incrementally
-    if (!frame.dirtyRects || frame.dirtyRects.length === 0) {
-      this.overflowIndex.clear();
-    }
 
     // Collect CellRenderInfo in Pass 1 for reuse in Pass 2
     const cellInfoCache: CellRenderInfoExtended[] = [];
@@ -743,6 +754,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     const defaultFontColor = this.sheetData.sheetViewSkin.defaultCellText;
     const textMeasurer = this.textMeasurer;
     const { x, y, width, height, row, col } = cellInfo;
+    const hasHardLineBreaks = /[\r\n]/.test(displayText);
 
     // 1. Rich text
     if (richTextSegments && richTextSegments.length > 0) {
@@ -826,7 +838,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     }
 
     // 5. Distributed horizontal alignment (non-wrap)
-    if (format?.horizontalAlign === 'distributed' && !format.wrapText) {
+    if (format?.horizontalAlign === 'distributed' && !format.wrapText && !hasHardLineBreaks) {
       renderDistributedHorizontalText(
         ctx,
         displayText,
@@ -842,8 +854,8 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       return;
     }
 
-    // 6. Wrap text
-    if (format?.wrapText) {
+    // 6. Multi-line text
+    if (format?.wrapText || hasHardLineBreaks) {
       renderWrappedText(ctx, cellInfo, format, {
         hasHyperlink,
         isCutCell: false,

@@ -1,5 +1,10 @@
 import { DocumentLifecycleSystem } from './document/document-lifecycle-system';
 import { _createDocumentHandleInternal } from './api/document/document-factory';
+import {
+  documentImportWarningsFromDiagnostics,
+  projectImportDiagnostic,
+} from './api/document/import-diagnostics';
+import { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from './api/document/xlsx-document-import';
 import { validateAndResolveImportSource } from './document/host-import-source';
 import {
   attachHostBootstrapCollaborationSidecar,
@@ -10,9 +15,14 @@ export {
   DocumentLifecycleSystem,
   _createDocumentHandleInternal,
   attachHostBootstrapCollaborationSidecar,
+  documentImportWarningsFromDiagnostics,
   fetchRoomSnapshotForHostBootstrap,
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
+  projectImportDiagnostic,
   validateAndResolveImportSource,
 };
+export { mapDocumentImportWarningToMogImportWarning } from './api/document/import-diagnostics';
+export type { InteractiveDeferredImportToken } from './api/document/xlsx-document-import';
 export type { DocumentHandle } from './api/document/document-factory';
 export type { DocumentByteSyncPort } from './document/providers/provider';
 export type {

@@ -23,6 +23,11 @@
       "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./wasm": {
+      "development": "./src/index.wasm.ts",
+      "types": "./dist/index.wasm.d.ts",
+      "import": "./dist/index.wasm.js"
     }
   },
   "scripts": {

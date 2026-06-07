@@ -11,9 +11,13 @@ import type {
   CellValue,
   ColumnFilter,
   FilterDetailInfo,
+  FilterHeaderInfoEntry,
   FilterSortState,
   FilterState,
+  FilterSummaryInfo,
 } from '../types';
+
+export type { FilterHeaderInfoEntry, FilterSummaryInfo } from '../types';
 
 export type AdvancedFilterMode = 'inPlace' | 'copyTo';
 
@@ -101,6 +105,31 @@ export interface FilterDropdownData {
    * classified as dates when their cells carry a date/time number format.
    */
   readonly columnType?: FilterDropdownColumnType;
+  /** True when imported criteria are preserved losslessly but not editable by the runtime evaluator. */
+  readonly unsupportedPreserved?: boolean;
+  /** Unsupported imported features preserved in lossless metadata for this dropdown column/filter. */
+  readonly unsupportedReasons?: readonly string[];
+}
+
+export type FilterListScope = 'sheetLocal' | 'complete';
+export type FilterCompactListScope = 'available' | FilterListScope;
+
+export interface FilterListOptions {
+  /**
+   * `sheetLocal` reads only normalized state for this sheet. `complete` waits
+   * for all deferred workbook materialization before resolving details.
+   */
+  readonly scope?: FilterListScope;
+}
+
+export interface FilterCompactListOptions {
+  /**
+   * `available` returns currently available compact metadata without promoting
+   * deferred XLSX materialization. It is intended for passive renderer/status
+   * UI that can refresh later. `sheetLocal` waits for this sheet, and
+   * `complete` waits for all deferred workbook materialization.
+   */
+  readonly scope?: FilterCompactListScope;
 }
 
 /** Sub-API for filter operations on a worksheet. */
@@ -300,12 +329,19 @@ export interface WorksheetFilters {
   apply(filterId: string): Promise<void>;
 
   /**
+   * Reapply a filter after data changes.
+   *
+   * @param filterId - Filter ID to reapply
+   */
+  reapply(filterId: string): Promise<void>;
+
+  /**
    * Get detailed filter info including resolved range and column filters.
    *
    * @param filterId - Filter ID
    * @returns Detailed filter info, or null if not found
    */
-  getInfo(filterId: string): Promise<FilterDetailInfo | null>;
+  getInfo(filterId: string, options?: FilterListOptions): Promise<FilterDetailInfo | null>;
 
   /**
    * @deprecated Use {@link getUniqueValues} instead.
@@ -323,7 +359,21 @@ export interface WorksheetFilters {
    *
    * @returns Array of detailed filter info objects
    */
-  list(): Promise<FilterDetailInfo[]>;
+  list(options?: FilterListOptions): Promise<FilterDetailInfo[]>;
+
+  /**
+   * List compact filter summaries without per-column criteria conversion.
+   *
+   * @returns Array of filter summary objects
+   */
+  listSummaries(options?: FilterCompactListOptions): Promise<FilterSummaryInfo[]>;
+
+  /**
+   * List renderer-ready filter header entries for the sheet.
+   *
+   * @returns Array of header entries keyed by row/column
+   */
+  listHeaderInfo(options?: FilterCompactListOptions): Promise<FilterHeaderInfoEntry[]>;
 
   /**
    * Whether any auto-filter exists on the sheet.

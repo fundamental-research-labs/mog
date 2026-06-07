@@ -364,10 +364,12 @@ export function CreatePivotDialog() {
   // All hooks must be called before this point (rules of hooks)
   if (!isOpen) return null;
 
+  const isExistingWorksheetLocation = locationMode === 'existingWorksheet';
+
   // Validate location for existing worksheet mode
   const isLocationValid =
     locationMode === 'newWorksheet' ||
-    (locationMode === 'existingWorksheet' &&
+    (isExistingWorksheetLocation &&
       destinationSheetId &&
       destinationCellRef.trim() &&
       !cellRefError);
@@ -377,7 +379,7 @@ export function CreatePivotDialog() {
 
   // Build the combined location display (e.g., "Sheet2!A1")
   const locationDisplay =
-    locationMode === 'existingWorksheet' && destinationSheetName && destinationCellRef
+    isExistingWorksheetLocation && destinationSheetName && destinationCellRef
       ? `${destinationSheetName}!${destinationCellRef}`
       : '';
 
@@ -444,52 +446,55 @@ export function CreatePivotDialog() {
               aria-label="Pivot table location"
             />
 
-            {/* Existing Worksheet Options - shown when that mode is selected */}
-            {locationMode === 'existingWorksheet' && (
-              <div className="mt-3 ml-6 space-y-3">
-                {/* Sheet Selection */}
-                <div className="flex items-center gap-3">
-                  <Label className="w-16 shrink-0">Sheet:</Label>
-                  <Select
-                    options={sheetOptions}
-                    value={destinationSheetId ?? ''}
-                    onChange={handleSheetChange}
-                    className="flex-1"
-                    size="sm"
-                  />
-                </div>
-
-                {/* Cell Reference Input */}
-                <div className="flex items-center gap-3">
-                  <Label className="w-16 shrink-0">Cell:</Label>
-                  <CollapsibleRangeInput
-                    ref={destinationCellInputRef}
-                    value={destinationCellRef}
-                    onChange={(value) => handleCellRefChange(value)}
-                    dialogId="create-pivot-dialog"
-                    inputId="destination-cell"
-                    label="Destination cell"
-                    placeholder="e.g., A1"
-                    error={!!cellRefError}
-                    className="flex-1"
-                    data-pivot-target="dialog-input"
-                    data-pivot-input="destination-cell"
-                  />
-                </div>
-
-                {/* Cell Reference Error */}
-                {cellRefError && (
-                  <div className="ml-[76px] text-body text-ss-error">{cellRefError}</div>
-                )}
-
-                {/* Combined Location Display */}
-                {locationDisplay && !cellRefError && (
-                  <div className="ml-[76px] text-body text-ss-text-secondary">
-                    Location: <span className="font-medium text-ss-text">{locationDisplay}</span>
-                  </div>
-                )}
+            <fieldset
+              disabled={!isExistingWorksheetLocation}
+              aria-disabled={!isExistingWorksheetLocation}
+              className={`mt-3 ml-6 space-y-3 ${isExistingWorksheetLocation ? '' : 'opacity-60'}`}
+            >
+              {/* Sheet Selection */}
+              <div className="flex items-center gap-3">
+                <Label className="w-16 shrink-0">Sheet:</Label>
+                <Select
+                  options={sheetOptions}
+                  value={destinationSheetId ?? ''}
+                  onChange={handleSheetChange}
+                  disabled={!isExistingWorksheetLocation}
+                  className="flex-1"
+                  size="sm"
+                />
               </div>
-            )}
+
+              {/* Cell Reference Input */}
+              <div className="flex items-center gap-3">
+                <Label className="w-16 shrink-0">Cell:</Label>
+                <CollapsibleRangeInput
+                  ref={destinationCellInputRef}
+                  value={destinationCellRef}
+                  onChange={(value) => handleCellRefChange(value)}
+                  dialogId="create-pivot-dialog"
+                  inputId="destination-cell"
+                  label="Destination cell"
+                  placeholder="e.g., A1"
+                  error={!!cellRefError}
+                  disabled={!isExistingWorksheetLocation}
+                  className="flex-1"
+                  data-pivot-target="dialog-input"
+                  data-pivot-input="destination-cell"
+                />
+              </div>
+
+              {/* Cell Reference Error */}
+              {cellRefError && (
+                <div className="ml-[76px] text-body text-ss-error">{cellRefError}</div>
+              )}
+
+              {/* Combined Location Display */}
+              {locationDisplay && !cellRefError && (
+                <div className="ml-[76px] text-body text-ss-text-secondary">
+                  Location: <span className="font-medium text-ss-text">{locationDisplay}</span>
+                </div>
+              )}
+            </fieldset>
           </div>
 
           {/* Guidance */}

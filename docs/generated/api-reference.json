@@ -1635,7 +1635,7 @@
         },
         "charts.exportImage": {
           "signature": "charts.exportImage(chartId: string, options?: ImageExportOptions | undefined): Promise<string>",
-          "docstring": "Export a chart as an image.\n\nSupported formats are PNG and JPEG. SVG and other unsupported formats\nreject explicitly instead of falling back to another image type.\nBrowser exports render through the app canvas backend; Node SDK exports\nrender through the native headless raster backend.",
+          "docstring": "Export a chart as an image.\n\nSupported formats are SVG, PNG, and JPEG. SVG uses the portable vector\nrenderer; PNG and JPEG require a runtime raster backend.",
           "usedTypes": []
         },
         "charts.setDataRange": {
@@ -2318,6 +2318,16 @@
           "docstring": "List all filters in the sheet with full detail (resolved numeric ranges\nand converted column-filter criteria).\n@returns Array of detailed filter info objects",
           "usedTypes": []
         },
+        "filters.listSummaries": {
+          "signature": "filters.listSummaries(): Promise<FilterSummaryInfo[]>",
+          "docstring": "List compact filter summaries without per-column criteria conversion.\n@returns Array of filter summary objects",
+          "usedTypes": []
+        },
+        "filters.listHeaderInfo": {
+          "signature": "filters.listHeaderInfo(): Promise<FilterHeaderInfoEntry[]>",
+          "docstring": "List renderer-ready filter header entries for the sheet.\n@returns Array of header entries keyed by row/column",
+          "usedTypes": []
+        },
         "filters.isEnabled": {
           "signature": "filters.isEnabled(): Promise<boolean>",
           "docstring": "Whether any auto-filter exists on the sheet.\n@returns true if at least one filter is present",
@@ -2818,6 +2828,16 @@
           "docstring": "Atomically create a new sheet AND a pivot table on it.\nBoth operations happen in a single transaction for undo atomicity.\n\nAccepts the same simple or full config formats as `add()`.\n@param - Name for the new sheet\n@param - Pivot table configuration\n@returns The new sheet ID and the created pivot config",
           "usedTypes": ["PivotTableConfig"]
         },
+        "pivots.getAll": {
+          "signature": "pivots.getAll(): Promise<PivotTableConfig[]>",
+          "docstring": "List full pivot configs rendered on this worksheet.",
+          "usedTypes": ["PivotTableConfig"]
+        },
+        "pivots.getImportedViewRecords": {
+          "signature": "pivots.getImportedViewRecords(): Promise<ImportedPivotViewRecord[]>",
+          "docstring": "List imported pivot view records rendered on this worksheet.\n\nPromoted imports include their native config; unsupported imports include\nread-only preserved OOXML metadata and capabilities.",
+          "usedTypes": []
+        },
         "pivots.remove": {
           "signature": "pivots.remove(name: string): Promise<void>",
           "docstring": "Remove a pivot table by name.\n@param - Pivot table name",
@@ -2858,84 +2878,34 @@
           "docstring": "Get the total number of pivot tables on this worksheet.\n@returns The count of pivot tables",
           "usedTypes": []
         },
-        "pivots.addPlacement": {
-          "signature": "pivots.addPlacement(pivotId: string, spec: PivotPlacementSpec): Promise<PivotPlacementMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.updatePlacement": {
-          "signature": "pivots.updatePlacement(pivotId: string, placementId: PlacementId, patch: Partial<Omit<PivotPlacementSpec, \"source\" | \"area\" | \"placementId\">>): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.removePlacement": {
-          "signature": "pivots.removePlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.movePlacement": {
-          "signature": "pivots.movePlacement(pivotId: string, placementId: PlacementId, toArea: PivotFieldArea, toPosition: number): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.renameValuePlacement": {
-          "signature": "pivots.renameValuePlacement(pivotId: string, placementId: PlacementId, displayName: string | null): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.setSortByValue": {
-          "signature": "pivots.setSortByValue(pivotId: string, axisPlacementId: PlacementId, valuePlacementId: PlacementId, config: { order: SortOrder; columnKey?: string | undefined; } | null): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
         "pivots.addField": {
           "signature": "pivots.addField(name: string, fieldId: string, area: PivotFieldArea, options?: { position?: number | undefined; aggregateFunction?: AggregateFunction | undefined; sortOrder?: SortOrder | undefined; displayName?: string | undefined; showValuesAs?: ShowValuesAsConfig | undefined; } | undefined): Promise<void>",
-          "docstring": "Add a field to a pivot table area, resolved by pivot name.\n@deprecated Legacy facade. Prefer `addPlacement(pivotId, spec)`.\n@param - Pivot table name\n@param - Field ID to add\n@param - Target area (row, column, value, or filter)\n@param - Optional configuration (position, aggregateFunction, sortOrder, displayName)",
+          "docstring": "Add a field to a pivot table area, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to add\n@param - Target area (row, column, value, or filter)\n@param - Optional configuration (position, aggregateFunction, sortOrder, displayName)",
           "usedTypes": []
         },
         "pivots.removeField": {
           "signature": "pivots.removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>",
-          "docstring": "Remove a field from a pivot table area, resolved by pivot name.\n@deprecated Legacy facade. Prefer `removePlacement(pivotId, placementId)`.\n@param - Pivot table name\n@param - Field ID to remove\n@param - Area to remove the field from",
+          "docstring": "Remove a field from a pivot table area, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to remove\n@param - Area to remove the field from",
           "usedTypes": []
         },
         "pivots.moveField": {
           "signature": "pivots.moveField(name: string, fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<void>",
-          "docstring": "Move a field to a different area or position, resolved by pivot name.\n@deprecated Legacy facade. Prefer `movePlacement(pivotId, placementId, toArea, toPosition)`.\n@param - Pivot table name\n@param - Field ID to move\n@param - Source area\n@param - Target area\n@param - Target position within the area",
+          "docstring": "Move a field to a different area or position, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to move\n@param - Source area\n@param - Target area\n@param - Target position within the area",
           "usedTypes": []
         },
         "pivots.setAggregateFunction": {
-          "signature": "pivots.setAggregateFunction(pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
+          "signature": "pivots.setAggregateFunction(pivot: string, fieldOrPlacement: string, aggregateFunction: AggregateFunction): Promise<PivotKernelMutationReceipt>",
+          "docstring": "Set the aggregate function for a value placement.\n\n`pivot` must be an unambiguous pivot name.\n`fieldOrPlacement` may be an unambiguous field name/ID, display label, or\nstable placement ID. Ambiguous references throw before mutating.",
           "usedTypes": []
         },
         "pivots.setShowValuesAs": {
-          "signature": "pivots.setShowValuesAs(pivotId: string, placementId: PlacementId, showValuesAs: ShowValuesAsConfig | null): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
+          "signature": "pivots.setShowValuesAs(pivot: string, fieldOrPlacement: string, showValuesAs: ShowValuesAsConfig | null): Promise<PivotKernelMutationReceipt>",
+          "docstring": "Set the \"Show Values As\" calculation for a value placement.\n\n`pivot` must be an unambiguous pivot name.\n`fieldOrPlacement` may be an unambiguous field name/ID, display label, or\nstable placement ID. Pass null to clear.",
           "usedTypes": []
         },
         "pivots.setSortOrder": {
-          "signature": "pivots.setSortOrder(pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.resetPlacement": {
-          "signature": "pivots.resetPlacement(pivotId: string, placementId: PlacementId): Promise<PivotKernelMutationReceipt>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.setAggregateFunctionLegacy": {
-          "signature": "pivots.setAggregateFunctionLegacy(name: string, fieldId: string, aggregateFunction: AggregateFunction): Promise<void>",
-          "docstring": "Set the aggregate function for a value field, resolved by pivot name.\n@deprecated Legacy facade. Prefer `setAggregateFunction(pivotId, placementId, aggregateFunction)`.\n@param - Pivot table name\n@param - Field ID (must be in the 'value' area)\n@param - New aggregation function",
-          "usedTypes": []
-        },
-        "pivots.setShowValuesAsLegacy": {
-          "signature": "pivots.setShowValuesAsLegacy(name: string, fieldId: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>",
-          "docstring": "Set the \"Show Values As\" calculation for a value field.\nOnly applies to fields in the 'value' area. Pass null to clear.\n@deprecated Legacy facade. Prefer `setShowValuesAs(pivotId, placementId, showValuesAs)`.\n@param - Pivot table name\n@param - Field ID (must be in the 'value' area)\n@param - ShowValuesAs configuration, or null to clear",
-          "usedTypes": []
-        },
-        "pivots.setSortOrderLegacy": {
-          "signature": "pivots.setSortOrderLegacy(name: string, fieldId: string, sortOrder: SortOrder): Promise<void>",
-          "docstring": "Set the sort order for a row or column field, resolved by pivot name.\n@deprecated Legacy facade. Prefer `setSortOrder(pivotId, placementId, sortOrder)`.\n@param - Pivot table name\n@param - Field ID (must be in 'row' or 'column' area)\n@param - Sort order ('asc', 'desc', or 'none')",
+          "signature": "pivots.setSortOrder(pivot: string, fieldOrPlacement: string, sortOrder: SortOrder | null): Promise<PivotKernelMutationReceipt>",
+          "docstring": "Set the sort order for a row or column placement.\n\n`pivot` must be an unambiguous pivot name.\n`fieldOrPlacement` may be an unambiguous field name/ID, display label, or\nstable placement ID.",
           "usedTypes": []
         },
         "pivots.setFilter": {
@@ -2950,7 +2920,7 @@
         },
         "pivots.resetField": {
           "signature": "pivots.resetField(name: string, fieldId: string): Promise<void>",
-          "docstring": "Reset a field placement to defaults, resolved by pivot name.\n@deprecated Legacy facade. Prefer `resetPlacement(pivotId, placementId)`.\n@param - Pivot table name\n@param - Field ID to reset",
+          "docstring": "Reset a field placement to defaults, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to reset",
           "usedTypes": []
         },
         "pivots.setLayout": {
@@ -2994,38 +2964,18 @@
           "usedTypes": []
         },
         "pivots.addCalculatedField": {
-          "signature": "pivots.addCalculatedField(pivotId: string, field: PivotCalculatedFieldSpec): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; }>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.addCalculatedFieldAndPlace": {
-          "signature": "pivots.addCalculatedFieldAndPlace(pivotId: string, field: PivotCalculatedFieldSpec, placement: Omit<PivotPlacementSpec, \"source\" | \"fieldId\">): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; placementId: PlacementId; }>",
+          "signature": "pivots.addCalculatedField(name: string, field: CalculatedField): Promise<void>",
           "docstring": null,
           "usedTypes": []
         },
         "pivots.updateCalculatedField": {
-          "signature": "pivots.updateCalculatedField(pivotId: string, calculatedFieldId: CalculatedFieldId, updates: Partial<Pick<PivotCalculatedFieldSpec, \"name\" | \"formula\">>): Promise<PivotKernelMutationReceipt>",
+          "signature": "pivots.updateCalculatedField(name: string, fieldId: string, updates: Partial<Pick<CalculatedField, \"name\" | \"formula\">>): Promise<void>",
           "docstring": null,
           "usedTypes": []
         },
         "pivots.removeCalculatedField": {
-          "signature": "pivots.removeCalculatedField(pivotId: string, calculatedFieldId: CalculatedFieldId): Promise<PivotKernelMutationReceipt>",
+          "signature": "pivots.removeCalculatedField(name: string, fieldId: string): Promise<void>",
           "docstring": null,
-          "usedTypes": []
-        },
-        "pivots.addCalculatedFieldLegacy": {
-          "signature": "pivots.addCalculatedFieldLegacy(name: string, field: CalculatedField): Promise<void>",
-          "docstring": "Add a calculated field to a pivot table, resolved by pivot name.\n@deprecated Legacy facade. Prefer define-only `addCalculatedField(pivotId, spec)`.\n@param - Pivot table name\n@param - Calculated field definition (fieldId, name, formula)",
-          "usedTypes": []
-        },
-        "pivots.removeCalculatedFieldLegacy": {
-          "signature": "pivots.removeCalculatedFieldLegacy(name: string, fieldId: string): Promise<void>",
-          "docstring": "Remove a calculated field from a pivot table, resolved by pivot name.\n@deprecated Legacy facade. Prefer `removeCalculatedField(pivotId, calculatedFieldId)`.\n@param - Pivot table name\n@param - Calculated field ID to remove",
-          "usedTypes": []
-        },
-        "pivots.updateCalculatedFieldLegacy": {
-          "signature": "pivots.updateCalculatedFieldLegacy(name: string, fieldId: string, updates: Partial<Pick<CalculatedField, \"name\" | \"formula\">>): Promise<void>",
-          "docstring": "Update a calculated field on a pivot table, resolved by pivot name.\n@deprecated Legacy facade. Prefer `updateCalculatedField(pivotId, calculatedFieldId, patch)`.\n@param - Pivot table name\n@param - Calculated field ID to update\n@param - Partial updates (name and/or formula)",
           "usedTypes": []
         },
         "pivots.getRange": {
@@ -4034,7 +3984,7 @@
     },
     "PivotTableHandle": {
       "name": "PivotTableHandle",
-      "definition": "{\n  /** Unique pivot table identifier (readonly) */\n  id: string;\n  /** Get the pivot table name */\n  getName(): string;\n  /** Get the current configuration including all fields */\n  getConfig(): PivotTableConfig;\n  /** Add a field to the row, column, or filter area */\n  addField(field: string, area: \"column\" | \"row\" | \"filter\", position?: number | undefined): void;\n  /** Add a value field with aggregation */\n  addValueField(field: string, aggregation: \"sum\" | \"count\" | \"average\" | \"min\" | \"max\", label?: string | undefined): void;\n  /** Remove a field by name */\n  removeField(fieldName: string): void;\n  /** Change the aggregation function of a value field */\n  changeAggregation(valueFieldLabel: string, newAggregation: \"sum\" | \"count\" | \"average\" | \"min\" | \"max\"): void;\n  /** Rename a value field's display label */\n  renameValueField(currentLabel: string, newLabel: string): void;\n  /** Refresh the pivot table from its data source */\n  refresh(): Promise<void>;\n  /** Get all items for all non-value fields */\n  getAllItems(): Promise<PivotFieldItems[]>;\n  /** Set the \"Show Values As\" calculation for a value field. Pass null to clear. */\n  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): void;\n  /** Set item visibility by value string -> boolean map */\n  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): void;\n  /** Get the data source type (range, table, or external). */\n  getDataSourceType(): DataSourceType;\n  /** Change the source data range without refreshing/materializing. */\n  setDataSource(dataSource: string): Promise<void>;\n}",
+      "definition": "{\n  /** Get the pivot table name */\n  getName(): string;\n  /** Get the current configuration including all fields */\n  getConfig(): PivotTableConfig;\n  /** Update the pivot table data configuration. */\n  update(updates: Partial<Omit<PivotTableConfig, \"id\" | \"createdAt\">>): Promise<void>;\n  /** Delete the pivot table. */\n  delete(): Promise<boolean>;\n  /** Subscribe to computed result updates for this pivot. */\n  subscribeResult(callback: (result: PivotTableResult | null, error?: string | undefined) => void): () => void;\n  /** Compute this pivot table result. */\n  compute(forceRefresh?: boolean | undefined): Promise<PivotTableResult | null>;\n  /** Get the full range occupied by the rendered pivot table. */\n  getRange(): Promise<CellRange | null>;\n  /** Add a field to the row, column, or filter area */\n  addField(field: string, area: \"column\" | \"row\" | \"filter\", position?: number | undefined): Promise<void>;\n  /** Add a value field with aggregation */\n  addValueField(field: string, aggregation: \"sum\" | \"count\" | \"average\" | \"min\" | \"max\", label?: string | undefined): Promise<void>;\n  /** Remove a field by name */\n  removeField(fieldName: string, area?: PivotFieldArea | undefined): Promise<void>;\n  /** Move a field to a different area or position. */\n  moveField(fieldName: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<void>;\n  /** Change the aggregation function of a value field */\n  changeAggregation(valueFieldLabel: string, newAggregation: \"sum\" | \"count\" | \"average\" | \"min\" | \"max\"): Promise<void>;\n  /** Rename a value field's display label */\n  renameValueField(currentLabel: string, newLabel: string): Promise<void>;\n  /** Refresh the pivot table from its data source */\n  refresh(): Promise<void>;\n  /** Get all items for all non-value fields */\n  getAllItems(): Promise<PivotFieldItems[]>;\n  /** Set the \"Show Values As\" calculation for a value field. Pass null to clear. */\n  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;\n  /** Set the sort order for a row or column field. */\n  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;\n  /** Set a filter on a field. */\n  setFilter(fieldId: string, filter: Omit<PivotFilter, \"fieldId\">): Promise<void>;\n  /** Remove a filter from a field. */\n  removeFilter(fieldId: string): Promise<void>;\n  /** Set layout options. */\n  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;\n  /** Set style options. */\n  setStyle(style: Partial<PivotTableStyle>): Promise<void>;\n  /** Toggle expansion state for a header. */\n  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;\n  /** Set expansion state for all headers. */\n  setAllExpanded(expanded: boolean): Promise<void>;\n  /** Read expansion state. */\n  getExpansionState(): Promise<PivotExpansionState>;\n  /** Get drill-down data for a pivot cell. */\n  getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;\n  /** Add a calculated field to this pivot. */\n  addCalculatedField(field: CalculatedField): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; }>;\n  /** Set item visibility by value string -> boolean map */\n  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;\n  /** Get the data source type (range, table, or external). */\n  getDataSourceType(): DataSourceType;\n  /** Change the source data range without refreshing/materializing. */\n  setDataSource(dataSource: string): Promise<void>;\n}",
       "docstring": "Handle for interacting with an existing pivot table.\n\nReturned by `worksheet.getPivotTable()`. Provides methods to query\nand modify the pivot table's field configuration."
     },
     "CellData": {
@@ -4216,7 +4166,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-05-30T16:59:04.002Z",
+  "generated": "2026-06-05T05:33:54.709Z",
   "formatPresets": {
     "general": {
       "default": {

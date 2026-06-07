@@ -28,6 +28,7 @@ import { generatePointMarks } from './point';
 import { generateRadarMarks } from './radar';
 import { generateRectMarks } from './rect';
 import { generateRuleMarks } from './rule';
+import { generateStockGlyphMarks } from './stock-glyph';
 import { generateSurface3DMarks } from './surface-3d';
 import { generateTextMarks } from './text';
 import { generateTickMarks } from './tick';
@@ -88,7 +89,7 @@ export function generateMarks(
     case 'square':
       return generatePointMarks(markSpec, data, scales, encodings, layout);
     case 'arc':
-      return generateArcMarks(markSpec, data, scales, encodings, layout);
+      return generateArcMarks(markSpec, data, scales, encodings, layout, config);
     case 'arc3d': {
       const arcMarks = generateArcMarks(
         { ...markSpec, type: 'arc' },
@@ -96,6 +97,7 @@ export function generateMarks(
         scales,
         encodings,
         layout,
+        config,
       );
       return depthEnhanceArcMarks(arcMarks, depthOptionsFor3DPlot(markSpec, layout)).map((mark) =>
         with3DMetadata(mark, markSpec.chart3d, 'outer'),
@@ -109,6 +111,8 @@ export function generateMarks(
       return generateTextMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'tick':
       return generateTickMarks(markSpec, data, scales, encodings, layout);
+    case 'stockGlyph':
+      return generateStockGlyphMarks(markSpec, data, scales, encodings, layout, encoding);
     case 'boxplot':
       return generateBoxPlotMarks(markSpec, data, scales, encodings, layout, encoding, config);
     case 'histogram':
@@ -139,6 +143,7 @@ export { generatePointMarks } from './point';
 export { generateRadarMarks } from './radar';
 export { generateRectMarks } from './rect';
 export { generateRuleMarks } from './rule';
+export { generateStockGlyphMarks } from './stock-glyph';
 export { generateSurface3DMarks } from './surface-3d';
 export { generateTextMarks } from './text';
 export { generateTickMarks } from './tick';

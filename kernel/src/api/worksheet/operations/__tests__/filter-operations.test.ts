@@ -8,10 +8,15 @@ const SHEET_ID = sheetId('sheet-1');
 
 function createMockCtx() {
   return {
+    awaitMaterialized: jest.fn().mockResolvedValue(undefined),
     computeBridge: {
       getFiltersInSheet: jest.fn().mockResolvedValue([]),
       getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       getCellPosition: jest.fn().mockResolvedValue(null),
+      setFilterSortState: jest.fn().mockResolvedValue(undefined),
+    },
+    writeGate: {
+      assertWritable: jest.fn(),
     },
   } as any;
 }
@@ -88,5 +93,23 @@ describe('FilterOps resolved ranges', () => {
 
     expect(result).toEqual({ id: 'filter-1' });
     expect(ctx.computeBridge.getCellPosition).not.toHaveBeenCalled();
+  });
+
+  it('waits for all sheets before mutating filter sort state', async () => {
+    const ctx = createMockCtx();
+
+    const result = await FilterOps.setFilterSortState(ctx, SHEET_ID, 'filter-1', {
+      columnCellId: 'header-a',
+      order: 'asc',
+      sortBy: 'value',
+    });
+
+    expect(result.success).toBe(true);
+    expect(ctx.awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(ctx.computeBridge.setFilterSortState).toHaveBeenCalledWith(SHEET_ID, 'filter-1', {
+      columnCellId: 'header-a',
+      order: 'asc',
+      sortBy: 'value',
+    });
   });
 });

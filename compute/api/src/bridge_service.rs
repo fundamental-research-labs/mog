@@ -47,6 +47,7 @@ use compute_core::storage::engine::search::{WorkbookComment, WorkbookPivotTable,
 use compute_core::storage::sheet::{
     filters as sheet_filters, grouping as sheet_grouping, sparklines as sheet_sparklines,
 };
+use compute_core::storage::workbook::imported_pivots::ImportedPivotViewRecord;
 use domain_types::domain::cell_style::CellStyleDef;
 use domain_types::domain::comment::{Comment, CommentMention, CommentType};
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};
@@ -61,7 +62,8 @@ use domain_types::domain::slicer::{
 };
 use domain_types::domain::table::Table as CanonicalTable;
 use domain_types::domain::validation::{CellValidationResult, ColumnSchema, RangeSchema};
-use domain_types::{CellFormat, ResolvedCellFormat, SheetProtectionOptions};
+use domain_types::{CellFormat, ImportDiagnostic, ResolvedCellFormat, SheetProtectionOptions};
+use snapshot_types::{RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage};
 
 /// Bridge service wrapping the compute engine for FFI exposure.
 ///

@@ -45,6 +45,9 @@ pub struct PivotEngineConfig {
     pub source_sheet_name: String,
     /// Range of cells in the source sheet that provide data.
     pub source_range: CellRange,
+    /// Stable ID of the sheet where the pivot table is rendered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_sheet_id: Option<String>,
     /// Name of the sheet where the pivot table is rendered.
     pub output_sheet_name: String,
     /// Top-left cell of the pivot table output.
@@ -126,6 +129,7 @@ impl TryFrom<PivotTableConfig> for PivotEngineConfig {
             source_sheet_id: config.source_sheet_id,
             source_sheet_name: config.source_sheet_name,
             source_range: config.source_range,
+            output_sheet_id: config.output_sheet_id,
             output_sheet_name: config.output_sheet_name,
             output_location: config.output_location,
             fields: config.fields,
@@ -175,6 +179,7 @@ impl From<PivotEngineConfig> for PivotTableConfig {
             source_sheet_id: config.source_sheet_id,
             source_sheet_name: config.source_sheet_name,
             source_range: config.source_range,
+            output_sheet_id: config.output_sheet_id,
             output_sheet_name: config.output_sheet_name,
             output_location: config.output_location,
             fields: config.fields,

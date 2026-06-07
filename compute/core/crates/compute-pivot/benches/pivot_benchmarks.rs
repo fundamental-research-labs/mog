@@ -185,6 +185,7 @@ fn make_config(num_rows: usize, placements: Vec<PivotFieldPlacement>) -> PivotTa
         source_sheet_id: None,
         source_sheet_name: "sheet1".to_string(),
         source_range: CellRange::new(0, 0, num_rows as u32, 4),
+        output_sheet_id: None,
         output_sheet_name: "sheet1".to_string(),
         output_location: OutputLocation { row: 0, col: 0 },
         fields: make_fields(),

@@ -14,8 +14,13 @@ import type {
   AggregateFunction,
   PivotFieldArea,
   PivotTableWithResult,
+  SortOrder,
 } from '@mog-sdk/contracts/pivot';
 import { Button } from '@mog/shell/components/ui';
+import {
+  createPivotCapabilitiesForSource,
+  type PivotCapabilities,
+} from '../../pivot/pivot-capabilities';
 import { PivotFieldList } from './PivotFieldList';
 
 // =============================================================================
@@ -24,27 +29,26 @@ import { PivotFieldList } from './PivotFieldList';
 
 export interface PivotFieldPanelProps {
   /** Currently editing pivot table (with computed result) */
-  pivot: PivotTableWithResult;
+  pivot: PivotTableWithResult & { capabilities?: PivotCapabilities };
   /** Callbacks for field operations */
   onAddField: (
     fieldId: string,
     area: PivotFieldArea,
-    options?: { aggregateFunction?: AggregateFunction },
+    options?: { position?: number; aggregateFunction?: AggregateFunction },
   ) => void;
-  onRemoveField: (fieldId: string, area: PivotFieldArea) => void;
-  onMoveField: (
-    fieldId: string,
-    fromArea: PivotFieldArea,
-    toArea: PivotFieldArea,
-    position: number,
-  ) => void;
-  onSetAggregateFunction: (fieldId: string, func: AggregateFunction) => void;
+  onRemovePlacement: (placementId: string) => void;
+  onMovePlacement: (placementId: string, toArea: PivotFieldArea, position: number) => void;
+  onSetAggregateFunction: (placementId: string, func: AggregateFunction) => void;
+  onSetSortOrder: (placementId: string, sortOrder: SortOrder) => void;
+  onSetValueSortOrder: (valuePlacementId: string, sortOrder: SortOrder) => void;
   /** Refresh the pivot table */
   onRefresh?: () => void;
   /** Delete the pivot table */
   onDelete?: () => void;
   /** Close panel */
   onClose: () => void;
+  /** Operation capabilities for the selected pivot. */
+  capabilities?: PivotCapabilities;
   /** Render imported cached pivots as inspect-only. */
   readOnly?: boolean;
   /** Custom style */
@@ -58,16 +62,23 @@ export interface PivotFieldPanelProps {
 export function PivotFieldPanel({
   pivot,
   onAddField,
-  onRemoveField,
-  onMoveField,
   onSetAggregateFunction,
+  onRemovePlacement,
+  onMovePlacement,
+  onSetSortOrder,
+  onSetValueSortOrder,
   onRefresh,
   onDelete,
   onClose,
+  capabilities,
   readOnly = false,
   style,
 }: PivotFieldPanelProps) {
   const { config, result, error } = pivot;
+  const effectiveCapabilities =
+    capabilities ??
+    pivot.capabilities ??
+    createPivotCapabilitiesForSource(readOnly ? 'unsupportedImport' : 'native');
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -86,30 +97,16 @@ export function PivotFieldPanel({
     (
       fieldId: string,
       area: PivotFieldArea,
-      options?: { aggregateFunction?: AggregateFunction },
+      options?: { position?: number; aggregateFunction?: AggregateFunction },
     ) => {
       onAddField(fieldId, area, options);
     },
     [onAddField],
   );
 
-  const handleRemoveField = useCallback(
-    (fieldId: string, area: PivotFieldArea) => {
-      onRemoveField(fieldId, area);
-    },
-    [onRemoveField],
-  );
-
-  const handleMoveField = useCallback(
-    (fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, position: number) => {
-      onMoveField(fieldId, fromArea, toArea, position);
-    },
-    [onMoveField],
-  );
-
   const handleAggregateChange = useCallback(
-    (fieldId: string, aggregate: AggregateFunction) => {
-      onSetAggregateFunction(fieldId, aggregate);
+    (placementId: string, aggregate: AggregateFunction) => {
+      onSetAggregateFunction(placementId, aggregate);
     },
     [onSetAggregateFunction],
   );
@@ -152,11 +149,25 @@ export function PivotFieldPanel({
           fields={config.fields}
           placements={config.placements}
           onAddField={handleAddField}
-          onRemoveField={handleRemoveField}
-          onMoveField={handleMoveField}
+          onRemovePlacement={onRemovePlacement}
+          onMovePlacement={onMovePlacement}
           onAggregateChange={handleAggregateChange}
+          onSortOrderChange={onSetSortOrder}
+          onValueSortChange={onSetValueSortOrder}
           disabled={readOnly}
+          canAddFields={effectiveCapabilities.canEditFields}
+          canReorderFields={effectiveCapabilities.canMove ?? effectiveCapabilities.canReorderFields}
+          canRemoveFields={effectiveCapabilities.canRemove ?? effectiveCapabilities.canRemoveFields}
+          canChangeAggregate={effectiveCapabilities.canChangeAggregate}
+          canSortLabels={effectiveCapabilities.canSortLabels}
+          canSortByValue={effectiveCapabilities.canSortByValue}
         />
+
+        {effectiveCapabilities.unsupportedReason && (
+          <div className="px-3 py-2 bg-ss-surface-secondary rounded mt-4 text-caption text-ss-text-secondary">
+            {effectiveCapabilities.unsupportedReason}
+          </div>
+        )}
 
         {/* Stats section */}
         {result && (
@@ -175,7 +186,7 @@ export function PivotFieldPanel({
 
       {/* Footer with actions */}
       <div className="flex gap-3 px-4 py-4 border-t border-ss-border-light bg-ss-surface-secondary">
-        {!readOnly && onRefresh && (
+        {effectiveCapabilities.canRefresh && onRefresh && (
           <Button
             variant="secondary"
             className="flex-1"
@@ -185,7 +196,7 @@ export function PivotFieldPanel({
             Refresh
           </Button>
         )}
-        {!readOnly && onDelete && (
+        {effectiveCapabilities.canDelete && onDelete && (
           <Button variant="danger" className="flex-1" onClick={onDelete} title="Delete pivot table">
             Delete
           </Button>

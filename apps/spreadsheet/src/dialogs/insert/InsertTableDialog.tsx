@@ -112,6 +112,17 @@ function formatA1Range(range: {
   return `${colToLetter(range.startCol)}${range.startRow + 1}:${colToLetter(range.endCol)}${range.endRow + 1}`;
 }
 
+function formatOptionalA1Range(
+  range: {
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+  } | null,
+): string {
+  return range ? formatA1Range(range) : '';
+}
+
 // =============================================================================
 // Style Preview Component
 // =============================================================================
@@ -191,11 +202,14 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
   const initialStylePreset = useUIStore((s) => s.insertTableInitialStylePreset);
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
+  const initialRangeInput = formatOptionalA1Range(initialRange);
 
   // Form state
-  const [rangeInput, setRangeInput] = useState('');
-  const [hasHeaders, setHasHeaders] = useState(true);
-  const [selectedStyle, setSelectedStyle] = useState<TableStylePreset>('medium2');
+  const [rangeInput, setRangeInput] = useState(() => initialRangeInput);
+  const [hasHeaders, setHasHeaders] = useState(() => initialHasHeaders);
+  const [selectedStyle, setSelectedStyle] = useState<TableStylePreset>(
+    () => initialStylePreset ?? 'medium2',
+  );
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   // Initialize range when dialog opens from the action-captured snapshot.
@@ -321,7 +335,11 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
 
       <DialogBody>
         {/* Range Input */}
-        <FormField label="Where is the data for your table?" error={rangeError ?? undefined}>
+        <FormField
+          label="Where is the data for your table?"
+          htmlFor="table-range"
+          error={rangeError ?? undefined}
+        >
           <CollapsibleRangeInput
             value={rangeInput}
             onChange={handleRangeChange}

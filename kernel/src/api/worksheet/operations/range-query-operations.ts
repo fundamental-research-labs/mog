@@ -121,6 +121,7 @@ export async function getExtendedRange(
   const n = normalizeRange(range);
   const anchor = activeCell ?? { row: n.startRow, col: n.startCol };
 
+  await ctx.awaitMaterialized?.(sheetId);
   const edge = await ctx.computeBridge.findDataEdge(sheetId, anchor.row, anchor.col, direction);
 
   // Extend the range to include the edge

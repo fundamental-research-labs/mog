@@ -383,17 +383,120 @@ pub fn build_workbook_snapshot_from_yrs(
     let calculation_settings = workbook_settings.calculation_settings;
     let calc = calculation_settings.clone().unwrap_or_default();
 
+    let pivot_tables = read_pivot_defs_from_yrs(storage, &sheet_order);
+
     Ok(WorkbookSnapshot {
         sheets: sheet_snapshots,
         named_ranges: named_ranges_vec,
         tables,
-        pivot_tables: vec![],
+        pivot_tables,
         data_table_regions,
         iterative_calc: calc.enable_iterative_calculation,
         max_iterations: calc.max_iterations,
         max_change: calc.max_change,
         calculation_settings,
     })
+}
+
+fn read_pivot_defs_from_yrs(
+    storage: &YrsStorage,
+    sheet_order: &[SheetId],
+) -> Vec<snapshot_types::PivotTableDef> {
+    let mut defs = Vec::new();
+    for sheet_id in sheet_order {
+        for config in
+            crate::storage::sheet::pivots::get_all_pivots(storage.doc(), storage.sheets(), sheet_id)
+        {
+            let output_sheet_id = config
+                .output_sheet_id
+                .as_deref()
+                .and_then(|value| SheetId::from_uuid_str(value).ok())
+                .unwrap_or(*sheet_id);
+            let (start_row, start_col, end_row, end_col) = config
+                .ref_range
+                .as_deref()
+                .and_then(crate::import::phantom::parse_range_ref)
+                .unwrap_or((
+                    config.output_location.row,
+                    config.output_location.col,
+                    config.output_location.row,
+                    config.output_location.col,
+                ));
+            let rendered_rows = end_row
+                .checked_sub(start_row)
+                .map(|delta| delta.saturating_add(1));
+            let rendered_cols = end_col
+                .checked_sub(start_col)
+                .map(|delta| delta.saturating_add(1));
+            let data_field_names = config
+                .placements
+                .iter()
+                .filter(|placement| {
+                    placement.area == domain_types::domain::pivot::PivotFieldArea::Value
+                })
+                .map(|placement| {
+                    placement.display_name.clone().unwrap_or_else(|| {
+                        config
+                            .fields
+                            .iter()
+                            .find(|field| field.id.as_str() == placement.field_id.as_str())
+                            .map(|field| field.name.clone())
+                            .unwrap_or_else(|| placement.field_id.to_string())
+                    })
+                })
+                .collect();
+            let cache_field_names = config
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect();
+            let row_field_indices = pivot_field_indices_for_area(
+                &config,
+                domain_types::domain::pivot::PivotFieldArea::Row,
+            );
+            let col_field_indices = pivot_field_indices_for_area(
+                &config,
+                domain_types::domain::pivot::PivotFieldArea::Column,
+            );
+            defs.push(snapshot_types::PivotTableDef {
+                id: config.id,
+                name: config.name,
+                sheet: output_sheet_id.to_uuid_string(),
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+                rendered_rows,
+                rendered_cols,
+                first_data_row: config.first_data_row.unwrap_or(0),
+                first_data_col: config.first_data_col.unwrap_or(0),
+                data_field_names,
+                cache_field_names,
+                row_field_indices,
+                col_field_indices,
+                data_on_rows: config.data_on_rows.unwrap_or(false),
+            });
+        }
+    }
+    defs
+}
+
+fn pivot_field_indices_for_area(
+    config: &domain_types::domain::pivot::PivotTableConfig,
+    area: domain_types::domain::pivot::PivotFieldArea,
+) -> Vec<u32> {
+    config
+        .placements
+        .iter()
+        .filter(|placement| placement.area == area)
+        .filter_map(|placement| {
+            config
+                .fields
+                .iter()
+                .position(|field| field.id.as_str() == placement.field_id.as_str())
+                .map(|index| index as u32)
+        })
+        .collect()
 }
 
 /// Read table definitions from Yrs.

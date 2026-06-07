@@ -76,8 +76,9 @@ function styleKey(mark: AnyMark): string {
       ? `|${(mark as TextMark).fontStyle ?? ''}|${(mark as TextMark).underline ?? ''}|${(mark as TextMark).strikethrough ?? ''}|${JSON.stringify((mark as TextMark).richText ?? null)}`
       : '';
   const paintKey = `${JSON.stringify(s.fillPaint ?? null)}|${JSON.stringify(s.strokePaint ?? null)}|${JSON.stringify(s.line ?? null)}|${JSON.stringify(s.shadow ?? s.effects ?? null)}`;
+  const strokePaint = s.line?.paint ?? s.strokePaint;
   const paintBoundsKey =
-    needsMarkBoundsForPaint(s.fillPaint) || needsMarkBoundsForPaint(s.strokePaint)
+    needsMarkBoundsForPaint(s.fillPaint) || needsMarkBoundsForPaint(strokePaint)
       ? `|bounds:${boundsKey(mark)}`
       : '';
   // Text marks need per-mark font/alignment, so we include those properties
@@ -85,7 +86,7 @@ function styleKey(mark: AnyMark): string {
   if (mark.type === 'text') {
     const t = mark as TextMark;
     const font = buildCanvasFontString(t.fontWeight, t.fontSize, t.fontFamily, t.fontStyle);
-    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${paintKey}|${font}|${t.textAlign}|${t.textBaseline}${richKey}${paintBoundsKey}${clip}`;
+    return `text|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${paintKey}|${font}|${t.textAlign}|${t.textBaseline}|${t.maxWidth ?? ''}|${t.lineHeight ?? ''}${richKey}${paintBoundsKey}${clip}`;
   }
   return `${mark.type}|${s.fill ?? ''}|${s.stroke ?? ''}|${s.strokeWidth ?? ''}|${s.strokeDash?.join(',') ?? ''}|${s.opacity ?? ''}|${s.cornerRadius ?? ''}|${paintKey}${paintBoundsKey}${clip}`;
 }
@@ -174,7 +175,13 @@ function drawSymbol(ctx: CanvasRenderingContext2D, mark: SymbolMark): void {
 
 /** Draw a text mark without save/restore/applyStyle (font/align already set by batch). */
 function drawText(ctx: CanvasRenderingContext2D, mark: TextMark): void {
-  if (mark.richText?.length || mark.underline || mark.strikethrough || mark.rotation) {
+  if (
+    mark.richText?.length ||
+    mark.underline ||
+    mark.strikethrough ||
+    mark.rotation ||
+    mark.maxWidth !== undefined
+  ) {
     renderMark(ctx, mark);
     return;
   }

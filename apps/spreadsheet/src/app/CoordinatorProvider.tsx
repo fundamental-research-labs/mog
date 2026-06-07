@@ -30,6 +30,7 @@ import {
   hasImplicitRowStructuredReference,
   qualifyImplicitRowStructuredReferences,
   resolveCalculatedColumnCellContext,
+  resolveTableHeaderCellContext,
 } from '../coordinator/tables/calculated-column-context';
 import { CircularReferenceDialog, useCircularReferenceDialog } from '../dialogs/formulas';
 import {
@@ -40,6 +41,7 @@ import {
 import { usePlatform, usePlatformIdentity, useShellService } from '@mog/shell';
 import {
   useActiveSheetId,
+  useDocumentContext,
   useFeatureGates,
   useReadOnly,
   useSpreadsheetHostCommandsOptional,
@@ -385,6 +387,8 @@ function KeyboardCaptureSetup({
       // so NEXT_SHEET/PREVIOUS_SHEET actions can fire while formula editing is active
       const isSheetSwitch =
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
+      const isPickerDropdownShortcut =
+        e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown';
       if (!isNavigationKey && !isSheetSwitch) {
         const isFormattingShortcut =
           (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());
@@ -420,6 +424,15 @@ function KeyboardCaptureSetup({
             e.preventDefault();
             e.stopPropagation();
           }
+        }
+
+        if (isPickerDropdownShortcut) {
+          const result = keyboardCoordinator.handleKeyboardEvent(e);
+          if (result.handled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          return;
         }
 
         // Not a navigation key - let it through for text input
@@ -589,6 +602,7 @@ export function SpreadsheetCoordinatorProvider({
   const uiStoreApi = useUIStoreApi();
   const platformIdentity = usePlatformIdentity();
   const readOnly = useReadOnly();
+  const importDurability = useDocumentContext().importDurability;
 
   // Get validation dialog actions from UI store. The coordinator lives above the
   // component tree, so it can't use React hooks; the UI store is the bridge that
@@ -623,6 +637,14 @@ export function SpreadsheetCoordinatorProvider({
       // dropped both the resolved value and any rejection.
       setCellValue: async (sheetId, row, col, value) => {
         const ws = workbook.getSheetById(sheetId);
+        const tableHeader = await resolveTableHeaderCellContext(sheetId, row, col, workbook);
+        if (tableHeader) {
+          if (tableHeader.columnName !== value) {
+            await ws.tables.renameColumn(tableHeader.tableName, tableHeader.columnIndex, value);
+          }
+          return;
+        }
+
         await ws.setCell(row, col, value);
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
@@ -735,6 +757,7 @@ export function SpreadsheetCoordinatorProvider({
           () => {
             void workbook
               .setIterativeCalculation(true)
+              .then(() => workbook.calculate())
               .then(() => {
                 onEnableIterative();
               })
@@ -788,6 +811,7 @@ export function SpreadsheetCoordinatorProvider({
         platform={platformIdentity.os}
         onMetric={onMetric}
         uiStoreApi={uiStoreApi}
+        importDurability={importDurability}
         editorDependencies={editorDependencies}
         enableKeyboard={enableKeyboard}
         onUIAction={onUIAction}

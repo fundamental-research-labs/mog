@@ -7,14 +7,16 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     use crate::import;
     use crate::storage::infra::hydration::{DefaultIdAllocator, allocate_sheet_ids};
 
-    // Pass 1: Parse XLSX — only first sheet's cells (ZIP decompress + XML parse).
-    // Remaining sheets get metadata only. Full parse happens in complete_deferred_hydration.
+    // Pass 1: Parse XLSX — only the initial active visible sheet's cells
+    // (ZIP decompress + XML parse). Remaining sheets get metadata only. Full
+    // parse happens in complete_deferred_hydration.
     let parsed = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import_deferred", "parse");
-        let parsed =
-            xlsx_api::parse_max_sheets(xlsx_data, 1).map_err(|e| ComputeError::Deserialize {
+        let parsed = xlsx_api::parse_initial_active_visible_sheet(xlsx_data).map_err(|e| {
+            ComputeError::Deserialize {
                 message: format!("XLSX parse error: {}", e),
-            })?;
+            }
+        })?;
         profile.counter("sheets", parsed.output.sheets.len() as u64);
         profile.counter(
             "cells",
@@ -27,6 +29,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         );
         parsed
     };
+    let import_report = parsed.import_report;
     let parse_output = parsed.output;
     let diagnostics = parsed.diagnostics;
     if !diagnostics.errors.is_empty() {
@@ -43,10 +46,15 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     // sheet order and stale workbook maps.
     engine.update_buffer.clear();
     engine.stores.storage = YrsStorage::new();
+    engine.import_report = import_report;
+    engine.clear_runtime_diagnostics();
 
     // Pass 2: Allocate IDs for ALL sheets (fast — only ~4ms for 28 sheets).
-    // Cell/Row/Col IDs are only allocated for sheets with cells (first sheet).
-    // Non-first sheets only get a SheetId (no cells to allocate).
+    // Cell/Row/Col IDs are only allocated for sheets with cells or imported
+    // dimensions. Metadata-only sheets still get stable SheetIds.
+    let critical_sheet_index = xlsx_api::initial_active_visible_sheet_index(&parse_output)
+        .filter(|idx| *idx < parse_output.sheets.len())
+        .unwrap_or(0);
     let mut allocator = DefaultIdAllocator::new();
     let allocations: Vec<_> = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new("import_deferred", "id_allocation");
@@ -63,6 +71,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
                 .map(|allocation| allocation.cell_ids.len() as u64)
                 .sum::<u64>(),
         );
+        profile.counter("critical_sheet_index", critical_sheet_index as u64);
         allocations
     };
 
@@ -86,67 +95,19 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         m
     };
 
-    // Pass 3: Build snapshot for first sheet only + lightweight metadata for all.
-    // We need sheet names/IDs for all sheets (for tab strip), but only
-    // process cells for the first sheet.
+    // Pass 3: Build snapshot from the selected parse output. All editable
+    // sheets are present for tab strip/order, but only the critical sheet has
+    // a full cell/domain payload.
     let workbook_snap = {
         let mut profile = crate::xlsx_profile::PhaseTimer::new(
             "import_deferred",
             "parse_output_to_workbook_snapshot",
         );
-        let first_sheet_parse = domain_types::ParseOutput {
-            sheets: if parse_output.sheets.is_empty() {
-                vec![]
-            } else {
-                vec![parse_output.sheets[0].clone()]
-            },
-            named_ranges: parse_output.named_ranges.clone(),
-            calculation: parse_output.calculation.clone(),
-            data_table_regions: parse_output
-                .data_table_regions
-                .iter()
-                .filter(|region| region.sheet_index == 0)
-                .cloned()
-                .collect(),
-            ..Default::default()
-        };
-        let first_id_map = {
-            use crate::storage::infra::hydration::HydrationIdMap;
-            let mut m = HydrationIdMap::default();
-            if let Some(alloc) = allocations.first() {
-                m.sheet_ids.push(alloc.sheet_id);
-                m.cell_ids.push(alloc.cell_ids.clone());
-                m.row_ids.push(alloc.row_ids.clone());
-                m.col_ids.push(alloc.col_ids.clone());
-                for identity in &alloc.identity_only_cells {
-                    m.identity_only_cells.push((
-                        alloc.sheet_id,
-                        identity.cell_id,
-                        identity.row,
-                        identity.col,
-                    ));
-                }
-            }
-            m
-        };
-        let mut snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
-            &first_sheet_parse,
-            Some(&first_id_map),
+        let snap = import::parse_output_to_snapshot::parse_output_to_workbook_snapshot(
+            &parse_output,
+            Some(&id_map),
             &mut allocator,
         );
-        // Add empty SheetSnapshot entries for remaining sheets using stable IDs
-        // from the allocations (not random STORAGE_ID_ALLOC IDs).
-        for (i, sheet_data) in parse_output.sheets.iter().enumerate().skip(1) {
-            let sheet_id = allocations[i].sheet_id;
-            snap.sheets.push(SheetSnapshot {
-                id: compute_document::hex::id_to_hex(sheet_id.as_u128()).to_string(),
-                name: sheet_data.name.clone(),
-                rows: sheet_data.rows,
-                cols: sheet_data.cols,
-                cells: vec![],
-                ranges: vec![],
-            });
-        }
         profile.counter("sheets", snap.sheets.len() as u64);
         profile.counter(
             "snapshot_cells",
@@ -165,46 +126,14 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         snap
     };
 
-    // Pass 4: Collect ranged positions for first sheet only
-    let mut ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> = Vec::new();
-    let mut range_data_per_sheet: Vec<Vec<snapshot_types::RangeData>> = Vec::new();
-
-    {
-        let mut profile =
-            crate::xlsx_profile::PhaseTimer::new("import_deferred", "ranged_positions");
-        if !parse_output.sheets.is_empty() && !workbook_snap.sheets.is_empty() {
-            let snap_sheet = &workbook_snap.sheets[0];
-            let snap_positions: std::collections::HashSet<(u32, u32)> =
-                snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
-            let ranged: std::collections::HashSet<(u32, u32)> = parse_output.sheets[0]
-                .cells
-                .iter()
-                .filter(|c| c.formula.is_some() || !c.value.is_null())
-                .map(|c| (c.row, c.col))
-                .filter(|pos| !snap_positions.contains(pos))
-                .collect();
-            ranged_positions.push(ranged);
-            range_data_per_sheet.push(snap_sheet.ranges.clone());
-        }
-        profile.counter("sheets", ranged_positions.len() as u64);
-        profile.counter(
-            "ranged_positions",
-            ranged_positions
-                .iter()
-                .map(|positions| positions.len() as u64)
-                .sum::<u64>(),
-        );
-    }
-
     // Pass 5: Hydrate the critical parse output into Yrs.
     //
     // Deferred import still avoids the expensive full-workbook cell hydration:
-    // `parse_output` contains all sheet headers but only the first sheet's
-    // cells. Hydrating that data preserves the normal production format read
-    // path (`properties::get_effective_format` -> Yrs stylePalette/properties)
-    // for first paint, while keeping sheet order/settings coherent for all
-    // tabs. A parse-output-backed format side channel would duplicate the
-    // cascade contract and drift from the storage path.
+    // `parse_output` contains all sheet headers but only the critical sheet's
+    // cells/domain payloads. Hydrating that data preserves the normal production
+    // format read path (`properties::get_effective_format` -> Yrs
+    // stylePalette/properties) for first paint, while keeping sheet
+    // order/settings coherent for all tabs.
     let mut critical_ranged_positions: Vec<std::collections::HashSet<(u32, u32)>> =
         Vec::with_capacity(parse_output.sheets.len());
     let mut critical_range_data_per_sheet: Vec<Vec<snapshot_types::RangeData>> =
@@ -215,15 +144,19 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         Vec<crate::storage::infra::hydration::ImportedRangeStyle>,
     > = Vec::with_capacity(parse_output.sheets.len());
     for sheet_idx in 0..parse_output.sheets.len() {
-        if sheet_idx == 0 {
-            critical_ranged_positions.push(
-                ranged_positions
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(std::collections::HashSet::new),
-            );
-            critical_range_data_per_sheet
-                .push(range_data_per_sheet.first().cloned().unwrap_or_default());
+        if sheet_idx == critical_sheet_index && sheet_idx < workbook_snap.sheets.len() {
+            let snap_sheet = &workbook_snap.sheets[sheet_idx];
+            let snap_positions: std::collections::HashSet<(u32, u32)> =
+                snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
+            let ranged = parse_output.sheets[sheet_idx]
+                .cells
+                .iter()
+                .filter(|c| c.formula.is_some() || !c.value.is_null())
+                .map(|c| (c.row, c.col))
+                .filter(|pos| !snap_positions.contains(pos))
+                .collect();
+            critical_ranged_positions.push(ranged);
+            critical_range_data_per_sheet.push(snap_sheet.ranges.clone());
         } else {
             critical_ranged_positions.push(std::collections::HashSet::new());
             critical_range_data_per_sheet.push(Vec::new());
@@ -294,26 +227,29 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             engine.stores.storage.doc().client_id(),
         ));
 
-    // Build indexes for only the first sheet (viewport-visible).
+    // Build indexes for only the critical sheet (viewport-visible).
     // Remaining sheets' indexes are built during complete_deferred_hydration.
-    let first_n = if workbook_snap.sheets.is_empty() {
-        0
+    let critical_sheet_range = if workbook_snap.sheets.is_empty() {
+        0..0
     } else {
-        1
+        critical_sheet_index..critical_sheet_index.saturating_add(1)
     };
     engine.stores.grid_indexes = build_grid_indexes_from_allocations_range(
         &workbook_snap,
         &allocations,
-        0..first_n,
+        critical_sheet_range.clone(),
         engine.stores.grid_id_alloc.clone(),
     )?;
-    engine.stores.merge_indexes =
-        build_merge_indexes_from_parse_output_range(&parse_output, &workbook_snap, 0..first_n)?;
+    engine.stores.merge_indexes = build_merge_indexes_from_parse_output_range(
+        &parse_output,
+        &workbook_snap,
+        critical_sheet_range.clone(),
+    )?;
     engine.stores.layout_indexes = build_layout_indexes_from_parse_output_range(
         &parse_output,
         &workbook_snap,
         &engine.stores.grid_indexes,
-        0..first_n,
+        critical_sheet_range,
     )?;
 
     engine.mirror.install_row_col_indexes(
@@ -325,6 +261,13 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     );
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
+
+    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+        &mut engine.stores,
+        &mut engine.mirror,
+        Some(&mut engine.import_report),
+        domain_types::ImportPhase::CriticalSheet,
+    );
 
     // Pass 9: Observer/undo/settings for the critical Yrs document.
     engine.update_buffer.clear();
@@ -381,16 +324,16 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // guard installed until every fallible full-hydration step has staged
         // successfully; a failed hydrate must remain retryable/protected.
         dh_log!("phase 0: re-parse XLSX");
-        let full_parse_output = {
+        let (full_parse_output, mut import_report) = {
             let mut profile =
                 crate::xlsx_profile::PhaseTimer::new("complete_deferred_hydration", "parse");
-            let parsed = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
+            let (parsed, report) = if let Some(raw_bytes) = &data.raw_xlsx_bytes {
                 let parsed = xlsx_api::parse(raw_bytes).map_err(|e| ComputeError::Deserialize {
                     message: format!("XLSX full re-parse error: {}", e),
                 })?;
-                parsed.output
+                (parsed.output, parsed.import_report)
             } else {
-                data.parse_output.clone()
+                (data.parse_output.clone(), engine.import_report.clone())
             };
             profile.counter("sheets", parsed.sheets.len() as u64);
             profile.counter(
@@ -401,15 +344,16 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                     .map(|sheet| sheet.cells.len() as u64)
                     .sum::<u64>(),
             );
-            parsed
+            let mut merged_report = engine.import_report.clone();
+            merge_import_reports(&mut merged_report, report);
+            (parsed, merged_report)
         };
         dh_log!("phase 0 done");
 
-        // Pass 1: Re-allocate IDs for ALL sheets with FIXED SheetIds.
-        // The fast path already assigned SheetIds (stored in data.allocations).
-        // The allocator sequence preserves first-sheet RowId/ColId/CellId when
-        // the full parse returns the same first-sheet cell stream.
-        use crate::storage::infra::hydration::allocate_sheet_ids_with_sheet_id;
+        // Pass 1: Re-allocate IDs for ALL sheets, reusing any IDs assigned by
+        // the first-paint parse while still consuming allocator slots for the
+        // full workbook shape.
+        use crate::storage::infra::hydration::allocate_sheet_ids_with_previous_allocation;
         let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
         let allocations: Vec<_> = {
             let mut profile = crate::xlsx_profile::PhaseTimer::new(
@@ -421,8 +365,11 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
                 .iter()
                 .enumerate()
                 .map(|(i, sheet)| {
-                    let fixed_sid = data.allocations.get(i).map(|a| a.sheet_id);
-                    allocate_sheet_ids_with_sheet_id(sheet, &mut allocator, fixed_sid)
+                    allocate_sheet_ids_with_previous_allocation(
+                        sheet,
+                        &mut allocator,
+                        data.allocations.get(i),
+                    )
                 })
                 .collect();
             profile.counter("sheets", allocations.len() as u64);
@@ -628,6 +575,12 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         };
         load_custom_cell_styles(&mut stores);
         load_custom_table_styles(&mut stores);
+        crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
+            &mut stores,
+            &mut new_mirror,
+            Some(&mut import_report),
+            domain_types::ImportPhase::FullHydration,
+        );
 
         DeferredHydrationCompletion {
             stores,
@@ -635,12 +588,24 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
             settings,
             phantom_cells: id_map.phantom_cells,
             calculation,
+            import_report,
         }
     };
 
     dh_log!("phase 5 done: mirror finalized, settings derived");
 
     Ok(Some(completion))
+}
+
+fn merge_import_reports(
+    target: &mut domain_types::ImportReport,
+    source: domain_types::ImportReport,
+) {
+    target.diagnostics.extend(source.diagnostics);
+    target.force_recalc_cells.extend(source.force_recalc_cells);
+    target.object_statuses.extend(source.object_statuses);
+    target.stats = source.stats;
+    target.canonicalize();
 }
 
 pub(in crate::storage::engine) fn commit_deferred_hydration(
@@ -661,6 +626,7 @@ pub(in crate::storage::engine) fn commit_deferred_hydration(
     engine.mutation.observer = observer;
     engine.mutation.undo_manager = undo_manager;
     engine.settings = completion.settings;
+    engine.import_report = completion.import_report;
     engine.viewport.clear();
 
     engine.init_cf_caches();

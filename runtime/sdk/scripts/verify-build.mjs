@@ -9,9 +9,17 @@
  * 5. Package.json is correctly configured for publishing
  * 6. Integration test: create a workbook and set/get a cell value
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 
@@ -89,7 +97,7 @@ function checkTypeScriptConsumerCompiles() {
     writeFileSync(
       consumerFile,
       `
-import { createWorkbook, type Workbook, type Worksheet } from '@mog-sdk/node';
+import { createWorkbook, type Workbook, type Worksheet } from '@mog-sdk/sdk';
 
 async function main() {
   const wb: Workbook = await createWorkbook();
@@ -115,7 +123,7 @@ void main;
       esModuleInterop: true,
       baseUrl: tempDir,
       paths: {
-        '@mog-sdk/node': [resolve(DIST, 'index.d.ts')],
+        '@mog-sdk/sdk': [resolve(DIST, 'index.d.ts')],
         '@mog-sdk/contracts': [resolve(REPO_ROOT, 'contracts', 'dist', 'index.d.ts')],
         '@mog-sdk/contracts/*': [
           resolve(REPO_ROOT, 'contracts', 'dist', '*.d.ts'),
@@ -138,6 +146,61 @@ void main;
   }
 }
 
+function checkNoEagerChartRasterRegistration(file) {
+  const source = readFileSync(resolve(DIST, file), 'utf-8');
+  const eagerPattern =
+    /createNodeChartImageExporterFactory\s*\(\s*loadNodeSdkNapiAddon\s*\(\s*\)\s*\)/;
+  assert(
+    !eagerPattern.test(source),
+    `${file} does not eagerly load the chart raster backend during exporter registration`,
+  );
+}
+
+function checkNoWorkerBundleNodeImports(file) {
+  const source = readFileSync(resolve(DIST, file), 'utf-8');
+  const forbidden = [
+    /\bnode:[^'")\s]+/,
+    /\bcreateRequire\b/,
+    /@mog-sdk\/(?:darwin|linux|win32)-/,
+    /importNodeModule\s*\(\s*['"]node:/,
+    /new\s+Function\s*\(/,
+  ];
+  const matches = forbidden.map((pattern) => source.match(pattern)?.[0]).filter(Boolean);
+  assert(matches.length === 0, `${file} has no Node/native imports in the worker graph`);
+  if (matches.length > 0) {
+    for (const match of matches.slice(0, 5)) console.error(`    -> ${match}`);
+  }
+}
+
+async function checkBundledEdgeImportMetaUrlUndefinedImport() {
+  const tempDir = mkdtempSync(resolve(tmpdir(), 'mog-sdk-edge-import-'));
+
+  try {
+    writeFileSync(resolve(tempDir, 'package.json'), '{ "type": "module" }\n');
+
+    for (const entry of readdirSync(DIST, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+
+      const sourcePath = resolve(DIST, entry.name);
+      const source = readFileSync(sourcePath, 'utf-8');
+      writeFileSync(
+        resolve(tempDir, entry.name),
+        source.replaceAll('import.meta.url', 'undefined'),
+      );
+    }
+
+    const esm = await import(pathToFileURL(resolve(tempDir, 'index.js')).href);
+    assert(
+      typeof esm.createWorkbook === 'function',
+      'ESM import succeeds when bundled import.meta.url is undefined',
+    );
+  } catch (e) {
+    assert(false, `ESM import with undefined import.meta.url failed: ${e.message}`);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 // =========================================================================
 // 1. Dist files exist
 // =========================================================================
@@ -146,10 +209,16 @@ console.log('\n--- 1. Dist files exist ---');
 const expectedFiles = [
   'index.js', // ESM
   'index.cjs', // CJS
+  'wasm.js', // ESM worker/WASM entry
+  'workerd.js', // ESM workerd condition entry
   'index.d.ts', // ESM types
   'index.d.cts', // CJS types
+  'wasm.d.ts', // WASM entry types
+  'workerd.d.ts', // workerd entry types
   'index.js.map', // ESM sourcemap
   'index.cjs.map', // CJS sourcemap
+  'wasm.js.map', // WASM sourcemap
+  'workerd.js.map', // workerd sourcemap
 ];
 
 for (const file of expectedFiles) {
@@ -170,9 +239,20 @@ try {
   const esm = await import(resolve(DIST, 'index.js'));
   assert(typeof esm.createWorkbook === 'function', 'createWorkbook is a function');
   assert(!('DocumentFactory' in esm), 'DocumentFactory is not exported');
+  const wasm = await import(resolve(DIST, 'wasm.js'));
+  assert(typeof wasm.createWorkbook === 'function', 'WASM createWorkbook is a function');
+  const workerdDts = readFileSync(resolve(DIST, 'workerd.d.ts'), 'utf-8');
+  assert(/createWorkbook/.test(workerdDts), 'workerd createWorkbook is declared');
+  const workerdSource = readFileSync(resolve(DIST, 'workerd.js'), 'utf-8');
+  assert(
+    /@mog-sdk\/wasm\/wasm/.test(workerdSource),
+    'workerd bundle imports the compute WASM asset for Workers bundlers',
+  );
 } catch (e) {
   assert(false, `ESM import failed: ${e.message}`);
 }
+
+await checkBundledEdgeImportMetaUrlUndefinedImport();
 
 // =========================================================================
 // 3. CJS bundle exports expected symbols
@@ -202,7 +282,7 @@ const dts = readFileSync(resolve(DIST, 'index.d.ts'), 'utf-8');
 const bootDts = readFileSync(resolve(DIST, 'boot.d.ts'), 'utf-8');
 
 // Check no unresolvable imports remain (imports from @mog/* or @rust-bridge/*)
-// (JSDoc comments with @mog-sdk/node are OK)
+// (JSDoc comments with @mog-sdk/sdk are OK)
 const privateImportPattern =
   /\b(?:import|export)\b[\s\S]*?\bfrom\s+['"](@mog\/|@rust-bridge\/|@mog-sdk\/types-|@mog-sdk\/spreadsheet-contracts)[^'"]*['"]/g;
 const privateImports = [...dts.matchAll(privateImportPattern)].map((match) =>
@@ -253,7 +333,7 @@ console.log('\n--- 5. Package.json ---');
 
 const pkg = JSON.parse(readFileSync(resolve(SDK_ROOT, 'package.json'), 'utf-8'));
 
-assert(pkg.name === '@mog-sdk/node', `name is @mog-sdk/node`);
+assert(pkg.name === '@mog-sdk/sdk', `name is @mog-sdk/sdk`);
 assert(!pkg.private, 'not marked private');
 assert(pkg.main === 'dist/index.cjs', 'main points to CJS');
 assert(pkg.module === 'dist/index.mjs' || pkg.module === 'dist/index.js', 'module points to ESM');
@@ -270,9 +350,19 @@ assert(pkg.optionalDependencies['@mog-sdk/linux-x64-musl'], 'linux-x64-musl opti
 assert(pkg.engines && pkg.engines.node, 'engines.node specified');
 
 // =========================================================================
-// 6. Integration test: create a workbook
+// 6. Lazy chart raster registration
 // =========================================================================
-console.log('\n--- 6. Integration test ---');
+console.log('\n--- 6. Lazy chart raster registration ---');
+
+checkNoEagerChartRasterRegistration('index.js');
+checkNoEagerChartRasterRegistration('index.cjs');
+checkNoWorkerBundleNodeImports('wasm.js');
+checkNoWorkerBundleNodeImports('workerd.js');
+
+// =========================================================================
+// 7. Integration test: create a workbook
+// =========================================================================
+console.log('\n--- 7. Integration test ---');
 
 try {
   const { createWorkbook } = await import(resolve(DIST, 'index.js'));

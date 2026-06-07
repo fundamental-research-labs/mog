@@ -212,6 +212,19 @@ export class RenderSystem implements IRenderSystem {
   private scrollToActiveCellSubscription: { unsubscribe(): void } | null = null;
 
   /**
+   * Subscription cleanup for Home/Ctrl+Home origin-scroll requests emitted by
+   * the renderer machine.
+   */
+  private scrollToOriginSubscription: { unsubscribe(): void } | null = null;
+
+  /**
+   * Subscription cleanup for page-scroll requests emitted by the renderer
+   * machine. Page navigation needs a page-sized scroll, not minimal
+   * active-cell viewport-follow.
+   */
+  private pageScrollSubscription: { unsubscribe(): void } | null = null;
+
+  /**
    * Cleanup for the viewport-follow coordinator (selection actor →
    * SCROLL_TO_ACTIVE_CELL). Wired by setSelectionActorForViewportFollow when
    * the selection actor becomes available; disposed in dispose().
@@ -759,6 +772,14 @@ export class RenderSystem implements IRenderSystem {
       },
     );
 
+    this.scrollToOriginSubscription = this.rendererActor.on('scrollToOriginRequested', (event) => {
+      this.applyScrollToOrigin(event.axis, event.cell);
+    });
+
+    this.pageScrollSubscription = this.rendererActor.on('pageScrollRequested', (event) => {
+      this.applyPageScroll(event.axis, event.direction, event.cell);
+    });
+
     // Subscribe to renderer state transitions for ready callbacks
     this.stateSubscription = this.rendererActor.subscribe((state) => {
       const currentState = state.value as string;
@@ -817,6 +838,16 @@ export class RenderSystem implements IRenderSystem {
     if (this.scrollToActiveCellSubscription) {
       this.scrollToActiveCellSubscription.unsubscribe();
       this.scrollToActiveCellSubscription = null;
+    }
+
+    if (this.scrollToOriginSubscription) {
+      this.scrollToOriginSubscription.unsubscribe();
+      this.scrollToOriginSubscription = null;
+    }
+
+    if (this.pageScrollSubscription) {
+      this.pageScrollSubscription.unsubscribe();
+      this.pageScrollSubscription = null;
     }
 
     // Tear down viewport-follow coordinator subscription on selection actor
@@ -884,5 +915,66 @@ export class RenderSystem implements IRenderSystem {
       const deps = this.rendererExecution?.getDependencies();
       deps?.onScrollPositionReset?.(position);
     }
+  }
+
+  private applyScrollToOrigin(axis: 'horizontal' | 'both', cell: CellCoord): void {
+    if (this.disposed || !this.started) return;
+
+    const viewport = this.rendererExecution?.getViewport() ?? null;
+    if (!viewport) return;
+
+    const current = viewport.getScrollPosition();
+    const origin = {
+      x: 0,
+      y: axis === 'both' ? 0 : current.y,
+    };
+    this.rendererExecution?.setScrollPosition(origin);
+    const deps = this.rendererExecution?.getDependencies();
+    deps?.onScrollPositionReset?.(origin);
+    this.applyScrollToActiveCell(cell);
+  }
+
+  private applyPageScroll(
+    axis: 'horizontal' | 'vertical',
+    direction: 'previous' | 'next',
+    cell: CellCoord,
+  ): void {
+    if (this.disposed || !this.started) return;
+
+    const viewport = this.rendererExecution?.getViewport() ?? null;
+    const geometry = this.rendererExecution?.getGeometry() ?? null;
+    if (!viewport || !geometry) {
+      this.applyScrollToActiveCell(cell);
+      return;
+    }
+
+    const visibleRange = viewport.getSnapshot().visibleRange;
+    const dimensions = geometry.getPositionDimensions();
+    const current = viewport.getScrollPosition();
+    let next = { x: current.x, y: current.y };
+
+    if (axis === 'horizontal') {
+      const visibleCols = Math.max(1, visibleRange.endCol - visibleRange.startCol + 1);
+      const targetStartCol =
+        direction === 'previous'
+          ? Math.max(0, visibleRange.startCol - visibleCols)
+          : Math.min(dimensions.totalCols - 1, visibleRange.startCol + visibleCols);
+      next = { ...next, x: dimensions.getColLeft(targetStartCol) };
+    } else {
+      const visibleRows = Math.max(1, visibleRange.endRow - visibleRange.startRow + 1);
+      const targetStartRow =
+        direction === 'previous'
+          ? Math.max(0, visibleRange.startRow - visibleRows)
+          : Math.min(dimensions.totalRows - 1, visibleRange.startRow + visibleRows);
+      next = { ...next, y: dimensions.getRowTop(targetStartRow) };
+    }
+
+    const clamped = viewport.clampScrollPosition(next);
+    this.rendererExecution?.setScrollPosition(clamped);
+
+    // Keep InputCoordinator's physics engine in sync with this renderer-owned
+    // scroll, matching applyScrollToActiveCell.
+    const deps = this.rendererExecution?.getDependencies();
+    deps?.onScrollPositionReset?.(clamped);
   }
 }

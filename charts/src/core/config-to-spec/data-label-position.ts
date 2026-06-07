@@ -1,5 +1,6 @@
 import type { ChartConfig, DataLabelConfig } from '../../types';
 import { isHorizontalBarLikeChartType, isBarLikeChartType } from './bar-geometry';
+import { isPieLikeChartType } from './pie-like';
 
 export function labelPlacement(
   position: DataLabelConfig['position'],
@@ -7,7 +8,7 @@ export function labelPlacement(
   value = 0,
 ) {
   const effectivePosition = position ?? defaultLabelPosition(chartType);
-  const isPie = chartType === 'pie' || chartType === 'doughnut' || chartType === 'pie3d';
+  const isPie = isPieLikeChartType(chartType);
   const isHorizontalBar = isHorizontalBarLikeChartType(chartType);
   switch (effectivePosition) {
     case 'left':

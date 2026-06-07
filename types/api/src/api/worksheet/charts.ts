@@ -30,11 +30,19 @@ import type {
  * those marks to an image.
  */
 export interface ChartImageExporter {
-  exportImage(
-    sheetId: string,
-    chartId: string,
-    options?: ImageExportOptions,
-  ): Promise<string | null>;
+  exportImage(sheetId: string, chartId: string, options?: ImageExportOptions): Promise<string>;
+}
+
+export type ChartReadMaterialization = 'available' | 'sheet' | 'complete';
+
+export interface ChartReadOptions {
+  /**
+   * Controls whether passive chart reads should promote deferred XLSX import
+   * materialization. The default, `sheet`, waits for this worksheet. `available`
+   * returns chart records that are already loaded so UI subscriptions do not
+   * block first interaction, and `complete` waits for all workbook sheets.
+   */
+  materialization?: ChartReadMaterialization;
 }
 
 export interface WorksheetCharts {
@@ -54,8 +62,8 @@ export interface WorksheetCharts {
   /** Remove a chart by ID. */
   remove(chartId: string): Promise<void>;
 
-  /** List all charts in the sheet. */
-  list(): Promise<Chart[]>;
+  /** List charts in the sheet. Pass `{ materialization: "available" }` for passive UI reads. */
+  list(options?: ChartReadOptions): Promise<Chart[]>;
 
   /** Remove all charts from the sheet. */
   clear(): Promise<void>;
@@ -70,10 +78,8 @@ export interface WorksheetCharts {
   /**
    * Export a chart as an image.
    *
-   * Supported formats are PNG and JPEG. SVG and other unsupported formats
-   * reject explicitly instead of falling back to another image type.
-   * Browser exports render through the app canvas backend; Node SDK exports
-   * render through the native headless raster backend.
+   * Supported formats are SVG, PNG, and JPEG. SVG uses the portable vector
+   * renderer; PNG and JPEG require a runtime raster backend.
    */
   exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;
 
@@ -86,8 +92,8 @@ export interface WorksheetCharts {
   /** Check if a chart exists by ID. */
   has(chartId: string): Promise<boolean>;
 
-  /** Get the total number of charts on this sheet. */
-  getCount(): Promise<number>;
+  /** Get the total number of loaded charts on this sheet. */
+  getCount(options?: ChartReadOptions): Promise<number>;
 
   /** Find a chart by its name, or null if not found. */
   getByName(name: string): Promise<Chart | null>;

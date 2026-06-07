@@ -1,4 +1,8 @@
 import type { DataRow, Layout, MarkSpec } from '../spec';
+import {
+  pieDoughnutArcFrame,
+  type PieDoughnutLayoutHints,
+} from '../../core/config-to-spec/pie-like';
 
 type Axis = 'x' | 'y';
 
@@ -8,6 +12,7 @@ export function directPosition(
   layout: Layout,
   axis: Axis,
   coordinateSystem: MarkSpec['coordinateSystem'],
+  pieDoughnutHints?: PieDoughnutLayoutHints,
 ): number | undefined {
   const value = datumNumber(datum, field);
   if (value === undefined) return undefined;
@@ -20,9 +25,17 @@ export function directPosition(
     return axis === 'x' ? table.x + value * table.width : table.y + value * table.height;
   }
   if (coordinateSystem === 'plotRadiusFraction') {
-    const diameter = Math.min(layout.plotArea.width, layout.plotArea.height);
-    const center =
-      axis === 'x'
+    const frame = pieDoughnutHints
+      ? pieDoughnutArcFrame(layout.plotArea, pieDoughnutHints)
+      : undefined;
+    const diameter = frame
+      ? frame.radius * 2
+      : Math.min(layout.plotArea.width, layout.plotArea.height);
+    const center = frame
+      ? axis === 'x'
+        ? frame.centerX
+        : frame.centerY
+      : axis === 'x'
         ? layout.plotArea.x + layout.plotArea.width / 2
         : layout.plotArea.y + layout.plotArea.height / 2;
     return center + (value - 0.5) * diameter;

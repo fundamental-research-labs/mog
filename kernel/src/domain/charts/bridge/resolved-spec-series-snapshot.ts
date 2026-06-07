@@ -4,6 +4,16 @@ import {
   seriesConfigSourceKey,
   seriesSourceIndex,
   seriesSourceKey,
+  renderedPointValueForRows,
+  shouldProjectStockSeries,
+  resolveSeriesColorAuthority,
+  stockRenderedPointProjection,
+  stockRenderedRoleValueProjectionFromRoleValues,
+  stockRoleOrder,
+  stockRolePlanWithEvidence,
+  stockSourceCompositionFromConfig,
+  stockSubTypeFromConfig,
+  stockSubTypeFromRolePresence,
   type ChartConfig,
   type ChartData,
   type ChartDataPoint,
@@ -12,6 +22,7 @@ import {
 import type {
   ChartSeriesProjectionAuthority,
   ChartSeriesProjectionDiagnosticReason,
+  ChartSeriesStockRole,
   ResolvedChartSpecSnapshot,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -31,6 +42,18 @@ import { hashJson, snapshotScalar } from './resolved-spec-primitives';
 export { renderAuthorityDiagnostics } from './resolved-spec-series-authority';
 
 type SeriesRangeReference = ResolvedChartRangeReferences['seriesReferences'][number];
+type ResolvedSeriesSnapshot = ResolvedChartSpecSnapshot['resolved']['series'][number];
+type SourceSeriesSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['sourceSeries']
+>[number];
+type ProjectedRoleMappingSnapshot = NonNullable<
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['projectedRoleMappings']
+>[number];
+type StockRenderProjectionSnapshot =
+  ResolvedChartSpecSnapshot['resolved']['seriesProjection']['stockRenderProjection'];
+type StockGlyphGeometrySnapshot =
+  ResolvedChartSpecSnapshot['resolved']['plot']['stockGlyphGeometry'];
+type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
 
 export function hasRenderableChartExData(config: ChartConfig): boolean {
   return (
@@ -52,6 +75,7 @@ export function snapshotSeries(
   const sourceSeriesIndex = seriesSourceIndex(series, index);
   const sourceSeriesKey = seriesSourceKey(series, index);
   const values: Array<number | null> = [];
+  const renderedValues: Array<number | null> = [];
   const xValues: Array<string | number | null> = [];
   const bubbleSizes: Array<number | null> = [];
   const stockValues = {
@@ -74,6 +98,7 @@ export function snapshotSeries(
     const value = numericPointValue(point);
     xValues.push(snapshotScalar(point?.x));
     values.push(value);
+    renderedValues.push(numericRenderedPointValue(point, config, configured));
     bubbleSizes.push(numericPointField(point, 'size'));
     stockValues.open.push(numericPointField(point, 'open'));
     stockValues.high.push(numericPointField(point, 'high'));
@@ -112,15 +137,42 @@ export function snapshotSeries(
     }),
   };
   const name = snapshotSeriesName(series, configured, sourceSeriesIndex);
-  const renderedPointCount = values.filter((value) => value !== null).length;
   const effectiveType = series.type ?? configured?.type;
+  const stockColorAuthorityContext = stockSeriesColorAuthorityContext(
+    config,
+    configured,
+    sourceSeriesIndex,
+  );
   const xRole = effectiveSeriesXRole(config, configured, effectiveType);
+  const colorAuthority = resolveSeriesColorAuthority({
+    config,
+    series: configured,
+    sourceSeriesIndex,
+    renderedSeriesIndex: index,
+    fallbackType: (effectiveType ?? config.type) as ChartConfig['type'],
+    ...stockColorAuthorityContext,
+  });
   const includeStockValues = shouldSnapshotStockValues(
     config,
     effectiveType,
     configured,
     stockValues,
   );
+  const stockPointProjection = shouldUseStockRenderedPointProjection(
+    config,
+    effectiveType,
+    configured,
+    stockValues,
+  )
+    ? stockRenderedPointProjection(
+        Array.from({ length }, (_, pointIndex) => series.data[pointIndex]),
+        stockSubTypeFromConfig(config, { categories: [], series: [series] }),
+      )
+    : undefined;
+  const includeRenderedValues = shouldSnapshotRenderedValues(config, effectiveType, configured);
+  const renderedPointCount =
+    stockPointProjection?.renderedPointCount ??
+    (includeRenderedValues ? renderedValues : values).filter((value) => value !== null).length;
 
   return {
     index,
@@ -153,11 +205,13 @@ export function snapshotSeries(
       configured?.color ??
       config.colors?.[sourceSeriesIndex] ??
       config.colors?.[index],
+    ...(colorAuthority ? { colorAuthority } : {}),
     source,
     renderAuthority,
     xValues,
     categories: seriesCategories,
     values,
+    ...(includeRenderedValues ? { renderedValues } : {}),
     bubbleSizes,
     ...(includeStockValues ? { stockValues } : {}),
     blankMask,
@@ -180,6 +234,7 @@ export function snapshotSeries(
       categories: seriesCategories,
       categoryFormatCodes: configured?.categoryLabelFormat,
       values,
+      renderedValues: includeRenderedValues ? renderedValues : undefined,
       bubbleSizes,
       stockValues: includeStockValues ? stockValues : undefined,
       blankMask,
@@ -198,10 +253,45 @@ function seriesProjectionAuthority(
   return config.dataRange ? 'liveRange' : 'unavailable';
 }
 
+function stockSeriesColorAuthorityContext(
+  config: ChartConfig,
+  configured: ChartSeriesConfig | undefined,
+  sourceSeriesIndex: number,
+): {
+  stockSourceRole?: ChartSeriesStockRole;
+  stockSourceRoleIndex?: number;
+  stockSourceRoleOrder?: readonly ChartSeriesStockRole[];
+} {
+  if (!shouldProjectStockSeries(config)) return {};
+  const composition = stockSourceCompositionFromConfig(config);
+  if (composition.sourceKind === 'modeled') return {};
+  if (!isExactOrVerifiedDefaultStockEvidence(composition.sourceRoleSemanticStatus)) return {};
+
+  const configuredIndex = configured ? config.series?.indexOf(configured) : undefined;
+  const roleIndex =
+    configuredIndex !== undefined && configuredIndex >= 0 ? configuredIndex : sourceSeriesIndex;
+  const stockSourceRole =
+    configured?.stockRole ??
+    composition.sourceRoleOrder[roleIndex] ??
+    composition.sourceRoleOrder[sourceSeriesIndex];
+  if (!stockSourceRole) return {};
+  return {
+    stockSourceRole,
+    stockSourceRoleIndex: roleIndex,
+    stockSourceRoleOrder: composition.sourceRoleOrder,
+  };
+}
+
+function isExactOrVerifiedDefaultStockEvidence(value: unknown): boolean {
+  return value === 'exact' || value === 'verifiedDefault';
+}
+
 export function snapshotSeriesProjection(
   config: ChartConfig,
   data: ChartData,
   series: ResolvedChartSpecSnapshot['resolved']['series'],
+  seriesReferencesByIndex?: ReadonlyMap<number, SeriesRangeReference>,
+  stockGlyphGeometry?: StockGlyphGeometrySnapshot,
 ): ResolvedChartSpecSnapshot['resolved']['seriesProjection'] {
   const renderedPointCountBySourceSeriesKey: Record<string, number> = {};
   for (const item of series) {
@@ -209,19 +299,40 @@ export function snapshotSeriesProjection(
   }
 
   const projectedKeys = new Set(series.map((item) => item.sourceSeriesKey));
+  const stockProjection = stockProjectionContext(config, data, series, stockGlyphGeometry);
+  const sourceSeries = snapshotSourceSeriesInventory(
+    config,
+    series,
+    stockProjection.stockRoleBySourceKey,
+    projectedKeys,
+    seriesReferencesByIndex,
+    stockProjection.renderedSeries,
+  );
   const droppedSeries =
     config.series
       ?.map((configured, index) => {
         const sourceSeriesIndex = seriesConfigSourceIndex(configured, index);
         const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
         if (projectedKeys.has(sourceSeriesKey)) return undefined;
+        const stockRole = stockProjection.stockRoleBySourceKey.get(sourceSeriesKey);
         const diagnostic = configured.projectionDiagnostics?.[0];
+        const projectedIntoSeries = stockProjection.renderedSeries;
+        const stockProjectionReason = stockRole !== undefined && projectedIntoSeries !== undefined;
         return {
           sourceSeriesIndex,
           sourceSeriesKey,
           name: configured.name,
-          reason: diagnostic?.reason ?? droppedSeriesReason(configured),
+          reason: stockProjectionReason
+            ? 'projectedIntoStockGlyph'
+            : (diagnostic?.reason ?? droppedSeriesReason(configured)),
           message: diagnostic?.message,
+          ...(stockProjectionReason
+            ? {
+                projectedIntoSeriesIndex: projectedIntoSeries.index,
+                projectedIntoSourceSeriesKey: projectedIntoSeries.sourceSeriesKey,
+                projectedIntoRole: stockRole,
+              }
+            : {}),
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== undefined) ?? [];
@@ -242,7 +353,269 @@ export function snapshotSeriesProjection(
     renderedSeriesCount: config.pivotProjection?.renderedSeriesCount ?? renderedSeriesCount,
     renderedPointCountBySourceSeriesKey,
     droppedSeries,
+    sourceSeries,
+    sourceSeriesCount: sourceSeries.length,
+    sourceRoleSeriesCount: sourceSeries.filter((item) => item.stockRole !== undefined).length,
+    projectedRoleMappings: stockProjection.projectedRoleMappings,
+    stockRenderProjection: stockProjection.stockRenderProjection,
   };
+}
+
+function snapshotSourceSeriesInventory(
+  config: ChartConfig,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  stockRoleBySourceKey: ReadonlyMap<string, ChartSeriesStockRole>,
+  projectedKeys: ReadonlySet<string>,
+  seriesReferencesByIndex: ReadonlyMap<number, SeriesRangeReference> | undefined,
+  renderedStockSeries: ResolvedSeriesSnapshot | undefined,
+): SourceSeriesSnapshot[] {
+  if (!config.series?.length) {
+    return series.map((item) => ({
+      index: item.index,
+      order: item.order,
+      sourceSeriesIndex: item.sourceSeriesIndex,
+      sourceSeriesKey: item.sourceSeriesKey,
+      name: item.name,
+      type: item.type,
+      visibleOrder: item.visibleOrder,
+      axisGroup: item.axisGroup,
+      xRole: item.xRole,
+      stockRole: item.stockRole,
+      source: item.source,
+      renderAuthority: item.renderAuthority,
+      projectionDiagnostics: item.projectionDiagnostics,
+    }));
+  }
+
+  return config.series.map((configured, index) => {
+    const sourceSeriesIndex = seriesConfigSourceIndex(configured, index);
+    const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
+    const rangeReference = seriesReferencesByIndex?.get(sourceSeriesIndex);
+    const stockRole = configured.stockRole ?? stockRoleBySourceKey.get(sourceSeriesKey);
+    const projectionDiagnostics = [...(configured.projectionDiagnostics ?? [])];
+    if (
+      stockRole !== undefined &&
+      renderedStockSeries !== undefined &&
+      !projectedKeys.has(sourceSeriesKey) &&
+      !projectionDiagnostics.some((diagnostic) => diagnostic.reason === 'projectedIntoStockGlyph')
+    ) {
+      projectionDiagnostics.push({
+        reason: 'projectedIntoStockGlyph',
+        severity: 'info',
+        sourceSeriesIndex,
+        sourceSeriesKey,
+        message: 'source stock role is represented by the rendered stock glyph series',
+      });
+    }
+
+    return {
+      index,
+      order: configured.order ?? configured.idx ?? index,
+      sourceSeriesIndex,
+      sourceSeriesKey,
+      name: configured.name ?? defaultSourceSeriesName(configured, sourceSeriesIndex),
+      type: configured.type,
+      visibleOrder: configured.visibleOrder,
+      axisGroup: configured.yAxisIndex === 1 ? 'secondary' : 'primary',
+      xRole: effectiveSeriesXRole(config, configured, configured.type),
+      stockRole,
+      source: {
+        values: configured.values,
+        categories: configured.categories,
+        bubbleSize: configured.bubbleSize,
+        stockRole,
+        valueSourceKind: configured.valueSourceKind,
+        categorySourceKind: configured.categorySourceKind,
+        bubbleSizeSourceKind: configured.bubbleSizeSourceKind,
+      },
+      renderAuthority: {
+        values: dimensionRenderAuthority({
+          cache: configured.valueCache,
+          sourceKind: configured.valueSourceKind,
+          resolvedRange: rangeReference?.values,
+        }),
+        categories: dimensionRenderAuthority({
+          cache: configured.categoryCache,
+          cacheRenderable:
+            hasRenderableChartPointCache(configured.categoryCache) ||
+            hasRenderableCategoryLevelsCache(configured.categoryLevels),
+          sourceKind: configured.categorySourceKind,
+          resolvedRange: rangeReference?.categories,
+        }),
+        bubbleSize: dimensionRenderAuthority({
+          cache: configured.bubbleSizeCache,
+          sourceKind: configured.bubbleSizeSourceKind,
+          resolvedRange: rangeReference?.bubbleSizes ?? null,
+        }),
+      },
+      ...(projectionDiagnostics.length > 0 ? { projectionDiagnostics } : {}),
+    };
+  });
+}
+
+function stockProjectionContext(
+  config: ChartConfig,
+  data: ChartData,
+  series: ResolvedChartSpecSnapshot['resolved']['series'],
+  stockGlyphGeometry: StockGlyphGeometrySnapshot | undefined,
+): {
+  stockRoleBySourceKey: Map<string, ChartSeriesStockRole>;
+  renderedSeries?: ResolvedSeriesSnapshot;
+  projectedRoleMappings?: ProjectedRoleMappingSnapshot[];
+  stockRenderProjection?: StockRenderProjectionSnapshot;
+} {
+  const stockRoleBySourceKey = new Map<string, ChartSeriesStockRole>();
+  const seriesConfigs = config.series ?? [];
+  const stockSourceComposition = stockSourceCompositionFromConfig(config, data);
+  const roleEvidence =
+    shouldProjectStockSeries(config) && seriesConfigs.length > 0
+      ? stockRolePlanWithEvidence(seriesConfigs, stockSourceComposition)
+      : null;
+  const roles = roleEvidence?.roles ?? null;
+  if (!roles) return { stockRoleBySourceKey };
+  const stockSubType = stockSubTypeFromRolePresence(roles);
+
+  const renderedSeries = series.find(isRenderedStockSeries) ?? series[0];
+  const projectedRoleMappings: ProjectedRoleMappingSnapshot[] = [];
+  for (const role of stockRoleOrder()) {
+    const configIndex = roles[role];
+    if (configIndex === undefined) continue;
+    const configured = seriesConfigs[configIndex];
+    if (!configured) continue;
+    const sourceSeriesIndex = seriesConfigSourceIndex(configured, configIndex);
+    const sourceSeriesKey = seriesConfigSourceKey(configured, sourceSeriesIndex);
+    stockRoleBySourceKey.set(sourceSeriesKey, role);
+    if (renderedSeries) {
+      projectedRoleMappings.push({
+        sourceSeriesIndex,
+        sourceSeriesKey,
+        stockRole: role,
+        projectedSeriesIndex: renderedSeries.index,
+        projectedSourceSeriesKey: renderedSeries.sourceSeriesKey,
+      });
+    }
+  }
+
+  const stockRenderProjection: StockRenderProjectionSnapshot | undefined =
+    renderedSeries && projectedRoleMappings.length > 0
+      ? {
+          projectionType: 'stockGlyph',
+          renderedSeriesIndex: renderedSeries.index,
+          renderedSourceSeriesKey: renderedSeries.sourceSeriesKey,
+          roles: projectedRoleMappings,
+          subType: stockGlyphGeometry?.subType ?? stockSubType,
+          ...(stockGlyphGeometry?.xMode !== undefined ? { xMode: stockGlyphGeometry.xMode } : {}),
+          geometryStatus: stockGlyphGeometry?.geometryStatus ?? 'unavailable',
+          ...(stockGlyphGeometry?.geometryStatusReason !== undefined
+            ? { geometryStatusReason: stockGlyphGeometry.geometryStatusReason }
+            : stockGlyphGeometry
+              ? {}
+              : { geometryStatusReason: 'stockGlyphGeometryUnavailable' }),
+          ...(stockGlyphGeometry?.visual !== undefined
+            ? {
+                visual: stockGlyphGeometry.visual,
+                visualStatus: stockGlyphGeometry.visual.visualStatus,
+                ...(stockGlyphGeometry.visual.visualStatusReason !== undefined
+                  ? { visualStatusReason: stockGlyphGeometry.visual.visualStatusReason }
+                  : {}),
+                priceGlyphMode: stockGlyphGeometry.visual.priceGlyphMode,
+                ...(stockGlyphGeometry.visual.sourceRoleVisuals !== undefined
+                  ? { sourceRoleVisuals: stockGlyphGeometry.visual.sourceRoleVisuals }
+                  : {}),
+              }
+            : { visualStatus: 'incomplete', visualStatusReason: 'stockGlyphVisualUnavailable' }),
+          stockSourceComposition,
+          ...(roleEvidence?.sourceRoleSemanticStatus !== undefined
+            ? { sourceRoleSemanticStatus: roleEvidence.sourceRoleSemanticStatus }
+            : stockSourceComposition.sourceRoleSemanticStatus !== undefined
+              ? { sourceRoleSemanticStatus: stockSourceComposition.sourceRoleSemanticStatus }
+              : {}),
+          ...(roleEvidence?.sourceRoleSemanticSource !== undefined
+            ? { sourceRoleSemanticSource: roleEvidence.sourceRoleSemanticSource }
+            : stockSourceComposition.sourceRoleSemanticSource !== undefined
+              ? { sourceRoleSemanticSource: stockSourceComposition.sourceRoleSemanticSource }
+              : {}),
+          ...(roleEvidence?.sourceRoleSemanticReason !== undefined
+            ? { sourceRoleSemanticReason: roleEvidence.sourceRoleSemanticReason }
+            : stockSourceComposition.sourceRoleSemanticReason !== undefined
+              ? { sourceRoleSemanticReason: stockSourceComposition.sourceRoleSemanticReason }
+              : {}),
+          ...(stockGlyphGeometry?.volumeAxisPolicy !== undefined
+            ? { volumeAxisPolicy: stockGlyphGeometry.volumeAxisPolicy }
+            : {}),
+          ...(stockGlyphGeometry?.highLowEndpointPolicy !== undefined
+            ? { highLowEndpointPolicy: stockGlyphGeometry.highLowEndpointPolicy }
+            : {}),
+          sourceRoleLineLayerCount:
+            stockGlyphGeometry?.visual?.sourceRoleVisuals?.filter(
+              (visual) => visual.layerMode === 'overlayLayer' && visual.lineVisible,
+            ).length ?? 0,
+          sourceRoleMarkerLayerCount:
+            stockGlyphGeometry?.visual?.sourceRoleVisuals?.filter(
+              (visual) => visual.layerMode === 'overlayLayer' && visual.markerVisible,
+            ).length ?? 0,
+          ...(stockGlyphGeometry?.priceScale !== undefined
+            ? { priceScale: stockGlyphGeometry.priceScale }
+            : {}),
+          ...(stockGlyphGeometry?.gapWidth !== undefined
+            ? { gapWidth: stockGlyphGeometry.gapWidth }
+            : {}),
+          ...(stockGlyphGeometry?.slotOccupancy !== undefined
+            ? { slotOccupancy: stockGlyphGeometry.slotOccupancy }
+            : {}),
+          ...(stockGlyphGeometry?.glyphWidth !== undefined
+            ? { glyphWidth: stockGlyphGeometry.glyphWidth }
+            : {}),
+          ...(stockGlyphGeometry?.tickLength !== undefined
+            ? { tickLength: stockGlyphGeometry.tickLength }
+            : {}),
+          ...(stockGlyphGeometry?.volumeBarWidth !== undefined
+            ? { volumeBarWidth: stockGlyphGeometry.volumeBarWidth }
+            : {}),
+          ...(stockGlyphGeometry?.volumeScale !== undefined
+            ? { volumeScale: stockGlyphGeometry.volumeScale }
+            : {}),
+          ...(stockGlyphGeometry?.volumeSurface !== undefined
+            ? { volumeSurface: stockGlyphGeometry.volumeSurface }
+            : {}),
+          ...(stockGlyphGeometry?.points !== undefined
+            ? { geometryPointCount: stockGlyphGeometry.points.length }
+            : {}),
+          ...stockRenderedRoleValueProjectionFromRoleValues(
+            renderedSeries.stockValues ?? {},
+            renderedSeries.categories.length > 0
+              ? renderedSeries.categories
+              : data.categories.map(snapshotScalar),
+            stockSubType,
+            renderedSeries.pointCount,
+          ),
+          categorySourceSeriesKey: renderedSeries.sourceSeriesKey,
+        }
+      : undefined;
+
+  return {
+    stockRoleBySourceKey,
+    renderedSeries,
+    ...(projectedRoleMappings.length > 0 ? { projectedRoleMappings } : {}),
+    ...(stockRenderProjection ? { stockRenderProjection } : {}),
+  };
+}
+
+function isRenderedStockSeries(series: ResolvedSeriesSnapshot): boolean {
+  const stockValues = series.stockValues;
+  return series.type === 'stock' || series.stockRole !== undefined || stockValues !== undefined;
+}
+
+function defaultSourceSeriesName(series: ChartSeriesConfig, sourceSeriesIndex: number): string {
+  if (typeof series.idx === 'number' && Number.isInteger(series.idx) && series.idx >= 0) {
+    return `Series ${series.idx + 1}`;
+  }
+
+  if (typeof series.order === 'number' && Number.isInteger(series.order) && series.order >= 0) {
+    return `Series ${series.order + 1}`;
+  }
+
+  return `Series ${sourceSeriesIndex + 1}`;
 }
 
 function droppedSeriesReason(
@@ -299,6 +672,15 @@ function numericPointValue(point: ChartDataPoint | undefined): number | null {
   return point.y;
 }
 
+function numericRenderedPointValue(
+  point: ChartDataPoint | undefined,
+  config: ChartConfig,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+): number | null {
+  const value = renderedPointValueForRows(point, config, configured);
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function numericPointField(
   point: ChartDataPoint | undefined,
   field: 'size' | 'open' | 'high' | 'low' | 'close' | 'volume',
@@ -326,4 +708,34 @@ function shouldSnapshotStockValues(
     configured?.stockRole !== undefined ||
     Object.values(stockValues).some((values) => values.some((value) => value !== null))
   );
+}
+
+function shouldUseStockRenderedPointProjection(
+  config: ChartConfig,
+  effectiveType: string | undefined,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+  stockValues: {
+    open: Array<number | null>;
+    high: Array<number | null>;
+    low: Array<number | null>;
+    close: Array<number | null>;
+    volume: Array<number | null>;
+  },
+): boolean {
+  if (configured?.stockRole !== undefined) return false;
+  return (
+    config.type === 'stock' ||
+    effectiveType === 'stock' ||
+    Object.values(stockValues).some((values) => values.some((value) => value !== null))
+  );
+}
+
+function shouldSnapshotRenderedValues(
+  config: ChartConfig,
+  effectiveType: string | undefined,
+  configured: NonNullable<ChartConfig['series']>[number] | undefined,
+): boolean {
+  if (config.type === 'radar' || effectiveType === 'radar') return false;
+  if (configured?.stockRole !== undefined) return false;
+  return config.type !== 'stock' && effectiveType !== 'stock';
 }

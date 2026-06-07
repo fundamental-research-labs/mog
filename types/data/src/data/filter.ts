@@ -363,6 +363,90 @@ export interface FilterState {
 }
 
 // =============================================================================
+// Imported/Runtime Filter Metadata Bindings
+// =============================================================================
+
+export type FilterCapability = 'supported' | 'unsupported';
+
+export type FilterHeaderSourceType = 'sheetAutoFilter' | 'tableAutoFilter';
+
+export type ImportFilterUnsupportedReason =
+  | 'unknownDynamicType'
+  | 'unknownCustomOperator'
+  | 'dateGroupUnsupported'
+  | 'dynamicTemporalContextUnsupported'
+  | 'valueTokenUnresolved'
+  | 'valueTypeUnsupported'
+  | 'colorDxfUnresolved'
+  | 'iconFilterUnsupported'
+  | 'unknownExtension'
+  | 'tableFilterShapeUnsupported';
+
+export interface FilterButtonMetadata {
+  headerCellId: CellId;
+  colId: number;
+  hiddenButton: boolean;
+  showButton?: boolean;
+  buttonVisible: boolean;
+}
+
+export interface LosslessCriterionDescriptor {
+  filterColId?: number;
+  tableColumnOrdinal?: number;
+  kind: string;
+  preservedJson: unknown;
+}
+
+export interface FilterShellMetadata {
+  capability: FilterCapability;
+  unsupportedReasons: readonly ImportFilterUnsupportedReason[];
+  hasActiveLosslessCriteria: boolean;
+  buttonMetadata: Readonly<Record<CellId, FilterButtonMetadata>>;
+  losslessCriteria: readonly LosslessCriterionDescriptor[];
+}
+
+export type FilterMetadataOwnerPath =
+  | {
+      kind: 'sheetAutoFilter';
+      sheetId: string;
+    }
+  | {
+      kind: 'tableAutoFilter';
+      sheetId: string;
+      tableId: string;
+    };
+
+export type FilterMetadataSourceKey =
+  | {
+      kind: 'sheetAutoFilter';
+      sheetId: string;
+      rangeRef: string;
+    }
+  | {
+      kind: 'tableAutoFilter';
+      sheetId: string;
+      tableId: string;
+      tableName: string;
+      rangeRef: string;
+    };
+
+export interface FilterMetadataBinding {
+  filterId: string;
+  filterKind: FilterType;
+  sheetId: string;
+  tableId?: string;
+  ownerPath: FilterMetadataOwnerPath;
+  sourceKey: FilterMetadataSourceKey;
+  rangeRef: string;
+  headerStartCellId: CellId;
+  headerEndCellId: CellId;
+  dataEndCellId: CellId;
+  colIdToHeaderCellId: Readonly<Record<number, CellId>>;
+  shell: FilterShellMetadata;
+  sourceFingerprint: string;
+}
+
+// =============================================================================
 // Filter Header Info (for UI rendering)
 // =============================================================================
 
@@ -392,6 +476,36 @@ export interface FilterHeaderInfo {
    * If true, the dropdown button shows a filter indicator.
    */
   hasActiveFilter: boolean;
+
+  /**
+   * Source object that owns this header button.
+   */
+  sourceType?: FilterHeaderSourceType;
+
+  /**
+   * Whether the imported/runtime filter criteria are owned by the production evaluator.
+   */
+  capability?: FilterCapability;
+
+  /**
+   * Unsupported import features preserved in lossless metadata for this filter.
+   */
+  unsupportedReasons?: readonly ImportFilterUnsupportedReason[];
+
+  /**
+   * Normalized button visibility after hiddenButton/showButton are applied.
+   */
+  buttonVisible?: boolean;
+
+  /**
+   * Whether the source workbook explicitly hides the filter dropdown button.
+   */
+  hiddenButton?: boolean;
+
+  /**
+   * Whether the source workbook explicitly shows the filter dropdown button.
+   */
+  showButton?: boolean;
 }
 
 // =============================================================================

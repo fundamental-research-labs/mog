@@ -70,6 +70,7 @@ function hasDuplicateOrBlankCategoryLabels(data: ChartData): boolean {
 
 function supportsContinuousCategoryAxis(chartType: ChartType): boolean {
   if (chartType === 'combo') return true;
+  if (chartType === 'stock') return true;
   if (chartType === 'radar') return false;
   const markType = MARK_TYPE_MAP[chartType];
   return markType === 'line' || markType === 'area';

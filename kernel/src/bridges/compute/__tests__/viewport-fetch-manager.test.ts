@@ -516,6 +516,27 @@ describe('ViewportFetchManager', () => {
       expect(state.prefetchDirtyState.staleCells.size).toBe(0);
     });
 
+    it('fetches registered viewports that have a visible window but no buffer yet', async () => {
+      const transport = makeMockTransport();
+      const { manager, coordinatorRegistry } = createManager(transport);
+      const coordinator = coordinatorRegistry.register('main');
+      coordinator.setVisibleWindow({ sheetId: 'sheet-1', ...bounds });
+
+      expect(coordinator.base.hasBuffer()).toBe(false);
+
+      await manager.forceRefreshAllViewports();
+
+      expect(transport.call).toHaveBeenCalledWith(
+        'compute_register_viewport',
+        expect.objectContaining({ viewportId: 'main', sheetId: 'sheet-1' }),
+      );
+      expect(transport.call).toHaveBeenCalledWith(
+        'compute_get_viewport_binary',
+        expect.objectContaining({ sheetId: 'sheet-1' }),
+      );
+      expect(coordinator.base.hasBuffer()).toBe(true);
+    });
+
     it('is a no-op when no viewports are registered', async () => {
       const transport = makeMockTransport();
       const { manager } = createManager(transport);

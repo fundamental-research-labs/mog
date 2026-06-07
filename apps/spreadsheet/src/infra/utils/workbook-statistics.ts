@@ -114,7 +114,7 @@ export async function getSheetStatistics(
   let pivotTables = 0;
 
   try {
-    const allCharts = await ws.charts.list();
+    const allCharts = await ws.charts.list({ materialization: 'available' });
     charts = allCharts.length;
   } catch {
     /* graceful fallback */

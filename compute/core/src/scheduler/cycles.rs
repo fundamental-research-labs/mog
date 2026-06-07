@@ -2,8 +2,9 @@
 //!
 //! Two strategies based on the workbook's `iterative_calc` setting:
 //!
-//! - **OFF (default)**: Circular cells are marked as circular-reference errors.
-//!   Downstream dependents then recalculate and propagate that error normally.
+//! - **OFF (default)**: Circular cells with no current/cached value are marked
+//!   as circular-reference errors. Imported circular cells with cached values
+//!   retain those values, and downstream dependents recalculate from them.
 //!
 //! - **ON**: Iterative convergence. Cycle cells are evaluated repeatedly
 //!   until values converge (delta < max_change) or max_iterations is reached.
@@ -175,21 +176,44 @@ impl ComputeCore {
             }
         }
 
+        let cycle_dependents: Vec<CellId> = {
+            let downstream = self
+                .graph
+                .affected_cells(
+                    &cycle_cell_set.iter().copied().collect::<Vec<_>>(),
+                    &*mirror,
+                )
+                .into_value();
+            downstream
+                .into_iter()
+                .filter(|c| non_cycle.contains(c) && self.ast_cache.contains_key(c))
+                .collect()
+        };
+
         // --- Pass 2: Resolve cycle cells ---
         //
         // Iterative calculation ON: seed non-numeric cycle values to 0 and run
         // the fixed-point solver.
         //
-        // Iterative calculation OFF: do not single-pass warm-start circular
-        // formulas. Store the explicit circular-reference error so user edits
-        // cannot silently turn `=A1+1` into a normal numeric value.
+        // Iterative calculation OFF: imported workbooks may carry Excel cached
+        // values for circular formulas. Preserve those values while still
+        // materializing an explicit circular error for genuinely blank cycles
+        // such as newly-authored formulas with no cached value.
         let mut iterative_result: Option<IterativeResult> = None;
         if self.iterative_calc {
+            let iteration_cells =
+                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &cycle_dependents);
             Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &cycle_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+            self.replace_final_changes_for_cells(
+                mirror,
+                &mut changed_cells,
+                &iteration_cells,
+                &cycle_cell_set,
+            );
         } else {
-            Self::mark_cycle_cells_as_circular_errors(mirror, &cycle_cells);
+            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
         }
 
         // Collect final values from cycle cells. Mark genuinely unresolvable
@@ -232,20 +256,6 @@ impl ComputeCore {
         crate::eval::cache::subexpr_cache::clear();
         crate::mirror::clear_caches();
 
-        let cycle_dependents: Vec<CellId> = {
-            let downstream = self
-                .graph
-                .affected_cells(
-                    &cycle_cell_set.iter().copied().collect::<Vec<_>>(),
-                    &*mirror,
-                )
-                .into_value();
-            downstream
-                .into_iter()
-                .filter(|c| non_cycle.contains(c) && self.ast_cache.contains_key(c))
-                .collect()
-        };
-
         if !cycle_dependents.is_empty() {
             let (dep_changes, dep_projections, dep_errors, dep_proj_deltas, dep_nested_cycles) =
                 self.topo_evaluate_pass(
@@ -287,12 +297,26 @@ impl ComputeCore {
                     }
                     let all_cycle_cells: Vec<CellId> = cycle_cell_set.iter().copied().collect();
                     if self.iterative_calc {
+                        let iteration_cells = self.iteration_cells_for_cycles(
+                            &all_cycle_cells,
+                            &cycle_cell_set,
+                            &cycle_dependents,
+                        );
                         Self::seed_cycle_cells_for_iteration(mirror, &all_cycle_cells);
                         let extra_result =
-                            self.evaluate_cycles_iterative(mirror, &all_cycle_cells, deadline)?;
+                            self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?;
                         iterative_result = Some(extra_result);
+                        self.replace_final_changes_for_cells(
+                            mirror,
+                            &mut changed_cells,
+                            &iteration_cells,
+                            &cycle_cell_set,
+                        );
                     } else {
-                        Self::mark_cycle_cells_as_circular_errors(mirror, &all_cycle_cells);
+                        Self::materialize_blank_cycle_cells_as_circular_errors(
+                            mirror,
+                            &all_cycle_cells,
+                        );
                     }
                 }
             }
@@ -447,14 +471,37 @@ impl ComputeCore {
         errors.extend(predecessor_result.2);
         all_projection_deltas.extend(predecessor_result.3);
 
+        let downstream_levels: Vec<Vec<CellId>> = downstream_levels
+            .into_iter()
+            .map(|level| {
+                level
+                    .into_iter()
+                    .filter(|c| !cycle_cell_set.contains(c) && self.ast_cache.contains_key(c))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|level: &Vec<CellId>| !level.is_empty())
+            .collect();
+        let downstream_cells: Vec<CellId> = downstream_levels
+            .iter()
+            .flat_map(|level| level.iter().copied())
+            .collect();
+
         // --- Pass 2: Resolve cycle cells ---
         let mut iterative_result: Option<IterativeResult> = None;
         if self.iterative_calc {
+            let iteration_cells =
+                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &downstream_cells);
             Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
             iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &cycle_cells, deadline)?);
+                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+            self.replace_final_changes_for_cells(
+                mirror,
+                &mut changed_cells,
+                &iteration_cells,
+                &cycle_cell_set,
+            );
         } else {
-            Self::mark_cycle_cells_as_circular_errors(mirror, &cycle_cells);
+            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
         }
 
         for &cell_id in &cycle_cells {
@@ -483,17 +530,6 @@ impl ComputeCore {
         // Use pre-computed downstream levels instead of recomputing via
         // affected_cells (saves 2 more barrier_topo calls).
         super::recalc::clear_thread_local_caches();
-
-        let downstream_levels: Vec<Vec<CellId>> = downstream_levels
-            .into_iter()
-            .map(|level| {
-                level
-                    .into_iter()
-                    .filter(|c| !cycle_cell_set.contains(c) && self.ast_cache.contains_key(c))
-                    .collect::<Vec<_>>()
-            })
-            .filter(|level: &Vec<CellId>| !level.is_empty())
-            .collect();
 
         if !downstream_levels.is_empty() {
             let downstream_result = self.topo_evaluate_pass_with_levels(
@@ -601,19 +637,38 @@ impl ComputeCore {
                 .get_cell_value(&cell_id)
                 .cloned()
                 .unwrap_or(CellValue::Null);
-            let should_reset = matches!(
-                current,
-                CellValue::Null | CellValue::Error(CellError::Circ, _)
-            ) || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
+            let should_reset = matches!(current, CellValue::Null | CellValue::Error(_, _))
+                || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
             if should_reset {
                 mirror.set_value_mut(&cell_id, CellValue::number(0.0));
             }
         }
     }
 
-    fn mark_cycle_cells_as_circular_errors(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+    fn materialize_blank_cycle_cells_as_circular_errors(
+        mirror: &mut CellMirror,
+        cycle_cells: &[CellId],
+    ) {
         for &cell_id in cycle_cells {
-            mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
+            let current = mirror
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            if matches!(current, CellValue::Null) {
+                mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
+            }
+        }
+    }
+
+    fn seed_error_cells_for_iteration(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+        for &cell_id in cycle_cells {
+            let current = mirror
+                .get_cell_value(&cell_id)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            if matches!(current, CellValue::Error(_, _)) {
+                mirror.set_value_mut(&cell_id, CellValue::number(0.0));
+            }
         }
     }
 
@@ -788,6 +843,8 @@ impl ComputeCore {
             compute_functions::helpers::sumifs_result_cache::clear();
             crate::eval::cache::subexpr_cache::clear();
             crate::mirror::clear_caches();
+
+            Self::seed_error_cells_for_iteration(mirror, cycle_cells);
 
             let mut max_delta: f64 = 0.0;
 

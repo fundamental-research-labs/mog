@@ -72,6 +72,7 @@ use value_types::{CellError, CellValue, ComputeError};
 mod agg_prepass;
 pub(crate) mod ast_transform;
 mod cf_eval;
+mod cycle_feedback;
 mod cycles;
 mod data_table_prepass;
 mod dep_extract;

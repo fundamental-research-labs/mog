@@ -51,6 +51,7 @@ import {
 import { setupFlashFillCoordination } from '../systems/grid-editing/features/flash-fill';
 import type { SheetCoordinatorConfig } from './types';
 import { processCoordinatorReceipts } from './receipt-processing';
+import { setupFloatingObjectSheetPopulation } from './floating-object-sheet-population';
 
 // =============================================================================
 // SHEET COORDINATOR CLASS
@@ -1031,41 +1032,19 @@ export class SheetCoordinator {
     // does another clear + rebuild, which is the intended self-heal.
     // =========================================================================
     if (this.uiStore) {
-      const populateAndResync = async (newSheetId: string) => {
-        if (projectionDisposed) return;
-        const populateGeneration = projectionGeneration;
-        const sheet = toSheetId(newSheetId);
-        const [objects, bounds] = await Promise.all([
-          floatingObjects.getObjectsInSheet(sheet),
-          floatingObjects.computeAllObjectBounds(sheet),
-        ]);
-        if (projectionDisposed || projectionGeneration !== populateGeneration) return;
-        store.getState().setObjectsForSheet(newSheetId, objects, bounds);
-        // Defer the renderer re-sync to the next animation frame so React
-        // has a chance to flush its render with the populated cache. The
-        // first switchSheet (fired by useRendererSync the moment activeSheetId
-        // changed) ran against an empty cache (and via the React adapter chain
-        // saw stale floatingObjects), producing a scene graph that pairs
-        // previous-sheet metadata with current-sheet bounds (per-sheet IDs
-        // collide, e.g. fobj-0/fobj-1).
-        //
-        // We can't go through `this.renderer.switchSheet` because the state
-        // machine guards SWITCH_SHEET as a no-op when `currentSheetId ===
-        // sheetId` (see grid-renderer-machine.ts `isSameSheet`). Bypass the
-        // actor and call the underlying GridRenderer directly — its
-        // switchSheet is idempotent (clear + syncSceneGraph).
-        requestAnimationFrame(() => {
-          if (projectionDisposed || projectionGeneration !== populateGeneration) return;
-          this.renderer.getObjects()?.resyncScene({ force: true, sheetId: newSheetId });
-        });
-      };
-
-      const unsubSheetSwitchPopulate = this.uiStore.subscribe((state, prevState) => {
-        if (state.activeSheetId !== prevState.activeSheetId) {
-          void populateAndResync(state.activeSheetId);
-        }
-      });
-      this.crossWiringCleanups.push(unsubSheetSwitchPopulate);
+      this.crossWiringCleanups.push(
+        setupFloatingObjectSheetPopulation({
+          uiStore: this.uiStore,
+          floatingObjects,
+          floatingObjectCache: store,
+          getRendererObjects: () => this.renderer.getObjects(),
+          getActiveSheetId: () =>
+            (this.config.getActiveSheetId ?? (() => this.config.initialSheetId))(),
+          importDurability: this.config.sheetSwitchDependencies?.importDurability,
+          isDisposed: () => projectionDisposed,
+          getGeneration: () => projectionGeneration,
+        }),
+      );
     }
   }
 

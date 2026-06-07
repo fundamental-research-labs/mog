@@ -38,59 +38,68 @@ describe('Editor-Focus synchronization', () => {
     sim.destroy();
   });
 
-  test('grid.onEditStart triggers input.focusEditor', () => {
+  test('grid.onEditStart triggers input.focusEditor', async () => {
     const focusEditorSpy = jest.spyOn(sim.input!, 'focusEditor');
 
     sim.grid.startEditing({ row: 0, col: 0 }, 'sheet-1');
+    await sim.flush();
 
     expect(focusEditorSpy).toHaveBeenCalled();
 
     focusEditorSpy.mockRestore();
   });
 
-  test('grid.onEditEnd triggers input.focusGrid (via cancelEdit)', () => {
+  test('grid.onEditEnd triggers input.focusGrid (via cancelEdit)', async () => {
     // cancelEdit sends CANCEL which transitions directly to 'inactive',
     // triggering onEditEnd -> input.focusGrid cross-system wiring.
     const focusGridSpy = jest.spyOn(sim.input!, 'focusGrid');
 
     sim.grid.startEditing({ row: 0, col: 0 }, 'sheet-1');
+    await sim.flush();
     sim.grid.cancelEdit();
+    await sim.flush();
 
     expect(focusGridSpy).toHaveBeenCalled();
 
     focusGridSpy.mockRestore();
   });
 
-  test('cancel edit returns focus to grid', () => {
+  test('cancel edit returns focus to grid', async () => {
     const focusEditorSpy = jest.spyOn(sim.input!, 'focusEditor');
     const focusGridSpy = jest.spyOn(sim.input!, 'focusGrid');
 
     sim.grid.startEditing({ row: 0, col: 0 }, 'sheet-1');
+    await sim.flush();
     expect(focusEditorSpy).toHaveBeenCalledTimes(1);
 
     sim.grid.cancelEdit();
+    await sim.flush();
     expect(focusGridSpy).toHaveBeenCalledTimes(1);
 
     focusEditorSpy.mockRestore();
     focusGridSpy.mockRestore();
   });
 
-  test('edit-cancel-edit cycle maintains focus consistency', () => {
+  test('edit-cancel-edit cycle maintains focus consistency', async () => {
     const focusEditorSpy = jest.spyOn(sim.input!, 'focusEditor');
     const focusGridSpy = jest.spyOn(sim.input!, 'focusGrid');
 
     // First edit cycle
     sim.grid.startEditing({ row: 0, col: 0 }, 'sheet-1');
+    await sim.flush();
     expect(focusEditorSpy).toHaveBeenCalledTimes(1);
 
     sim.grid.cancelEdit();
+    await sim.flush();
     expect(focusGridSpy).toHaveBeenCalledTimes(1);
 
     // Second edit cycle
     sim.grid.startEditing({ row: 1, col: 0 }, 'sheet-1');
+    await sim.flush();
     expect(focusEditorSpy).toHaveBeenCalledTimes(2);
 
     sim.grid.cancelEdit();
+    await sim.flush();
     expect(focusGridSpy).toHaveBeenCalledTimes(2);
 
     focusEditorSpy.mockRestore();

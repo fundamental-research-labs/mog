@@ -97,6 +97,7 @@ export type RendererEvent =
   | { type: 'QUEUE_ACTION'; action: PendingAction }
   | { type: 'INVALIDATE'; priority: RenderPriority; regions?: CellRange[] }
   | { type: 'SCROLL_TO_ACTIVE_CELL'; cell: CellCoord }
+  | { type: 'SCROLL_TO_ORIGIN'; axis: 'horizontal' | 'both'; cell: CellCoord }
   | {
       type: 'SCROLL_PAGE';
       axis: 'horizontal' | 'vertical';
@@ -114,6 +115,11 @@ export type RendererEvent =
 export type RendererEmitted =
   | {
       type: 'scrollToActiveCellRequested';
+      cell: CellCoord;
+    }
+  | {
+      type: 'scrollToOriginRequested';
+      axis: 'horizontal' | 'both';
       cell: CellCoord;
     }
   | {
@@ -313,6 +319,21 @@ export const rendererMachine = setup({
       return { type: 'scrollToActiveCellRequested', cell: event.cell };
     }),
 
+    emitScrollToOriginRequested: emit(({ event }) => {
+      if (event.type !== 'SCROLL_TO_ORIGIN') {
+        return {
+          type: 'scrollToOriginRequested',
+          axis: 'both',
+          cell: { row: 0, col: 0 },
+        };
+      }
+      return {
+        type: 'scrollToOriginRequested',
+        axis: event.axis,
+        cell: event.cell,
+      };
+    }),
+
     // Emit a page-scroll request to subscribers. Page navigation differs from
     // viewport-follow: it scrolls one rendered page even when the destination
     // active cell would be visible after a minimal nudge.
@@ -450,6 +471,11 @@ export const rendererMachine = setup({
           // The machine remains pure — coordinate-system + scroll application
           // live in RenderSystem (actor.on subscriber).
           actions: 'emitScrollToActiveCellRequested',
+        },
+        SCROLL_TO_ORIGIN: {
+          // Home/Ctrl+Home has scroll-origin semantics even when a frozen-pane
+          // target cell is technically visible.
+          actions: 'emitScrollToOriginRequested',
         },
         SCROLL_PAGE: {
           // Stay in ready; emit a request so RenderSystem applies a page-sized

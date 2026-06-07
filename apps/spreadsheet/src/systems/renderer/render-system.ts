@@ -212,6 +212,12 @@ export class RenderSystem implements IRenderSystem {
   private scrollToActiveCellSubscription: { unsubscribe(): void } | null = null;
 
   /**
+   * Subscription cleanup for Home/Ctrl+Home origin-scroll requests emitted by
+   * the renderer machine.
+   */
+  private scrollToOriginSubscription: { unsubscribe(): void } | null = null;
+
+  /**
    * Subscription cleanup for page-scroll requests emitted by the renderer
    * machine. Page navigation needs a page-sized scroll, not minimal
    * active-cell viewport-follow.
@@ -766,6 +772,10 @@ export class RenderSystem implements IRenderSystem {
       },
     );
 
+    this.scrollToOriginSubscription = this.rendererActor.on('scrollToOriginRequested', (event) => {
+      this.applyScrollToOrigin(event.axis, event.cell);
+    });
+
     this.pageScrollSubscription = this.rendererActor.on('pageScrollRequested', (event) => {
       this.applyPageScroll(event.axis, event.direction, event.cell);
     });
@@ -828,6 +838,11 @@ export class RenderSystem implements IRenderSystem {
     if (this.scrollToActiveCellSubscription) {
       this.scrollToActiveCellSubscription.unsubscribe();
       this.scrollToActiveCellSubscription = null;
+    }
+
+    if (this.scrollToOriginSubscription) {
+      this.scrollToOriginSubscription.unsubscribe();
+      this.scrollToOriginSubscription = null;
     }
 
     if (this.pageScrollSubscription) {
@@ -900,6 +915,23 @@ export class RenderSystem implements IRenderSystem {
       const deps = this.rendererExecution?.getDependencies();
       deps?.onScrollPositionReset?.(position);
     }
+  }
+
+  private applyScrollToOrigin(axis: 'horizontal' | 'both', cell: CellCoord): void {
+    if (this.disposed || !this.started) return;
+
+    const viewport = this.rendererExecution?.getViewport() ?? null;
+    if (!viewport) return;
+
+    const current = viewport.getScrollPosition();
+    const origin = {
+      x: 0,
+      y: axis === 'both' ? 0 : current.y,
+    };
+    this.rendererExecution?.setScrollPosition(origin);
+    const deps = this.rendererExecution?.getDependencies();
+    deps?.onScrollPositionReset?.(origin);
+    this.applyScrollToActiveCell(cell);
   }
 
   private applyPageScroll(

@@ -32,6 +32,8 @@ import type { SelectionContext, SelectionEvent, SelectionScrollIntent } from './
 
 function getSelectionScrollIntent(event: SelectionEvent): SelectionScrollIntent | undefined {
   switch (event.type) {
+    case 'KEY_HOME':
+      return { type: 'origin', axis: event.ctrlKey ? 'both' : 'horizontal' };
     case 'PAGE_LEFT':
       return { type: 'page', axis: 'horizontal', direction: 'previous' };
     case 'PAGE_RIGHT':

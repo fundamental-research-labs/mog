@@ -50,4 +50,31 @@ describe('page navigation emits', () => {
     subscription.unsubscribe();
     actor.stop();
   });
+
+  it('annotates Ctrl+Home with a top-left origin scroll intent', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 120, startCol: 8, endRow: 120, endCol: 8 }],
+      activeCell: { row: 120, col: 8 },
+      source: 'user',
+    });
+    emitted.length = 0;
+
+    actor.send({ type: 'KEY_HOME', ctrlKey: true, shiftKey: false });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 0, col: 0 },
+      followCell: { row: 0, col: 0 },
+      scrollIntent: { type: 'origin', axis: 'both' },
+    });
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
 });

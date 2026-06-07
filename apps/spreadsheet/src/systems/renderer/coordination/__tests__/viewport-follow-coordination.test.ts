@@ -6,11 +6,16 @@ type SelectionEvent = {
   type: 'userSelectionChanged';
   activeCell: { row: number; col: number };
   followCell: { row: number; col: number };
-  scrollIntent?: {
-    type: 'page';
-    axis: 'horizontal' | 'vertical';
-    direction: 'previous' | 'next';
-  };
+  scrollIntent?:
+    | {
+        type: 'page';
+        axis: 'horizontal' | 'vertical';
+        direction: 'previous' | 'next';
+      }
+    | {
+        type: 'origin';
+        axis: 'horizontal' | 'both';
+      };
 };
 
 function createSelectionActor() {
@@ -84,6 +89,34 @@ describe('viewport-follow coordination', () => {
       axis: 'horizontal',
       direction: 'previous',
       cell: { row: 0, col: 23 },
+    });
+  });
+
+  it('requests origin scroll for Home navigation even when the target is visible', () => {
+    const selectionActor = createSelectionActor();
+    const rendererActor = { send: jest.fn() };
+    const viewport = {
+      getScrollToCell: jest.fn(() => null),
+    };
+
+    setupViewportFollowCoordination({
+      selectionActor: selectionActor as any,
+      rendererActor: rendererActor as any,
+      getViewport: () => viewport as any,
+    });
+
+    selectionActor.emit({
+      type: 'userSelectionChanged',
+      activeCell: { row: 0, col: 0 },
+      followCell: { row: 0, col: 0 },
+      scrollIntent: { type: 'origin', axis: 'both' },
+    });
+
+    expect(viewport.getScrollToCell).not.toHaveBeenCalled();
+    expect(rendererActor.send).toHaveBeenCalledWith({
+      type: 'SCROLL_TO_ORIGIN',
+      axis: 'both',
+      cell: { row: 0, col: 0 },
     });
   });
 });

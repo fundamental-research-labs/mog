@@ -416,6 +416,16 @@ jobs:
       - name: Install trusted publishing npm
         run: npm install -g "npm@$NPM_VERSION"
 
+      - name: Configure npm auth fallback
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          else
+            echo "NPM_TOKEN is not configured; npm will use trusted publishing if available."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Download all artifacts (current run)
         if: ${{ inputs.source-run-id == '' }}
         uses: actions/download-artifact@v7

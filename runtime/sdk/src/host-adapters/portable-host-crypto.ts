@@ -49,8 +49,7 @@ function rotr(value: number, bits: number): number {
   return (value >>> bits) | (value << (32 - bits));
 }
 
-function sha256Hex(input: string): string {
-  const bytes = utf8Bytes(input);
+function sha256BytesHex(bytes: Uint8Array): string {
   const bitLength = bytes.length * 8;
   const paddedLength = ((bytes.length + 9 + 63) >>> 6) << 6;
   const padded = new Uint8Array(paddedLength);
@@ -123,6 +122,10 @@ function sha256Hex(input: string): string {
     .join('');
 }
 
+function sha256Hex(input: string): string {
+  return sha256BytesHex(utf8Bytes(input));
+}
+
 export function createPortableRandomUUID(): string {
   const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
   if (randomUUID) return randomUUID();
@@ -144,4 +147,12 @@ export function createPortableRandomUUID(): string {
 
 export function createPortableCanonicalFingerprint(canonical: string): HostCanonicalFingerprint {
   return `mog-host-fp:v1:sha256:${sha256Hex(canonical)}` as HostCanonicalFingerprint;
+}
+
+export function createPortableByteFingerprint(bytes: Uint8Array): HostCanonicalFingerprint {
+  const prefix = utf8Bytes(`immutable-byte-handle:v1:size=${bytes.byteLength}\n`);
+  const framed = new Uint8Array(prefix.length + bytes.byteLength);
+  framed.set(prefix);
+  framed.set(bytes, prefix.length);
+  return `mog-host-fp:v1:sha256:${sha256BytesHex(framed)}` as HostCanonicalFingerprint;
 }

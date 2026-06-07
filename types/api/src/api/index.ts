@@ -71,6 +71,8 @@ export type {
 // Worksheet sub-API interfaces
 export type {
   ChartImageExporter,
+  ChartReadMaterialization,
+  ChartReadOptions,
   ConditionalFormatUpdate,
   NodeMoveDirection,
   NodePosition,
@@ -92,6 +94,8 @@ export type {
   FilterDropdownColumnType,
   FilterDropdownData,
   FilterDropdownItem,
+  FilterCompactListOptions,
+  FilterCompactListScope,
   FilterListOptions,
   FilterListScope,
   WorksheetFormControls,

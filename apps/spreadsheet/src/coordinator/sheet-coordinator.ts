@@ -548,6 +548,7 @@ export class SheetCoordinator {
       this.crossWiringCleanups.push(
         setupSheetSwitchCoordination({
           workbook,
+          importDurability: this.config.sheetSwitchDependencies.importDurability,
           editorActor: this.grid.access.actors.editor,
           clipboardActor: this.grid.access.actors.clipboard,
           rendererActor: this.renderer.access.actors.renderer,

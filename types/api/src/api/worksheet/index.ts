@@ -12,7 +12,12 @@ export type {
   ChangeTrackOptions,
   WorksheetChanges,
 } from './changes';
-export type { ChartImageExporter, WorksheetCharts } from './charts';
+export type {
+  ChartImageExporter,
+  ChartReadMaterialization,
+  ChartReadOptions,
+  WorksheetCharts,
+} from './charts';
 export type { WorksheetComments } from './comments';
 export type { WorksheetCustomProperties } from './custom-properties';
 export type {

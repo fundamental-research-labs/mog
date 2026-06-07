@@ -62,7 +62,7 @@ describe('subscribeActiveSheetPersistence', () => {
     expect(workbook.setCustomSetting).toHaveBeenCalledWith(ACTIVE_SHEET_CUSTOM_SETTING_KEY, second);
   });
 
-  it('waits for import durability and then persists only the latest active sheet', async () => {
+  it('waits for scheduled background hydration and then persists only the latest active sheet', async () => {
     const first = sheetId('sheet-1');
     const second = sheetId('sheet-2');
     const third = sheetId('sheet-3');
@@ -77,6 +77,7 @@ describe('subscribeActiveSheetPersistence', () => {
       get isImportDurabilityPending() {
         return pending;
       },
+      scheduleDeferredHydration: jest.fn(() => durabilityPromise),
       awaitImportDurability: jest.fn(() => durabilityPromise),
     };
 
@@ -89,7 +90,8 @@ describe('subscribeActiveSheetPersistence', () => {
     store.setActiveSheet(third);
 
     expect(workbook.setCustomSetting).not.toHaveBeenCalled();
-    expect(importDurability.awaitImportDurability).toHaveBeenCalledTimes(1);
+    expect(importDurability.scheduleDeferredHydration).toHaveBeenCalledTimes(1);
+    expect(importDurability.awaitImportDurability).not.toHaveBeenCalled();
 
     pending = false;
     resolveDurability();
@@ -112,6 +114,7 @@ describe('subscribeActiveSheetPersistence', () => {
     });
     const importDurability: ImportDurabilityGate = {
       isImportDurabilityPending: true,
+      scheduleDeferredHydration: jest.fn(() => durabilityPromise),
       awaitImportDurability: jest.fn(() => durabilityPromise),
     };
 

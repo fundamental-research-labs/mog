@@ -9,6 +9,7 @@ import type {
   ChartConfig,
   ChartFormatString,
   ChartImageExporter,
+  ChartReadOptions,
   ChartSeriesDimension,
   ChartType,
   SheetId,
@@ -55,6 +56,28 @@ function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 
 // Internal helpers
 // =============================================================================
 
+async function awaitSheetMaterialized(ctx: DocumentContext, sheetId: SheetId): Promise<void> {
+  await ctx.awaitMaterialized?.(sheetId);
+}
+
+async function awaitChartReadScope(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  options?: ChartReadOptions,
+): Promise<void> {
+  const materialization = options?.materialization ?? 'sheet';
+  if (materialization === 'available') {
+    return;
+  }
+  if (materialization === 'complete') {
+    await ctx.awaitMaterialized?.('allSheets');
+    return;
+  }
+  if (materialization === 'sheet') {
+    await awaitSheetMaterialized(ctx, sheetId);
+  }
+}
+
 /**
  * Get a chart as the public Chart type, throwing chartNotFound if absent.
  */
@@ -63,6 +86,7 @@ async function requireChart(
   sheetId: SheetId,
   chartId: string,
 ): Promise<Chart> {
+  await awaitSheetMaterialized(ctx, sheetId);
   const raw = (await ctx.computeBridge.getChart(sheetId, chartId)) as ChartFloatingObject | null;
   if (!raw) throw chartNotFound(chartId);
   return serializedChartToChart(raw);
@@ -91,6 +115,7 @@ async function applyUpdate(
   chartId: string,
   updates: Partial<ChartConfig>,
 ): Promise<void> {
+  await awaitSheetMaterialized(ctx, sheetId);
   // Ensure chart exists
   const existing = (await ctx.computeBridge.getChart(
     sheetId,
@@ -130,6 +155,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     const hasSeriesValues = config.series?.some((s) => s.values);
     if (!config.dataRange && !hasSeriesValues)
       throw invalidChartConfig('dataRange is required when series[].values are not provided');
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
 
     // Generate a stable ID once and pass it through the entire pipeline.
     // If the caller already provided an ID (e.g., via config), preserve it.
@@ -164,6 +190,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async get(chartId: string): Promise<Chart | null> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
       chartId,
@@ -177,10 +204,12 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async updateRaw(chartId: string, fields: Record<string, unknown>): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.updateChart(this.sheetId, chartId, fields);
   }
 
   async remove(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     const existing = (await this.ctx.computeBridge.getChart(
       this.sheetId,
       chartId,
@@ -189,7 +218,8 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     await this.ctx.computeBridge.deleteChart(this.sheetId, chartId);
   }
 
-  async list(): Promise<Chart[]> {
+  async list(options?: ChartReadOptions): Promise<Chart[]> {
+    await awaitChartReadScope(this.ctx, this.sheetId, options);
     const charts = (await this.ctx.computeBridge.getAllCharts(
       this.sheetId,
     )) as ChartFloatingObject[];
@@ -222,6 +252,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async exportImage(chartId: string, options?: ImageExportOptions): Promise<string> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
       chartId,
@@ -258,7 +289,8 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return (await this.get(chartId)) !== null;
   }
 
-  async getCount(): Promise<number> {
+  async getCount(options?: ChartReadOptions): Promise<number> {
+    await awaitChartReadScope(this.ctx, this.sheetId, options);
     const charts = (await this.ctx.computeBridge.getAllCharts(
       this.sheetId,
     )) as ChartFloatingObject[];
@@ -275,18 +307,22 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async bringToFront(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.bringChartToFront(this.sheetId, chartId);
   }
 
   async sendToBack(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.sendChartToBack(this.sheetId, chartId);
   }
 
   async bringForward(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.bringChartForward(this.sheetId, chartId);
   }
 
   async sendBackward(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.sendChartBackward(this.sheetId, chartId);
   }
 
@@ -295,14 +331,17 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async linkToTable(chartId: string, tableId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.linkChartToTable(this.sheetId, chartId, tableId);
   }
 
   async unlinkFromTable(chartId: string): Promise<void> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     await this.ctx.computeBridge.unlinkChartFromTable(this.sheetId, chartId);
   }
 
   async isLinkedToTable(chartId: string): Promise<boolean> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     return this.ctx.computeBridge.isChartLinkedToTable(this.sheetId, chartId);
   }
 
@@ -670,6 +709,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
    * snapshot, not the richer `ChartLayout` used by the charts library).
    */
   private async getChartLayout(chartId: string): Promise<ChartLayoutSnapshot | null> {
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     const bridge = this.ctx.charts;
     if (!bridge || typeof bridge.getLayout !== 'function') {
       return null;
@@ -915,6 +955,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async activate(chartId: string): Promise<void> {
     // Verify chart exists
+    await awaitSheetMaterialized(this.ctx, this.sheetId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
       chartId,

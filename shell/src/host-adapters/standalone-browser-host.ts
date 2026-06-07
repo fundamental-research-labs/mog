@@ -49,7 +49,10 @@ import type {
   SourceHandleResolveResult,
 } from '@mog-sdk/types-host/bindings';
 import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
-import { createHostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
+import {
+  createHostByteFingerprint,
+  createHostCanonicalFingerprint,
+} from '@mog-sdk/types-host/fingerprints';
 import type { IndexedDbProviderConfig } from '@mog-sdk/types-document/storage/provider-configs';
 import type { CollaborationSidecar, DocumentHandle } from '@mog-sdk/kernel';
 
@@ -138,10 +141,7 @@ function createBrowserReplayRegistry(): HostHandoffReplayRegistry {
 function computeByteContentIdentity(bytes: Uint8Array) {
   return {
     kind: 'immutable-byte-handle' as const,
-    handleFingerprint: createHostCanonicalFingerprint({
-      bytes: Array.from(bytes),
-      sizeBytes: bytes.byteLength,
-    }),
+    handleFingerprint: createHostByteFingerprint(bytes),
     sizeBytes: bytes.byteLength,
   };
 }

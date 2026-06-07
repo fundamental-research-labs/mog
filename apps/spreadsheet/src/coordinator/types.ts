@@ -286,6 +286,14 @@ export interface ShellCoordinatorState {
 export interface SheetSwitchDependencies {
   /** UI store API for subscribing to activeSheetId changes and accessing view state methods */
   uiStoreApi: import('zustand').StoreApi<import('../ui-store').UIState>;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
+}
+
+export interface SheetSwitchImportDurabilityGate {
+  readonly isImportDurabilityPending: boolean;
+  scheduleDeferredHydration?(): Promise<void>;
+  awaitImportDurability(): Promise<void>;
 }
 
 /**

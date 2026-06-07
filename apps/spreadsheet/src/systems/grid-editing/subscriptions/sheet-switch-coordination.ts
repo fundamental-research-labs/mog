@@ -62,12 +62,20 @@ export type OnSheetSwitchCallback = (
   callback: (newSheetId: SheetId, prevSheetId: SheetId | null) => void,
 ) => () => void;
 
+export interface SheetSwitchImportDurabilityGate {
+  readonly isImportDurabilityPending: boolean;
+  scheduleDeferredHydration?(): Promise<void>;
+  awaitImportDurability(): Promise<void>;
+}
+
 /**
  * Configuration for sheet switch coordination.
  */
 export interface SheetSwitchCoordinationConfig {
   /** Workbook API for event subscriptions */
   workbook: Workbook;
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
   editorActor: EditorActor;
   clipboardActor: ClipboardActor;
   rendererActor: RendererActor;
@@ -166,6 +174,7 @@ export interface SheetSwitchCoordinationConfig {
 export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConfig): () => void {
   const {
     workbook,
+    importDurability,
     editorActor,
     rendererActor,
     selectionActor,
@@ -186,6 +195,70 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
   // Subscribe to renderer state to detect when sheet switch completes
   // Used to restore selection after renderer is ready
   let pendingRestoreSheetId: string | null = null;
+  let disposed = false;
+  let pendingScrollFlush: Promise<void> | null = null;
+  const pendingScrollPositions = new Map<SheetId, { topRow: number; leftCol: number }>();
+
+  const flushPendingScrollPositions = (): void => {
+    const positions = [...pendingScrollPositions.entries()];
+    pendingScrollPositions.clear();
+    for (const [pendingSheetId, position] of positions) {
+      void workbook
+        .getSheetById(pendingSheetId)
+        .view.setScrollPosition(position.topRow, position.leftCol)
+        .catch((err) => {
+          console.warn('[SheetSwitchCoordination] Failed to persist scroll position:', err);
+        });
+    }
+  };
+
+  const scheduleScrollFlushAfterDurability = (): void => {
+    if (pendingScrollFlush) return;
+
+    const waitForDurability =
+      importDurability?.scheduleDeferredHydration?.bind(importDurability) ??
+      importDurability?.awaitImportDurability.bind(importDurability);
+    if (!waitForDurability) {
+      flushPendingScrollPositions();
+      return;
+    }
+
+    pendingScrollFlush = waitForDurability()
+      .then(() => {
+        if (!disposed) {
+          flushPendingScrollPositions();
+        }
+      })
+      .catch((err) => {
+        pendingScrollPositions.clear();
+        console.warn('[SheetSwitchCoordination] Failed to wait for import durability:', err);
+      })
+      .finally(() => {
+        pendingScrollFlush = null;
+        if (!disposed && pendingScrollPositions.size > 0) {
+          scheduleScrollFlushAfterDurability();
+        }
+      });
+  };
+
+  const persistScrollPosition = (sheetId: SheetId, topRow: number, leftCol: number): void => {
+    const write = () => {
+      void workbook
+        .getSheetById(sheetId)
+        .view.setScrollPosition(topRow, leftCol)
+        .catch((err) => {
+          console.warn('[SheetSwitchCoordination] Failed to persist scroll position:', err);
+        });
+    };
+
+    if (!importDurability) {
+      write();
+      return;
+    }
+
+    pendingScrollPositions.set(sheetId, { topRow, leftCol });
+    scheduleScrollFlushAfterDurability();
+  };
 
   const rendererSub = rendererActor.subscribe((state) => {
     // When renderer enters 'ready' state after a sheet switch, restore selection
@@ -303,7 +376,7 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
       // Convert pixel scroll position to cell-level using the coordinate system's visible range.
       const topLeft = getTopLeftCell?.(prevSheetId);
       if (topLeft) {
-        void workbook.getSheetById(prevSheetId).view.setScrollPosition(topLeft.row, topLeft.col);
+        persistScrollPosition(prevSheetId, topLeft.row, topLeft.col);
       }
     }
 
@@ -355,6 +428,8 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
 
   // Return cleanup function
   return () => {
+    disposed = true;
+    pendingScrollPositions.clear();
     rendererSub.unsubscribe();
     unsubSheetSwitch();
     sheetDeletedUnsub();

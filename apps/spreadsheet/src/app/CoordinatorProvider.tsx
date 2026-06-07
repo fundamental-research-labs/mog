@@ -41,6 +41,7 @@ import {
 import { usePlatform, usePlatformIdentity, useShellService } from '@mog/shell';
 import {
   useActiveSheetId,
+  useDocumentContext,
   useFeatureGates,
   useReadOnly,
   useSpreadsheetHostCommandsOptional,
@@ -601,6 +602,7 @@ export function SpreadsheetCoordinatorProvider({
   const uiStoreApi = useUIStoreApi();
   const platformIdentity = usePlatformIdentity();
   const readOnly = useReadOnly();
+  const importDurability = useDocumentContext().importDurability;
 
   // Get validation dialog actions from UI store. The coordinator lives above the
   // component tree, so it can't use React hooks; the UI store is the bridge that
@@ -809,6 +811,7 @@ export function SpreadsheetCoordinatorProvider({
         platform={platformIdentity.os}
         onMetric={onMetric}
         uiStoreApi={uiStoreApi}
+        importDurability={importDurability}
         editorDependencies={editorDependencies}
         enableKeyboard={enableKeyboard}
         onUIAction={onUIAction}

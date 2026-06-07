@@ -1,4 +1,10 @@
-import { canonicalJsonStringify, createHostCanonicalFingerprint, sha256Hex } from '../fingerprints';
+import {
+  canonicalJsonStringify,
+  createHostByteFingerprint,
+  createHostCanonicalFingerprint,
+  sha256BytesHex,
+  sha256Hex,
+} from '../fingerprints';
 import type { HostCanonicalFingerprint, HostCanonicalFingerprintProof } from '../fingerprints';
 import type { VerifiedPrincipal } from '../identity';
 import type {
@@ -91,8 +97,21 @@ describe('Canonical fingerprint format', () => {
     expect(sha256Hex('abc')).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
+    expect(sha256BytesHex(new Uint8Array([0x61, 0x62, 0x63]))).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
     expect(createHostCanonicalFingerprint({ b: 2, a: 1 })).toBe(
       `mog-host-fp:v1:sha256:${sha256Hex(canonicalJsonStringify({ a: 1, b: 2 }))}`,
+    );
+  });
+
+  it('frames raw byte fingerprints without canonicalizing bytes as JSON arrays', () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+
+    expect(createHostByteFingerprint(bytes)).toMatch(FINGERPRINT_REGEX);
+    expect(createHostByteFingerprint(bytes)).toBe(createHostByteFingerprint(bytes.slice()));
+    expect(createHostByteFingerprint(bytes)).not.toBe(
+      createHostByteFingerprint(new Uint8Array([0, 1, 2, 3, 4])),
     );
   });
 

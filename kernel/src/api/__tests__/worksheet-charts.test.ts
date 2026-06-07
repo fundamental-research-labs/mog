@@ -58,6 +58,105 @@ function chartOoxmlWithAnchorIndex(anchorIndex: number): ChartFloatingObject['oo
   } as unknown as ChartFloatingObject['ooxml'];
 }
 
+describe('WorksheetChartsImpl materialization scopes', () => {
+  it('awaits sheet materialization before listing charts by default', async () => {
+    const calls: string[] = [];
+    const chart = makeChart();
+    const ctx = {
+      awaitMaterialized: jest.fn(async (scope: string) => {
+        calls.push(`await:${scope}`);
+      }),
+      computeBridge: {
+        getAllCharts: jest.fn(async () => {
+          calls.push('getAllCharts');
+          return [chart];
+        }),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    await expect(charts.list()).resolves.toEqual([expect.objectContaining({ id: chart.id })]);
+
+    expect(ctx.awaitMaterialized).toHaveBeenCalledWith(SHEET_ID);
+    expect(ctx.computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_ID);
+    expect(calls).toEqual([`await:${SHEET_ID}`, 'getAllCharts']);
+  });
+
+  it('does not materialize deferred imports for explicitly available chart lists', async () => {
+    const calls: string[] = [];
+    const chart = makeChart();
+    const ctx = {
+      awaitMaterialized: jest.fn(async (scope: string) => {
+        calls.push(`await:${scope}`);
+      }),
+      computeBridge: {
+        getAllCharts: jest.fn(async () => {
+          calls.push('getAllCharts');
+          return [chart];
+        }),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    await expect(charts.list({ materialization: 'available' })).resolves.toEqual([
+      expect.objectContaining({ id: chart.id }),
+    ]);
+
+    expect(ctx.awaitMaterialized).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_ID);
+    expect(calls).toEqual(['getAllCharts']);
+  });
+
+  it('awaits complete materialization for complete chart lists', async () => {
+    const chart = makeChart();
+    const ctx = {
+      awaitMaterialized: jest.fn(async () => undefined),
+      computeBridge: {
+        getAllCharts: jest.fn(async () => [chart]),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    await expect(charts.list({ materialization: 'complete' })).resolves.toEqual([
+      expect.objectContaining({ id: chart.id }),
+    ]);
+
+    expect(ctx.awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(ctx.computeBridge.getAllCharts).toHaveBeenCalledWith(SHEET_ID);
+  });
+
+  it('awaits sheet materialization before updating charts through helper paths', async () => {
+    const calls: string[] = [];
+    const chart = makeChart();
+    const ctx = {
+      awaitMaterialized: jest.fn(async (scope: string) => {
+        calls.push(`await:${scope}`);
+      }),
+      computeBridge: {
+        getChart: jest.fn(async () => {
+          calls.push('getChart');
+          return chart;
+        }),
+        updateChart: jest.fn(async () => {
+          calls.push('updateChart');
+        }),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    await charts.update(chart.id, { name: 'Updated chart' });
+
+    expect(ctx.awaitMaterialized).toHaveBeenCalledWith(SHEET_ID);
+    expect(ctx.computeBridge.getChart).toHaveBeenCalledWith(SHEET_ID, chart.id);
+    expect(ctx.computeBridge.updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      chart.id,
+      expect.objectContaining({ name: 'Updated chart' }),
+    );
+    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'updateChart']);
+  });
+});
+
 describe('WorksheetChartsImpl chart list ordering', () => {
   it('orders imported charts by drawing frame anchorIndex before serialization', async () => {
     const anchor7 = makeChart({

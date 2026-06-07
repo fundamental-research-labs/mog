@@ -50,6 +50,7 @@ import type {
 } from '@mog-sdk/types-host/bindings';
 import type { HostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
 import {
+  createPortableByteFingerprint,
   createPortableCanonicalFingerprint,
   createPortableRandomUUID,
 } from './portable-host-crypto';
@@ -238,10 +239,7 @@ function computeCanonicalFingerprint(value: unknown): HostCanonicalFingerprint {
 function computeByteContentIdentity(bytes: Uint8Array) {
   return {
     kind: 'immutable-byte-handle' as const,
-    handleFingerprint: computeCanonicalFingerprint({
-      bytes: Array.from(bytes),
-      sizeBytes: bytes.byteLength,
-    }),
+    handleFingerprint: createPortableByteFingerprint(bytes),
     sizeBytes: bytes.byteLength,
   };
 }

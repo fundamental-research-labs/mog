@@ -29,6 +29,7 @@ import { jest } from '@jest/globals';
 import { RustDocument } from '../rust-document';
 import { InMemoryProvider } from '../providers/__tests__/in-memory-provider';
 import type { Provider } from '../providers/provider';
+import { WriteGate } from '../write-gate';
 
 // ---------------------------------------------------------------------------
 // Stub bridge — the minimal surface RustDocument calls during init + drain
@@ -694,6 +695,65 @@ describe('RustDocument orchestrator contract', () => {
       await doc.fullStateCheckpoint({ mode: { kind: 'importInitialize' } });
 
       expect(checkpointModes).toEqual(['importInitialize']);
+      expect(observed).toEqual([]);
+      expect(doc.hasAppendActive).toBe(true);
+
+      bridge.emit(new Uint8Array([0x01]));
+      await Promise.resolve();
+      expect(observed).toEqual([0x01]);
+      await doc.destroy();
+    });
+
+    it('import promotion absorbs first-contact live updates into the full-state snapshot', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const writeGate = new WriteGate();
+      (bridge as StubBridge & { writeGate: WriteGate }).writeGate = writeGate;
+      const observed: number[] = [];
+      const checkpointModes: string[] = [];
+      const checkpointGateModes: string[] = [];
+      const provider: Provider = {
+        name: 'ImportPromotionProvider',
+        appendUpdate: (update) => {
+          observed.push(update[0] ?? 0);
+        },
+        attach: async (_doc, mode) => ({
+          status: 'ready',
+          mode: mode?.kind ?? 'normal',
+        }),
+        flush: async () => {},
+        checkpointFullState: async (_doc, mode) => {
+          checkpointGateModes.push(writeGate.mode);
+          checkpointModes.push(mode?.kind ?? 'normal');
+          return {
+            status: 'committed',
+            mode: mode?.kind ?? 'normal',
+          };
+        },
+        flushSync: () => {},
+        detach: async () => {},
+        stateVector: async () => new Uint8Array(),
+        flushFailed: false,
+      };
+
+      await doc.attachProvider(provider, {
+        mode: { kind: 'importInitialize', replaceExisting: true },
+        suppressInitialBaseline: true,
+        suppressQueuedUpdates: true,
+        suppressTouch: true,
+      });
+      bridge.emit(new Uint8Array([0x88]));
+      await Promise.resolve();
+      expect(doc.pendingUpdatesCount).toBe(1);
+
+      await doc.fullStateCheckpoint({
+        mode: { kind: 'importInitialize' },
+        absorbStagedLiveUpdates: true,
+      });
+
+      expect(checkpointModes).toEqual(['importInitialize']);
+      expect(checkpointGateModes).toEqual(['checkpointing']);
+      expect(writeGate.mode).toBe('open');
+      expect(doc.pendingUpdatesCount).toBe(0);
       expect(observed).toEqual([]);
       expect(doc.hasAppendActive).toBe(true);
 

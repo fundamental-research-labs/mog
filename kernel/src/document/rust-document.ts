@@ -148,6 +148,14 @@ export interface RustDocumentAttachProviderOptions {
 export interface RustDocumentFullStateCheckpointOptions {
   mode?: ProviderCheckpointMode;
   publishAfterCommit?: boolean;
+  /**
+   * Import-initialize promotion only. The lifecycle system intentionally
+   * allows first-contact interactions before the deferred import snapshot is
+   * durably committed. Those updates are already represented in the full-state
+   * snapshot; absorb their queued update_v1 payloads under the write gate so
+   * promotion can commit one coherent snapshot.
+   */
+  absorbStagedLiveUpdates?: boolean;
 }
 
 // =============================================================================
@@ -264,6 +272,15 @@ export class RustDocument {
    * promoted.
    */
   private importInitializeHydrationDepth = 0;
+
+  /**
+   * Non-zero while an import-initialize full-state checkpoint is absorbing
+   * queued first-contact updates into the snapshot that is about to be
+   * committed. This is distinct from hydration suppression: the updates are
+   * user-visible engine state, but they must not be appended incrementally to a
+   * Provider that has not been promoted yet.
+   */
+  private importInitializePromotionDepth = 0;
 
   /**
    * Set to `true` the first time `enqueueUpdate` fans an `update_v1` payload
@@ -817,54 +834,78 @@ export class RustDocument {
   async fullStateCheckpoint(options: RustDocumentFullStateCheckpointOptions = {}): Promise<void> {
     if (this.destroyed) return;
     const importInitialize = options.mode?.kind === 'importInitialize';
-    if (!importInitialize) {
-      await this.drainBridgePendingUpdatesNow();
-      this.drainQueuedUpdatesNow();
-      await this.computeBridge.flushUndoCapture();
-    }
+    const absorbStagedLiveUpdates = importInitialize && options.absorbStagedLiveUpdates === true;
+    const writeGate = this.computeBridge.writeGate as WriteGate | undefined;
+    let enteredCheckpointing = false;
 
-    const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
-    const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
-    const checkpointProviders = importInitialize ? this.importStagedProviders : this.providers;
-    if (importInitialize && (this.updateQueue.length > 0 || this.flushScheduled)) {
-      await this.detachImportStagedProviders('live update queue is not empty');
-      throw new Error(
-        `Imported document ${this.docId} cannot promote provider: live update queue is not empty`,
+    try {
+      if (absorbStagedLiveUpdates && !writeGate) {
+        throw new Error(
+          `Imported document ${this.docId} cannot absorb staged live updates without a write gate`,
+        );
+      }
+      if (absorbStagedLiveUpdates && writeGate) {
+        writeGate.enterCheckpointing();
+        enteredCheckpointing = true;
+      }
+
+      if (importInitialize) {
+        if (absorbStagedLiveUpdates) {
+          await this.absorbImportInitializeLiveUpdates();
+        }
+      } else {
+        await this.drainBridgePendingUpdatesNow();
+        this.drainQueuedUpdatesNow();
+        await this.computeBridge.flushUndoCapture();
+      }
+
+      const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
+      const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
+      const checkpointProviders = importInitialize ? this.importStagedProviders : this.providers;
+      if (importInitialize && (this.updateQueue.length > 0 || this.flushScheduled)) {
+        await this.detachImportStagedProviders('live update queue is not empty');
+        throw new Error(
+          `Imported document ${this.docId} cannot promote provider: live update queue is not empty`,
+        );
+      }
+      const checkpointResults = await Promise.all(
+        checkpointProviders.map((p) => p.checkpointFullState(doc, options.mode)),
       );
-    }
-    const checkpointResults = await Promise.all(
-      checkpointProviders.map((p) => p.checkpointFullState(doc, options.mode)),
-    );
-    if (importInitialize && checkpointProviders.length > 0) {
-      const blocked = checkpointResults.find((result) => result?.status === 'blocked');
-      if (blocked?.status === 'blocked') {
-        await this.detachImportStagedProviders(blocked.reason);
-        throw new Error(
-          blocked.message ??
-            `Imported document ${this.docId} cannot promote provider: ${blocked.reason}`,
+      if (importInitialize && checkpointProviders.length > 0) {
+        const blocked = checkpointResults.find((result) => result?.status === 'blocked');
+        if (blocked?.status === 'blocked') {
+          await this.detachImportStagedProviders(blocked.reason);
+          throw new Error(
+            blocked.message ??
+              `Imported document ${this.docId} cannot promote provider: ${blocked.reason}`,
+          );
+        }
+        const uncommittedProvider = checkpointResults.findIndex(
+          (result) => !isCommittedCheckpoint(result),
         );
+        if (uncommittedProvider !== -1) {
+          await this.detachImportStagedProviders('checkpoint did not commit');
+          throw new Error(
+            `Imported document ${this.docId} cannot promote provider: checkpoint did not commit`,
+          );
+        }
+        if (this.initialProviderBaselineUpdate) {
+          await this.detachImportStagedProviders('initial baseline update was captured');
+          throw new Error(
+            `Imported document ${this.docId} cannot promote provider: initial baseline update was captured`,
+          );
+        }
+        this.providers.push(...checkpointProviders);
+        this.importStagedProviders = [];
+        this._appendActive = true;
       }
-      const uncommittedProvider = checkpointResults.findIndex(
-        (result) => !isCommittedCheckpoint(result),
-      );
-      if (uncommittedProvider !== -1) {
-        await this.detachImportStagedProviders('checkpoint did not commit');
-        throw new Error(
-          `Imported document ${this.docId} cannot promote provider: checkpoint did not commit`,
-        );
+      if (options.publishAfterCommit) {
+        await this.touchUserVisibleDoc();
       }
-      if (this.initialProviderBaselineUpdate) {
-        await this.detachImportStagedProviders('initial baseline update was captured');
-        throw new Error(
-          `Imported document ${this.docId} cannot promote provider: initial baseline update was captured`,
-        );
+    } finally {
+      if (enteredCheckpointing) {
+        writeGate?.leaveCheckpointing();
       }
-      this.providers.push(...checkpointProviders);
-      this.importStagedProviders = [];
-      this._appendActive = true;
-    }
-    if (options.publishAfterCommit) {
-      await this.touchUserVisibleDoc();
     }
   }
 
@@ -1049,6 +1090,7 @@ export class RustDocument {
     if (this.destroyed) return;
     if (this.providerReplayDepth > 0) return;
     if (this.importInitializeHydrationDepth > 0) return;
+    if (this.importInitializePromotionDepth > 0) return;
     // Defensive copy — the bridge's subscriber callback may reuse the
     // input buffer between dispatches (see the dispatcher's drain in
     // compute-bridge.ts).
@@ -1132,6 +1174,17 @@ export class RustDocument {
       flushPendingUpdateV1?: () => Promise<void>;
     };
     await bridge.flushPendingUpdateV1?.();
+  }
+
+  private async absorbImportInitializeLiveUpdates(): Promise<void> {
+    this.importInitializePromotionDepth++;
+    try {
+      await this.drainBridgePendingUpdatesNow();
+    } finally {
+      this.importInitializePromotionDepth--;
+    }
+    this.updateQueue = [];
+    this.flushScheduled = false;
   }
 
   private appendInitialProviderBaseline(provider: Provider): void {

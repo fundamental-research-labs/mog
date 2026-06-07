@@ -1789,6 +1789,7 @@ export class DocumentLifecycleSystem {
         await rustDocument.fullStateCheckpoint({
           mode: { kind: 'importInitialize' },
           publishAfterCommit,
+          absorbStagedLiveUpdates: true,
         });
       } catch (err) {
         this.deferredHydrationPending = false;

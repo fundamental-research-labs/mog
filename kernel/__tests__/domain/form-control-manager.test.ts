@@ -22,6 +22,10 @@ type MockContext = DocumentContext & {
   __floatingObjects: Map<string, Record<string, unknown>>;
 };
 
+async function flushAsyncProjection(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function createMockContext(): MockContext {
   let nextObjectId = 1;
   const handlers = new Map<string, Set<EventHandler>>();
@@ -592,6 +596,129 @@ describe('FormControlManager', () => {
           type: 'checkbox',
           sheetId: 'sheet-1',
           linkedCellId: checkbox.linkedCellId,
+        }),
+      );
+    });
+  });
+
+  describe('imported numeric controls', () => {
+    it('hydrates imported scroll bars from floating objects', async () => {
+      ctx.__floatingObjects.set('scroll-1', {
+        id: 'scroll-1',
+        sheetId: 'sheet-1',
+        type: 'formControl',
+        controlType: 'ScrollBar',
+        cellLink: '$H$4',
+        anchor: {
+          anchorRow: 2,
+          anchorCol: 1,
+          anchorRowOffsetEmu: 0,
+          anchorColOffsetEmu: 0,
+          anchorMode: 'oneCell',
+        },
+        width: 120,
+        height: 20,
+        zIndex: 7,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        locked: false,
+        visible: true,
+        printable: true,
+        opacity: 1,
+        name: 'Scroll Bar 46',
+        createdAt: 1000,
+        updatedAt: 1000,
+        ooxml: {
+          min: 1,
+          max: 100,
+          inc: 2,
+          page: 10,
+          horiz: true,
+          controlPr: { disabled: false },
+        },
+      });
+
+      ctx.__emit({
+        type: 'floatingObject:created',
+        sheetId: 'sheet-1',
+        objectId: 'scroll-1',
+        objectType: 'formControl',
+      });
+      await flushAsyncProjection();
+
+      expect(manager.getControl('scroll-1')).toEqual(
+        expect.objectContaining({
+          id: 'scroll-1',
+          type: 'scrollBar',
+          sheetId: 'sheet-1',
+          linkedCellId: 'cell-sheet-1-3-7',
+          min: 1,
+          max: 100,
+          step: 2,
+          page: 10,
+          orientation: 'horizontal',
+          width: 120,
+          height: 20,
+          enabled: true,
+        }),
+      );
+    });
+
+    it('hydrates imported spinners from alternate OOXML control names', async () => {
+      ctx.__floatingObjects.set('spin-1', {
+        id: 'spin-1',
+        sheetId: 'sheet-1',
+        type: 'formControl',
+        controlType: 'Spin',
+        cellLink: '$B$2',
+        anchor: {
+          anchorRow: 1,
+          anchorCol: 1,
+          anchorRowOffsetEmu: 0,
+          anchorColOffsetEmu: 0,
+          anchorMode: 'oneCell',
+        },
+        width: 18,
+        height: 36,
+        zIndex: 3,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        locked: false,
+        visible: true,
+        printable: true,
+        opacity: 1,
+        name: 'Spin Button 1',
+        createdAt: 1000,
+        updatedAt: 1000,
+        ooxml: {
+          min: 0,
+          max: 10,
+          inc: 1,
+          horiz: false,
+          controlPr: { disabled: true },
+        },
+      });
+
+      ctx.__emit({
+        type: 'floatingObject:created',
+        sheetId: 'sheet-1',
+        objectId: 'spin-1',
+        objectType: 'formControl',
+      });
+      await flushAsyncProjection();
+
+      expect(manager.getControl('spin-1')).toEqual(
+        expect.objectContaining({
+          id: 'spin-1',
+          type: 'spinner',
+          sheetId: 'sheet-1',
+          linkedCellId: 'cell-sheet-1-1-1',
+          min: 0,
+          max: 10,
+          step: 1,
+          enabled: false,
         }),
       );
     });

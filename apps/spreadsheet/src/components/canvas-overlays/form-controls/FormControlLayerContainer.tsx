@@ -142,12 +142,7 @@ export function FormControlLayerContainer() {
       const control = controls.find((c) => c.id === controlId);
       if (!control) return;
 
-      const linkedCellId =
-        control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox'
-          ? control.linkedCellId
-          : control.type === 'button'
-            ? control.linkedCellId
-            : undefined;
+      const linkedCellId = getLinkedCellId(control);
 
       if (!linkedCellId) return;
 
@@ -232,6 +227,19 @@ interface WorksheetLike {
 
 type WritableCellValue = string | number | boolean | null | Date;
 
+function getLinkedCellId(control: FormControl): string | undefined {
+  if ('linkedCellId' in control) {
+    return control.linkedCellId;
+  }
+  return undefined;
+}
+
+function isListControl(
+  control: FormControl,
+): control is Extract<FormControl, { type: 'comboBox' | 'listBox' }> {
+  return control.type === 'comboBox' || control.type === 'listBox';
+}
+
 function toWritableCellValue(value: unknown): WritableCellValue {
   if (value == null) return null;
   if (value instanceof Date) return value;
@@ -273,22 +281,17 @@ async function resolveControlPositions(
     let linkedCellPosition: { row: number; col: number } | undefined;
     let resolvedItems: string[] | undefined;
 
-    if (control.type === 'checkbox' || control.type === 'comboBox' || control.type === 'listBox') {
-      const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
+    const linkedCellId = getLinkedCellId(control);
+    if (linkedCellId) {
+      const linkedPosition = await ws._internal.getCellPosition(linkedCellId);
       if (linkedPosition) {
         linkedCellPosition = linkedPosition;
         const cell = await ws.getCell(linkedPosition.row, linkedPosition.col);
         cellValue = cell.value;
       }
 
-      if (control.type === 'comboBox' || control.type === 'listBox') {
+      if (isListControl(control)) {
         resolvedItems = await resolveListItems(control, ws);
-      }
-    } else if (control.type === 'button' && control.linkedCellId) {
-      const linkedPosition = await ws._internal.getCellPosition(control.linkedCellId);
-      if (linkedPosition) {
-        const cell = await ws.getCell(linkedPosition.row, linkedPosition.col);
-        cellValue = cell.value;
       }
     }
 

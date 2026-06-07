@@ -24,6 +24,7 @@ import { ButtonOverlayControl } from './ButtonOverlayControl';
 import { CheckboxOverlayControl } from './CheckboxOverlayControl';
 import { ComboBoxOverlayControl } from './ComboBoxOverlayControl';
 import { ListBoxOverlayControl } from './ListBoxOverlayControl';
+import { NumericOverlayControl } from './NumericOverlayControl';
 
 // =============================================================================
 // Types
@@ -124,6 +125,20 @@ const ControlRenderer = memo(
             width={width}
             height={height}
             resolvedItems={resolvedItems ?? control.items ?? []}
+            onCellValueChange={onCellValueChange}
+          />
+        );
+        break;
+
+      case 'scrollBar':
+      case 'slider':
+      case 'spinner':
+        content = (
+          <NumericOverlayControl
+            control={control}
+            cellValue={cellValue}
+            width={width}
+            height={height}
             onCellValueChange={onCellValueChange}
           />
         );

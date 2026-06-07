@@ -161,6 +161,7 @@ import { WorksheetCommentsImpl } from './comments';
 import { WorksheetConditionalFormattingImpl } from './conditional-formats';
 import { WorksheetCustomPropertiesImpl } from './custom-properties';
 import { WorksheetFiltersImpl } from './filters';
+import { formControlLinkedCellResetValue } from './form-control-linked-cell-reset';
 import { WorksheetFormControlsImpl } from './form-controls';
 import { WorksheetFormatsImpl } from './formats';
 import { WorksheetHyperlinksImpl } from './hyperlinks';
@@ -1151,7 +1152,7 @@ export class WorksheetImpl implements Worksheet {
     const linkedCells: Array<{
       row: number;
       col: number;
-      controlType: 'checkbox' | 'comboBox' | 'listBox' | 'button';
+      resetValue?: CellValuePrimitive;
     }> = [];
 
     const controls = this.formControls.list();
@@ -1180,7 +1181,11 @@ export class WorksheetImpl implements Worksheet {
           pos.col >= startCol &&
           pos.col <= endCol
         ) {
-          linkedCells.push({ row: pos.row, col: pos.col, controlType: control.type });
+          linkedCells.push({
+            row: pos.row,
+            col: pos.col,
+            resetValue: formControlLinkedCellResetValue(control),
+          });
         }
       }
     }
@@ -1189,13 +1194,11 @@ export class WorksheetImpl implements Worksheet {
     await this.clear(range, 'contents');
 
     // Reset linked cells to their default values
-    for (const { row, col, controlType } of linkedCells) {
-      if (controlType === 'checkbox') {
-        await CellOps.setCell(this.ctx, this.sheetId, row, col, false);
-      } else if (controlType === 'comboBox' || controlType === 'listBox') {
-        await CellOps.setCell(this.ctx, this.sheetId, row, col, '');
+    for (const { row, col, resetValue } of linkedCells) {
+      if (resetValue !== undefined) {
+        await CellOps.setCell(this.ctx, this.sheetId, row, col, resetValue);
       }
-      // Buttons have no value to reset
+      // Buttons have no value to reset.
     }
   }
 

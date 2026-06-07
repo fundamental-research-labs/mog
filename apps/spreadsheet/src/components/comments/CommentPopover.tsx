@@ -621,9 +621,7 @@ export function CommentPopover() {
     <>
       <div className="px-3 py-2 border-b border-ss-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-caption font-medium text-ss-text-secondary">
-            Comment
-          </span>
+          <span className="text-caption font-medium text-ss-text-secondary">Comment</span>
           {isResolved && (
             <span className="text-caption text-ss-success flex items-center gap-1">
               <CheckmarkCircleSvg style={{ width: 12, height: 12 }} />

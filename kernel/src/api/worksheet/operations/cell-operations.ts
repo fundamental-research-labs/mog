@@ -320,12 +320,7 @@ async function applyTableHeaderWrite(
   if (!alreadyMaterialized) {
     await awaitAllSheetsBeforeCellWrite(ctx);
   }
-  await assertUnprotectedTableDefinition(
-    ctx,
-    sheetId,
-    'tables.renameColumn',
-    write.tableName,
-  );
+  await assertUnprotectedTableDefinition(ctx, sheetId, 'tables.renameColumn', write.tableName);
   await ctx.computeBridge.renameTableColumn(write.tableName, write.columnIndex, write.newName);
   return true;
 }
@@ -569,7 +564,8 @@ export async function setCells(
   const edits = Array.from(deduped.values());
   const dates = Array.from(dateWrites.values());
   const headerWrites = Array.from(tableHeaderWrites.values());
-  const duplicatesRemoved = cells.length - errors.length - edits.length - dates.length - headerWrites.length;
+  const duplicatesRemoved =
+    cells.length - errors.length - edits.length - dates.length - headerWrites.length;
 
   if (edits.length > 0 || dates.length > 0 || headerWrites.length > 0) {
     await awaitAllSheetsBeforeCellWrite(ctx);
@@ -585,8 +581,7 @@ export async function setCells(
 
     let wroteHeader = false;
     for (const headerWrite of headerWrites) {
-      wroteHeader =
-        (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true)) || wroteHeader;
+      wroteHeader = (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true)) || wroteHeader;
     }
 
     // --- Use the mutation pipeline path for primitives ---

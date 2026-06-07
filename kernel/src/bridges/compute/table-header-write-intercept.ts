@@ -11,11 +11,7 @@ export interface TableHeaderRename {
 }
 
 export interface TableHeaderLookup {
-  getTableAtCell(
-    sheetId: SheetId,
-    row: number,
-    col: number,
-  ): Promise<CanonicalTable | null>;
+  getTableAtCell(sheetId: SheetId, row: number, col: number): Promise<CanonicalTable | null>;
   getAllTablesInSheet(sheetId: SheetId): Promise<CanonicalTable[]>;
 }
 

@@ -88,9 +88,7 @@ export async function touchDoc(docId: string): Promise<void> {
   try {
     await runTx(db, 'readwrite', async (store) => {
       const list = await wrapRequest<RecentDoc[]>(store.get(KEY_RECENT_DOCS));
-      const previousLastActiveDocId = await wrapRequest<string>(
-        store.get(KEY_LAST_ACTIVE_DOC_ID),
-      );
+      const previousLastActiveDocId = await wrapRequest<string>(store.get(KEY_LAST_ACTIVE_DOC_ID));
       const now = Date.now();
       const next: RecentDoc[] = [{ docId, lastTouchedAt: now }];
       let previousLastActiveEntry: RecentDoc | null = null;

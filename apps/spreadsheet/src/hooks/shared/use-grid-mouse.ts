@@ -2036,7 +2036,10 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       const pendingTableClick = pendingTableClickSelectionRef.current;
       if (pendingTableClick && !pendingTableClickMovedRef.current) {
-        const resolved = resolvePendingTableClickSelection(pendingTableClick, uiStoreApi.getState());
+        const resolved = resolvePendingTableClickSelection(
+          pendingTableClick,
+          uiStoreApi.getState(),
+        );
         if (resolved) {
           selection.setSelection([resolved.range], resolved.activeCell);
         }

@@ -49,14 +49,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "path",
-          "ruleId",
-          "category",
-          "match",
-          "allowedCount",
-          "owner"
-        ],
+        "required": ["path", "ruleId", "category", "match", "allowedCount", "owner"],
         "properties": {
           "path": {
             "type": "string",

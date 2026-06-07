@@ -147,7 +147,10 @@ function parseTimelineValue(cell: ForecastCell): number | null {
   return null;
 }
 
-function parseForecastSource(matrix: ForecastCell[][], range: ForecastRange): ForecastSource | null {
+function parseForecastSource(
+  matrix: ForecastCell[][],
+  range: ForecastRange,
+): ForecastSource | null {
   if (range.endCol - range.startCol + 1 !== 2 || matrix.length < 3) return null;
 
   for (const dataStartRow of [0, 1]) {
@@ -165,12 +168,8 @@ function parseForecastSource(matrix: ForecastCell[][], range: ForecastRange): Fo
 
     if (!valid || points.length < 2) continue;
 
-    const increasing = points.every(
-      (point, index) => index === 0 || point.x > points[index - 1].x,
-    );
-    const decreasing = points.every(
-      (point, index) => index === 0 || point.x < points[index - 1].x,
-    );
+    const increasing = points.every((point, index) => index === 0 || point.x > points[index - 1].x);
+    const decreasing = points.every((point, index) => index === 0 || point.x < points[index - 1].x);
     if (!increasing && !decreasing) continue;
 
     const hasHeader = dataStartRow === 1;

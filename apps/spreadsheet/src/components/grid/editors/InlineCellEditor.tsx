@@ -115,8 +115,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
     cursorPosition,
     selectionAnchor,
     hasSelection,
-  } =
-    useEditorState();
+  } = useEditorState();
   const isEditingOnActiveSheet = isEditing && editingSheetId === activeSheetId;
 
   // Editor actions (input, commit, imeStart, imeUpdate, imeEnd)

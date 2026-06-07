@@ -11,9 +11,7 @@ export function categoryValueRows(rows: DataRow[]): DataRow[] {
       .map((row) => seriesIndex(row))
       .filter((value): value is number => value !== undefined),
   );
-  const distinctCategories = new Set(
-    positiveRows.map((row) => String(row[CATEGORY_FIELD] ?? '')),
-  );
+  const distinctCategories = new Set(positiveRows.map((row) => String(row[CATEGORY_FIELD] ?? '')));
   const isOnePointPerSeries =
     positiveRows.length > 1 &&
     distinctSeriesIndexes.size === positiveRows.length &&

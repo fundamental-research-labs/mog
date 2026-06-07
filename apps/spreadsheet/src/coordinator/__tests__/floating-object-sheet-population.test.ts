@@ -5,7 +5,10 @@ import type { FloatingObject } from '@mog-sdk/contracts/floating-objects';
 import { setupFloatingObjectSheetPopulation } from '../floating-object-sheet-population';
 import type { FloatingObjectSheetPopulationConfig } from '../floating-object-sheet-population';
 
-type SheetSwitchListener = (state: { activeSheetId: string }, prevState: { activeSheetId: string }) => void;
+type SheetSwitchListener = (
+  state: { activeSheetId: string },
+  prevState: { activeSheetId: string },
+) => void;
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
@@ -26,10 +29,7 @@ function makeObject(id: string, sheetId: string): FloatingObject {
   } as FloatingObject;
 }
 
-function createHarness(options?: {
-  activeSheetId?: string;
-  durabilityPromise?: Promise<void>;
-}) {
+function createHarness(options?: { activeSheetId?: string; durabilityPromise?: Promise<void> }) {
   let listener: SheetSwitchListener | null = null;
   let activeSheetId = options?.activeSheetId ?? 'sheet-1';
 
@@ -50,9 +50,7 @@ function createHarness(options?: {
     getState: () => ({ setObjectsForSheet }),
   };
   const resyncScene = jest.fn();
-  const awaitImportDurability = jest.fn(
-    () => options?.durabilityPromise ?? Promise.resolve(),
-  );
+  const awaitImportDurability = jest.fn(() => options?.durabilityPromise ?? Promise.resolve());
 
   const cleanup = setupFloatingObjectSheetPopulation({
     uiStore,

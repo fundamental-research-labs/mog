@@ -98,11 +98,7 @@ describe('configToSpec ChartEx-family semantics', () => {
     expect(rows.map((row) => row[TREEMAP_X2_FIELD])).toEqual([0.5, 0.8, 1]);
     expect(rows.every((row) => row[TREEMAP_Y_FIELD] === 0)).toBe(true);
     expect(rows.every((row) => row[TREEMAP_Y2_FIELD] === 1)).toBe(true);
-    expect(rows.map((row) => row[TREEMAP_FILL_FIELD])).toEqual([
-      '#111111',
-      '#222222',
-      '#333333',
-    ]);
+    expect(rows.map((row) => row[TREEMAP_FILL_FIELD])).toEqual(['#111111', '#222222', '#333333']);
     expect(spec.layer).toEqual([
       expect.objectContaining({
         mark: expect.objectContaining({

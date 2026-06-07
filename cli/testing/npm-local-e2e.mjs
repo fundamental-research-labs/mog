@@ -57,7 +57,10 @@ try {
   const workbookPath = resolve(workbooks, 'npm-local-smoke.xlsx');
   if (!existsSync(workbookPath)) throw new Error(`Workbook was not written: ${workbookPath}`);
 
-  writeFileSync(resolve(root, 'result.json'), `${JSON.stringify({ ok: true, workbookPath }, null, 2)}\n`);
+  writeFileSync(
+    resolve(root, 'result.json'),
+    `${JSON.stringify({ ok: true, workbookPath }, null, 2)}\n`,
+  );
   console.log(JSON.stringify({ ok: true, tarballPath, workbookPath }, null, 2));
 } finally {
   rmSync(root, { recursive: true, force: true });

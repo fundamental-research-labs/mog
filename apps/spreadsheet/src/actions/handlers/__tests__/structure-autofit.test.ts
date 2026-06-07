@@ -86,7 +86,7 @@ function getMockWorksheet(deps: ActionDependencies) {
 }
 
 function getSelectionSetMock(deps: ActionDependencies): jest.Mock {
-  return (deps.commands.selection.setSelection as unknown as jest.Mock);
+  return deps.commands.selection.setSelection as unknown as jest.Mock;
 }
 
 describe('Structure autofit handlers', () => {

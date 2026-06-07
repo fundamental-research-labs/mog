@@ -598,11 +598,7 @@ for (const [key, group] of allowedGroupsByStableKey) {
 
 for (const entry of normalizedAllowlist.groups) {
   for (const field of ['owner', 'reason', 'migrationPlan']) {
-    if (
-      typeof entry[field] !== 'string' ||
-      entry[field].trim() === '' ||
-      entry[field] === 'TODO'
-    ) {
+    if (typeof entry[field] !== 'string' || entry[field].trim() === '' || entry[field] === 'TODO') {
       metadataFailures.push(`${formatGroup(entry)} missing ${field}`);
     }
   }

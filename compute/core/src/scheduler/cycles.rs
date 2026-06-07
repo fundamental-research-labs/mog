@@ -2,9 +2,9 @@
 //!
 //! Two strategies based on the workbook's `iterative_calc` setting:
 //!
-//! - **OFF (default)**: Circular cells with no current/cached value are marked
-//!   as circular-reference errors. Imported circular cells with cached values
-//!   retain those values, and downstream dependents recalculate from them.
+//! - **OFF (default)**: Circular cells are evaluated with the same bounded
+//!   fixed-point recovery loop used for iterative calculation. Numeric cached
+//!   values seed the loop; blank/text/bool/error cycle values seed from 0.
 //!
 //! - **ON**: Iterative convergence. Cycle cells are evaluated repeatedly
 //!   until values converge (delta < max_change) or max_iterations is reached.
@@ -88,7 +88,7 @@ impl ComputeCore {
                 path: if self.iterative_calc {
                     "iterative"
                 } else {
-                    "circular_error"
+                    "fixed_point_recovery"
                 },
             });
         }
@@ -192,29 +192,21 @@ impl ComputeCore {
 
         // --- Pass 2: Resolve cycle cells ---
         //
-        // Iterative calculation ON: seed non-numeric cycle values to 0 and run
-        // the fixed-point solver.
-        //
-        // Iterative calculation OFF: imported workbooks may carry Excel cached
-        // values for circular formulas. Preserve those values while still
-        // materializing an explicit circular error for genuinely blank cycles
-        // such as newly-authored formulas with no cached value.
-        let mut iterative_result: Option<IterativeResult> = None;
-        if self.iterative_calc {
-            let iteration_cells =
-                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &cycle_dependents);
-            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
-            iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
-            self.replace_final_changes_for_cells(
-                mirror,
-                &mut changed_cells,
-                &iteration_cells,
-                &cycle_cell_set,
-            );
-        } else {
-            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
-        }
+        // Seed non-numeric cycle values to 0 and run the fixed-point solver.
+        // The solver is used even when iterative calculation is off: circular
+        // diagnostics still tell the UI about the cycle, but user-visible values
+        // follow the always-compute policy pinned by the recalc circular suite.
+        let iteration_cells =
+            self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &cycle_dependents);
+        Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
+        let mut iterative_result =
+            Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+        self.replace_final_changes_for_cells(
+            mirror,
+            &mut changed_cells,
+            &iteration_cells,
+            &cycle_cell_set,
+        );
 
         // Collect final values from cycle cells. Mark genuinely unresolvable
         // cycles (still Null after evaluation) as #CIRC errors. Emit a
@@ -296,28 +288,21 @@ impl ComputeCore {
                         }
                     }
                     let all_cycle_cells: Vec<CellId> = cycle_cell_set.iter().copied().collect();
-                    if self.iterative_calc {
-                        let iteration_cells = self.iteration_cells_for_cycles(
-                            &all_cycle_cells,
-                            &cycle_cell_set,
-                            &cycle_dependents,
-                        );
-                        Self::seed_cycle_cells_for_iteration(mirror, &all_cycle_cells);
-                        let extra_result =
-                            self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?;
-                        iterative_result = Some(extra_result);
-                        self.replace_final_changes_for_cells(
-                            mirror,
-                            &mut changed_cells,
-                            &iteration_cells,
-                            &cycle_cell_set,
-                        );
-                    } else {
-                        Self::materialize_blank_cycle_cells_as_circular_errors(
-                            mirror,
-                            &all_cycle_cells,
-                        );
-                    }
+                    let iteration_cells = self.iteration_cells_for_cycles(
+                        &all_cycle_cells,
+                        &cycle_cell_set,
+                        &cycle_dependents,
+                    );
+                    Self::seed_cycle_cells_for_iteration(mirror, &all_cycle_cells);
+                    let extra_result =
+                        self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?;
+                    iterative_result = Some(extra_result);
+                    self.replace_final_changes_for_cells(
+                        mirror,
+                        &mut changed_cells,
+                        &iteration_cells,
+                        &cycle_cell_set,
+                    );
                 }
             }
         }
@@ -432,7 +417,7 @@ impl ComputeCore {
                 path: if self.iterative_calc {
                     "iterative"
                 } else {
-                    "circular_error"
+                    "fixed_point_recovery"
                 },
             });
         }
@@ -487,22 +472,17 @@ impl ComputeCore {
             .collect();
 
         // --- Pass 2: Resolve cycle cells ---
-        let mut iterative_result: Option<IterativeResult> = None;
-        if self.iterative_calc {
-            let iteration_cells =
-                self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &downstream_cells);
-            Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
-            iterative_result =
-                Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
-            self.replace_final_changes_for_cells(
-                mirror,
-                &mut changed_cells,
-                &iteration_cells,
-                &cycle_cell_set,
-            );
-        } else {
-            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
-        }
+        let iteration_cells =
+            self.iteration_cells_for_cycles(&cycle_cells, &cycle_cell_set, &downstream_cells);
+        Self::seed_cycle_cells_for_iteration(mirror, &cycle_cells);
+        let iterative_result =
+            Some(self.evaluate_cycles_iterative(mirror, &iteration_cells, deadline)?);
+        self.replace_final_changes_for_cells(
+            mirror,
+            &mut changed_cells,
+            &iteration_cells,
+            &cycle_cell_set,
+        );
 
         for &cell_id in &cycle_cells {
             let computed = mirror
@@ -641,21 +621,6 @@ impl ComputeCore {
                 || matches!(&current, CellValue::Text(_) | CellValue::Boolean(_));
             if should_reset {
                 mirror.set_value_mut(&cell_id, CellValue::number(0.0));
-            }
-        }
-    }
-
-    fn materialize_blank_cycle_cells_as_circular_errors(
-        mirror: &mut CellMirror,
-        cycle_cells: &[CellId],
-    ) {
-        for &cell_id in cycle_cells {
-            let current = mirror
-                .get_cell_value(&cell_id)
-                .cloned()
-                .unwrap_or(CellValue::Null);
-            if matches!(current, CellValue::Null) {
-                mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
             }
         }
     }

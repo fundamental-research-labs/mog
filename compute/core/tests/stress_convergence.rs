@@ -257,8 +257,10 @@ fn test_toggle_iterative_calc_flag() {
     assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
     assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
 
-    // Iterative metrics should NOT be populated (flag is off)
-    assert_eq!(result2.metrics.iterative_iterations, 0);
+    // The iterative flag is off, but circular recovery still uses the bounded
+    // fixed-point loop and reports circular iteration metrics.
+    assert!(result2.metrics.has_circular_refs);
+    assert!(result2.metrics.iterative_iterations >= 1);
 }
 
 /// Test 5: CRITICAL — Type-changing cycle (Finding B1 regression).

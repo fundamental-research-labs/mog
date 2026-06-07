@@ -317,7 +317,7 @@ mod tests {
     use crate::storage::engine::mutation::CellInput;
     use cell_types::SheetPos;
     use snapshot_types::RecalcOptions;
-    use value_types::{CellError, CellValue, FiniteF64};
+    use value_types::{CellValue, FiniteF64};
 
     fn simple_snapshot() -> WorkbookSnapshot {
         WorkbookSnapshot {
@@ -365,16 +365,6 @@ mod tests {
         {
             Some(CellValue::Number(n)) => n.get(),
             other => panic!("expected numeric value at ({row}, {col}), got {other:?}"),
-        }
-    }
-
-    fn assert_circular_error_at(engine: &YrsComputeEngine, row: u32, col: u32) {
-        match engine
-            .mirror()
-            .get_cell_value_at(&sheet_id(), SheetPos::new(row, col))
-        {
-            Some(CellValue::Error(CellError::Circ, None)) => {}
-            other => panic!("expected circular error at ({row}, {col}), got {other:?}"),
         }
     }
 
@@ -448,8 +438,8 @@ mod tests {
         engine
             .recalculate_with_options(&RecalcOptions::default())
             .expect("non-iterative recalc should run");
-        assert_circular_error_at(&engine, 0, 0);
-        assert_circular_error_at(&engine, 0, 1);
+        assert!((number_at(&engine, 0, 0) - 2.0).abs() <= 0.01);
+        assert!((number_at(&engine, 0, 1) - 1.0).abs() <= 0.01);
 
         engine
             .set_iterative_calculation(true)
@@ -459,8 +449,8 @@ mod tests {
             .expect("bare recalculate after atomic settings change");
 
         assert!(
-            result.metrics.iterative_iterations > 1,
-            "atomic settings change must dirty compute; metrics = {:?}",
+            result.metrics.has_circular_refs && result.metrics.iterative_iterations >= 1,
+            "atomic settings change must dirty compute and use iterative circular recovery; metrics = {:?}",
             result.metrics
         );
         assert!((number_at(&engine, 0, 0) - 2.0).abs() <= 0.01);

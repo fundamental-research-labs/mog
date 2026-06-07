@@ -163,44 +163,48 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     Array<{ name: string; sheetName: string; range: string; columns: Array<{ name: string }> }>
   >([]);
   const [cachedSheets, setCachedSheets] = useState<Array<{ id: string; name: string }>>([]);
+  const referenceDataLoadedRef = useRef(false);
+  const referenceDataLoadRef = useRef<Promise<void> | null>(null);
+  const referenceDataGenerationRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   /**
    * Refresh just the cached named ranges. Used after a name is created/updated/deleted
    * (either via the Name Box itself or by an external API caller / event).
    */
-  const refreshNamedRanges = useCallback(async (): Promise<void> => {
-    try {
-      const namedRanges = await wb.names.list();
-      setCachedNamedRanges(
-        namedRanges.map((nr) => ({
-          name: nr.name,
-          refersTo: nr.reference,
-          scope: nr.scope,
-          comment: nr.comment,
-        })),
-      );
-    } catch {
-      // Silent: degrade gracefully if list() fails transiently.
-    }
-  }, [wb]);
+  const refreshNamedRanges = useCallback(
+    async (force = false): Promise<void> => {
+      if (!force && !referenceDataLoadedRef.current && !referenceDataLoadRef.current) {
+        return;
+      }
+      try {
+        const generation = referenceDataGenerationRef.current;
+        const namedRanges = await wb.names.list();
+        if (!isMountedRef.current || referenceDataGenerationRef.current !== generation) return;
+        setCachedNamedRanges(
+          namedRanges.map((nr) => ({
+            name: nr.name,
+            refersTo: nr.reference,
+            scope: nr.scope,
+            comment: nr.comment,
+          })),
+        );
+      } catch {
+        // Silent: degrade gracefully if list() fails transiently.
+      }
+    },
+    [wb],
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadData() {
+  const loadReferenceData = useCallback(async (): Promise<void> => {
+    if (referenceDataLoadedRef.current) return;
+    if (referenceDataLoadRef.current) return referenceDataLoadRef.current;
+
+    const generation = referenceDataGenerationRef.current;
+    const load = (async () => {
       try {
         // Load named ranges via Workbook API
         const namedRanges = await wb.names.list();
-        if (!cancelled) {
-          // Map NamedRangeInfo to the format expected by createStoreAdapter
-          setCachedNamedRanges(
-            namedRanges.map((nr) => ({
-              name: nr.name,
-              refersTo: nr.reference,
-              scope: nr.scope,
-              comment: nr.comment,
-            })),
-          );
-        }
 
         // Load sheets via Workbook API
         const sheetNames = await wb.getSheetNames();
@@ -209,7 +213,6 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           const ws = await wb.getSheet(name);
           sheets.push({ id: ws.getSheetId(), name });
         }
-        if (!cancelled) setCachedSheets(sheets);
 
         // Load tables from all sheets via Worksheet API
         const tables: Array<{
@@ -230,16 +233,56 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             });
           }
         }
-        if (!cancelled) setCachedTables(tables);
+
+        if (!isMountedRef.current || referenceDataGenerationRef.current !== generation) return;
+
+        setCachedNamedRanges(
+          namedRanges.map((nr) => ({
+            name: nr.name,
+            refersTo: nr.reference,
+            scope: nr.scope,
+            comment: nr.comment,
+          })),
+        );
+        setCachedSheets(sheets);
+        setCachedTables(tables);
+        referenceDataLoadedRef.current = true;
       } catch {
         // Silent: dropdown degrades gracefully without data
+      } finally {
+        if (referenceDataGenerationRef.current === generation) {
+          referenceDataLoadRef.current = null;
+        }
       }
-    }
-    loadData();
-    return () => {
-      cancelled = true;
-    };
+    })();
+
+    referenceDataLoadRef.current = load;
+    return load;
   }, [wb]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      referenceDataGenerationRef.current += 1;
+      referenceDataLoadRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    referenceDataGenerationRef.current += 1;
+    referenceDataLoadedRef.current = false;
+    referenceDataLoadRef.current = null;
+    setCachedNamedRanges([]);
+    setCachedTables([]);
+    setCachedSheets([]);
+  }, [wb]);
+
+  useEffect(() => {
+    if (isOpen || isEditing) {
+      void loadReferenceData();
+    }
+  }, [isOpen, isEditing, loadReferenceData]);
 
   // Keep the cached named-ranges list in sync with workbook-level mutations.
   // Without this, names added programmatically (or via other UI paths) wouldn't
@@ -376,17 +419,23 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // table name (identifiers don't contain colons). Skip the async name-lookup
       // and resolve directly. This makes range navigation via the Name Box
       // synchronous so callers don't have to race against an async dispatch.
+      const activateSheetByName = async (sheetName: string): Promise<void> => {
+        try {
+          const targetSheet = await wb.getSheet(sheetName);
+          const targetSheetId = targetSheet.getSheetId();
+          if (targetSheetId !== activeSheetId) {
+            setActiveSheetId(targetSheetId);
+          }
+        } catch {
+          // Ignore unresolved sheet names; parsing still resolves the active-sheet coordinates.
+        }
+      };
+
       if (trimmedAddress.includes(':')) {
         const parsedRange = parseCellRange(trimmedAddress);
         if (parsedRange) {
           if (parsedRange.sheetName) {
-            const sheets = storeAdapter.getSheets();
-            const targetSheet = sheets.find(
-              (s) => s.name.toLowerCase() === parsedRange.sheetName!.toLowerCase(),
-            );
-            if (targetSheet && targetSheet.id !== activeSheetId) {
-              setActiveSheetId(targetSheet.id);
-            }
+            await activateSheetByName(parsedRange.sheetName);
           }
           selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
             row: parsedRange.startRow,
@@ -404,18 +453,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       );
 
       // Helper: navigate to a named range given its refersTo string
-      const navigateToNamedRangeRef = (refersTo: string): boolean => {
+      const navigateToNamedRangeRef = async (refersTo: string): Promise<boolean> => {
         const ref = refersTo.replace(/^=/, '').replace(/\$/g, '');
         const parsedRange = parseCellRange(ref);
         if (!parsedRange) return false;
         if (parsedRange.sheetName) {
-          const sheets = storeAdapter.getSheets();
-          const targetSheet = sheets.find(
-            (s) => s.name.toLowerCase() === parsedRange.sheetName!.toLowerCase(),
-          );
-          if (targetSheet && targetSheet.id !== activeSheetId) {
-            setActiveSheetId(targetSheet.id);
-          }
+          await activateSheetByName(parsedRange.sheetName);
         }
         selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
           row: parsedRange.startRow,
@@ -429,7 +472,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // Excel parity: select the FULL range (not just its anchor) so the
         // user lands with the named range visually highlighted.
         const [, nameData] = matchingName;
-        navigateToNamedRangeRef(nameData.refersTo);
+        await navigateToNamedRangeRef(nameData.refersTo);
         return;
       }
 
@@ -439,7 +482,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       try {
         const apiEntry = await wb.names.get(trimmedAddress);
         if (apiEntry && apiEntry.reference) {
-          if (navigateToNamedRangeRef(apiEntry.reference)) {
+          if (await navigateToNamedRangeRef(apiEntry.reference)) {
             return;
           }
         }
@@ -457,13 +500,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const parsed = parseCellAddress(`${matchingTable.sheetName}!${refStart}`);
         if (parsed) {
           // Switch to table's sheet if different
-          const sheets = storeAdapter.getSheets();
-          const targetSheet = sheets.find(
-            (s) => s.name.toLowerCase() === matchingTable.sheetName.toLowerCase(),
-          );
-          if (targetSheet && targetSheet.id !== activeSheetId) {
-            setActiveSheetId(targetSheet.id);
-          }
+          await activateSheetByName(matchingTable.sheetName);
           selectionCommands.setSelection(
             [
               {
@@ -505,13 +542,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         // If sheet is specified and different, switch sheets first
         if (parsed.sheetName) {
-          const sheets = storeAdapter.getSheets();
-          const targetSheet = sheets.find(
-            (s) => s.name.toLowerCase() === parsed.sheetName!.toLowerCase(),
-          );
-          if (targetSheet && targetSheet.id !== activeSheetId) {
-            setActiveSheetId(targetSheet.id);
-          }
+          await activateSheetByName(parsed.sheetName);
         }
 
         // Set selection to the range (or single cell when start === end);
@@ -542,7 +573,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           // the new entry on the very next render. The 'namedRangeChanged'
           // subscription will also fire, but explicit refresh avoids any
           // event-loop ordering surprises with the test harness.
-          await refreshNamedRanges();
+          await refreshNamedRanges(true);
         } catch (_err) {
           // Unexpected failure (validation already filtered the typical
           // cases). Fall back to the dialog so the user can correct it.

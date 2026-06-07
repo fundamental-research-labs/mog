@@ -3,6 +3,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 
 import {
+  APPLY_GOAL_SEEK_RESULT,
   EXECUTE_DATA_TABLE,
   EXECUTE_GOAL_SEEK,
   OPEN_FORECAST_SHEET_DIALOG,
@@ -71,8 +72,15 @@ function createDeps(overrides?: {
 
 function createGoalSeekDeps(overrides?: {
   goalSeek?: jest.Mock;
+  goalSeekResult?: {
+    found: boolean;
+    solutionValue?: number;
+    achievedValue?: number;
+    iterations?: number;
+  } | null;
   getCell?: jest.Mock;
   getDisplayValue?: jest.Mock;
+  setCell?: jest.Mock;
 }): ActionDependencies {
   const goalSeek =
     overrides?.goalSeek ??
@@ -84,15 +92,18 @@ function createGoalSeekDeps(overrides?: {
   const getCell =
     overrides?.getCell ?? jest.fn().mockResolvedValue({ value: 20, formatted: '$20.00' });
   const getDisplayValue = overrides?.getDisplayValue ?? jest.fn().mockResolvedValue('$20.00');
+  const setCell = overrides?.setCell ?? jest.fn().mockResolvedValue(undefined);
   const state = {
     activeSheetId: 'sheet-1',
     goalSeekDialog: {
       setCell: 'B1',
       toValue: '20',
       byChangingCell: 'A1',
+      result: overrides?.goalSeekResult,
     },
     setGoalSeekStatus: jest.fn(),
     setGoalSeekResult: jest.fn(),
+    closeGoalSeekDialog: jest.fn(),
   };
 
   return {
@@ -103,6 +114,7 @@ function createGoalSeekDeps(overrides?: {
       getSheetById: jest.fn().mockReturnValue({
         getCell,
         getDisplayValue,
+        setCell,
         whatIf: {
           goalSeek,
         },
@@ -116,18 +128,16 @@ function createForecastDeps(overrides?: {
   ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
   sheetNames?: string[];
 }): ActionDependencies {
-  const cells =
-    overrides?.cells ??
-    [
-      ['Month', 'Revenue'],
-      [46023, 100],
-      [46054, 118],
-      [46082, 132],
-      [46113, 155],
-      [46143, 181],
-      [46174, 214],
-      [46204, 246],
-    ];
+  const cells = overrides?.cells ?? [
+    ['Month', 'Revenue'],
+    [46023, 100],
+    [46054, 118],
+    [46082, 132],
+    [46113, 155],
+    [46143, 181],
+    [46174, 214],
+    [46204, 246],
+  ];
   const getCell = jest.fn((row: number, col: number) =>
     Promise.resolve({
       value: cells[row]?.[col] ?? null,
@@ -271,6 +281,28 @@ describe('data analysis actions', () => {
       achievedValue: 10,
       iterations: 4,
     });
+  });
+
+  it('applies the goal seek solution as a typed number', async () => {
+    const setCell = jest.fn().mockResolvedValue(undefined);
+    const deps = createGoalSeekDeps({
+      setCell,
+      goalSeekResult: {
+        found: true,
+        solutionValue: 0.5,
+        achievedValue: 5,
+        iterations: 3,
+      },
+    });
+
+    const result = await APPLY_GOAL_SEEK_RESULT(deps);
+    const state = deps.uiStore.getState() as {
+      closeGoalSeekDialog: jest.Mock;
+    };
+
+    expect(result).toEqual({ handled: true });
+    expect(setCell).toHaveBeenCalledWith(0, 0, 0.5);
+    expect(state.closeGoalSeekDialog).toHaveBeenCalledTimes(1);
   });
 
   it('calculates a two-variable data table and writes body results', async () => {

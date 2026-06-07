@@ -123,6 +123,7 @@ export const APPLY_GOAL_SEEK_RESULT: AsyncActionHandler = async (deps): Promise<
   if (!result || !result.found || result.solutionValue === undefined) {
     return { handled: true, error: 'No valid solution to apply' };
   }
+  const solutionValue = result.solutionValue;
 
   // Parse changing cell reference
   let changingPos: { row: number; col: number };
@@ -138,7 +139,7 @@ export const APPLY_GOAL_SEEK_RESULT: AsyncActionHandler = async (deps): Promise<
   // Apply the solution value via unified Worksheet API
   const ws = deps.workbook.getSheetById(sheetId);
   const ok = await guardBridgeMutation(() =>
-    ws.setCell(changingPos.row, changingPos.col, String(result.solutionValue)),
+    ws.setCell(changingPos.row, changingPos.col, solutionValue),
   );
   if (!ok) return { handled: true };
 

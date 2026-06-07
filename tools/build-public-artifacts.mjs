@@ -410,6 +410,32 @@ function buildWasmArtifact(workspacePackages, errors) {
   return wasmPkg;
 }
 
+function buildChartRasterWasmArtifact(workspacePackages, errors) {
+  console.log('\n=== Chart raster WASM asset artifact ===');
+  const chartRasterPkg = workspacePackages.get('@mog-sdk/chart-raster-wasm');
+  if (!chartRasterPkg) {
+    errors.push('@mog-sdk/chart-raster-wasm: binary-wrapper package missing from workspace');
+    return null;
+  }
+
+  if (!skipWasmBuild) {
+    try {
+      run('bash', ['compute/chart-render-wasm/build.sh', '--profile', 'release']);
+    } catch (error) {
+      errors.push(`@mog-sdk/chart-raster-wasm: ${error.message}`);
+    }
+  } else {
+    console.log(`  SKIP chart raster WASM build (${checkOnly ? 'check-only' : 'skip-wasm-build'})`);
+  }
+
+  const missing = verifyPackageFiles(chartRasterPkg.manifest, chartRasterPkg.dir);
+  if (missing.length > 0) {
+    errors.push(`@mog-sdk/chart-raster-wasm: missing packaged WASM file(s): ${missing.join(', ')}`);
+  }
+
+  return chartRasterPkg;
+}
+
 const inventory = loadJsonc(join(ROOT, 'tools/package-inventory.jsonc'));
 const workspacePackages = discoverWorkspacePackages();
 const errors = [];
@@ -477,6 +503,14 @@ const wasmPkg = needsWasmArtifact ? buildWasmArtifact(workspacePackages, errors)
 if (!needsWasmArtifact) {
   console.log('\n=== WASM asset artifact ===');
   console.log(`  SKIP WASM build (not required by selected ship-public packages)`);
+}
+const needsChartRasterWasmArtifact = shipPublicNames.includes('@mog-sdk/sdk');
+const chartRasterWasmPkg = needsChartRasterWasmArtifact
+  ? buildChartRasterWasmArtifact(workspacePackages, errors)
+  : null;
+if (!needsChartRasterWasmArtifact) {
+  console.log('\n=== Chart raster WASM asset artifact ===');
+  console.log(`  SKIP chart raster WASM build (not required by selected ship-public packages)`);
 }
 let kernelArtifactBuilt = false;
 let sdkArtifactBuilt = false;
@@ -582,6 +616,9 @@ console.log(
 );
 console.log(`  host native package: ${hostNative ?? '(unsupported)'}`);
 console.log(`  wasm package: ${wasmPkg ? '@mog-sdk/wasm' : '(missing)'}`);
+console.log(
+  `  chart raster wasm package: ${chartRasterWasmPkg ? '@mog-sdk/chart-raster-wasm' : '(missing)'}`,
+);
 
 if (errors.length > 0) {
   console.error(

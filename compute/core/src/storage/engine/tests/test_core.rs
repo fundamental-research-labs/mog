@@ -209,6 +209,38 @@ fn pivot_legacy_source_sheet_name_resolves_to_source_sheet_id_on_read() {
 }
 
 #[test]
+fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+    let sid_str = sid.to_uuid_string();
+
+    let config = json!({
+        "id": "caller-id",
+        "name": "TransportNullIds",
+        "sourceSheetId": null,
+        "sourceSheetName": "Sheet1",
+        "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 1, "endCol": 1 },
+        "outputSheetId": null,
+        "outputSheetName": "Sheet1",
+        "outputLocation": { "row": 5, "col": 0 },
+        "fields": [],
+        "placements": [],
+        "filters": []
+    });
+
+    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created: compute_pivot::PivotTableConfig = created_result
+        .extract_data()
+        .expect("created pivot config in data");
+
+    assert_eq!(created.source_sheet_id.as_deref(), Some(sid_str.as_str()));
+    assert_eq!(created.output_sheet_id.as_deref(), Some(sid_str.as_str()));
+    assert_eq!(created.source_sheet_name, "Sheet1");
+    assert_eq!(created.output_sheet_name, "Sheet1");
+}
+
+#[test]
 fn pivot_create_rejects_source_sheet_id_name_conflict() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

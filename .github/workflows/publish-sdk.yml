@@ -437,7 +437,7 @@ jobs:
           done
           cp artifacts/wasm/* compute/wasm/npm/
           echo "wasm: $(ls -lh compute/wasm/npm/compute_core_wasm_bg.wasm | awk '{print $5}')"
-          cp artifacts/chart-raster-wasm/* compute/chart-render-wasm/npm/
+          cp -R artifacts/chart-raster-wasm/. compute/chart-render-wasm/npm/
           echo "chart raster wasm: $(ls -lh compute/chart-render-wasm/npm/compute_chart_render_wasm_bg.wasm | awk '{print $5}')"
 
       - name: Resolve npm publish tag

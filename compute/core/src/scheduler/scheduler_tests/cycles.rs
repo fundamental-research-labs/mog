@@ -1,4 +1,5 @@
 use super::*;
+use value_types::CellError;
 
 static FULL_RECALC_WITH_OPTIONS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -103,12 +104,11 @@ fn test_self_referencing_formula() {
 
     let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
 
-    // Non-iterative cycles run the same bounded fixed-point recovery loop as
-    // iterative calculation. Starting from cached 0, A1=A1+1 reaches the
-    // max-iteration cap.
+    // Imported self-references also preserve their cached value. New formulas
+    // without a cached value are covered separately below.
     let a1_id = cid(0x10);
     let a1_val = core.get_cell_value(&mirror, &a1_id).unwrap();
-    assert_eq!(*a1_val, CellValue::number(100.0));
+    assert_eq!(*a1_val, CellValue::number(0.0));
 
     // Circular reference diagnostic should be emitted
     let has_circular_diag = result.errors.iter().any(|e| e.error.contains("Circular"));
@@ -119,7 +119,7 @@ fn test_self_referencing_formula() {
 }
 
 #[test]
-fn blank_self_referencing_formula_recovers_to_numeric_value() {
+fn blank_self_referencing_formula_materializes_circular_error() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();
     let snap = WorkbookSnapshot {
@@ -152,50 +152,9 @@ fn blank_self_referencing_formula_recovers_to_numeric_value() {
     let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
     let a1_id = cid(0x10);
 
-    assert!(matches!(
-        core.get_cell_value(&mirror, &a1_id).unwrap(),
-        CellValue::Number(_)
-    ));
-    assert!(result.errors.iter().any(|e| e.error.contains("Circular")));
-}
-
-#[test]
-fn bool_cached_self_referencing_formula_recovers_from_zero_seed() {
-    let mut core = ComputeCore::new();
-    let mut mirror = CellMirror::new();
-    let snap = WorkbookSnapshot {
-        sheets: vec![SheetSnapshot {
-            id: "00000000-0000-0000-0000-000000000001".to_string(),
-            name: "Sheet1".to_string(),
-            rows: 100,
-            cols: 26,
-            cells: vec![CellData {
-                cell_id: "00000000-0000-0000-0000-000000000010".to_string(),
-                row: 0,
-                col: 0,
-                value: CellValue::Boolean(true),
-                formula: Some("=A1".to_string()),
-                identity_formula: None,
-                array_ref: None,
-            }],
-            ranges: vec![],
-        }],
-        named_ranges: vec![],
-        tables: vec![],
-        pivot_tables: vec![],
-        data_table_regions: vec![],
-        iterative_calc: false,
-        max_iterations: 100,
-        max_change: value_types::FiniteF64::must(0.001),
-        calculation_settings: None,
-    };
-
-    let result = core.init_from_snapshot(&mut mirror, snap).unwrap();
-    let a1_id = cid(0x10);
-
     assert_eq!(
         *core.get_cell_value(&mirror, &a1_id).unwrap(),
-        CellValue::number(0.0)
+        CellValue::Error(CellError::Circ, None)
     );
     assert!(result.errors.iter().any(|e| e.error.contains("Circular")));
 }
@@ -210,7 +169,7 @@ fn bool_cached_self_referencing_formula_recovers_from_zero_seed() {
 // `Engine::recalculate_with_options`) rather than `ComputeCore::full_recalc`.
 // Idempotency is a property of the engine wrapper, which short-circuits on a
 // clean dirty bit. A second user-facing call must not re-emit the already
-// computed circular values.
+// materialized circular errors.
 //
 // The invariant this test pins down:
 //
@@ -298,13 +257,15 @@ fn test_calculate_idempotent_under_cycles() {
     // Capture mirror values for the cycle cells after the first recalc.
     let a1_after_first = engine.mirror().get_cell_value(&a1_id).cloned();
     let a2_after_first = engine.mirror().get_cell_value(&a2_id).cloned();
-    assert!(
-        matches!(a1_after_first, Some(CellValue::Number(_))),
-        "A1 should recover to a numeric circular value, got {a1_after_first:?}"
+    assert_eq!(
+        a1_after_first,
+        Some(CellValue::number(0.0)),
+        "A1 should preserve imported cached circular value"
     );
-    assert!(
-        matches!(a2_after_first, Some(CellValue::Number(_))),
-        "A2 should recover to a numeric circular value, got {a2_after_first:?}"
+    assert_eq!(
+        a2_after_first,
+        Some(CellValue::number(0.0)),
+        "A2 should preserve imported cached circular value"
     );
 
     // Second user-facing recalc with NO intervening mutation. The dirty
@@ -519,10 +480,11 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
     core.init_from_snapshot(&mut mirror, self_cycle_snapshot())
         .expect("self-cycle snapshot should initialize");
     let a1 = cid(0x10);
-    let before = match core.get_cell_value(&mirror, &a1).unwrap() {
-        CellValue::Number(n) => n.get(),
-        other => panic!("A1 should start as a numeric circular recovery value, got {other:?}"),
-    };
+    assert_eq!(
+        *core.get_cell_value(&mirror, &a1).unwrap(),
+        CellValue::Error(CellError::Circ, None),
+        "A1 should start as a circular error when no cached value exists"
+    );
 
     let result = core
         .full_recalc_with_options(
@@ -542,7 +504,7 @@ fn full_recalc_with_options_circular_workbook_consumes_per_call_options() {
     assert!(result.metrics.has_circular_refs);
     assert_eq!(result.metrics.iterative_iterations, 4);
     assert!(!result.metrics.iterative_converged);
-    assert_eq!(after, before + 4.0);
+    assert_eq!(after, 4.0);
     assert!(!core.iterative_calc());
     assert_eq!(core.max_iterations(), 100);
     assert_eq!(core.max_change(), 0.001);

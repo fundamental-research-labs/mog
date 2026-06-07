@@ -304,7 +304,8 @@ fn test_tight_convergence_threshold() {
 // Test 10: IF(FALSE) cycle
 // A1="=IF(FALSE,B1,42)", B1="=A1+1". Static graph has cycle (A1 refs B1).
 // But IF(FALSE) means B1 never actually read by A1.
-// Init via snapshot: always-converge. A1=42, B1=43. has_circular_refs=true.
+// Init via non-iterative snapshot: numeric cached values are preserved.
+// has_circular_refs=true.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_if_false_static_cycle() {
@@ -326,10 +327,8 @@ fn test_if_false_static_cycle() {
     )]);
     let result = core.init_from_snapshot(&mut mirror, snapshot).unwrap();
 
-    // A1=IF(FALSE,B1,42)=42 regardless of B1
-    assert_mirror_number(&mirror, 0, 0, 0, 42.0);
-    // B1="=A1+1"=43
-    assert_mirror_number(&mirror, 0, 0, 1, 43.0);
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
     // Static graph sees cycle
     assert!(
         result.metrics.has_circular_refs,
@@ -340,7 +339,7 @@ fn test_if_false_static_cycle() {
 // ---------------------------------------------------------------------------
 // Test 11: Volatile function in cycle
 // A1="=B1+NOW()*0", B1="=A1+1". NOW()*0=0, so A1=B1, B1=A1+1. Divergent.
-// Init via snapshot: always-converge, capped at max_iterations.
+// Init via iterative snapshot: iterative solver is capped at max_iterations.
 // Assert has_circular_refs. Self-consistency: B1 ≈ A1+1 (within 2.0).
 // ---------------------------------------------------------------------------
 #[test]
@@ -372,7 +371,7 @@ fn test_volatile_function_in_cycle() {
         "Volatile cycle should be detected"
     );
 
-    // Both cells should be Numbers (always-converge). Self-consistency:
+    // Both cells should be Numbers from iterative solving. Self-consistency:
     let a1 = read_mirror_number(&mirror, 0, 0, 0);
     let b1 = read_mirror_number(&mirror, 0, 0, 1);
     assert!(

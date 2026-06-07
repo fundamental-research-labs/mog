@@ -125,7 +125,7 @@ fn test_batch_create_break_cycle_repeatedly() {
     let s = sid(0);
 
     for _ in 0..10 {
-        // Create cycle with skip_cycle_check=true → always-converge
+        // Create cycle with skip_cycle_check=true.
         let edits_cycle: Vec<(
             SheetId,
             CellId,

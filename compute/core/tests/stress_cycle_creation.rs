@@ -310,21 +310,8 @@ fn test_cross_sheet_divergent_cycle() {
         "Cross-sheet cycle should be detected"
     );
 
-    // Both cells are Numbers (always-converge path).
-    let _s1_a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let s2_a1 = read_mirror_number(&mirror, 1, 0, 0);
-
-    // Divergent +1 cycle capped at max_iterations. Check formula relationship
-    // within large slack (iterations accumulate offset).
-    assert_cycle_self_consistent(
-        &mirror,
-        0,
-        0,
-        0,
-        || s2_a1 + 1.0,
-        102.0,
-        "Sheet1!A1 ≈ Sheet2!A1 + 1 (divergent)",
-    );
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 1, 0, 0, 0.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,26 +343,14 @@ fn test_named_range_divergent_cycle() {
         "Named range cycle should be detected"
     );
 
-    // Both cells are Numbers — divergent cycle.
-    let _a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
-
-    // Verify formula relationship with divergent slack.
-    assert_cycle_self_consistent(
-        &mirror,
-        0,
-        0,
-        0,
-        || b1 + 1.0,
-        102.0,
-        "A1 ≈ B1 + 1 (divergent named range cycle)",
-    );
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
 }
 
 // ---------------------------------------------------------------------------
 // Test 10: 20-cell ring via init_from_snapshot
 // A1="=A20+1", A2="=A1+1", ..., A20="=A19+1". Divergent.
-// Assert has_circular_refs. Assert each cell is Number.
+// Assert has_circular_refs. Assert numeric cached values are preserved.
 // Assert changed_cells.len() <= 21 (no exponential blowup).
 // ---------------------------------------------------------------------------
 #[test]
@@ -431,9 +406,8 @@ fn test_large_20_cell_ring() {
         "20-cell ring should be detected as circular"
     );
 
-    // Each cell should be a Number (not an error)
     for row in 0u32..20 {
-        let _val = read_mirror_number(&mirror, 0, row, 0);
+        assert_mirror_number(&mirror, 0, row, 0, 0.0);
     }
 
     // No exponential blowup: changed_cells should be at most 21 (20 ring cells + margin)

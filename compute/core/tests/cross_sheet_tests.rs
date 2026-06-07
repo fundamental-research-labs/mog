@@ -182,20 +182,12 @@ fn test_cross_sheet_circular_ref_two_sheets() {
     assert!(cell_is_error(&result, 1, 0, 0) || has_circular_error(&result, 1, 0, 0));
 }
 
-/// Regression test: cycle seeding must reset cached Text/Bool values to 0.
-///
-/// Bug: `handle_cycles_and_recalc` pass-2 seeding only reset `Null` and
-/// `CellError::Circ` to 0. When a cycle cell held a previously-cached text
-/// value (e.g. "Sheet2Data"), that value propagated through the circular
-/// evaluation unchanged, making the cell display the old text instead of 0
-/// or `#CIRC!`.
-///
-/// Fix (cycles.rs): extend the seed-reset condition to also cover
-/// `CellValue::Text(_)` and `CellValue::Bool(_)`.
+/// Imported cross-sheet circular formulas can carry cached text values. With
+/// iterative calculation disabled, those cached values are preserved while
+/// circular-reference diagnostics are still emitted.
 #[test]
-fn test_cross_sheet_circular_ref_text_cached_value_reset() {
-    // Both cells carry a stale "Sheet2Data" text value from a prior save.
-    // After cycle evaluation, neither cell should still show text.
+fn test_cross_sheet_circular_ref_text_cached_value_preserved() {
+    // Both cells carry a cached "Sheet2Data" text value from a prior save.
     let snapshot = build_snapshot(vec![
         (
             "Sheet1",
@@ -226,25 +218,12 @@ fn test_cross_sheet_circular_ref_text_cached_value_reset() {
         .init_from_snapshot(&mut mirror, snapshot)
         .expect("init failed");
 
-    // The cells must NOT propagate the stale text value through the cycle.
-    // Acceptable outcomes are: error (#CIRC!, #REF!, etc.), Number(0), or
-    // absent from changed_cells (meaning unchanged from seed value 0).
     for sheet_idx in [0u32, 1u32] {
-        let val = find_changed_value(&result, sheet_idx, 0, 0);
-        match &val {
-            Some(CellValue::Text(t)) => panic!(
-                "Sheet{}!A1 must not show stale text after cycle resolution, got {:?}",
-                sheet_idx + 1,
-                t
-            ),
-            Some(CellValue::Boolean(b)) => panic!(
-                "Sheet{}!A1 must not show stale bool after cycle resolution, got {:?}",
-                sheet_idx + 1,
-                b
-            ),
-            // Number(0), any error, or absent — all acceptable
-            _ => {}
-        }
+        assert_eq!(
+            find_changed_value(&result, sheet_idx, 0, 0),
+            Some(CellValue::Text("Sheet2Data".into()))
+        );
+        assert!(has_circular_error(&result, sheet_idx, 0, 0));
     }
 }
 

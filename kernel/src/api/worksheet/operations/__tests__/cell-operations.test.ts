@@ -64,8 +64,8 @@ describe('CellOps filter reapply materialization', () => {
     expect(ctx.computeBridge.getActiveFilters).toHaveBeenCalledWith(SHEET_ID);
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, 'filter-1');
     expect(ctx.order).toEqual([
-      'setCellsByPosition',
       'await:allSheets',
+      'setCellsByPosition',
       'getActiveFilters',
       'applyFilter',
     ]);
@@ -81,8 +81,8 @@ describe('CellOps filter reapply materialization', () => {
     expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
     expect(ctx.computeBridge.getMutationHandler).not.toHaveBeenCalled();
     expect(ctx.order).toEqual([
-      'renameTableColumn',
       'await:allSheets',
+      'renameTableColumn',
       'getActiveFilters',
       'applyFilter',
     ]);
@@ -97,6 +97,7 @@ describe('CellOps filter reapply materialization', () => {
     expect(ctx.computeBridge.renameTableColumn).not.toHaveBeenCalled();
     expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
     expect(ctx.computeBridge.getActiveFilters).not.toHaveBeenCalled();
+    expect(ctx.awaitMaterialized).not.toHaveBeenCalled();
   });
 
   it('splits table header renames from normal cells in batch writes', async () => {
@@ -117,5 +118,12 @@ describe('CellOps filter reapply materialization', () => {
       { row: 1, col: 0, input: { kind: 'parse', text: 'West' } },
     ]);
     expect(ctx.computeBridge.getMutationHandler).toHaveBeenCalledTimes(1);
+    expect(ctx.order).toEqual([
+      'await:allSheets',
+      'renameTableColumn',
+      'setCellsByPosition',
+      'getActiveFilters',
+      'applyFilter',
+    ]);
   });
 });

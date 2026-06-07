@@ -216,6 +216,7 @@ export async function setRange(
     }
   }
 
+  await ctx.awaitMaterialized?.('allSheets');
   await ctx.computeBridge.setCellsByPosition(sheetId, edits);
 }
 
@@ -239,6 +240,7 @@ export async function clearRange(
 
   const normalized = normalizeRange(range);
 
+  await ctx.awaitMaterialized?.('allSheets');
   await ctx.computeBridge.clearRangeByPosition(
     sheetId,
     normalized.startRow,

@@ -262,11 +262,14 @@ async function reapplyActiveFiltersAfterWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
 ): Promise<void> {
-  await ctx.awaitMaterialized?.('allSheets');
   const activeFilters = await ctx.computeBridge.getActiveFilters(sheetId);
   for (const filter of activeFilters) {
     await ctx.computeBridge.applyFilter(sheetId, filter.id);
   }
+}
+
+async function awaitAllSheetsBeforeCellWrite(ctx: DocumentContext): Promise<void> {
+  await ctx.awaitMaterialized?.('allSheets');
 }
 
 interface TableHeaderWrite {
@@ -311,8 +314,12 @@ async function applyTableHeaderWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
   write: TableHeaderWrite,
+  alreadyMaterialized = false,
 ): Promise<boolean> {
   if (write.currentName === write.newName) return false;
+  if (!alreadyMaterialized) {
+    await awaitAllSheetsBeforeCellWrite(ctx);
+  }
   await assertUnprotectedTableDefinition(
     ctx,
     sheetId,
@@ -362,6 +369,8 @@ export async function setCell(
     }
     return;
   }
+
+  await awaitAllSheetsBeforeCellWrite(ctx);
 
   // Tell the change accumulator which cells are being directly written
   ctx.computeBridge.getMutationHandler()?.changeAccumulator.setDirectEdits([{ sheetId, row, col }]);
@@ -563,6 +572,8 @@ export async function setCells(
   const duplicatesRemoved = cells.length - errors.length - edits.length - dates.length - headerWrites.length;
 
   if (edits.length > 0 || dates.length > 0 || headerWrites.length > 0) {
+    await awaitAllSheetsBeforeCellWrite(ctx);
+
     // --- Tell the change accumulator which cells are being directly written ---
     const allCoords = [
       ...edits.map((e) => ({ sheetId, row: e.row, col: e.col })),
@@ -574,7 +585,8 @@ export async function setCells(
 
     let wroteHeader = false;
     for (const headerWrite of headerWrites) {
-      wroteHeader = (await applyTableHeaderWrite(ctx, sheetId, headerWrite)) || wroteHeader;
+      wroteHeader =
+        (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true)) || wroteHeader;
     }
 
     // --- Use the mutation pipeline path for primitives ---
@@ -640,6 +652,7 @@ export async function setDateValue(
   col: number,
   date: { year: number; month: number; day: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
@@ -662,6 +675,7 @@ export async function setTimeValue(
   col: number,
   time: { hours: number; minutes: number; seconds: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.setTimeValue(sheetId, row, col, time.hours, time.minutes, time.seconds);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
@@ -693,6 +707,7 @@ export async function relocateCells(
   source: CellRange,
   target: { row: number; col: number },
 ): Promise<void> {
+  await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.relocateCellsYrs(
     sheetId,
     source.startRow,

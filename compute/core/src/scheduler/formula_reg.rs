@@ -1,6 +1,9 @@
 //! Formula parsing, registration, and variable DAG management.
 
 use super::*;
+use crate::storage::cells::structured_ref_updater::{
+    replace_column_name_in_formula, template_contains_column_ref, template_contains_table_ref,
+};
 use crate::storage::engine::mutation::CellInput;
 
 impl ComputeCore {
@@ -611,6 +614,63 @@ impl ComputeCore {
                 self.cell_formula_text.insert(cell_id, formula);
             }
         }
+    }
+
+    /// Rewrite and re-register runtime formula text after a table column rename.
+    ///
+    /// Yrs persistence is handled by `structured_ref_updater`; this keeps the
+    /// live scheduler caches and dependency graph aligned within the same
+    /// mutation so API reads observe renamed structured references immediately.
+    pub(crate) fn rewrite_table_column_rename_formula_texts(
+        &mut self,
+        mirror: &mut CellMirror,
+        table_name: &str,
+        old_column_name: &str,
+        new_column_name: &str,
+    ) -> RecalcResult {
+        if table_name.is_empty()
+            || old_column_name.is_empty()
+            || new_column_name.is_empty()
+            || old_column_name == new_column_name
+        {
+            return RecalcResult::empty();
+        }
+
+        let updates: Vec<(CellId, SheetId, String)> = self
+            .cell_formula_text
+            .iter()
+            .filter_map(|(cell_id, formula)| {
+                if !template_contains_table_ref(formula, table_name)
+                    || !template_contains_column_ref(formula, old_column_name)
+                {
+                    return None;
+                }
+                let rewritten = replace_column_name_in_formula(
+                    formula,
+                    table_name,
+                    old_column_name,
+                    new_column_name,
+                );
+                if rewritten == *formula {
+                    return None;
+                }
+                let sheet_id = mirror.sheet_for_cell(cell_id)?;
+                Some((*cell_id, sheet_id, rewritten))
+            })
+            .collect();
+
+        if updates.is_empty() {
+            return RecalcResult::empty();
+        }
+
+        let mut dirty = Vec::with_capacity(updates.len());
+        for (cell_id, sheet_id, formula) in updates {
+            self.parse_and_register_formula(mirror, cell_id, sheet_id, formula, false);
+            dirty.push(cell_id);
+        }
+
+        self.recalc(mirror, &dirty)
+            .unwrap_or_else(|_| RecalcResult::empty())
     }
 
     // -----------------------------------------------------------------------

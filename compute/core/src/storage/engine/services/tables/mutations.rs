@@ -1,6 +1,7 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
 use crate::storage::engine::services::filters as filter_services;
+use crate::storage::engine::table_result_merge::merge_mutation_result;
 use crate::storage::engine::{mutation::CellInput, mutation_coordinator::MutationCoordinator};
 
 // -------------------------------------------------------------------
@@ -474,6 +475,13 @@ pub(in crate::storage::engine) fn rename_table_column(
         &old_column_name,
         new_column_name,
     );
+    let formula_recalc = stores.compute.rewrite_table_column_rename_formula_texts(
+        mirror,
+        table_name,
+        &old_column_name,
+        new_column_name,
+    );
+    merge_mutation_result(&mut result, MutationResult::from_recalc(formula_recalc));
 
     result.table_changes.push(TableChange {
         name: updated.name,

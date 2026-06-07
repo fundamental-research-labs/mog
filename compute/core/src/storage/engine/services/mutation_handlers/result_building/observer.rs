@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cell_types::{CellId, SheetId};
 
@@ -14,7 +14,8 @@ use crate::storage::engine::services::structural::recompute_floating_object_boun
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{
-    dimensions, pivots, properties, settings, sparklines, view, visibility,
+    comments as sheet_comments, dimensions, pivots, properties, settings, sparklines, view,
+    visibility,
 };
 use crate::storage::workbook;
 use compute_document::hex::{hex_to_id, id_to_hex};
@@ -59,6 +60,20 @@ fn current_slicer_state(
         Some(yrs::Out::YMap(map)) => domain_types::yrs_schema::slicer::from_yrs_map(&map, &txn),
         _ => None,
     }
+}
+
+fn current_comment_cell_ref(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    comment_id: &str,
+) -> Option<String> {
+    sheet_comments::get_comment(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        comment_id,
+    )
+    .map(|comment| comment.cell_ref)
 }
 
 fn push_table_change_once(
@@ -328,31 +343,93 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     }
 
     // --- Comment changes ---
+    //
+    // A structured comment row can emit both the top-level comment entry event
+    // and field-level map events in the same observer drain, especially during
+    // undo/redo. Public mutation results are cell-anchor invalidations, so
+    // collapse raw comment-row churn to one `(sheet, cell)` change.
+    let mut raw_comment_refs_by_key = HashMap::new();
+    for cch in &changes.comments {
+        if let Some(cell_ref) = cch.cell_ref.as_ref() {
+            raw_comment_refs_by_key.insert((cch.sheet_id, cch.key.clone()), cell_ref.clone());
+        }
+    }
+    let mut seen_comment_cells = HashSet::new();
     for cch in &changes.comments {
         let sheet_id_str = cch.sheet_id.to_uuid_string();
-        let kind = observer_kind_to_change_kind(cch.kind);
-        let cell_ref = cch.cell_ref.as_deref().unwrap_or(&cch.key);
-        let cell_id = parse_cell_ref(cell_ref).unwrap_or_else(|| CellId::from_raw(0));
+        let cell_ref = cch
+            .cell_ref
+            .clone()
+            .or_else(|| {
+                raw_comment_refs_by_key
+                    .get(&(cch.sheet_id, cch.key.clone()))
+                    .cloned()
+            })
+            .or_else(|| current_comment_cell_ref(stores, &cch.sheet_id, &cch.key))
+            .unwrap_or_else(|| cch.key.clone());
+        if !seen_comment_cells.insert((cch.sheet_id, cell_ref.clone())) {
+            continue;
+        }
+        let kind = if sheet_comments::has_comments(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            &cch.sheet_id,
+            &cell_ref,
+        ) {
+            ChangeKind::Set
+        } else {
+            ChangeKind::Removed
+        };
+        let cell_id = parse_cell_ref(&cell_ref).unwrap_or_else(|| CellId::from_raw(0));
         let position = stores
             .grid_indexes
             .get(&cch.sheet_id)
             .and_then(|g| g.cell_position(&cell_id))
+            .or_else(|| {
+                mirror
+                    .resolve_position(&cell_id)
+                    .map(|pos| (pos.row(), pos.col()))
+            })
             .map(|(row, col)| CellPosition { row, col });
 
         result.comment_changes.push(CommentChange {
             sheet_id: sheet_id_str,
-            cell_id: cell_ref.to_string(),
+            cell_id: cell_ref,
             position,
             kind,
         });
     }
 
     // --- Slicer changes ---
+    let mut raw_slicer_data_by_id = HashMap::new();
     for sch in &changes.slicers {
-        let data = current_slicer_state(stores, &sch.slicer_id).or_else(|| sch.data.clone());
+        let entry = raw_slicer_data_by_id
+            .entry(sch.slicer_id.clone())
+            .or_insert_with(|| (sch.sheet_id, sch.data.clone()));
+        if entry.1.is_none() && sch.data.is_some() {
+            *entry = (sch.sheet_id, sch.data.clone());
+        }
+    }
+    let mut seen_slicers = HashSet::new();
+    for sch in &changes.slicers {
+        if !seen_slicers.insert(sch.slicer_id.clone()) {
+            continue;
+        }
+        let current_data = current_slicer_state(stores, &sch.slicer_id);
+        let (raw_sheet_id, raw_data) = raw_slicer_data_by_id
+            .get(&sch.slicer_id)
+            .cloned()
+            .unwrap_or((sch.sheet_id, sch.data.clone()));
+        let kind = if current_data.is_some() {
+            SlicerChangeKind::Updated
+        } else {
+            SlicerChangeKind::Deleted
+        };
+        let data = current_data.or(raw_data);
         let sheet_id = sch
             .sheet_id
             .map(|sid| sid.to_uuid_string())
+            .or_else(|| raw_sheet_id.map(|sid| sid.to_uuid_string()))
             .or_else(|| data.as_ref().map(|slicer| slicer.sheet_id.clone()))
             .unwrap_or_default();
         let (source_type, source_id) = data
@@ -365,10 +442,7 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
         result.slicer_changes.push(SlicerChange {
             sheet_id,
             slicer_id: sch.slicer_id.clone(),
-            kind: match sch.kind {
-                CellChangeKind::Modified => SlicerChangeKind::Updated,
-                CellChangeKind::Removed => SlicerChangeKind::Deleted,
-            },
+            kind,
             source_type,
             source_id,
             updated_fields: Vec::new(),

@@ -38,9 +38,13 @@ use crate::storage::engine::mutation::CellInput;
 use cell_types::{CellId, SheetId};
 use compute_document::cell_serde::{cell_value_to_any, yrs_any_to_cell_value};
 use compute_document::hex::id_to_hex;
-use compute_document::schema::{KEY_CELLS, KEY_FORMULA, KEY_GRID_INDEX, KEY_VALUE};
+use compute_document::schema::{
+    KEY_CELL_PROPERTIES, KEY_CELLS, KEY_COMMENTS, KEY_FORMULA, KEY_GRID_ID_TO_POS, KEY_GRID_INDEX,
+    KEY_GRID_POS_TO_ID, KEY_VALUE,
+};
 use compute_formats::FormatType;
 use compute_parser::FormulaSource;
+use domain_types::yrs_schema::comment as comment_schema;
 use value_types::CellValue;
 
 // ---------------------------------------------------------------------------
@@ -81,11 +85,23 @@ pub(crate) fn write_cell_position_to_yrs(
         return;
     };
     let pos_key = format!("{}:{}", row_hex, col_hex);
-    if let Some(Out::YMap(pos_to_id)) = gi_map.get(txn, "posToId") {
-        pos_to_id.insert(txn, pos_key.as_str(), Any::String(Arc::from(cell_hex)));
+    if let Some(Out::YMap(pos_to_id)) = gi_map.get(txn, KEY_GRID_POS_TO_ID) {
+        let already_current = matches!(
+            pos_to_id.get(txn, pos_key.as_str()),
+            Some(Out::Any(Any::String(existing))) if existing.as_ref() == cell_hex
+        );
+        if !already_current {
+            pos_to_id.insert(txn, pos_key.as_str(), Any::String(Arc::from(cell_hex)));
+        }
     }
-    if let Some(Out::YMap(id_to_pos)) = gi_map.get(txn, "idToPos") {
-        id_to_pos.insert(txn, cell_hex, Any::String(Arc::from(pos_key.as_str())));
+    if let Some(Out::YMap(id_to_pos)) = gi_map.get(txn, KEY_GRID_ID_TO_POS) {
+        let already_current = matches!(
+            id_to_pos.get(txn, cell_hex),
+            Some(Out::Any(Any::String(existing))) if existing.as_ref() == pos_key.as_str()
+        );
+        if !already_current {
+            id_to_pos.insert(txn, cell_hex, Any::String(Arc::from(pos_key.as_str())));
+        }
     }
 }
 
@@ -104,7 +120,7 @@ pub(crate) fn remove_cell_position_from_yrs(
     };
     // Read the existing pos_key before removing so we can also drop the
     // reverse posToId entry.
-    let pos_key = match gi_map.get(txn, "idToPos") {
+    let pos_key = match gi_map.get(txn, KEY_GRID_ID_TO_POS) {
         Some(Out::YMap(id_to_pos)) => match id_to_pos.get(txn, cell_hex) {
             Some(Out::Any(Any::String(s))) => {
                 let k = s.to_string();
@@ -116,10 +132,43 @@ pub(crate) fn remove_cell_position_from_yrs(
         _ => None,
     };
     if let Some(pos_key) = pos_key
-        && let Some(Out::YMap(pos_to_id)) = gi_map.get(txn, "posToId")
+        && let Some(Out::YMap(pos_to_id)) = gi_map.get(txn, KEY_GRID_POS_TO_ID)
     {
         pos_to_id.remove(txn, pos_key.as_str());
     }
+}
+
+pub(crate) fn cell_has_identity_backing_metadata<T: yrs::ReadTxn>(
+    txn: &T,
+    sheets: &MapRef,
+    sheet_hex: &str,
+    cell_hex: &str,
+) -> bool {
+    let Some(Out::YMap(sheet_map)) = sheets.get(txn, sheet_hex) else {
+        return false;
+    };
+
+    if let Some(Out::YMap(props_map)) = sheet_map.get(txn, KEY_CELL_PROPERTIES)
+        && props_map.get(txn, cell_hex).is_some()
+    {
+        return true;
+    }
+
+    if let Some(Out::YMap(comments_map)) = sheet_map.get(txn, KEY_COMMENTS) {
+        for (_, value) in comments_map.iter(txn) {
+            let Out::YMap(comment_map) = value else {
+                continue;
+            };
+            if let Some(Out::Any(Any::String(cell_ref))) =
+                comment_map.get(txn, comment_schema::KEY_CELL_REF)
+                && cell_ref.as_ref() == cell_hex
+            {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 mod parsing;
@@ -227,9 +276,9 @@ fn read_cell_data_from_yrs<T: yrs::ReadTxn>(
 // operate on an open transaction; the caller owns mirror updates because the
 // mirror API needs the transaction dropped.
 
-/// Remove a cell. Returns the `CellId` that was removed, or `None` if the
-/// cell did not exist at (row, col). Caller is responsible for the matching
-/// `mirror.remove_cell(...)` after dropping the transaction.
+/// Remove a cell's value payload. If comments or cell properties still refer
+/// to the CellId, keep the Yrs/grid identity and return a Null mirror update
+/// instead of a hard remove.
 fn yrs_remove_cell(
     txn: &mut yrs::TransactionMut<'_>,
     sheets: &MapRef,
@@ -238,13 +287,19 @@ fn yrs_remove_cell(
     grid_index: &mut crate::identity::GridIndex,
     row: u32,
     col: u32,
-) -> Option<CellId> {
-    let cell_id = grid_index.cell_id_at(row, col)?;
+) -> MirrorAction {
+    let Some(cell_id) = grid_index.cell_id_at(row, col) else {
+        return MirrorAction::None;
+    };
     let cell_hex = id_to_hex(cell_id.as_u128());
     cells_map.remove(txn, &cell_hex);
-    remove_cell_position_from_yrs(txn, sheets, sheet_hex, &cell_hex);
-    grid_index.remove_cell(&cell_id);
-    Some(cell_id)
+    if cell_has_identity_backing_metadata(txn, sheets, sheet_hex, &cell_hex) {
+        MirrorAction::Apply(cell_id, CellValue::Null)
+    } else {
+        remove_cell_position_from_yrs(txn, sheets, sheet_hex, &cell_hex);
+        grid_index.remove_cell(&cell_id);
+        MirrorAction::Remove(cell_id)
+    }
 }
 
 /// Store verbatim text. Empty `text` stores `Text("")` — structurally
@@ -363,7 +418,6 @@ fn dispatch_cell_input(
     match input {
         CellInput::Clear => {
             yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col)
-                .map_or(MirrorAction::None, MirrorAction::Remove)
         }
         CellInput::Literal { text } => {
             let (cid, cv) = yrs_store_text(
@@ -373,8 +427,7 @@ fn dispatch_cell_input(
         }
         CellInput::Value {
             value: CellValue::Null,
-        } => yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col)
-            .map_or(MirrorAction::None, MirrorAction::Remove),
+        } => yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col),
         CellInput::Value {
             value: CellValue::Text(text),
         } => {
@@ -392,14 +445,12 @@ fn dispatch_cell_input(
         CellInput::Parse { text } => match CellWrite::from_user_string(&text, target) {
             CellWrite::Empty => {
                 yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col)
-                    .map_or(MirrorAction::None, MirrorAction::Remove)
             }
             // Defensive: `from_user_string` never produces Value(Null)
             // (whitespace-only classifies to Empty). Preserved to carry the
             // pre-W6 behaviour of routing a null scalar to cell-remove.
             CellWrite::Value(CellValue::Null) => {
                 yrs_remove_cell(txn, sheets, sheet_hex, cells_map, grid_index, row, col)
-                    .map_or(MirrorAction::None, MirrorAction::Remove)
             }
             // Classifier-produced text preserves the original bytes (trailing
             // whitespace round-trips). Route to the text leaf so the stored

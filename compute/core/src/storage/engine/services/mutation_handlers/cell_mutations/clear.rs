@@ -159,15 +159,25 @@ pub(in crate::storage::engine) fn mutation_clear_cells(
             .find_map(|(sid, grid)| grid.cell_position(&cell_id).map(|_| *sid));
 
         if let Some(sheet_id) = sheet_id {
-            stores.storage.remove_cell_with_origin(
-                mirror,
-                &sheet_id,
-                &cell_id,
-                Some(ORIGIN_USER_EDIT),
-            );
+            let preserve_identity = stores
+                .storage
+                .remove_cell_value_with_origin_preserving_metadata(
+                    &sheet_id,
+                    &cell_id,
+                    Some(ORIGIN_USER_EDIT),
+                );
 
-            if let Some(grid) = stores.grid_indexes.get_mut(&sheet_id) {
-                grid.remove_cell(&cell_id);
+            if preserve_identity {
+                if let Some(pos) = mirror.resolve_position(&cell_id)
+                    && let Some(grid) = stores.grid_indexes.get_mut(&sheet_id)
+                {
+                    grid.register_cell(cell_id, pos.row(), pos.col());
+                }
+            } else {
+                mirror.remove_cell(&cell_id);
+                if let Some(grid) = stores.grid_indexes.get_mut(&sheet_id) {
+                    grid.remove_cell(&cell_id);
+                }
             }
         }
     }

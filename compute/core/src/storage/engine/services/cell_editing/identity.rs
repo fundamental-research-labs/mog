@@ -1,5 +1,5 @@
 use cell_types::{CellId, SheetId};
-use yrs::{Map, Origin, Transact};
+use yrs::{Array, Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::cells::values as cell_values;
@@ -73,47 +73,89 @@ pub(in crate::storage::engine) fn ensure_cell_id_mirrored(
     row: u32,
     col: u32,
 ) -> Option<CellId> {
-    // Fast path: cell already registered locally. The Yrs mirror was
-    // written when the cell was first created, so nothing more to do.
-    if let Some(grid) = stores.grid_indexes.get(sheet_id)
-        && let Some(cid) = grid.cell_id_at(row, col)
-    {
-        return Some(cid);
-    }
+    let already_registered = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col));
 
     // For Range-resident positions, pre-register the virtual CellId so
     // ensure_cell_id returns it instead of minting a fresh random one.
     let grid = stores.grid_indexes.get_mut(sheet_id)?;
-    cell_values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
+    if already_registered.is_none() {
+        cell_values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
+    }
 
-    // Allocate a new CellId in the in-memory GridIndex and resolve its hexes
-    // (O(1) via the grid) before dropping the borrow.
-    let cell_id = grid.ensure_cell_id(row, col);
-    let row_hex = grid.row_id_hex(row);
-    let col_hex = grid.col_id_hex(col);
+    let cell_id = mirror_cell_position_to_yrs(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        grid,
+        sheet_id,
+        row,
+        col,
+    );
+    Some(cell_id)
+}
 
-    // Mirror into yrs `gridIndex/{posToId, idToPos}` inside a scoped txn
-    // so remote peers receive the identity alongside the payload write
-    // the caller is about to perform.
+fn mirror_cell_position_to_yrs(
+    doc: &yrs::Doc,
+    sheets: &yrs::MapRef,
+    grid: &mut crate::identity::GridIndex,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> CellId {
+    // Metadata-only writes can be the first operation on an empty sheet. Expand
+    // row/col axes before reading row_id_hex/col_id_hex, otherwise the in-memory
+    // CellId is not persisted to gridIndex and the next value undo can orphan
+    // comments or properties that refer to it.
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    {
+        let mut dims = crate::storage::sheet_dimensions::SheetDimensionsMut::from_grid_index(
+            doc, sheets, grid,
+        );
+        let _ = dims.ensure_capacity(&mut txn, *sheet_id, row, col);
+        if !yrs_axes_cover_position(&txn, sheets, sheet_id, row, col) {
+            let _ = dims.materialize_dense_axes_and_remove_compact_keys(&mut txn, *sheet_id);
+        }
+    }
+
+    let cell_id = grid
+        .cell_id_at(row, col)
+        .unwrap_or_else(|| grid.ensure_cell_id(row, col));
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let cell_hex = id_to_hex(cell_id.as_u128());
-    let sheets_map = stores.storage.doc().get_or_insert_map("sheets");
-    let mut txn = stores
-        .storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let row_hex = grid.row_id_hex(row);
+    let col_hex = grid.col_id_hex(col);
 
     if let (Some(rh), Some(ch)) = (row_hex.as_ref(), col_hex.as_ref()) {
         crate::storage::cells::values::write_cell_position_to_yrs(
             &mut txn,
-            &sheets_map,
+            sheets,
             &sheet_hex,
             &cell_hex,
             rh.as_str(),
             ch.as_str(),
         );
     }
-    Some(cell_id)
+    cell_id
+}
+
+fn yrs_axes_cover_position(
+    txn: &yrs::TransactionMut<'_>,
+    sheets: &yrs::MapRef,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> bool {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let Some(Out::YMap(sheet_map)) = sheets.get(txn, sheet_hex.as_str()) else {
+        return false;
+    };
+    let row_ok = crate::storage::infra::grid_helpers::get_row_order_array(&sheet_map, txn)
+        .is_some_and(|row_order| row < row_order.len(txn));
+    let col_ok = crate::storage::infra::grid_helpers::get_col_order_array(&sheet_map, txn)
+        .is_some_and(|col_order| col < col_order.len(txn));
+    row_ok && col_ok
 }
 
 /// Persist identity mappings for every cell referenced by an [`IdentityFormula`]

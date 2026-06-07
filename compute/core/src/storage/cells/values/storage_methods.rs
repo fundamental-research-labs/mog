@@ -16,7 +16,7 @@ use compute_document::hex::id_to_hex;
 use value_types::CellValue;
 use yrs::{Array, Map, Origin, Transact};
 
-use super::remove_cell_position_from_yrs;
+use super::{cell_has_identity_backing_metadata, remove_cell_position_from_yrs};
 
 impl YrsStorage {
     /// Read a cell value directly from the yrs document.
@@ -274,5 +274,40 @@ impl YrsStorage {
         }
 
         mirror.remove_cell(cell_id);
+    }
+
+    /// Remove only the Yrs cell value payload, preserving CellId identity when
+    /// comments or cell properties still anchor to it.
+    ///
+    /// Returns `true` when the caller should leave mirror/grid identity in
+    /// place with a Null value, and `false` when it should hard-remove the
+    /// cell from mirror/grid as well.
+    pub fn remove_cell_value_with_origin_preserving_metadata(
+        &mut self,
+        sheet_id: &SheetId,
+        cell_id: &CellId,
+        origin: Option<&[u8]>,
+    ) -> bool {
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        let cell_hex = id_to_hex(cell_id.as_u128());
+
+        let mut txn = match origin {
+            Some(o) => self.doc.transact_mut_with(yrs::Origin::from(o)),
+            None => self.doc.transact_mut(),
+        };
+
+        if let Some(yrs::Out::YMap(sheet_map)) = self.sheets.get(&txn, &sheet_hex)
+            && let Some(yrs::Out::YMap(cells_map)) =
+                sheet_map.get(&txn, compute_document::schema::KEY_CELLS)
+        {
+            cells_map.remove(&mut txn, &cell_hex);
+        }
+
+        let preserve_identity =
+            cell_has_identity_backing_metadata(&txn, &self.sheets, &sheet_hex, &cell_hex);
+        if !preserve_identity {
+            remove_cell_position_from_yrs(&mut txn, &self.sheets, &sheet_hex, &cell_hex);
+        }
+        preserve_identity
     }
 }

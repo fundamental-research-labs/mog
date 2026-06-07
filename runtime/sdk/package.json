@@ -141,7 +141,6 @@
     }
   },
   "dependencies": {
-    "@mog-sdk/chart-raster-wasm": "workspace:*",
     "@mog-sdk/contracts": "workspace:*",
     "@mog-sdk/wasm": "workspace:*",
     "@types/node": "^25.5.0"
@@ -157,6 +156,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.7",
+    "@mog-sdk/chart-raster-wasm": "workspace:*",
     "@mog-sdk/kernel": "workspace:*",
     "@mog-sdk/types-host": "workspace:*",
     "@mog/kernel-host-internal": "workspace:*",

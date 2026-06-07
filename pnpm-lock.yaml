@@ -1211,9 +1211,6 @@ importers:
 
   runtime/sdk:
     dependencies:
-      '@mog-sdk/chart-raster-wasm':
-        specifier: workspace:*
-        version: link:../../compute/chart-render-wasm/npm
       '@mog-sdk/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -1227,6 +1224,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.58.7
         version: 7.58.7(@types/node@25.9.1)
+      '@mog-sdk/chart-raster-wasm':
+        specifier: workspace:*
+        version: link:../../compute/chart-render-wasm/npm
       '@mog-sdk/kernel':
         specifier: workspace:*
         version: link:../../kernel

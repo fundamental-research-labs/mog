@@ -131,7 +131,8 @@ function splitCallArguments(source: string, openParen: number): string[] | null 
 function hasQualifiedPivotUpdateOptions(arg: string): boolean {
   return (
     /^pivotUpdateOptions\s*\(/.test(arg) ||
-    (/\breason\s*:/.test(arg) && /\brefreshPolicy\s*:/.test(arg))
+    ((/\breason\s*:/.test(arg) || /\breason\b/.test(arg)) &&
+      (/\brefreshPolicy\s*:/.test(arg) || /\brefreshPolicy\b/.test(arg)))
   );
 }
 

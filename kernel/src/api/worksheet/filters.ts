@@ -337,6 +337,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       colorFilter: { type: opts.colorType, color: opts.color },
     };
     await this.setColumnFilter(col, criteria, resolvedId);
+    await this.apply(resolvedId);
   }
 
   /** Standard alias for {@link getAutoFilter}. */

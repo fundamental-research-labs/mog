@@ -64,24 +64,45 @@ jobs:
       - name: Validate release branch
         id: release-branch
         shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry-run || false }}
         run: |
-          if [[ ! "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
-            echo "::error::SDK publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
-            exit 1
+          if [[ "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            echo "release-version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "release-version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "release-version=" >> "$GITHUB_OUTPUT"
+            echo "Dry-run candidate validation may run from ${GITHUB_REF_NAME}; production publishes still require release/vX.Y.Z."
+            exit 0
+          fi
+          echo "::error::SDK publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+          exit 1
 
       - name: Determine version
         id: version
         run: |
           RELEASE_VERSION="${{ steps.release-branch.outputs.release-version }}"
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
+          INPUT_VERSION="${{ inputs.version }}"
+          if [ -n "$RELEASE_VERSION" ]; then
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="$INPUT_VERSION"
+            else
+              VERSION="$RELEASE_VERSION"
+            fi
+            if [ "$VERSION" != "$RELEASE_VERSION" ]; then
+              echo "::error::Input version ${VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+              exit 1
+            fi
+          elif [ "${{ inputs.dry-run || false }}" = "true" ]; then
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="$INPUT_VERSION"
+            else
+              VERSION=$(node -p "require('./runtime/sdk/package.json').version")
+            fi
+            echo "Dry-run candidate validation from ${GITHUB_REF_NAME}; using package version ${VERSION}."
           else
-            VERSION="$RELEASE_VERSION"
-          fi
-          if [ "$VERSION" != "$RELEASE_VERSION" ]; then
-            echo "::error::Input version ${VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+            echo "::error::SDK publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
             exit 1
           fi
           if [ -n "${{ inputs.source-run-id }}" ]; then
@@ -126,7 +147,10 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           ALLOW_EXISTING_NPM=false
-          if [ -n "${{ inputs.source-run-id }}" ]; then
+          if [ "${{ inputs.dry-run || false }}" = "true" ]; then
+            ALLOW_EXISTING_NPM=true
+            echo "Dry-run candidate validation allows already-published npm versions."
+          elif [ -n "${{ inputs.source-run-id }}" ]; then
             ALLOW_EXISTING_NPM=true
             echo "Reusing artifacts from run ${{ inputs.source-run-id }}; already-published npm packages will be skipped in the publish job."
           fi

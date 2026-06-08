@@ -62,10 +62,7 @@ import { usePlatformInfo } from '@mog/shell';
 import { useContextMenuActions } from '../../hooks/toolbar/use-context-menu-actions';
 import type { CellContextMenuProps, ContextMenuItem as ContextMenuItemType } from './types';
 import { MenuItemRenderer } from './MenuItemRenderer';
-import {
-  getFormatCellsContextMenuShortcut,
-  platformFromShellInfo,
-} from './shortcut-labels';
+import { getFormatCellsContextMenuShortcut, platformFromShellInfo } from './shortcut-labels';
 
 // =============================================================================
 // Main Component

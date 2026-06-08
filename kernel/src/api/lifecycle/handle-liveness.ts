@@ -85,8 +85,7 @@ export class HandleLiveness {
     const label = metadata.label ?? this.options.label;
     const reasonOperation = reason?.operation;
     const message =
-      reason?.message ??
-      `${label}.${operation}: handle is disposed, closed, or invalidated`;
+      reason?.message ?? `${label}.${operation}: handle is disposed, closed, or invalidated`;
     return new KernelError(reason?.code ?? this.options.code ?? 'BRIDGE_DISPOSED', message, {
       context: {
         operation,

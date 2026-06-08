@@ -221,11 +221,10 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         ...(current.layout ? { layout: current.layout } : {}),
         ...(current.style ? { style: current.style } : {}),
         ...(includeRanges ? { renderedRange: await getRange(pivotId) } : {}),
-        expansionState:
-          ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
-            expandedRows: {},
-            expandedColumns: {},
-          },
+        expansionState: ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
+          expandedRows: {},
+          expandedColumns: {},
+        },
         dataSourceType: 'range',
         ...(options?.includeItems
           ? { items: await ctx.pivot.getAllPivotItems(sheetId, pivotId) }

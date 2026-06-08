@@ -1,11 +1,8 @@
 import type { ApiCompatibilityEntry } from './types';
 
-const ROUND_55_REPORT =
-  'mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md';
-const ROUND_55_PLAN =
-  'mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md';
-const ROUND_5_NAMESPACE_PLAN =
-  'mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md';
+const ROUND_55_REPORT = 'api-compatibility:round55/workbook-api-issues';
+const ROUND_55_PLAN = 'api-compatibility:round55/versioned-api-compatibility-layer';
+const ROUND_5_NAMESPACE_PLAN = 'api-compatibility:round5/namespaced-sub-apis';
 
 export const apiCompatibilityRegistry = [
   {
@@ -24,20 +21,12 @@ export const apiCompatibilityRegistry = [
       { source: 'trace', reference: `${ROUND_55_REPORT}#wsdescriberange-with-no-range` },
       {
         source: 'source',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md',
+        reference: 'api-compatibility:round55/describe-range-no-arg-startrow',
       },
     ],
     behavior:
       'Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.',
-    runtimeSurfaces: [
-      'typescript',
-      'kernel',
-      'api-describe',
-      'agent-guidance',
-      'docs',
-      'api-eval',
-    ],
+    runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs', 'api-eval'],
     surfaceDisposition: {
       typescript: 'contract_extension',
       kernel: 'contract_extension',
@@ -69,8 +58,7 @@ export const apiCompatibilityRegistry = [
       { source: 'trace', reference: `${ROUND_55_REPORT}#wsgetcharts` },
       {
         source: 'source',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md',
+        reference: 'api-compatibility:round55/imported-chart-api-discoverability',
       },
     ],
     behavior:
@@ -115,10 +103,12 @@ export const apiCompatibilityRegistry = [
     evidence: [
       {
         source: 'prior_version',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md',
+        reference: 'api-compatibility:round55/imported-chart-id-alias-contract',
       },
-      { source: 'trace', reference: `${ROUND_55_REPORT}#describe--describerange-on-sheets-with-imported-charts` },
+      {
+        source: 'trace',
+        reference: `${ROUND_55_REPORT}#describe--describerange-on-sheets-with-imported-charts`,
+      },
     ],
     behavior:
       'Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.',
@@ -154,7 +144,7 @@ export const apiCompatibilityRegistry = [
       {
         source: 'source',
         reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface',
+          'api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface',
       },
     ],
     behavior:
@@ -193,20 +183,12 @@ export const apiCompatibilityRegistry = [
       { source: 'trace', reference: `${ROUND_55_REPORT}#pivot-handle-introspection` },
       {
         source: 'source',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md',
+        reference: 'api-compatibility:round55/pivot-handle-introspection-gap',
       },
     ],
     behavior:
       'Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.',
-    runtimeSurfaces: [
-      'typescript',
-      'kernel',
-      'api-describe',
-      'agent-guidance',
-      'docs',
-      'api-eval',
-    ],
+    runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs', 'api-eval'],
     surfaceDisposition: {
       typescript: 'contract_extension',
       kernel: 'contract_extension',
@@ -251,7 +233,8 @@ export const apiCompatibilityRegistry = [
     },
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
-      message: 'Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.',
+      message:
+        'Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.',
       replacements: ['type:PivotTableHandle.getInfo', 'ws.pivots.getInfo'],
     },
     verification: ['dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts'],
@@ -272,8 +255,7 @@ export const apiCompatibilityRegistry = [
       { source: 'trace', reference: `${ROUND_55_REPORT}#setitemvisibility` },
       {
         source: 'source',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md',
+        reference: 'api-compatibility:round55/pivot-set-item-visibility-contract',
       },
     ],
     behavior:
@@ -318,8 +300,7 @@ export const apiCompatibilityRegistry = [
       { source: 'trace', reference: `${ROUND_55_REPORT}#setitemvisibility` },
       {
         source: 'source',
-        reference:
-          'mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause',
+        reference: 'api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause',
       },
     ],
     behavior:
@@ -497,7 +478,8 @@ export const apiCompatibilityRegistry = [
     },
     diagnostics: {
       code: 'MOG002_MOG_API_USAGE',
-      message: 'ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).',
+      message:
+        'ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).',
       replacements: ['ws.charts.add'],
     },
     verification: ['dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts'],

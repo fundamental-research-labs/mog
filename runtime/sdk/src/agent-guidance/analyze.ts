@@ -263,18 +263,14 @@ function coalesceOverlappingDiagnostics(
   for (const diagnostic of diagnostics) {
     const overlappingIndex = coalesced.findIndex(
       (existing) =>
-        existing.entryId === diagnostic.entryId &&
-        spansOverlap(existing.span, diagnostic.span),
+        existing.entryId === diagnostic.entryId && spansOverlap(existing.span, diagnostic.span),
     );
     if (overlappingIndex < 0) {
       coalesced.push(diagnostic);
       continue;
     }
 
-    coalesced[overlappingIndex] = preferDiagnostic(
-      coalesced[overlappingIndex],
-      diagnostic,
-    );
+    coalesced[overlappingIndex] = preferDiagnostic(coalesced[overlappingIndex], diagnostic);
   }
 
   return coalesced;
@@ -319,11 +315,12 @@ export function diagnosticFromCompatibilityEntry(
       (entry.status === 'rejected' ? 'MOG003_COMPATIBILITY_REJECTED' : 'MOG002_MOG_API_USAGE'),
     severity: blocking ? 'error' : deprecated ? 'warning' : 'info',
     dialect: 'mog-version',
-    category: entry.observedPath.includes('.charts') || entry.observedPath.includes('Chart')
-      ? 'charts'
-      : entry.observedPath.includes('.pivots') || entry.observedPath.includes('Pivot')
-        ? 'pivots'
-        : 'compatibility',
+    category:
+      entry.observedPath.includes('.charts') || entry.observedPath.includes('Chart')
+        ? 'charts'
+        : entry.observedPath.includes('.pivots') || entry.observedPath.includes('Pivot')
+          ? 'pivots'
+          : 'compatibility',
     entryId: entry.id,
     matcherId: `compatibility.${entry.id}`,
     offendingSymbol: entry.observedPath,
@@ -389,16 +386,17 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
     ) {
       continue;
     }
-    const directMatches =
-      isPivotHandleDescribePath(entry.observedPath)
-        ? pivotHandleDescribeMatches(stripped)
-        : null;
+    const directMatches = isPivotHandleDescribePath(entry.observedPath)
+      ? pivotHandleDescribeMatches(stripped)
+      : null;
     const pattern = directMatches ? null : compatibilityPattern(entry);
     if (!directMatches && !pattern) continue;
-    const matches = directMatches ?? Array.from(stripped.matchAll(pattern!)).map((match) => {
-      const start = match.index ?? 0;
-      return { start, end: start + match[0].length };
-    });
+    const matches =
+      directMatches ??
+      Array.from(stripped.matchAll(pattern!)).map((match) => {
+        const start = match.index ?? 0;
+        return { start, end: start + match[0].length };
+      });
     for (const match of matches) {
       const { start, end } = match;
       const span = spanFor(code, start, end);

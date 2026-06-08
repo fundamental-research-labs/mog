@@ -87,11 +87,14 @@ describe('SDK agent API guidance', () => {
     expect(matcherIds).toContain('officejs.context-workbook-active-worksheet');
     expect(matcherIds).toContain('officejs.range-values-assignment');
     expect(matcherIds).toContain('officejs.context-sync');
-    expect(diagnostics.filter((diagnostic) => diagnostic.entryId === 'officejs.active-sheet'))
-      .toHaveLength(1);
+    expect(
+      diagnostics.filter((diagnostic) => diagnostic.entryId === 'officejs.active-sheet'),
+    ).toHaveLength(1);
     expect(diagnostics.some((diagnostic) => diagnostic.blocking)).toBe(true);
     expect(
-      diagnostics.flatMap((diagnostic) => diagnostic.mogReplacements).map((replacement) => replacement.path),
+      diagnostics
+        .flatMap((diagnostic) => diagnostic.mogReplacements)
+        .map((replacement) => replacement.path),
     ).toContain('ws.setRange');
 
     const preflight = preflightMogCode(source);
@@ -182,9 +185,7 @@ describe('SDK agent API guidance', () => {
       'getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;',
     );
     expect(apiSpec.types.PivotTableHandle?.definition).not.toContain('describe(');
-    expect(apiSpec.types.PivotHandleInfoOptions?.definition).toContain(
-      'includeItems?: boolean',
-    );
+    expect(apiSpec.types.PivotHandleInfoOptions?.definition).toContain('includeItems?: boolean');
     expect(apiSpec.types.PivotHandleInfo?.definition).toContain('contentArea: string');
     expect(apiSpec.types.PivotHandleInfo?.definition).toContain('rowFields: string[]');
     expect(apiSpec.types.PivotHandleInfo?.definition).toContain('availableMethods: string[]');

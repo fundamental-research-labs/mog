@@ -16,7 +16,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -62,7 +62,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -109,7 +109,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -156,7 +156,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -203,7 +203,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -250,7 +250,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -297,7 +297,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -344,7 +344,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -391,7 +391,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -438,11 +438,11 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+          "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
         },
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+          "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
         }
       ],
       "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -482,7 +482,7 @@
       "evidence": [
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+          "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
         }
       ],
       "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -529,11 +529,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+          "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
         }
       ],
       "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
@@ -576,7 +576,7 @@
       "evidence": [
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+          "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
         }
       ],
       "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -622,11 +622,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+          "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+          "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
         }
       ],
       "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -669,11 +669,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+          "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
         }
       ],
       "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -714,11 +714,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+          "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+          "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
         }
       ],
       "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -760,11 +760,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+          "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+          "reference": "api-compatibility:round55/imported-chart-api-discoverability"
         }
       ],
       "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -810,7 +810,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -856,7 +856,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -903,7 +903,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -950,7 +950,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -997,7 +997,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -1044,7 +1044,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -1091,7 +1091,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -1138,7 +1138,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -1185,7 +1185,7 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          "reference": "api-compatibility:round5/namespaced-sub-apis"
         }
       ],
       "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -1232,11 +1232,11 @@
       "evidence": [
         {
           "source": "prior_version",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+          "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
         },
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+          "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
         }
       ],
       "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -1276,7 +1276,7 @@
       "evidence": [
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+          "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
         }
       ],
       "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -1323,11 +1323,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+          "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
         }
       ],
       "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
@@ -1370,7 +1370,7 @@
       "evidence": [
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+          "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
         }
       ],
       "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -1416,11 +1416,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+          "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+          "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
         }
       ],
       "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -1463,11 +1463,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+          "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
         }
       ],
       "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -1508,11 +1508,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+          "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+          "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
         }
       ],
       "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -1554,11 +1554,11 @@
       "evidence": [
         {
           "source": "trace",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+          "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
         },
         {
           "source": "source",
-          "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+          "reference": "api-compatibility:round55/imported-chart-api-discoverability"
         }
       ],
       "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -1605,11 +1605,11 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
           },
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
           }
         ],
         "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -1651,11 +1651,11 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
           },
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
           }
         ],
         "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -1697,7 +1697,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
           }
         ],
         "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -1746,7 +1746,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
           }
         ],
         "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -1795,11 +1795,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
           }
         ],
         "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -1842,11 +1842,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
           }
         ],
         "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -1889,7 +1889,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -1937,7 +1937,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -1985,7 +1985,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -2034,7 +2034,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -2083,11 +2083,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
           }
         ],
         "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -2131,11 +2131,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
           }
         ],
         "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -2179,7 +2179,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -2228,7 +2228,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -2277,11 +2277,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability"
           }
         ],
         "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -2327,11 +2327,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability"
           }
         ],
         "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -2377,7 +2377,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -2426,7 +2426,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -2475,7 +2475,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -2524,7 +2524,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -2573,7 +2573,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -2622,7 +2622,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -2671,7 +2671,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
           }
         ],
         "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -2719,7 +2719,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
           }
         ],
         "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -2767,11 +2767,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
           }
         ],
         "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -2816,11 +2816,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
           }
         ],
         "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -2865,11 +2865,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
           }
         ],
         "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
@@ -2914,11 +2914,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
           }
         ],
         "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
@@ -2963,7 +2963,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -3012,7 +3012,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -3061,7 +3061,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -3110,7 +3110,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -3159,7 +3159,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -3208,7 +3208,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -3259,7 +3259,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
           }
         ],
         "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -3305,11 +3305,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
           }
         ],
         "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -3354,7 +3354,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            "reference": "api-compatibility:round55/versioned-api-compatibility-layer"
           }
         ],
         "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
@@ -3400,11 +3400,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            "reference": "api-compatibility:round55/workbook-api-issues#pivot-handle-introspection"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            "reference": "api-compatibility:round55/pivot-handle-introspection-gap"
           }
         ],
         "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
@@ -3449,11 +3449,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
           }
         ],
         "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -3496,11 +3496,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract#likely-root-cause"
           }
         ],
         "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
@@ -3543,11 +3543,11 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
           },
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
           }
         ],
         "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -3589,11 +3589,11 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            "reference": "api-compatibility:round55/imported-chart-id-alias-contract"
           },
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            "reference": "api-compatibility:round55/workbook-api-issues#describe--describerange-on-sheets-with-imported-charts"
           }
         ],
         "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
@@ -3635,7 +3635,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -3683,7 +3683,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
@@ -3731,7 +3731,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -3780,7 +3780,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
@@ -3829,7 +3829,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -3876,7 +3876,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
           }
         ],
         "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -3923,11 +3923,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability"
           }
         ],
         "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -3973,7 +3973,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
@@ -4020,7 +4020,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability#stale-hint-surface"
           }
         ],
         "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
@@ -4067,11 +4067,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsgetcharts"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            "reference": "api-compatibility:round55/imported-chart-api-discoverability"
           }
         ],
         "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
@@ -4117,7 +4117,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -4166,7 +4166,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
@@ -4215,7 +4215,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -4264,7 +4264,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
@@ -4313,11 +4313,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
           }
         ],
         "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -4361,11 +4361,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            "reference": "api-compatibility:round55/workbook-api-issues#wsdescriberange-with-no-range"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            "reference": "api-compatibility:round55/describe-range-no-arg-startrow"
           }
         ],
         "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
@@ -4409,7 +4409,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -4458,7 +4458,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
@@ -4507,7 +4507,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -4556,7 +4556,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
@@ -4605,7 +4605,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -4654,7 +4654,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
@@ -4703,7 +4703,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -4752,7 +4752,7 @@
         "evidence": [
           {
             "source": "prior_version",
-            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            "reference": "api-compatibility:round5/namespaced-sub-apis"
           }
         ],
         "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
@@ -4801,11 +4801,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
           }
         ],
         "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
@@ -4850,11 +4850,11 @@
         "evidence": [
           {
             "source": "trace",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            "reference": "api-compatibility:round55/workbook-api-issues#setitemvisibility"
           },
           {
             "source": "source",
-            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            "reference": "api-compatibility:round55/pivot-set-item-visibility-contract"
           }
         ],
         "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",

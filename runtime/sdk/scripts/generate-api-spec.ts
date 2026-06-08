@@ -35,7 +35,10 @@ import {
   compatibilityReferencesForPath,
   generateApiCompatibilityIndex,
 } from './api-compatibility-generation';
-import type { ApiCompatibilityIndex, ApiCompatibilityReference } from '../src/api-compatibility/types';
+import type {
+  ApiCompatibilityIndex,
+  ApiCompatibilityReference,
+} from '../src/api-compatibility/types';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -1811,10 +1814,7 @@ const API_GUIDANCE_SCHEMA = {
           type: 'array',
           minItems: 1,
           items: {
-            oneOf: [
-              { $ref: '#/$defs/symbolMatcher' },
-              { $ref: '#/$defs/compoundMatcher' },
-            ],
+            oneOf: [{ $ref: '#/$defs/symbolMatcher' }, { $ref: '#/$defs/compoundMatcher' }],
           },
         },
         message: { type: 'string', minLength: 1 },

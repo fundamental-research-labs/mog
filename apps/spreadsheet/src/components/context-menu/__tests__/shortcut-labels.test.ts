@@ -1,7 +1,4 @@
-import {
-  getFormatCellsContextMenuShortcut,
-  platformFromShellInfo,
-} from '../shortcut-labels';
+import { getFormatCellsContextMenuShortcut, platformFromShellInfo } from '../shortcut-labels';
 
 describe('context menu shortcut labels', () => {
   it('advertises the Format Cells shortcut as Command+1 on macOS', () => {

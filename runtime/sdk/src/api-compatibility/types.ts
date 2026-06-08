@@ -18,12 +18,7 @@ export type ApiCompatibilitySurface =
   | 'python'
   | 'api-eval';
 
-export type ApiCompatibilityAppliesTo =
-  | 'method'
-  | 'property'
-  | 'argument'
-  | 'handle'
-  | 'result';
+export type ApiCompatibilityAppliesTo = 'method' | 'property' | 'argument' | 'handle' | 'result';
 
 export type ApiCompatibilityEvidenceSource =
   | 'trace'

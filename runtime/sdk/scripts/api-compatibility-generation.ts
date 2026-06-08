@@ -274,10 +274,7 @@ export function assertApiCompatibilityIndex(
     ) {
       throw new Error(`Compatibility entry ${entry.id} must name a canonical path`);
     }
-    if (
-      entry.status === 'deprecated_alias' &&
-      (!entry.deprecatedSince || !entry.removeAfter)
-    ) {
+    if (entry.status === 'deprecated_alias' && (!entry.deprecatedSince || !entry.removeAfter)) {
       throw new Error(
         `Deprecated compatibility entry ${entry.id} must include deprecatedSince and removeAfter`,
       );

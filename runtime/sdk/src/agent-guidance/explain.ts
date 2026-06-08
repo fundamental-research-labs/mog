@@ -26,15 +26,11 @@ function inputMatchesSymbol(input: string, matcherSymbol: string): boolean {
 
   if (normalizedMatcher.includes('.')) {
     return (
-      normalizedInput === normalizedMatcher ||
-      normalizedInput.endsWith(`.${normalizedMatcher}`)
+      normalizedInput === normalizedMatcher || normalizedInput.endsWith(`.${normalizedMatcher}`)
     );
   }
 
-  return (
-    normalizedInput === normalizedMatcher ||
-    normalizedInput.endsWith(`.${normalizedMatcher}`)
-  );
+  return normalizedInput === normalizedMatcher || normalizedInput.endsWith(`.${normalizedMatcher}`);
 }
 
 function findForeignMatcher(

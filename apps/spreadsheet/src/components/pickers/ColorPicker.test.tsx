@@ -52,9 +52,7 @@ describe('ColorPicker active swatch state', () => {
       },
     };
 
-    render(
-      <ColorPicker value="#FFFFFF" onChange={() => undefined} theme={duplicateTheme} />,
-    );
+    render(<ColorPicker value="#FFFFFF" onChange={() => undefined} theme={duplicateTheme} />);
 
     const whiteSwatches = screen
       .getAllByTestId('color-swatch')

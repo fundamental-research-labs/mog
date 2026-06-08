@@ -1,9 +1,9 @@
 use super::*;
 use crate::domain::drawings::{CellAnchor, ClientData, Extent, OneCellAnchor};
 use crate::output::results::FullParsedSheet;
+use domain_types::CFRule;
 use domain_types::chart::AnchorPosition;
 use domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps;
-use domain_types::CFRule;
 use ooxml_types::cond_format::{
     CfColor, CfRule as OoxmlCfRule, CfRuleType, Cfvo, CfvoType, DataBar, DataBarAxisPosition,
     DataBarDirection,

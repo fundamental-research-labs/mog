@@ -925,7 +925,9 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
 
   private async infoForPivot(p: DataPivotTableConfig): Promise<PivotTableInfo> {
     const apiConfig = dataConfigToApiConfig(p, p.sourceSheetName);
-    const location = p.outputLocation ? toA1(p.outputLocation.row, p.outputLocation.col) : undefined;
+    const location = p.outputLocation
+      ? toA1(p.outputLocation.row, p.outputLocation.col)
+      : undefined;
     const contentArea = await this.getContentAreaForPivot(this.pivotId(p));
     return {
       name: p.name ?? p.id,

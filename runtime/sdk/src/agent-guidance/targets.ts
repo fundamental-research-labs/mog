@@ -71,7 +71,8 @@ export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation {
         issues.push({
           entryId: entry.id,
           path: replacement.path,
-          reason: 'Replacement path does not resolve to generated API guidance targets or a documented SDK root import.',
+          reason:
+            'Replacement path does not resolve to generated API guidance targets or a documented SDK root import.',
         });
       }
     }

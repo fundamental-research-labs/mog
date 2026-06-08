@@ -22,12 +22,7 @@ export type ApiGuidanceCategory =
   | 'file-io'
   | 'host';
 
-export type ApiGuidanceMatcherKind =
-  | 'member-chain'
-  | 'call'
-  | 'assignment'
-  | 'token'
-  | 'compound';
+export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound';
 
 export interface ApiGuidanceBaseMatcher {
   readonly id: string;
@@ -98,11 +93,7 @@ export interface ApiGuidanceDiagnostic {
   readonly span?: SourceSpan;
 }
 
-export type ApiGuidanceTargetKind =
-  | 'method'
-  | 'property'
-  | 'subApiAccessor'
-  | 'rootImport';
+export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport';
 
 export type ApiGuidanceTargetRoot = 'workbook' | 'worksheet' | 'subApi' | 'rootImport';
 

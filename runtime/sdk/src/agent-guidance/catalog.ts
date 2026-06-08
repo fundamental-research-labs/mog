@@ -8,7 +8,12 @@ export const apiGuidanceCatalog = [
     matchers: [
       { id: 'officejs.excel-run', kind: 'call', symbol: 'Excel.run', confidence: 0.99 },
       { id: 'officejs.office-on-ready', kind: 'call', symbol: 'Office.onReady', confidence: 0.94 },
-      { id: 'officejs.excel-create-workbook', kind: 'call', symbol: 'Excel.createWorkbook', confidence: 0.96 },
+      {
+        id: 'officejs.excel-create-workbook',
+        kind: 'call',
+        symbol: 'Excel.createWorkbook',
+        confidence: 0.96,
+      },
     ],
     message:
       'This looks like Microsoft Office JavaScript spreadsheet API code. You are writing Mog code.',
@@ -21,7 +26,8 @@ export const apiGuidanceCatalog = [
       },
       {
         path: 'createWorkbook',
-        snippet: "import { createWorkbook } from '@mog-sdk/sdk';\nconst wb = await createWorkbook();",
+        snippet:
+          "import { createWorkbook } from '@mog-sdk/sdk';\nconst wb = await createWorkbook();",
         note: 'Root SDK factory, not a workbook member path.',
       },
     ],
@@ -185,7 +191,11 @@ export const apiGuidanceCatalog = [
     dialect: 'officejs',
     category: 'range',
     matchers: [
-      { id: 'officejs.get-used-range-null-object', kind: 'call', symbol: 'getUsedRangeOrNullObject' },
+      {
+        id: 'officejs.get-used-range-null-object',
+        kind: 'call',
+        symbol: 'getUsedRangeOrNullObject',
+      },
       { id: 'officejs.get-range-edge', kind: 'call', symbol: 'getRangeEdge' },
       { id: 'officejs.get-surrounding-region', kind: 'call', symbol: 'getSurroundingRegion' },
       { id: 'officejs.get-resized-range', kind: 'call', symbol: 'getResizedRange' },
@@ -215,8 +225,7 @@ export const apiGuidanceCatalog = [
     ],
     message:
       'Microsoft Office JavaScript spreadsheet range formatting properties are not Mog formatting calls.',
-    suggestion:
-      'Use the worksheet formats API with an explicit range and format object.',
+    suggestion: 'Use the worksheet formats API with an explicit range and format object.',
     mogReplacements: [
       {
         path: 'ws.formats.setRange',
@@ -224,7 +233,8 @@ export const apiGuidanceCatalog = [
       },
       {
         path: 'ws.formats.setCellProperties',
-        snippet: 'await ws.formats.setCellProperties([{ row: 0, col: 0, format: { bold: true } }]);',
+        snippet:
+          'await ws.formats.setCellProperties([{ row: 0, col: 0, format: { bold: true } }]);',
         note: 'Use cell properties for per-cell format matrices.',
       },
       {
@@ -251,9 +261,18 @@ export const apiGuidanceCatalog = [
     suggestion:
       'Use `await ws.tables.add(range, { name, hasHeaders })` and worksheet table row helpers.',
     mogReplacements: [
-      { path: 'ws.tables.add', snippet: 'const table = await ws.tables.add("A1:C10", { name, hasHeaders: true });' },
-      { path: 'ws.tables.addRow', snippet: 'await ws.tables.addRow(table.name, undefined, values);' },
-      { path: 'wb.getSheets', snippet: 'for (const ws of await wb.getSheets()) {\n  // inspect ws.tables\n}' },
+      {
+        path: 'ws.tables.add',
+        snippet: 'const table = await ws.tables.add("A1:C10", { name, hasHeaders: true });',
+      },
+      {
+        path: 'ws.tables.addRow',
+        snippet: 'await ws.tables.addRow(table.name, undefined, values);',
+      },
+      {
+        path: 'wb.getSheets',
+        snippet: 'for (const ws of await wb.getSheets()) {\n  // inspect ws.tables\n}',
+      },
     ],
     confidence: 0.95,
     blocking: true,
@@ -269,7 +288,11 @@ export const apiGuidanceCatalog = [
         kind: 'call',
         symbol: 'column.filter.applyValuesFilter',
       },
-      { id: 'officejs-worksheet-auto-filter-apply', kind: 'call', symbol: 'worksheet.autoFilter.apply' },
+      {
+        id: 'officejs-worksheet-auto-filter-apply',
+        kind: 'call',
+        symbol: 'worksheet.autoFilter.apply',
+      },
       { id: 'officejs-sheet-auto-filter-apply', kind: 'call', symbol: 'sheet.autoFilter.apply' },
     ],
     message:
@@ -282,8 +305,15 @@ export const apiGuidanceCatalog = [
         path: 'ws.filters.setColumnFilter',
         snippet: 'await ws.filters.setColumnFilter(0, { type: "value", values: ["Widget"] });',
       },
-      { path: 'ws.tables.sort.apply', snippet: 'await ws.tables.sort.apply("Table1", [{ columnIndex: 0, ascending: true }]);' },
-      { path: 'ws.sortRange', snippet: 'await ws.sortRange("A1:C10", { columns: [{ columnIndex: 0, ascending: true }], hasHeaders: true });' },
+      {
+        path: 'ws.tables.sort.apply',
+        snippet: 'await ws.tables.sort.apply("Table1", [{ columnIndex: 0, ascending: true }]);',
+      },
+      {
+        path: 'ws.sortRange',
+        snippet:
+          'await ws.sortRange("A1:C10", { columns: [{ columnIndex: 0, ascending: true }], hasHeaders: true });',
+      },
     ],
     confidence: 0.95,
     blocking: true,
@@ -293,13 +323,20 @@ export const apiGuidanceCatalog = [
     dialect: 'officejs',
     category: 'names',
     matchers: [
-      { id: 'officejs-workbook-names-add', kind: 'member-chain', symbol: 'context.workbook.names.add' },
-      { id: 'officejs-workbook-names-get-item', kind: 'member-chain', symbol: 'context.workbook.names.getItem' },
+      {
+        id: 'officejs-workbook-names-add',
+        kind: 'member-chain',
+        symbol: 'context.workbook.names.add',
+      },
+      {
+        id: 'officejs-workbook-names-get-item',
+        kind: 'member-chain',
+        symbol: 'context.workbook.names.getItem',
+      },
       { id: 'officejs-named-item-get-range', kind: 'member-chain', symbol: 'namedItem.getRange' },
       { id: 'officejs-names-items', kind: 'member-chain', symbol: 'names.items' },
     ],
-    message:
-      'Microsoft Office JavaScript spreadsheet named item APIs do not exist in Mog.',
+    message: 'Microsoft Office JavaScript spreadsheet named item APIs do not exist in Mog.',
     suggestion: 'Use the Mog workbook or worksheet names APIs.',
     mogReplacements: [
       { path: 'wb.names.add', snippet: 'await wb.names.add(name, reference);' },
@@ -331,7 +368,7 @@ export const apiGuidanceCatalog = [
       { path: 'wb.toXlsx', snippet: 'const bytes = await wb.toXlsx();' },
       {
         path: 'createWorkbook',
-        snippet: "const wb = await createWorkbook(sourceOrOptions);",
+        snippet: 'const wb = await createWorkbook(sourceOrOptions);',
         note: 'Root SDK factory, not a workbook member path.',
       },
     ],

@@ -76,16 +76,18 @@ fn restore_data_table_saved_values(mirror: &mut CellMirror, saved_values: &[(Cel
     clear_data_table_eval_caches();
 }
 
-fn preserve_imported_data_table_cached_values(
+/// Return the current values for a registered data-table region.
+///
+/// `TABLE()` is a region-owned pseudo-formula, not a normal worksheet function.
+/// If the prepass cannot reconstruct enough of the data-table model to evaluate
+/// a registered region, keep those cells resolved to their current values so
+/// they do not fall through to ordinary formula evaluation as `#CALC!`.
+fn current_data_table_region_values(
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
     region: &DataTableRegionDef,
     id_alloc: &cell_types::IdAllocator,
 ) -> Vec<(CellId, CellValue)> {
-    if region.ooxml_flags.is_none() {
-        return Vec::new();
-    }
-
     let mut values = Vec::new();
     for row in region.start_row..=region.end_row {
         for col in region.start_col..=region.end_col {
@@ -311,7 +313,7 @@ impl super::ComputeCore {
                 // (start_row - 1, start_col) or (start_row, start_col - 1) per
                 // Excel convention, we try the corner first, then fall back.
                 if region.start_row == 0 || region.start_col == 0 {
-                    results.extend(preserve_imported_data_table_cached_values(
+                    results.extend(current_data_table_region_values(
                         mirror,
                         &sheet_id,
                         region,
@@ -334,7 +336,7 @@ impl super::ComputeCore {
                 }) {
                     Some(pair) => pair,
                     None => {
-                        results.extend(preserve_imported_data_table_cached_values(
+                        results.extend(current_data_table_region_values(
                             mirror,
                             &sheet_id,
                             region,
@@ -360,7 +362,7 @@ impl super::ComputeCore {
 
                 // Must have at least one input cell
                 if row_input_cell.is_none() && col_input_cell.is_none() {
-                    results.extend(preserve_imported_data_table_cached_values(
+                    results.extend(current_data_table_region_values(
                         mirror,
                         &sheet_id,
                         region,
@@ -419,11 +421,10 @@ impl super::ComputeCore {
 
                 // 3d½: Batch-materialize body cell CellIds.
                 //
-                // XLSX-parsed data table body cells often exist only in col_data
-                // (dense column storage) without pos_to_id entries. Without CellIds
-                // the write-back loop silently drops computed values. Call
-                // ensure_cell_id() for every body position before evaluation so the
-                // write-back is infallible.
+                // Densely hydrated data table cells can exist only in col_data
+                // without pos_to_id entries. Without CellIds the write-back loop
+                // silently drops computed values. Call ensure_cell_id() for every
+                // body position before evaluation so the write-back is infallible.
                 let body_rows = (region.end_row - region.start_row + 1) as usize;
                 let body_cols = (region.end_col - region.start_col + 1) as usize;
                 let mut body_cell_ids: Vec<Vec<Option<CellId>>> = Vec::with_capacity(body_rows);

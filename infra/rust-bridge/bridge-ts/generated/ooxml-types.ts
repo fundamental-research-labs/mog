@@ -331,6 +331,11 @@ export interface Chart {
   plot_vis_only: boolean | null;
   disp_blanks_as: DisplayBlanksAs | null;
   show_d_lbls_over_max: boolean | null;
+  show_all_field_buttons?: boolean;
+  show_axis_field_buttons?: boolean;
+  show_legend_field_buttons?: boolean;
+  show_value_field_buttons?: boolean;
+  show_report_filter_field_buttons?: boolean;
   pivot_fmts: PivotFmt[];
   extensions: ExtensionEntry[];
   has_empty_ext_lst: boolean;

@@ -105,7 +105,7 @@ function callPattern(symbol: string): RegExp {
 }
 
 function assignmentPattern(symbol: string): RegExp {
-  const property = symbol.match(/\.([A-Za-z_$][\w$]*)\s*=/)?.[1];
+  const property = symbol.match(/\.([A-Za-z_$][\w$]*)(?:\s*=)?$/)?.[1];
   if (!property) return chainPattern(symbol);
   return new RegExp(`\\b[A-Za-z_$][\\w$]*\\s*\\.\\s*${escapeRegExp(property)}\\s*=`, 'g');
 }
@@ -131,24 +131,44 @@ function shouldSuppressLocalFalsePositive(
   stripped: string,
   matcher: ApiGuidanceSymbolMatcher,
 ): boolean {
-  if (matcher.symbol.startsWith('Excel.') && hasLocalDeclaration(stripped, 'Excel')) {
+  const excelIsLocal = hasLocalDeclaration(stripped, 'Excel');
+  const officeIsLocal = hasLocalDeclaration(stripped, 'Office');
+  const contextIsLocal = hasLocalDeclaration(stripped, 'context');
+  const hasOfficeSignal =
+    (!excelIsLocal && /Excel\s*\.\s*run\s*\(/.test(stripped)) ||
+    (!officeIsLocal && /Office\s*\.\s*context/.test(stripped)) ||
+    (!contextIsLocal &&
+      (/context\s*\.\s*workbook/.test(stripped) || /context\s*\.\s*sync\s*\(/.test(stripped)));
+  const requiresOfficeSignal = new Set([
+    'worksheet.tables.add',
+    'sheet.tables.add',
+    'table.rows.add',
+    'table.columns.add',
+    'table.sort.apply',
+    'column.filter.applyValuesFilter',
+    'worksheet.autoFilter.apply',
+    'sheet.autoFilter.apply',
+    'names.items',
+  ]);
+
+  if (requiresOfficeSignal.has(matcher.symbol) && !hasOfficeSignal) {
     return true;
   }
-  if (matcher.symbol.startsWith('Office.') && hasLocalDeclaration(stripped, 'Office')) {
+
+  if (matcher.symbol.startsWith('Excel.') && excelIsLocal) {
     return true;
   }
-  if (matcher.symbol.startsWith('context.') && hasLocalDeclaration(stripped, 'context')) {
+  if (matcher.symbol.startsWith('Office.') && officeIsLocal) {
+    return true;
+  }
+  if (matcher.symbol.startsWith('context.') && contextIsLocal) {
     return true;
   }
   return false;
 }
 
 function referencesFor(replacements: readonly MogReplacement[]): string[] {
-  return replacements.map((replacement) =>
-    replacement.path.includes('.')
-      ? `api.guidance.explain("${replacement.path}")`
-      : `api.describe()`,
-  );
+  return replacements.map((replacement) => `api.guidance.explain("${replacement.path}")`);
 }
 
 export function diagnosticFromGuidanceEntry(

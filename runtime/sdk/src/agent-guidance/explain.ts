@@ -26,8 +26,7 @@ function inputMatchesSymbol(input: string, matcherSymbol: string): boolean {
   if (normalizedMatcher.includes('.')) {
     return (
       normalizedInput === normalizedMatcher ||
-      normalizedInput.endsWith(`.${normalizedMatcher}`) ||
-      normalizedMatcher.endsWith(`.${normalizedInput}`)
+      normalizedInput.endsWith(`.${normalizedMatcher}`)
     );
   }
 

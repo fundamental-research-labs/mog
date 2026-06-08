@@ -1,87 +1,116 @@
-import { api, analyzeMogCode, explainApiSymbol, validateApiGuidanceCatalog } from '../src';
+import generatedGuidance from '../src/generated/api-guidance.json';
+import { api } from '../src/api-describe';
+import {
+  analyzeMogCode,
+  apiGuidanceCatalog,
+  apiGuidanceCatalogValidation,
+  preflightMogCode,
+  resolveGuidanceTarget,
+} from '../src/agent-guidance';
 
-describe('agent API guidance', () => {
-  it('explains OfficeJS active worksheet access with a Mog replacement', () => {
-    const explanation = api.guidance.explain('context.workbook.worksheets.getActiveWorksheet');
-
-    expect(explanation?.kind).toBe('foreign-api-dialect');
-    if (explanation?.kind !== 'foreign-api-dialect') return;
-    expect(explanation.diagnostic.code).toBe('MOG001_FOREIGN_API_DIALECT');
-    expect(explanation.diagnostic.dialect).toBe('officejs');
-    expect(explanation.diagnostic.mogReplacements).toContainEqual({
-      path: 'wb.activeSheet',
-      snippet: 'const ws = wb.activeSheet;',
-    });
+describe('SDK agent API guidance', () => {
+  it('keeps the generated guidance artifact in sync with the typed catalog', () => {
+    expect(generatedGuidance.entries).toEqual(apiGuidanceCatalog);
   });
 
-  it('explains generated Mog target metadata for sync properties', () => {
-    const explanation = explainApiSymbol('wb.activeSheet');
+  it('validates every catalog replacement path against generated guidance targets or root imports', () => {
+    expect(apiGuidanceCatalogValidation).toEqual({ valid: true, issues: [] });
 
-    expect(explanation?.kind).toBe('mog-api');
-    if (explanation?.kind !== 'mog-api') return;
-    expect(explanation.target.kind).toBe('property');
-    expect(explanation.target.asyncModel).toBe('sync');
-    expect(explanation.target.signature).toContain('activeSheet');
+    for (const entry of apiGuidanceCatalog) {
+      for (const replacement of entry.mogReplacements) {
+        expect(resolveGuidanceTarget(replacement.path)).toBeTruthy();
+      }
+    }
   });
 
-  it('analyzes common OfficeJS residue without reading comments or string literals', () => {
-    const diagnostics = analyzeMogCode(`
-      // Excel.run and context.sync() are documentation text.
-      const text = "range.values = [[1]]";
+  it('explains wrong OfficeJS symbols and real Mog paths through api.guidance', () => {
+    const wrong = api.guidance.explain('context.workbook.worksheets.getActiveWorksheet');
+
+    expect(wrong?.kind).toBe('foreign-api-dialect');
+    if (wrong?.kind !== 'foreign-api-dialect') throw new Error('expected foreign guidance');
+    expect(wrong.diagnostic.code).toBe('MOG001_FOREIGN_API_DIALECT');
+    expect(wrong.diagnostic.mogReplacements).toContainEqual(
+      expect.objectContaining({ path: 'wb.activeSheet' }),
+    );
+
+    const activeSheet = api.guidance.explain('wb.activeSheet');
+    expect(activeSheet?.kind).toBe('mog-api');
+    if (activeSheet?.kind !== 'mog-api') throw new Error('expected Mog API guidance');
+    expect(activeSheet.target.kind).toBe('property');
+    expect(activeSheet.target.interface).toBe('Workbook');
+
+    const rootImport = api.guidance.explain('createWorkbook');
+    expect(rootImport?.kind).toBe('mog-api');
+    if (rootImport?.kind !== 'mog-api') throw new Error('expected root import guidance');
+    expect(rootImport.target.kind).toBe('rootImport');
+  });
+
+  it('analyzes and preflights common OfficeJS residue without executing code', () => {
+    const source = `
       await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const range = sheet.getRange("A1:B2");
         range.values = [[1, 2], [3, 4]];
         await context.sync();
       });
-    `);
+    `;
 
-    expect(diagnostics.some((diagnostic) => diagnostic.matcherId === 'officejs.excel-run')).toBe(
-      true,
-    );
+    const diagnostics = analyzeMogCode(source);
+    const matcherIds = diagnostics.map((diagnostic) => diagnostic.matcherId);
+
+    expect(matcherIds).toContain('officejs.excel-run');
+    expect(matcherIds).toContain('officejs.context-workbook-active-worksheet');
+    expect(matcherIds).toContain('officejs.range-values-assignment');
+    expect(matcherIds).toContain('officejs.context-sync');
+    expect(diagnostics.some((diagnostic) => diagnostic.blocking)).toBe(true);
     expect(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.matcherId === 'officejs.context-workbook-active-worksheet' &&
-          diagnostic.mogReplacements.some((replacement) => replacement.path === 'wb.activeSheet'),
-      ),
-    ).toBe(true);
-    expect(
-      diagnostics.some(
-        (diagnostic) =>
-          diagnostic.matcherId === 'officejs.range-values-assignment' &&
-          diagnostic.mogReplacements.some((replacement) => replacement.path === 'ws.setRange'),
-      ),
-    ).toBe(true);
+      diagnostics.flatMap((diagnostic) => diagnostic.mogReplacements).map((replacement) => replacement.path),
+    ).toContain('ws.setRange');
+
+    const preflight = preflightMogCode(source);
+    expect(preflight.ok).toBe(false);
+    expect(preflight.diagnostics).toEqual(diagnostics);
   });
 
-  it('does not block comments, strings, valid Mog code, or unrelated local identifiers', () => {
-    const diagnostics = api.guidance.analyze(`
-      // Excel.run appears in a comment.
-      const message = "context.sync() appears in documentation";
-      const Excel = { run: () => "not OfficeJS" };
-      const context = { sync: () => "local" };
-      const ws = wb.activeSheet;
-      await ws.setCell("A1", message + Excel.run() + context.sync());
-      const values = Object.values({ a: 1 });
-      await ws.getRange("A1");
-    `);
-
-    expect(diagnostics.filter((diagnostic) => diagnostic.blocking)).toEqual([]);
-  });
-
-  it('preflight blocks high-confidence wrong-dialect code', () => {
-    const result = api.guidance.preflight(`
+  it('detects formatting, table/filter, names, file, and range-navigation categories', () => {
+    const source = `
       await Excel.run(async (context) => {
-        await context.sync();
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const range = sheet.getRange("A1:B2");
+        range.format.fill.color = "#fff";
+        range.getUsedRangeOrNullObject();
+        const table = sheet.tables.add("A1:B2", true);
+        table.sort.apply([{ key: 0, ascending: true }]);
+        context.workbook.names.add("Total", "=Sheet1!A1");
+        Office.context.document.getFileAsync("compressed", () => {});
       });
-    `);
+    `;
 
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics[0]?.code).toBe('MOG001_FOREIGN_API_DIALECT');
+    const categories = new Set(analyzeMogCode(source).map((diagnostic) => diagnostic.category));
+
+    expect(categories.has('formatting')).toBe(true);
+    expect(categories.has('filters')).toBe(true);
+    expect(categories.has('names')).toBe(true);
+    expect(categories.has('file-io')).toBe(true);
+    expect(categories.has('range')).toBe(true);
+    expect(categories.has('tables')).toBe(true);
   });
 
-  it('validates every catalog replacement against generated target metadata', () => {
-    expect(validateApiGuidanceCatalog()).toEqual({ valid: true, issues: [] });
+  it('does not match comments, strings, valid Mog code, or ordinary local Excel/context identifiers', () => {
+    const source = `
+      // await Excel.run(async (context) => context.sync());
+      const text = "context.workbook.worksheets.getActiveWorksheet(); range.values = []";
+      const worksheet = wb.activeSheet;
+      await worksheet.tables.add("A1:B2", { hasHeaders: true });
+      await ws.setRange("A1:B2", [[1, 2], [3, 4]]);
+      const Excel = { run() {} };
+      const context = { sync() {} };
+      Excel.run();
+      context.sync();
+      console.log(text, Excel, context);
+    `;
+
+    expect(analyzeMogCode(source)).toEqual([]);
+    expect(api.guidance.preflight(source)).toEqual({ ok: true, diagnostics: [] });
   });
 });

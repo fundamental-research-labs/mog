@@ -140,6 +140,12 @@ function declarationEntriesForPackage(inventory, manifest) {
   return [...entries].filter((entry) => /\.(?:d\.ts|d\.cts|d\.mts)$/.test(entry)).sort();
 }
 
+function hasBinEntries(manifest) {
+  if (!manifest.bin) return false;
+  if (typeof manifest.bin === 'string') return true;
+  return typeof manifest.bin === 'object' && !Array.isArray(manifest.bin) && Object.keys(manifest.bin).length > 0;
+}
+
 function loadRequiredPackages() {
   const inventory = parseJsonc(resolve(__dirname, 'package-inventory.jsonc'));
   const workspacePackages = discoverWorkspacePackages();
@@ -168,6 +174,13 @@ function loadRequiredPackages() {
     }
 
     const entries = declarationEntriesForPackage(inventory, workspacePackage.manifest);
+    if (entries.length === 0 && hasBinEntries(workspacePackage.manifest)) {
+      skipped.push({
+        name: packageName,
+        reason: 'bin-only package not covered by declaration rollup checker',
+      });
+      continue;
+    }
     required.push({
       name: packageName,
       packageDir: workspacePackage.dir,

@@ -634,6 +634,9 @@ function validatePackedManifest(manifest, fileList, optionalArtifactFiles) {
       errors.push(`devDependencies.${depName} exposes private native package`);
     }
   }
+  if (manifest.devDependencies && Object.keys(manifest.devDependencies).length > 0) {
+    errors.push(`public packed manifest must not include devDependencies`);
+  }
 
   if (isForbiddenInternalPackage(packageName)) {
     errors.push(`pack target itself is forbidden internal package ${packageName}`);
@@ -651,6 +654,25 @@ function validatePackedManifest(manifest, fileList, optionalArtifactFiles) {
   for (const exportTarget of collectExportTargets(manifest.exports)) {
     if (!packedPathExists(fileList, exportTarget)) {
       errors.push(`exports target ${exportTarget} is not included in packed tarball`);
+    }
+  }
+
+  for (const [binName, binTarget] of binEntries(manifest)) {
+    if (!String(binTarget).startsWith('./dist/')) {
+      errors.push(`bin.${binName} target ${binTarget} must point at ./dist/*`);
+    }
+    if (!packedPathExists(fileList, binTarget)) {
+      errors.push(`bin.${binName} target ${binTarget} is not included in packed tarball`);
+    }
+  }
+
+  for (const filePath of fileList) {
+    if (
+      filePath.startsWith('src/') ||
+      filePath.startsWith('testing/') ||
+      filePath.startsWith('scripts/')
+    ) {
+      errors.push(`source/test/internal script file packed: ${filePath}`);
     }
   }
 
@@ -700,6 +722,13 @@ function reportAndExit(gateName) {
 
   console.log(`\n${gateName} PASSED`);
   process.exit(0);
+}
+
+function binEntries(manifest) {
+  if (!manifest.bin) return [];
+  if (typeof manifest.bin === 'string') return [[manifest.name ?? '<unnamed>', manifest.bin]];
+  if (typeof manifest.bin !== 'object' || Array.isArray(manifest.bin)) return [];
+  return Object.entries(manifest.bin).filter(([, target]) => typeof target === 'string');
 }
 
 function collectDevelopmentExportSubpaths(exportsField) {

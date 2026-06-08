@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "schemaVersion",
+    "package",
     "compatibility",
     "interfaces",
     "subApis",
@@ -14,6 +15,23 @@
   "properties": {
     "schemaVersion": {
       "const": "1"
+    },
+    "package": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "@mog-sdk/sdk"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "compatibility": {
       "type": "object",

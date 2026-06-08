@@ -623,13 +623,26 @@
     "forbiddenRuntimeDeps": [],
   },
 
-  // ── private (product apps, native binaries, servers) ──────────────────
   "@mog-sdk/cli": {
-    "disposition": "private",
-    "requirePrivate": true,
-    "publicTarget": null,
-    "forbiddenRuntimeDeps": [],
+    "disposition": "ship-public",
+    "requirePrivate": false,
+    "publicTarget": "@mog-sdk/cli",
+    "forbiddenRuntimeDeps": [
+      "@mog/*",
+      "@mog-sdk/kernel",
+      "@mog-sdk/spreadsheet-contracts",
+      "@mog-sdk/types-*",
+      "@mog/types-*",
+      "@openai/*",
+      "@anthropic-ai/*",
+      "@langchain/*",
+      "openai",
+      "anthropic",
+      "langchain",
+    ],
   },
+
+  // ── private (product apps, native binaries, servers) ──────────────────
   "@mog/app-spreadsheet": {
     "disposition": "private",
     "requirePrivate": true,

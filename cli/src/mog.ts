@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { api, createWorkbook, Utils, type Workbook } from '@mog-sdk/sdk/node';
 import {
+  isNamedPipePath,
   parseCliArgs,
   pidPathForState,
   socketPathForState,
@@ -155,8 +156,16 @@ function sendRequest(stateKey: string, request: DaemonRequest): Promise<DaemonRe
 async function runDaemon(stateKey: string): Promise<void> {
   const socketPath = socketPathForState(stateKey);
   const pidPath = pidPathForState(stateKey);
-  if (existsSync(socketPath)) {
+  if (!isNamedPipePath(socketPath)) {
+    await mkdir(dirname(socketPath), { recursive: true });
+  }
+  await mkdir(dirname(pidPath), { recursive: true });
+
+  if (!isNamedPipePath(socketPath) && existsSync(socketPath)) {
     unlinkSync(socketPath);
+  }
+  if (existsSync(pidPath)) {
+    unlinkSync(pidPath);
   }
 
   const server = net.createServer({ allowHalfOpen: true }, (socket) => {
@@ -166,7 +175,7 @@ async function runDaemon(stateKey: string): Promise<void> {
       data += chunk;
     });
     socket.on('end', () => {
-      void handleRawRequest(data, server).then((response) => {
+      void handleRawRequest(data, server, { socketPath, pidPath }).then((response) => {
         socket.end(JSON.stringify(response));
       });
     });
@@ -182,12 +191,8 @@ async function runDaemon(stateKey: string): Promise<void> {
   });
 
   const cleanup = async () => {
-    for (const entry of workbooks.values()) {
-      await Promise.resolve(entry.workbook.dispose());
-    }
-    workbooks.clear();
-    await unlink(socketPath).catch(() => undefined);
-    await unlink(pidPath).catch(() => undefined);
+    await disposeAllWorkbooks();
+    await cleanupStateFiles(socketPath, pidPath);
   };
 
   process.once('SIGTERM', () => {
@@ -198,10 +203,14 @@ async function runDaemon(stateKey: string): Promise<void> {
   });
 }
 
-async function handleRawRequest(raw: string, server: net.Server): Promise<DaemonResponse> {
+async function handleRawRequest(
+  raw: string,
+  server: net.Server,
+  stateFiles: { socketPath: string; pidPath: string },
+): Promise<DaemonResponse> {
   try {
     const request = JSON.parse(raw) as DaemonRequest;
-    return { ok: true, result: await handleRequest(request, server) };
+    return { ok: true, result: await handleRequest(request, server, stateFiles) };
   } catch (error) {
     return {
       ok: false,
@@ -213,7 +222,11 @@ async function handleRawRequest(raw: string, server: net.Server): Promise<Daemon
   }
 }
 
-async function handleRequest(request: DaemonRequest, server: net.Server): Promise<unknown> {
+async function handleRequest(
+  request: DaemonRequest,
+  server: net.Server,
+  stateFiles: { socketPath: string; pidPath: string },
+): Promise<unknown> {
   switch (request.method) {
     case 'ping':
       return { status: 'ok', handles: workbooks.size };
@@ -282,13 +295,26 @@ async function handleRequest(request: DaemonRequest, server: net.Server): Promis
     case 'list':
       return [...workbooks.values()].map(describeEntry);
     case 'shutdown':
-      for (const entry of workbooks.values()) {
-        await Promise.resolve(entry.workbook.dispose());
-      }
-      workbooks.clear();
-      server.close();
+      await disposeAllWorkbooks();
+      server.close(() => {
+        void cleanupStateFiles(stateFiles.socketPath, stateFiles.pidPath);
+      });
       return { shutdown: true };
   }
+}
+
+async function disposeAllWorkbooks(): Promise<void> {
+  for (const entry of workbooks.values()) {
+    await Promise.resolve(entry.workbook.dispose());
+  }
+  workbooks.clear();
+}
+
+async function cleanupStateFiles(socketPath: string, pidPath: string): Promise<void> {
+  if (!isNamedPipePath(socketPath)) {
+    await unlink(socketPath).catch(() => undefined);
+  }
+  await unlink(pidPath).catch(() => undefined);
 }
 
 function requireWorkbook(id: string): WorkbookEntry {

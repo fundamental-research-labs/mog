@@ -141,7 +141,15 @@ function verifyPackageArtifact(pkg, inventory) {
 
   errors.push(...ensurePrivateFriendArtifactsExist(inventory, pkg.manifest, pkg.dir));
 
+  if (hasBinEntries(pkg.manifest)) {
+    errors.push(...verifyBinArtifacts(pkg.manifest, pkg.dir, relDir));
+  }
+
   const targets = collectPublicExportTargets(inventory, pkg.manifest);
+  if (targets.size === 0 && hasBinEntries(pkg.manifest)) {
+    return errors;
+  }
+
   const distTargets = [...targets].filter((target) => target.startsWith('./dist/'));
   if (distTargets.length === 0) {
     errors.push(`${pkg.manifest.name} (${relDir}): export map has no ./dist/* artifact targets`);
@@ -161,6 +169,44 @@ function verifyPackageArtifact(pkg, inventory) {
     errors.push(`${pkg.manifest.name} (${relDir}): export map has no declaration artifact targets`);
   }
 
+  return errors;
+}
+
+function hasBinEntries(manifest) {
+  return binTargets(manifest).length > 0;
+}
+
+function binTargets(manifest) {
+  if (!manifest.bin) return [];
+  if (typeof manifest.bin === 'string') return [manifest.bin];
+  if (typeof manifest.bin !== 'object' || Array.isArray(manifest.bin)) return [];
+  return Object.values(manifest.bin).filter((target) => typeof target === 'string');
+}
+
+function verifyBinArtifacts(manifest, packageRoot, relDir) {
+  const errors = [];
+  for (const target of binTargets(manifest)) {
+    if (!target.startsWith('./dist/')) {
+      errors.push(`${manifest.name} (${relDir}): bin target ${target} must point at ./dist/*`);
+      continue;
+    }
+
+    const targetPath = join(packageRoot, target);
+    if (!existsSync(targetPath)) {
+      errors.push(`${manifest.name} (${relDir}): missing bin artifact ${target}`);
+      continue;
+    }
+
+    const source = readFileSync(targetPath, 'utf8');
+    if (!source.startsWith('#!')) {
+      errors.push(`${manifest.name} (${relDir}): bin artifact ${target} is missing a shebang`);
+    }
+
+    const mode = statSync(targetPath).mode;
+    if ((mode & 0o111) === 0) {
+      errors.push(`${manifest.name} (${relDir}): bin artifact ${target} is not executable`);
+    }
+  }
   return errors;
 }
 

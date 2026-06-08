@@ -10,11 +10,14 @@ on:
         type: choice
         options:
           - 'true'
-          - 'false'
 
 permissions:
   contents: read
-  id-token: write
+
+env:
+  NODE_VERSION: '24.16.0'
+  PNPM_VERSION: '11.5.0'
+  NPM_VERSION: '11.16.0'
 
 jobs:
   package:
@@ -26,15 +29,15 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.18.3
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      - run: npm install -g npm@^11.5.1
+      - run: npm install -g "npm@$NPM_VERSION"
 
       - run: pnpm install --frozen-lockfile
 
@@ -43,7 +46,7 @@ jobs:
           CLI_VERSION=$(node -p "require('./cli/package.json').version")
           SDK_VERSION=$(node -p "require('./runtime/sdk/package.json').version")
           if [ "$CLI_VERSION" != "$SDK_VERSION" ]; then
-            echo "@mog-sdk/cli version ${CLI_VERSION} does not match @mog-sdk/node ${SDK_VERSION}."
+            echo "@mog-sdk/cli version ${CLI_VERSION} does not match @mog-sdk/sdk ${SDK_VERSION}."
             exit 1
           fi
 
@@ -72,20 +75,15 @@ jobs:
     steps:
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.14.0
+          node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
 
-      - run: npm install -g npm@^11.5.1
+      - run: npm install -g "npm@$NPM_VERSION"
 
-      - name: Configure npm token fallback
+      - name: Verify npm version
         run: |
-          if [ -n "${NPM_TOKEN:-}" ]; then
-            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          else
-            echo "NPM_TOKEN is not configured; npm will use trusted publishing if available."
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm --version
+          echo "No NPM_TOKEN fallback is configured. Production npm publish runs through publish-sdk.yml trusted publishing."
 
       - uses: actions/download-artifact@v4
         with:
@@ -96,41 +94,3 @@ jobs:
         run: |
           TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
           npm publish "$TARBALL" --access public --dry-run
-
-  publish:
-    name: Publish @mog-sdk/cli to npm
-    runs-on: ubuntu-latest
-    needs: package
-    if: ${{ inputs.dry_run == 'false' }}
-    environment: npm-production
-    concurrency:
-      group: npm-production
-      cancel-in-progress: false
-
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.14.0
-          registry-url: https://registry.npmjs.org
-
-      - run: npm install -g npm@^11.5.1
-
-      - name: Configure npm token fallback
-        run: |
-          if [ -n "${NPM_TOKEN:-}" ]; then
-            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          else
-            echo "NPM_TOKEN is not configured; npm will use trusted publishing if available."
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: mog-sdk-cli-npm-package
-          path: artifacts/npm
-
-      - name: Publish CLI package
-        run: |
-          TARBALL=$(ls artifacts/npm/mog-sdk-cli-*.tgz)
-          npm publish "$TARBALL" --access public

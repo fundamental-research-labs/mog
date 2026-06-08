@@ -37,7 +37,7 @@ import type {
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
 import { KernelError } from '../../../errors';
-import { toA1 } from '../../internal/utils';
+import { rangeToA1, toA1 } from '../../internal/utils';
 import { buildPivotTableHandle } from './handle';
 import { dataConfigToApiConfig } from './config-conversion';
 import {
@@ -248,23 +248,26 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     } catch {
       return [];
     }
-    return pivots.map((p) => {
-      const apiConfig = dataConfigToApiConfig(p, p.sourceSheetName);
-      const location = p.outputLocation
-        ? toA1(p.outputLocation.row, p.outputLocation.col)
-        : undefined;
-      return {
-        name: p.name ?? p.id,
-        dataSource: apiConfig.dataSource,
-        contentArea: '',
-        filterArea: undefined,
-        location,
-        rowFields: apiConfig.rowFields,
-        columnFields: apiConfig.columnFields,
-        valueFields: apiConfig.valueFields,
-        filterFields: apiConfig.filterFields,
-      };
-    });
+    return Promise.all(
+      pivots.map(async (p) => {
+        const apiConfig = dataConfigToApiConfig(p, p.sourceSheetName);
+        const location = p.outputLocation
+          ? toA1(p.outputLocation.row, p.outputLocation.col)
+          : undefined;
+        const contentArea = await this.getContentAreaForPivot(p.id ?? p.name);
+        return {
+          name: p.name ?? p.id,
+          dataSource: apiConfig.dataSource,
+          contentArea,
+          filterArea: undefined,
+          location,
+          rowFields: apiConfig.rowFields,
+          columnFields: apiConfig.columnFields,
+          valueFields: apiConfig.valueFields,
+          filterFields: apiConfig.filterFields,
+        };
+      }),
+    );
   }
 
   async get(pivotRef: string | DataPivotTableConfig): Promise<PivotTableHandle | null> {
@@ -287,10 +290,11 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     const location = pivot.outputLocation
       ? toA1(pivot.outputLocation.row, pivot.outputLocation.col)
       : undefined;
+    const contentArea = await this.getContentAreaForPivot(pivot.id ?? pivot.name);
     return {
       name: pivot.name ?? pivot.id,
       dataSource: apiConfig.dataSource,
-      contentArea: '',
+      contentArea,
       filterArea: undefined,
       location,
       rowFields: apiConfig.rowFields,
@@ -856,5 +860,10 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
         addPivotCalculatedFieldToId({ ctx: this.ctx, sheetId: this.sheetId, pivotId, field }),
       setDataSource: (pivotId, dataSource) => this.setDataSourceForHandle(pivotId, dataSource),
     });
+  }
+
+  private async getContentAreaForPivot(pivotId: string): Promise<string> {
+    const range = await getPivotRangeForId({ ctx: this.ctx, sheetId: this.sheetId, pivotId });
+    return range ? rangeToA1(range) : '';
   }
 }

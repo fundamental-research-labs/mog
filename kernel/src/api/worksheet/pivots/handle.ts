@@ -29,6 +29,7 @@ import {
   automaticPivotValueDisplayName,
   valuePlacementWithAggregate,
 } from '../../../domain/pivots/value-labels';
+import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -433,23 +434,8 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     },
 
     async setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void> {
-      const current = await ctx.pivot.getPivot(sheetId, pivotId);
-      if (!current) return;
-      const visibleKeys = Object.entries(visibleItems)
-        .filter(([, visible]) => visible)
-        .map(([key]) => key);
-      const hiddenKeys = Object.entries(visibleItems)
-        .filter(([, visible]) => !visible)
-        .map(([key]) => key);
-      const filters = current.filters.filter((filter) => filter.fieldId !== fieldId);
-      if (hiddenKeys.length > 0) {
-        filters.push(
-          hiddenKeys.length <= visibleKeys.length
-            ? ({ fieldId, excludeValues: hiddenKeys } as PivotFilter)
-            : ({ fieldId, includeValues: visibleKeys } as PivotFilter),
-        );
-      }
-      await updateCachedPivot({ filters }, 'filterChanged');
+      await setPivotItemVisibilityForId({ ctx, sheetId, pivotId, fieldId, visibleItems });
+      await refreshCachedConfig();
     },
   };
 }

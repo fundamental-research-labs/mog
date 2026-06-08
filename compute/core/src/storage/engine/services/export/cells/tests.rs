@@ -1,6 +1,6 @@
 use super::materialize::build_cell_data_for_cell_id;
 use super::{export_authored_style_runs_for_sheet, export_cells_for_sheet};
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, SheetId, SheetPos};
 use domain_types::{AuthoredStyleRun, CellFormat, DocumentFormat};
 use rustc_hash::FxHashMap;
 use value_types::CellValue;
@@ -267,6 +267,59 @@ fn imported_style_only_blank_cells_do_not_export_as_cells() {
     assert!(
         exported.is_none(),
         "imported style metadata alone should remain range/style metadata, not a physical blank cell"
+    );
+}
+
+#[test]
+fn explicit_blank_cell_export_ignores_col_data_effective_value() {
+    let sheet_id = SheetId::from_raw(104);
+    let blank_cell_id = CellId::from_raw(204);
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(workbook(&sheet_id, vec![])).expect("engine should build");
+    engine
+        .mirror
+        .register_identity_only(&sheet_id, SheetPos::new(0, 0), blank_cell_id);
+    engine
+        .mirror
+        .get_sheet_mut(&sheet_id)
+        .expect("sheet mirror")
+        .col_data
+        .insert(0, vec![number(88.0)]);
+
+    assert_eq!(
+        engine
+            .mirror
+            .get_cell_value_in_sheet(&sheet_id, &blank_cell_id)
+            .cloned(),
+        Some(number(88.0)),
+        "effective reads should still see the materialized col_data value"
+    );
+
+    let props = FxHashMap::default();
+    let array_refs = FxHashMap::default();
+    let formula_metadata = FxHashMap::default();
+    let rich_strings = FxHashMap::default();
+    let mut palette = Vec::new();
+    let palette = LocalPalette::from_vec(&mut palette);
+    let exported = build_cell_data_for_cell_id(
+        &engine.stores,
+        &engine.mirror,
+        &sheet_id,
+        &blank_cell_id,
+        0,
+        0,
+        &props,
+        &array_refs,
+        &formula_metadata,
+        &rich_strings,
+        &palette,
+        true,
+    )
+    .expect("explicit blank should export when preserve_blank is set");
+
+    assert!(
+        exported.value.is_null(),
+        "authored blank cell export must not serialize the materialized col_data value"
     );
 }
 

@@ -25,15 +25,17 @@ pub(super) fn build_cell_data_for_cell_id(
     palette: &impl PaletteOps,
     preserve_blank: bool,
 ) -> Option<CellData> {
-    // Get value: ComputeCore first, then mirror fallback.
-    let value = stores
-        .compute
-        .get_cell_value(mirror, cell_id)
-        .cloned()
+    // Export explicit cells from their stored value, not the effective value.
+    // Effective reads fall back to range/projection col_data for Null ghost
+    // cells; that is correct for formulas and viewport reads, but it would turn
+    // authored blank/style-only cells into real XLSX value cells on save.
+    let value = mirror
+        .get_cell_value_raw(cell_id)
+        .map(export_scalar_value)
         .unwrap_or_else(|| {
             mirror
                 .get_cell_value_in_sheet(sheet_id, cell_id)
-                .cloned()
+                .map(export_scalar_value)
                 .unwrap_or(CellValue::Null)
         });
 
@@ -125,6 +127,13 @@ pub(super) fn build_cell_data_for_cell_id(
         original_value,
         projection_role: ImportedCellProjectionRole::Normal,
     })
+}
+
+fn export_scalar_value(value: &CellValue) -> CellValue {
+    match value {
+        CellValue::Array(array) => array.get(0, 0).cloned().unwrap_or(CellValue::Null),
+        value => value.clone(),
+    }
 }
 
 fn is_imported_style_only_blank(

@@ -38,7 +38,7 @@ import type {
 import type { DocumentContext } from '../../../context';
 import { KernelError } from '../../../errors';
 import { rangeToA1, toA1 } from '../../internal/utils';
-import { buildPivotTableHandle } from './handle';
+import { buildPivotTableHandle, type PivotHandleSnapshotRegistry } from './handle';
 import { dataConfigToApiConfig } from './config-conversion';
 import {
   convertSimpleToDataConfig,
@@ -102,16 +102,79 @@ import {
   getPivotRangeForId,
   getPivotRowLabelRangeByName,
 } from '../../../domain/pivots/ranges';
+import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+
+type PivotSnapshotEntry =
+  | { readonly status: 'live'; readonly config: DataPivotTableConfig }
+  | { readonly status: 'deleted' };
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
+  private readonly pivotSnapshots = new Map<string, PivotSnapshotEntry>();
+  private readonly snapshots: PivotHandleSnapshotRegistry = {
+    get: (pivotId) => {
+      const entry = this.pivotSnapshots.get(pivotId);
+      return entry?.status === 'live' ? entry.config : undefined;
+    },
+    set: (config) => {
+      this.cachePivot(config);
+    },
+    markDeleted: (pivotId) => {
+      this.pivotSnapshots.set(pivotId, { status: 'deleted' });
+    },
+    require: (pivotId, operation) => {
+      this._assertLive(operation);
+      const entry = this.pivotSnapshots.get(pivotId);
+      if (entry?.status === 'live') {
+        return entry.config;
+      }
+      throw new KernelError(
+        'PIVOT_NOT_FOUND',
+        `${operation}: Pivot handle "${pivotId}" is stale or invalidated.`,
+        { context: { operation, sheetId: this.sheetId, pivotId } },
+      );
+    },
+    refresh: async (pivotId, operation) => {
+      this._assertLive(operation);
+      const pivot = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+      if (!pivot) {
+        this.pivotSnapshots.set(pivotId, { status: 'deleted' });
+        throw new KernelError(
+          'PIVOT_NOT_FOUND',
+          `${operation}: Pivot handle "${pivotId}" is stale or invalidated.`,
+          { context: { operation, sheetId: this.sheetId, pivotId } },
+        );
+      }
+      return this.cachePivot(pivot);
+    },
+  };
+
   constructor(
     private readonly ctx: DocumentContext,
     private readonly sheetId: SheetId,
     private readonly workbook?: Workbook | null,
+    private readonly liveness?: HandleLiveness,
   ) {}
 
   private _ensureWritable(op: string): void {
+    this._assertLive(op);
     this.ctx.writeGate.assertWritable(op);
+  }
+
+  private _assertLive(op: string): void {
+    this.liveness?.assertLive(`worksheet.pivots.${op}`);
+  }
+
+  private pivotId(config: DataPivotTableConfig): string {
+    return config.id ?? config.name;
+  }
+
+  private cachePivot(config: DataPivotTableConfig): DataPivotTableConfig {
+    this.pivotSnapshots.set(this.pivotId(config), { status: 'live', config });
+    return config;
+  }
+
+  private markPivotDeleted(pivotId: string): void {
+    this.pivotSnapshots.set(pivotId, { status: 'deleted' });
   }
 
   // ---------------------------------------------------------------------------
@@ -123,6 +186,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
    * Throws KernelError if not found.
    */
   private async resolveNameToId(name: string, operation: string): Promise<string> {
+    this._assertLive(operation);
     const pivot = await findPivotByName(this.ctx, this.sheetId, name);
     if (!pivot) {
       throw new KernelError('COMPUTE_ERROR', `${operation}: Pivot table "${name}" not found`);
@@ -161,7 +225,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       dataConfig,
       `pivot-${Date.now()}-${WorksheetPivotsImpl._idCounter++}`,
     );
-    return await this.ctx.pivot.createPivot(configWithId);
+    return this.cachePivot(await this.ctx.pivot.createPivot(configWithId));
   }
 
   async addWithSheet(
@@ -194,18 +258,22 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     if (this.workbook) {
       await (this.workbook as WorkbookInternal).refreshSheetMetadata();
     }
-    return { sheetId: toSheetId(result.sheetId), config: result.config };
+    return { sheetId: toSheetId(result.sheetId), config: this.cachePivot(result.config) };
   }
 
   async getAll(): Promise<DataPivotTableConfig[]> {
+    this._assertLive('getAll');
     try {
-      return await this.ctx.pivot.getAllPivots(this.sheetId);
+      const pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
+      pivots.forEach((pivot) => this.cachePivot(pivot));
+      return pivots;
     } catch {
       return [];
     }
   }
 
   async getImportedViewRecords(): Promise<ImportedPivotViewRecord[]> {
+    this._assertLive('getImportedViewRecords');
     try {
       return await this.ctx.pivot.getImportedPivotViewRecords(this.sheetId);
     } catch {
@@ -215,15 +283,19 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
 
   async rename(name: string, newName: string): Promise<void> {
     const pivotId = await this.resolveNameToId(name, 'rename');
-    await this.ctx.pivot.updatePivot(
+    const updated = await this.ctx.pivot.updatePivot(
       this.sheetId,
       pivotId,
       { name: newName },
       { reason: 'renamed', refreshPolicy: 'refreshAndMaterialize' },
     );
+    if (updated) {
+      this.cachePivot(updated);
+    }
   }
 
   async remove(name: string): Promise<void> {
+    this._assertLive('remove');
     const pivot = await findPivotByName(this.ctx, this.sheetId, name);
     if (!pivot) {
       throw new KernelError('COMPUTE_ERROR', `Pivot table "${name}" not found`);
@@ -232,9 +304,11 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       throw new KernelError('COMPUTE_ERROR', 'Pivot ID is required');
     }
     await this.ctx.pivot.deletePivot(this.sheetId, pivot.id);
+    this.markPivotDeleted(pivot.id);
   }
 
   async clear(): Promise<void> {
+    this._assertLive('clear');
     const pivots = await this.list();
     for (const pivot of pivots) {
       await this.remove(pivot.name);
@@ -242,35 +316,19 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   }
 
   async list(): Promise<PivotTableInfo[]> {
+    this._assertLive('list');
     let pivots: DataPivotTableConfig[];
     try {
       pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
     } catch {
       return [];
     }
-    return Promise.all(
-      pivots.map(async (p) => {
-        const apiConfig = dataConfigToApiConfig(p, p.sourceSheetName);
-        const location = p.outputLocation
-          ? toA1(p.outputLocation.row, p.outputLocation.col)
-          : undefined;
-        const contentArea = await this.getContentAreaForPivot(p.id ?? p.name);
-        return {
-          name: p.name ?? p.id,
-          dataSource: apiConfig.dataSource,
-          contentArea,
-          filterArea: undefined,
-          location,
-          rowFields: apiConfig.rowFields,
-          columnFields: apiConfig.columnFields,
-          valueFields: apiConfig.valueFields,
-          filterFields: apiConfig.filterFields,
-        };
-      }),
-    );
+    pivots.forEach((pivot) => this.cachePivot(pivot));
+    return Promise.all(pivots.map((p) => this.infoForPivot(p)));
   }
 
   async get(pivotRef: string | DataPivotTableConfig): Promise<PivotTableHandle | null> {
+    this._assertLive('get');
     const pivot =
       typeof pivotRef === 'string'
         ? await findPivotByName(this.ctx, this.sheetId, pivotRef)
@@ -278,30 +336,18 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     if (!pivot) {
       return null;
     }
+    this.cachePivot(pivot);
     return this.buildHandle(pivot, pivot.sourceSheetName);
   }
 
   async getInfo(name: string): Promise<PivotTableInfo | null> {
+    this._assertLive('getInfo');
     const pivot = await findPivotByName(this.ctx, this.sheetId, name);
     if (!pivot) {
       return null;
     }
-    const apiConfig = dataConfigToApiConfig(pivot, pivot.sourceSheetName);
-    const location = pivot.outputLocation
-      ? toA1(pivot.outputLocation.row, pivot.outputLocation.col)
-      : undefined;
-    const contentArea = await this.getContentAreaForPivot(pivot.id ?? pivot.name);
-    return {
-      name: pivot.name ?? pivot.id,
-      dataSource: apiConfig.dataSource,
-      contentArea,
-      filterArea: undefined,
-      location,
-      rowFields: apiConfig.rowFields,
-      columnFields: apiConfig.columnFields,
-      valueFields: apiConfig.valueFields,
-      filterFields: apiConfig.filterFields,
-    };
+    this.cachePivot(pivot);
+    return this.infoForPivot(pivot);
   }
 
   async has(name: string): Promise<boolean> {
@@ -621,6 +667,10 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       (await findPivotByName(this.ctx, this.sheetId, name)) ??
       (await requirePivot(this.ctx, this.sheetId, pivotId, 'setDataSource'));
     await this._setDataSourceByPivotId(pivotId, config, dataSource, name);
+    const updated = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+    if (updated) {
+      this.cachePivot(updated);
+    }
   }
 
   private async setDataSourceForHandle(pivotId: string, dataSource: string): Promise<void> {
@@ -864,10 +914,30 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       resolvePlacement,
       placementId,
       getRange: (pivotId) => getPivotRangeForId({ ctx: this.ctx, sheetId: this.sheetId, pivotId }),
+      getCollectionInfo: (config) => this.infoForPivot(config),
       addCalculatedField: (pivotId, field) =>
         addPivotCalculatedFieldToId({ ctx: this.ctx, sheetId: this.sheetId, pivotId, field }),
       setDataSource: (pivotId, dataSource) => this.setDataSourceForHandle(pivotId, dataSource),
+      snapshots: this.snapshots,
+      liveness: this.liveness,
     });
+  }
+
+  private async infoForPivot(p: DataPivotTableConfig): Promise<PivotTableInfo> {
+    const apiConfig = dataConfigToApiConfig(p, p.sourceSheetName);
+    const location = p.outputLocation ? toA1(p.outputLocation.row, p.outputLocation.col) : undefined;
+    const contentArea = await this.getContentAreaForPivot(this.pivotId(p));
+    return {
+      name: p.name ?? p.id,
+      dataSource: apiConfig.dataSource,
+      contentArea,
+      filterArea: undefined,
+      location,
+      rowFields: apiConfig.rowFields,
+      columnFields: apiConfig.columnFields,
+      valueFields: apiConfig.valueFields,
+      filterFields: apiConfig.filterFields,
+    };
   }
 
   private async getContentAreaForPivot(pivotId: string): Promise<string> {

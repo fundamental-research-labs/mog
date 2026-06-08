@@ -901,6 +901,18 @@ export interface PivotHandleInfo {
   name: string;
   /** Source data range (e.g. "Sheet1!A1:D100"). */
   dataSource: string;
+  /** Range occupied by the pivot table content. */
+  contentArea: string;
+  /** Output anchor location as A1 reference (e.g. "G1"). */
+  location?: string;
+  /** Row dimension field names. */
+  rowFields: string[];
+  /** Column dimension field names. */
+  columnFields: string[];
+  /** Value fields with aggregation info. */
+  valueFields: PivotValueField[];
+  /** Filter field names. */
+  filterFields: string[];
   /** Source sheet name when known. */
   sourceSheetName?: string;
   /** Source range in zero-based coordinates. */

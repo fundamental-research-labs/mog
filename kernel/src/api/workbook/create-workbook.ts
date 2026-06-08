@@ -11,13 +11,8 @@
 
 import type { Workbook } from '@mog-sdk/contracts/api';
 import type { DocumentImportOptions, DocumentImportWarning } from '@mog-sdk/contracts/document';
-import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import { KernelError } from '../../errors';
-import {
-  DocumentFactory,
-  type DocumentHandle,
-  type DocumentHandleInternal,
-} from '../document/document-factory';
+import { DocumentFactory, type DocumentHandle } from '../document/document-factory';
 import { resolveUserTimezone } from '../document/resolve-user-timezone';
 import { createWorkbookFromConfig } from './workbook-impl';
 import type { CreateWorkbookOptions, WorkbookConfig } from './types';
@@ -71,11 +66,9 @@ async function createWorkbookWithBootstrap(options: CreateWorkbookOptions): Prom
     });
   }
 
-  // Create the workbook using the WorkbookConfig path.
-  // stateProvider is omitted — WorkbookImpl uses default headless provider.
-  const wb = await createWorkbookFromConfig({
-    ctx: (handle as DocumentHandleInternal).context as IKernelContext,
-    eventBus: handle.eventBus,
+  // Create the workbook through the document handle so document disposal can
+  // synchronously invalidate this facade and its child handles.
+  const wb = await handle.workbook({
     previouslySaved: !!source,
     importWarnings,
     writeFile: options.writeFile,

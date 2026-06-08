@@ -21,6 +21,7 @@ import type {
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import type { HostPrincipalLock } from '../../context/host-principal-lock';
 import type { DocumentContext } from '../../context';
+import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
 // Lazy CodeExecutor Types
@@ -77,6 +78,8 @@ export interface WorkbookConfig {
   writeFile?: (path: string, data: Uint8Array) => Promise<void>;
   /** Warnings from XLSX import (empty if created blank). */
   importWarnings?: readonly DocumentImportWarning[];
+  /** Shared liveness token for document-owned workbook facades. */
+  liveness?: HandleLiveness;
   /**
    * Host principal lock — when present, prevents `setActivePrincipal` and
    * `makePrincipal` from mutating the active principal. Installed by the

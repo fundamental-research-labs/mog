@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
+import { createHandleLiveness } from '../lifecycle/handle-liveness';
 import { WorksheetPivotsImpl } from '../worksheet/pivots/index';
 
 const SHEET_ID = sheetId('sheet-1');
@@ -99,7 +100,12 @@ function createCtx(): any {
       getPivot: jest.fn().mockResolvedValue(config),
       compute: jest.fn().mockResolvedValue(makePivotResult()),
       updatePivot: jest.fn().mockResolvedValue(config),
+      deletePivot: jest.fn().mockResolvedValue(true),
+      subscribe: jest.fn().mockReturnValue(jest.fn()),
       getAllPivotItems: jest.fn().mockResolvedValue(makePivotItems()),
+    },
+    writeGate: {
+      assertWritable: jest.fn(),
     },
   };
 }
@@ -191,6 +197,12 @@ describe('WorksheetPivotsImpl contracts', () => {
         id: 'pivot-1',
         name: 'SalesPivot',
         dataSource: 'Sheet1!A1:B6',
+        contentArea: 'D3:E4',
+        location: 'D3',
+        rowFields: ['Category'],
+        columnFields: [],
+        valueFields: [expect.objectContaining({ field: 'Amount', aggregation: 'sum' })],
+        filterFields: [],
         dataSourceType: 'range',
         renderedRange: {
           startRow: 2,
@@ -204,6 +216,61 @@ describe('WorksheetPivotsImpl contracts', () => {
       }),
     );
     expect(ctx.pivot.getPivot).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+  });
+
+  it('handle getInfo defaults to range identity without item lists', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    const info = await handle!.getInfo();
+
+    expect(info).toEqual(
+      expect.objectContaining({
+        contentArea: 'D3:E4',
+        renderedRange: {
+          startRow: 2,
+          startCol: 3,
+          endRow: 3,
+          endCol: 4,
+          sheetId: SHEET_ID,
+        },
+      }),
+    );
+    expect(info).not.toHaveProperty('items');
+  });
+
+  it('multiple handles share the latest current config snapshot', async () => {
+    const handleA = await pivots.get('SalesPivot');
+    const handleB = await pivots.get('SalesPivot');
+    ctx.pivot.updatePivot.mockImplementation(async (_sheetId, _pivotId, updates) =>
+      makePivotConfig(updates),
+    );
+
+    await handleA!.update({ name: 'RenamedPivot' });
+
+    expect(handleB!.getName()).toBe('RenamedPivot');
+    expect(handleB!.getConfig()).toEqual(expect.objectContaining({ name: 'RenamedPivot' }));
+  });
+
+  it('deleted handles reject sync cached readback instead of returning stale config', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    await handle!.delete();
+
+    expect(() => handle!.getConfig()).toThrow(/stale|invalidated/i);
+  });
+
+  it('pivot result subscriptions unregister when owner liveness invalidates', async () => {
+    const liveness = createHandleLiveness({ label: 'Workbook' });
+    pivots = new WorksheetPivotsImpl(ctx, SHEET_ID, null, liveness);
+    const unsubscribe = jest.fn();
+    ctx.pivot.subscribe.mockReturnValue(unsubscribe);
+    const handle = await pivots.get('SalesPivot');
+
+    handle!.subscribeResult(jest.fn());
+    liveness.invalidate({ operation: 'test.close' });
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(() => handle!.subscribeResult(jest.fn())).toThrow(/disposed|closed|invalidated/i);
   });
 
   it('literal "(blank)" item keys remain text values distinct from semantic blanks', async () => {

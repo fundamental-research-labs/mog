@@ -15,6 +15,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import type { TrackerHandle } from './change-accumulator';
 
 // =============================================================================
@@ -63,15 +64,26 @@ class ChangeTrackerImpl implements ChangeTracker, TrackerHandle {
   } | null;
   private excludeOrigins: Set<ChangeOrigin> | null;
   private readonly unregister: () => void;
+  private readonly liveness: HandleLiveness;
+  private readonly stopLivenessListener: () => void;
 
-  constructor(sheetId: string, options: ChangeTrackOptions | undefined, unregister: () => void) {
+  constructor(
+    sheetId: string,
+    options: ChangeTrackOptions | undefined,
+    unregister: () => void,
+    liveness: HandleLiveness,
+  ) {
     this.sheetId = sheetId;
     this.unregister = unregister;
+    this.liveness = liveness;
     this.scopeBounds = options?.scope ? parseRangeScope(options.scope) : null;
     this.excludeOrigins =
       options?.excludeOrigins && options.excludeOrigins.length > 0
         ? new Set(options.excludeOrigins)
         : null;
+    this.stopLivenessListener = liveness.onInvalidate(() => {
+      this.close();
+    });
   }
 
   // --- TrackerHandle (called by ChangeAccumulator) ---
@@ -103,6 +115,7 @@ class ChangeTrackerImpl implements ChangeTracker, TrackerHandle {
   // --- ChangeTracker public API ---
 
   collect(): ChangeRecord[] {
+    this.liveness.assertLive('worksheet.changes.track.collect');
     const result = this.buffer;
     this.buffer = [];
     return result;
@@ -112,11 +125,12 @@ class ChangeTrackerImpl implements ChangeTracker, TrackerHandle {
     if (!this._active) return;
     this._active = false;
     this.buffer = [];
+    this.stopLivenessListener();
     this.unregister();
   }
 
   get active(): boolean {
-    return this._active;
+    return this._active && !this.liveness.isDisposed;
   }
 }
 
@@ -128,17 +142,24 @@ export class WorksheetChangesImpl implements WorksheetChanges {
   constructor(
     private readonly ctx: DocumentContext,
     private readonly sheetId: string,
+    private readonly liveness: HandleLiveness,
   ) {}
 
   track(options?: ChangeTrackOptions): ChangeTracker {
+    this.liveness.assertLive('worksheet.changes.track');
     const accumulator = this.ctx.computeBridge.getMutationHandler()?.changeAccumulator;
     if (!accumulator) {
       throw new Error('Change tracking unavailable: MutationResultHandler not initialized');
     }
 
-    const tracker = new ChangeTrackerImpl(this.sheetId, options, () => {
-      accumulator.unregister(tracker);
-    });
+    const tracker = new ChangeTrackerImpl(
+      this.sheetId,
+      options,
+      () => {
+        accumulator.unregister(tracker);
+      },
+      this.liveness,
+    );
 
     accumulator.register(tracker);
     return tracker;

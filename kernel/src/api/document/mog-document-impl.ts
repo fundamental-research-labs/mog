@@ -33,6 +33,7 @@ import type { DocumentStoragePhase } from '@mog-sdk/types-document/storage/lifec
 import type { DocumentHandle } from './document-factory';
 import { MogSdkEventFacade } from './mog-sdk-event-facade';
 import { CollaborationFirstJoinRequiresHostBootstrapError } from '../../errors/document';
+import { MogSdkError } from '../../errors/mog-sdk-error';
 
 // =============================================================================
 // Phase → MogDocumentStatus mapping
@@ -157,6 +158,14 @@ class MogDocumentImpl implements MogDocument {
     this._handle = handle;
   }
 
+  private _assertOpen(operation: string): void {
+    if (!this._handle.isDisposed) return;
+    throw new MogSdkError('DISPOSED', `${operation}: document is disposed`, {
+      operation,
+      details: { documentId: this._handle.documentId },
+    });
+  }
+
   // -- Identity ---------------------------------------------------------------
 
   get documentId(): string {
@@ -211,6 +220,7 @@ class MogDocumentImpl implements MogDocument {
   // -- Workbook access --------------------------------------------------------
 
   async workbook(options?: MogDocumentWorkbookOptions): Promise<Workbook> {
+    this._assertOpen('MogDocument.workbook');
     if (options) {
       // Options path — create a configured workbook (not cached).
       return this._handle.workbook({

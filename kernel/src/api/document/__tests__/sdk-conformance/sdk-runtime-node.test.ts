@@ -244,15 +244,37 @@ describe('Disposal cascade', () => {
     expect(doc.isDisposed).toBe(true);
   });
 
-  it('workbook obtained after document close rejects property access', async () => {
+  it('workbook access after document close rejects immediately', async () => {
     const doc = await createTestDocument();
     await doc.workbook();
     await doc.close();
 
-    // The workbook facade is cached, so it resolves — but accessing
-    // properties on a disposed workbook should throw synchronously.
-    const wb = await doc.workbook();
-    expect(() => wb.activeSheet).toThrow();
+    await expect(doc.workbook()).rejects.toThrow(/disposed/i);
+  });
+
+  it('document close invalidates zero-arg and configured workbook handles', async () => {
+    const doc = await createTestDocument();
+    const ownedWb = await doc.workbook();
+    const configuredWb = await doc.workbook({ readOnly: false });
+    const ownedWs = ownedWb.activeSheet;
+    const configuredWs = configuredWb.activeSheet;
+
+    await doc.close();
+
+    expect(() => ownedWb.sheetNames).toThrow(/disposed|closed|invalidated/i);
+    expect(() => configuredWb.sheetNames).toThrow(/disposed|closed|invalidated/i);
+    await expect(ownedWs.getValue('A1')).rejects.toThrow(/disposed|closed|invalidated/i);
+    await expect(configuredWs.getValue('A1')).rejects.toThrow(/disposed|closed|invalidated/i);
+  });
+
+  it('closing a configured workbook does not dispose the document by default', async () => {
+    const doc = await createTestDocument();
+    const configuredWb = await doc.workbook({ readOnly: false });
+
+    await configuredWb.close('skipSave');
+
+    expect(doc.isDisposed).toBe(false);
+    await doc.close();
   });
 
   it('disposeAsync cascades to closed state', async () => {

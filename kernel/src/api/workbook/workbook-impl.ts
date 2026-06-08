@@ -164,10 +164,26 @@ import type {
   KernelDocumentHighWaterMarkProof,
 } from '@mog-sdk/types-host/kernel';
 import { createHostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
+import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
 // WorkbookImpl
 // =============================================================================
+
+function resolveWorkbookLivenessMetadata(ctx: DocumentContext): {
+  readonly label: string;
+  readonly documentId?: string;
+  readonly sessionId?: string;
+} {
+  const maybeScope = (ctx as { workbookLinkScope?: DocumentContext['workbookLinkScope'] })
+    .workbookLinkScope;
+  const scope = typeof maybeScope === 'function' ? maybeScope.call(ctx) : undefined;
+  return {
+    label: 'Workbook',
+    ...(scope?.requestingDocumentId ? { documentId: scope.requestingDocumentId } : {}),
+    ...(scope?.requestingSessionId ? { sessionId: scope.requestingSessionId } : {}),
+  };
+}
 
 export class WorkbookImpl implements WorkbookInternal {
   /**
@@ -213,6 +229,7 @@ export class WorkbookImpl implements WorkbookInternal {
 
   // Track disposal
   private _disposed = false;
+  private readonly _liveness: HandleLiveness;
 
   /**
    * Guard: throws a clean KernelError if the workbook has been disposed.
@@ -220,11 +237,9 @@ export class WorkbookImpl implements WorkbookInternal {
    * (sheets, charts, etc.) from hitting the invalidated transport.
    */
   private _ensureNotDisposed(): void {
+    this._liveness.assertLive('workbook');
     if (this._disposed) {
-      throw new KernelError(
-        'BRIDGE_DISPOSED',
-        'Workbook is closed. Create a new workbook to continue.',
-      );
+      throw this._liveness.error('workbook');
     }
   }
 
@@ -240,6 +255,13 @@ export class WorkbookImpl implements WorkbookInternal {
   constructor(config: WorkbookConfig) {
     // Cast to DocumentContext — WorkbookImpl is internal kernel code and knows the runtime type
     this.ctx = config.ctx as DocumentContext;
+    this._liveness =
+      config.liveness ??
+      createHandleLiveness({
+        label: 'Workbook',
+        code: 'BRIDGE_DISPOSED',
+        metadata: resolveWorkbookLivenessMetadata(this.ctx),
+      });
 
     // stateProvider is the single source of truth for active sheet + UI state.
     // When not provided, a default headless provider tracks activeSheetId internally
@@ -526,11 +548,13 @@ export class WorkbookImpl implements WorkbookInternal {
 
   /** SYNC — returns cached sheet count, updated by refreshSheetMetadata(). */
   get sheetCount(): number {
+    this._ensureNotDisposed();
     return this._cachedSheetCount;
   }
 
   /** SYNC — returns cached sheet names in display order, updated by refreshSheetMetadata(). */
   get sheetNames(): string[] {
+    this._ensureNotDisposed();
     return this._cachedSheetNames;
   }
 
@@ -575,6 +599,7 @@ export class WorkbookImpl implements WorkbookInternal {
         workbook: this as Workbook,
         name,
         floatingObjectManager: this._floatingObjectManager,
+        liveness: this._liveness,
       });
       this._worksheetInstances.set(sheetId, ws);
     }
@@ -1660,7 +1685,7 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   get isDisposed(): boolean {
-    return this._disposed;
+    return this._disposed || this._liveness.isDisposed;
   }
 
   get importWarnings(): readonly DocumentImportWarning[] {
@@ -1674,6 +1699,10 @@ export class WorkbookImpl implements WorkbookInternal {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this._liveness.invalidate({
+      operation: 'workbook.dispose',
+      message: 'Workbook is closed or disposed. Create a new workbook to continue.',
+    });
 
     // Dispose all tracked child handles (viewport regions, subscriptions, etc.)
     this._disposables.dispose();
@@ -1895,7 +1924,8 @@ export class WorkbookImpl implements WorkbookInternal {
 
   private _changes?: WorkbookChangesImpl;
   get changes(): WorkbookChanges {
-    return (this._changes ??= new WorkbookChangesImpl(this.ctx));
+    this._ensureNotDisposed();
+    return (this._changes ??= new WorkbookChangesImpl(this.ctx, this._liveness));
   }
 
   get diagnostics(): WorkbookDiagnostics {

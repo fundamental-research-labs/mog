@@ -29,6 +29,7 @@ import type {
 } from '@mog-sdk/contracts/document';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
 import type { DocumentByteSyncPort, Provider } from '../../document/providers/provider';
+import type { DocumentContext } from '../../context';
 
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { KernelHostContext } from '@mog-sdk/types-host/kernel';
@@ -37,6 +38,7 @@ import {
   HostContextValidationError,
   LegacyOptionRejectedError,
 } from '../../errors/document';
+import { KernelError } from '../../errors';
 import type { PivotExpansionStateProvider } from '@mog-sdk/contracts/pivot';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import type { TrapError } from '@mog/transport';
@@ -58,6 +60,7 @@ import {
   type InteractiveDeferredImportToken,
   type XlsxDocumentImportOptions,
 } from './xlsx-document-import';
+import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 
 export { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from './xlsx-document-import';
 export type {
@@ -559,18 +562,57 @@ function createDocumentHandle(
   let disposed = false;
   let cachedWorkbook: Workbook | undefined;
   let cachedSyncPort: DocumentByteSyncPort | undefined;
+  const workbookTokens = new Set<HandleLiveness>();
 
   let disposePromise: Promise<void> | null = null;
 
   const assertNotDisposed = (operation: string) => {
     if (disposed) {
-      throw new Error(`DocumentHandle.${operation}: handle is disposed`);
+      throw new KernelError('DOC_DISPOSED', `DocumentHandle.${operation}: handle is disposed`, {
+        context: { operation, documentId },
+      });
     }
+  };
+
+  const createWorkbookLiveness = (operation: string): HandleLiveness => {
+    const documentContext = context as unknown as DocumentContext;
+    const token = createHandleLiveness({
+      label: 'Workbook',
+      code: 'BRIDGE_DISPOSED',
+      metadata: {
+        label: 'Workbook',
+        documentId,
+        sessionId: documentContext.workbookLinkScope().requestingSessionId,
+        createdBy: operation,
+      },
+    });
+    workbookTokens.add(token);
+    token.onInvalidate(() => {
+      workbookTokens.delete(token);
+    });
+    return token;
+  };
+
+  const invalidateWorkbooks = (operation: string): void => {
+    for (const token of [...workbookTokens]) {
+      token.invalidate({
+        operation,
+        message: 'Workbook handle is closed, disposed, or invalidated.',
+        metadata: { documentId },
+      });
+    }
+  };
+
+  const beginDocumentDisposal = (operation: string): void => {
+    if (!disposed) {
+      disposed = true;
+    }
+    invalidateWorkbooks(operation);
   };
 
   const disposeAsync = async () => {
     if (disposePromise) return disposePromise;
-    disposed = true;
+    beginDocumentDisposal('document.disposeAsync');
     disposePromise = Promise.resolve().then(async () => {
       // Dispose cached workbook first (it may flush state)
       if (cachedWorkbook) {
@@ -716,6 +758,7 @@ function createDocumentHandle(
           timestamp: Date.now(),
         };
       }
+      beginDocumentDisposal('document.close');
       const result = await rustDoc.close();
       await disposeAsync();
       return result;
@@ -763,6 +806,7 @@ function createDocumentHandle(
     },
 
     workbook: async function (this: DocumentHandleInternal, config?: DocumentHandleWorkbookConfig) {
+      assertNotDisposed('workbook');
       const ownerHandle = (this as DocumentHandleInternal | undefined) ?? handle;
       // Config-accepting path: fresh workbook each call (not cached).
       if (config) {
@@ -777,6 +821,7 @@ function createDocumentHandle(
           onSave: config.onSave,
           writeFile: config.writeFile,
           importWarnings: config.importWarnings ?? importWarnings,
+          liveness: createWorkbookLiveness('document.workbook(config)'),
         });
       }
 
@@ -788,6 +833,7 @@ function createDocumentHandle(
         ctx: context,
         eventBus: context.eventBus,
         importWarnings,
+        liveness: createWorkbookLiveness('document.workbook'),
       });
 
       // Chain disposal: production close/async-dispose awaits the handle;

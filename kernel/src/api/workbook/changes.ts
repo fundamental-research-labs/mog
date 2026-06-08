@@ -23,6 +23,7 @@ import type { DocumentContext } from '../../context';
 import type { WorkbookTrackerHandle } from '../worksheet/change-accumulator';
 import { getName } from '../../domain/sheets/sheet-meta';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
 // WorkbookChangeTrackerImpl
@@ -57,17 +58,24 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
   private readonly originFilter: Set<ChangeOrigin> | null;
   private readonly unregister: () => void;
   private readonly resolveSheetName: (sid: string) => Promise<string>;
+  private readonly liveness: HandleLiveness;
+  private readonly stopLivenessListener: () => void;
 
   constructor(
     options: WorkbookTrackOptions | undefined,
     unregister: () => void,
     resolveSheetName: (sid: string) => Promise<string>,
+    liveness: HandleLiveness,
   ) {
     this.unregister = unregister;
     this.resolveSheetName = resolveSheetName;
+    this.liveness = liveness;
     this.limit = options?.limit ?? DEFAULT_LIMIT;
     this.originFilter =
       options?.origins && options.origins.length > 0 ? new Set(options.origins) : null;
+    this.stopLivenessListener = liveness.onInvalidate(() => {
+      this.close();
+    });
   }
 
   // --- WorkbookTrackerHandle (called by ChangeAccumulator) ---
@@ -104,6 +112,7 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
   // --- WorkbookChangeTracker public API ---
 
   collect(): WorkbookCollectResult {
+    this.liveness.assertLive('workbook.changes.track.collect');
     // Use the eagerly-populated nameCache to resolve sheetId → sheet name.
     // The cache is populated asynchronously during _ingestBySheet(), which
     // fires on every mutation. By the time user code calls collect() (after
@@ -138,6 +147,7 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
    * Preferred over collect() when called from async context.
    */
   async collectAsync(): Promise<WorkbookCollectResult> {
+    this.liveness.assertLive('workbook.changes.track.collectAsync');
     const pendingSnapshot = this.pending;
     const truncated = this._truncated;
     const totalObserved = this._totalObserved;
@@ -175,11 +185,12 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
     if (!this._active) return;
     this._active = false;
     this.pending = [];
+    this.stopLivenessListener();
     this.unregister();
   }
 
   get active(): boolean {
-    return this._active;
+    return this._active && !this.liveness.isDisposed;
   }
 }
 
@@ -188,9 +199,13 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
 // =============================================================================
 
 export class WorkbookChangesImpl implements WorkbookChanges {
-  constructor(private readonly ctx: DocumentContext) {}
+  constructor(
+    private readonly ctx: DocumentContext,
+    private readonly liveness: HandleLiveness,
+  ) {}
 
   track(options?: WorkbookTrackOptions): WorkbookChangeTracker {
+    this.liveness.assertLive('workbook.changes.track');
     const accumulator = this.ctx.computeBridge.getMutationHandler()?.changeAccumulator;
     if (!accumulator) {
       throw new Error('Change tracking unavailable: MutationResultHandler not initialized');
@@ -208,6 +223,7 @@ export class WorkbookChangesImpl implements WorkbookChanges {
           return sid;
         }
       },
+      this.liveness,
     );
 
     accumulator.registerWorkbook(tracker);

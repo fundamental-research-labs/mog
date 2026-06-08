@@ -1,5 +1,5 @@
 import generatedGuidance from '../src/generated/api-guidance.json';
-import { api } from '../src/api-describe';
+import { api, apiSpec } from '../src/api-describe';
 import {
   analyzeMogCode,
   apiCompatibility,
@@ -174,6 +174,48 @@ describe('SDK agent API guidance', () => {
           blocking: true,
         }),
       ]),
+    );
+  });
+
+  it('surfaces pivot handle getInfo in generated API metadata and describe output', () => {
+    expect(apiSpec.types.PivotTableHandle?.definition).toContain(
+      'getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;',
+    );
+    expect(apiSpec.types.PivotTableHandle?.definition).not.toContain('describe(');
+    expect(apiSpec.types.PivotHandleInfoOptions?.definition).toContain(
+      'includeItems?: boolean',
+    );
+    expect(apiSpec.types.PivotHandleInfo?.definition).toContain('contentArea: string');
+    expect(apiSpec.types.PivotHandleInfo?.definition).toContain('rowFields: string[]');
+    expect(apiSpec.types.PivotHandleInfo?.definition).toContain('availableMethods: string[]');
+
+    const handleDescription = api.describe('type:PivotTableHandle');
+    expect(handleDescription).toEqual(
+      expect.objectContaining({
+        name: 'PivotTableHandle',
+        definition: expect.stringContaining(
+          'getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;',
+        ),
+      }),
+    );
+
+    const getDescription = api.describe('ws.pivots.get');
+    if (!getDescription || !('types' in getDescription)) {
+      throw new Error('expected ws.pivots.get method metadata');
+    }
+    expect(getDescription.types.PivotTableHandle?.definition).toContain(
+      'getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;',
+    );
+    expect(getDescription.types.PivotHandleInfo?.definition).toContain('contentArea: string');
+
+    const handleDescribeDiagnostic = api.guidance.explain('ws.pivots.get(...).describe');
+    expect(handleDescribeDiagnostic?.kind).toBe('mog-api-compatibility');
+    if (handleDescribeDiagnostic?.kind !== 'mog-api-compatibility') {
+      throw new Error('expected pivot handle describe compatibility guidance');
+    }
+    expect(handleDescribeDiagnostic.entry.id).toBe('round55.pivot.handle.describe.diagnostic');
+    expect(handleDescribeDiagnostic.entry.diagnostics?.replacements).toContain(
+      'type:PivotTableHandle.getInfo',
     );
   });
 });

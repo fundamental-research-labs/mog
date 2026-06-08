@@ -714,9 +714,7 @@ class HeadlessLifecycleSystem {
         '[HeadlessLifecycleSystem] workbook accessed before ready -- call create() or createFromXlsx() first',
       );
     }
-    return (await this.handle.workbook({
-      importWarnings: this._importWarnings,
-    })) as WorkbookInternal;
+    return (await this.handle.workbook()) as WorkbookInternal;
   }
 
   /**

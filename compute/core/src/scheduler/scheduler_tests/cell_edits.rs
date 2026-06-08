@@ -33,6 +33,36 @@ fn test_set_cell_formula_recalc() {
 }
 
 #[test]
+fn test_set_cell_table_formula_without_region_returns_calc_error() {
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    core.init_from_snapshot(&mut mirror, basic_snapshot())
+        .unwrap();
+
+    let sheet_id = sid(1);
+    core.set_cell(&mut mirror, &sheet_id, cid(0x30), 1, 1, "1000")
+        .unwrap();
+
+    let cases = [
+        (cid(0x31), 1, 4, "=TABLE(B1,B2)"),
+        (cid(0x32), 4, 4, "=TABLE(,B2)"),
+        (cid(0x33), 5, 4, "=TABLE(B1,)"),
+        (cid(0x34), 6, 4, "=TABLE(,)"),
+    ];
+
+    for (cell_id, row, col, formula) in cases {
+        core.set_cell(&mut mirror, &sheet_id, cell_id, row, col, formula)
+            .unwrap();
+
+        assert_eq!(
+            core.get_cell_value(&mirror, &cell_id),
+            Some(&CellValue::Error(value_types::CellError::Calc, None)),
+            "{formula} should remain an unsupported TABLE pseudo-function without a data-table region"
+        );
+    }
+}
+
+#[test]
 fn test_set_cell_triggers_dependent_recalc() {
     let mut core = ComputeCore::new();
     let mut mirror = CellMirror::new();

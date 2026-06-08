@@ -18,14 +18,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 /// Region group: maps (sheet_uuid, start_row, start_col) to (region_def, cells).
 type RegionGroupMap = FxHashMap<(String, u32, u32), (DataTableRegionDef, Vec<(CellId, u32, u32)>)>;
 
-/// Orphan signature map: maps (sheet, row_input_ref, col_input_ref) to cells needing region synthesis.
-///
-/// Typed data-table input refs: keys are typed `Option<CellRef>` (was `Option<(u32, u32)>`)
-/// to match the snapshot-side `DataTableRegionDef.row_input_ref` /
-/// `col_input_ref` shape — no `cell_ref_to_a1` round-trip when synthesizing
-/// orphan regions.
-type OrphanSigMap = FxHashMap<(SheetId, Option<CellRef>, Option<CellRef>), Vec<(CellId, u32, u32)>>;
-
 #[cfg(test)]
 static DATA_TABLE_PANIC_AFTER_OVERRIDE: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
@@ -111,27 +103,6 @@ pub(super) fn is_table_formula(ast: &ASTNode) -> bool {
     matches!(ast, ASTNode::Function { name, .. } if name.eq_ignore_ascii_case("TABLE"))
 }
 
-/// Extract a typed `CellRef` (sheet-local) from a TABLE formula AST argument.
-/// Used to build the `OrphanSigMap` keyed on typed refs — matches the
-/// snapshot-side `DataTableRegionDef.row_input_ref` shape.
-fn extract_table_input_cell_refs(ast: &ASTNode) -> (Option<CellRef>, Option<CellRef>) {
-    let args = match ast {
-        ASTNode::Function { name, args } if name.eq_ignore_ascii_case("TABLE") => args,
-        _ => return (None, None),
-    };
-
-    let extract_ref = |arg: &ASTNode| -> Option<CellRef> {
-        match arg {
-            ASTNode::CellReference(cell_ref_node) => Some(cell_ref_node.reference),
-            _ => None,
-        }
-    };
-
-    let row_input = args.first().and_then(&extract_ref);
-    let col_input = args.get(1).and_then(extract_ref);
-    (row_input, col_input)
-}
-
 /// Resolve a typed `CellRef` to its (row, col) on the given mirror.
 ///
 /// `Positional` refs return their stored (row, col) directly.
@@ -183,6 +154,26 @@ impl super::ComputeCore {
         if table_cells.is_empty() {
             return Vec::new();
         }
+
+        // Step 2: Group TABLE cells by registered data table region.
+        // API-authored `=TABLE(...)` formulas do not create `DataTableRegionDef`
+        // metadata; those are ordinary unsupported pseudo-function calls and must
+        // fall through to evaluator-level #CALC! handling.
+        let mut region_groups: RegionGroupMap = FxHashMap::default();
+        for &(cell_id, sheet_id, row, col) in &table_cells {
+            if let Some(region) = mirror.find_data_table_at(&sheet_id, row, col) {
+                let key = (region.sheet.clone(), region.start_row, region.start_col);
+                let entry = region_groups
+                    .entry(key)
+                    .or_insert_with(|| (region.clone(), Vec::new()));
+                entry.1.push((cell_id, row, col));
+            }
+        }
+
+        if region_groups.is_empty() {
+            return Vec::new();
+        }
+
         self.begin_sumifs_cache_epoch();
 
         let prior_in_data_table_eval = self.in_data_table_eval;
@@ -191,108 +182,6 @@ impl super::ComputeCore {
         DATA_TABLE_EVAL_SCOPE_ENTRIES.fetch_add(1, Ordering::SeqCst);
 
         let prepass_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            // Step 2: Group TABLE cells by data table region.
-            // Key: (sheet_uuid, start_row, start_col) uniquely identifies a region.
-            let mut region_groups: RegionGroupMap = FxHashMap::default();
-
-            for &(cell_id, sheet_id, row, col) in &table_cells {
-                if let Some(region) = mirror.find_data_table_at(&sheet_id, row, col) {
-                    let key = (region.sheet.clone(), region.start_row, region.start_col);
-                    let entry = region_groups
-                        .entry(key)
-                        .or_insert_with(|| (region.clone(), Vec::new()));
-                    entry.1.push((cell_id, row, col));
-                }
-            }
-
-            // Step 2b: Synthesize regions for orphan TABLE cells (no pre-registered region).
-            // This handles API-created workbooks where data_table_regions is empty.
-            //
-            // Key insight: each setCell('=TABLE(...)') triggers its own recalc with
-            // only 1 dirty cell. A 1x1 region misidentifies sibling TABLE cells as
-            // headers. To compute correct bounds, scan the FULL ast_cache for all
-            // TABLE cells sharing the same input refs — not just the dirty set.
-            {
-                let matched_cells: FxHashSet<CellId> = region_groups
-                    .values()
-                    .flat_map(|(_, cells)| cells.iter().map(|(cid, _, _)| *cid))
-                    .collect();
-
-                // Collect the input ref signatures of dirty orphan TABLE cells
-                let mut dirty_orphan_sigs: OrphanSigMap = FxHashMap::default();
-
-                for &(cell_id, sheet_id, row, col) in &table_cells {
-                    if matched_cells.contains(&cell_id) {
-                        continue;
-                    }
-                    if let Some(entry) = self.ast_cache.get(&cell_id) {
-                        let (row_input, col_input) = extract_table_input_cell_refs(&entry.ast);
-                        if row_input.is_some() || col_input.is_some() {
-                            dirty_orphan_sigs
-                                .entry((sheet_id, row_input, col_input))
-                                .or_default()
-                                .push((cell_id, row, col));
-                        }
-                    }
-                }
-
-                // For each unique signature, scan the full ast_cache for ALL TABLE
-                // cells with matching input refs to compute the true bounding box.
-                //
-                // Typed data-table input refs: signature keys are now typed `Option<CellRef>`
-                // (was `Option<(u32, u32)>`); the synthesized region writes them
-                // directly into `DataTableRegionDef` with no `cell_ref_to_a1`
-                // round-trip.
-                for ((sheet_id, row_input_ref, col_input_ref), dirty_cells) in dirty_orphan_sigs {
-                    let mut min_row = u32::MAX;
-                    let mut max_row = 0u32;
-                    let mut min_col = u32::MAX;
-                    let mut max_col = 0u32;
-
-                    for (&cid, entry) in self.ast_cache.iter() {
-                        if !is_table_formula(&entry.ast) {
-                            continue;
-                        }
-                        let (ri, ci) = extract_table_input_cell_refs(&entry.ast);
-                        if ri != row_input_ref || ci != col_input_ref {
-                            continue;
-                        }
-                        if let Some(compute_graph::CellPosition {
-                            sheet: sid,
-                            row: r,
-                            col: c,
-                        }) = compute_graph::PositionResolver::resolve(mirror, &cid)
-                            && sid == sheet_id
-                        {
-                            min_row = min_row.min(r);
-                            max_row = max_row.max(r);
-                            min_col = min_col.min(c);
-                            max_col = max_col.max(c);
-                        }
-                    }
-
-                    if min_row > max_row {
-                        continue;
-                    }
-
-                    let region = DataTableRegionDef {
-                        sheet: sheet_id.to_uuid_string(),
-                        start_row: min_row,
-                        start_col: min_col,
-                        end_row: max_row,
-                        end_col: max_col,
-                        row_input_ref,
-                        col_input_ref,
-                        ooxml_flags: None,
-                    };
-                    let key = (region.sheet.clone(), region.start_row, region.start_col);
-                    let entry = region_groups
-                        .entry(key)
-                        .or_insert_with(|| (region, Vec::new()));
-                    entry.1.extend(dirty_cells);
-                }
-            }
-
             // Step 3: Evaluate each region (sorted by key for deterministic ordering)
             let mut results: Vec<(CellId, CellValue)> = Vec::new();
             let mut sorted_regions: Vec<_> = region_groups.into_iter().collect();
@@ -805,6 +694,24 @@ mod tests {
         reset_data_table_eval_scope_entries_for_tests();
         let mut dirty = FxHashSet::default();
         dirty.insert(test_cell_id(1));
+
+        assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
+        assert!(!core.in_data_table_eval);
+        assert_eq!(data_table_eval_scope_entries_for_tests(), 0);
+    }
+
+    #[test]
+    fn data_table_prepass_orphan_table_dirty_set_does_not_toggle_flag() {
+        let _guard = data_table_test_lock();
+        let mut core = ComputeCore::new();
+        let mut mirror = CellMirror::new();
+        let mut snapshot = data_table_snapshot();
+        snapshot.data_table_regions.clear();
+        core.init_from_snapshot(&mut mirror, snapshot)
+            .expect("orphan TABLE snapshot should initialize");
+        reset_data_table_eval_scope_entries_for_tests();
+        let mut dirty = FxHashSet::default();
+        dirty.insert(test_cell_id(8));
 
         assert!(core.run_data_table_prepass(&mut mirror, &dirty).is_empty());
         assert!(!core.in_data_table_eval);

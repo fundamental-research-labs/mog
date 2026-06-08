@@ -81,6 +81,25 @@ function rgbToHex(r: number, g: number, b: number): string {
 }
 
 /**
+ * Normalize a color for picker selection comparisons.
+ * Returns uppercase six-digit hex with a leading #, or null for unsupported input.
+ */
+function normalizeHexColor(color: string | null | undefined): string | null {
+  if (!color) return null;
+
+  let hex = color.trim();
+  if (!hex.startsWith('#')) {
+    hex = `#${hex}`;
+  }
+
+  if (/^#[0-9A-Fa-f]{3}$/.test(hex)) {
+    hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+
+  return /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex.toUpperCase() : null;
+}
+
+/**
  * Convert hex color to HSL components.
  * H: 0-360 (degrees), S: 0-100 (percent), L: 0-100 (percent)
  */
@@ -236,6 +255,11 @@ const COLOR_INPUT_TABS = [
   { id: 'hsl', label: 'HSL' },
 ] as const;
 
+interface PickerSwatch {
+  id: string;
+  color: string;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -291,11 +315,34 @@ export function ColorPicker({
   const themeColors = useMemo(() => getThemeColorsRow(theme), [theme]);
   const themeTints = useMemo(() => getThemeTintRows(themeColors), [themeColors]);
 
-  // Build flat array of all colors for keyboard navigation
-  const allColors = useMemo(
-    () => [...themeColors, ...themeTints.flat(), ...STANDARD_COLORS],
+  const paletteSwatches = useMemo<PickerSwatch[]>(
+    () => [
+      ...themeColors.map((color, i) => ({ id: `theme-${i}`, color })),
+      ...themeTints.flatMap((row, rowIdx) =>
+        row.map((color, colIdx) => ({ id: `tint-${rowIdx}-${colIdx}`, color })),
+      ),
+      ...STANDARD_COLORS.map((color, i) => ({ id: `standard-${i}`, color })),
+    ],
     [themeColors, themeTints],
   );
+
+  const recentSwatches = useMemo<PickerSwatch[]>(
+    () => recentColors.slice(0, 10).map((color, i) => ({ id: `recent-${i}`, color })),
+    [recentColors],
+  );
+
+  const selectedSwatchId = useMemo(() => {
+    const selectedColor = normalizeHexColor(value);
+    if (!selectedColor) return null;
+
+    const selectedSwatch = [...paletteSwatches, ...recentSwatches].find(
+      (swatch) => normalizeHexColor(swatch.color) === selectedColor,
+    );
+    return selectedSwatch?.id ?? null;
+  }, [paletteSwatches, recentSwatches, value]);
+
+  // Build flat array of all colors for keyboard navigation
+  const allColors = useMemo(() => paletteSwatches.map((swatch) => swatch.color), [paletteSwatches]);
 
   const handleColorClick = useCallback(
     (color: string) => {
@@ -511,11 +558,12 @@ export function ColorPicker({
         <div className="grid grid-cols-10 gap-0.5">
           {themeColors.map((color, i) => {
             const idx = colorIndex++;
+            const swatchId = `theme-${i}`;
             return (
               <ColorSwatch
-                key={`theme-${i}-${color}`}
+                key={`${swatchId}-${color}`}
                 color={color}
-                selected={value?.toUpperCase() === color.toUpperCase()}
+                selected={selectedSwatchId === swatchId}
                 focused={focusedIndex === idx}
                 onClick={() => handleColorClick(color)}
                 onFocus={() => setFocusedIndex(idx)}
@@ -535,11 +583,12 @@ export function ColorPicker({
           <div key={rowIdx} className={`grid grid-cols-10 gap-0.5 ${rowIdx > 0 ? 'mt-0.5' : ''}`}>
             {row.map((color, colIdx) => {
               const idx = colorIndex++;
+              const swatchId = `tint-${rowIdx}-${colIdx}`;
               return (
                 <ColorSwatch
-                  key={`tint-${rowIdx}-${colIdx}-${color}`}
+                  key={`${swatchId}-${color}`}
                   color={color}
-                  selected={value?.toUpperCase() === color.toUpperCase()}
+                  selected={selectedSwatchId === swatchId}
                   focused={focusedIndex === idx}
                   onClick={() => handleColorClick(color)}
                   onFocus={() => setFocusedIndex(idx)}
@@ -558,13 +607,14 @@ export function ColorPicker({
       <div className="mb-2">
         <SectionLabel>Standard Colors</SectionLabel>
         <div className="grid grid-cols-10 gap-0.5">
-          {STANDARD_COLORS.map((color) => {
+          {STANDARD_COLORS.map((color, i) => {
             const idx = colorIndex++;
+            const swatchId = `standard-${i}`;
             return (
               <ColorSwatch
-                key={`standard-${color}`}
+                key={`${swatchId}-${color}`}
                 color={color}
-                selected={value?.toUpperCase() === color.toUpperCase()}
+                selected={selectedSwatchId === swatchId}
                 focused={focusedIndex === idx}
                 onClick={() => handleColorClick(color)}
                 onFocus={() => setFocusedIndex(idx)}
@@ -583,11 +633,11 @@ export function ColorPicker({
         <div className="mb-2">
           <SectionLabel>Recent Colors</SectionLabel>
           <div className="flex gap-0.5 flex-wrap">
-            {recentColors.slice(0, 10).map((color, idx) => (
+            {recentSwatches.map(({ id, color }) => (
               <ColorSwatch
-                key={`recent-${color}-${idx}`}
+                key={`${id}-${color}`}
                 color={color}
-                selected={value?.toUpperCase() === color.toUpperCase()}
+                selected={selectedSwatchId === id}
                 onClick={() => handleColorClick(color)}
               />
             ))}

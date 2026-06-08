@@ -40,17 +40,23 @@ When generating Mog code, use `api.describe(...)` for valid Mog methods and
 ```typescript
 api.describe('ws.tables.add')
 api.describe('ws.filters.setColumnFilter')
+api.guidance.analyze(source)
 api.guidance.explain('context.workbook.worksheets.getActiveWorksheet')
 api.guidance.explain('wb.activeSheet')
 api.guidance.preflight(source)
 ```
 
+For each diagnostic, inspect `diagnostic.mogReplacements` for replacement
+paths/snippets and `diagnostic.references` for follow-up `api.guidance.explain`
+queries.
+
 Code shaped like the Microsoft Office JavaScript spreadsheet API is diagnosed,
 not supported. Do not use `Excel.run`, `Office.context`, `context.sync()`,
 `.load(...)`, `.isNullObject`, Range proxy assignment such as
 `range.values = data`, or `range.format.fill.color`. Use Mog-native APIs such
-as `const ws = wb.activeSheet`, `await wb.getSheet(name)`,
-`await ws.setRange(range, data)`, and `await ws.formats.setRange(range, format)`.
+as the injected `wb` object, `const ws = wb.activeSheet`,
+`await wb.getSheet(name)`, `await ws.setRange(range, data)`, and
+`await ws.formats.setRange(range, format)`.
 
 ## Quick Start
 

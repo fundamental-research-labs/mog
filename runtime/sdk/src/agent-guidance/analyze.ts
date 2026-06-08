@@ -171,6 +171,53 @@ function referencesFor(replacements: readonly MogReplacement[]): string[] {
   return replacements.map((replacement) => `api.guidance.explain("${replacement.path}")`);
 }
 
+function spansOverlap(left: SourceSpan | undefined, right: SourceSpan | undefined): boolean {
+  if (!left || !right) return false;
+  return left.start <= right.end && right.start <= left.end;
+}
+
+function spanWidth(span: SourceSpan | undefined): number {
+  return span ? span.end - span.start : 0;
+}
+
+function preferDiagnostic(
+  existing: ApiGuidanceDiagnostic,
+  candidate: ApiGuidanceDiagnostic,
+): ApiGuidanceDiagnostic {
+  if (candidate.confidence !== existing.confidence) {
+    return candidate.confidence > existing.confidence ? candidate : existing;
+  }
+  if (candidate.blocking !== existing.blocking) {
+    return candidate.blocking ? candidate : existing;
+  }
+  return spanWidth(candidate.span) > spanWidth(existing.span) ? candidate : existing;
+}
+
+function coalesceOverlappingDiagnostics(
+  diagnostics: readonly ApiGuidanceDiagnostic[],
+): ApiGuidanceDiagnostic[] {
+  const coalesced: ApiGuidanceDiagnostic[] = [];
+
+  for (const diagnostic of diagnostics) {
+    const overlappingIndex = coalesced.findIndex(
+      (existing) =>
+        existing.entryId === diagnostic.entryId &&
+        spansOverlap(existing.span, diagnostic.span),
+    );
+    if (overlappingIndex < 0) {
+      coalesced.push(diagnostic);
+      continue;
+    }
+
+    coalesced[overlappingIndex] = preferDiagnostic(
+      coalesced[overlappingIndex],
+      diagnostic,
+    );
+  }
+
+  return coalesced;
+}
+
 export function diagnosticFromGuidanceEntry(
   entry: ApiGuidanceEntry,
   matcher: ApiGuidanceMatcher,
@@ -235,7 +282,9 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
     }
   }
 
-  return diagnostics.sort((a, b) => (a.span?.start ?? 0) - (b.span?.start ?? 0));
+  return coalesceOverlappingDiagnostics(diagnostics).sort(
+    (a, b) => (a.span?.start ?? 0) - (b.span?.start ?? 0),
+  );
 }
 
 export function preflightMogCode(code: string): ApiGuidancePreflightResult {

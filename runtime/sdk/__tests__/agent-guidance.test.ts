@@ -62,6 +62,8 @@ describe('SDK agent API guidance', () => {
     expect(matcherIds).toContain('officejs.context-workbook-active-worksheet');
     expect(matcherIds).toContain('officejs.range-values-assignment');
     expect(matcherIds).toContain('officejs.context-sync');
+    expect(diagnostics.filter((diagnostic) => diagnostic.entryId === 'officejs.active-sheet'))
+      .toHaveLength(1);
     expect(diagnostics.some((diagnostic) => diagnostic.blocking)).toBe(true);
     expect(
       diagnostics.flatMap((diagnostic) => diagnostic.mogReplacements).map((replacement) => replacement.path),

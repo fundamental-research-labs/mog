@@ -1,5 +1,5 @@
 import rawApiSpec from './generated/api-spec.json';
-import { apiGuidance, type ApiGuidanceApi } from './agent-guidance';
+import { apiGuidance, type ApiGuidanceApi } from './agent-guidance/index';
 
 // ─── Return Types ────────────────────────────────────────────────────────────
 

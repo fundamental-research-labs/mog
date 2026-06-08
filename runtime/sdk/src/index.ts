@@ -188,7 +188,7 @@ export {
   preflightMogCode,
   resolveGuidanceTarget,
   validateApiGuidanceCatalog,
-} from './agent-guidance';
+} from './agent-guidance/index';
 export type {
   ApiSpec,
   ApiSpecFunctionEntry,
@@ -227,4 +227,4 @@ export type {
   MogApiGuidanceExplanation,
   MogReplacement,
   SourceSpan,
-} from './agent-guidance';
+} from './agent-guidance/index';

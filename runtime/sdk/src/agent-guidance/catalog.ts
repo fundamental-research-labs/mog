@@ -10,7 +10,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs.office-on-ready', kind: 'call', symbol: 'Office.onReady', confidence: 0.94 },
       { id: 'officejs.excel-create-workbook', kind: 'call', symbol: 'Excel.createWorkbook', confidence: 0.96 },
     ],
-    message: 'This looks like OfficeJS. You are writing Mog code.',
+    message:
+      'This looks like Microsoft Office JavaScript spreadsheet API code. You are writing Mog code.',
     suggestion:
       'Do not wrap Mog code in Excel.run or Office.onReady. Use the injected `wb` / `ws` objects, or create a workbook with `createWorkbook(...)` at the SDK boundary.',
     mogReplacements: [
@@ -72,7 +73,8 @@ export const apiGuidanceCatalog = [
         blocking: true,
       },
     ],
-    message: 'OfficeJS proxy load/sync code is not part of the Mog API.',
+    message:
+      'Microsoft Office JavaScript spreadsheet proxy load/sync code is not part of the Mog API.',
     suggestion:
       'Mog APIs return real values directly. Await the Mog method that reads or writes the data you need.',
     mogReplacements: [
@@ -107,7 +109,8 @@ export const apiGuidanceCatalog = [
         confidence: 0.94,
       },
     ],
-    message: 'This active worksheet access is OfficeJS, not Mog.',
+    message:
+      'This active worksheet access comes from the Microsoft Office JavaScript spreadsheet API, not Mog.',
     suggestion: 'Use `const ws = wb.activeSheet;` for the active worksheet.',
     mogReplacements: [{ path: 'wb.activeSheet', snippet: 'const ws = wb.activeSheet;' }],
     confidence: 0.98,
@@ -126,7 +129,8 @@ export const apiGuidanceCatalog = [
       },
       { id: 'officejs.worksheets-items', kind: 'member-chain', symbol: 'worksheets.items' },
     ],
-    message: 'OfficeJS worksheet collection calls are not Mog worksheet access.',
+    message:
+      'Microsoft Office JavaScript spreadsheet worksheet collection calls are not Mog worksheet access.',
     suggestion:
       'Use `await wb.getSheet(name)` when the sheet must exist, `await wb.findSheet(name)` for nullable lookup, or `wb.sheetNames` / `await wb.getSheets()` for listing.',
     mogReplacements: [
@@ -146,7 +150,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs.range-values-assignment', kind: 'assignment', symbol: '.values' },
       { id: 'officejs.range-formulas-assignment', kind: 'assignment', symbol: '.formulas' },
     ],
-    message: 'OfficeJS range proxy assignment does not write data in Mog.',
+    message:
+      'Microsoft Office JavaScript spreadsheet range proxy assignment does not write data in Mog.',
     suggestion: 'Use `await ws.setRange(range, values)` for range writes.',
     mogReplacements: [{ path: 'ws.setRange', snippet: 'await ws.setRange("A1:B2", values);' }],
     confidence: 0.97,
@@ -165,7 +170,8 @@ export const apiGuidanceCatalog = [
         blocking: true,
       },
     ],
-    message: 'OfficeJS range proxy reads require load/sync; Mog reads return values directly.',
+    message:
+      'Microsoft Office JavaScript spreadsheet range proxy reads require load/sync; Mog reads return values directly.',
     suggestion: 'Use `await ws.getValues(range)` or `await ws.getRange(range)`.',
     mogReplacements: [
       { path: 'ws.getValues', snippet: 'const values = await ws.getValues("A1:B2");' },
@@ -185,7 +191,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs.get-resized-range', kind: 'call', symbol: 'getResizedRange' },
       { id: 'officejs.get-offset-range', kind: 'call', symbol: 'getOffsetRange' },
     ],
-    message: 'OfficeJS range navigation helpers do not map one-for-one to Mog APIs.',
+    message:
+      'Microsoft Office JavaScript spreadsheet range navigation helpers do not map one-for-one to Mog APIs.',
     suggestion:
       'Choose the Mog range API that matches the intent: used range, current region, data edge, or address/index conversion.',
     mogReplacements: [
@@ -206,7 +213,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs.font-bold', kind: 'member-chain', symbol: '.format.font.bold' },
       { id: 'officejs.number-format', kind: 'member-chain', symbol: '.numberFormat' },
     ],
-    message: 'OfficeJS range formatting properties are not Mog formatting calls.',
+    message:
+      'Microsoft Office JavaScript spreadsheet range formatting properties are not Mog formatting calls.',
     suggestion:
       'Use the worksheet formats API with an explicit range and format object.',
     mogReplacements: [
@@ -238,7 +246,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs.table-columns-add', kind: 'call', symbol: 'table.columns.add' },
       { id: 'officejs.workbook-tables', kind: 'member-chain', symbol: 'context.workbook.tables' },
     ],
-    message: 'OfficeJS table collection calls use a different table API shape.',
+    message:
+      'Microsoft Office JavaScript spreadsheet table collection calls use a different table API shape.',
     suggestion:
       'Use `await ws.tables.add(range, { name, hasHeaders })` and worksheet table row helpers.',
     mogReplacements: [
@@ -263,7 +272,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs-worksheet-auto-filter-apply', kind: 'call', symbol: 'worksheet.autoFilter.apply' },
       { id: 'officejs-sheet-auto-filter-apply', kind: 'call', symbol: 'sheet.autoFilter.apply' },
     ],
-    message: 'OfficeJS filter and sort calls are not Mog filter APIs.',
+    message:
+      'Microsoft Office JavaScript spreadsheet filter and sort calls are not Mog filter APIs.',
     suggestion:
       'Use worksheet filter APIs or `ws.sortRange(...)` with explicit ranges and criteria.',
     mogReplacements: [
@@ -288,7 +298,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs-named-item-get-range', kind: 'member-chain', symbol: 'namedItem.getRange' },
       { id: 'officejs-names-items', kind: 'member-chain', symbol: 'names.items' },
     ],
-    message: 'OfficeJS named item APIs do not exist in Mog.',
+    message:
+      'Microsoft Office JavaScript spreadsheet named item APIs do not exist in Mog.',
     suggestion: 'Use the Mog workbook or worksheet names APIs.',
     mogReplacements: [
       { path: 'wb.names.add', snippet: 'await wb.names.add(name, reference);' },
@@ -312,7 +323,8 @@ export const apiGuidanceCatalog = [
       { id: 'officejs-file-slices', kind: 'member-chain', symbol: '.getSliceAsync' },
       { id: 'officejs-create-workbook-file', kind: 'call', symbol: 'Excel.createWorkbook' },
     ],
-    message: 'OfficeJS document file APIs are host APIs, not Mog file I/O.',
+    message:
+      'Microsoft Office JavaScript spreadsheet document file APIs are host APIs, not Mog file I/O.',
     suggestion: 'Use Mog workbook save/export APIs or create workbooks through the SDK.',
     mogReplacements: [
       { path: 'wb.save', snippet: 'await wb.save(path);' },

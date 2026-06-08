@@ -290,8 +290,10 @@ try {
 
 The package includes generated SDK introspection metadata. Use `api.describe`
 to inspect root methods, sub-APIs, or a specific method signature. Agents that
-generate code should also use `api.guidance` for source preflight and
-wrong-dialect explanations when that API is available in their SDK version.
+generate code should also use `api.guidance.analyze(source)` or
+`api.guidance.preflight(source)` before execution, and
+`api.guidance.explain(...)` for wrong-dialect explanations when that API is
+available in their SDK version.
 
 ```typescript
 import { api } from '@mog-sdk/sdk';
@@ -302,6 +304,10 @@ console.log(api.describe('type:TableOptions'));
 
 console.log(api.guidance.explain('context.workbook.worksheets.getActiveWorksheet'));
 console.log(api.guidance.explain('wb.activeSheet'));
+
+for (const diagnostic of api.guidance.analyze(source)) {
+  console.log(diagnostic.mogReplacements, diagnostic.references);
+}
 ```
 
 ## Agent API Guidance
@@ -312,10 +318,12 @@ it is not supported or shimmed. Do not use `Excel.run`, `Office.context`,
 `context.sync()`, Range proxy `.load(...)`, null-object sentinels, or
 assignments such as `range.values = data`.
 
-Use Mog-native API paths instead: `const ws = wb.activeSheet`,
+Generated sandbox code should use the injected `wb` object and derive
+`const ws = wb.activeSheet`. Use Mog-native API paths instead:
 `await wb.getSheet(name)`, `await ws.setRange(range, data)`,
 `await ws.getValues(range)`, `await ws.formats.setRange(range, format)`, and
-`await ws.tables.add(range, options)`.
+`await ws.tables.add(range, options)`. Read `diagnostic.mogReplacements` for
+replacement paths/snippets; the summary error string is not the full guidance.
 
 ## Public Surface Notes
 

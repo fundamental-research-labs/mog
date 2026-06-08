@@ -29,6 +29,12 @@ const PUBLIC_DECLARATIONS = new Set([
   'wasm.d.ts',
   'workerd.d.ts',
   'api-describe.d.ts',
+  'agent-guidance/analyze.d.ts',
+  'agent-guidance/catalog.d.ts',
+  'agent-guidance/explain.d.ts',
+  'agent-guidance/index.d.ts',
+  'agent-guidance/targets.d.ts',
+  'agent-guidance/types.d.ts',
   'boot.d.ts',
   'collaborative-engine.d.ts',
   'public-kernel-facade.d.ts',
@@ -314,6 +320,14 @@ for (const artifact of findDeclarationArtifacts(DIST)) {
   const relativePath = artifact.slice(DIST.length + 1);
   if (!PUBLIC_DECLARATIONS.has(relativePath)) {
     unlinkSync(artifact);
+  }
+}
+
+for (const filename of PUBLIC_DECLARATIONS) {
+  const filepath = resolve(DIST, filename);
+  if (!existsSync(filepath)) {
+    console.error(`ERROR: Missing public declaration artifact: ${filename}`);
+    failed = true;
   }
 }
 

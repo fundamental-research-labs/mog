@@ -217,8 +217,9 @@ await ws.filters.setColumnFilter(0, { type: 'value', values: ['Widget'] });
 ### API Discovery and Agent Guidance
 
 Use `api.describe(...)` to inspect real Mog paths before generating code. Use
-`api.guidance` when available to diagnose generated source before execution and
-to explain wrong-dialect symbols.
+`api.guidance.analyze(source)` or `api.guidance.preflight(source)` before
+execution, and use `api.guidance.explain(...)` for wrong-dialect symbols or
+real Mog paths.
 
 ```typescript
 import { api } from '@mog-sdk/sdk';
@@ -229,18 +230,26 @@ console.log(api.describe('ws.filters.setColumnFilter'));
 console.log(api.guidance.explain('context.workbook.worksheets.getActiveWorksheet'));
 console.log(api.guidance.explain('wb.activeSheet'));
 
+const diagnostics = api.guidance.analyze(source);
+for (const diagnostic of diagnostics) {
+  console.log(diagnostic.mogReplacements, diagnostic.references);
+}
+
 const preflight = api.guidance.preflight(source);
 if (!preflight.ok) {
-  throw new Error(preflight.diagnostics[0]?.suggestion ?? 'Invalid Mog code');
+  const first = preflight.diagnostics[0];
+  throw new Error(first?.mogReplacements[0]?.snippet ?? first?.suggestion ?? 'Invalid Mog code');
 }
 ```
 
 OfficeJS-looking code is a diagnosed foreign dialect, not a supported API mode.
 Do not write `Excel.run`, `Office.context`, `context.sync()`, Range proxy
 `.load(...)` calls, null-object sentinels, or assignments such as
-`range.values = data`. Use Mog-native workbook and worksheet APIs such as
-`wb.activeSheet`, `await wb.getSheet(name)`, `await ws.setRange(range, data)`,
-and `await ws.formats.setRange(range, format)`.
+`range.values = data`. In generated sandbox code, use the injected `wb` object
+and derive `const ws = wb.activeSheet`; then call Mog-native APIs such as
+`await wb.getSheet(name)`, `await ws.setRange(range, data)`, and
+`await ws.formats.setRange(range, format)`. Read `diagnostic.mogReplacements`
+for replacement paths/snippets; do not rely only on the summary error string.
 
 ### Low-Level Access
 

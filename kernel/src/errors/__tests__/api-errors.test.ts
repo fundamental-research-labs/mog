@@ -67,7 +67,9 @@ describe('API error factories', () => {
     expect(err.code).toBe('OBJ_CHART_NOT_FOUND');
     expect(err.message).toBe('Chart "chart-7" not found');
     expect(err.path).toEqual(['chartId']);
-    expect(err.suggestion).toBe('Use getCharts() to list available charts');
+    expect(err.suggestion).toBe(
+      'Use ws.charts.list() to list available charts, or api.describe("ws.charts") for chart API discovery',
+    );
     expect(err.context).toEqual({ resourceType: 'chart', resourceId: 'chart-7' });
   });
 

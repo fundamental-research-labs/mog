@@ -1,5 +1,7 @@
 import type {
   PivotHandlePlacementSpec,
+  PivotHandleInfo,
+  PivotHandleInfoOptions,
   PivotValueSortConfig,
   PivotTableConfig as ApiPivotTableConfig,
   PivotTableHandle,
@@ -30,6 +32,7 @@ import {
   valuePlacementWithAggregate,
 } from '../../../domain/pivots/value-labels';
 import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
+import { toA1 } from '../../internal/utils';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -81,6 +84,45 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
   } = options;
   const pivotId = pivotConfig.id ?? pivotConfig.name;
   let cachedConfig: DataPivotTableConfig = pivotConfig;
+  const availableMethods = [
+    'getName',
+    'getInfo',
+    'getConfig',
+    'update',
+    'delete',
+    'subscribeResult',
+    'compute',
+    'getRange',
+    'addField',
+    'addValueField',
+    'addPlacement',
+    'removeField',
+    'removePlacement',
+    'moveField',
+    'movePlacement',
+    'changeAggregation',
+    'setPlacementAggregateFunction',
+    'renameValueField',
+    'renameValuePlacement',
+    'refresh',
+    'getAllItems',
+    'setShowValuesAs',
+    'setSortOrder',
+    'setPlacementSortOrder',
+    'setSortByValue',
+    'setFilter',
+    'removeFilter',
+    'setLayout',
+    'setStyle',
+    'toggleExpanded',
+    'setAllExpanded',
+    'getExpansionState',
+    'getDrillDownData',
+    'addCalculatedField',
+    'setItemVisibility',
+    'getDataSourceType',
+    'setDataSource',
+  ] as const;
 
   const refreshCachedConfig = async (): Promise<void> => {
     const updated = await ctx.pivot.getPivot(sheetId, pivotId);
@@ -108,6 +150,46 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
   return {
     getName(): string {
       return cachedConfig.name ?? pivotId;
+    },
+
+    async getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo> {
+      const current = (await ctx.pivot.getPivot(sheetId, pivotId)) ?? cachedConfig;
+      cachedConfig = current;
+      const apiConfig = toApiConfig(current, sourceSheetName);
+      const includeRanges = options?.includeRanges ?? true;
+      const outputLocation = current.outputLocation
+        ? {
+            row: current.outputLocation.row,
+            col: current.outputLocation.col,
+            a1: toA1(current.outputLocation.row, current.outputLocation.col),
+          }
+        : undefined;
+
+      return {
+        id: pivotId,
+        name: current.name ?? pivotId,
+        dataSource: apiConfig.dataSource,
+        ...(current.sourceSheetName ? { sourceSheetName: current.sourceSheetName } : {}),
+        ...(current.sourceRange ? { sourceRange: current.sourceRange } : {}),
+        ...(current.outputSheetName ? { outputSheetName: current.outputSheetName } : {}),
+        ...(outputLocation ? { outputLocation } : {}),
+        fields: current.fields,
+        placements: current.placements,
+        filters: current.filters,
+        ...(current.layout ? { layout: current.layout } : {}),
+        ...(current.style ? { style: current.style } : {}),
+        ...(includeRanges ? { renderedRange: await getRange(pivotId) } : {}),
+        expansionState:
+          ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
+            expandedRows: {},
+            expandedColumns: {},
+          },
+        dataSourceType: 'range',
+        ...(options?.includeItems
+          ? { items: await ctx.pivot.getAllPivotItems(sheetId, pivotId) }
+          : {}),
+        availableMethods: [...availableMethods],
+      };
     },
 
     getConfig(): ApiPivotTableConfig {

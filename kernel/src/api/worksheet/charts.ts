@@ -78,6 +78,23 @@ async function awaitChartReadScope(
   }
 }
 
+async function resolveChartIdInput(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  chartId: string,
+): Promise<string> {
+  const exact = (await ctx.computeBridge.getChart(sheetId, chartId)) as ChartFloatingObject | null;
+  if (exact) return chartId;
+  if (!/^chart-import-\d+$/.test(chartId)) return chartId;
+
+  const candidate = `${chartId}-${sheetId}`;
+  const scoped = (await ctx.computeBridge.getChart(
+    sheetId,
+    candidate,
+  )) as ChartFloatingObject | null;
+  return scoped ? candidate : chartId;
+}
+
 /**
  * Get a chart as the public Chart type, throwing chartNotFound if absent.
  */
@@ -87,7 +104,11 @@ async function requireChart(
   chartId: string,
 ): Promise<Chart> {
   await awaitSheetMaterialized(ctx, sheetId);
-  const raw = (await ctx.computeBridge.getChart(sheetId, chartId)) as ChartFloatingObject | null;
+  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
+  const raw = (await ctx.computeBridge.getChart(
+    sheetId,
+    resolvedChartId,
+  )) as ChartFloatingObject | null;
   if (!raw) throw chartNotFound(chartId);
   return serializedChartToChart(raw);
 }
@@ -116,10 +137,11 @@ async function applyUpdate(
   updates: Partial<ChartConfig>,
 ): Promise<void> {
   await awaitSheetMaterialized(ctx, sheetId);
+  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
   // Ensure chart exists
   const existing = (await ctx.computeBridge.getChart(
     sheetId,
-    chartId,
+    resolvedChartId,
   )) as ChartFloatingObject | null;
   if (!existing) throw chartNotFound(chartId);
   const internalUpdates = chartUpdatesToInternal(updates);
@@ -128,7 +150,7 @@ async function applyUpdate(
   if (internalUpdates.anchor && existing.anchor) {
     internalUpdates.anchor = { ...existing.anchor, ...internalUpdates.anchor };
   }
-  await ctx.computeBridge.updateChart(sheetId, chartId, internalUpdates);
+  await ctx.computeBridge.updateChart(sheetId, resolvedChartId, internalUpdates);
 }
 
 // =============================================================================
@@ -191,9 +213,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async get(chartId: string): Promise<Chart | null> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
-      chartId,
+      resolvedChartId,
     )) as ChartFloatingObject | null;
     return raw ? serializedChartToChart(raw) : null;
   }
@@ -205,17 +228,19 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async updateRaw(chartId: string, fields: Record<string, unknown>): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.updateChart(this.sheetId, chartId, fields);
+    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
+    await this.ctx.computeBridge.updateChart(this.sheetId, resolvedChartId, fields);
   }
 
   async remove(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
     const existing = (await this.ctx.computeBridge.getChart(
       this.sheetId,
-      chartId,
+      resolvedChartId,
     )) as ChartFloatingObject | null;
     if (!existing) throw chartNotFound(chartId);
-    await this.ctx.computeBridge.deleteChart(this.sheetId, chartId);
+    await this.ctx.computeBridge.deleteChart(this.sheetId, resolvedChartId);
   }
 
   async list(options?: ChartReadOptions): Promise<Chart[]> {
@@ -253,16 +278,17 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async exportImage(chartId: string, options?: ImageExportOptions): Promise<string> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
-      chartId,
+      resolvedChartId,
     )) as ChartFloatingObject | null;
     if (!raw) throw chartNotFound(chartId);
 
     const exporter = this.exporter ?? this.ctx.chartImageExporter;
     if (exporter) {
       try {
-        const dataUrl = await exporter.exportImage(this.sheetId, chartId, options);
+        const dataUrl = await exporter.exportImage(this.sheetId, resolvedChartId, options);
         return dataUrl;
       } catch (error) {
         if (error instanceof KernelError) throw error;
@@ -308,22 +334,34 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async bringToFront(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.bringChartToFront(this.sheetId, chartId);
+    await this.ctx.computeBridge.bringChartToFront(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   async sendToBack(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.sendChartToBack(this.sheetId, chartId);
+    await this.ctx.computeBridge.sendChartToBack(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   async bringForward(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.bringChartForward(this.sheetId, chartId);
+    await this.ctx.computeBridge.bringChartForward(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   async sendBackward(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.sendChartBackward(this.sheetId, chartId);
+    await this.ctx.computeBridge.sendChartBackward(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   // ===========================================================================
@@ -332,17 +370,27 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async linkToTable(chartId: string, tableId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.linkChartToTable(this.sheetId, chartId, tableId);
+    await this.ctx.computeBridge.linkChartToTable(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+      tableId,
+    );
   }
 
   async unlinkFromTable(chartId: string): Promise<void> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.unlinkChartFromTable(this.sheetId, chartId);
+    await this.ctx.computeBridge.unlinkChartFromTable(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   async isLinkedToTable(chartId: string): Promise<boolean> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
-    return this.ctx.computeBridge.isChartLinkedToTable(this.sheetId, chartId);
+    return this.ctx.computeBridge.isChartLinkedToTable(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   // ===========================================================================
@@ -714,7 +762,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     if (!bridge || typeof bridge.getLayout !== 'function') {
       return null;
     }
-    return bridge.getLayout(this.sheetId, chartId);
+    return bridge.getLayout(
+      this.sheetId,
+      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
+    );
   }
 
   // ===========================================================================
@@ -956,9 +1007,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   async activate(chartId: string): Promise<void> {
     // Verify chart exists
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
     const raw = (await this.ctx.computeBridge.getChart(
       this.sheetId,
-      chartId,
+      resolvedChartId,
     )) as ChartFloatingObject | null;
     if (!raw) throw chartNotFound(chartId);
 
@@ -966,7 +1018,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     this.ctx.eventBus.emit({
       type: 'chart:selected',
       sheetId: this.sheetId,
-      chartId,
+      chartId: resolvedChartId,
     } as never);
   }
 }

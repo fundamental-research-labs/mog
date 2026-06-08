@@ -167,6 +167,45 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('collection setItemVisibility alias shares canonical visibility behavior', async () => {
+    await pivots.setItemVisibility('SalesPivot', 'Category', {
+      ['\u0000BLANK\u0000']: false,
+    });
+
+    expect(ctx.pivot.updatePivot).toHaveBeenCalledWith(
+      SHEET_ID,
+      'pivot-1',
+      { filters: [{ fieldId: 'Category', excludeValues: [null] }] },
+      { reason: 'filterChanged', refreshPolicy: 'refreshAndMaterialize' },
+    );
+  });
+
+  it('handle getInfo is own-key visible and bound to pivot id', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    expect(Object.keys(handle!)).toContain('getInfo');
+    const info = await handle!.getInfo({ includeItems: true });
+
+    expect(info).toEqual(
+      expect.objectContaining({
+        id: 'pivot-1',
+        name: 'SalesPivot',
+        dataSource: 'Sheet1!A1:B6',
+        dataSourceType: 'range',
+        renderedRange: {
+          startRow: 2,
+          startCol: 3,
+          endRow: 3,
+          endCol: 4,
+          sheetId: SHEET_ID,
+        },
+        availableMethods: expect.arrayContaining(['getInfo', 'setItemVisibility']),
+        items: makePivotItems(),
+      }),
+    );
+    expect(ctx.pivot.getPivot).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+  });
+
   it('literal "(blank)" item keys remain text values distinct from semantic blanks', async () => {
     await pivots.setPivotItemVisibility('SalesPivot', 'Category', {
       ['T:(blank)']: false,

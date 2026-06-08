@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mog.dev/schemas/api-compatibility.schema.json",
+  "title": "Mog API Compatibility Registry",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "entries",
+    "byId",
+    "byObservedPath",
+    "byCanonicalPath"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "byId": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "byObservedPath": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/entry"
+        }
+      }
+    },
+    "byCanonicalPath": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/entry"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "reference": {
+      "type": "object",
+      "required": [
+        "id",
+        "observedPath",
+        "canonicalPath",
+        "status",
+        "appliesTo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "canonical",
+            "contract_extension",
+            "supported_alias",
+            "input_alias",
+            "deprecated_alias",
+            "semantic_compatibility",
+            "structured_diagnostic",
+            "rejected"
+          ]
+        },
+        "appliesTo": {
+          "enum": [
+            "method",
+            "property",
+            "argument",
+            "handle",
+            "result"
+          ]
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "observedPath",
+        "canonicalPath",
+        "status",
+        "appliesTo",
+        "ownerTheme",
+        "ownerPackage",
+        "firstObservedVersion",
+        "canonicalSince",
+        "deprecatedSince",
+        "removeAfter",
+        "evidence",
+        "behavior",
+        "runtimeSurfaces",
+        "surfaceDisposition",
+        "verification"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "canonical",
+            "contract_extension",
+            "supported_alias",
+            "input_alias",
+            "deprecated_alias",
+            "semantic_compatibility",
+            "structured_diagnostic",
+            "rejected"
+          ]
+        },
+        "appliesTo": {
+          "enum": [
+            "method",
+            "property",
+            "argument",
+            "handle",
+            "result"
+          ]
+        },
+        "ownerTheme": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ownerPackage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "firstObservedVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonicalSince": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deprecatedSince": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "removeAfter": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "source",
+              "reference"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "source": {
+                "enum": [
+                  "trace",
+                  "eval",
+                  "docs",
+                  "training",
+                  "prior_version",
+                  "source"
+                ]
+              },
+              "reference": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "behavior": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSurfaces": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "typescript",
+              "kernel",
+              "executeCode-preflight",
+              "api-describe",
+              "agent-guidance",
+              "docs",
+              "python",
+              "api-eval"
+            ]
+          }
+        },
+        "surfaceDisposition": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "canonical",
+              "contract_extension",
+              "supported_alias",
+              "input_alias",
+              "deprecated_alias",
+              "semantic_compatibility",
+              "structured_diagnostic",
+              "rejected"
+            ]
+          }
+        },
+        "diagnostics": {
+          "type": "object",
+          "required": [
+            "code",
+            "message",
+            "replacements"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "MOG002_MOG_API_USAGE",
+                "MOG003_COMPATIBILITY_REJECTED"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "replacements": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

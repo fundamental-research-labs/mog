@@ -561,5 +561,4892 @@
       "confidence": 0.96,
       "blocking": true
     }
-  ]
+  ],
+  "compatibility": {
+    "schemaVersion": "1",
+    "entries": [
+      {
+        "id": "round5.chart.addChart.diagnostic",
+        "observedPath": "ws.addChart",
+        "canonicalPath": "ws.charts.add",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+          "replacements": [
+            "ws.charts.add"
+          ]
+        },
+        "verification": [
+          "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+        ]
+      },
+      {
+        "id": "round5.chart.getChart.deprecated",
+        "observedPath": "ws.getChart",
+        "canonicalPath": "ws.charts.get",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+          "replacements": [
+            "ws.charts.get"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.chart.listCharts.deprecated",
+        "observedPath": "ws.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.chart.removeChart.deprecated",
+        "observedPath": "ws.removeChart",
+        "canonicalPath": "ws.charts.remove",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+          "replacements": [
+            "ws.charts.remove"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.chart.updateChart.deprecated",
+        "observedPath": "ws.updateChart",
+        "canonicalPath": "ws.charts.update",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+          "replacements": [
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.pivot.addPivotTable.deprecated",
+        "observedPath": "ws.addPivotTable",
+        "canonicalPath": "ws.pivots.add",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+          "replacements": [
+            "ws.pivots.add"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.pivot.getPivotTable.deprecated",
+        "observedPath": "ws.getPivotTable",
+        "canonicalPath": "ws.pivots.get",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+          "replacements": [
+            "ws.pivots.get"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.pivot.listPivotTables.deprecated",
+        "observedPath": "ws.listPivotTables",
+        "canonicalPath": "ws.pivots.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+          "replacements": [
+            "ws.pivots.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      {
+        "id": "round5.pivot.removePivotTable.deprecated",
+        "observedPath": "ws.removePivotTable",
+        "canonicalPath": "ws.pivots.remove",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+          "replacements": [
+            "ws.pivots.remove"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      {
+        "id": "round55.chart.imported-short-id.input-alias",
+        "observedPath": "chart-import-N",
+        "canonicalPath": "ws.charts.*(chartId)",
+        "status": "input_alias",
+        "appliesTo": "argument",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.8.1",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+          },
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+          }
+        ],
+        "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "input_alias",
+          "kernel": "input_alias",
+          "executeCode-preflight": "input_alias",
+          "api-describe": "input_alias",
+          "agent-guidance": "input_alias",
+          "docs": "input_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "input_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+        ]
+      },
+      {
+        "id": "round55.chart.not-found-guidance",
+        "observedPath": "chartNotFound suggestion: getCharts()",
+        "canonicalPath": "ws.charts.list",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+          }
+        ],
+        "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+        "runtimeSurfaces": [
+          "kernel",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+          "replacements": [
+            "ws.charts.list",
+            "api.describe(\"ws.charts\")"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- api-errors"
+        ]
+      },
+      {
+        "id": "round55.pivot.collection.setItemVisibility.alias",
+        "observedPath": "ws.pivots.setItemVisibility",
+        "canonicalPath": "ws.pivots.setPivotItemVisibility",
+        "status": "supported_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+          }
+        ],
+        "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "supported_alias",
+          "kernel": "supported_alias",
+          "executeCode-preflight": "supported_alias",
+          "api-describe": "supported_alias",
+          "agent-guidance": "supported_alias",
+          "docs": "supported_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "supported_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+        ]
+      },
+      {
+        "id": "round55.pivot.handle.describe.diagnostic",
+        "observedPath": "ws.pivots.get(...).describe",
+        "canonicalPath": "type:PivotTableHandle.getInfo",
+        "status": "structured_diagnostic",
+        "appliesTo": "handle",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+          }
+        ],
+        "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+          "replacements": [
+            "type:PivotTableHandle.getInfo",
+            "ws.pivots.getInfo"
+          ]
+        },
+        "verification": [
+          "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+        ]
+      },
+      {
+        "id": "round55.pivot.handle.getInfo",
+        "observedPath": "ws.pivots.get(...).getInfo",
+        "canonicalPath": "type:PivotTableHandle.getInfo",
+        "status": "contract_extension",
+        "appliesTo": "handle",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+          }
+        ],
+        "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "contract_extension",
+          "kernel": "contract_extension",
+          "executeCode-preflight": "contract_extension",
+          "api-describe": "contract_extension",
+          "agent-guidance": "contract_extension",
+          "docs": "contract_extension",
+          "python": "structured_diagnostic",
+          "api-eval": "contract_extension"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+          "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+        ]
+      },
+      {
+        "id": "round55.pivot.item-visibility.blank-semantics",
+        "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+        "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+        "status": "semantic_compatibility",
+        "appliesTo": "argument",
+        "ownerTheme": "round-55/theme-03",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+          }
+        ],
+        "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "semantic_compatibility",
+          "kernel": "semantic_compatibility",
+          "executeCode-preflight": "semantic_compatibility",
+          "api-describe": "semantic_compatibility",
+          "agent-guidance": "semantic_compatibility",
+          "docs": "semantic_compatibility",
+          "python": "structured_diagnostic",
+          "api-eval": "semantic_compatibility"
+        },
+        "verification": [
+          "cargo test -p compute-pivot",
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+        ]
+      },
+      {
+        "id": "round55.worksheet.describeRange.no-arg",
+        "observedPath": "ws.describeRange()",
+        "canonicalPath": "ws.describeRange",
+        "status": "contract_extension",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+          }
+        ],
+        "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "contract_extension",
+          "kernel": "contract_extension",
+          "api-describe": "contract_extension",
+          "agent-guidance": "contract_extension",
+          "docs": "contract_extension",
+          "python": "structured_diagnostic",
+          "api-eval": "contract_extension"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+          "pnpm --filter @mog/types-api typecheck",
+          "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+        ]
+      },
+      {
+        "id": "round55.worksheet.getCharts.alias",
+        "observedPath": "ws.getCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "supported_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+          }
+        ],
+        "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "supported_alias",
+          "kernel": "supported_alias",
+          "executeCode-preflight": "supported_alias",
+          "api-describe": "supported_alias",
+          "agent-guidance": "supported_alias",
+          "docs": "supported_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "supported_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+          "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+        ]
+      }
+    ],
+    "byId": {
+      "round5.chart.addChart.diagnostic": {
+        "id": "round5.chart.addChart.diagnostic",
+        "observedPath": "ws.addChart",
+        "canonicalPath": "ws.charts.add",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+          "replacements": [
+            "ws.charts.add"
+          ]
+        },
+        "verification": [
+          "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+        ]
+      },
+      "round5.chart.getChart.deprecated": {
+        "id": "round5.chart.getChart.deprecated",
+        "observedPath": "ws.getChart",
+        "canonicalPath": "ws.charts.get",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+          "replacements": [
+            "ws.charts.get"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      "round5.chart.listCharts.deprecated": {
+        "id": "round5.chart.listCharts.deprecated",
+        "observedPath": "ws.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      "round5.chart.removeChart.deprecated": {
+        "id": "round5.chart.removeChart.deprecated",
+        "observedPath": "ws.removeChart",
+        "canonicalPath": "ws.charts.remove",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+          "replacements": [
+            "ws.charts.remove"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      "round5.chart.updateChart.deprecated": {
+        "id": "round5.chart.updateChart.deprecated",
+        "observedPath": "ws.updateChart",
+        "canonicalPath": "ws.charts.update",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+          "replacements": [
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+        ]
+      },
+      "round5.pivot.addPivotTable.deprecated": {
+        "id": "round5.pivot.addPivotTable.deprecated",
+        "observedPath": "ws.addPivotTable",
+        "canonicalPath": "ws.pivots.add",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+          "replacements": [
+            "ws.pivots.add"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      "round5.pivot.getPivotTable.deprecated": {
+        "id": "round5.pivot.getPivotTable.deprecated",
+        "observedPath": "ws.getPivotTable",
+        "canonicalPath": "ws.pivots.get",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+          "replacements": [
+            "ws.pivots.get"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      "round5.pivot.listPivotTables.deprecated": {
+        "id": "round5.pivot.listPivotTables.deprecated",
+        "observedPath": "ws.listPivotTables",
+        "canonicalPath": "ws.pivots.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+          "replacements": [
+            "ws.pivots.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      "round5.pivot.removePivotTable.deprecated": {
+        "id": "round5.pivot.removePivotTable.deprecated",
+        "observedPath": "ws.removePivotTable",
+        "canonicalPath": "ws.pivots.remove",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-5/namespaced-sub-apis",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.9.1",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+          }
+        ],
+        "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+          "replacements": [
+            "ws.pivots.remove"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+        ]
+      },
+      "round55.chart.imported-short-id.input-alias": {
+        "id": "round55.chart.imported-short-id.input-alias",
+        "observedPath": "chart-import-N",
+        "canonicalPath": "ws.charts.*(chartId)",
+        "status": "input_alias",
+        "appliesTo": "argument",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.8.1",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "prior_version",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+          },
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+          }
+        ],
+        "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "input_alias",
+          "kernel": "input_alias",
+          "executeCode-preflight": "input_alias",
+          "api-describe": "input_alias",
+          "agent-guidance": "input_alias",
+          "docs": "input_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "input_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+        ]
+      },
+      "round55.chart.not-found-guidance": {
+        "id": "round55.chart.not-found-guidance",
+        "observedPath": "chartNotFound suggestion: getCharts()",
+        "canonicalPath": "ws.charts.list",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+          }
+        ],
+        "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+        "runtimeSurfaces": [
+          "kernel",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+          "replacements": [
+            "ws.charts.list",
+            "api.describe(\"ws.charts\")"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- api-errors"
+        ]
+      },
+      "round55.pivot.collection.setItemVisibility.alias": {
+        "id": "round55.pivot.collection.setItemVisibility.alias",
+        "observedPath": "ws.pivots.setItemVisibility",
+        "canonicalPath": "ws.pivots.setPivotItemVisibility",
+        "status": "supported_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+          }
+        ],
+        "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "supported_alias",
+          "kernel": "supported_alias",
+          "executeCode-preflight": "supported_alias",
+          "api-describe": "supported_alias",
+          "agent-guidance": "supported_alias",
+          "docs": "supported_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "supported_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+        ]
+      },
+      "round55.pivot.handle.describe.diagnostic": {
+        "id": "round55.pivot.handle.describe.diagnostic",
+        "observedPath": "ws.pivots.get(...).describe",
+        "canonicalPath": "type:PivotTableHandle.getInfo",
+        "status": "structured_diagnostic",
+        "appliesTo": "handle",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+          }
+        ],
+        "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+          "replacements": [
+            "type:PivotTableHandle.getInfo",
+            "ws.pivots.getInfo"
+          ]
+        },
+        "verification": [
+          "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+        ]
+      },
+      "round55.pivot.handle.getInfo": {
+        "id": "round55.pivot.handle.getInfo",
+        "observedPath": "ws.pivots.get(...).getInfo",
+        "canonicalPath": "type:PivotTableHandle.getInfo",
+        "status": "contract_extension",
+        "appliesTo": "handle",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+          }
+        ],
+        "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "contract_extension",
+          "kernel": "contract_extension",
+          "executeCode-preflight": "contract_extension",
+          "api-describe": "contract_extension",
+          "agent-guidance": "contract_extension",
+          "docs": "contract_extension",
+          "python": "structured_diagnostic",
+          "api-eval": "contract_extension"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+          "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+        ]
+      },
+      "round55.pivot.item-visibility.blank-semantics": {
+        "id": "round55.pivot.item-visibility.blank-semantics",
+        "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+        "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+        "status": "semantic_compatibility",
+        "appliesTo": "argument",
+        "ownerTheme": "round-55/theme-03",
+        "ownerPackage": "@mog-sdk/kernel",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+          }
+        ],
+        "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "semantic_compatibility",
+          "kernel": "semantic_compatibility",
+          "executeCode-preflight": "semantic_compatibility",
+          "api-describe": "semantic_compatibility",
+          "agent-guidance": "semantic_compatibility",
+          "docs": "semantic_compatibility",
+          "python": "structured_diagnostic",
+          "api-eval": "semantic_compatibility"
+        },
+        "verification": [
+          "cargo test -p compute-pivot",
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+          "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+        ]
+      },
+      "round55.worksheet.describeRange.no-arg": {
+        "id": "round55.worksheet.describeRange.no-arg",
+        "observedPath": "ws.describeRange()",
+        "canonicalPath": "ws.describeRange",
+        "status": "contract_extension",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+          }
+        ],
+        "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "contract_extension",
+          "kernel": "contract_extension",
+          "api-describe": "contract_extension",
+          "agent-guidance": "contract_extension",
+          "docs": "contract_extension",
+          "python": "structured_diagnostic",
+          "api-eval": "contract_extension"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+          "pnpm --filter @mog/types-api typecheck",
+          "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+        ]
+      },
+      "round55.worksheet.getCharts.alias": {
+        "id": "round55.worksheet.getCharts.alias",
+        "observedPath": "ws.getCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "supported_alias",
+        "appliesTo": "method",
+        "ownerTheme": "round-55/theme-07",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": "0.9.0",
+        "canonicalSince": "0.9.1",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+          },
+          {
+            "source": "source",
+            "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+          }
+        ],
+        "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "api-describe",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "supported_alias",
+          "kernel": "supported_alias",
+          "executeCode-preflight": "supported_alias",
+          "api-describe": "supported_alias",
+          "agent-guidance": "supported_alias",
+          "docs": "supported_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "supported_alias"
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+          "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+        ]
+      }
+    },
+    "byObservedPath": {
+      "chart-import-N": [
+        {
+          "id": "round55.chart.imported-short-id.input-alias",
+          "observedPath": "chart-import-N",
+          "canonicalPath": "ws.charts.*(chartId)",
+          "status": "input_alias",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.8.1",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            },
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            }
+          ],
+          "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "input_alias",
+            "kernel": "input_alias",
+            "executeCode-preflight": "input_alias",
+            "api-describe": "input_alias",
+            "agent-guidance": "input_alias",
+            "docs": "input_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "input_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+            "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+          ]
+        }
+      ],
+      "chart-import-N()": [
+        {
+          "id": "round55.chart.imported-short-id.input-alias",
+          "observedPath": "chart-import-N",
+          "canonicalPath": "ws.charts.*(chartId)",
+          "status": "input_alias",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.8.1",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            },
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            }
+          ],
+          "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "input_alias",
+            "kernel": "input_alias",
+            "executeCode-preflight": "input_alias",
+            "api-describe": "input_alias",
+            "agent-guidance": "input_alias",
+            "docs": "input_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "input_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+            "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+          ]
+        }
+      ],
+      "chartNotFound suggestion: getCharts": [
+        {
+          "id": "round55.chart.not-found-guidance",
+          "observedPath": "chartNotFound suggestion: getCharts()",
+          "canonicalPath": "ws.charts.list",
+          "status": "structured_diagnostic",
+          "appliesTo": "result",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            }
+          ],
+          "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+          "runtimeSurfaces": [
+            "kernel",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+            "replacements": [
+              "ws.charts.list",
+              "api.describe(\"ws.charts\")"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- api-errors"
+          ]
+        }
+      ],
+      "chartNotFound suggestion: getCharts()": [
+        {
+          "id": "round55.chart.not-found-guidance",
+          "observedPath": "chartNotFound suggestion: getCharts()",
+          "canonicalPath": "ws.charts.list",
+          "status": "structured_diagnostic",
+          "appliesTo": "result",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            }
+          ],
+          "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+          "runtimeSurfaces": [
+            "kernel",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+            "replacements": [
+              "ws.charts.list",
+              "api.describe(\"ws.charts\")"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- api-errors"
+          ]
+        }
+      ],
+      "handle.setItemVisibility(field, {\"(blank)\": false})": [
+        {
+          "id": "round55.pivot.item-visibility.blank-semantics",
+          "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+          "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+          "status": "semantic_compatibility",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-03",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            }
+          ],
+          "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "semantic_compatibility",
+            "kernel": "semantic_compatibility",
+            "executeCode-preflight": "semantic_compatibility",
+            "api-describe": "semantic_compatibility",
+            "agent-guidance": "semantic_compatibility",
+            "docs": "semantic_compatibility",
+            "python": "structured_diagnostic",
+            "api-eval": "semantic_compatibility"
+          },
+          "verification": [
+            "cargo test -p compute-pivot",
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "handle.setItemVisibility(field, {\"(blank)\": false})()": [
+        {
+          "id": "round55.pivot.item-visibility.blank-semantics",
+          "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+          "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+          "status": "semantic_compatibility",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-03",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            }
+          ],
+          "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "semantic_compatibility",
+            "kernel": "semantic_compatibility",
+            "executeCode-preflight": "semantic_compatibility",
+            "api-describe": "semantic_compatibility",
+            "agent-guidance": "semantic_compatibility",
+            "docs": "semantic_compatibility",
+            "python": "structured_diagnostic",
+            "api-eval": "semantic_compatibility"
+          },
+          "verification": [
+            "cargo test -p compute-pivot",
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.addChart": [
+        {
+          "id": "round5.chart.addChart.diagnostic",
+          "observedPath": "ws.addChart",
+          "canonicalPath": "ws.charts.add",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+            "replacements": [
+              "ws.charts.add"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.addChart()": [
+        {
+          "id": "round5.chart.addChart.diagnostic",
+          "observedPath": "ws.addChart",
+          "canonicalPath": "ws.charts.add",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+            "replacements": [
+              "ws.charts.add"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.addPivotTable": [
+        {
+          "id": "round5.pivot.addPivotTable.deprecated",
+          "observedPath": "ws.addPivotTable",
+          "canonicalPath": "ws.pivots.add",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+            "replacements": [
+              "ws.pivots.add"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.addPivotTable()": [
+        {
+          "id": "round5.pivot.addPivotTable.deprecated",
+          "observedPath": "ws.addPivotTable",
+          "canonicalPath": "ws.pivots.add",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+            "replacements": [
+              "ws.pivots.add"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.describeRange": [
+        {
+          "id": "round55.worksheet.describeRange.no-arg",
+          "observedPath": "ws.describeRange()",
+          "canonicalPath": "ws.describeRange",
+          "status": "contract_extension",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            }
+          ],
+          "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+            "pnpm --filter @mog/types-api typecheck",
+            "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+          ]
+        }
+      ],
+      "ws.describeRange()": [
+        {
+          "id": "round55.worksheet.describeRange.no-arg",
+          "observedPath": "ws.describeRange()",
+          "canonicalPath": "ws.describeRange",
+          "status": "contract_extension",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            }
+          ],
+          "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+            "pnpm --filter @mog/types-api typecheck",
+            "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+          ]
+        }
+      ],
+      "ws.getChart": [
+        {
+          "id": "round5.chart.getChart.deprecated",
+          "observedPath": "ws.getChart",
+          "canonicalPath": "ws.charts.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+            "replacements": [
+              "ws.charts.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.getChart()": [
+        {
+          "id": "round5.chart.getChart.deprecated",
+          "observedPath": "ws.getChart",
+          "canonicalPath": "ws.charts.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+            "replacements": [
+              "ws.charts.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.getCharts": [
+        {
+          "id": "round55.worksheet.getCharts.alias",
+          "observedPath": "ws.getCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            }
+          ],
+          "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.getCharts()": [
+        {
+          "id": "round55.worksheet.getCharts.alias",
+          "observedPath": "ws.getCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            }
+          ],
+          "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.getPivotTable": [
+        {
+          "id": "round5.pivot.getPivotTable.deprecated",
+          "observedPath": "ws.getPivotTable",
+          "canonicalPath": "ws.pivots.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+            "replacements": [
+              "ws.pivots.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.getPivotTable()": [
+        {
+          "id": "round5.pivot.getPivotTable.deprecated",
+          "observedPath": "ws.getPivotTable",
+          "canonicalPath": "ws.pivots.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+            "replacements": [
+              "ws.pivots.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.listCharts": [
+        {
+          "id": "round5.chart.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+            "replacements": [
+              "ws.charts.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.listCharts()": [
+        {
+          "id": "round5.chart.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+            "replacements": [
+              "ws.charts.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.listPivotTables": [
+        {
+          "id": "round5.pivot.listPivotTables.deprecated",
+          "observedPath": "ws.listPivotTables",
+          "canonicalPath": "ws.pivots.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+            "replacements": [
+              "ws.pivots.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.listPivotTables()": [
+        {
+          "id": "round5.pivot.listPivotTables.deprecated",
+          "observedPath": "ws.listPivotTables",
+          "canonicalPath": "ws.pivots.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+            "replacements": [
+              "ws.pivots.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.get(...).describe": [
+        {
+          "id": "round55.pivot.handle.describe.diagnostic",
+          "observedPath": "ws.pivots.get(...).describe",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "structured_diagnostic",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            }
+          ],
+          "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+            "replacements": [
+              "type:PivotTableHandle.getInfo",
+              "ws.pivots.getInfo"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.pivots.get(...).describe()": [
+        {
+          "id": "round55.pivot.handle.describe.diagnostic",
+          "observedPath": "ws.pivots.get(...).describe",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "structured_diagnostic",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            }
+          ],
+          "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+            "replacements": [
+              "type:PivotTableHandle.getInfo",
+              "ws.pivots.getInfo"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.pivots.get(...).getInfo": [
+        {
+          "id": "round55.pivot.handle.getInfo",
+          "observedPath": "ws.pivots.get(...).getInfo",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "contract_extension",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            }
+          ],
+          "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "executeCode-preflight": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+          ]
+        }
+      ],
+      "ws.pivots.get(...).getInfo()": [
+        {
+          "id": "round55.pivot.handle.getInfo",
+          "observedPath": "ws.pivots.get(...).getInfo",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "contract_extension",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            }
+          ],
+          "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "executeCode-preflight": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+          ]
+        }
+      ],
+      "ws.pivots.setItemVisibility": [
+        {
+          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "observedPath": "ws.pivots.setItemVisibility",
+          "canonicalPath": "ws.pivots.setPivotItemVisibility",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            }
+          ],
+          "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.pivots.setItemVisibility()": [
+        {
+          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "observedPath": "ws.pivots.setItemVisibility",
+          "canonicalPath": "ws.pivots.setPivotItemVisibility",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            }
+          ],
+          "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.removeChart": [
+        {
+          "id": "round5.chart.removeChart.deprecated",
+          "observedPath": "ws.removeChart",
+          "canonicalPath": "ws.charts.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+            "replacements": [
+              "ws.charts.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.removeChart()": [
+        {
+          "id": "round5.chart.removeChart.deprecated",
+          "observedPath": "ws.removeChart",
+          "canonicalPath": "ws.charts.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+            "replacements": [
+              "ws.charts.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.removePivotTable": [
+        {
+          "id": "round5.pivot.removePivotTable.deprecated",
+          "observedPath": "ws.removePivotTable",
+          "canonicalPath": "ws.pivots.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+            "replacements": [
+              "ws.pivots.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.removePivotTable()": [
+        {
+          "id": "round5.pivot.removePivotTable.deprecated",
+          "observedPath": "ws.removePivotTable",
+          "canonicalPath": "ws.pivots.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+            "replacements": [
+              "ws.pivots.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.updateChart": [
+        {
+          "id": "round5.chart.updateChart.deprecated",
+          "observedPath": "ws.updateChart",
+          "canonicalPath": "ws.charts.update",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+            "replacements": [
+              "ws.charts.update"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.updateChart()": [
+        {
+          "id": "round5.chart.updateChart.deprecated",
+          "observedPath": "ws.updateChart",
+          "canonicalPath": "ws.charts.update",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+            "replacements": [
+              "ws.charts.update"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ]
+    },
+    "byCanonicalPath": {
+      "type:PivotTableHandle.getInfo": [
+        {
+          "id": "round55.pivot.handle.describe.diagnostic",
+          "observedPath": "ws.pivots.get(...).describe",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "structured_diagnostic",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            }
+          ],
+          "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+            "replacements": [
+              "type:PivotTableHandle.getInfo",
+              "ws.pivots.getInfo"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        },
+        {
+          "id": "round55.pivot.handle.getInfo",
+          "observedPath": "ws.pivots.get(...).getInfo",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "contract_extension",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            }
+          ],
+          "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "executeCode-preflight": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+          ]
+        }
+      ],
+      "type:PivotTableHandle.getInfo()": [
+        {
+          "id": "round55.pivot.handle.describe.diagnostic",
+          "observedPath": "ws.pivots.get(...).describe",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "structured_diagnostic",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/plans/07-versioned-api-compatibility-layer.md"
+            }
+          ],
+          "behavior": "Handle describe() is intentionally not added in the pilot; agents should use handle.getInfo() for structured pivot introspection.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Pivot handles do not expose describe(); use handle.getInfo() for structured pivot introspection.",
+            "replacements": [
+              "type:PivotTableHandle.getInfo",
+              "ws.pivots.getInfo"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        },
+        {
+          "id": "round55.pivot.handle.getInfo",
+          "observedPath": "ws.pivots.get(...).getInfo",
+          "canonicalPath": "type:PivotTableHandle.getInfo",
+          "status": "contract_extension",
+          "appliesTo": "handle",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#pivot-handle-introspection"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/011-pivot-handle-introspection-gap.md"
+            }
+          ],
+          "behavior": "Pivot handles expose side-effect-free getInfo() bound to the pivot ID captured when the handle was created.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "executeCode-preflight": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/pivots/pivot-get-info.ts"
+          ]
+        }
+      ],
+      "type:PivotTableHandle.setItemVisibility": [
+        {
+          "id": "round55.pivot.item-visibility.blank-semantics",
+          "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+          "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+          "status": "semantic_compatibility",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-03",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            }
+          ],
+          "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "semantic_compatibility",
+            "kernel": "semantic_compatibility",
+            "executeCode-preflight": "semantic_compatibility",
+            "api-describe": "semantic_compatibility",
+            "agent-guidance": "semantic_compatibility",
+            "docs": "semantic_compatibility",
+            "python": "structured_diagnostic",
+            "api-eval": "semantic_compatibility"
+          },
+          "verification": [
+            "cargo test -p compute-pivot",
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "type:PivotTableHandle.setItemVisibility()": [
+        {
+          "id": "round55.pivot.item-visibility.blank-semantics",
+          "observedPath": "handle.setItemVisibility(field, {\"(blank)\": false})",
+          "canonicalPath": "type:PivotTableHandle.setItemVisibility",
+          "status": "semantic_compatibility",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-03",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md#likely-root-cause"
+            }
+          ],
+          "behavior": "Displayed blank pivot items round-trip to the canonical blank source key for Null, empty string, and whitespace-only strings without colliding with literal \"(blank)\" text.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "semantic_compatibility",
+            "kernel": "semantic_compatibility",
+            "executeCode-preflight": "semantic_compatibility",
+            "api-describe": "semantic_compatibility",
+            "agent-guidance": "semantic_compatibility",
+            "docs": "semantic_compatibility",
+            "python": "structured_diagnostic",
+            "api-eval": "semantic_compatibility"
+          },
+          "verification": [
+            "cargo test -p compute-pivot",
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.charts.*(chartId)": [
+        {
+          "id": "round55.chart.imported-short-id.input-alias",
+          "observedPath": "chart-import-N",
+          "canonicalPath": "ws.charts.*(chartId)",
+          "status": "input_alias",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.8.1",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            },
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            }
+          ],
+          "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "input_alias",
+            "kernel": "input_alias",
+            "executeCode-preflight": "input_alias",
+            "api-describe": "input_alias",
+            "agent-guidance": "input_alias",
+            "docs": "input_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "input_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+            "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+          ]
+        }
+      ],
+      "ws.charts.*(chartId)()": [
+        {
+          "id": "round55.chart.imported-short-id.input-alias",
+          "observedPath": "chart-import-N",
+          "canonicalPath": "ws.charts.*(chartId)",
+          "status": "input_alias",
+          "appliesTo": "argument",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.8.1",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/007-imported-chart-id-alias-contract.md"
+            },
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#describe--describerange-on-sheets-with-imported-charts"
+            }
+          ],
+          "behavior": "Worksheet-scoped chart ID inputs first try the exact ID, then resolve numeric imported aliases such as chart-import-0 to the current sheet-qualified canonical ID. Returned IDs and persisted state remain canonical.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "input_alias",
+            "kernel": "input_alias",
+            "executeCode-preflight": "input_alias",
+            "api-describe": "input_alias",
+            "agent-guidance": "input_alias",
+            "docs": "input_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "input_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+            "dev/api-eval/scenarios/charts/chart-imported-consistency.ts"
+          ]
+        }
+      ],
+      "ws.charts.add": [
+        {
+          "id": "round5.chart.addChart.diagnostic",
+          "observedPath": "ws.addChart",
+          "canonicalPath": "ws.charts.add",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+            "replacements": [
+              "ws.charts.add"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.charts.add()": [
+        {
+          "id": "round5.chart.addChart.diagnostic",
+          "observedPath": "ws.addChart",
+          "canonicalPath": "ws.charts.add",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "The old addChart return contract is not promoted as a hidden shim; learned calls are diagnosed to ws.charts.add(config).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addChart(config) is not part of the compatibility runtime. Use ws.charts.add(config).",
+            "replacements": [
+              "ws.charts.add"
+            ]
+          },
+          "verification": [
+            "dev/api-eval/scenarios/api-compatibility/unsupported-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.charts.get": [
+        {
+          "id": "round5.chart.getChart.deprecated",
+          "observedPath": "ws.getChart",
+          "canonicalPath": "ws.charts.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+            "replacements": [
+              "ws.charts.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.charts.get()": [
+        {
+          "id": "round5.chart.getChart.deprecated",
+          "observedPath": "ws.getChart",
+          "canonicalPath": "ws.charts.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart getter delegates to ws.charts.get(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getChart(id) is deprecated. Use ws.charts.get(id).",
+            "replacements": [
+              "ws.charts.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.charts.list": [
+        {
+          "id": "round5.chart.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+            "replacements": [
+              "ws.charts.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        },
+        {
+          "id": "round55.chart.not-found-guidance",
+          "observedPath": "chartNotFound suggestion: getCharts()",
+          "canonicalPath": "ws.charts.list",
+          "status": "structured_diagnostic",
+          "appliesTo": "result",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            }
+          ],
+          "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+          "runtimeSurfaces": [
+            "kernel",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+            "replacements": [
+              "ws.charts.list",
+              "api.describe(\"ws.charts\")"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- api-errors"
+          ]
+        },
+        {
+          "id": "round55.worksheet.getCharts.alias",
+          "observedPath": "ws.getCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            }
+          ],
+          "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.charts.list()": [
+        {
+          "id": "round5.chart.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart listing alias delegates to ws.charts.list(options?).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+            "replacements": [
+              "ws.charts.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        },
+        {
+          "id": "round55.chart.not-found-guidance",
+          "observedPath": "chartNotFound suggestion: getCharts()",
+          "canonicalPath": "ws.charts.list",
+          "status": "structured_diagnostic",
+          "appliesTo": "result",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/kernel",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md#stale-hint-surface"
+            }
+          ],
+          "behavior": "First-party chart-not-found hints must name ws.charts.list() and api.describe(\"ws.charts\"), not the learned root alias.",
+          "runtimeSurfaces": [
+            "kernel",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "Use ws.charts.list() or api.describe(\"ws.charts\") to enumerate worksheet charts.",
+            "replacements": [
+              "ws.charts.list",
+              "api.describe(\"ws.charts\")"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- api-errors"
+          ]
+        },
+        {
+          "id": "round55.worksheet.getCharts.alias",
+          "observedPath": "ws.getCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsgetcharts"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/006-imported-chart-api-discoverability.md"
+            }
+          ],
+          "behavior": "Worksheet.getCharts(options?) is a typed public alias for Worksheet.charts.list(options?) with identical ordering, materialization behavior, and returned Chart records.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl",
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
+            "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
+          ]
+        }
+      ],
+      "ws.charts.remove": [
+        {
+          "id": "round5.chart.removeChart.deprecated",
+          "observedPath": "ws.removeChart",
+          "canonicalPath": "ws.charts.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+            "replacements": [
+              "ws.charts.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.charts.remove()": [
+        {
+          "id": "round5.chart.removeChart.deprecated",
+          "observedPath": "ws.removeChart",
+          "canonicalPath": "ws.charts.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart remover delegates to ws.charts.remove(chartId).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removeChart(id) is deprecated. Use ws.charts.remove(id).",
+            "replacements": [
+              "ws.charts.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.charts.update": [
+        {
+          "id": "round5.chart.updateChart.deprecated",
+          "observedPath": "ws.updateChart",
+          "canonicalPath": "ws.charts.update",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+            "replacements": [
+              "ws.charts.update"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.charts.update()": [
+        {
+          "id": "round5.chart.updateChart.deprecated",
+          "observedPath": "ws.updateChart",
+          "canonicalPath": "ws.charts.update",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root chart updater delegates to ws.charts.update(chartId, updates).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.updateChart(id, updates) is deprecated. Use ws.charts.update(id, updates).",
+            "replacements": [
+              "ws.charts.update"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
+          ]
+        }
+      ],
+      "ws.describeRange": [
+        {
+          "id": "round55.worksheet.describeRange.no-arg",
+          "observedPath": "ws.describeRange()",
+          "canonicalPath": "ws.describeRange",
+          "status": "contract_extension",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            }
+          ],
+          "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+            "pnpm --filter @mog/types-api typecheck",
+            "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+          ]
+        }
+      ],
+      "ws.describeRange()": [
+        {
+          "id": "round55.worksheet.describeRange.no-arg",
+          "observedPath": "ws.describeRange()",
+          "canonicalPath": "ws.describeRange",
+          "status": "contract_extension",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#wsdescriberange-with-no-range"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/005-describe-range-no-arg-startrow-error.md"
+            }
+          ],
+          "behavior": "Calling describeRange with no range or undefined describes the used range with the same empty-sheet and large-sheet safeguards as describe(), while preserving includeStyle.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "contract_extension",
+            "kernel": "contract_extension",
+            "api-describe": "contract_extension",
+            "agent-guidance": "contract_extension",
+            "docs": "contract_extension",
+            "python": "structured_diagnostic",
+            "api-eval": "contract_extension"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-impl",
+            "pnpm --filter @mog/types-api typecheck",
+            "dev/api-eval/scenarios/api-compatibility/describe-range-no-arg.ts"
+          ]
+        }
+      ],
+      "ws.pivots.add": [
+        {
+          "id": "round5.pivot.addPivotTable.deprecated",
+          "observedPath": "ws.addPivotTable",
+          "canonicalPath": "ws.pivots.add",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+            "replacements": [
+              "ws.pivots.add"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.add()": [
+        {
+          "id": "round5.pivot.addPivotTable.deprecated",
+          "observedPath": "ws.addPivotTable",
+          "canonicalPath": "ws.pivots.add",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot creation alias delegates to ws.pivots.add(config).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addPivotTable(config) is deprecated. Use ws.pivots.add(config).",
+            "replacements": [
+              "ws.pivots.add"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.get": [
+        {
+          "id": "round5.pivot.getPivotTable.deprecated",
+          "observedPath": "ws.getPivotTable",
+          "canonicalPath": "ws.pivots.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+            "replacements": [
+              "ws.pivots.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.get()": [
+        {
+          "id": "round5.pivot.getPivotTable.deprecated",
+          "observedPath": "ws.getPivotTable",
+          "canonicalPath": "ws.pivots.get",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot getter alias delegates to ws.pivots.get(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.getPivotTable(name) is deprecated. Use ws.pivots.get(name).",
+            "replacements": [
+              "ws.pivots.get"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.list": [
+        {
+          "id": "round5.pivot.listPivotTables.deprecated",
+          "observedPath": "ws.listPivotTables",
+          "canonicalPath": "ws.pivots.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+            "replacements": [
+              "ws.pivots.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.list()": [
+        {
+          "id": "round5.pivot.listPivotTables.deprecated",
+          "observedPath": "ws.listPivotTables",
+          "canonicalPath": "ws.pivots.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot listing alias delegates to ws.pivots.list().",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.listPivotTables() is deprecated. Use ws.pivots.list().",
+            "replacements": [
+              "ws.pivots.list"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.remove": [
+        {
+          "id": "round5.pivot.removePivotTable.deprecated",
+          "observedPath": "ws.removePivotTable",
+          "canonicalPath": "ws.pivots.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+            "replacements": [
+              "ws.pivots.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.remove()": [
+        {
+          "id": "round5.pivot.removePivotTable.deprecated",
+          "observedPath": "ws.removePivotTable",
+          "canonicalPath": "ws.pivots.remove",
+          "status": "deprecated_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-5/namespaced-sub-apis",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": null,
+          "canonicalSince": null,
+          "deprecatedSince": "0.9.1",
+          "removeAfter": "none",
+          "evidence": [
+            {
+              "source": "prior_version",
+              "reference": "mog-internal/plans/archive/universal-api/round-5/03-NAMESPACED-SUB-APIS.md"
+            }
+          ],
+          "behavior": "Deprecated root pivot removal alias delegates to ws.pivots.remove(name).",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "api-describe",
+            "agent-guidance",
+            "docs"
+          ],
+          "surfaceDisposition": {
+            "typescript": "deprecated_alias",
+            "kernel": "deprecated_alias",
+            "executeCode-preflight": "deprecated_alias",
+            "api-describe": "deprecated_alias",
+            "agent-guidance": "deprecated_alias",
+            "docs": "deprecated_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "deprecated_alias"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.removePivotTable(name) is deprecated. Use ws.pivots.remove(name).",
+            "replacements": [
+              "ws.pivots.remove"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.pivots.setPivotItemVisibility": [
+        {
+          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "observedPath": "ws.pivots.setItemVisibility",
+          "canonicalPath": "ws.pivots.setPivotItemVisibility",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            }
+          ],
+          "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.pivots.setPivotItemVisibility()": [
+        {
+          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "observedPath": "ws.pivots.setItemVisibility",
+          "canonicalPath": "ws.pivots.setPivotItemVisibility",
+          "status": "supported_alias",
+          "appliesTo": "method",
+          "ownerTheme": "round-55/theme-07",
+          "ownerPackage": "@mog-sdk/contracts",
+          "firstObservedVersion": "0.9.0",
+          "canonicalSince": "0.9.1",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "trace",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/mog-0.9-workbook-api-issues.md#setitemvisibility"
+            },
+            {
+              "source": "source",
+              "reference": "mog-internal/plans/active/bug-fixes/round-55/findings/012-pivot-set-item-visibility-contract.md"
+            }
+          ],
+          "behavior": "WorksheetPivots.setItemVisibility(name, fieldId, visibleItems) delegates to setPivotItemVisibility with identical filters, refresh policy, errors, and readbacks.",
+          "runtimeSurfaces": [
+            "typescript",
+            "kernel",
+            "executeCode-preflight",
+            "api-describe",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "supported_alias",
+            "kernel": "supported_alias",
+            "executeCode-preflight": "supported_alias",
+            "api-describe": "supported_alias",
+            "agent-guidance": "supported_alias",
+            "docs": "supported_alias",
+            "python": "structured_diagnostic",
+            "api-eval": "supported_alias"
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
+            "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ]
+    }
+  }
 }

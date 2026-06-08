@@ -5,6 +5,7 @@ import { apiGuidanceTargets } from './targets';
 import type { ApiGuidanceApi } from './types';
 
 export { analyzeMogCode, diagnosticFromGuidanceEntry, preflightMogCode } from './analyze';
+export { diagnosticFromCompatibilityEntry } from './analyze';
 export { apiGuidanceCatalog } from './catalog';
 export { explainApiSymbol } from './explain';
 export {
@@ -14,6 +15,14 @@ export {
   resolveGuidanceTarget,
   validateApiGuidanceCatalog,
 } from './targets';
+export { apiCompatibility } from '../api-compatibility/index';
+export type {
+  ApiCompatibilityEntry,
+  ApiCompatibilityIndex,
+  ApiCompatibilityReference,
+  ApiCompatibilityStatus,
+  ApiCompatibilitySurface,
+} from '../api-compatibility/index';
 export type {
   ApiGuidanceApi,
   ApiGuidanceCatalogValidation,
@@ -33,6 +42,7 @@ export type {
   ApiGuidanceTarget,
   ApiGuidanceTargetKind,
   ForeignApiGuidanceExplanation,
+  MogApiCompatibilityExplanation,
   MogApiGuidanceExplanation,
   MogReplacement,
   SourceSpan,

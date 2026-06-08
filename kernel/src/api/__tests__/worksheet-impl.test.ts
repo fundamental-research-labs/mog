@@ -346,6 +346,91 @@ describe('WorksheetImpl', () => {
     ws = new WorksheetImpl(SHEET_ID, ctx);
   });
 
+  it('supports legacy root pivot aliases with API-shaped create results', async () => {
+    const pivotConfig = {
+      id: 'pivot-1',
+      name: 'SalesPivot',
+      sourceSheetName: 'Sheet1',
+      sourceRange: { startRow: 0, startCol: 0, endRow: 5, endCol: 1 },
+      outputSheetName: 'Sheet1',
+      outputLocation: { row: 2, col: 3 },
+      fields: [
+        { id: 'Category', name: 'Category', dataType: 'string' },
+        { id: 'Amount', name: 'Amount', dataType: 'number' },
+      ],
+      placements: [
+        { fieldId: 'Category', area: 'row', position: 0 },
+        { fieldId: 'Amount', area: 'value', position: 0, aggregateFunction: 'sum' },
+      ],
+      filters: [],
+      calculatedFields: [],
+    };
+    ctx.pivot = {
+      createPivot: jest.fn().mockResolvedValue(pivotConfig),
+      getAllPivots: jest.fn().mockResolvedValue([pivotConfig]),
+      getPivot: jest.fn().mockResolvedValue(pivotConfig),
+      deletePivot: jest.fn().mockResolvedValue(true),
+      compute: jest.fn().mockResolvedValue({
+        rows: [],
+        columnHeaders: [],
+        renderedBounds: {
+          totalRows: 2,
+          totalCols: 2,
+          firstDataRow: 1,
+          firstDataCol: 1,
+          numDataRows: 1,
+          numDataCols: 1,
+        },
+        sourceRowCount: 1,
+      }),
+    };
+
+    await expect(
+      ws.addPivotTable({
+        name: 'SalesPivot',
+        sourceSheetName: 'Sheet1',
+        sourceRange: { startRow: 0, startCol: 0, endRow: 5, endCol: 1 },
+        outputSheetName: 'Sheet1',
+        outputLocation: { row: 2, col: 3 },
+        fields: pivotConfig.fields,
+        placements: pivotConfig.placements,
+        filters: [],
+        calculatedFields: [],
+      } as any),
+    ).resolves.toEqual({
+      name: 'SalesPivot',
+      dataSource: 'Sheet1!A1:B6',
+      rowFields: ['Category'],
+      columnFields: [],
+      valueFields: [
+        {
+          placementId: 'value:Amount:0',
+          field: 'Amount',
+          aggregation: 'sum',
+          label: undefined,
+        },
+      ],
+      filterFields: [],
+      allowMultipleFiltersPerField: undefined,
+      autoFormat: undefined,
+      preserveFormatting: undefined,
+    });
+
+    await expect(ws.listPivotTables()).resolves.toEqual([
+      expect.objectContaining({
+        name: 'SalesPivot',
+        dataSource: 'Sheet1!A1:B6',
+        contentArea: 'D3:E4',
+      }),
+    ]);
+    await expect(ws.getPivotTable('SalesPivot')).resolves.toEqual(
+      expect.objectContaining({ getName: expect.any(Function), getInfo: expect.any(Function) }),
+    );
+
+    await ws.removePivotTable('SalesPivot');
+    expect(ctx.pivot.deletePivot).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+  });
+
   // =========================================================================
   // 1. Cell read/write — A1 overload
   // =========================================================================
@@ -1286,6 +1371,69 @@ describe('WorksheetImpl', () => {
   // =========================================================================
 
   describe('describeRange()', () => {
+    it('describes the used range when called without a range', async () => {
+      (QueryOps.getUsedRange as jest.Mock).mockResolvedValue({
+        startRow: 0,
+        startCol: 0,
+        endRow: 0,
+        endCol: 1,
+      });
+      ctx.computeBridge.queryRange.mockResolvedValueOnce({
+        cells: [
+          { row: 0, col: 0, value: 'Name', has_formula: false, formatted: 'Name' },
+          { row: 0, col: 1, value: 'Score', has_formula: false, formatted: 'Score' },
+        ],
+        merges: [],
+      });
+      (analyzeFormulas as jest.Mock).mockReturnValue({
+        patterns: new Map(),
+        formulaToId: new Map(),
+        minCellsForAbbreviation: 3,
+      });
+      (generateFormulaDocumentation as jest.Mock).mockReturnValue([]);
+
+      const result = await ws.describeRange();
+
+      expect(result).toContain('A1:Name');
+      expect(result).toContain('B1:Score');
+    });
+
+    it('preserves includeStyle=false for undefined range', async () => {
+      (QueryOps.getUsedRange as jest.Mock).mockResolvedValue({
+        startRow: 0,
+        startCol: 0,
+        endRow: 0,
+        endCol: 0,
+      });
+      ctx.computeBridge.queryRange.mockResolvedValueOnce({
+        cells: [{ row: 0, col: 0, value: 'Name', has_formula: false, formatted: 'Name' }],
+        merges: [],
+      });
+      (analyzeFormulas as jest.Mock).mockReturnValue({
+        patterns: new Map(),
+        formulaToId: new Map(),
+        minCellsForAbbreviation: 3,
+      });
+      (generateFormulaDocumentation as jest.Mock).mockReturnValue([]);
+
+      await ws.describeRange(undefined, false);
+
+      expect(getStyleHints).not.toHaveBeenCalled();
+    });
+
+    it('returns empty string for no-arg describeRange on empty sheets', async () => {
+      (QueryOps.getUsedRange as jest.Mock).mockResolvedValue(null);
+
+      await expect(ws.describeRange()).resolves.toBe('');
+    });
+
+    it('throws a typed argument error for malformed CellRange objects', async () => {
+      await expect(ws.describeRange({ startRow: 0 } as any)).rejects.toMatchObject({
+        code: 'API_INVALID_ARGUMENT',
+        path: ['range'],
+      });
+    });
+
     it('returns empty string for invalid range', async () => {
       const result = await ws.describeRange('invalid');
 

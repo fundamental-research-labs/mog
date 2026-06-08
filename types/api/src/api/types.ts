@@ -885,15 +885,63 @@ export interface PivotValueSortConfig {
   columnKey?: string;
 }
 
+/** Options for side-effect-free pivot handle introspection. */
+export interface PivotHandleInfoOptions {
+  /** Include current pivot items for non-value fields. Defaults to false. */
+  includeItems?: boolean;
+  /** Include rendered range metadata when available. Defaults to true. */
+  includeRanges?: boolean;
+}
+
+/** Side-effect-free, handle-local pivot table introspection. */
+export interface PivotHandleInfo {
+  /** Stable pivot ID captured by the handle. */
+  id: string;
+  /** Current pivot display name. */
+  name: string;
+  /** Source data range (e.g. "Sheet1!A1:D100"). */
+  dataSource: string;
+  /** Source sheet name when known. */
+  sourceSheetName?: string;
+  /** Source range in zero-based coordinates. */
+  sourceRange?: CellRange;
+  /** Output sheet name when known. */
+  outputSheetName?: string;
+  /** Output anchor location. */
+  outputLocation?: { row: number; col: number; a1: string };
+  /** Full field definitions from the pivot config. */
+  fields: DataPivotTableConfig['fields'];
+  /** Full placement definitions from the pivot config. */
+  placements: DataPivotTableConfig['placements'];
+  /** Current filters, including item-visibility filters. */
+  filters: DataPivotTableConfig['filters'];
+  /** Layout settings when present. */
+  layout?: PivotTableLayout;
+  /** Style settings when present. */
+  style?: PivotTableStyle;
+  /** Current rendered range, when requested and available. */
+  renderedRange?: CellRange | null;
+  /** Current expansion state. */
+  expansionState: PivotExpansionState;
+  /** Data source type for this pivot. */
+  dataSourceType: DataSourceType;
+  /** Current item lists when explicitly requested. */
+  items?: PivotFieldItems[];
+  /** Mutation/read methods available on this handle. */
+  availableMethods: string[];
+}
+
 /**
  * Handle for interacting with an existing pivot table.
  *
- * Returned by `worksheet.getPivotTable()`. Provides methods to query
+ * Returned by `worksheet.pivots.get()`. Provides methods to query
  * and modify the pivot table's field configuration.
  */
 export interface PivotTableHandle {
   /** Get the pivot table name */
   getName(): string;
+  /** Side-effect-free handle-local introspection bound to this pivot ID. */
+  getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
   /** Update the pivot table data configuration. */

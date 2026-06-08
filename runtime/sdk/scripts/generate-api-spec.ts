@@ -27,6 +27,15 @@ import {
   DEFAULT_FORMAT_BY_TYPE,
 } from '@mog-sdk/contracts/number-formats/constants';
 import { apiGuidanceCatalog, documentedRootGuidancePaths } from '../src/agent-guidance/catalog';
+import { apiCompatibilityRegistry } from '../src/api-compatibility/registry';
+import {
+  API_COMPATIBILITY_REFERENCE_SCHEMA,
+  API_COMPATIBILITY_SCHEMA,
+  assertApiCompatibilityIndex,
+  compatibilityReferencesForPath,
+  generateApiCompatibilityIndex,
+} from './api-compatibility-generation';
+import type { ApiCompatibilityIndex, ApiCompatibilityReference } from '../src/api-compatibility/types';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -60,7 +69,16 @@ const API_GUIDANCE_SCHEMA_FILE = path.resolve(
   REPO_ROOT,
   'runtime/sdk/src/generated/api-guidance.schema.json',
 );
+const API_COMPATIBILITY_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-compatibility.json',
+);
+const API_COMPATIBILITY_SCHEMA_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-compatibility.schema.json',
+);
 const SCHEMA_VERSION = '1';
+const API_COMPATIBILITY_INDEX = generateApiCompatibilityIndex(apiCompatibilityRegistry);
 
 // ---------------------------------------------------------------------------
 // Exclude lists (OK to hand-maintain — these hide internal plumbing)
@@ -320,6 +338,7 @@ interface FunctionEntry {
   ownerPackage: string;
   alias: AliasMetadata;
   deprecation: DeprecationMetadata;
+  compatibility: ApiCompatibilityReference[];
   source: SourceLocation;
   targetInterface?: string;
 }
@@ -346,6 +365,7 @@ interface TypeEntry {
 
 interface ApiSpec {
   schemaVersion: '1';
+  compatibility: ApiCompatibilityIndex;
   subApis: {
     workbook: Record<string, FunctionEntry>;
     worksheet: Record<string, FunctionEntry>;
@@ -372,6 +392,7 @@ interface ApiGuidanceTarget {
   asyncModel: AsyncModel;
   signature: string;
   typeText: string;
+  compatibility: ApiCompatibilityReference[];
   targetInterface?: string;
   source: SourceLocation;
   ownerPackage: string;
@@ -386,6 +407,7 @@ interface ApiGuidanceTargets {
 interface ApiGuidanceCatalogOutput {
   schemaVersion: '1';
   entries: typeof apiGuidanceCatalog;
+  compatibility: ApiCompatibilityIndex;
 }
 
 function literalValueFromNode(
@@ -651,6 +673,7 @@ function createMemberEntry(options: {
       replacement: null,
     },
     deprecation,
+    compatibility: compatibilityReferencesForPath(API_COMPATIBILITY_INDEX, canonicalPath),
     source: getSourceLocation(sourceFile),
     ...(targetInterface ? { targetInterface } : {}),
   };
@@ -1302,6 +1325,7 @@ function generate(): ApiSpec {
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    compatibility: API_COMPATIBILITY_INDEX,
     subApis: subApiMap,
     interfaces: sortedInterfaces,
     types: sortedTypes,
@@ -1328,6 +1352,7 @@ function generateGuidanceTargets(spec: ApiSpec): ApiGuidanceTargets {
         asyncModel: member.asyncModel,
         signature: member.signature,
         typeText: member.returns.typeText,
+        compatibility: member.compatibility,
         ...(member.targetInterface ? { targetInterface: member.targetInterface } : {}),
         source: member.source,
         ownerPackage: member.ownerPackage,
@@ -1360,6 +1385,7 @@ function generateApiGuidanceCatalog(): ApiGuidanceCatalogOutput {
   return {
     schemaVersion: SCHEMA_VERSION,
     entries: apiGuidanceCatalog,
+    compatibility: API_COMPATIBILITY_INDEX,
   };
 }
 
@@ -1372,10 +1398,11 @@ const API_SPEC_SCHEMA = {
   $id: 'https://mog.dev/schemas/api-spec.schema.json',
   title: 'Mog SDK API Spec',
   type: 'object',
-  required: ['schemaVersion', 'interfaces', 'subApis', 'types'],
+  required: ['schemaVersion', 'compatibility', 'interfaces', 'subApis', 'types'],
   additionalProperties: true,
   properties: {
     schemaVersion: { const: SCHEMA_VERSION },
+    compatibility: { type: 'object', additionalProperties: true },
     interfaces: {
       type: 'object',
       additionalProperties: { $ref: '#/$defs/interfaceEntry' },
@@ -1504,6 +1531,7 @@ const API_SPEC_SCHEMA = {
         'ownerPackage',
         'alias',
         'deprecation',
+        'compatibility',
         'source',
       ],
       additionalProperties: true,
@@ -1527,6 +1555,10 @@ const API_SPEC_SCHEMA = {
         ownerPackage: { type: 'string', minLength: 1 },
         alias: { $ref: '#/$defs/alias' },
         deprecation: { $ref: '#/$defs/deprecation' },
+        compatibility: {
+          type: 'array',
+          items: API_COMPATIBILITY_REFERENCE_SCHEMA,
+        },
         source: { $ref: '#/$defs/sourceLocation' },
         targetInterface: { type: 'string' },
       },
@@ -1694,6 +1726,7 @@ const API_GUIDANCE_TARGETS_SCHEMA = {
         'asyncModel',
         'signature',
         'typeText',
+        'compatibility',
         'source',
         'ownerPackage',
       ],
@@ -1711,6 +1744,10 @@ const API_GUIDANCE_TARGETS_SCHEMA = {
         asyncModel: { enum: ['sync', 'promise'] },
         signature: { type: 'string' },
         typeText: { type: 'string' },
+        compatibility: {
+          type: 'array',
+          items: API_COMPATIBILITY_REFERENCE_SCHEMA,
+        },
         targetInterface: { type: 'string' },
         source: { $ref: '#/$defs/sourceLocation' },
         ownerPackage: { type: 'string', minLength: 1 },
@@ -1724,7 +1761,7 @@ const API_GUIDANCE_SCHEMA = {
   $id: 'https://mog.dev/schemas/api-guidance.schema.json',
   title: 'Mog SDK API Guidance Catalog',
   type: 'object',
-  required: ['schemaVersion', 'entries'],
+  required: ['schemaVersion', 'entries', 'compatibility'],
   additionalProperties: false,
   properties: {
     schemaVersion: { const: SCHEMA_VERSION },
@@ -1732,6 +1769,7 @@ const API_GUIDANCE_SCHEMA = {
       type: 'array',
       items: { $ref: '#/$defs/apiGuidanceEntry' },
     },
+    compatibility: { type: 'object', additionalProperties: true },
   },
   $defs: {
     apiGuidanceEntry: {
@@ -1750,7 +1788,7 @@ const API_GUIDANCE_SCHEMA = {
       additionalProperties: false,
       properties: {
         id: { type: 'string', minLength: 1 },
-        dialect: { const: 'officejs' },
+        dialect: { enum: ['officejs', 'mog-version'] },
         category: {
           enum: [
             'bootstrap',
@@ -1761,6 +1799,9 @@ const API_GUIDANCE_SCHEMA = {
             'formatting',
             'tables',
             'filters',
+            'compatibility',
+            'charts',
+            'pivots',
             'names',
             'file-io',
             'host',
@@ -1902,6 +1943,9 @@ function assertFunctionEntry(entry: FunctionEntry, pathLabel: string): void {
   if (!entry.source.file || (entry.source.line !== undefined && entry.source.line < 1)) {
     throw new Error(`${pathLabel}: invalid source`);
   }
+  if (!Array.isArray(entry.compatibility)) {
+    throw new Error(`${pathLabel}: missing compatibility references`);
+  }
   entry.parameters.forEach((param, index) => {
     if (param.position !== index) {
       throw new Error(`${pathLabel}.parameters[${index}]: parameter position mismatch`);
@@ -1961,6 +2005,9 @@ function assertGuidanceTargets(index: ApiGuidanceTargets): void {
     }
     if (!target.source.file) {
       throw new Error(`Guidance target ${target.path} missing source file`);
+    }
+    if (!Array.isArray(target.compatibility)) {
+      throw new Error(`Guidance target ${target.path} missing compatibility references`);
     }
   }
   for (const path of Object.keys(index.byPath)) {
@@ -2029,6 +2076,7 @@ const spec = generate();
 assertApiSpec(spec);
 const guidanceTargets = generateGuidanceTargets(spec);
 assertGuidanceTargets(guidanceTargets);
+assertApiCompatibilityIndex(API_COMPATIBILITY_INDEX, guidanceTargets);
 const guidanceCatalog = generateApiGuidanceCatalog();
 assertApiGuidanceCatalog(guidanceCatalog, guidanceTargets);
 
@@ -2038,6 +2086,8 @@ fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
 // Only write if content actually changed (avoids noisy diffs on publish)
 writeGeneratedFile(OUTPUT_SCHEMA_FILE, API_SPEC_SCHEMA);
 writeGeneratedFile(OUTPUT_FILE, spec);
+writeGeneratedFile(API_COMPATIBILITY_SCHEMA_FILE, API_COMPATIBILITY_SCHEMA);
+writeGeneratedFile(API_COMPATIBILITY_FILE, API_COMPATIBILITY_INDEX);
 writeGeneratedFile(API_GUIDANCE_SCHEMA_FILE, API_GUIDANCE_SCHEMA);
 writeGeneratedFile(API_GUIDANCE_FILE, guidanceCatalog);
 writeGeneratedFile(GUIDANCE_TARGETS_SCHEMA_FILE, API_GUIDANCE_TARGETS_SCHEMA);

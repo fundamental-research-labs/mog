@@ -1,4 +1,10 @@
-export type ApiGuidanceDialect = 'officejs';
+import type {
+  ApiCompatibilityEntry,
+  ApiCompatibilityReference,
+  ApiCompatibilityStatus,
+} from '../api-compatibility/types';
+
+export type ApiGuidanceDialect = 'officejs' | 'mog-version';
 
 export type ApiGuidanceCategory =
   | 'bootstrap'
@@ -9,6 +15,9 @@ export type ApiGuidanceCategory =
   | 'formatting'
   | 'tables'
   | 'filters'
+  | 'compatibility'
+  | 'charts'
+  | 'pivots'
   | 'names'
   | 'file-io'
   | 'host';
@@ -67,7 +76,8 @@ export interface SourceSpan {
 
 export type ApiGuidanceDiagnosticCode =
   | 'MOG001_FOREIGN_API_DIALECT'
-  | 'MOG002_MOG_API_USAGE';
+  | 'MOG002_MOG_API_USAGE'
+  | 'MOG003_COMPATIBILITY_REJECTED';
 
 export interface ApiGuidanceDiagnostic {
   readonly code: ApiGuidanceDiagnosticCode;
@@ -83,6 +93,8 @@ export interface ApiGuidanceDiagnostic {
   readonly references: readonly string[];
   readonly confidence: number;
   readonly blocking: boolean;
+  readonly compatibilityId?: string;
+  readonly compatibilityStatus?: ApiCompatibilityStatus;
   readonly span?: SourceSpan;
 }
 
@@ -115,6 +127,7 @@ export interface ApiGuidanceTarget {
   readonly targetInterface?: string;
   readonly source?: ApiGuidanceSourceLocation;
   readonly ownerPackage: string;
+  readonly compatibility?: readonly ApiCompatibilityReference[];
 }
 
 export interface ApiGuidanceCatalogValidationIssue {
@@ -143,7 +156,17 @@ export interface MogApiGuidanceExplanation {
   readonly recommendedBy: readonly string[];
 }
 
-export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation;
+export interface MogApiCompatibilityExplanation {
+  readonly kind: 'mog-api-compatibility';
+  readonly path: string;
+  readonly entry: ApiCompatibilityEntry;
+  readonly target: ApiGuidanceTarget | null;
+}
+
+export type ApiGuidanceExplanation =
+  | ForeignApiGuidanceExplanation
+  | MogApiGuidanceExplanation
+  | MogApiCompatibilityExplanation;
 
 export interface ApiGuidancePreflightResult {
   readonly ok: boolean;

@@ -5,7 +5,8 @@
   "type": "object",
   "required": [
     "schemaVersion",
-    "entries"
+    "entries",
+    "compatibility"
   ],
   "additionalProperties": false,
   "properties": {
@@ -17,6 +18,10 @@
       "items": {
         "$ref": "#/$defs/apiGuidanceEntry"
       }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": true
     }
   },
   "$defs": {
@@ -40,7 +45,10 @@
           "minLength": 1
         },
         "dialect": {
-          "const": "officejs"
+          "enum": [
+            "officejs",
+            "mog-version"
+          ]
         },
         "category": {
           "enum": [
@@ -52,6 +60,9 @@
             "formatting",
             "tables",
             "filters",
+            "compatibility",
+            "charts",
+            "pivots",
             "names",
             "file-io",
             "host"

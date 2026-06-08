@@ -83,21 +83,7 @@ export async function describe(
 ): Promise<string> {
   // No address (or empty string) → describe the entire used range (or summarize if too large)
   if (address === undefined || address === '') {
-    const usedRange = await QueryOps.getUsedRange(ctx, sheetId);
-    if (!usedRange) return '';
-
-    const rows = usedRange.endRow - usedRange.startRow + 1;
-    const cols = usedRange.endCol - usedRange.startCol + 1;
-    const boundingBox = rows * cols;
-
-    if (boundingBox >= MAX_DESCRIBE_AUTO_CELLS) {
-      // Large sheet — full describeRange would overwhelm LLM context.
-      // Delegate to summarize with includeData so the agent still gets cell data.
-      return summarize(ctx, sheetId, { includeData: true });
-    }
-
-    const rangeStr = `${toA1(usedRange.startRow, usedRange.startCol)}:${toA1(usedRange.endRow, usedRange.endCol)}`;
-    return describeRange(ctx, sheetId, rangeStr);
+    return describeUsedRange(ctx, sheetId);
   }
 
   // Range string → delegate to describeRange
@@ -127,6 +113,26 @@ export async function describe(
   }
 
   return result;
+}
+
+export async function describeUsedRange(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  includeStyle: boolean = true,
+): Promise<string> {
+  const usedRange = await QueryOps.getUsedRange(ctx, sheetId);
+  if (!usedRange) return '';
+
+  const rows = usedRange.endRow - usedRange.startRow + 1;
+  const cols = usedRange.endCol - usedRange.startCol + 1;
+  const boundingBox = rows * cols;
+
+  if (boundingBox >= MAX_DESCRIBE_AUTO_CELLS) {
+    return summarize(ctx, sheetId, { includeData: true });
+  }
+
+  const rangeStr = `${toA1(usedRange.startRow, usedRange.startCol)}:${toA1(usedRange.endRow, usedRange.endCol)}`;
+  return describeRange(ctx, sheetId, rangeStr, includeStyle);
 }
 
 // =============================================================================

@@ -153,7 +153,37 @@ describe('WorksheetChartsImpl materialization scopes', () => {
       chart.id,
       expect.objectContaining({ name: 'Updated chart' }),
     );
-    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'updateChart']);
+    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'getChart', 'updateChart']);
+  });
+
+  it('accepts worksheet-scoped short imported chart IDs but returns canonical IDs', async () => {
+    const fullId = `chart-import-0-${SHEET_ID}`;
+    const chart = makeChart({ id: fullId, name: 'Imported chart' });
+    const ctx = {
+      awaitMaterialized: jest.fn(async () => undefined),
+      computeBridge: {
+        getChart: jest.fn(async (_sheetId: string, chartId: string) =>
+          chartId === fullId ? chart : null,
+        ),
+        updateChart: jest.fn(async () => undefined),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    await expect(charts.get('chart-import-0')).resolves.toEqual(
+      expect.objectContaining({ id: fullId }),
+    );
+    await charts.update('chart-import-0', { name: 'Updated import' });
+
+    expect(ctx.computeBridge.updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      fullId,
+      expect.objectContaining({ name: 'Updated import' }),
+    );
+    expect(ctx.computeBridge.getChart).not.toHaveBeenCalledWith(
+      expect.anything(),
+      `chart-import-0-other-sheet`,
+    );
   });
 });
 

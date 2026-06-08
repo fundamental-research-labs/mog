@@ -2,6 +2,7 @@ import generatedGuidance from '../src/generated/api-guidance.json';
 import { api } from '../src/api-describe';
 import {
   analyzeMogCode,
+  apiCompatibility,
   apiGuidanceCatalog,
   apiGuidanceCatalogValidation,
   preflightMogCode,
@@ -11,6 +12,7 @@ import {
 describe('SDK agent API guidance', () => {
   it('keeps the generated guidance artifact in sync with the typed catalog', () => {
     expect(generatedGuidance.entries).toEqual(apiGuidanceCatalog);
+    expect(generatedGuidance.compatibility.entries).toEqual(apiCompatibility.entries);
   });
 
   it('validates every catalog replacement path against generated guidance targets or root imports', () => {
@@ -43,6 +45,29 @@ describe('SDK agent API guidance', () => {
     expect(rootImport?.kind).toBe('mog-api');
     if (rootImport?.kind !== 'mog-api') throw new Error('expected root import guidance');
     expect(rootImport.target.kind).toBe('rootImport');
+  });
+
+  it('explains versioned Mog API compatibility decisions', () => {
+    const getCharts = api.guidance.explain('ws.getCharts');
+    expect(getCharts?.kind).toBe('mog-api-compatibility');
+    if (getCharts?.kind !== 'mog-api-compatibility') {
+      throw new Error('expected compatibility guidance');
+    }
+    expect(getCharts.entry.status).toBe('supported_alias');
+    expect(getCharts.entry.canonicalPath).toBe('ws.charts.list');
+    expect(getCharts.target?.path).toBe('ws.charts.list');
+
+    const canonical = api.guidance.explain('ws.charts.list');
+    expect(canonical?.kind).toBe('mog-api');
+    if (canonical?.kind !== 'mog-api') throw new Error('expected canonical Mog guidance');
+    expect(canonical.target.compatibility?.map((entry) => entry.id)).toContain(
+      'round55.worksheet.getCharts.alias',
+    );
+
+    const method = api.describe('ws.getCharts');
+    expect(method && 'compatibility' in method ? method.compatibility : []).toContainEqual(
+      expect.objectContaining({ id: 'round55.worksheet.getCharts.alias' }),
+    );
   });
 
   it('analyzes and preflights common OfficeJS residue without executing code', () => {
@@ -114,5 +139,41 @@ describe('SDK agent API guidance', () => {
 
     expect(analyzeMogCode(source)).toEqual([]);
     expect(api.guidance.preflight(source)).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('preflights Mog-version compatibility diagnostics without blocking supported aliases', () => {
+    const supported = preflightMogCode('const charts = await ws.getCharts();');
+    expect(supported).toEqual({ ok: true, diagnostics: [] });
+
+    const deprecated = preflightMogCode('const charts = await ws.listCharts();');
+    expect(deprecated.ok).toBe(true);
+    expect(deprecated.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'MOG002_MOG_API_USAGE',
+        dialect: 'mog-version',
+        entryId: 'round5.chart.listCharts.deprecated',
+        compatibilityStatus: 'deprecated_alias',
+        blocking: false,
+      }),
+    ]);
+
+    const rejected = preflightMogCode(`
+      await ws.addChart({ type: "bar", dataRange: "A1:B2" });
+      const handle = await ws.pivots.get("SalesPivot");
+      await handle.describe();
+    `);
+    expect(rejected.ok).toBe(false);
+    expect(rejected.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entryId: 'round5.chart.addChart.diagnostic',
+          blocking: true,
+        }),
+        expect.objectContaining({
+          entryId: 'round55.pivot.handle.describe.diagnostic',
+          blocking: true,
+        }),
+      ]),
+    );
   });
 });

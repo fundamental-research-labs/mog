@@ -21,7 +21,7 @@
  *
  *   await ws.formats.setFormat("A1", { bold: true });
  *   await ws.structure.insertRows(0, 5);
- *   await ws.charts.addChart(config);
+ *   await ws.charts.add(config);
  *
  * Root methods cover: identity, cell I/O, formula, bulk reads, LLM presentation,
  * query, sort/batch, dependents/precedents, events, bridge accessors, display,
@@ -47,8 +47,13 @@ import type {
   FormatChangeResult,
   FormatEntry,
   GoalSeekResult,
+  Chart,
+  ChartConfig,
   IdentifiedCellData,
   NumberFormatCategory,
+  PivotTableConfig,
+  PivotTableHandle,
+  PivotTableInfo,
   RangeValueType,
   RawCellData,
   FindInRangeOptions,
@@ -70,6 +75,7 @@ import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
 import type {
   WorksheetBindings,
+  ChartReadOptions,
   WorksheetChanges,
   WorksheetCharts,
   WorksheetComments,
@@ -104,6 +110,7 @@ import type {
   WorksheetView,
   WorksheetWhatIf,
   WorksheetTextEffectCollection,
+  PivotCreateConfig,
 } from './worksheet/index';
 
 /**
@@ -596,11 +603,59 @@ export interface Worksheet {
    *  Without address: returns describeRange() over the used range (or empty string if sheet is empty) */
   describe(address?: string): Promise<string>;
 
-  /** Get a tabular description of a range with formula abbreviation. */
-  describeRange(range: string | CellRange, includeStyle?: boolean): Promise<string>;
+  /** Get a tabular description of a range with formula abbreviation.
+   *  Without a range: returns describe() used-range output (or empty string if sheet is empty). */
+  describeRange(range?: string | CellRange, includeStyle?: boolean): Promise<string>;
 
   /** Get a sheet overview summary for agent context. */
   summarize(options?: SummaryOptions): Promise<string>;
+
+  /**
+   * Supported compatibility alias for {@link WorksheetCharts.list}.
+   *
+   * Prefer `ws.charts.list(options)` in new code.
+   */
+  getCharts(options?: ChartReadOptions): Promise<Chart[]>;
+
+  /**
+   * @deprecated Use `ws.charts.list(options)` instead.
+   */
+  listCharts(options?: ChartReadOptions): Promise<Chart[]>;
+
+  /**
+   * @deprecated Use `ws.charts.get(chartId)` instead.
+   */
+  getChart(chartId: string): Promise<Chart | null>;
+
+  /**
+   * @deprecated Use `ws.charts.update(chartId, updates)` instead.
+   */
+  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void>;
+
+  /**
+   * @deprecated Use `ws.charts.remove(chartId)` instead.
+   */
+  removeChart(chartId: string): Promise<void>;
+
+  /**
+   * @deprecated Use `ws.pivots.add(config)` instead.
+   */
+  addPivotTable(config: PivotCreateConfig): Promise<PivotTableConfig>;
+
+  /**
+   * @deprecated Use `ws.pivots.remove(name)` instead.
+   */
+  removePivotTable(name: string): Promise<void>;
+
+  /**
+   * @deprecated Use `ws.pivots.list()` instead.
+   */
+  listPivotTables(): Promise<PivotTableInfo[]>;
+
+  /**
+   * @deprecated Use `ws.pivots.get(name)` instead.
+   */
+  getPivotTable(name: string): Promise<PivotTableHandle | null>;
 
   // ===========================================================================
   // Query

@@ -599,6 +599,17 @@ export interface WorksheetPivots {
     visibleItems: Record<string, boolean>,
   ): Promise<void>;
 
+  /**
+   * Supported compatibility alias for {@link setPivotItemVisibility}.
+   *
+   * Prefer `setPivotItemVisibility(name, fieldId, visibleItems)` in new code.
+   */
+  setItemVisibility(
+    name: string,
+    fieldId: string,
+    visibleItems: Record<string, boolean>,
+  ): Promise<void>;
+
   // ===========================================================================
   // Expansion State
   // ===========================================================================

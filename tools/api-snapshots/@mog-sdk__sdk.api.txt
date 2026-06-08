@@ -6,21 +6,40 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const apiGuidance: ApiGuidanceApi
+export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
+export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
+export const apiGuidanceTargets: readonly ApiGuidanceTarget[]
 export const apiSpec: ApiSpec
 export const colToLetter: (col: number) => string
 export const parseCellAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellRange: (ref: string) => ParsedCellRange | null
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
+export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
 export function createWorkbook(): Promise<Workbook>
+export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
+export function preflightMogCode(code: string): ApiGuidancePreflightResult
+export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
+export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
 export interface AccessExplanation { /** The resolved access level */ readonly level: AccessLevel; /** The policy that determined the level (null = default, no policy matched) */ readonly matchedPolic ...
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
 export interface AccessPolicyMetadata { /** Tag of the principal who created this policy */ readonly createdBy: string; /** Creation timestamp (epoch ms) */ readonly createdAt: number; /** Human-reada ...
 export interface AccessPrincipal { readonly tags: string[]; }
+export interface ApiGuidanceApi { readonly analyze: (code: string) => ApiGuidanceDiagnostic[]; readonly preflight: (code: string) => ApiGuidancePreflightResult; readonly explain: (symbolOrPath: string ...
+export interface ApiGuidanceCatalogValidation { readonly valid: boolean; readonly issues: readonly ApiGuidanceCatalogValidationIssue[]; }
+export interface ApiGuidanceCatalogValidationIssue { readonly entryId: string; readonly path: string; readonly reason: string; }
+export interface ApiGuidanceCompoundMatcher extends ApiGuidanceBaseMatcher { readonly kind: 'compound'; readonly symbols: readonly string[]; readonly confidence: number; readonly blocking: boolean; }
+export interface ApiGuidanceDiagnostic { readonly code: ApiGuidanceDiagnosticCode; readonly severity: 'error' | 'warning' | 'info'; readonly dialect?: ApiGuidanceDialect; readonly category: ApiGuidanc ...
+export interface ApiGuidanceEntry { readonly id: string; readonly dialect: ApiGuidanceDialect; readonly category: ApiGuidanceCategory; readonly matchers: readonly ApiGuidanceMatcher[]; readonly messag ...
+export interface ApiGuidancePreflightResult { readonly ok: boolean; readonly diagnostics: readonly ApiGuidanceDiagnostic[]; }
+export interface ApiGuidanceSourceLocation { readonly file: string; readonly line?: number; }
+export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
+export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
 export interface ApiSpec { subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<string, ApiSpecInterfaceEntry>; types: Reco ...
 export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; targetInterface?: string; }
 export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
@@ -35,6 +54,7 @@ export interface CreateWorkbookOptions { documentId?: string; /** XLSX data shor
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface DocumentSecurityConfig { /** * Callback to resolve the current principal. Called once per document * session; the returned principal is forwarded to Rust and governs * every bridge ca ...
 export interface FilterExpression { /** Field to filter on (column ID or column name) */ field: string; /** Value to match (exact equality) */ equals: CellValue; }
+export interface ForeignApiGuidanceExplanation { readonly kind: 'foreign-api-dialect'; readonly symbol: string; readonly diagnostic: ApiGuidanceDiagnostic; readonly entry: ApiGuidanceEntry; }
 export interface HeadlessOptions { /** Pre-loaded napi addon module from the public native platform package. */ computeAddon: NapiAddonModule; /** Document ID (defaults to random UUID) */ docId?: stri ...
 export interface IMogDocumentFactory { create(options?: MogDocumentCreateOptions): Promise<MogDocument>; open(options: MogDocumentImportOptions): Promise<MogDocumentOpenResult>; }
 export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<void>; canUndo(): boolean; canRedo(): boolean; getState(): Promise<MogUndoState>; setNextDescription(description: string): ...
@@ -44,6 +64,7 @@ export interface InterfaceResult { name: string; path: string; docstring: string
 export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly types: Record<string, TypeResult>; }
 export interface MethodResult { name: string; path: string; signature: string; docstring: string; types: Record<string, TypeResult>; }
 export interface MethodSummary { name: string; signature: string; docstring: string; }
+export interface MogApiGuidanceExplanation { readonly kind: 'mog-api'; readonly path: string; readonly target: ApiGuidanceTarget; readonly examples: readonly string[]; readonly recommendedBy: readonly ...
 export interface MogAsyncDisposable { disposeAsync(): Promise<void>; [Symbol.asyncDispose](): Promise<void>; }
 export interface MogCollaborationHandle extends MogDisposable { detach(): Promise<void>; }
 export interface MogCreateWorkbookOptions { readonly documentId?: string; readonly xlsx?: Uint8Array; readonly source?: MogDocumentSource; readonly importOptions?: MogImportOptions; readonly security? ...
@@ -60,6 +81,7 @@ export interface MogExportResult { readonly success: boolean; readonly data?: Ui
 export interface MogImportOptions { readonly maxCells?: number; readonly valuesOnly?: boolean; readonly skipFormatting?: boolean; readonly signal?: AbortSignal; readonly onProgress?: (progress: MogImp ...
 export interface MogImportResult { readonly success: boolean; readonly sheetIds: readonly string[]; readonly cellCount?: number; readonly warnings: readonly MogImportWarning[]; readonly metrics?: MogI ...
 export interface MogImportWarning { readonly id?: string; readonly type: MogImportWarningType; readonly message: string; readonly severity?: ImportDiagnosticSeverity; readonly recoverability?: ImportD ...
+export interface MogReplacement { readonly path: string; readonly snippet?: string; readonly note?: string; }
 export interface MogSdkCollaborationProvider { readonly url: string; readonly participantId: string; }
 export interface MogSdkDiagnostics { readonly domain?: string; readonly property?: string; readonly issueCode?: string; readonly severity?: 'error' | 'warning' | 'info'; }
 export interface MogSdkError extends IMogSdkError { }
@@ -78,6 +100,7 @@ export interface NapiAddonModule { ComputeEngine: (new (snapshotJson: string) =>
 export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; }
 export interface RootNode { readonly name: string; readonly methods: MethodSummary[]; readonly subApis: string[]; readonly [key: string]: SubApiNode | MethodNode | unknown; }
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
+export interface SourceSpan { readonly start: number; readonly end: number; readonly line?: number; readonly column?: number; }
 export interface StoreCellData { /** Stable cell identity - never changes even when cell moves */ id: CellId; /** Current row position (mutable on structure changes) */ row: number; /** Current column ...
 export interface SubApiNode { readonly name: string; readonly path: string; readonly docstring: string; readonly methods: MethodSummary[]; readonly [methodName: string]: MethodNode | unknown; }
 export interface TableRecord { /** The record's row ID (row index as string, e.g., "5") */ rowId: string; /** The record's field values (keyed by column ID or column name) */ values: RecordValues; }
@@ -88,6 +111,13 @@ export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces
 export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
+export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'names' | 'file-io' | 'host'
+export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE'
+export type ApiGuidanceDialect = 'officejs'
+export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation
+export type ApiGuidanceMatcher = ApiGuidanceSymbolMatcher | ApiGuidanceCompoundMatcher
+export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound'
+export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport'
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type CellWriteData = Pick<StoreCellData, 'raw' | 'formula' | 'identityFormula' | 'computed'>
@@ -119,21 +149,40 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const apiGuidance: ApiGuidanceApi
+export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
+export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
+export const apiGuidanceTargets: readonly ApiGuidanceTarget[]
 export const apiSpec: ApiSpec
 export const colToLetter: (col: number) => string
 export const parseCellAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellRange: (ref: string) => ParsedCellRange | null
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
+export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
 export function createWorkbook(): Promise<Workbook>
+export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
+export function preflightMogCode(code: string): ApiGuidancePreflightResult
+export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
+export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
 export interface AccessExplanation { /** The resolved access level */ readonly level: AccessLevel; /** The policy that determined the level (null = default, no policy matched) */ readonly matchedPolic ...
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
 export interface AccessPolicyMetadata { /** Tag of the principal who created this policy */ readonly createdBy: string; /** Creation timestamp (epoch ms) */ readonly createdAt: number; /** Human-reada ...
 export interface AccessPrincipal { readonly tags: string[]; }
+export interface ApiGuidanceApi { readonly analyze: (code: string) => ApiGuidanceDiagnostic[]; readonly preflight: (code: string) => ApiGuidancePreflightResult; readonly explain: (symbolOrPath: string ...
+export interface ApiGuidanceCatalogValidation { readonly valid: boolean; readonly issues: readonly ApiGuidanceCatalogValidationIssue[]; }
+export interface ApiGuidanceCatalogValidationIssue { readonly entryId: string; readonly path: string; readonly reason: string; }
+export interface ApiGuidanceCompoundMatcher extends ApiGuidanceBaseMatcher { readonly kind: 'compound'; readonly symbols: readonly string[]; readonly confidence: number; readonly blocking: boolean; }
+export interface ApiGuidanceDiagnostic { readonly code: ApiGuidanceDiagnosticCode; readonly severity: 'error' | 'warning' | 'info'; readonly dialect?: ApiGuidanceDialect; readonly category: ApiGuidanc ...
+export interface ApiGuidanceEntry { readonly id: string; readonly dialect: ApiGuidanceDialect; readonly category: ApiGuidanceCategory; readonly matchers: readonly ApiGuidanceMatcher[]; readonly messag ...
+export interface ApiGuidancePreflightResult { readonly ok: boolean; readonly diagnostics: readonly ApiGuidanceDiagnostic[]; }
+export interface ApiGuidanceSourceLocation { readonly file: string; readonly line?: number; }
+export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
+export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
 export interface ApiSpec { subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<string, ApiSpecInterfaceEntry>; types: Reco ...
 export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; targetInterface?: string; }
 export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
@@ -148,6 +197,7 @@ export interface CreateWorkbookOptions { documentId?: string; /** XLSX data shor
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface DocumentSecurityConfig { /** * Callback to resolve the current principal. Called once per document * session; the returned principal is forwarded to Rust and governs * every bridge ca ...
 export interface FilterExpression { /** Field to filter on (column ID or column name) */ field: string; /** Value to match (exact equality) */ equals: CellValue; }
+export interface ForeignApiGuidanceExplanation { readonly kind: 'foreign-api-dialect'; readonly symbol: string; readonly diagnostic: ApiGuidanceDiagnostic; readonly entry: ApiGuidanceEntry; }
 export interface HeadlessOptions { /** Pre-loaded napi addon module from the public native platform package. */ computeAddon: NapiAddonModule; /** Document ID (defaults to random UUID) */ docId?: stri ...
 export interface IMogDocumentFactory { create(options?: MogDocumentCreateOptions): Promise<MogDocument>; open(options: MogDocumentImportOptions): Promise<MogDocumentOpenResult>; }
 export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<void>; canUndo(): boolean; canRedo(): boolean; getState(): Promise<MogUndoState>; setNextDescription(description: string): ...
@@ -157,6 +207,7 @@ export interface InterfaceResult { name: string; path: string; docstring: string
 export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly types: Record<string, TypeResult>; }
 export interface MethodResult { name: string; path: string; signature: string; docstring: string; types: Record<string, TypeResult>; }
 export interface MethodSummary { name: string; signature: string; docstring: string; }
+export interface MogApiGuidanceExplanation { readonly kind: 'mog-api'; readonly path: string; readonly target: ApiGuidanceTarget; readonly examples: readonly string[]; readonly recommendedBy: readonly ...
 export interface MogAsyncDisposable { disposeAsync(): Promise<void>; [Symbol.asyncDispose](): Promise<void>; }
 export interface MogCollaborationHandle extends MogDisposable { detach(): Promise<void>; }
 export interface MogCreateWorkbookOptions { readonly documentId?: string; readonly xlsx?: Uint8Array; readonly source?: MogDocumentSource; readonly importOptions?: MogImportOptions; readonly security? ...
@@ -173,6 +224,7 @@ export interface MogExportResult { readonly success: boolean; readonly data?: Ui
 export interface MogImportOptions { readonly maxCells?: number; readonly valuesOnly?: boolean; readonly skipFormatting?: boolean; readonly signal?: AbortSignal; readonly onProgress?: (progress: MogImp ...
 export interface MogImportResult { readonly success: boolean; readonly sheetIds: readonly string[]; readonly cellCount?: number; readonly warnings: readonly MogImportWarning[]; readonly metrics?: MogI ...
 export interface MogImportWarning { readonly id?: string; readonly type: MogImportWarningType; readonly message: string; readonly severity?: ImportDiagnosticSeverity; readonly recoverability?: ImportD ...
+export interface MogReplacement { readonly path: string; readonly snippet?: string; readonly note?: string; }
 export interface MogSdkCollaborationProvider { readonly url: string; readonly participantId: string; }
 export interface MogSdkDiagnostics { readonly domain?: string; readonly property?: string; readonly issueCode?: string; readonly severity?: 'error' | 'warning' | 'info'; }
 export interface MogSdkError extends IMogSdkError { }
@@ -191,6 +243,7 @@ export interface NapiAddonModule { ComputeEngine: (new (snapshotJson: string) =>
 export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; }
 export interface RootNode { readonly name: string; readonly methods: MethodSummary[]; readonly subApis: string[]; readonly [key: string]: SubApiNode | MethodNode | unknown; }
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
+export interface SourceSpan { readonly start: number; readonly end: number; readonly line?: number; readonly column?: number; }
 export interface StoreCellData { /** Stable cell identity - never changes even when cell moves */ id: CellId; /** Current row position (mutable on structure changes) */ row: number; /** Current column ...
 export interface SubApiNode { readonly name: string; readonly path: string; readonly docstring: string; readonly methods: MethodSummary[]; readonly [methodName: string]: MethodNode | unknown; }
 export interface TableRecord { /** The record's row ID (row index as string, e.g., "5") */ rowId: string; /** The record's field values (keyed by column ID or column name) */ values: RecordValues; }
@@ -201,6 +254,13 @@ export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces
 export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
+export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'names' | 'file-io' | 'host'
+export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE'
+export type ApiGuidanceDialect = 'officejs'
+export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation
+export type ApiGuidanceMatcher = ApiGuidanceSymbolMatcher | ApiGuidanceCompoundMatcher
+export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound'
+export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport'
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type CellWriteData = Pick<StoreCellData, 'raw' | 'formula' | 'identityFormula' | 'computed'>

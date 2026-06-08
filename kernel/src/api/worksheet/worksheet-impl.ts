@@ -22,6 +22,9 @@
 import type {
   ActiveCellEditSource,
   AggregateResult,
+  Chart,
+  ChartConfig,
+  ChartReadOptions,
   CellData,
   CellMetadataCache as CellMetadataCacheContract,
   CellRange,
@@ -35,6 +38,10 @@ import type {
   FormulaSyntaxValidationError,
   IdentifiedCellData,
   NumberFormatCategory,
+  PivotCreateConfig,
+  PivotTableConfig,
+  PivotTableHandle,
+  PivotTableInfo,
   RawCellData,
   FindInRangeOptions,
   SearchOptions,
@@ -170,6 +177,7 @@ import { WorksheetLayoutImpl } from './layout';
 import { WorksheetNamesImpl } from './names';
 import { WorksheetOutlineImpl } from './outline';
 import { WorksheetPivotsImpl } from './pivots';
+import { dataConfigToApiConfig } from './pivots/config-conversion';
 import { WorksheetPrintImpl } from './print';
 import { WorksheetProtectionImpl } from './protection';
 import { WorksheetSettingsImpl } from './settings';
@@ -1490,7 +1498,26 @@ export class WorksheetImpl implements Worksheet {
     return DescribeOps.describe(this.ctx, this.sheetId, address);
   }
 
-  async describeRange(range: string | CellRange, includeStyle: boolean = true): Promise<string> {
+  async describeRange(range?: string | CellRange, includeStyle: boolean = true): Promise<string> {
+    if (range == null) {
+      return DescribeOps.describeUsedRange(this.ctx, this.sheetId, includeStyle);
+    }
+    if (
+      typeof range !== 'string' &&
+      (typeof range.startRow !== 'number' ||
+        typeof range.startCol !== 'number' ||
+        typeof range.endRow !== 'number' ||
+        typeof range.endCol !== 'number')
+    ) {
+      throw new KernelError(
+        'API_INVALID_ARGUMENT',
+        'describeRange range must be an A1 range string or CellRange object',
+        {
+          path: ['range'],
+          suggestion: 'Call ws.describeRange() for the used range, or pass a range like "A1:B10"',
+        },
+      );
+    }
     const rangeStr =
       typeof range === 'string'
         ? range
@@ -1500,6 +1527,43 @@ export class WorksheetImpl implements Worksheet {
 
   async summarize(options?: SummaryOptions): Promise<string> {
     return DescribeOps.summarize(this.ctx, this.sheetId, options);
+  }
+
+  getCharts(options?: ChartReadOptions): Promise<Chart[]> {
+    return this.charts.list(options);
+  }
+
+  listCharts(options?: ChartReadOptions): Promise<Chart[]> {
+    return this.charts.list(options);
+  }
+
+  getChart(chartId: string): Promise<Chart | null> {
+    return this.charts.get(chartId);
+  }
+
+  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void> {
+    return this.charts.update(chartId, updates);
+  }
+
+  removeChart(chartId: string): Promise<void> {
+    return this.charts.remove(chartId);
+  }
+
+  async addPivotTable(config: PivotCreateConfig): Promise<PivotTableConfig> {
+    const created = await this.pivots.add(config);
+    return dataConfigToApiConfig(created, created.sourceSheetName);
+  }
+
+  removePivotTable(name: string): Promise<void> {
+    return this.pivots.remove(name);
+  }
+
+  listPivotTables(): Promise<PivotTableInfo[]> {
+    return this.pivots.list();
+  }
+
+  getPivotTable(name: string): Promise<PivotTableHandle | null> {
+    return this.pivots.get(name);
   }
 
   // ===========================================================================
@@ -1625,6 +1689,7 @@ export class WorksheetImpl implements Worksheet {
       {
         caseSensitive: options?.matchCase,
         wholeCell: options?.entireCell,
+        includeFormulas: options?.searchFormulas,
       },
     );
   }
@@ -1647,6 +1712,7 @@ export class WorksheetImpl implements Worksheet {
       {
         caseSensitive: options?.matchCase,
         wholeCell: options?.entireCell,
+        includeFormulas: options?.searchFormulas,
       },
     );
   }

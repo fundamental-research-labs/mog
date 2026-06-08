@@ -1,4 +1,5 @@
 import { apiGuidanceCatalog } from './catalog';
+import { apiCompatibility } from '../api-compatibility/index';
 import { diagnosticFromGuidanceEntry } from './analyze';
 import { normalizeMogApiPath, resolveGuidanceTarget } from './targets';
 import type {
@@ -57,6 +58,28 @@ function findForeignMatcher(
   return null;
 }
 
+function normalizeCompatibilityPath(path: string): string {
+  return normalizeMogApiPath(path).replace(/\(\s*\)$/, '');
+}
+
+function findObservedCompatibilityEntry(symbolOrPath: string) {
+  const normalized = normalizeCompatibilityPath(symbolOrPath);
+  return (
+    apiCompatibility.byObservedPath[normalized]?.[0] ??
+    apiCompatibility.byObservedPath[`${normalized}()`]?.[0] ??
+    null
+  );
+}
+
+function findCanonicalCompatibilityEntry(symbolOrPath: string) {
+  const normalized = normalizeCompatibilityPath(symbolOrPath);
+  return (
+    apiCompatibility.byCanonicalPath[normalized]?.[0] ??
+    apiCompatibility.byCanonicalPath[`${normalized}()`]?.[0] ??
+    null
+  );
+}
+
 export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null {
   const foreign = findForeignMatcher(symbolOrPath);
   if (foreign) {
@@ -72,9 +95,31 @@ export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation |
     };
   }
 
+  const compatibility = findObservedCompatibilityEntry(symbolOrPath);
+  if (compatibility) {
+    const target = compatibility.canonicalPath
+      ? resolveGuidanceTarget(compatibility.canonicalPath)
+      : null;
+    return {
+      kind: 'mog-api-compatibility',
+      path: normalizeCompatibilityPath(symbolOrPath),
+      entry: compatibility,
+      target,
+    };
+  }
+
   const path = normalizeMogApiPath(symbolOrPath);
   const target = resolveGuidanceTarget(path);
-  if (!target) return null;
+  if (!target) {
+    const canonicalCompatibility = findCanonicalCompatibilityEntry(symbolOrPath);
+    if (!canonicalCompatibility) return null;
+    return {
+      kind: 'mog-api-compatibility',
+      path: normalizeCompatibilityPath(symbolOrPath),
+      entry: canonicalCompatibility,
+      target: null,
+    };
+  }
 
   const examples: string[] = [];
   const recommendedBy: string[] = [];

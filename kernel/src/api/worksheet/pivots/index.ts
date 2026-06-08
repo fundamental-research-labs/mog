@@ -570,6 +570,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
+  async setItemVisibility(
+    name: string,
+    fieldId: string,
+    visibleItems: Record<string, boolean>,
+  ): Promise<void> {
+    await this.setPivotItemVisibility(name, fieldId, visibleItems);
+  }
+
   // ===========================================================================
   // Expansion State (delegated to PivotExpansionStateProvider)
   // ===========================================================================

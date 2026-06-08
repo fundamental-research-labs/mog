@@ -202,7 +202,7 @@ export function notImplemented(feature: string): KernelError {
 export function chartNotFound(chartId: string): KernelError {
   return new KernelError('OBJ_CHART_NOT_FOUND', `Chart "${chartId}" not found`, {
     path: ['chartId'],
-    suggestion: 'Use getCharts() to list available charts',
+    suggestion: 'Use ws.charts.list() to list available charts, or api.describe("ws.charts") for chart API discovery',
     context: { resourceType: 'chart', resourceId: chartId },
   });
 }

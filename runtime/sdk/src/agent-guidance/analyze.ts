@@ -1,4 +1,5 @@
 import { apiGuidanceCatalog } from './catalog';
+import { apiCompatibility } from '../api-compatibility/index';
 import type {
   ApiGuidanceDiagnostic,
   ApiGuidanceEntry,
@@ -8,6 +9,7 @@ import type {
   MogReplacement,
   SourceSpan,
 } from './types';
+import type { ApiCompatibilityEntry } from '../api-compatibility/types';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -116,6 +118,49 @@ function patternFor(matcher: ApiGuidanceSymbolMatcher): RegExp {
   return chainPattern(matcher.symbol);
 }
 
+function compatibilityPattern(entry: ApiCompatibilityEntry): RegExp | null {
+  const path = entry.observedPath.trim();
+  if (!path.startsWith('ws.') && !path.startsWith('wb.')) return null;
+
+  if (isPivotHandleDescribePath(path)) {
+    return /\bws\s*\.\s*pivots\s*\.\s*get\s*\([^)]*\)\s*\.\s*describe\s*\(/g;
+  }
+
+  const normalized = path.replace(/\(\s*\)$/, '');
+  if (!/^(ws|wb)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
+  return callPattern(normalized);
+}
+
+function isPivotHandleDescribePath(path: string): boolean {
+  return path === 'ws.pivots.get(...).describe' || path === 'ws.pivots.get(...).describe()';
+}
+
+function pivotHandleDescribeMatches(stripped: string): Array<{ start: number; end: number }> {
+  const matches: Array<{ start: number; end: number }> = [];
+  const direct = /\bws\s*\.\s*pivots\s*\.\s*get\s*\([^)]*\)\s*\.\s*describe\s*\(/g;
+  for (const match of stripped.matchAll(direct)) {
+    const start = match.index ?? 0;
+    matches.push({ start, end: start + match[0].length });
+  }
+
+  const variableNames = new Set<string>();
+  const assignment =
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?ws\s*\.\s*pivots\s*\.\s*get\s*\([^;]*?\)/g;
+  for (const match of stripped.matchAll(assignment)) {
+    variableNames.add(match[1]);
+  }
+
+  for (const name of variableNames) {
+    const handleDescribe = new RegExp(`\\b${escapeRegExp(name)}\\s*\\.\\s*describe\\s*\\(`, 'g');
+    for (const match of stripped.matchAll(handleDescribe)) {
+      const start = match.index ?? 0;
+      matches.push({ start, end: start + match[0].length });
+    }
+  }
+
+  return matches;
+}
+
 function findSymbol(stripped: string, symbol: string): { start: number; end: number } | null {
   const matcher: ApiGuidanceSymbolMatcher = {
     id: 'adhoc',
@@ -169,6 +214,23 @@ function shouldSuppressLocalFalsePositive(
 
 function referencesFor(replacements: readonly MogReplacement[]): string[] {
   return replacements.map((replacement) => `api.guidance.explain("${replacement.path}")`);
+}
+
+function replacementsForCompatibility(entry: ApiCompatibilityEntry): MogReplacement[] {
+  const paths = entry.diagnostics?.replacements?.length
+    ? entry.diagnostics.replacements
+    : entry.canonicalPath
+      ? [entry.canonicalPath]
+      : [];
+  return paths
+    .filter((path) => path.startsWith('ws.') || path.startsWith('wb.') || path.startsWith('type:'))
+    .map((path) => ({ path }));
+}
+
+function compatibilityReferences(entry: ApiCompatibilityEntry): string[] {
+  const refs = [`api.guidance.explain("${entry.observedPath}")`];
+  if (entry.canonicalPath) refs.push(`api.guidance.explain("${entry.canonicalPath}")`);
+  return refs;
 }
 
 function spansOverlap(left: SourceSpan | undefined, right: SourceSpan | undefined): boolean {
@@ -244,6 +306,43 @@ export function diagnosticFromGuidanceEntry(
   };
 }
 
+export function diagnosticFromCompatibilityEntry(
+  entry: ApiCompatibilityEntry,
+  span?: SourceSpan,
+): ApiGuidanceDiagnostic {
+  const blocking = entry.status === 'structured_diagnostic' || entry.status === 'rejected';
+  const deprecated = entry.status === 'deprecated_alias';
+  const replacements = replacementsForCompatibility(entry);
+  return {
+    code:
+      entry.diagnostics?.code ??
+      (entry.status === 'rejected' ? 'MOG003_COMPATIBILITY_REJECTED' : 'MOG002_MOG_API_USAGE'),
+    severity: blocking ? 'error' : deprecated ? 'warning' : 'info',
+    dialect: 'mog-version',
+    category: entry.observedPath.includes('.charts') || entry.observedPath.includes('Chart')
+      ? 'charts'
+      : entry.observedPath.includes('.pivots') || entry.observedPath.includes('Pivot')
+        ? 'pivots'
+        : 'compatibility',
+    entryId: entry.id,
+    matcherId: `compatibility.${entry.id}`,
+    offendingSymbol: entry.observedPath,
+    message: entry.diagnostics?.message ?? entry.behavior,
+    suggestion:
+      entry.diagnostics?.message ??
+      (entry.canonicalPath
+        ? `Use ${entry.canonicalPath} for the canonical Mog API path.`
+        : entry.behavior),
+    mogReplacements: replacements,
+    references: compatibilityReferences(entry),
+    confidence: 0.99,
+    blocking,
+    compatibilityId: entry.id,
+    compatibilityStatus: entry.status,
+    ...(span ? { span } : {}),
+  };
+}
+
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
   const stripped = stripCommentsAndStrings(code);
   const diagnostics: ApiGuidanceDiagnostic[] = [];
@@ -279,6 +378,34 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
         seen.add(key);
         diagnostics.push(diagnosticFromGuidanceEntry(entry, matcher, matcher.symbol, span));
       }
+    }
+  }
+
+  for (const entry of apiCompatibility.entries) {
+    if (
+      entry.status !== 'deprecated_alias' &&
+      entry.status !== 'structured_diagnostic' &&
+      entry.status !== 'rejected'
+    ) {
+      continue;
+    }
+    const directMatches =
+      isPivotHandleDescribePath(entry.observedPath)
+        ? pivotHandleDescribeMatches(stripped)
+        : null;
+    const pattern = directMatches ? null : compatibilityPattern(entry);
+    if (!directMatches && !pattern) continue;
+    const matches = directMatches ?? Array.from(stripped.matchAll(pattern!)).map((match) => {
+      const start = match.index ?? 0;
+      return { start, end: start + match[0].length };
+    });
+    for (const match of matches) {
+      const { start, end } = match;
+      const span = spanFor(code, start, end);
+      const key = `${entry.id}:${span.start}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      diagnostics.push(diagnosticFromCompatibilityEntry(entry, span));
     }
   }
 

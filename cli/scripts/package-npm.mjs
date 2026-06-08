@@ -16,7 +16,9 @@ const candidateDir = resolve(publicPackagesDir, 'mog-sdk__cli');
 const tarballDir = resolve(repoRoot, 'artifacts', 'npm');
 
 if (!existsSync(resolve(cliRoot, 'dist', 'mog.cjs'))) {
-  throw new Error(`Missing built CLI at cli/dist/mog.cjs. Run pnpm --filter @mog-sdk/cli build first.`);
+  throw new Error(
+    `Missing built CLI at cli/dist/mog.cjs. Run pnpm --filter @mog-sdk/cli build first.`,
+  );
 }
 
 mkdirSync(publicPackagesDir, { recursive: true });

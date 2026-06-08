@@ -74,7 +74,10 @@ function assertApiSpecSynced() {
 }
 
 function assertPackagedApiSpecVersion(data) {
-  assertApiSpecPackageVersion(JSON.parse(data.toString('utf8')), 'packaged references/api-spec.json');
+  assertApiSpecPackageVersion(
+    JSON.parse(data.toString('utf8')),
+    'packaged references/api-spec.json',
+  );
 }
 
 function assertApiSpecPackageVersion(spec, label) {
@@ -87,10 +90,7 @@ function assertApiSpecPackageVersion(spec, label) {
 
 function rewriteSkillInstallVersion(source) {
   return source
-    .replace(
-      /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-      `mog-cli-v${packageVersion}`,
-    )
+    .replace(/mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g, `mog-cli-v${packageVersion}`)
     .replace(
       /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
       `@mog-sdk/cli@${packageVersion}`,
@@ -123,7 +123,9 @@ function assertNoInstallVersionMismatch(source, label) {
 function assertNoForbiddenInstallPaths(source, label) {
   const forbidden = /raw\.githubusercontent|github\.com\/[^\s`'"]+\/releases|r2\.dev|\bcurl\b/i;
   if (forbidden.test(source)) {
-    throw new Error(`${label} references a forbidden raw GitHub, GitHub Releases, R2, or curl install path`);
+    throw new Error(
+      `${label} references a forbidden raw GitHub, GitHub Releases, R2, or curl install path`,
+    );
   }
 }
 

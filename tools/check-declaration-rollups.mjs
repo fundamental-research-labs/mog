@@ -143,7 +143,11 @@ function declarationEntriesForPackage(inventory, manifest) {
 function hasBinEntries(manifest) {
   if (!manifest.bin) return false;
   if (typeof manifest.bin === 'string') return true;
-  return typeof manifest.bin === 'object' && !Array.isArray(manifest.bin) && Object.keys(manifest.bin).length > 0;
+  return (
+    typeof manifest.bin === 'object' &&
+    !Array.isArray(manifest.bin) &&
+    Object.keys(manifest.bin).length > 0
+  );
 }
 
 function loadRequiredPackages() {

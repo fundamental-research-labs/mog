@@ -79,7 +79,10 @@ async function runInstalledCliSmoke({ mog, cwd, workbooks }) {
       { cwd, encoding: 'utf8' },
     ),
   );
-  if (executed.result !== 'npm local ok' || !executed.logs?.some((line) => line.includes('npm local smoke'))) {
+  if (
+    executed.result !== 'npm local ok' ||
+    !executed.logs?.some((line) => line.includes('npm local smoke'))
+  ) {
     throw new Error(`execute returned ${JSON.stringify(executed)}`);
   }
 
@@ -123,7 +126,9 @@ function hostNativeTarballPrefix() {
     const glibc = process.report?.getReport?.().header?.glibcVersionRuntime;
     return `mog-sdk-linux-${process.arch}-${glibc ? 'gnu' : 'musl'}`;
   }
-  throw new Error(`Unsupported platform for Mog CLI npm smoke: ${process.platform}/${process.arch}`);
+  throw new Error(
+    `Unsupported platform for Mog CLI npm smoke: ${process.platform}/${process.arch}`,
+  );
 }
 
 function executablePath(binDir, name) {

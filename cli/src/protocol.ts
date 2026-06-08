@@ -87,10 +87,7 @@ export type DaemonStatePathOptions = {
   tmpDir?: string;
 };
 
-export function socketPathForState(
-  stateKey: string,
-  options: DaemonStatePathOptions = {},
-): string {
+export function socketPathForState(stateKey: string, options: DaemonStatePathOptions = {}): string {
   const env = options.env ?? process.env;
   if (env.MOG_CLI_SOCKET) return env.MOG_CLI_SOCKET;
 
@@ -100,10 +97,7 @@ export function socketPathForState(
   return join(options.tmpDir ?? tmpdir(), `mog-${stateKey}.sock`);
 }
 
-export function pidPathForState(
-  stateKey: string,
-  options: DaemonStatePathOptions = {},
-): string {
+export function pidPathForState(stateKey: string, options: DaemonStatePathOptions = {}): string {
   const env = options.env ?? process.env;
   return env.MOG_CLI_PID ?? join(options.tmpDir ?? tmpdir(), `mog-${stateKey}.pid`);
 }

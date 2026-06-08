@@ -108,6 +108,8 @@ export async function autoFill(
     throw new KernelError('COMPUTE_ERROR', 'Range coordinates must be non-negative');
   }
 
+  await ctx.awaitMaterialized?.('allSheets');
+
   const direction = computeDirection(sourceRange, targetRange);
   const flags = modeToFlags(mode);
 

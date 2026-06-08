@@ -76,6 +76,34 @@ fn restore_data_table_saved_values(mirror: &mut CellMirror, saved_values: &[(Cel
     clear_data_table_eval_caches();
 }
 
+fn preserve_imported_data_table_cached_values(
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    region: &DataTableRegionDef,
+    id_alloc: &cell_types::IdAllocator,
+) -> Vec<(CellId, CellValue)> {
+    if region.ooxml_flags.is_none() {
+        return Vec::new();
+    }
+
+    let mut values = Vec::new();
+    for row in region.start_row..=region.end_row {
+        for col in region.start_col..=region.end_col {
+            let pos = SheetPos::new(row, col);
+            let Some(cell_id) = mirror.ensure_cell_id_identity_only(sheet_id, pos, id_alloc) else {
+                continue;
+            };
+            let value = mirror
+                .get_cell_value_raw(&cell_id)
+                .or_else(|| mirror.get_cell_value_at(sheet_id, pos))
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            values.push((cell_id, value));
+        }
+    }
+    values
+}
+
 /// Check if an AST node is a top-level TABLE function call.
 pub(super) fn is_table_formula(ast: &ASTNode) -> bool {
     matches!(ast, ASTNode::Function { name, .. } if name.eq_ignore_ascii_case("TABLE"))
@@ -283,6 +311,12 @@ impl super::ComputeCore {
                 // (start_row - 1, start_col) or (start_row, start_col - 1) per
                 // Excel convention, we try the corner first, then fall back.
                 if region.start_row == 0 || region.start_col == 0 {
+                    results.extend(preserve_imported_data_table_cached_values(
+                        mirror,
+                        &sheet_id,
+                        region,
+                        &self.id_alloc,
+                    ));
                     continue;
                 }
                 let candidate_positions = [
@@ -299,7 +333,15 @@ impl super::ComputeCore {
                     Some((cid, entry.ast.clone()))
                 }) {
                     Some(pair) => pair,
-                    None => continue,
+                    None => {
+                        results.extend(preserve_imported_data_table_cached_values(
+                            mirror,
+                            &sheet_id,
+                            region,
+                            &self.id_alloc,
+                        ));
+                        continue;
+                    }
                 };
 
                 // 3c: Resolve input cell references.
@@ -318,6 +360,12 @@ impl super::ComputeCore {
 
                 // Must have at least one input cell
                 if row_input_cell.is_none() && col_input_cell.is_none() {
+                    results.extend(preserve_imported_data_table_cached_values(
+                        mirror,
+                        &sheet_id,
+                        region,
+                        &self.id_alloc,
+                    ));
                     continue;
                 }
 

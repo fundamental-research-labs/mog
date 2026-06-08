@@ -12,6 +12,50 @@ use compute_document::hex::id_to_hex;
 use super::AdjustedFormulaResult;
 use super::cell_mutations::mutation_set_cells_by_position_raw;
 
+fn source_formula_at(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> (
+    Option<formula_types::IdentityFormula>,
+    Vec<compute_fill::formula_adjust::RefPosition>,
+) {
+    let pos = SheetPos::new(row, col);
+    let cell_id = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col))
+        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+
+    let formula = cell_id
+        .and_then(|id| mirror.get_formula(&id).cloned())
+        .or_else(|| {
+            let formula_text =
+                cell_id.and_then(|id| stores.compute.get_formula(&id).map(str::to_owned));
+            formula_text.and_then(|text| {
+                stores
+                    .compute
+                    .to_identity_formula(mirror, sheet_id, &text)
+                    .ok()
+            })
+        });
+
+    let ref_positions = formula
+        .as_ref()
+        .map(|id_formula| {
+            id_formula
+                .refs
+                .iter()
+                .map(|r| resolve_identity_ref_to_fill_position(mirror, sheet_id, r, row, col))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    (formula, ref_positions)
+}
+
 fn source_format_at(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -79,8 +123,6 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     // -- 1. Gather source cells --
     let mut source_cells: Vec<SourceCell> = Vec::new();
 
-    let sheet_mirror = mirror.get_sheet(sheet_id);
-
     for row in src.start_row..=src.end_row {
         for col in src.start_col..=src.end_col {
             let pos = SheetPos::new(row, col);
@@ -90,33 +132,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
                 .cloned()
                 .unwrap_or(CellValue::Null);
 
-            let (formula, ref_positions) = if let Some(sm) = sheet_mirror {
-                if let Some(cell_id) = sm.cell_id_at(pos) {
-                    if let Some(entry) = sm.get_cell(&cell_id) {
-                        if let Some(ref id_formula) = entry.formula {
-                            let positions: Vec<compute_fill::formula_adjust::RefPosition> =
-                                id_formula
-                                    .refs
-                                    .iter()
-                                    .map(|r| {
-                                        resolve_identity_ref_to_fill_position(
-                                            mirror, sheet_id, r, row, col,
-                                        )
-                                    })
-                                    .collect();
-                            (Some((**id_formula).clone()), positions)
-                        } else {
-                            (None, Vec::new())
-                        }
-                    } else {
-                        (None, Vec::new())
-                    }
-                } else {
-                    (None, Vec::new())
-                }
-            } else {
-                (None, Vec::new())
-            };
+            let (formula, ref_positions) = source_formula_at(stores, mirror, sheet_id, row, col);
 
             let format = Some(source_format_at(stores, mirror, sheet_id, row, col));
 

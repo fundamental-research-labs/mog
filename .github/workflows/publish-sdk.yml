@@ -461,6 +461,7 @@ jobs:
 
       - name: 'Dry run: CLI source gates'
         run: |
+          pnpm -w run build:public-artifacts -- --through @mog-sdk/sdk --skip-native-build --skip-host-native-artifact --skip-wasm-build
           pnpm --filter @mog-sdk/cli typecheck
           pnpm --filter @mog-sdk/cli test:e2e
 
@@ -626,6 +627,7 @@ jobs:
 
       - name: 'Publish readiness: CLI source gates'
         run: |
+          pnpm -w run build:public-artifacts -- --through @mog-sdk/sdk --skip-native-build --skip-host-native-artifact --skip-wasm-build
           pnpm --filter @mog-sdk/cli typecheck
           pnpm --filter @mog-sdk/cli test:e2e
 

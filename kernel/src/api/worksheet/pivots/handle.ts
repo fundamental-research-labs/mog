@@ -28,7 +28,7 @@ import type {
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
-import { KernelError } from '../../../errors';
+import { createPivotStaleHandleError } from '../../../errors';
 import {
   automaticPivotValueDisplayName,
   valuePlacementWithAggregate,
@@ -173,11 +173,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     });
     if (!result) {
       snapshots.markDeleted(pivotId);
-      throw new KernelError(
-        'PIVOT_NOT_FOUND',
-        `Pivot handle ${pivotId} is stale or invalidated during update.`,
-        { context: { operation: 'pivot.update', pivotId, sheetId } },
-      );
+      throw createPivotStaleHandleError({ operation: 'pivot.update', pivotId, sheetId });
     }
     snapshots.set(result);
     return result;

@@ -36,7 +36,7 @@ import type {
   PivotTableStyle,
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
-import { KernelError } from '../../../errors';
+import { KernelError, createPivotStaleHandleError } from '../../../errors';
 import { rangeToA1, toA1 } from '../../internal/utils';
 import { buildPivotTableHandle, type PivotHandleSnapshotRegistry } from './handle';
 import { dataConfigToApiConfig } from './config-conversion';
@@ -127,22 +127,14 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       if (entry?.status === 'live') {
         return entry.config;
       }
-      throw new KernelError(
-        'PIVOT_NOT_FOUND',
-        `${operation}: Pivot handle "${pivotId}" is stale or invalidated.`,
-        { context: { operation, sheetId: this.sheetId, pivotId } },
-      );
+      throw createPivotStaleHandleError({ operation, sheetId: this.sheetId, pivotId });
     },
     refresh: async (pivotId, operation) => {
       this._assertLive(operation);
       const pivot = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
       if (!pivot) {
         this.pivotSnapshots.set(pivotId, { status: 'deleted' });
-        throw new KernelError(
-          'PIVOT_NOT_FOUND',
-          `${operation}: Pivot handle "${pivotId}" is stale or invalidated.`,
-          { context: { operation, sheetId: this.sheetId, pivotId } },
-        );
+        throw createPivotStaleHandleError({ operation, sheetId: this.sheetId, pivotId });
       }
       return this.cachePivot(pivot);
     },

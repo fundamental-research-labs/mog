@@ -44,11 +44,13 @@ export {
   createPivotInvalidDataSourceError,
   createPivotAmbiguousPlacementError,
   createPivotNotFoundError,
+  createPivotStaleHandleError,
   createPivotUnresolvedFieldReferencesError,
   type PivotInvalidDataSourceContext,
   type PivotInvalidReference,
   type PivotInvalidReferenceKind,
   type PivotNotFoundContext,
+  type PivotStaleHandleContext,
   type PivotUnresolvedFieldReferencesContext,
 } from './pivot';
 export { failResult, mapResult, okResult, unwrap, type OperationResult } from './operation';

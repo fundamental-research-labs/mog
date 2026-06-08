@@ -5,6 +5,12 @@ export interface PivotNotFoundContext {
   sheetId?: string;
 }
 
+export interface PivotStaleHandleContext {
+  operation: string;
+  pivotId: string;
+  sheetId?: string;
+}
+
 export interface PivotInvalidDataSourceContext {
   pivotName: string;
   dataSource: string;
@@ -78,6 +84,14 @@ export function createPivotNotFoundError(context: PivotNotFoundContext): KernelE
   return new KernelError('PIVOT_NOT_FOUND', `Pivot table "${context.pivotName}" not found`, {
     context: { ...context },
   });
+}
+
+export function createPivotStaleHandleError(context: PivotStaleHandleContext): KernelError {
+  return new KernelError(
+    'PIVOT_NOT_FOUND',
+    `${context.operation}: Pivot handle "${context.pivotId}" is stale or invalidated.`,
+    { context: { ...context } },
+  );
 }
 
 export function createPivotInvalidDataSourceError(

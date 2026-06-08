@@ -1,57 +1,46 @@
 import { execFileSync } from 'node:child_process';
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  createPublicPackageDirectory,
+  discoverWorkspacePackages,
+  loadJsonc,
+} from '../../tools/public-package-manifest.mjs';
 
 const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(cliRoot, '..');
-const artifactsDir = resolve(repoRoot, 'artifacts', 'npm');
-const packageDir = resolve(artifactsDir, 'mog-cli');
 const version = releasePackageVersion();
+const publicPackagesDir = resolve(repoRoot, 'artifacts', 'public-packages');
+const candidateDir = resolve(publicPackagesDir, 'mog-sdk__cli');
+const tarballDir = resolve(repoRoot, 'artifacts', 'npm');
 
-const distFile = resolve(cliRoot, 'dist', 'mog.cjs');
-const distMapFile = resolve(cliRoot, 'dist', 'mog.cjs.map');
-if (!existsSync(distFile)) {
-  throw new Error(`Missing built CLI at ${distFile}. Run pnpm --filter @mog-sdk/cli build first.`);
+if (!existsSync(resolve(cliRoot, 'dist', 'mog.cjs'))) {
+  throw new Error(`Missing built CLI at cli/dist/mog.cjs. Run pnpm --filter @mog-sdk/cli build first.`);
 }
 
-rmSync(packageDir, { recursive: true, force: true });
-mkdirSync(resolve(packageDir, 'dist'), { recursive: true });
-cpSync(distFile, resolve(packageDir, 'dist', 'mog.cjs'));
-if (existsSync(distMapFile)) cpSync(distMapFile, resolve(packageDir, 'dist', 'mog.cjs.map'));
-chmodSync(resolve(packageDir, 'dist', 'mog.cjs'), 0o755);
+mkdirSync(publicPackagesDir, { recursive: true });
+rmSync(tarballDir, { recursive: true, force: true });
+mkdirSync(tarballDir, { recursive: true });
 
-writeFileSync(
-  resolve(packageDir, 'package.json'),
-  `${JSON.stringify(npmManifest(version), null, 2)}\n`,
-);
-writeFileSync(
-  resolve(packageDir, 'README.md'),
-  [
-    '# Mog CLI',
-    '',
-    'Minimal command-line interface for operating Mog workbooks with the headless SDK.',
-    '',
-    '```bash',
-    'npm install -g @mog-sdk/cli',
-    'mog create --name model --path .',
-    '```',
-    '',
-  ].join('\n'),
-);
-
-const output = execFileSync('npm', ['pack', '--pack-destination', artifactsDir, '--json'], {
-  cwd: packageDir,
-  encoding: 'utf8',
+createPublicPackageDirectory(cliRoot, {
+  root: repoRoot,
+  inventory: loadJsonc(resolve(repoRoot, 'tools', 'package-inventory.jsonc')),
+  workspacePackages: discoverWorkspacePackages(repoRoot),
+  outDir: candidateDir,
 });
+
+const candidateManifest = readJson(resolve(candidateDir, 'package.json'));
+assertCandidateManifest(candidateManifest);
+
+const output = execFileSync(
+  'npm',
+  ['pack', candidateDir, '--pack-destination', tarballDir, '--json'],
+  {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  },
+);
 const packed = JSON.parse(output);
 const filename = packed.at(0)?.filename;
 if (!filename) throw new Error(`npm pack did not report a filename: ${output}`);
@@ -61,40 +50,46 @@ console.log(
     {
       ok: true,
       version,
-      packageDir,
-      tarballPath: resolve(artifactsDir, filename),
+      candidateDir,
+      tarballPath: resolve(tarballDir, filename),
     },
     null,
     2,
   ),
 );
 
-function npmManifest(packageVersion) {
-  return {
-    name: '@mog-sdk/cli',
-    version: packageVersion,
-    description: 'Minimal command-line interface for operating Mog workbooks with the headless SDK',
-    license: 'MIT',
-    type: 'commonjs',
-    bin: {
-      mog: './dist/mog.cjs',
-    },
-    files: ['dist', 'README.md'],
-    engines: {
-      node: '>=18',
-    },
-    repository: {
-      type: 'git',
-      url: 'https://github.com/fundamental-research-labs/mog',
-      directory: 'cli',
-    },
-    publishConfig: {
-      access: 'public',
-    },
-    dependencies: {
-      '@mog-sdk/sdk': packageVersion,
-    },
-  };
+function assertCandidateManifest(manifest) {
+  if (manifest.name !== '@mog-sdk/cli') {
+    throw new Error(`candidate name ${manifest.name} is not @mog-sdk/cli`);
+  }
+  if (manifest.version !== version) {
+    throw new Error(`candidate version ${manifest.version} is not ${version}`);
+  }
+  if (manifest.private === true) {
+    throw new Error('candidate manifest must not contain private: true');
+  }
+  if (manifest.dependencies?.['@mog-sdk/sdk'] !== version) {
+    throw new Error(
+      `candidate @mog-sdk/sdk dependency ${manifest.dependencies?.['@mog-sdk/sdk']} is not ${version}`,
+    );
+  }
+  if (manifest.devDependencies) {
+    throw new Error('candidate manifest must not include devDependencies');
+  }
+  if (manifest.bin?.mog !== './dist/mog.cjs') {
+    throw new Error(`candidate bin.mog is ${manifest.bin?.mog}, expected ./dist/mog.cjs`);
+  }
+  assertNoForbiddenSpecs(manifest);
+}
+
+function assertNoForbiddenSpecs(manifest) {
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+      if (/^(workspace|file|link):/.test(String(spec))) {
+        throw new Error(`candidate ${field}.${name} uses forbidden spec ${spec}`);
+      }
+    }
+  }
 }
 
 function releasePackageVersion() {

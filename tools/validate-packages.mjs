@@ -185,6 +185,13 @@ function exportMapEntries(manifest) {
   return Object.entries(exportsField);
 }
 
+function binEntries(manifest) {
+  if (!manifest.bin) return [];
+  if (typeof manifest.bin === 'string') return [[manifest.name ?? '<unnamed>', manifest.bin]];
+  if (typeof manifest.bin !== 'object' || Array.isArray(manifest.bin)) return [];
+  return Object.entries(manifest.bin).filter(([, target]) => typeof target === 'string');
+}
+
 function validateExportDisposition(name, manifest, entry, inventory, errors) {
   const exportDispositions = entry.exports ?? {};
   if (
@@ -468,6 +475,38 @@ for (const pkg of workspacePackages) {
       errors.push(
         `${name} (${relPath}): "files" includes "src". Public packages must ship only built artifacts (e.g. ["dist"]).`,
       );
+    }
+  }
+
+  // 8b. Ship-public packages are either libraries with public exports or bin
+  // packages with executable dist targets. Binary-wrapper packages may publish
+  // raw runtime artifacts through main/files instead.
+  if (entry.disposition === 'ship-public' && !entry.requirePrivate) {
+    const exports = exportMapEntries(manifest);
+    const bins = binEntries(manifest);
+    if (exports.length === 0 && bins.length === 0) {
+      errors.push(
+        `${name} (${relPath}): public packages must declare either exports or bin entries.`,
+      );
+    }
+    for (const [binName, target] of bins) {
+      if (!String(target).startsWith('./dist/')) {
+        errors.push(
+          `${name} (${relPath}): bin.${binName} target "${target}" must point at ./dist/*`,
+        );
+      }
+      const files = Array.isArray(manifest.files) ? manifest.files : [];
+      const normalized = String(target).replace(/^\.\//, '');
+      const covered = files.some((file) => {
+        if (typeof file !== 'string') return false;
+        const entryPath = file.replace(/^\.\//, '').replace(/\/+$/, '');
+        return normalized === entryPath || normalized.startsWith(`${entryPath}/`);
+      });
+      if (!covered) {
+        errors.push(
+          `${name} (${relPath}): bin.${binName} target "${target}" is not covered by files.`,
+        );
+      }
     }
   }
 

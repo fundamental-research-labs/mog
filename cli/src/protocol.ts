@@ -81,12 +81,35 @@ export function stateKeyForCwd(cwd = process.cwd()): string {
   return createHash('sha256').update(cwd).digest('hex').slice(0, 20);
 }
 
-export function socketPathForState(stateKey: string): string {
-  return process.env.MOG_CLI_SOCKET ?? join(tmpdir(), `mog-${stateKey}.sock`);
+export type DaemonStatePathOptions = {
+  env?: Partial<Pick<NodeJS.ProcessEnv, 'MOG_CLI_SOCKET' | 'MOG_CLI_PID'>>;
+  platform?: NodeJS.Platform;
+  tmpDir?: string;
+};
+
+export function socketPathForState(
+  stateKey: string,
+  options: DaemonStatePathOptions = {},
+): string {
+  const env = options.env ?? process.env;
+  if (env.MOG_CLI_SOCKET) return env.MOG_CLI_SOCKET;
+
+  const platform = options.platform ?? process.platform;
+  if (platform === 'win32') return `\\\\.\\pipe\\mog-${stateKey}`;
+
+  return join(options.tmpDir ?? tmpdir(), `mog-${stateKey}.sock`);
 }
 
-export function pidPathForState(stateKey: string): string {
-  return process.env.MOG_CLI_PID ?? join(tmpdir(), `mog-${stateKey}.pid`);
+export function pidPathForState(
+  stateKey: string,
+  options: DaemonStatePathOptions = {},
+): string {
+  const env = options.env ?? process.env;
+  return env.MOG_CLI_PID ?? join(options.tmpDir ?? tmpdir(), `mog-${stateKey}.pid`);
+}
+
+export function isNamedPipePath(path: string): boolean {
+  return path.startsWith('\\\\.\\pipe\\') || path.startsWith('\\\\?\\pipe\\');
 }
 
 export function toJsonSafe(value: unknown): unknown {

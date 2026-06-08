@@ -1,4 +1,13 @@
-import { cpSync, globSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  globSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -183,10 +192,24 @@ export function createPublicPackageDirectory(packageDir, options = {}) {
   const publicManifest = buildPublicPackageManifest(manifest, { inventory, workspacePackages });
   const outDir = options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-public-package-'));
 
-  cpSync(packageDir, outDir, {
-    recursive: true,
-    filter: (source) => !source.includes('/node_modules/'),
-  });
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  copyDeclaredPackageFiles(packageDir, outDir, publicManifest);
   writeFileSync(resolve(outDir, 'package.json'), `${JSON.stringify(publicManifest, null, 2)}\n`);
   return outDir;
+}
+
+function copyDeclaredPackageFiles(packageDir, outDir, manifest) {
+  for (const entry of manifest.files ?? []) {
+    if (typeof entry !== 'string') continue;
+    const normalized = entry.replace(/^\.\//, '').replace(/\/+$/, '');
+    if (!normalized || normalized.includes('..')) continue;
+
+    const source = resolve(packageDir, normalized);
+    if (!existsSync(source)) continue;
+
+    const destination = resolve(outDir, normalized);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(source, destination, { recursive: true });
+  }
 }

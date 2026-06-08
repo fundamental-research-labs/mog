@@ -6,7 +6,8 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const apiCompatibility: ApiCompatibilityIndex
 export const apiGuidance: ApiGuidanceApi
 export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
 export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
@@ -30,6 +31,9 @@ export interface AccessExplanation { /** The resolved access level */ readonly l
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
 export interface AccessPolicyMetadata { /** Tag of the principal who created this policy */ readonly createdBy: string; /** Creation timestamp (epoch ms) */ readonly createdAt: number; /** Human-reada ...
 export interface AccessPrincipal { readonly tags: string[]; }
+export interface ApiCompatibilityEntry { readonly id: string; readonly observedPath: string; readonly canonicalPath: string | null; readonly status: ApiCompatibilityStatus; readonly appliesTo: ApiComp ...
+export interface ApiCompatibilityIndex { readonly schemaVersion: '1'; readonly entries: readonly ApiCompatibilityEntry[]; readonly byId: Record<string, ApiCompatibilityEntry>; readonly byObservedPath: ...
+export interface ApiCompatibilityReference { readonly id: string; readonly observedPath: string; readonly canonicalPath: string | null; readonly status: ApiCompatibilityStatus; readonly appliesTo: Api ...
 export interface ApiGuidanceApi { readonly analyze: (code: string) => ApiGuidanceDiagnostic[]; readonly preflight: (code: string) => ApiGuidancePreflightResult; readonly explain: (symbolOrPath: string ...
 export interface ApiGuidanceCatalogValidation { readonly valid: boolean; readonly issues: readonly ApiGuidanceCatalogValidationIssue[]; }
 export interface ApiGuidanceCatalogValidationIssue { readonly entryId: string; readonly path: string; readonly reason: string; }
@@ -40,8 +44,8 @@ export interface ApiGuidancePreflightResult { readonly ok: boolean; readonly dia
 export interface ApiGuidanceSourceLocation { readonly file: string; readonly line?: number; }
 export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
 export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
-export interface ApiSpec { subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<string, ApiSpecInterfaceEntry>; types: Reco ...
-export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; targetInterface?: string; }
+export interface ApiSpec { compatibility?: ApiCompatibilityIndex; subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<stri ...
+export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; compatibility?: ApiCompatibilityReference[]; targetInterface?: string; }
 export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
 export interface ApiSpecTypeEntry { name: string; definition?: string; isEnum?: boolean; values?: Record<string, string>; docstring?: string; }
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
@@ -61,9 +65,10 @@ export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<vo
 export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown>; readonly operation?: string; readonly diagnostics?: MogSdkDiagnostics; toJSON( ...
 export interface IMogSdkEventFacade { /** * Subscribe to a specific stable event type. * Returns a disposable subscription handle. */ on<K extends MogSdkEventType>(type: K, handler: (event: TypedMogSd ...
 export interface InterfaceResult { name: string; path: string; docstring: string; methods: MethodSummary[]; }
-export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly types: Record<string, TypeResult>; }
-export interface MethodResult { name: string; path: string; signature: string; docstring: string; types: Record<string, TypeResult>; }
-export interface MethodSummary { name: string; signature: string; docstring: string; }
+export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly compatibility: ApiCompatibilityReference[]; readonly types: ...
+export interface MethodResult { name: string; path: string; signature: string; docstring: string; compatibility: ApiCompatibilityReference[]; types: Record<string, TypeResult>; }
+export interface MethodSummary { name: string; signature: string; docstring: string; compatibility: ApiCompatibilityReference[]; }
+export interface MogApiCompatibilityExplanation { readonly kind: 'mog-api-compatibility'; readonly path: string; readonly entry: ApiCompatibilityEntry; readonly target: ApiGuidanceTarget | null; }
 export interface MogApiGuidanceExplanation { readonly kind: 'mog-api'; readonly path: string; readonly target: ApiGuidanceTarget; readonly examples: readonly string[]; readonly recommendedBy: readonly ...
 export interface MogAsyncDisposable { disposeAsync(): Promise<void>; [Symbol.asyncDispose](): Promise<void>; }
 export interface MogCollaborationHandle extends MogDisposable { detach(): Promise<void>; }
@@ -111,10 +116,12 @@ export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces
 export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
-export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'names' | 'file-io' | 'host'
-export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE'
-export type ApiGuidanceDialect = 'officejs'
-export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation
+export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
+export type ApiCompatibilitySurface = 'typescript' | 'kernel' | 'executeCode-preflight' | 'api-describe' | 'agent-guidance' | 'docs' | 'python' | 'api-eval'
+export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'compatibility' | 'charts' | 'pivots' | 'names' | 'file-io' | ' ...
+export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE' | 'MOG003_COMPATIBILITY_REJECTED'
+export type ApiGuidanceDialect = 'officejs' | 'mog-version'
+export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation | MogApiCompatibilityExplanation
 export type ApiGuidanceMatcher = ApiGuidanceSymbolMatcher | ApiGuidanceCompoundMatcher
 export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound'
 export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport'
@@ -149,7 +156,8 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const apiCompatibility: ApiCompatibilityIndex
 export const apiGuidance: ApiGuidanceApi
 export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
 export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
@@ -173,6 +181,9 @@ export interface AccessExplanation { /** The resolved access level */ readonly l
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
 export interface AccessPolicyMetadata { /** Tag of the principal who created this policy */ readonly createdBy: string; /** Creation timestamp (epoch ms) */ readonly createdAt: number; /** Human-reada ...
 export interface AccessPrincipal { readonly tags: string[]; }
+export interface ApiCompatibilityEntry { readonly id: string; readonly observedPath: string; readonly canonicalPath: string | null; readonly status: ApiCompatibilityStatus; readonly appliesTo: ApiComp ...
+export interface ApiCompatibilityIndex { readonly schemaVersion: '1'; readonly entries: readonly ApiCompatibilityEntry[]; readonly byId: Record<string, ApiCompatibilityEntry>; readonly byObservedPath: ...
+export interface ApiCompatibilityReference { readonly id: string; readonly observedPath: string; readonly canonicalPath: string | null; readonly status: ApiCompatibilityStatus; readonly appliesTo: Api ...
 export interface ApiGuidanceApi { readonly analyze: (code: string) => ApiGuidanceDiagnostic[]; readonly preflight: (code: string) => ApiGuidancePreflightResult; readonly explain: (symbolOrPath: string ...
 export interface ApiGuidanceCatalogValidation { readonly valid: boolean; readonly issues: readonly ApiGuidanceCatalogValidationIssue[]; }
 export interface ApiGuidanceCatalogValidationIssue { readonly entryId: string; readonly path: string; readonly reason: string; }
@@ -183,8 +194,8 @@ export interface ApiGuidancePreflightResult { readonly ok: boolean; readonly dia
 export interface ApiGuidanceSourceLocation { readonly file: string; readonly line?: number; }
 export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
 export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
-export interface ApiSpec { subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<string, ApiSpecInterfaceEntry>; types: Reco ...
-export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; targetInterface?: string; }
+export interface ApiSpec { compatibility?: ApiCompatibilityIndex; subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<stri ...
+export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; compatibility?: ApiCompatibilityReference[]; targetInterface?: string; }
 export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
 export interface ApiSpecTypeEntry { name: string; definition?: string; isEnum?: boolean; values?: Record<string, string>; docstring?: string; }
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
@@ -204,9 +215,10 @@ export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<vo
 export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown>; readonly operation?: string; readonly diagnostics?: MogSdkDiagnostics; toJSON( ...
 export interface IMogSdkEventFacade { /** * Subscribe to a specific stable event type. * Returns a disposable subscription handle. */ on<K extends MogSdkEventType>(type: K, handler: (event: TypedMogSd ...
 export interface InterfaceResult { name: string; path: string; docstring: string; methods: MethodSummary[]; }
-export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly types: Record<string, TypeResult>; }
-export interface MethodResult { name: string; path: string; signature: string; docstring: string; types: Record<string, TypeResult>; }
-export interface MethodSummary { name: string; signature: string; docstring: string; }
+export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly compatibility: ApiCompatibilityReference[]; readonly types: ...
+export interface MethodResult { name: string; path: string; signature: string; docstring: string; compatibility: ApiCompatibilityReference[]; types: Record<string, TypeResult>; }
+export interface MethodSummary { name: string; signature: string; docstring: string; compatibility: ApiCompatibilityReference[]; }
+export interface MogApiCompatibilityExplanation { readonly kind: 'mog-api-compatibility'; readonly path: string; readonly entry: ApiCompatibilityEntry; readonly target: ApiGuidanceTarget | null; }
 export interface MogApiGuidanceExplanation { readonly kind: 'mog-api'; readonly path: string; readonly target: ApiGuidanceTarget; readonly examples: readonly string[]; readonly recommendedBy: readonly ...
 export interface MogAsyncDisposable { disposeAsync(): Promise<void>; [Symbol.asyncDispose](): Promise<void>; }
 export interface MogCollaborationHandle extends MogDisposable { detach(): Promise<void>; }
@@ -254,10 +266,12 @@ export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces
 export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
-export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'names' | 'file-io' | 'host'
-export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE'
-export type ApiGuidanceDialect = 'officejs'
-export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation
+export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
+export type ApiCompatibilitySurface = 'typescript' | 'kernel' | 'executeCode-preflight' | 'api-describe' | 'agent-guidance' | 'docs' | 'python' | 'api-eval'
+export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'compatibility' | 'charts' | 'pivots' | 'names' | 'file-io' | ' ...
+export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE' | 'MOG003_COMPATIBILITY_REJECTED'
+export type ApiGuidanceDialect = 'officejs' | 'mog-version'
+export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation | MogApiCompatibilityExplanation
 export type ApiGuidanceMatcher = ApiGuidanceSymbolMatcher | ApiGuidanceCompoundMatcher
 export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound'
 export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport'

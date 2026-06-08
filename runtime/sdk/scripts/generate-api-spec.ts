@@ -59,6 +59,9 @@ const OUTPUT_SCHEMA_FILE = path.resolve(
   REPO_ROOT,
   'runtime/sdk/src/generated/api-spec.schema.json',
 );
+const SDK_PACKAGE_JSON = JSON.parse(
+  fs.readFileSync(path.resolve(REPO_ROOT, 'runtime/sdk/package.json'), 'utf-8'),
+) as { name: string; version: string };
 const GUIDANCE_TARGETS_FILE = path.resolve(
   REPO_ROOT,
   'runtime/sdk/src/generated/api-guidance-targets.json',
@@ -366,8 +369,14 @@ interface TypeEntry {
   ownerPackage: string;
 }
 
+interface ApiSpecPackageMetadata {
+  name: '@mog-sdk/sdk';
+  version: string;
+}
+
 interface ApiSpec {
   schemaVersion: '1';
+  package: ApiSpecPackageMetadata;
   compatibility: ApiCompatibilityIndex;
   subApis: {
     workbook: Record<string, FunctionEntry>;
@@ -1328,6 +1337,10 @@ function generate(): ApiSpec {
 
   return {
     schemaVersion: SCHEMA_VERSION,
+    package: {
+      name: '@mog-sdk/sdk',
+      version: SDK_PACKAGE_JSON.version,
+    },
     compatibility: API_COMPATIBILITY_INDEX,
     subApis: subApiMap,
     interfaces: sortedInterfaces,
@@ -1401,10 +1414,19 @@ const API_SPEC_SCHEMA = {
   $id: 'https://mog.dev/schemas/api-spec.schema.json',
   title: 'Mog SDK API Spec',
   type: 'object',
-  required: ['schemaVersion', 'compatibility', 'interfaces', 'subApis', 'types'],
+  required: ['schemaVersion', 'package', 'compatibility', 'interfaces', 'subApis', 'types'],
   additionalProperties: true,
   properties: {
     schemaVersion: { const: SCHEMA_VERSION },
+    package: {
+      type: 'object',
+      required: ['name', 'version'],
+      additionalProperties: false,
+      properties: {
+        name: { const: '@mog-sdk/sdk' },
+        version: { type: 'string', minLength: 1 },
+      },
+    },
     compatibility: { type: 'object', additionalProperties: true },
     interfaces: {
       type: 'object',
@@ -1958,6 +1980,11 @@ function assertFunctionEntry(entry: FunctionEntry, pathLabel: string): void {
 function assertApiSpec(spec: ApiSpec): void {
   if (spec.schemaVersion !== SCHEMA_VERSION) {
     throw new Error(`api spec schemaVersion must be ${SCHEMA_VERSION}`);
+  }
+  if (spec.package.name !== '@mog-sdk/sdk' || spec.package.version !== SDK_PACKAGE_JSON.version) {
+    throw new Error(
+      `api spec package metadata must be @mog-sdk/sdk@${SDK_PACKAGE_JSON.version}`,
+    );
   }
   if (!spec.subApis.workbook || !spec.subApis.worksheet) {
     throw new Error('api spec must contain subApis.workbook and subApis.worksheet');

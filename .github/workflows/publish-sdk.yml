@@ -103,6 +103,7 @@ jobs:
             runtime/spreadsheet-app/package.json
             runtime/embed/package.json
             runtime/sdk/package.json
+            cli/package.json
             compute/napi/npm/darwin-arm64/package.json
             compute/napi/npm/darwin-x64/package.json
             compute/napi/npm/linux-x64-gnu/package.json
@@ -143,6 +144,7 @@ jobs:
             "@mog-sdk/spreadsheet-app"
             "@mog-sdk/embed"
             "@mog-sdk/sdk"
+            "@mog-sdk/cli"
           )
           for pkg in "${packages[@]}"; do
             if npm view "$pkg@$VERSION" version 2>/dev/null; then
@@ -379,6 +381,155 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  dry-run-candidates:
+    name: Dry-run release candidates
+    needs: [version, build-native, build-wasm, build-chart-raster-wasm, build-python]
+    if: |
+      always() &&
+      needs.version.outputs.dry-run == 'true' &&
+      needs.version.result == 'success' &&
+      (needs.build-native.result == 'success' || needs.build-native.result == 'skipped') &&
+      (needs.build-wasm.result == 'success' || needs.build-wasm.result == 'skipped') &&
+      (needs.build-chart-raster-wasm.result == 'success' || needs.build-chart-raster-wasm.result == 'skipped') &&
+      (needs.build-python.result == 'success' || needs.build-python.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install npm used for packing
+        run: npm install -g "npm@$NPM_VERSION"
+
+      - name: Download all artifacts (current run)
+        if: ${{ inputs.source-run-id == '' }}
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Download all artifacts (source run)
+        if: ${{ inputs.source-run-id != '' }}
+        run: gh run download ${{ inputs.source-run-id }} --dir artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move binaries into platform packages
+        run: |
+          for pkg in darwin-arm64 darwin-x64 linux-x64-gnu linux-arm64-gnu linux-x64-musl linux-arm64-musl win32-x64-msvc; do
+            cp artifacts/native-${pkg}/compute-core-napi.node \
+               compute/napi/npm/${pkg}/
+            echo "${pkg}: $(ls -lh compute/napi/npm/${pkg}/compute-core-napi.node | awk '{print $5}')"
+          done
+          cp artifacts/wasm/* compute/wasm/npm/
+          cp -R artifacts/chart-raster-wasm/. compute/chart-render-wasm/npm/
+
+      - name: 'Dry run: CLI source gates'
+        run: |
+          pnpm --filter @mog-sdk/cli typecheck
+          pnpm --filter @mog-sdk/cli test:e2e
+
+      - name: 'Dry run: package inventory'
+        run: pnpm validate:packages
+
+      - name: 'Dry run: private leak scan'
+        run: pnpm check:private-leaks
+
+      - name: 'Dry run: build public artifacts'
+        run: pnpm run build:public-artifacts -- --skip-native-build --skip-wasm-build
+
+      - name: 'Dry run: boundary artifacts'
+        run: |
+          pnpm check:binary-wrapper-surfaces
+          pnpm check:contracts-declaration-identity
+          pnpm check:declaration-rollups
+          pnpm check:api-snapshots
+
+      - name: 'Dry run: assemble public package candidates'
+        run: pnpm assemble:public-packages
+
+      - name: 'Dry run: assert CLI candidate'
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          node - <<'NODE'
+          const fs = require('fs');
+          const version = process.env.VERSION;
+          const manifest = JSON.parse(fs.readFileSync('artifacts/public-packages/mog-sdk__cli/package.json', 'utf8'));
+          const failures = [];
+          if (manifest.name !== '@mog-sdk/cli') failures.push(`name=${manifest.name}`);
+          if (manifest.version !== version) failures.push(`version=${manifest.version}`);
+          if (manifest.bin?.mog !== './dist/mog.cjs') failures.push(`bin.mog=${manifest.bin?.mog}`);
+          if (manifest.dependencies?.['@mog-sdk/sdk'] !== version) failures.push(`@mog-sdk/sdk=${manifest.dependencies?.['@mog-sdk/sdk']}`);
+          if (manifest.private === true) failures.push('private=true');
+          if (manifest.devDependencies) failures.push('devDependencies present');
+          const forbidden = JSON.stringify(manifest).match(/(?:workspace|file|link):/);
+          if (forbidden) failures.push(`forbidden spec ${forbidden[0]}`);
+          if (failures.length) {
+            console.error(`CLI candidate failed: ${failures.join(', ')}`);
+            process.exit(1);
+          }
+          NODE
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+
+      - name: 'Dry run: packed public fixtures'
+        run: |
+          pnpm check:public-package-manifests
+          pnpm check:external-fixtures -- --skip-build
+
+      - name: 'Dry run: npm tarball candidates'
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          rm -rf artifacts/npm-tarballs
+          mkdir -p artifacts/npm-tarballs
+          for dir in artifacts/public-packages/mog-sdk__*; do
+            echo "Packing $(node -p "require('./$dir/package.json').name")..."
+            npm pack "$dir" --pack-destination artifacts/npm-tarballs
+          done
+          test -f "artifacts/npm-tarballs/mog-sdk-cli-${VERSION}.tgz"
+          shasum -a 256 artifacts/npm-tarballs/*.tgz > artifacts/npm-tarballs/SHA256SUMS
+
+      - name: 'Dry run: CLI packed candidate smoke'
+        run: node cli/testing/npm-local-e2e.mjs --tarball-dir artifacts/npm-tarballs
+
+      - name: 'Dry run: CLI skill artifact'
+        run: pnpm --filter @mog-sdk/cli package:skill
+
+      - name: Upload dry-run public package candidates
+        uses: actions/upload-artifact@v6
+        with:
+          name: npm-release-candidates-${{ needs.version.outputs.version }}
+          path: artifacts/npm-tarballs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload dry-run CLI skill artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: mog-cli-kernel-skill-${{ needs.version.outputs.version }}
+          path: artifacts/mog-cli-kernel.skill.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Dry-run summary
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          echo "## SDK Publish Dry Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm tarball candidate: \`@mog-sdk/cli@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- skill artifact: \`mog-cli-kernel.skill.zip\`" >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Publish packages
     needs: [version, build-native, build-wasm, build-chart-raster-wasm, build-python]
@@ -449,6 +600,11 @@ jobs:
           cp -R artifacts/chart-raster-wasm/. compute/chart-render-wasm/npm/
           echo "chart raster wasm: $(ls -lh compute/chart-render-wasm/npm/compute_chart_render_wasm_bg.wasm | awk '{print $5}')"
 
+      - name: 'Publish readiness: CLI source gates'
+        run: |
+          pnpm --filter @mog-sdk/cli typecheck
+          pnpm --filter @mog-sdk/cli test:e2e
+
       - name: Resolve npm publish tag
         id: npm-tag
         run: |
@@ -487,6 +643,30 @@ jobs:
       - name: 'Publish readiness: assemble public package candidates'
         run: pnpm assemble:public-packages
 
+      - name: 'Publish readiness: CLI candidate manifest'
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          node - <<'NODE'
+          const fs = require('fs');
+          const version = process.env.VERSION;
+          const manifest = JSON.parse(fs.readFileSync('artifacts/public-packages/mog-sdk__cli/package.json', 'utf8'));
+          const failures = [];
+          if (manifest.name !== '@mog-sdk/cli') failures.push(`name=${manifest.name}`);
+          if (manifest.version !== version) failures.push(`version=${manifest.version}`);
+          if (manifest.bin?.mog !== './dist/mog.cjs') failures.push(`bin.mog=${manifest.bin?.mog}`);
+          if (manifest.dependencies?.['@mog-sdk/sdk'] !== version) failures.push(`@mog-sdk/sdk=${manifest.dependencies?.['@mog-sdk/sdk']}`);
+          if (manifest.private === true) failures.push('private=true');
+          if (manifest.devDependencies) failures.push('devDependencies present');
+          const forbidden = JSON.stringify(manifest).match(/(?:workspace|file|link):/);
+          if (forbidden) failures.push(`forbidden spec ${forbidden[0]}`);
+          if (failures.length) {
+            console.error(`CLI candidate failed: ${failures.join(', ')}`);
+            process.exit(1);
+          }
+          NODE
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+
       - name: 'Publish readiness: packed public fixtures'
         run: |
           pnpm check:public-package-manifests
@@ -494,19 +674,35 @@ jobs:
 
       - name: 'Publish readiness: npm tarball candidates'
         run: |
+          VERSION="${{ needs.version.outputs.version }}"
           rm -rf artifacts/npm-tarballs
           mkdir -p artifacts/npm-tarballs
           for dir in artifacts/public-packages/mog-sdk__*; do
             echo "Packing $(node -p "require('./$dir/package.json').name")..."
             npm pack "$dir" --pack-destination artifacts/npm-tarballs
           done
+          test -f "artifacts/npm-tarballs/mog-sdk-cli-${VERSION}.tgz"
           shasum -a 256 artifacts/npm-tarballs/*.tgz > artifacts/npm-tarballs/SHA256SUMS
+
+      - name: 'Publish readiness: CLI packed candidate smoke'
+        run: node cli/testing/npm-local-e2e.mjs --tarball-dir artifacts/npm-tarballs
+
+      - name: 'Publish readiness: CLI skill artifact'
+        run: pnpm --filter @mog-sdk/cli package:skill
 
       - name: Upload public package candidates
         uses: actions/upload-artifact@v6
         with:
           name: npm-release-candidates-${{ needs.version.outputs.version }}
           path: artifacts/npm-tarballs/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload CLI skill artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: mog-cli-kernel-skill-${{ needs.version.outputs.version }}
+          path: artifacts/mog-cli-kernel.skill.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -548,6 +744,88 @@ jobs:
             cd "$GITHUB_WORKSPACE"
           done
 
+      - name: Wait for CLI dependency visibility
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          packages=(
+            "@mog-sdk/darwin-arm64"
+            "@mog-sdk/darwin-x64"
+            "@mog-sdk/linux-x64-gnu"
+            "@mog-sdk/linux-arm64-gnu"
+            "@mog-sdk/linux-x64-musl"
+            "@mog-sdk/linux-arm64-musl"
+            "@mog-sdk/win32-x64-msvc"
+            "@mog-sdk/wasm"
+            "@mog-sdk/contracts"
+            "@mog-sdk/sdk"
+          )
+          missing=("${packages[@]}")
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            next_missing=()
+            for pkg in "${missing[@]}"; do
+              if ! npm view "$pkg@$VERSION" version 2>/dev/null; then
+                next_missing+=("$pkg")
+              fi
+            done
+            if [ "${#next_missing[@]}" -eq 0 ]; then
+              exit 0
+            fi
+            missing=("${next_missing[@]}")
+            echo "attempt $attempt: CLI dependencies not yet visible: ${missing[*]}; sleeping..."
+            sleep 15
+          done
+          echo "::error::CLI dependency package(s) not visible after 180s: ${missing[*]}"
+          exit 1
+
+      - name: Publish CLI package
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npm-trusted-publishing-only.npmrc
+        run: |
+          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
+          NPM_TAG_ARGS=()
+          if [ -n "${{ steps.npm-tag.outputs.tag }}" ]; then
+            NPM_TAG_ARGS=(--tag "${{ steps.npm-tag.outputs.tag }}")
+          fi
+          VERSION="${{ needs.version.outputs.version }}"
+          dir=artifacts/public-packages/mog-sdk__cli
+          PACKAGE_NAME=$(node -p "require('./$dir/package.json').name")
+          if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
+            echo "$PACKAGE_NAME@$VERSION already published; skipping."
+            exit 0
+          fi
+          echo "Publishing $PACKAGE_NAME..."
+          cd "$dir"
+          pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
+          cd "$GITHUB_WORKSPACE"
+
+      - name: CLI registry install smoke
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if npm view "@mog-sdk/cli@$VERSION" version 2>/dev/null; then
+              VERSION="$VERSION" node cli/testing/registry-e2e.mjs
+              exit 0
+            fi
+            echo "attempt $attempt: @mog-sdk/cli@$VERSION not yet visible; sleeping..."
+            sleep 15
+          done
+          echo "::error::@mog-sdk/cli@$VERSION not visible after 180s"
+          exit 1
+
+      - name: Verify CLI npm provenance
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            PROVENANCE=$(npm view "@mog-sdk/cli@$VERSION" dist.attestations.provenance.predicateType --json 2>/dev/null || true)
+            if [ "$PROVENANCE" = '"https://slsa.dev/provenance/v1"' ]; then
+              exit 0
+            fi
+            echo "attempt $attempt: provenance not yet visible for @mog-sdk/cli@$VERSION; sleeping..."
+            sleep 15
+          done
+          echo "::error::@mog-sdk/cli@$VERSION does not expose npm provenance attestations"
+          exit 1
+
       - name: Post-publish verification (npm)
         run: |
           # npm registry read-index propagates a few seconds after publish.
@@ -567,6 +845,7 @@ jobs:
             "@mog-sdk/spreadsheet-app"
             "@mog-sdk/embed"
             "@mog-sdk/sdk"
+            "@mog-sdk/cli"
           )
           missing=("${packages[@]}")
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
@@ -631,6 +910,10 @@ jobs:
           echo "- \`@mog-sdk/spreadsheet-app@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/embed@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/sdk@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/cli@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### CLI skill artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`mog-cli-kernel.skill.zip\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
             echo "### Published PyPI packages" >> "$GITHUB_STEP_SUMMARY"
@@ -652,6 +935,12 @@ jobs:
           ref: ${{ needs.version.outputs.ref }}
           fetch-depth: 0
 
+      - name: Download CLI skill artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: mog-cli-kernel-skill-${{ needs.version.outputs.version }}
+          path: artifacts
+
       - name: Ensure TypeScript SDK release tag exists
         run: |
           TAG="${{ needs.version.outputs.tag }}"
@@ -666,12 +955,20 @@ jobs:
         run: |
           if gh release view "${{ needs.version.outputs.tag }}" >/dev/null 2>&1; then
             echo "${{ needs.version.outputs.tag }} release already exists; skipping."
-            exit 0
+          else
+            gh release create "${{ needs.version.outputs.tag }}" \
+              --title "@mog-sdk/sdk v${{ needs.version.outputs.version }}" \
+              --generate-notes \
+              --latest
           fi
-          gh release create "${{ needs.version.outputs.tag }}" \
-            --title "@mog-sdk/sdk v${{ needs.version.outputs.version }}" \
-            --generate-notes \
-            --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CLI skill artifact to TypeScript SDK release
+        run: |
+          gh release upload "${{ needs.version.outputs.tag }}" \
+            artifacts/mog-cli-kernel.skill.zip \
+            --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

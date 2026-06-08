@@ -1,26 +1,51 @@
 {
   "name": "@mog-sdk/cli",
-  "version": "0.8.0",
-  "private": true,
+  "version": "0.9.0",
+  "description": "Command-line interface for operating Mog workbooks with the headless SDK",
   "type": "module",
   "bin": {
     "mog": "./dist/mog.cjs"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "pnpm -w run build:public-artifacts -- --through @mog-sdk/sdk --skip-native-build --skip-host-native-artifact --skip-wasm-build && tsup",
+    "build": "tsup && node scripts/verify-bin.mjs --fix",
     "package:npm": "pnpm run build && node scripts/package-npm.mjs",
     "package:release": "pnpm run package:npm && pnpm run package:skill",
     "package:skill": "node scripts/package-skill.mjs",
     "test:npm-local": "pnpm run package:npm && node testing/npm-local-e2e.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm test:e2e",
-    "test:e2e": "pnpm build && node testing/e2e.mjs"
+    "test:e2e": "pnpm -w run build:public-artifacts -- --through @mog-sdk/sdk --skip-native-build --skip-host-native-artifact --skip-wasm-build && pnpm build && pnpm run test:daemon && node testing/e2e.mjs",
+    "test:daemon": "tsx testing/daemon-state.test.ts"
+  },
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "xlsx",
+    "cli",
+    "mog"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog",
+    "directory": "cli"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@mog-sdk/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "tsx": "^4.19.0",
     "tsup": "^8.5.0",
     "typescript": "^5.7.0"
   }

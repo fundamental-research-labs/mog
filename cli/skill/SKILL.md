@@ -20,12 +20,12 @@ If missing, install from npm with a user-local prefix:
 
 ```bash
 mkdir -p "$HOME/.mog/npm"
-npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli@0.8.0
+npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli@0.9.0
 export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
 mog --help
 ```
 
-Do not install Mog from raw GitHub, GitHub Releases, R2, or curl-based
+Do not install Mog from raw GitHub, GitHub Releases, R2, or one-off
 standalone artifacts.
 
 ## Commands

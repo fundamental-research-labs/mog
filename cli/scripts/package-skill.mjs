@@ -6,24 +6,126 @@ import { fileURLToPath } from 'node:url';
 const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = resolve(cliRoot, '..');
 const skillRoot = resolve(cliRoot, 'skill');
+const skillApiSpecPath = resolve(skillRoot, 'references', 'api-spec.json');
+const sdkApiSpecPath = resolve(repoRoot, 'runtime', 'sdk', 'src', 'generated', 'api-spec.json');
 const artifactsDir = resolve(repoRoot, 'artifacts');
 const zipPath = resolve(artifactsDir, 'mog-cli-kernel.skill.zip');
+const allowedEntries = ['SKILL.md', 'references/api-spec.json'];
 const crcTable = makeCrc32Table();
 const packageVersion = releasePackageVersion();
+
+const skillSource = readFileSync(resolve(skillRoot, 'SKILL.md'), 'utf8');
+assertNoInstallVersionMismatch(skillSource, 'cli/skill/SKILL.md');
+assertNoForbiddenInstallPaths(skillSource, 'cli/skill/SKILL.md');
+assertSkillRootContract();
+assertApiSpecSynced();
 
 mkdirSync(artifactsDir, { recursive: true });
 rmSync(zipPath, { force: true });
 
-const entries = collectFiles(skillRoot).map((path) => {
-  const name = relative(skillRoot, path).split(sep).join('/');
-  return { name, data: fileData(name, path) };
-});
+const entries = [
+  {
+    name: 'SKILL.md',
+    data: Buffer.from(rewriteSkillInstallVersion(skillSource), 'utf8'),
+  },
+  {
+    name: 'references/api-spec.json',
+    data: readFileSync(skillApiSpecPath),
+  },
+];
+assertEntriesExactly(entries.map((entry) => entry.name));
+assertNoInstallVersionMismatch(entries[0].data.toString('utf8'), 'packaged SKILL.md');
+assertNoForbiddenInstallPaths(entries[0].data.toString('utf8'), 'packaged SKILL.md');
+assertPackagedApiSpecVersion(entries[1].data);
 
 writeFileSync(zipPath, makeZip(entries));
 
 console.log(
   JSON.stringify({ ok: true, zipPath, entries: entries.map((entry) => entry.name) }, null, 2),
 );
+
+function assertSkillRootContract() {
+  const actual = collectFiles(skillRoot).map((path) => {
+    return relative(skillRoot, path).split(sep).join('/');
+  });
+  assertEntriesExactly(actual);
+}
+
+function assertEntriesExactly(actual) {
+  const expected = [...allowedEntries].sort();
+  const sorted = [...actual].sort();
+  if (JSON.stringify(sorted) !== JSON.stringify(expected)) {
+    throw new Error(
+      `mog-cli-kernel skill must contain exactly ${expected.join(', ')}; found ${sorted.join(', ')}`,
+    );
+  }
+}
+
+function assertApiSpecSynced() {
+  const sdkSpec = readJson(sdkApiSpecPath);
+  const skillSpec = readJson(skillApiSpecPath);
+  assertApiSpecPackageVersion(sdkSpec, sdkApiSpecPath);
+  assertApiSpecPackageVersion(skillSpec, skillApiSpecPath);
+  if (JSON.stringify(skillSpec) !== JSON.stringify(sdkSpec)) {
+    throw new Error(
+      `cli/skill/references/api-spec.json is not synchronized with runtime/sdk/src/generated/api-spec.json. Run pnpm --filter @mog-sdk/sdk generate:api-spec and copy the generated spec into the CLI skill reference.`,
+    );
+  }
+}
+
+function assertPackagedApiSpecVersion(data) {
+  assertApiSpecPackageVersion(JSON.parse(data.toString('utf8')), 'packaged references/api-spec.json');
+}
+
+function assertApiSpecPackageVersion(spec, label) {
+  if (spec.package?.name !== '@mog-sdk/sdk' || spec.package?.version !== packageVersion) {
+    throw new Error(
+      `${label} must declare package metadata @mog-sdk/sdk@${packageVersion}; found ${JSON.stringify(spec.package)}`,
+    );
+  }
+}
+
+function rewriteSkillInstallVersion(source) {
+  return source
+    .replace(
+      /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+      `mog-cli-v${packageVersion}`,
+    )
+    .replace(
+      /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+      `@mog-sdk/cli@${packageVersion}`,
+    )
+    .replace(
+      /@mog-sdk\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+      `@mog-sdk/cli@${packageVersion}`,
+    );
+}
+
+function assertNoInstallVersionMismatch(source, label) {
+  const patterns = [
+    /@mog-sdk\/cli@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
+    /@mog\/cli@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
+    /mog-cli-v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
+  ];
+  const mismatches = [];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      if (match[1] !== packageVersion) mismatches.push(match[0]);
+    }
+  }
+  if (mismatches.length > 0) {
+    throw new Error(
+      `${label} contains install version(s) that do not match @mog-sdk/cli@${packageVersion}: ${mismatches.join(', ')}`,
+    );
+  }
+}
+
+function assertNoForbiddenInstallPaths(source, label) {
+  const forbidden = /raw\.githubusercontent|github\.com\/[^\s`'"]+\/releases|r2\.dev|\bcurl\b/i;
+  if (forbidden.test(source)) {
+    throw new Error(`${label} references a forbidden raw GitHub, GitHub Releases, R2, or curl install path`);
+  }
+}
 
 function collectFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -34,35 +136,19 @@ function collectFiles(dir) {
   });
 }
 
-function fileData(name, path) {
-  const data = readFileSync(path);
-  if (name !== 'SKILL.md') return data;
-  return Buffer.from(
-    data
-      .toString('utf8')
-      .replace(
-        /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-        `mog-cli-v${packageVersion}`,
-      )
-      .replace(
-        /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-        `@mog-sdk/cli@${packageVersion}`,
-      ),
-    'utf8',
-  );
-}
-
 function releasePackageVersion() {
-  const packageJson = JSON.parse(readFileSync(resolve(cliRoot, 'package.json'), 'utf8'));
-  const sdkPackageJson = JSON.parse(
-    readFileSync(resolve(repoRoot, 'runtime', 'sdk', 'package.json'), 'utf8'),
-  );
+  const packageJson = readJson(resolve(cliRoot, 'package.json'));
+  const sdkPackageJson = readJson(resolve(repoRoot, 'runtime', 'sdk', 'package.json'));
   if (packageJson.version !== sdkPackageJson.version) {
     throw new Error(
       `@mog-sdk/cli version ${packageJson.version} must match @mog-sdk/sdk version ${sdkPackageJson.version}`,
     );
   }
   return packageJson.version;
+}
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
 }
 
 function makeZip(files) {

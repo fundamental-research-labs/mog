@@ -45,7 +45,14 @@ function DotIcon({ className }: { className?: string }) {
   return <CircleSvg className={className} style={{ width: 8, height: 8 }} />;
 }
 
-function toAriaKeyShortcuts(shortcut: string): string {
+const MAC_SYMBOL_SHORTCUT_REPLACEMENTS: Record<string, string> = {
+  '\u2303': 'Control',
+  '\u2325': 'Alt',
+  '\u2318': 'Meta',
+  '\u21E7': 'Shift',
+};
+
+export function toAriaKeyShortcuts(shortcut: string): string {
   const replacements: Record<string, string> = {
     alt: 'Alt',
     cmd: 'Meta',
@@ -64,6 +71,21 @@ function toAriaKeyShortcuts(shortcut: string): string {
 
   return shortcut
     .split('+')
+    .flatMap((token) => {
+      const expanded: string[] = [];
+      let remaining = token.trim();
+
+      while (remaining.length > 0) {
+        const replacement = MAC_SYMBOL_SHORTCUT_REPLACEMENTS[remaining[0]];
+        if (!replacement) break;
+
+        expanded.push(replacement);
+        remaining = remaining.slice(1);
+      }
+
+      if (remaining) expanded.push(remaining);
+      return expanded;
+    })
     .map((token) => {
       const trimmed = token.trim();
       return replacements[trimmed.toLowerCase()] ?? trimmed;
@@ -169,6 +191,47 @@ export interface ContextMenuItemProps extends Omit<
   className?: string;
 }
 
+function renderContextMenuItemContent(
+  children: ReactNode,
+  icon?: ReactNode,
+  shortcut?: string,
+): ReactNode[] {
+  const content: ReactNode[] = [];
+
+  if (icon) {
+    content.push(
+      <span
+        key="icon"
+        aria-hidden="true"
+        className="w-4 h-4 flex items-center justify-center shrink-0"
+      >
+        {icon}
+      </span>,
+    );
+  }
+
+  content.push(
+    <span key="label" className="flex-1">
+      {children}
+    </span>,
+  );
+
+  if (shortcut) {
+    content.push(
+      <kbd
+        key="shortcut"
+        aria-hidden="true"
+        data-shortcut={shortcut}
+        className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary"
+      >
+        {` ${shortcut}`}
+      </kbd>,
+    );
+  }
+
+  return content;
+}
+
 /**
  * Individual menu item with optional icon and shortcut.
  *
@@ -200,15 +263,7 @@ export const ContextMenuItem = forwardRef<HTMLDivElement, ContextMenuItemProps>(
       aria-keyshortcuts={shortcut ? toAriaKeyShortcuts(shortcut) : undefined}
       {...props}
     >
-      {icon && <span className="w-4 h-4 flex items-center justify-center shrink-0">{icon}</span>}
-      <span className="flex-1">{children}</span>
-      {shortcut && (
-        <kbd
-          aria-hidden="true"
-          data-shortcut={shortcut}
-          className="ml-auto pl-4 text-ribbon-compact text-ss-text-tertiary before:content-[attr(data-shortcut)]"
-        />
-      )}
+      {renderContextMenuItemContent(children, icon, shortcut)}
     </RadixContextMenu.Item>
   ),
 );
@@ -247,12 +302,20 @@ export const ContextMenuCheckboxItem = forwardRef<HTMLDivElement, ContextMenuChe
       className={cn(menuItemClasses, 'pl-8', className)}
       {...props}
     >
-      <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
-        <RadixContextMenu.ItemIndicator>
-          <CheckIcon className="text-ss-primary" />
-        </RadixContextMenu.ItemIndicator>
-      </span>
-      {children}
+      {[
+        <span
+          key="indicator"
+          aria-hidden="true"
+          className="absolute left-2 flex h-4 w-4 items-center justify-center"
+        >
+          <RadixContextMenu.ItemIndicator>
+            <CheckIcon className="text-ss-primary" />
+          </RadixContextMenu.ItemIndicator>
+        </span>,
+        <span key="label" className="flex-1">
+          {children}
+        </span>,
+      ]}
     </RadixContextMenu.CheckboxItem>
   ),
 );
@@ -301,12 +364,20 @@ export const ContextMenuRadioItem = forwardRef<HTMLDivElement, ContextMenuRadioI
       className={cn(menuItemClasses, 'pl-8', className)}
       {...props}
     >
-      <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
-        <RadixContextMenu.ItemIndicator>
-          <DotIcon className="text-ss-primary" />
-        </RadixContextMenu.ItemIndicator>
-      </span>
-      {children}
+      {[
+        <span
+          key="indicator"
+          aria-hidden="true"
+          className="absolute left-2 flex h-4 w-4 items-center justify-center"
+        >
+          <RadixContextMenu.ItemIndicator>
+            <DotIcon className="text-ss-primary" />
+          </RadixContextMenu.ItemIndicator>
+        </span>,
+        <span key="label" className="flex-1">
+          {children}
+        </span>,
+      ]}
     </RadixContextMenu.RadioItem>
   ),
 );
@@ -358,11 +429,17 @@ export const ContextMenuSubTrigger = forwardRef<HTMLDivElement, ContextMenuSubTr
       className={cn(menuItemClasses, 'justify-between', className)}
       {...props}
     >
-      <span className="flex items-center gap-2">
-        {icon && <span className="w-4 h-4 flex items-center justify-center shrink-0">{icon}</span>}
-        <span>{children}</span>
-      </span>
-      <ChevronRightIcon className="text-ss-text-secondary ml-2" />
+      {[
+        <span key="label" className="flex items-center gap-2">
+          {icon ? (
+            <span aria-hidden="true" className="w-4 h-4 flex items-center justify-center shrink-0">
+              {icon}
+            </span>
+          ) : null}
+          <span>{children}</span>
+        </span>,
+        <ChevronRightIcon key="chevron" className="text-ss-text-secondary ml-2" />,
+      ]}
     </RadixContextMenu.SubTrigger>
   ),
 );

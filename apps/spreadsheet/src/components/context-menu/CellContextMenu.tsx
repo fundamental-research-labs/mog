@@ -17,154 +17,55 @@
  * @module components/context-menu/CellContextMenu
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { useReadOnly } from '../../infra/context';
 import {
-  AdvancedFilterSvg,
-  CellsMergeSvg,
-  CellsSplitSvg,
-  ClearFilterSvg,
-  ClearSvg,
-  CommentSvg,
-  CopySvg,
-  CutSvg,
-  DeleteCommentSvg,
-  DeleteSvg,
-  FilterSvg,
-  FormatCellsSvg,
-  GridSvg,
-  GroupSvg,
-  HideSvg,
-  InsertColumnLeftSvg,
-  InsertRowAboveSvg,
-  LinkSvg,
-  NewCommentSvg,
-  PageBreaksSvg,
-  PasteFormattingSvg,
-  PasteFormulasSvg,
-  PasteSvg,
-  PasteValuesSvg,
-  ResizeSvg,
-  ShowSvg,
-  SortAscendingSvg,
-  SortDescendingSvg,
-  SparklineLineSvg,
-  UngroupSvg,
-  wrapIcon,
-} from '@mog/icons';
+  ClearFilterIcon,
+  ClearIcon,
+  CopyIcon,
+  CustomSortIcon,
+  CutIcon,
+  DeleteCommentIcon,
+  DeleteIcon,
+  DeleteRowIcon,
+  EditCommentIcon,
+  FilterIcon,
+  FormatCellsIcon,
+  GroupIcon,
+  HideIcon,
+  HyperlinkIcon,
+  InsertCellsIcon,
+  InsertColLeftIcon,
+  InsertIcon,
+  InsertRowAboveIcon,
+  LinkIcon,
+  MergeCellsIcon,
+  NewCommentIcon,
+  OpenHyperlinkIcon,
+  PageBreakIcon,
+  PasteFormattingIcon,
+  PasteFormulasIcon,
+  PasteIcon,
+  PasteValuesIcon,
+  ResizeIcon,
+  ShowIcon,
+  SortAscendingIcon,
+  SortDescendingIcon,
+  SparklineIcon,
+  UngroupIcon,
+  UnmergeCellsIcon,
+} from './icons';
 
+import { ContextMenuContent } from '@mog/shell/components/ui';
+import { usePlatformInfo } from '@mog/shell';
 import { useContextMenuActions } from '../../hooks/toolbar/use-context-menu-actions';
-import {
-  ContextMenuCheckboxItem,
-  ContextMenuContent,
-  ContextMenuItem as ContextMenuItemComponent,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from '@mog/shell/components/ui';
 import type { CellContextMenuProps, ContextMenuItem as ContextMenuItemType } from './types';
-
-// =============================================================================
-// Icon Components (wrapped from @mog/icons)
-// =============================================================================
-
-const CutIcon = wrapIcon(CutSvg, 'toolbar');
-const CopyIcon = wrapIcon(CopySvg, 'toolbar');
-const PasteIcon = wrapIcon(PasteSvg, 'toolbar');
-const PasteValuesIcon = wrapIcon(PasteValuesSvg, 'toolbar');
-const PasteFormulasIcon = wrapIcon(PasteFormulasSvg, 'toolbar');
-const PasteFormattingIcon = wrapIcon(PasteFormattingSvg, 'toolbar');
-const InsertRowAboveIcon = wrapIcon(InsertRowAboveSvg, 'toolbar');
-const InsertColLeftIcon = wrapIcon(InsertColumnLeftSvg, 'toolbar');
-const InsertCellsIcon = wrapIcon(GridSvg, 'toolbar');
-const DeleteRowIcon = wrapIcon(DeleteSvg, 'toolbar');
-const HideIcon = wrapIcon(HideSvg, 'toolbar');
-const ShowIcon = wrapIcon(ShowSvg, 'toolbar');
-const ResizeIcon = wrapIcon(ResizeSvg, 'toolbar');
-const ClearIcon = wrapIcon(ClearSvg, 'toolbar');
-const PageBreakIcon = wrapIcon(PageBreaksSvg, 'toolbar');
-const GroupIcon = wrapIcon(GroupSvg, 'toolbar');
-const UngroupIcon = wrapIcon(UngroupSvg, 'toolbar');
-const SparklineIcon = wrapIcon(SparklineLineSvg, 'toolbar');
-const MergeCellsIcon = wrapIcon(CellsMergeSvg, 'toolbar');
-const UnmergeCellsIcon = wrapIcon(CellsSplitSvg, 'toolbar');
-const LinkIcon = wrapIcon(LinkSvg, 'toolbar');
-const HyperlinkIcon = wrapIcon(LinkSvg, 'toolbar');
-const OpenHyperlinkIcon = wrapIcon(LinkSvg, 'toolbar');
-const FormatCellsIcon = wrapIcon(FormatCellsSvg, 'toolbar');
-const NewCommentIcon = wrapIcon(NewCommentSvg, 'toolbar');
-const EditCommentIcon = wrapIcon(CommentSvg, 'toolbar');
-const DeleteCommentIcon = wrapIcon(DeleteCommentSvg, 'toolbar');
-// Sort/Filter icons
-const SortAscendingIcon = wrapIcon(SortAscendingSvg, 'toolbar');
-const SortDescendingIcon = wrapIcon(SortDescendingSvg, 'toolbar');
-const FilterIcon = wrapIcon(FilterSvg, 'toolbar');
-const ClearFilterIcon = wrapIcon(ClearFilterSvg, 'toolbar');
-const CustomSortIcon = wrapIcon(AdvancedFilterSvg, 'toolbar');
-// Table icons
-const InsertIcon = wrapIcon(InsertRowAboveSvg, 'toolbar'); // Reuse for table insert
-const DeleteIcon = wrapIcon(DeleteSvg, 'toolbar'); // Reuse for table delete
-
-// =============================================================================
-// Helper to render menu items recursively
-// =============================================================================
-
-interface MenuItemRendererProps {
-  items: ContextMenuItemType[];
-  onClose: () => void;
-}
-
-function MenuItemRenderer({ items, onClose }: MenuItemRendererProps) {
-  return (
-    <>
-      {items.map((item, index) => (
-        <React.Fragment key={item.id}>
-          {item.children && item.children.length > 0 ? (
-            // Render as submenu
-            <ContextMenuSub>
-              <ContextMenuSubTrigger icon={item.icon} disabled={item.disabled}>
-                {item.label}
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                <MenuItemRenderer items={item.children} onClose={onClose} />
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-          ) : item.checked !== undefined ? (
-            // Render as checkbox item
-            <ContextMenuCheckboxItem
-              checked={item.checked}
-              disabled={item.disabled}
-              onCheckedChange={() => {
-                item.onClick();
-                onClose();
-              }}
-            >
-              {item.label}
-            </ContextMenuCheckboxItem>
-          ) : (
-            // Render as regular item
-            <ContextMenuItemComponent
-              data-testid={item.testId}
-              icon={item.icon}
-              shortcut={item.shortcut}
-              disabled={item.disabled}
-              destructive={item.danger}
-              onSelect={() => {
-                item.onClick();
-                onClose();
-              }}
-            >
-              {item.label}
-            </ContextMenuItemComponent>
-          )}
-          {item.dividerAfter && index < items.length - 1 && <ContextMenuSeparator />}
-        </React.Fragment>
-      ))}
-    </>
-  );
-}
+import { MenuItemRenderer } from './MenuItemRenderer';
+import {
+  getFormatCellsContextMenuShortcut,
+  platformFromShellInfo,
+} from './shortcut-labels';
 
 // =============================================================================
 // Main Component
@@ -193,6 +94,12 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
   );
   const actions = useContextMenuActions(contextMenuCell);
   const readOnly = useReadOnly();
+  const platformInfo = usePlatformInfo();
+  const keyboardPlatform = useMemo(() => platformFromShellInfo(platformInfo), [platformInfo]);
+  const formatCellsShortcut = useMemo(
+    () => getFormatCellsContextMenuShortcut(keyboardPlatform),
+    [keyboardPlatform],
+  );
 
   // Build menu items based on target type
   const menuItems = useMemo((): ContextMenuItemType[] => {
@@ -975,7 +882,7 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
       id: 'formatCells',
       label: 'Format Cells...',
       icon: <FormatCellsIcon />,
-      shortcut: 'Ctrl+1',
+      shortcut: formatCellsShortcut,
       onClick: actions.openFormatCellsDialog,
     });
 
@@ -1058,7 +965,7 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
     }
 
     return items;
-  }, [target, actions, readOnly]);
+  }, [target, actions, readOnly, formatCellsShortcut]);
 
   return (
     <ContextMenuContent

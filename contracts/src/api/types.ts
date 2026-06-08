@@ -7,6 +7,7 @@
  */
 import type { FormulaA1 } from '@mog/types-core/formula-string';
 import type { FunctionArgument } from '@mog/types-core/function-registry';
+import type { CodeExecutionDiagnostic } from '../core/execution';
 import type {
   CellBorders,
   CellFormat,
@@ -1328,6 +1329,8 @@ export interface CodeResult {
   output?: string;
   /** Error message (if success is false) */
   error?: string;
+  /** Structured diagnostics produced by the executor */
+  diagnostics?: readonly CodeExecutionDiagnostic[];
   /** Execution duration in milliseconds */
   duration?: number;
 }

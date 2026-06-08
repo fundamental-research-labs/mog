@@ -178,6 +178,17 @@ export type {
 // API introspection — programmatic SDK API discovery for AI agents
 // ---------------------------------------------------------------------------
 export { api, apiSpec } from './api-describe';
+export {
+  analyzeMogCode,
+  apiGuidance,
+  apiGuidanceCatalog,
+  apiGuidanceCatalogValidation,
+  apiGuidanceTargets,
+  explainApiSymbol,
+  preflightMogCode,
+  resolveGuidanceTarget,
+  validateApiGuidanceCatalog,
+} from './agent-guidance';
 export type {
   ApiSpec,
   ApiSpecFunctionEntry,
@@ -194,3 +205,26 @@ export type {
   RootNode,
   TypesNode,
 } from './api-describe';
+export type {
+  ApiGuidanceApi,
+  ApiGuidanceCatalogValidation,
+  ApiGuidanceCatalogValidationIssue,
+  ApiGuidanceCategory,
+  ApiGuidanceCompoundMatcher,
+  ApiGuidanceDiagnostic,
+  ApiGuidanceDiagnosticCode,
+  ApiGuidanceDialect,
+  ApiGuidanceEntry,
+  ApiGuidanceExplanation,
+  ApiGuidanceMatcher,
+  ApiGuidanceMatcherKind,
+  ApiGuidancePreflightResult,
+  ApiGuidanceSourceLocation,
+  ApiGuidanceSymbolMatcher,
+  ApiGuidanceTarget,
+  ApiGuidanceTargetKind,
+  ForeignApiGuidanceExplanation,
+  MogApiGuidanceExplanation,
+  MogReplacement,
+  SourceSpan,
+} from './agent-guidance';

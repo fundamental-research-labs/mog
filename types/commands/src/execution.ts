@@ -46,6 +46,74 @@ export interface DirtyCell {
 }
 
 // ============================================================================
+// Execution Diagnostics
+// ============================================================================
+
+/**
+ * Source span for diagnostics reported against executed source code.
+ */
+export interface CodeExecutionDiagnosticSpan {
+  /** UTF-16 source offset where the diagnostic starts */
+  start: number;
+  /** UTF-16 source offset where the diagnostic ends */
+  end: number;
+  /** 1-based line number, when available */
+  line?: number;
+  /** 1-based column number, when available */
+  column?: number;
+}
+
+/**
+ * Mog API replacement suggested by an execution diagnostic.
+ */
+export interface CodeExecutionDiagnosticReplacement {
+  /** Canonical Mog API path, such as `wb.activeSheet` or `ws.setRange` */
+  path: string;
+  /** Ready-to-use snippet for the replacement, when one is available */
+  snippet?: string;
+  /** Extra guidance for ambiguous replacements */
+  note?: string;
+}
+
+/**
+ * Structured diagnostic returned by code executors.
+ *
+ * The shape is intentionally structural rather than importing from the public
+ * SDK guidance layer. Command/core contracts sit below the SDK package, while
+ * execution paths can still populate richer guidance-specific fields.
+ */
+export interface CodeExecutionDiagnostic {
+  /** Stable diagnostic code, for example `MOG001_FOREIGN_API_DIALECT` */
+  code: string;
+  /** Human-readable severity */
+  severity: 'error' | 'warning' | 'info';
+  /** Wrong dialect when a diagnostic identifies foreign API residue */
+  dialect?: string;
+  /** Stable diagnostic category, such as `worksheet` or `range` */
+  category?: string;
+  /** Stable catalog entry identifier */
+  entryId?: string;
+  /** Stable matcher identifier */
+  matcherId?: string;
+  /** Source symbol or token that triggered the diagnostic */
+  offendingSymbol?: string;
+  /** Concise human-readable message */
+  message: string;
+  /** Actionable correction text */
+  suggestion?: string;
+  /** Suggested Mog replacements */
+  mogReplacements?: readonly CodeExecutionDiagnosticReplacement[];
+  /** Follow-up references, such as `api.guidance.explain("wb.activeSheet")` */
+  references?: readonly string[];
+  /** Confidence score in the inclusive range [0, 1] */
+  confidence?: number;
+  /** Whether this diagnostic should block execution */
+  blocking?: boolean;
+  /** Optional source span */
+  span?: CodeExecutionDiagnosticSpan;
+}
+
+// ============================================================================
 // Execution Result
 // ============================================================================
 
@@ -59,6 +127,8 @@ export interface CodeExecutionResult {
   error?: string;
   /** Error stack trace if available */
   stack?: string;
+  /** Structured diagnostics produced before or during execution */
+  diagnostics?: readonly CodeExecutionDiagnostic[];
   /** Console logs captured during execution */
   logs: string[];
   /** Total number of cells changed */

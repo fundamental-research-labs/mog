@@ -1,4 +1,5 @@
 import rawApiSpec from './generated/api-spec.json';
+import { apiGuidance, type ApiGuidanceApi } from './agent-guidance';
 
 // ─── Return Types ────────────────────────────────────────────────────────────
 
@@ -502,11 +503,13 @@ export const api: {
     (): OverviewResult;
     (path: string): DescribeResult;
   };
+  guidance: ApiGuidanceApi;
   wb: RootNode;
   ws: RootNode;
   types: TypesNode;
 } = {
   describe,
+  guidance: apiGuidance,
   wb: buildRootNode('wb'),
   ws: buildRootNode('ws'),
   types: buildTypesNode(),

@@ -26,6 +26,7 @@ import {
   FORMAT_PRESETS,
   DEFAULT_FORMAT_BY_TYPE,
 } from '@mog-sdk/contracts/number-formats/constants';
+import { apiGuidanceCatalog, documentedRootGuidancePaths } from '../src/agent-guidance/catalog';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -46,6 +47,19 @@ const OUTPUT_SCHEMA_FILE = path.resolve(
   REPO_ROOT,
   'runtime/sdk/src/generated/api-spec.schema.json',
 );
+const GUIDANCE_TARGETS_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-guidance-targets.json',
+);
+const GUIDANCE_TARGETS_SCHEMA_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-guidance-targets.schema.json',
+);
+const API_GUIDANCE_FILE = path.resolve(REPO_ROOT, 'runtime/sdk/src/generated/api-guidance.json');
+const API_GUIDANCE_SCHEMA_FILE = path.resolve(
+  REPO_ROOT,
+  'runtime/sdk/src/generated/api-guidance.schema.json',
+);
 const SCHEMA_VERSION = '1';
 
 // ---------------------------------------------------------------------------
@@ -53,7 +67,6 @@ const SCHEMA_VERSION = '1';
 // ---------------------------------------------------------------------------
 
 const WORKBOOK_EXCLUDED_MEMBERS = new Set([
-  'activeSheet',
   'pivot',
   'charts',
   'ink',
@@ -344,6 +357,35 @@ interface ApiSpec {
     Record<string, { code: string; example: string; description?: string }>
   >;
   defaultFormats?: Record<string, string>;
+}
+
+interface ApiGuidanceTarget {
+  schemaVersion: '1';
+  path: string;
+  stableId: string;
+  root: ApiRoot;
+  parentRoot?: 'workbook' | 'worksheet';
+  interface: string;
+  member: string;
+  kind: ApiMemberKind;
+  visibility: Visibility;
+  asyncModel: AsyncModel;
+  signature: string;
+  typeText: string;
+  targetInterface?: string;
+  source: SourceLocation;
+  ownerPackage: string;
+}
+
+interface ApiGuidanceTargets {
+  schemaVersion: '1';
+  targets: ApiGuidanceTarget[];
+  byPath: Record<string, ApiGuidanceTarget>;
+}
+
+interface ApiGuidanceCatalogOutput {
+  schemaVersion: '1';
+  entries: typeof apiGuidanceCatalog;
 }
 
 function literalValueFromNode(
@@ -1268,6 +1310,59 @@ function generate(): ApiSpec {
   };
 }
 
+function generateGuidanceTargets(spec: ApiSpec): ApiGuidanceTargets {
+  const byPath = new Map<string, ApiGuidanceTarget>();
+
+  for (const iface of Object.values(spec.interfaces)) {
+    for (const member of Object.values(iface.members)) {
+      const target: ApiGuidanceTarget = {
+        schemaVersion: SCHEMA_VERSION,
+        path: member.canonicalPath,
+        stableId: member.stableId,
+        root: member.root,
+        ...(member.parentRoot ? { parentRoot: member.parentRoot } : {}),
+        interface: member.interface,
+        member: member.method,
+        kind: member.kind,
+        visibility: member.visibility,
+        asyncModel: member.asyncModel,
+        signature: member.signature,
+        typeText: member.returns.typeText,
+        ...(member.targetInterface ? { targetInterface: member.targetInterface } : {}),
+        source: member.source,
+        ownerPackage: member.ownerPackage,
+      };
+
+      const existing = byPath.get(target.path);
+      if (existing && existing.stableId !== target.stableId) {
+        throw new Error(
+          `Duplicate guidance target path ${target.path}: ${existing.stableId} vs ${target.stableId}`,
+        );
+      }
+      byPath.set(target.path, target);
+    }
+  }
+
+  const targets = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+  const byPathRecord: Record<string, ApiGuidanceTarget> = {};
+  for (const target of targets) {
+    byPathRecord[target.path] = target;
+  }
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    targets,
+    byPath: byPathRecord,
+  };
+}
+
+function generateApiGuidanceCatalog(): ApiGuidanceCatalogOutput {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    entries: apiGuidanceCatalog,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Schema and self-validation
 // ---------------------------------------------------------------------------
@@ -1557,6 +1652,178 @@ const API_SPEC_SCHEMA = {
   },
 } as const;
 
+const API_GUIDANCE_TARGETS_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://mog.dev/schemas/api-guidance-targets.schema.json',
+  title: 'Mog SDK API Guidance Targets',
+  type: 'object',
+  required: ['schemaVersion', 'targets', 'byPath'],
+  additionalProperties: false,
+  properties: {
+    schemaVersion: { const: SCHEMA_VERSION },
+    targets: {
+      type: 'array',
+      items: { $ref: '#/$defs/apiGuidanceTarget' },
+    },
+    byPath: {
+      type: 'object',
+      additionalProperties: { $ref: '#/$defs/apiGuidanceTarget' },
+    },
+  },
+  $defs: {
+    sourceLocation: {
+      type: 'object',
+      required: ['file'],
+      additionalProperties: false,
+      properties: {
+        file: { type: 'string', minLength: 1 },
+        line: { type: 'integer', minimum: 1 },
+      },
+    },
+    apiGuidanceTarget: {
+      type: 'object',
+      required: [
+        'schemaVersion',
+        'path',
+        'stableId',
+        'root',
+        'interface',
+        'member',
+        'kind',
+        'visibility',
+        'asyncModel',
+        'signature',
+        'typeText',
+        'source',
+        'ownerPackage',
+      ],
+      additionalProperties: false,
+      properties: {
+        schemaVersion: { const: SCHEMA_VERSION },
+        path: { type: 'string', pattern: '^(wb|ws)\\.' },
+        stableId: { type: 'string', minLength: 1 },
+        root: { enum: ['workbook', 'worksheet', 'subApi'] },
+        parentRoot: { enum: ['workbook', 'worksheet'] },
+        interface: { type: 'string', minLength: 1 },
+        member: { type: 'string', minLength: 1 },
+        kind: { enum: ['method', 'property', 'subApiAccessor'] },
+        visibility: { enum: ['public', 'internal', 'deprecated'] },
+        asyncModel: { enum: ['sync', 'promise'] },
+        signature: { type: 'string' },
+        typeText: { type: 'string' },
+        targetInterface: { type: 'string' },
+        source: { $ref: '#/$defs/sourceLocation' },
+        ownerPackage: { type: 'string', minLength: 1 },
+      },
+    },
+  },
+} as const;
+
+const API_GUIDANCE_SCHEMA = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://mog.dev/schemas/api-guidance.schema.json',
+  title: 'Mog SDK API Guidance Catalog',
+  type: 'object',
+  required: ['schemaVersion', 'entries'],
+  additionalProperties: false,
+  properties: {
+    schemaVersion: { const: SCHEMA_VERSION },
+    entries: {
+      type: 'array',
+      items: { $ref: '#/$defs/apiGuidanceEntry' },
+    },
+  },
+  $defs: {
+    apiGuidanceEntry: {
+      type: 'object',
+      required: [
+        'id',
+        'dialect',
+        'category',
+        'matchers',
+        'message',
+        'suggestion',
+        'mogReplacements',
+        'confidence',
+        'blocking',
+      ],
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        dialect: { const: 'officejs' },
+        category: {
+          enum: [
+            'bootstrap',
+            'sync-load',
+            'workbook',
+            'worksheet',
+            'range',
+            'formatting',
+            'tables',
+            'filters',
+            'names',
+            'file-io',
+            'host',
+          ],
+        },
+        matchers: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            oneOf: [
+              { $ref: '#/$defs/symbolMatcher' },
+              { $ref: '#/$defs/compoundMatcher' },
+            ],
+          },
+        },
+        message: { type: 'string', minLength: 1 },
+        suggestion: { type: 'string', minLength: 1 },
+        mogReplacements: {
+          type: 'array',
+          minItems: 1,
+          items: { $ref: '#/$defs/mogReplacement' },
+        },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        blocking: { type: 'boolean' },
+      },
+    },
+    symbolMatcher: {
+      type: 'object',
+      required: ['id', 'kind', 'symbol'],
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        kind: { enum: ['member-chain', 'call', 'assignment', 'token'] },
+        symbol: { type: 'string', minLength: 1 },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        blocking: { type: 'boolean' },
+      },
+    },
+    compoundMatcher: {
+      type: 'object',
+      required: ['id', 'kind', 'symbols', 'confidence', 'blocking'],
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        kind: { const: 'compound' },
+        symbols: { type: 'array', minItems: 2, items: { type: 'string', minLength: 1 } },
+        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        blocking: { type: 'boolean' },
+      },
+    },
+    mogReplacement: {
+      type: 'object',
+      required: ['path'],
+      additionalProperties: false,
+      properties: {
+        path: { type: 'string', minLength: 1 },
+        snippet: { type: 'string' },
+        note: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
 function assertNormalizedType(type: NormalizedType, pathLabel: string): void {
   switch (type.kind) {
     case 'primitive':
@@ -1670,6 +1937,77 @@ function assertApiSpec(spec: ApiSpec): void {
   }
 }
 
+function assertGuidanceTargets(index: ApiGuidanceTargets): void {
+  if (index.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`api guidance targets schemaVersion must be ${SCHEMA_VERSION}`);
+  }
+  const seen = new Set<string>();
+  for (const target of index.targets) {
+    if (!target.path || !/^(wb|ws)\./.test(target.path)) {
+      throw new Error(`Invalid guidance target path: ${target.path}`);
+    }
+    if (seen.has(target.path)) {
+      throw new Error(`Duplicate guidance target path: ${target.path}`);
+    }
+    seen.add(target.path);
+    if (index.byPath[target.path] !== target) {
+      throw new Error(`Guidance target ${target.path} missing from byPath index`);
+    }
+    if (!['method', 'property', 'subApiAccessor'].includes(target.kind)) {
+      throw new Error(`Guidance target ${target.path} has invalid kind ${target.kind}`);
+    }
+    if (!['sync', 'promise'].includes(target.asyncModel)) {
+      throw new Error(`Guidance target ${target.path} has invalid asyncModel ${target.asyncModel}`);
+    }
+    if (!target.source.file) {
+      throw new Error(`Guidance target ${target.path} missing source file`);
+    }
+  }
+  for (const path of Object.keys(index.byPath)) {
+    if (!seen.has(path)) {
+      throw new Error(`Guidance byPath contains non-target path: ${path}`);
+    }
+  }
+}
+
+function assertApiGuidanceCatalog(
+  catalog: ApiGuidanceCatalogOutput,
+  targets: ApiGuidanceTargets,
+): void {
+  if (catalog.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`api guidance schemaVersion must be ${SCHEMA_VERSION}`);
+  }
+
+  const entryIds = new Set<string>();
+  const matcherIds = new Set<string>();
+
+  for (const entry of catalog.entries) {
+    if (entryIds.has(entry.id)) {
+      throw new Error(`Duplicate API guidance entry id: ${entry.id}`);
+    }
+    entryIds.add(entry.id);
+    if (entry.confidence < 0 || entry.confidence > 1) {
+      throw new Error(`API guidance entry ${entry.id} confidence must be in [0, 1]`);
+    }
+
+    for (const matcher of entry.matchers) {
+      if (matcherIds.has(matcher.id)) {
+        throw new Error(`Duplicate API guidance matcher id: ${matcher.id}`);
+      }
+      matcherIds.add(matcher.id);
+    }
+
+    for (const replacement of entry.mogReplacements) {
+      if (documentedRootGuidancePaths.has(replacement.path)) continue;
+      if (!targets.byPath[replacement.path]) {
+        throw new Error(
+          `API guidance replacement ${entry.id} -> ${replacement.path} does not resolve in generated guidance targets`,
+        );
+      }
+    }
+  }
+}
+
 function writeGeneratedFile(filePath: string, value: unknown): void {
   const newContent = JSON.stringify(value, null, 2) + '\n';
   const existingContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
@@ -1689,6 +2027,10 @@ console.log('Generating SDK API spec from contracts/src/api/...\n');
 
 const spec = generate();
 assertApiSpec(spec);
+const guidanceTargets = generateGuidanceTargets(spec);
+assertGuidanceTargets(guidanceTargets);
+const guidanceCatalog = generateApiGuidanceCatalog();
+assertApiGuidanceCatalog(guidanceCatalog, guidanceTargets);
 
 // Ensure output directory exists
 fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
@@ -1696,6 +2038,10 @@ fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
 // Only write if content actually changed (avoids noisy diffs on publish)
 writeGeneratedFile(OUTPUT_SCHEMA_FILE, API_SPEC_SCHEMA);
 writeGeneratedFile(OUTPUT_FILE, spec);
+writeGeneratedFile(API_GUIDANCE_SCHEMA_FILE, API_GUIDANCE_SCHEMA);
+writeGeneratedFile(API_GUIDANCE_FILE, guidanceCatalog);
+writeGeneratedFile(GUIDANCE_TARGETS_SCHEMA_FILE, API_GUIDANCE_TARGETS_SCHEMA);
+writeGeneratedFile(GUIDANCE_TARGETS_FILE, guidanceTargets);
 
 // Print summary
 const ifaceCount = Object.keys(spec.interfaces).length;

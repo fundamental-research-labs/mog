@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mog.dev/schemas/api-guidance-targets.schema.json",
+  "title": "Mog SDK API Guidance Targets",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "targets",
+    "byPath"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/apiGuidanceTarget"
+      }
+    },
+    "byPath": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/apiGuidanceTarget"
+      }
+    }
+  },
+  "$defs": {
+    "sourceLocation": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "apiGuidanceTarget": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "path",
+        "stableId",
+        "root",
+        "interface",
+        "member",
+        "kind",
+        "visibility",
+        "asyncModel",
+        "signature",
+        "typeText",
+        "source",
+        "ownerPackage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": "1"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(wb|ws)\\."
+        },
+        "stableId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "root": {
+          "enum": [
+            "workbook",
+            "worksheet",
+            "subApi"
+          ]
+        },
+        "parentRoot": {
+          "enum": [
+            "workbook",
+            "worksheet"
+          ]
+        },
+        "interface": {
+          "type": "string",
+          "minLength": 1
+        },
+        "member": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "method",
+            "property",
+            "subApiAccessor"
+          ]
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "internal",
+            "deprecated"
+          ]
+        },
+        "asyncModel": {
+          "enum": [
+            "sync",
+            "promise"
+          ]
+        },
+        "signature": {
+          "type": "string"
+        },
+        "typeText": {
+          "type": "string"
+        },
+        "targetInterface": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/sourceLocation"
+        },
+        "ownerPackage": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

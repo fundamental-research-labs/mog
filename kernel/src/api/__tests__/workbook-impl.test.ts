@@ -1895,6 +1895,44 @@ describe('WorkbookImpl - Code Execution', () => {
     expect(result.error).toBe('SyntaxError');
   });
 
+  it('executeCode() preserves structured executor diagnostics', async () => {
+    const diagnostics = [
+      {
+        code: 'MOG001_FOREIGN_API_DIALECT',
+        severity: 'error' as const,
+        dialect: 'officejs',
+        category: 'worksheet',
+        entryId: 'officejs.active-sheet',
+        matcherId: 'officejs.context-workbook-active-worksheet',
+        offendingSymbol: 'context.workbook.worksheets.getActiveWorksheet',
+        message: 'This looks like OfficeJS. You are writing Mog code.',
+        suggestion: 'Use `const ws = wb.activeSheet;` for the active worksheet.',
+        mogReplacements: [{ path: 'wb.activeSheet', snippet: 'const ws = wb.activeSheet;' }],
+        references: ['api.guidance.explain("wb.activeSheet")'],
+        confidence: 0.98,
+        blocking: true,
+      },
+    ];
+    const mockExecute = jest.fn().mockResolvedValue({
+      status: 'error',
+      error: 'This looks like OfficeJS. You are writing Mog code.',
+      logs: [],
+      diagnostics,
+    });
+    const mockFactory = jest.fn().mockReturnValue({
+      execute: mockExecute,
+      dispose: jest.fn(),
+    });
+
+    const { wb } = await createWorkbook({
+      codeExecutorFactory: mockFactory as any,
+    });
+
+    const result = await wb.executeCode('await Excel.run(async (context) => context.sync())');
+    expect(result.success).toBe(false);
+    expect(result.diagnostics).toEqual(diagnostics);
+  });
+
   it('setCodeExecutorFactory() sets the factory for later use', async () => {
     const { wb } = await createWorkbook();
 

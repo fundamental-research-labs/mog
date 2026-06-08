@@ -1102,6 +1102,7 @@ export class WorkbookImpl implements WorkbookInternal {
       success: result.status === 'success',
       output: result.logs?.join('\n'),
       error: result.error ?? undefined,
+      diagnostics: result.diagnostics,
       duration: result.timing?.total,
     };
   }

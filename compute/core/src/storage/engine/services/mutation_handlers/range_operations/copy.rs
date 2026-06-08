@@ -13,6 +13,52 @@ use super::super::fill::{
 };
 use super::formula_rebase::build_cross_sheet_adjusted_formula;
 
+fn source_format_at(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    source_sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> domain_types::CellFormat {
+    use crate::storage::properties;
+
+    let pos = SheetPos::new(row, col);
+    let cell_id = stores
+        .grid_indexes
+        .get(source_sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col))
+        .or_else(|| mirror.resolve_cell_id(source_sheet_id, pos));
+    let table_fmt = super::super::super::tables::resolve_table_format_at_cell(
+        mirror,
+        source_sheet_id,
+        row,
+        col,
+    );
+
+    if let Some(cell_id) = cell_id {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        properties::get_effective_format(
+            &stores.storage,
+            source_sheet_id,
+            &cell_hex,
+            row,
+            col,
+            table_fmt.as_ref(),
+            stores.grid_indexes.get(source_sheet_id),
+            mirror.get_sheet(source_sheet_id),
+        )
+    } else {
+        properties::get_positional_format(
+            &stores.storage,
+            source_sheet_id,
+            row,
+            col,
+            stores.grid_indexes.get(source_sheet_id),
+            mirror.get_sheet(source_sheet_id),
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // mutation_copy_range
 // ---------------------------------------------------------------------------
@@ -146,29 +192,13 @@ pub(in crate::storage::engine) fn mutation_copy_range(
 
                 // Read source format (only needed for All and Formats modes)
                 let format = match copy_type {
-                    CopyType::All | CopyType::Formats => sheet_mirror
-                        .as_ref()
-                        .and_then(|sm| sm.cell_id_at(pos))
-                        .map(|cell_id| {
-                            let cell_hex = id_to_hex(cell_id.as_u128());
-                            let table_fmt =
-                                super::super::super::tables::resolve_table_format_at_cell(
-                                    mirror,
-                                    source_sheet_id,
-                                    src_row,
-                                    src_col,
-                                );
-                            properties::get_effective_format(
-                                &stores.storage,
-                                source_sheet_id,
-                                &cell_hex,
-                                src_row,
-                                src_col,
-                                table_fmt.as_ref(),
-                                stores.grid_indexes.get(source_sheet_id),
-                                mirror.get_sheet(source_sheet_id),
-                            )
-                        }),
+                    CopyType::All | CopyType::Formats => Some(source_format_at(
+                        stores,
+                        mirror,
+                        source_sheet_id,
+                        src_row,
+                        src_col,
+                    )),
                     _ => None,
                 };
 
@@ -317,7 +347,7 @@ pub(in crate::storage::engine) fn mutation_copy_range(
             continue;
         };
         let cell_hex = id_to_hex(cell_id.as_u128());
-        properties::set_cell_format(
+        properties::replace_cell_format(
             stores.storage.doc(),
             stores.storage.workbook_map(),
             stores.storage.sheets(),

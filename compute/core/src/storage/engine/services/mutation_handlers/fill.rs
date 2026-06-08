@@ -4,13 +4,54 @@ use cell_types::{CellId, SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::{CellEntry, CellMirror};
-use crate::snapshot::RecalcResult;
+use crate::snapshot::{CellChange, CellPosition, RecalcResult};
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 
 use super::AdjustedFormulaResult;
 use super::cell_mutations::mutation_set_cells_by_position_raw;
+
+fn source_format_at(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> domain_types::CellFormat {
+    use crate::storage::properties;
+
+    let pos = SheetPos::new(row, col);
+    let cell_id = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col))
+        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+    let table_fmt = super::super::tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
+
+    if let Some(cell_id) = cell_id {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        properties::get_effective_format(
+            &stores.storage,
+            sheet_id,
+            &cell_hex,
+            row,
+            col,
+            table_fmt.as_ref(),
+            stores.grid_indexes.get(sheet_id),
+            mirror.get_sheet(sheet_id),
+        )
+    } else {
+        properties::get_positional_format(
+            &stores.storage,
+            sheet_id,
+            row,
+            col,
+            stores.grid_indexes.get(sheet_id),
+            mirror.get_sheet(sheet_id),
+        )
+    }
+}
 
 // ---------------------------------------------------------------------------
 // mutation_auto_fill
@@ -27,7 +68,6 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<(RecalcResult, compute_fill::types::FillResultSummary), ComputeError> {
-    use crate::storage::properties;
     use crate::storage::sheet::{dimensions, merges};
     use compute_fill::types::{
         FillInput, FillResultSummary, FillUpdate, LocaleNames, MergeRegion as FillMerge, SourceCell,
@@ -78,28 +118,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
                 (None, Vec::new())
             };
 
-            let format = if let Some(sm) = sheet_mirror {
-                if let Some(cell_id) = sm.cell_id_at(pos) {
-                    let cell_hex = id_to_hex(cell_id.as_u128());
-                    let table_fmt = super::super::tables::resolve_table_format_at_cell(
-                        mirror, sheet_id, row, col,
-                    );
-                    Some(properties::get_effective_format(
-                        &stores.storage,
-                        sheet_id,
-                        &cell_hex,
-                        row,
-                        col,
-                        table_fmt.as_ref(),
-                        stores.grid_indexes.get(sheet_id),
-                        sheet_mirror,
-                    ))
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            let format = Some(source_format_at(stores, mirror, sheet_id, row, col));
 
             source_cells.push(SourceCell {
                 row,
@@ -189,6 +208,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
 
     // -- 5. Apply fill updates to storage --
     let mut cell_edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)> = Vec::new();
+    let mut format_edits: Vec<(u32, u32, domain_types::CellFormat)> = Vec::new();
 
     mutation.observer.set_suppressed(true);
 
@@ -236,20 +256,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
                 }
             }
             FillUpdate::Format { row, col, format } => {
-                let Some(cell_id) = super::super::cell_editing::ensure_cell_id_mirrored(
-                    stores, mirror, sheet_id, *row, *col,
-                ) else {
-                    continue;
-                };
-                let cell_hex = id_to_hex(cell_id.as_u128());
-                crate::storage::properties::set_cell_format(
-                    stores.storage.doc(),
-                    stores.storage.workbook_map(),
-                    stores.storage.sheets(),
-                    sheet_id,
-                    &cell_hex,
-                    format,
-                );
+                format_edits.push((*row, *col, format.clone()));
             }
             FillUpdate::Clear { row, col } => {
                 cell_edits.push((*sheet_id, *row, *col, CellValue::Null, None));
@@ -259,12 +266,64 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
 
     mutation.observer.set_suppressed(false);
 
-    if cell_edits.is_empty() {
-        return Ok((RecalcResult::empty(), summary));
-    }
+    let mut recalc = if cell_edits.is_empty() {
+        RecalcResult::empty()
+    } else {
+        mutation_set_cells_by_position_raw(stores, &mut *mirror, mutation, cell_edits, false)?
+    };
 
-    let recalc =
-        mutation_set_cells_by_position_raw(stores, &mut *mirror, mutation, cell_edits, false)?;
+    let mut format_changes: Vec<CellChange> = Vec::with_capacity(format_edits.len());
+    mutation.observer.set_suppressed(true);
+    for (row, col, format) in &format_edits {
+        let Some(cell_id) = super::super::cell_editing::ensure_cell_id_mirrored(
+            stores, mirror, sheet_id, *row, *col,
+        ) else {
+            continue;
+        };
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        crate::storage::properties::replace_cell_format(
+            stores.storage.doc(),
+            stores.storage.workbook_map(),
+            stores.storage.sheets(),
+            sheet_id,
+            &cell_hex,
+            format,
+        );
+        let value = mirror
+            .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
+            .cloned()
+            .unwrap_or(CellValue::Null);
+        format_changes.push(CellChange {
+            cell_id: cell_id.to_uuid_string(),
+            sheet_id: sheet_id.to_uuid_string(),
+            position: Some(CellPosition {
+                row: *row,
+                col: *col,
+            }),
+            value,
+            display_text: None,
+            format_idx: None,
+            extra_flags: 0,
+            old_value: None,
+        });
+    }
+    mutation.observer.set_suppressed(false);
+
+    for change in format_changes {
+        let Some(position) = &change.position else {
+            recalc.changed_cells.push(change);
+            continue;
+        };
+        let already_changed = recalc.changed_cells.iter().any(|existing| {
+            existing.sheet_id == change.sheet_id
+                && existing.position.as_ref().is_some_and(|existing_pos| {
+                    existing_pos.row == position.row && existing_pos.col == position.col
+                })
+        });
+        if !already_changed {
+            recalc.changed_cells.push(change);
+        }
+    }
     Ok((recalc, summary))
 }
 

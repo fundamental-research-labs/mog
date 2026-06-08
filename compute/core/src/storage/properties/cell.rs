@@ -245,6 +245,25 @@ pub fn set_cell_format(
     set_properties(doc, sheets, sheet_id, cell_id, &props);
 }
 
+/// Replace the format portion of a cell's properties.
+///
+/// Copy/paste and autofill replicate a source format snapshot. Unlike toolbar
+/// formatting, that operation must clear target-only format properties that
+/// are absent from the source. Non-format metadata is preserved.
+pub fn replace_cell_format(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_id: &str,
+    format: &CellFormat,
+) {
+    let mut props = get_properties(doc, workbook, sheets, sheet_id, cell_id).unwrap_or_default();
+    props.format = Some(normalize_format_patch(format));
+    props.style_id = None;
+    set_properties(doc, sheets, sheet_id, cell_id, &props);
+}
+
 /// Clear the format from a cell's properties, preserving other metadata.
 ///
 /// If the cell has no other metadata after removing the format, the

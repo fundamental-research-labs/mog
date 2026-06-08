@@ -5,9 +5,10 @@
 //   Bug #2: AutoFill overwrites source range
 //   Bug #3: AutoFill formulas produce #REF! (CellMirror desync)
 
-use cell_types::SheetPos;
+use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
 use compute_core::storage::engine::YrsComputeEngine;
+use domain_types::CellFormat;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
 
@@ -82,6 +83,31 @@ fn fill_request(
         include_formats: true,
         step_value: 1.0,
     }
+}
+
+fn cell_id_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellId {
+    let cell_hex = engine
+        .get_cell_id_at(sheet_id, row, col)
+        .unwrap_or_else(|| panic!("cell at row {row} col {col} should have an id"));
+    CellId::from_raw(u128::from_str_radix(&cell_hex, 16).expect("cell id hex parses"))
+}
+
+fn set_format_at(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    format: CellFormat,
+) {
+    let cell_id = cell_id_at(engine, sheet_id, row, col);
+    engine
+        .set_cell_format(sheet_id, &cell_id, &format)
+        .expect("set cell format");
+}
+
+fn format_at(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) -> CellFormat {
+    let cell_id = cell_id_at(engine, sheet_id, row, col);
+    engine.get_cell_format(sheet_id, &cell_id, row, col)
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -446,6 +472,95 @@ fn bug2_autofill_preserves_source_formula() {
         num(30.0),
         "C1 value must still be 30 after fill"
     );
+}
+
+#[test]
+fn autofill_copies_formats_for_value_and_formula_source_columns() {
+    let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet_id, 0, 2, "=A1+B1")
+        .unwrap();
+
+    set_format_at(
+        &mut engine,
+        &sheet_id,
+        0,
+        0,
+        CellFormat {
+            background_color: Some("#FFEE00".to_string()),
+            number_format: Some("$#,##0.00".to_string()),
+            ..Default::default()
+        },
+    );
+    set_format_at(
+        &mut engine,
+        &sheet_id,
+        0,
+        1,
+        CellFormat {
+            bold: Some(true),
+            number_format: Some("0.00%".to_string()),
+            ..Default::default()
+        },
+    );
+    set_format_at(
+        &mut engine,
+        &sheet_id,
+        0,
+        2,
+        CellFormat {
+            bold: Some(true),
+            background_color: Some("#C6EFCE".to_string()),
+            number_format: Some("$#,##0.00".to_string()),
+            ..Default::default()
+        },
+    );
+
+    let request = fill_request(0, 0, 0, 2, 1, 0, 2, 2, "down");
+    let (_patches, _result) = engine.auto_fill(&sheet_id, request).unwrap();
+
+    for row in 1..=2 {
+        let a_fmt = format_at(&engine, &sheet_id, row, 0);
+        assert_eq!(
+            a_fmt.background_color.as_deref(),
+            Some("#FFEE00"),
+            "A{} should copy A1 fill",
+            row + 1
+        );
+        assert_eq!(
+            a_fmt.number_format.as_deref(),
+            Some("$#,##0.00"),
+            "A{} should copy A1 number format",
+            row + 1
+        );
+
+        let b_fmt = format_at(&engine, &sheet_id, row, 1);
+        assert_eq!(b_fmt.bold, Some(true), "B{} should copy B1 bold", row + 1);
+        assert_eq!(
+            b_fmt.number_format.as_deref(),
+            Some("0.00%"),
+            "B{} should copy B1 number format",
+            row + 1
+        );
+
+        let c_fmt = format_at(&engine, &sheet_id, row, 2);
+        assert_eq!(c_fmt.bold, Some(true), "C{} should copy C1 bold", row + 1);
+        assert_eq!(
+            c_fmt.background_color.as_deref(),
+            Some("#C6EFCE"),
+            "C{} should copy C1 fill",
+            row + 1
+        );
+        assert_eq!(
+            c_fmt.number_format.as_deref(),
+            Some("$#,##0.00"),
+            "C{} should copy C1 number format",
+            row + 1
+        );
+    }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

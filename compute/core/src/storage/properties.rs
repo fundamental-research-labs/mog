@@ -62,7 +62,7 @@ pub use cascade::{get_effective_format, get_effective_format_preloaded, get_posi
 pub use cell::{
     clear_cell_format, clear_cell_formats, clear_formula_cache_metadata, clear_properties,
     get_all_properties, get_cell_format, get_properties, iter_all_properties,
-    iter_formatted_property_cell_ids, set_cell_format, set_cell_formats,
+    iter_formatted_property_cell_ids, replace_cell_format, set_cell_format, set_cell_formats,
     set_cell_formats_with_origin, set_properties,
 };
 pub use defaults::default_format;

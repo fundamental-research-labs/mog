@@ -571,11 +571,21 @@ impl SheetMirror {
     }
 
     fn apply_column_overlays(&self, col: u32, col_id: ColId, data: &mut [CellValue]) {
-        // Layer 2: per-cell overrides unconditionally overwrite payload values.
+        // Layer 2: per-cell overrides overwrite payload values. Imported
+        // ghost identities (Null with no formula) carry metadata/addressability
+        // only and must not erase range payloads. User-authored blank range
+        // overrides are virtual cells and still suppress the payload value.
         for (pos, cell_id) in &self.pos_to_id {
             if pos.col() == col
                 && let Some(entry) = self.cells.get(cell_id)
             {
+                let is_blank_range_override =
+                    cell_id.is_virtual() && entry.value.is_null() && entry.formula.is_none();
+                let should_overlay =
+                    !entry.value.is_null() || entry.formula.is_some() || is_blank_range_override;
+                if !should_overlay {
+                    continue;
+                }
                 let row = pos.row() as usize;
                 if row < data.len() {
                     data[row] = entry.value.clone();

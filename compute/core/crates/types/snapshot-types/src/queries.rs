@@ -268,6 +268,8 @@ pub struct FindInRangeOptions {
     pub case_sensitive: Option<bool>,
     #[serde(default)]
     pub whole_cell: Option<bool>,
+    #[serde(default)]
+    pub include_formulas: Option<bool>,
 }
 
 /// A single cell match from find-in-range.

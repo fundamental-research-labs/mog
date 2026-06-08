@@ -285,7 +285,7 @@ fn build_find_regex(options: &FindInRangeOptions) -> Option<regex::Regex> {
 
 /// Find the first cell matching literal text in a range.
 pub(in crate::storage::engine) fn find_in_range(
-    stores: &EngineStores,
+    engine: &crate::storage::engine::YrsComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -294,33 +294,46 @@ pub(in crate::storage::engine) fn find_in_range(
     options: FindInRangeOptions,
 ) -> Option<FindInRangeResult> {
     let re = build_find_regex(&options)?;
-    let range = cell_types::RangePos::new(*sheet_id, start_row, start_col, end_row, end_col);
+    let include_formulas = options.include_formulas.unwrap_or(false);
     let mut result: Option<FindInRangeResult> = None;
-    let grid = stores.grid_indexes.get(sheet_id)?;
 
-    cell_iter::for_each_cell_in_range(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        &range,
-        |row, col, data| {
+    for_each_cell_in_range(
+        engine,
+        sheet_id,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+        false,
+        &mut |visit| {
             if result.is_some() {
                 return; // already found first match
             }
-            if let Some(data) = data {
-                let display = match &data.value {
-                    Some(v) if !matches!(v, value_types::CellValue::Null) => v.to_string(),
-                    _ => return,
-                };
-                if !display.is_empty() && re.is_match(&display) {
-                    result = Some(FindInRangeResult {
-                        row,
-                        col,
-                        address: crate::range_manager::pos_to_a1(row, col),
-                        value: display,
-                    });
-                }
+            let display = if visit.formatted.is_empty() {
+                visit.value.to_string()
+            } else {
+                visit.formatted.clone()
+            };
+            if !display.is_empty() && re.is_match(&display) {
+                result = Some(FindInRangeResult {
+                    row: visit.row,
+                    col: visit.col,
+                    address: crate::range_manager::pos_to_a1(visit.row, visit.col),
+                    value: display,
+                });
+                return;
+            }
+
+            if include_formulas
+                && let Some(formula) = &visit.formula
+                && re.is_match(formula)
+            {
+                result = Some(FindInRangeResult {
+                    row: visit.row,
+                    col: visit.col,
+                    address: crate::range_manager::pos_to_a1(visit.row, visit.col),
+                    value: display,
+                });
             }
         },
     );
@@ -330,7 +343,7 @@ pub(in crate::storage::engine) fn find_in_range(
 
 /// Find all cells matching literal text in a range.
 pub(in crate::storage::engine) fn find_all_in_range(
-    stores: &EngineStores,
+    engine: &crate::storage::engine::YrsComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -342,32 +355,43 @@ pub(in crate::storage::engine) fn find_all_in_range(
         Some(r) => r,
         None => return Vec::new(),
     };
-    let range = cell_types::RangePos::new(*sheet_id, start_row, start_col, end_row, end_col);
+    let include_formulas = options.include_formulas.unwrap_or(false);
     let mut results = Vec::new();
-    let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-        return results;
-    };
 
-    cell_iter::for_each_cell_in_range(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        *sheet_id,
-        grid,
-        &range,
-        |row, col, data| {
-            if let Some(data) = data {
-                let display = match &data.value {
-                    Some(v) if !matches!(v, value_types::CellValue::Null) => v.to_string(),
-                    _ => return,
-                };
-                if !display.is_empty() && re.is_match(&display) {
-                    results.push(FindInRangeResult {
-                        row,
-                        col,
-                        address: crate::range_manager::pos_to_a1(row, col),
-                        value: display,
-                    });
-                }
+    for_each_cell_in_range(
+        engine,
+        sheet_id,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+        false,
+        &mut |visit| {
+            let display = if visit.formatted.is_empty() {
+                visit.value.to_string()
+            } else {
+                visit.formatted.clone()
+            };
+            if !display.is_empty() && re.is_match(&display) {
+                results.push(FindInRangeResult {
+                    row: visit.row,
+                    col: visit.col,
+                    address: crate::range_manager::pos_to_a1(visit.row, visit.col),
+                    value: display,
+                });
+                return;
+            }
+
+            if include_formulas
+                && let Some(formula) = &visit.formula
+                && re.is_match(formula)
+            {
+                results.push(FindInRangeResult {
+                    row: visit.row,
+                    col: visit.col,
+                    address: crate::range_manager::pos_to_a1(visit.row, visit.col),
+                    value: display,
+                });
             }
         },
     );

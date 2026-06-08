@@ -383,13 +383,7 @@ pub(in crate::storage::engine) fn find_in_range(
     options: crate::engine_types::queries::FindInRangeOptions,
 ) -> Option<crate::engine_types::queries::FindInRangeResult> {
     services::queries::find_in_range(
-        &engine.stores,
-        sheet_id,
-        start_row,
-        start_col,
-        end_row,
-        end_col,
-        options,
+        engine, sheet_id, start_row, start_col, end_row, end_col, options,
     )
 }
 
@@ -403,13 +397,7 @@ pub(in crate::storage::engine) fn find_all_in_range(
     options: crate::engine_types::queries::FindInRangeOptions,
 ) -> Vec<crate::engine_types::queries::FindInRangeResult> {
     services::queries::find_all_in_range(
-        &engine.stores,
-        sheet_id,
-        start_row,
-        start_col,
-        end_row,
-        end_col,
-        options,
+        engine, sheet_id, start_row, start_col, end_row, end_col, options,
     )
 }
 

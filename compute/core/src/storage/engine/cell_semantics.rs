@@ -10,7 +10,6 @@ use crate::storage::cells::values as cell_values;
 use crate::storage::properties;
 use bridge_core as bridge;
 use cell_types::{SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use compute_formats;
 use domain_types::CellFormat;
 use value_types::CellValue;
@@ -151,11 +150,7 @@ impl YrsComputeEngine {
         };
 
         // Get effective format
-        let cell_id_hex = self
-            .mirror
-            .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-            .map(|cid| id_to_hex(cid.as_u128()))
-            .unwrap_or_default();
+        let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
         let table_fmt = self.resolve_table_format_at_cell(sheet_id, row, col);
         let effective = properties::get_effective_format(
             &self.stores.storage,

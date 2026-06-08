@@ -2212,6 +2212,7 @@ export interface FindInRangeOptions {
   text: string;
   caseSensitive: boolean | null;
   wholeCell: boolean | null;
+  includeFormulas: boolean | null;
 }
 
 export interface FindInRangeResult {

@@ -196,7 +196,7 @@ export async function findInRange(
   sheetId: SheetId,
   range: CellRange,
   text: string,
-  options?: { caseSensitive?: boolean; wholeCell?: boolean },
+  options?: { caseSensitive?: boolean; wholeCell?: boolean; includeFormulas?: boolean },
 ): Promise<{ address: string; value: string } | null> {
   if (!text) return null;
 
@@ -212,6 +212,7 @@ export async function findInRange(
       text,
       caseSensitive: options?.caseSensitive ?? null,
       wholeCell: options?.wholeCell ?? null,
+      includeFormulas: options?.includeFormulas ?? null,
     },
   );
 
@@ -242,7 +243,7 @@ export async function replaceAll(
   range: CellRange,
   text: string,
   replacement: string,
-  options?: { caseSensitive?: boolean; wholeCell?: boolean },
+  options?: { caseSensitive?: boolean; wholeCell?: boolean; includeFormulas?: boolean },
 ): Promise<number> {
   if (!text) return 0;
 
@@ -260,6 +261,7 @@ export async function replaceAll(
       text,
       caseSensitive: options?.caseSensitive ?? null,
       wholeCell: options?.wholeCell ?? null,
+      includeFormulas: options?.includeFormulas ?? null,
     },
   );
 

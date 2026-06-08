@@ -1,6 +1,24 @@
 use super::*;
 
 impl YrsComputeEngine {
+    pub(crate) fn format_lookup_cell_id_hex(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> String {
+        self.stores
+            .grid_indexes
+            .get(sheet_id)
+            .and_then(|grid| grid.cell_id_at(row, col))
+            .or_else(|| {
+                self.mirror
+                    .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+            })
+            .map(|cid| id_to_hex(cid.as_u128()).to_string())
+            .unwrap_or_default()
+    }
+
     /// Inner workhorse: format a known CellValue using the effective format at
     /// `(sheet_id, row, col)`.
     pub(crate) fn format_value_at_cell(
@@ -10,11 +28,7 @@ impl YrsComputeEngine {
         row: u32,
         col: u32,
     ) -> String {
-        let cell_id_hex = self
-            .mirror
-            .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-            .map(|cid| id_to_hex(cid.as_u128()))
-            .unwrap_or_default();
+        let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
 
         let table_fmt = self.resolve_table_format_at_cell(sheet_id, row, col);
         let mut effective = properties::get_effective_format(

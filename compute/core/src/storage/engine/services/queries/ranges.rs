@@ -274,18 +274,27 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     };
 
                 if let Some(cell_id) = cell_id_opt {
-                    // ComputeCore-first value read (same pattern as get_active_cell)
-                    let value = engine
+                    // ComputeCore-first value read (same pattern as get_active_cell), with a
+                    // positional fallback for range-backed import cells whose virtual id reads
+                    // as null but whose coordinate-backed value is materialized.
+                    let identity_value = engine
                         .stores
                         .compute
                         .get_cell_value(&engine.mirror, &cell_id)
                         .cloned()
-                        .unwrap_or_else(|| {
-                            mirror
-                                .get_cell_value_in_sheet(sheet_id, &cell_id)
-                                .cloned()
-                                .unwrap_or(CellValue::Null)
-                        });
+                        .or_else(|| mirror.get_cell_value_in_sheet(sheet_id, &cell_id).cloned());
+                    let value = match identity_value {
+                        Some(value) if !value.is_null() => value,
+                        Some(value) => mirror
+                            .get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                            .filter(|pos_value| !pos_value.is_null())
+                            .cloned()
+                            .unwrap_or(value),
+                        None => mirror
+                            .get_cell_value_at(sheet_id, SheetPos::new(row, col))
+                            .cloned()
+                            .unwrap_or(CellValue::Null),
+                    };
 
                     // Actual formula text from ComputeCore, mirror identity formula fallback
                     let formula = formula_text_for_cell(engine, mirror, &cell_id).or_else(|| {

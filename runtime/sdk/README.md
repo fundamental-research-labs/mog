@@ -129,8 +129,17 @@ const { sheet, created } = await wb.getOrCreateSheet('Data');
 
 ```typescript
 // Create a table from existing data
-await ws.setRange('A1', [['Product', 'Q1', 'Q2'], ['Widget', 100, 150], ['Gadget', 200, 180]]);
-await ws.tables.add('SalesData', 'A1:C3', { hasHeaders: true });
+await ws.setRange('A1:C3', [
+  ['Product', 'Q1', 'Q2'],
+  ['Widget', 100, 150],
+  ['Gadget', 200, 180],
+]);
+
+const table = await ws.tables.add('A1:C3', {
+  name: 'SalesData',
+  hasHeaders: true,
+});
+await ws.tables.addRow(table.name, undefined, ['Service', 50, 75]);
 ```
 
 ### Serialization
@@ -198,11 +207,40 @@ await ws.charts.add({ type: 'bar', dataRange: 'A1:B5' });
 await ws.conditionalFormats.add({ range: 'B2:B10', rule: { type: 'greaterThan', value: 100 } });
 
 // Tables
-await ws.tables.add('MyTable', 'A1:C5', { hasHeaders: true });
+await ws.tables.add('A1:C5', { name: 'MyTable', hasHeaders: true });
 
 // Filters
 await ws.filters.add('A1:C10');
+await ws.filters.setColumnFilter(0, { type: 'value', values: ['Widget'] });
 ```
+
+### API Discovery and Agent Guidance
+
+Use `api.describe(...)` to inspect real Mog paths before generating code. Use
+`api.guidance` when available to diagnose generated source before execution and
+to explain wrong-dialect symbols.
+
+```typescript
+import { api } from '@mog-sdk/sdk';
+
+console.log(api.describe('ws.tables.add'));
+console.log(api.describe('ws.filters.setColumnFilter'));
+
+console.log(api.guidance.explain('context.workbook.worksheets.getActiveWorksheet'));
+console.log(api.guidance.explain('wb.activeSheet'));
+
+const preflight = api.guidance.preflight(source);
+if (!preflight.ok) {
+  throw new Error(preflight.diagnostics[0]?.suggestion ?? 'Invalid Mog code');
+}
+```
+
+OfficeJS-looking code is a diagnosed foreign dialect, not a supported API mode.
+Do not write `Excel.run`, `Office.context`, `context.sync()`, Range proxy
+`.load(...)` calls, null-object sentinels, or assignments such as
+`range.values = data`. Use Mog-native workbook and worksheet APIs such as
+`wb.activeSheet`, `await wb.getSheet(name)`, `await ws.setRange(range, data)`,
+and `await ws.formats.setRange(range, format)`.
 
 ### Low-Level Access
 

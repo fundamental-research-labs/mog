@@ -32,6 +32,26 @@ api.describe('type:ChartType')
 
 Paths use `wb.*` for workbook and `ws.*` for worksheet. Sub-APIs are accessed as `ws.{subApi}.{method}`.
 
+## Agent API Guidance
+
+When generating Mog code, use `api.describe(...)` for valid Mog methods and
+`api.guidance` for source preflight and wrong-dialect explanations:
+
+```typescript
+api.describe('ws.tables.add')
+api.describe('ws.filters.setColumnFilter')
+api.guidance.explain('context.workbook.worksheets.getActiveWorksheet')
+api.guidance.explain('wb.activeSheet')
+api.guidance.preflight(source)
+```
+
+Code shaped like the Microsoft Office JavaScript spreadsheet API is diagnosed,
+not supported. Do not use `Excel.run`, `Office.context`, `context.sync()`,
+`.load(...)`, `.isNullObject`, Range proxy assignment such as
+`range.values = data`, or `range.format.fill.color`. Use Mog-native APIs such
+as `const ws = wb.activeSheet`, `await wb.getSheet(name)`,
+`await ws.setRange(range, data)`, and `await ws.formats.setRange(range, format)`.
+
 ## Quick Start
 
 ```typescript
@@ -84,7 +104,11 @@ await wb.sheets.rename('Sheet1', 'Sales');
 await wb.getOrCreateSheet('Data');          // idempotent sheet access
 
 // Tables
-await ws.tables.add('Sales', 'A1:C10', { hasHeaders: true });
+await ws.tables.add('A1:C10', { name: 'Sales', hasHeaders: true });
+
+// Filters
+await ws.filters.add('A1:C10');
+await ws.filters.setColumnFilter(0, { type: 'value', values: ['Widget'] });
 
 // Charts
 await ws.charts.add({ type: 'bar', dataRange: 'A1:B5' });

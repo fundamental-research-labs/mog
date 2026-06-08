@@ -36,6 +36,12 @@ console.log(await ws.getCell('A2'));
 await wb.dispose();
 ```
 
+Agents should discover the SDK surface through `api.describe(...)` and run
+generated code through `api.guidance` when that API is available in the SDK
+version they are using. OfficeJS-looking code such as `Excel.run`,
+`Office.context`, `context.sync()`, proxy `.load(...)`, or `range.values = ...`
+is diagnosed as a foreign spreadsheet dialect; Mog does not support or shim it.
+
 Use `@mog-sdk/embed` for browser, React, and Web Component embeds. See:
 
 - [Unified SDK](runtime/sdk/README.md)

@@ -246,6 +246,16 @@ await ws.tables.addRow(table.name, undefined, ['Service', 50, 75]);
 await ws.tables.setShowBandedRows(table.name, true);
 ```
 
+## Filters
+
+Create worksheet auto-filters with `ws.filters.add(range)`, then apply
+column criteria with `ws.filters.setColumnFilter(col, criteria, filterId?)`.
+
+```typescript
+await ws.filters.add('A1:C10');
+await ws.filters.setColumnFilter(0, { type: 'value', values: ['Widget'] });
+```
+
 ## Export
 
 Export to an `.xlsx` file with `wb.save(path)`, or get workbook bytes with
@@ -279,7 +289,9 @@ try {
 ## API Discovery
 
 The package includes generated SDK introspection metadata. Use `api.describe`
-to inspect root methods, sub-APIs, or a specific method signature.
+to inspect root methods, sub-APIs, or a specific method signature. Agents that
+generate code should also use `api.guidance` for source preflight and
+wrong-dialect explanations when that API is available in their SDK version.
 
 ```typescript
 import { api } from '@mog-sdk/sdk';
@@ -287,7 +299,23 @@ import { api } from '@mog-sdk/sdk';
 console.log(api.describe());
 console.log(api.describe('ws.tables.add'));
 console.log(api.describe('type:TableOptions'));
+
+console.log(api.guidance.explain('context.workbook.worksheets.getActiveWorksheet'));
+console.log(api.guidance.explain('wb.activeSheet'));
 ```
+
+## Agent API Guidance
+
+Mog is not a Microsoft Office JavaScript API compatibility layer. Code shaped
+like that API is diagnosed as a known wrong dialect so agents can rewrite it;
+it is not supported or shimmed. Do not use `Excel.run`, `Office.context`,
+`context.sync()`, Range proxy `.load(...)`, null-object sentinels, or
+assignments such as `range.values = data`.
+
+Use Mog-native API paths instead: `const ws = wb.activeSheet`,
+`await wb.getSheet(name)`, `await ws.setRange(range, data)`,
+`await ws.getValues(range)`, `await ws.formats.setRange(range, format)`, and
+`await ws.tables.add(range, options)`.
 
 ## Public Surface Notes
 

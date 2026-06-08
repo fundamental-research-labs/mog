@@ -354,7 +354,9 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         // the first-paint parse while still consuming allocator slots for the
         // full workbook shape.
         use crate::storage::infra::hydration::allocate_sheet_ids_with_previous_allocation;
-        let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::new();
+        let mut allocator = crate::storage::infra::hydration::DefaultIdAllocator::with_seed(
+            seed_after_allocations(&data.allocations),
+        );
         let allocations: Vec<_> = {
             let mut profile = crate::xlsx_profile::PhaseTimer::new(
                 "complete_deferred_hydration",
@@ -595,6 +597,33 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
     dh_log!("phase 5 done: mirror finalized, settings derived");
 
     Ok(Some(completion))
+}
+
+fn seed_after_allocations(
+    allocations: &[crate::storage::infra::hydration::SheetIdAllocation],
+) -> u64 {
+    let mut max_id = 0_u128;
+
+    for allocation in allocations {
+        max_id = max_id.max(allocation.sheet_id.as_u128());
+        for row_id in &allocation.row_ids {
+            max_id = max_id.max(row_id.as_u128());
+        }
+        for col_id in &allocation.col_ids {
+            max_id = max_id.max(col_id.as_u128());
+        }
+        for cell_id in &allocation.cell_ids {
+            max_id = max_id.max(cell_id.as_u128());
+        }
+        for identity in &allocation.identity_only_cells {
+            max_id = max_id.max(identity.cell_id.as_u128());
+        }
+    }
+
+    u64::try_from(max_id)
+        .unwrap_or(u64::MAX.saturating_sub(1))
+        .saturating_add(1)
+        .max(1)
 }
 
 fn merge_import_reports(

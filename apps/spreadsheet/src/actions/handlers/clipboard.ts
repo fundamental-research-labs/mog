@@ -1190,13 +1190,22 @@ export const CONFIRM_PASTE_OVERWRITE: ActionHandler = (deps) => {
 
   // Re-trigger the paste, skipping the overwrite check this time. The
   // clipboard machine is in `hasCut` (because the original paste path sent
-  // PASTE_ERROR while isCut), so the PASTE event transitions back to
-  // `pasting` and the integration proceeds with mutations.
-  deps.commands.clipboard.paste(
-    pendingData.targetCell,
-    /* skipSizeCheck */ true,
-    /* skipOverwriteCheck */ true,
-  );
+  // PASTE_ERROR while isCut), so the paste event transitions back to
+  // `pasting` and the integration proceeds with the original paste mode.
+  if (pendingData.pasteOptions) {
+    deps.commands.clipboard.pasteSpecial(
+      pendingData.targetCell,
+      pendingData.pasteOptions,
+      /* skipSizeCheck */ true,
+      /* skipOverwriteCheck */ true,
+    );
+  } else {
+    deps.commands.clipboard.paste(
+      pendingData.targetCell,
+      /* skipSizeCheck */ true,
+      /* skipOverwriteCheck */ true,
+    );
+  }
 
   return handled();
 };

@@ -826,6 +826,7 @@ export function SpreadsheetCoordinatorProvider({
             uiStoreApi.getState().openPasteOverwriteConfirmDialog({
               targetCell: pendingData.targetCell,
               sheetId: pendingData.sheetId,
+              pasteOptions: pendingData.pasteOptions,
             });
           },
           onProtectionError: (message) => {

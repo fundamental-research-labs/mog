@@ -1814,6 +1814,7 @@ export class GridEditingSystem implements IGridEditingSystem {
             clipboardDeps.onCutOverwriteConfirm!({
               targetCell: pendingData.targetCell,
               sheetId: pendingData.sheetId as string,
+              pasteOptions: pendingData.pasteOptions,
             })
         : undefined,
       getHiddenRows: (sheetId) => workbook.getSheetById(sheetId).layout.getHiddenRowsBitmap(),

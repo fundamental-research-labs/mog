@@ -51,8 +51,19 @@ export function createClipboardCommands(actor: MinimalActor): ClipboardCommands 
     paste: (targetCell: CellCoord, skipSizeCheck?: boolean, skipOverwriteCheck?: boolean) =>
       actor.send({ type: 'PASTE', targetCell, skipSizeCheck, skipOverwriteCheck }),
 
-    pasteSpecial: (targetCell: CellCoord, options: PasteSpecialOptions) =>
-      actor.send({ type: 'PASTE_SPECIAL', targetCell, options }),
+    pasteSpecial: (
+      targetCell: CellCoord,
+      options: PasteSpecialOptions,
+      skipSizeCheck?: boolean,
+      skipOverwriteCheck?: boolean,
+    ) =>
+      actor.send({
+        type: 'PASTE_SPECIAL',
+        targetCell,
+        options,
+        skipSizeCheck,
+        skipOverwriteCheck,
+      }),
 
     // -------------------------------------------------------------------------
     // Data-less trigger methods (for handlers)

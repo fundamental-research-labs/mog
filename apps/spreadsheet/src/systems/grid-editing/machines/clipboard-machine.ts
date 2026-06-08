@@ -149,7 +149,13 @@ export type ClipboardEvent =
   | { type: 'COPY_VIEW'; viewData: ViewClipboardData }
   | { type: 'CUT_VIEW'; viewData: ViewClipboardData }
   | { type: 'PASTE'; targetCell: CellCoord; skipSizeCheck?: boolean; skipOverwriteCheck?: boolean }
-  | { type: 'PASTE_SPECIAL'; targetCell: CellCoord; options: PasteSpecialOptions }
+  | {
+      type: 'PASTE_SPECIAL';
+      targetCell: CellCoord;
+      options: PasteSpecialOptions;
+      skipSizeCheck?: boolean;
+      skipOverwriteCheck?: boolean;
+    }
   | { type: 'SHOW_PASTE_PREVIEW'; targetCell: CellCoord }
   | { type: 'HIDE_PASTE_PREVIEW' }
   | { type: 'PASTE_COMPLETE' }
@@ -215,16 +221,28 @@ export const ClipboardEvents = {
     viewData,
   }),
 
-  paste: (targetCell: CellCoord, skipSizeCheck?: boolean): ClipboardEvent => ({
+  paste: (
+    targetCell: CellCoord,
+    skipSizeCheck?: boolean,
+    skipOverwriteCheck?: boolean,
+  ): ClipboardEvent => ({
     type: 'PASTE',
     targetCell,
     skipSizeCheck,
+    skipOverwriteCheck,
   }),
 
-  pasteSpecial: (targetCell: CellCoord, options: PasteSpecialOptions): ClipboardEvent => ({
+  pasteSpecial: (
+    targetCell: CellCoord,
+    options: PasteSpecialOptions,
+    skipSizeCheck?: boolean,
+    skipOverwriteCheck?: boolean,
+  ): ClipboardEvent => ({
     type: 'PASTE_SPECIAL',
     targetCell,
     options,
+    skipSizeCheck,
+    skipOverwriteCheck,
   }),
 
   showPastePreview: (targetCell: CellCoord): ClipboardEvent => ({
@@ -653,11 +671,17 @@ export const clipboardMachine = setup({
       }
       return {
         pastePreviewTarget: event.targetCell,
-        // Capture skipSizeCheck flag from PASTE event
-        skipSizeCheck: event.type === 'PASTE' ? (event.skipSizeCheck ?? false) : false,
-        // Cut-paste overwrite: capture skipOverwriteCheck flag from PASTE event
+        // Capture retry flags from paste events.
+        skipSizeCheck:
+          event.type === 'PASTE' || event.type === 'PASTE_SPECIAL'
+            ? (event.skipSizeCheck ?? false)
+            : false,
+        // Cut-paste overwrite: capture skipOverwriteCheck flag from paste events
         // (set when the user has confirmed the overwrite via the dialog).
-        skipOverwriteCheck: event.type === 'PASTE' ? (event.skipOverwriteCheck ?? false) : false,
+        skipOverwriteCheck:
+          event.type === 'PASTE' || event.type === 'PASTE_SPECIAL'
+            ? (event.skipOverwriteCheck ?? false)
+            : false,
       };
     }),
 

@@ -1006,8 +1006,16 @@ export interface ClipboardCommands {
    * Used by integration layer which determines the target.
    * @param targetCell - Target cell for paste
    * @param options - Paste special options
+   * @param skipSizeCheck - Whether to skip size mismatch warning
+   * @param skipOverwriteCheck - Whether to skip cut-paste overwrite confirmation
+   *   (set after the user has explicitly confirmed the overwrite)
    */
-  pasteSpecial(targetCell: CellCoord, options: PasteSpecialOptions): void;
+  pasteSpecial(
+    targetCell: CellCoord,
+    options: PasteSpecialOptions,
+    skipSizeCheck?: boolean,
+    skipOverwriteCheck?: boolean,
+  ): void;
 
   // -------------------------------------------------------------------------
   // Data-less trigger methods (for handlers)

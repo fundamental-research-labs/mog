@@ -151,6 +151,7 @@ export interface ClipboardPasteIntegrationConfig {
   onCutOverwriteConfirm?: (pendingData: {
     targetCell: { row: number; col: number };
     sheetId: SheetId;
+    pasteOptions: ClipboardState['context']['pasteOptions'];
   }) => void;
   /**
    * Callback to check if paste is allowed on target range (Protection).
@@ -465,6 +466,7 @@ export function setupClipboardPasteIntegration(
         onCutOverwriteConfirm({
           targetCell: pastePreviewTarget,
           sheetId,
+          pasteOptions,
         });
         return;
       }
@@ -526,6 +528,7 @@ export function setupClipboardPasteIntegration(
         sourceRanges.length > 0 &&
         data.sourceSheetId &&
         store.relocateCells &&
+        pasteOptions == null &&
         !protectedCellsSet
       ) {
         // Cut-paste: Use cell relocation to preserve CellIds

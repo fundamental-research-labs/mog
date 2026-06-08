@@ -113,6 +113,7 @@ describe('Clipboard Paste Integration', () => {
     expect(onCutOverwriteConfirm).toHaveBeenCalledWith({
       targetCell: { row: 0, col: 2 },
       sheetId,
+      pasteOptions: null,
     });
     expect(relocateCells).not.toHaveBeenCalled();
     expect(clipboardActor.getSnapshot().matches('hasCut')).toBe(true);
@@ -127,6 +128,92 @@ describe('Clipboard Paste Integration', () => {
 
     expect(relocateCells).toHaveBeenCalledTimes(1);
     expect(relocateCells).toHaveBeenCalledWith(sheetId, sourceRange, sheetId, 0, 2);
+    expect(clipboardActor.getSnapshot().matches('empty')).toBe(true);
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
+  it('preserves cut paste-special values through overwrite confirmation retry', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 0, startCol: 0, endRow: 1, endCol: 0 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 10 },
+        '1,0': { raw: 20, formula: '=A1*2' },
+      },
+      textSignature: '10\n20',
+    };
+    const pasteOptions = { values: true };
+
+    const copyRange = jest.fn(async () => {});
+    const relocateCells = jest.fn(async () => ({ success: true, movedCount: 2 }));
+    const onCutPasteComplete = jest.fn(async () => {});
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn((_sheet, row, col) =>
+        row === 0 && col === 2 ? { raw: 'existing' } : undefined,
+      ),
+      copyRange,
+      relocateCells,
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const onCutOverwriteConfirm = jest.fn();
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+      onCutOverwriteConfirm,
+      onCutPasteComplete,
+    });
+
+    clipboardActor.send({ type: 'CUT', ranges: [sourceRange], data: clipboardData });
+    clipboardActor.send({
+      type: 'PASTE_SPECIAL',
+      targetCell: { row: 0, col: 2 },
+      options: pasteOptions,
+    });
+    await flushAsync();
+
+    expect(onCutOverwriteConfirm).toHaveBeenCalledWith({
+      targetCell: { row: 0, col: 2 },
+      sheetId,
+      pasteOptions,
+    });
+    expect(clipboardActor.getSnapshot().matches('hasCut')).toBe(true);
+    expect(clipboardActor.getSnapshot().context.pasteOptions).toBeNull();
+    expect(copyRange).not.toHaveBeenCalled();
+    expect(relocateCells).not.toHaveBeenCalled();
+
+    clipboardActor.send({
+      type: 'PASTE_SPECIAL',
+      targetCell: { row: 0, col: 2 },
+      options: pasteOptions,
+      skipSizeCheck: true,
+      skipOverwriteCheck: true,
+    });
+    await waitForPendingClipboardPaste();
+
+    expect(relocateCells).not.toHaveBeenCalled();
+    expect(copyRange).toHaveBeenCalledTimes(1);
+    expect(copyRange).toHaveBeenCalledWith(
+      sheetId,
+      sourceRange,
+      sheetId,
+      0,
+      2,
+      'values',
+      false,
+      false,
+    );
+    expect(store.setCellValues).not.toHaveBeenCalled();
+    expect(onCutPasteComplete).toHaveBeenCalledWith(sheetId, [sourceRange]);
     expect(clipboardActor.getSnapshot().matches('empty')).toBe(true);
 
     cleanup();

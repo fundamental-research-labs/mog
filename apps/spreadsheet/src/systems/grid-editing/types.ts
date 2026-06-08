@@ -753,6 +753,7 @@ export interface ClipboardDependencies {
   onCutOverwriteConfirm?: (pendingData: {
     targetCell: { row: number; col: number };
     sheetId: string;
+    pasteOptions: import('@mog-sdk/contracts/actors').PasteSpecialOptions | null;
   }) => void;
 }
 

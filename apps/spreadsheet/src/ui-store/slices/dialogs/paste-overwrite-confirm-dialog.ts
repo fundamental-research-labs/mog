@@ -13,11 +13,13 @@
  * marching-ants cleared (the cut is cancelled).
  *
  * Plain copy-paste does NOT trigger this dialog (Excel parity — copy-paste
- * always overwrites silently). Paste-special variants are also out of scope.
+ * always overwrites silently). Cut paste-special keeps its selected paste
+ * mode when the user confirms.
  *
  */
 
 import type { StateCreator } from 'zustand';
+import type { PasteSpecialOptions } from '../../../systems/shared/types';
 
 /**
  * Pending cut-paste data stored while dialog is open.
@@ -29,6 +31,8 @@ export interface PendingCutPasteData {
   targetCell: { row: number; col: number };
   /** Sheet ID where paste will occur */
   sheetId: string;
+  /** Original paste-special options, or null for plain paste */
+  pasteOptions: PasteSpecialOptions | null;
 }
 
 /**

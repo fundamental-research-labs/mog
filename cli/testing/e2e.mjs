@@ -112,7 +112,9 @@ try {
   }
 
   const listedAfterCreate = run(['list']);
-  if (!listedAfterCreate.some((entry) => entry.id === exactId && entry.path === exactWorkbookPath)) {
+  if (
+    !listedAfterCreate.some((entry) => entry.id === exactId && entry.path === exactWorkbookPath)
+  ) {
     throw new Error(`list did not include created workbook: ${JSON.stringify(listedAfterCreate)}`);
   }
 
@@ -151,7 +153,9 @@ try {
     'return await ws.getValue("D1");',
   ]);
   if (retainedMutation.result !== 'before throw') {
-    throw new Error(`non-transactional mutation was not retained: ${JSON.stringify(retainedMutation)}`);
+    throw new Error(
+      `non-transactional mutation was not retained: ${JSON.stringify(retainedMutation)}`,
+    );
   }
 
   const committedCopy = run(['commit', '--id', exactId, '--path', committedCopyPath]);
@@ -169,9 +173,7 @@ try {
   const copiedRetainedValue = await reopenedCopy.activeSheet.getValue('D1');
   await reopenedCopy.dispose();
   if (copiedFileValue !== 'file edit' || copiedRetainedValue !== 'before throw') {
-    throw new Error(
-      `committed copy values were C1=${copiedFileValue}, D1=${copiedRetainedValue}`,
-    );
+    throw new Error(`committed copy values were C1=${copiedFileValue}, D1=${copiedRetainedValue}`);
   }
 
   const created = run(['create', '--name', createdWorkbookName, '--path', workbooks]);

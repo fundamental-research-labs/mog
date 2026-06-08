@@ -1982,9 +1982,7 @@ function assertApiSpec(spec: ApiSpec): void {
     throw new Error(`api spec schemaVersion must be ${SCHEMA_VERSION}`);
   }
   if (spec.package.name !== '@mog-sdk/sdk' || spec.package.version !== SDK_PACKAGE_JSON.version) {
-    throw new Error(
-      `api spec package metadata must be @mog-sdk/sdk@${SDK_PACKAGE_JSON.version}`,
-    );
+    throw new Error(`api spec package metadata must be @mog-sdk/sdk@${SDK_PACKAGE_JSON.version}`);
   }
   if (!spec.subApis.workbook || !spec.subApis.worksheet) {
     throw new Error('api spec must contain subApis.workbook and subApis.worksheet');

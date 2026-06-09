@@ -195,6 +195,23 @@ fn assert_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col
         ),
         "cell {row},{col} should evaluate to #REF!"
     );
+
+    let queried = engine.query_range(sheet_id, row, col, row, col);
+    let cell = queried
+        .cells
+        .iter()
+        .find(|cell| cell.row == row && cell.col == col)
+        .unwrap_or_else(|| panic!("query_range should return #REF! cell {row},{col}"));
+    assert!(
+        matches!(&cell.value, CellValue::Error(CellError::Ref, _)),
+        "query_range cell {row},{col} should carry #REF!, got {:?}",
+        cell.value
+    );
+    assert_eq!(
+        cell.formatted.as_deref(),
+        Some("#REF!"),
+        "query_range cell {row},{col} should display #REF!"
+    );
 }
 
 fn assert_direct_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {

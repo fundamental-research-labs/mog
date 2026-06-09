@@ -986,7 +986,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
  */}
           <InlineSliderEditor />
           <InlineRichTextEditor />
-          <InlineCellEditor workbookSettings={workbookSettings} />
+          <InlineCellEditor workbookSettings={workbookSettings} rendererSkin={rendererSkin} />
           <ValidationDropdownOverlay />
           <DatePickerOverlay />
 

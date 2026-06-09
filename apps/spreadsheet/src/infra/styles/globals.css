@@ -713,6 +713,14 @@
     --tab-inactive-text: var(--color-ss-text-secondary);
     --quick-access-hover-bg: rgba(255, 255, 255, 0.08);
     --quick-access-hover-border: rgba(255, 255, 255, 0.14);
+    --formula-paren-0: var(--color-ss-text);
+    --formula-paren-1: #93c5fd;
+    --formula-paren-2: #fdba74;
+    --formula-paren-3: #86efac;
+    --formula-paren-4: #d8b4fe;
+    --formula-paren-5: #fcd34d;
+    --formula-paren-match-bg: rgba(253, 224, 71, 0.24);
+    --formula-paren-error-bg: rgba(248, 113, 113, 0.22);
   }
 
   [data-mog-color-scheme='dark'] .bg-white,

@@ -260,12 +260,12 @@ export function FunctionSuggestions({
                 <HighlightedText text={item.fn.name} matchedIndices={item.matchedIndices} />
               </div>
               <span className="sr-only"> </span>
-              <div className="text-caption text-text-muted truncate mt-0.5">
+              <div className="text-caption text-ss-text-tertiary truncate mt-0.5">
                 {item.fn.description}
               </div>
               <span className="sr-only"> </span>
             </div>
-            <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
+            <div className="text-caption text-ss-text-tertiary bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
               {item.fn.category}
             </div>
           </li>
@@ -288,10 +288,12 @@ export function FunctionSuggestions({
               <div className="flex-1 min-w-0">
                 <div className="font-ss-mono font-medium text-body">{ns.name}</div>
                 <span className="sr-only"> </span>
-                <div className="text-caption text-text-muted truncate mt-0.5">{ns.refersTo}</div>
+                <div className="text-caption text-ss-text-tertiary truncate mt-0.5">
+                  {ns.refersTo}
+                </div>
                 <span className="sr-only"> </span>
               </div>
-              <div className="text-caption text-text-muted bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
+              <div className="text-caption text-ss-text-tertiary bg-ss-surface-secondary px-1.5 py-0.5 rounded shrink-0">
                 {nameSuggestionTypeLabel(ns)}
               </div>
             </li>
@@ -300,7 +302,7 @@ export function FunctionSuggestions({
       </ul>
 
       {/* Keyboard hints footer */}
-      <div className="px-3 py-1.5 text-caption text-text-muted border-t border-ss-border bg-ss-surface-secondary flex gap-3">
+      <div className="px-3 py-1.5 text-caption text-ss-text-tertiary border-t border-ss-border bg-ss-surface-secondary flex gap-3">
         <span>
           <kbd className="px-1 py-0.5 bg-ss-surface rounded border border-ss-border text-ribbon-compact">
             ↑↓

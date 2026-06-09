@@ -184,7 +184,7 @@ export function FormulaArgumentHint({
   const expandChevron = hasDetails ? (
     <span
       aria-hidden
-      className={`ml-2 inline-block text-caption text-text-muted transition-transform ${
+      className={`ml-2 inline-block text-caption text-ss-text-tertiary transition-transform ${
         expanded ? 'rotate-180' : ''
       }`}
     >
@@ -203,7 +203,7 @@ export function FormulaArgumentHint({
         aria-live="polite"
       >
         {/* Function name and basic syntax (always shown) */}
-        <div className="flex items-baseline font-ss-mono text-text-ss-primary">
+        <div className="flex items-baseline font-ss-mono text-ss-text">
           <span className="whitespace-nowrap">
             <span className="font-semibold text-ss-primary">{functionInfo.name}</span>
             <span className="text-ss-text-secondary">
@@ -232,7 +232,7 @@ export function FormulaArgumentHint({
       aria-live="polite"
     >
       {/* Function signature with current argument highlighted (always shown) */}
-      <div className="flex items-baseline font-ss-mono text-text-ss-primary leading-tight">
+      <div className="flex items-baseline font-ss-mono text-ss-text leading-tight">
         <span className="whitespace-nowrap">
           <span className="font-semibold text-ss-primary">{functionInfo.name}</span>
           <span className="text-ss-text-secondary">(</span>
@@ -250,7 +250,7 @@ export function FormulaArgumentHint({
                 {arg.repeating ? ', ...' : ''}
                 {arg.optional ? ']' : ''}
               </span>
-              {i < args.length - 1 ? <span className="text-text-muted">, </span> : ''}
+              {i < args.length - 1 ? <span className="text-ss-text-tertiary">, </span> : ''}
             </span>
           ))}
           <span className="text-ss-text-secondary">)</span>
@@ -263,17 +263,19 @@ export function FormulaArgumentHint({
         <>
           {/* Current argument description */}
           {currentArg && (
-            <div className="mt-2 text-body-sm text-text border-t border-ss-border-light pt-2">
-              <span className="font-medium text-text-ss-primary">{currentArg.name}</span>
-              <span className="text-text-muted"> ({currentArg.type})</span>
-              {currentArg.optional && <span className="text-text-muted italic"> - optional</span>}
+            <div className="mt-2 text-body-sm text-ss-text border-t border-ss-border-light pt-2">
+              <span className="font-medium text-ss-text">{currentArg.name}</span>
+              <span className="text-ss-text-tertiary"> ({currentArg.type})</span>
+              {currentArg.optional && (
+                <span className="text-ss-text-tertiary italic"> - optional</span>
+              )}
               <div className="mt-1 text-ss-text-secondary">{currentArg.description}</div>
             </div>
           )}
 
           {/* Function description */}
           {functionInfo.description && (
-            <div className="mt-2 text-caption text-text-muted border-t border-ss-border-light pt-2">
+            <div className="mt-2 text-caption text-ss-text-tertiary border-t border-ss-border-light pt-2">
               {functionInfo.description}
             </div>
           )}

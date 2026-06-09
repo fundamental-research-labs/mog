@@ -1,0 +1,47 @@
+{
+  "name": "@mog/spreadsheet-dev",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "private": true,
+  "description": "Development app for testing the spreadsheet engine",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b . && vite build",
+    "preview": "vite preview",
+    "check-types": "tsc -b .",
+    "typecheck": "tsc -b ."
+  },
+  "dependencies": {
+    "@mog-sdk/contracts": "workspace:*",
+    "@mog/app-spreadsheet": "workspace:*",
+    "@mog/devtools": "workspace:*",
+    "@mog-sdk/kernel": "workspace:*",
+    "@mog/shell": "workspace:*",
+    "@mog/transport": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-notification": "^2.0.0",
+    "@tauri-apps/plugin-process": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@mog/vite-wasm-plugin": "workspace:*",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vite-plugin-svgr": "^4.5.0"
+  }
+}

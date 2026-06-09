@@ -67,6 +67,9 @@
       "path": "./contracts/runtime-services"
     },
     {
+      "path": "./dev/app"
+    },
+    {
       "path": "./file-io/pdf/graphics"
     },
     {
@@ -128,6 +131,9 @@
     },
     {
       "path": "./table-engine"
+    },
+    {
+      "path": "./tools/vite-wasm-plugin"
     },
     {
       "path": "./types/api"

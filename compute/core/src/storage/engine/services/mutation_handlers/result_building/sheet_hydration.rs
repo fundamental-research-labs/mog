@@ -5,8 +5,8 @@ use crate::snapshot::{
     Axis, CellPosition, CfChange, ChangeKind, CommentChange, FilterChange, FloatingObjectChange,
     FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult, PageBreakChange,
     PivotTableChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange,
-    ScrollPositionChange, SheetChange, SheetChangeField, SheetSettingsChange, SparklineChange,
-    SplitConfigChange, TableChange,
+    ScrollPositionChange, SheetChange, SheetChangeField, SheetSettingsChange, SheetViewCell,
+    SheetViewRange, SparklineChange, SplitConfigChange, TableChange, ViewSelectionChange,
 };
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{
@@ -14,6 +14,7 @@ use crate::storage::sheet::{
     visibility,
 };
 use compute_document::hex::{hex_to_id, id_to_hex};
+use formula_types::CellRef;
 
 // ---------------------------------------------------------------------------
 // build_sheet_hydration_changes
@@ -463,6 +464,18 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         });
     }
 
+    let roundtrip_meta = settings::get_roundtrip_meta(doc, sheets, sid);
+    if let Some((active_cell, ranges)) = parse_saved_view_selection(
+        roundtrip_meta.active_cell.as_deref(),
+        roundtrip_meta.sqref.as_deref(),
+    ) {
+        result.view_selection_changes.push(ViewSelectionChange {
+            sheet_id: sheet_id_str.clone(),
+            active_cell,
+            ranges,
+        });
+    }
+
     // ----- Scroll position (always emit — defaults populate the mirror) -----
     let scroll = view::get_scroll_position(doc, sheets, sid);
     result.scroll_position_changes.push(ScrollPositionChange {
@@ -470,6 +483,92 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
         top_row: scroll.top_row,
         left_col: scroll.left_col,
     });
+}
+
+fn parse_saved_view_selection(
+    active_cell: Option<&str>,
+    sqref: Option<&str>,
+) -> Option<(SheetViewCell, Vec<SheetViewRange>)> {
+    let mut ranges = sqref
+        .and_then(compute_parser::parse_sqref_list)
+        .map(|refs| {
+            refs.into_iter()
+                .filter_map(sheet_view_range_from_ref)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let active = active_cell
+        .and_then(compute_parser::parse_a1_cell)
+        .and_then(|cell| sheet_view_cell_from_ref(cell.reference))
+        .or_else(|| {
+            ranges.first().map(|r| SheetViewCell {
+                row: r.start_row,
+                col: r.start_col,
+            })
+        })?;
+
+    if ranges.is_empty() {
+        ranges.push(SheetViewRange {
+            start_row: active.row,
+            start_col: active.col,
+            end_row: active.row,
+            end_col: active.col,
+        });
+    }
+
+    Some((active, ranges))
+}
+
+fn sheet_view_range_from_ref(range: compute_parser::RangeRef) -> Option<SheetViewRange> {
+    let start = sheet_view_cell_from_ref(range.start)?;
+    let end = sheet_view_cell_from_ref(range.end)?;
+    Some(SheetViewRange {
+        start_row: start.row.min(end.row),
+        start_col: start.col.min(end.col),
+        end_row: start.row.max(end.row),
+        end_col: start.col.max(end.col),
+    })
+}
+
+fn sheet_view_cell_from_ref(cell: CellRef) -> Option<SheetViewCell> {
+    match cell {
+        CellRef::Positional { row, col, .. } => Some(SheetViewCell { row, col }),
+        CellRef::Resolved(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_saved_view_selection;
+
+    #[test]
+    fn parse_saved_view_selection_promotes_active_cell_and_sqref() {
+        let (active, ranges) = parse_saved_view_selection(Some("AJ454"), Some("AJ454"))
+            .expect("saved view selection should parse");
+
+        assert_eq!(active.row, 453);
+        assert_eq!(active.col, 35);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].start_row, 453);
+        assert_eq!(ranges[0].start_col, 35);
+        assert_eq!(ranges[0].end_row, 453);
+        assert_eq!(ranges[0].end_col, 35);
+    }
+
+    #[test]
+    fn parse_saved_view_selection_falls_back_to_active_cell_range() {
+        let (active, ranges) = parse_saved_view_selection(Some("C7"), None)
+            .expect("active cell should seed a single-cell range");
+
+        assert_eq!(active.row, 6);
+        assert_eq!(active.col, 2);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0].start_row, 6);
+        assert_eq!(ranges[0].start_col, 2);
+        assert_eq!(ranges[0].end_row, 6);
+        assert_eq!(ranges[0].end_col, 2);
+    }
 }
 
 // ---------------------------------------------------------------------------

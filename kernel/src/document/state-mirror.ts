@@ -43,6 +43,7 @@ import type {
   MirrorScrollPosition,
   MirrorSheetMeta,
   MirrorSplitConfig,
+  MirrorViewSelection,
 } from '@mog-sdk/contracts/api';
 import {
   sheetId as toSheetId,
@@ -64,6 +65,7 @@ import type {
   SheetChange,
   SheetSettingsChange,
   SplitConfigChange,
+  ViewSelectionChange,
   WorkbookSettingsChange,
 } from '../bridges/compute/compute-types.gen';
 import {
@@ -81,6 +83,7 @@ export type {
   MirrorFrozenPanes as FrozenPanes,
   MirrorScrollPosition as ScrollPosition,
   MirrorSheetMeta as SheetMetaSnapshot,
+  MirrorViewSelection as ViewSelectionSnapshot,
 };
 
 // =============================================================================
@@ -122,6 +125,7 @@ export class StateMirror implements MirrorReadView {
   private readonly printSettingsBySheet = new Map<string, PrintSettings>();
   private readonly splitConfigBySheet = new Map<string, MirrorSplitConfig | null>();
   private readonly scrollPositionBySheet = new Map<string, MirrorScrollPosition>();
+  private readonly viewSelectionBySheet = new Map<string, MirrorViewSelection>();
   private readonly sheetMetaBySheet = new Map<string, MirrorSheetMeta>();
 
   // Sheet ordering — kept in insertion order; `field: 'order'` reorders.
@@ -183,6 +187,11 @@ export class StateMirror implements MirrorReadView {
 
   getScrollPosition(sheetId: SheetId): MirrorScrollPosition {
     return this.scrollPositionBySheet.get(sheetId as unknown as string) ?? DEFAULT_SCROLL_POSITION;
+  }
+
+  getViewSelection(sheetId: SheetId): MirrorViewSelection | null {
+    const selection = this.viewSelectionBySheet.get(sheetId as unknown as string);
+    return selection ? clonePlainData(selection) : null;
   }
 
   getSheetMeta(sheetId: SheetId): MirrorSheetMeta {
@@ -280,6 +289,9 @@ export class StateMirror implements MirrorReadView {
     }
     if (result.scrollPositionChanges?.length) {
       for (const c of result.scrollPositionChanges) this.applyScrollPositionChange(c);
+    }
+    if (result.viewSelectionChanges?.length) {
+      for (const c of result.viewSelectionChanges) this.applyViewSelectionChange(c);
     }
     if (result.workbookSettingsChanges?.length) {
       for (const c of result.workbookSettingsChanges) this.applyWorkbookSettingsChange(c);
@@ -436,6 +448,23 @@ export class StateMirror implements MirrorReadView {
     });
   }
 
+  applyViewSelectionChange(change: ViewSelectionChange): void {
+    this._lastVariant = 'viewSelectionChanges';
+    const ranges = (change.ranges ?? []).map((range) => ({ ...range }));
+    if (ranges.length === 0) {
+      ranges.push({
+        startRow: change.activeCell.row,
+        startCol: change.activeCell.col,
+        endRow: change.activeCell.row,
+        endCol: change.activeCell.col,
+      });
+    }
+    this.viewSelectionBySheet.set(change.sheetId, {
+      activeCell: { row: change.activeCell.row, col: change.activeCell.col },
+      ranges,
+    });
+  }
+
   applyWorkbookSettingsChange(change: WorkbookSettingsChange): void {
     this._lastVariant = 'workbookSettingsChanges';
     // WorkbookSettingsChange carries a full Rust-owned settings snapshot.
@@ -465,6 +494,7 @@ export class StateMirror implements MirrorReadView {
     this.printSettingsBySheet.clear();
     this.splitConfigBySheet.clear();
     this.scrollPositionBySheet.clear();
+    this.viewSelectionBySheet.clear();
     this.sheetMetaBySheet.clear();
     this.sheetOrder = [];
     this.workbookSettings = cloneWorkbookDefaults();
@@ -493,6 +523,7 @@ export class StateMirror implements MirrorReadView {
     this.printSettingsBySheet.delete(sheetId);
     this.splitConfigBySheet.delete(sheetId);
     this.scrollPositionBySheet.delete(sheetId);
+    this.viewSelectionBySheet.delete(sheetId);
     this.sheetMetaBySheet.delete(sheetId);
     const idx = this.sheetOrder.indexOf(toSheetId(sheetId));
     if (idx >= 0) this.sheetOrder.splice(idx, 1);

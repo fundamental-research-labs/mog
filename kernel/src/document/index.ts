@@ -85,6 +85,7 @@ export {
   type FrozenPanes,
   type ScrollPosition,
   type SheetMetaSnapshot,
+  type ViewSelectionSnapshot,
 } from './state-mirror';
 
 // Write gate — mutation admission control during lifecycle transitions.

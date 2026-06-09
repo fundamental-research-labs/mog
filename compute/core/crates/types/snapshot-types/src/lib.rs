@@ -43,9 +43,10 @@ pub use mutation::{
     PrintSettingsChange, PrintTitlesChange, PropertyChange, RangeChange, RangeChangeKind,
     RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, RuntimeOperationDiagnostic,
     ScrollPositionChange, SheetChange, SheetChangeField, SheetLifecycleRuntimeHint,
-    SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType, SortingChange,
-    SparklineChange, SplitConfigChange, StructureChangeResult, StructureChangeType, TableChange,
-    UndoState, VisibilityChange, WorkbookSettingsChange,
+    SheetSettingsChange, SheetViewCell, SheetViewRange, SlicerChange, SlicerChangeKind,
+    SlicerSourceType, SortingChange, SparklineChange, SplitConfigChange, StructureChangeResult,
+    StructureChangeType, TableChange, UndoState, ViewSelectionChange, VisibilityChange,
+    WorkbookSettingsChange,
 };
 pub use recalc::{
     CellChange, CellEdit, CellErrorInfo, ParseResult, ProjectionCellData, ProjectionChange,

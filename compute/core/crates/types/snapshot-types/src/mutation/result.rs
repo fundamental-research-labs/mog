@@ -14,7 +14,8 @@ use super::policy_parse::{PolicyPreservedParseOutcome, PolicyPreservedParseSumma
 use super::primitives::SheetLifecycleRuntimeHint;
 use super::sheet_workbook::{
     PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange, ScrollPositionChange,
-    SheetChange, SheetSettingsChange, SplitConfigChange, WorkbookSettingsChange,
+    SheetChange, SheetSettingsChange, SplitConfigChange, ViewSelectionChange,
+    WorkbookSettingsChange,
 };
 use crate::recalc::RecalcResult;
 use value_types::CellValue;
@@ -77,6 +78,9 @@ pub struct MutationResult {
     /// Scroll-position changes (per sheet).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scroll_position_changes: Vec<ScrollPositionChange>,
+    /// Saved sheet view selection changes (per sheet).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub view_selection_changes: Vec<ViewSelectionChange>,
     /// Workbook-level settings changes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workbook_settings_changes: Vec<WorkbookSettingsChange>,
@@ -158,6 +162,7 @@ impl MutationResult {
             print_settings_changes: Vec::new(),
             split_config_changes: Vec::new(),
             scroll_position_changes: Vec::new(),
+            view_selection_changes: Vec::new(),
             workbook_settings_changes: Vec::new(),
             cf_changes: Vec::new(),
             named_range_changes: Vec::new(),
@@ -251,6 +256,7 @@ mod tests {
         assert!(mr.print_settings_changes.is_empty());
         assert!(mr.split_config_changes.is_empty());
         assert!(mr.scroll_position_changes.is_empty());
+        assert!(mr.view_selection_changes.is_empty());
         assert!(mr.workbook_settings_changes.is_empty());
         assert!(mr.cf_changes.is_empty());
         assert!(mr.named_range_changes.is_empty());
@@ -380,6 +386,7 @@ mod tests {
             print_settings_changes: vec![],
             split_config_changes: vec![],
             scroll_position_changes: vec![],
+            view_selection_changes: vec![],
             workbook_settings_changes: vec![],
             cf_changes: vec![],
             named_range_changes: vec![NamedRangeChange {
@@ -469,6 +476,7 @@ mod tests {
         assert!(mr.print_settings_changes.is_empty());
         assert!(mr.split_config_changes.is_empty());
         assert!(mr.scroll_position_changes.is_empty());
+        assert!(mr.view_selection_changes.is_empty());
         assert!(mr.workbook_settings_changes.is_empty());
         assert!(mr.cf_changes.is_empty());
         assert!(mr.named_range_changes.is_empty());

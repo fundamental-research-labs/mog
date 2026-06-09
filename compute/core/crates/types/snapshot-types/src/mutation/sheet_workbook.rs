@@ -148,6 +148,43 @@ pub struct ScrollPositionChange {
     pub left_col: u32,
 }
 
+/// A cell coordinate used by saved sheet view selection state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetViewCell {
+    /// Zero-based row index.
+    pub row: u32,
+    /// Zero-based column index.
+    pub col: u32,
+}
+
+/// A rectangular range used by saved sheet view selection state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetViewRange {
+    /// Zero-based start row index.
+    pub start_row: u32,
+    /// Zero-based start column index.
+    pub start_col: u32,
+    /// Zero-based end row index.
+    pub end_row: u32,
+    /// Zero-based end column index.
+    pub end_col: u32,
+}
+
+/// Saved sheet view selection for initial runtime restoration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewSelectionChange {
+    /// Sheet ID as UUID string.
+    pub sheet_id: String,
+    /// Active cell from the saved sheet view.
+    pub active_cell: SheetViewCell,
+    /// Selected ranges from the saved sheet view.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranges: Vec<SheetViewRange>,
+}
+
 /// A workbook-level settings change (workbook-scoped, not per-sheet).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

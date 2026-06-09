@@ -2974,6 +2974,7 @@ export interface MutationResult {
   printSettingsChanges?: PrintSettingsChange[];
   splitConfigChanges?: SplitConfigChange[];
   scrollPositionChanges?: ScrollPositionChange[];
+  viewSelectionChanges?: ViewSelectionChange[];
   workbookSettingsChanges?: WorkbookSettingsChange[];
   cfChanges?: CfChange[];
   namedRangeChanges?: NamedRangeChange[];
@@ -4367,6 +4368,24 @@ export interface ScrollPositionChange {
   sheetId: string;
   topRow: number;
   leftCol: number;
+}
+
+export interface SheetViewCell {
+  row: number;
+  col: number;
+}
+
+export interface SheetViewRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+}
+
+export interface ViewSelectionChange {
+  sheetId: string;
+  activeCell: SheetViewCell;
+  ranges?: SheetViewRange[];
 }
 
 export interface SelectionAggregates {

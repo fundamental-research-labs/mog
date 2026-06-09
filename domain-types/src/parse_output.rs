@@ -2066,8 +2066,22 @@ impl SheetView {
             .top_left_cell
             .as_deref()
             .and_then(parse_a1_cell_ref)
+            .or_else(|| {
+                sv.pane
+                    .as_ref()
+                    .and_then(|pane| pane.top_left_cell.as_deref())
+                    .and_then(parse_a1_cell_ref)
+            })
             .unwrap_or((0, 0));
-        let primary_selection = sv.selections.last();
+        let active_pane = sv.pane.as_ref().map(|pane| pane.effective_active_pane());
+        let primary_selection = active_pane
+            .and_then(|pane| {
+                sv.selections
+                    .iter()
+                    .rev()
+                    .find(|selection| selection.effective_pane() == pane)
+            })
+            .or_else(|| sv.selections.last());
         Self {
             show_gridlines: sv.show_grid_lines,
             show_row_col_headers: sv.show_row_col_headers,

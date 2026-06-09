@@ -253,7 +253,12 @@ impl YrsStorage {
         hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
 
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
-        hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_views(
+            &self.workbook,
+            &output.workbook_views,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_custom_workbook_views_xml(
             &self.workbook,
             &output.custom_workbook_views_xml,
@@ -498,7 +503,12 @@ impl YrsStorage {
         hydrate_workbook_pivot_cache_sources(&self.workbook, &output.pivot_cache_sources, &mut txn);
         hydrate_workbook_pivot_cache_records(&self.workbook, &output.pivot_cache_records, &mut txn);
         hydrate_workbook_calculation(&self.workbook, &output.calculation, &mut txn);
-        hydrate_workbook_views(&self.workbook, &output.workbook_views, &mut txn);
+        hydrate_workbook_views(
+            &self.workbook,
+            &output.workbook_views,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_custom_workbook_views_xml(
             &self.workbook,
             &output.custom_workbook_views_xml,

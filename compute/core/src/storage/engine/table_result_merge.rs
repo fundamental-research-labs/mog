@@ -54,6 +54,9 @@ pub(in crate::storage::engine) fn merge_mutation_result(
         .scroll_position_changes
         .append(&mut source.scroll_position_changes);
     target
+        .view_selection_changes
+        .append(&mut source.view_selection_changes);
+    target
         .workbook_settings_changes
         .append(&mut source.workbook_settings_changes);
     target.cf_changes.append(&mut source.cf_changes);

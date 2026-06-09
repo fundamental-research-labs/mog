@@ -31,5 +31,6 @@ pub use primitives::{
 pub use result::MutationResult;
 pub use sheet_workbook::{
     PageBreakChange, PrintAreaChange, PrintSettingsChange, PrintTitlesChange, ScrollPositionChange,
-    SheetChange, SheetChangeField, SheetSettingsChange, SplitConfigChange, WorkbookSettingsChange,
+    SheetChange, SheetChangeField, SheetSettingsChange, SheetViewCell, SheetViewRange,
+    SplitConfigChange, ViewSelectionChange, WorkbookSettingsChange,
 };

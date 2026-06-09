@@ -13,6 +13,7 @@
  */
 
 import type {
+  CellRange,
   PrintSettings,
   SheetId,
   SheetSettings,
@@ -35,6 +36,12 @@ export interface MirrorFrozenPanes {
 export interface MirrorScrollPosition {
   topRow: number;
   leftCol: number;
+}
+
+/** Saved sheet view selection for initial runtime restoration. */
+export interface MirrorViewSelection {
+  activeCell: { row: number; col: number };
+  ranges: CellRange[];
 }
 
 /**
@@ -106,6 +113,7 @@ export interface MirrorReadView {
   getPrintSettings(sheetId: SheetId): PrintSettings;
   getSplitConfig(sheetId: SheetId): MirrorSplitConfig | null;
   getScrollPosition(sheetId: SheetId): MirrorScrollPosition;
+  getViewSelection(sheetId: SheetId): MirrorViewSelection | null;
   /** Sheet metadata (name, order, hidden, tabColor, frozen). */
   getSheetMeta(sheetId: SheetId): MirrorSheetMeta;
 

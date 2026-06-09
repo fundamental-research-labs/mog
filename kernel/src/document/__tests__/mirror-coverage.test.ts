@@ -448,6 +448,8 @@ const mutationResultDispatcherCoverage: Record<keyof MutationResult, string> = {
     'handleSplitConfigChanges — emits split:position-changed/removed; mirror.applySplitConfigChange',
   scrollPositionChanges:
     'handleScrollPositionChanges — emits scroll:changed; mirror.applyScrollPositionChange',
+  viewSelectionChanges:
+    'mirror.applyViewSelectionChange — restores saved sheet view selection without event emission',
   workbookSettingsChanges:
     'handleWorkbookSettingsChanges — emits workbook:settings-changed; mirror.applyWorkbookSettingsChange',
   cfChanges: 'handleCfChanges — emits cf:rules-changed events',

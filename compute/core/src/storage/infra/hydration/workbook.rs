@@ -114,7 +114,11 @@ fn is_external_workbook_ref(refers_to: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::should_preserve_defined_name_ref_opaque;
+    use super::{hydrate_workbook_views, should_preserve_defined_name_ref_opaque};
+    use crate::storage::YrsStorage;
+    use crate::storage::workbook::settings::get_settings;
+    use cell_types::SheetId;
+    use yrs::Transact;
 
     #[test]
     fn preserves_external_workbook_defined_names_as_opaque() {
@@ -146,6 +150,32 @@ mod tests {
             "SalesData",
             "Sheet1!$A$1:$B$10"
         ));
+    }
+
+    #[test]
+    fn hydrate_workbook_views_seeds_selected_sheet_id_from_active_tab() {
+        let storage = YrsStorage::new();
+        let sheet_ids = [SheetId::from_raw(1), SheetId::from_raw(2)];
+        let workbook_views = [domain_types::domain::workbook::WorkbookView {
+            active_tab: 1,
+            ..Default::default()
+        }];
+
+        {
+            let mut txn = storage.doc().transact_mut();
+            hydrate_workbook_views(
+                storage.workbook_map(),
+                &workbook_views,
+                &sheet_ids,
+                &mut txn,
+            );
+        }
+
+        let settings = get_settings(storage.doc(), storage.workbook_map());
+        assert_eq!(
+            settings.selected_sheet_ids,
+            Some(vec![sheet_ids[1].to_uuid_string()])
+        );
     }
 }
 
@@ -330,6 +360,7 @@ pub(super) fn hydrate_workbook_calculation(
 pub(super) fn hydrate_workbook_views(
     workbook: &MapRef,
     workbook_views: &[domain_types::domain::workbook::WorkbookView],
+    sheet_ids: &[SheetId],
     txn: &mut yrs::TransactionMut,
 ) {
     if workbook_views.is_empty() {
@@ -340,6 +371,19 @@ pub(super) fn hydrate_workbook_views(
         crate::storage::ensure_workbook_child_map(workbook, txn, KEY_WORKBOOK_SETTINGS);
     if let Ok(json) = serde_json::to_string(workbook_views) {
         settings_map.insert(txn, "workbookViews", Any::String(Arc::from(json.as_str())));
+    }
+    if let Some(active_sheet_id) = workbook_views
+        .first()
+        .and_then(|view| sheet_ids.get(view.active_tab as usize))
+    {
+        let selected_sheet_ids = [active_sheet_id.to_uuid_string()];
+        if let Ok(json) = serde_json::to_string(&selected_sheet_ids) {
+            settings_map.insert(
+                txn,
+                "selectedSheetIds",
+                Any::String(Arc::from(json.as_str())),
+            );
+        }
     }
 }
 

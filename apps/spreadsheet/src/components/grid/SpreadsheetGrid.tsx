@@ -102,6 +102,7 @@ import { InlineSliderEditor } from './editors/InlineSliderEditor';
 import { ValidationDropdownOverlay } from './editors/ValidationDropdownOverlay';
 
 import { useRemoteCursors } from '../../hooks/collab/useRemoteCursors';
+import { isValidRestoredSelection } from './utils/restored-selection';
 
 function getOutlineSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
   return summaryAfter ? end + 1 : start - 1;
@@ -126,6 +127,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   showFps = false,
 }: SpreadsheetGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const restoredImportedSelectionSheetsRef = useRef<Set<string>>(new Set());
 
   // Get coordinator for setting renderer dependencies
   const coordinator = useCoordinator();
@@ -469,6 +471,22 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     const sessionViewState = uiStoreApi.getState().getSheetViewState(activeSheetId);
     if (!sessionViewState && (scrollPos.topRow > 0 || scrollPos.leftCol > 0)) {
       coordinator.renderer.applyCellLevelScroll(scrollPos.topRow, scrollPos.leftCol);
+    }
+
+    if (!sessionViewState && !restoredImportedSelectionSheetsRef.current.has(activeSheetId)) {
+      const savedSelection = wb.mirror.getViewSelection(activeSheetId);
+      if (savedSelection && isValidRestoredSelection(savedSelection)) {
+        restoredImportedSelectionSheetsRef.current.add(activeSheetId);
+        coordinator.grid.access.actors.selection.send({
+          type: 'SET_SELECTION',
+          ranges: savedSelection.ranges,
+          activeCell: savedSelection.activeCell,
+          anchor: null,
+          anchorCol: null,
+          anchorRow: null,
+          source: 'restore',
+        });
+      }
     }
   }, [wb, activeSheetId, coordinator, uiStoreApi]);
 

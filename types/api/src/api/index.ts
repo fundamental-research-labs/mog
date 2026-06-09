@@ -52,6 +52,7 @@ export type {
   MirrorReadView,
   MirrorFrozenPanes,
   MirrorScrollPosition,
+  MirrorViewSelection,
   MirrorPageBreaks,
   MirrorPageBreakEntry,
   MirrorSplitConfig,

@@ -27,6 +27,7 @@ import type {
   SheetChange,
   SheetSettingsChange,
   SplitConfigChange,
+  ViewSelectionChange,
   WorkbookSettingsChange,
 } from '../../bridges/compute/compute-types.gen';
 import { MutationResultHandler } from '../../bridges/mutation-result-handler';
@@ -88,6 +89,11 @@ describe('StateMirror — empty mirror returns defaults', () => {
   it('getScrollPosition returns {0,0} for unknown sheet', () => {
     const mirror = createStateMirror();
     expect(mirror.getScrollPosition(SHEET_A as never)).toEqual({ topRow: 0, leftCol: 0 });
+  });
+
+  it('getViewSelection returns null for unknown sheet', () => {
+    const mirror = createStateMirror();
+    expect(mirror.getViewSelection(SHEET_A as never)).toBeNull();
   });
 
   it('getCulture returns the default workbook culture', () => {
@@ -339,6 +345,30 @@ describe('StateMirror — scroll position', () => {
   });
 });
 
+describe('StateMirror — saved view selection', () => {
+  it('applyViewSelectionChange stores a cloned selection snapshot', () => {
+    const mirror = new StateMirror();
+    const change: ViewSelectionChange = {
+      sheetId: SHEET_A,
+      activeCell: { row: 453, col: 35 },
+      ranges: [{ startRow: 453, startCol: 35, endRow: 453, endCol: 35 }],
+    };
+    mirror.applyViewSelectionChange(change);
+
+    const selection = mirror.getViewSelection(SHEET_A as never);
+    expect(selection).toEqual({
+      activeCell: { row: 453, col: 35 },
+      ranges: [{ startRow: 453, startCol: 35, endRow: 453, endCol: 35 }],
+    });
+    selection!.activeCell.row = 0;
+    selection!.ranges[0]!.startRow = 0;
+    expect(mirror.getViewSelection(SHEET_A as never)).toEqual({
+      activeCell: { row: 453, col: 35 },
+      ranges: [{ startRow: 453, startCol: 35, endRow: 453, endCol: 35 }],
+    });
+  });
+});
+
 describe('StateMirror — workbook settings', () => {
   it('applyWorkbookSettingsChange stores settings; getCulture/getSelectedSheetIds derive', () => {
     const mirror = new StateMirror();
@@ -523,6 +553,13 @@ describe('StateMirror.apply(MutationResult) — single-call dispatch', () => {
         } as PrintAreaChange,
       ],
       scrollPositionChanges: [{ sheetId: SHEET_A, topRow: 7, leftCol: 2 }],
+      viewSelectionChanges: [
+        {
+          sheetId: SHEET_A,
+          activeCell: { row: 453, col: 35 },
+          ranges: [{ startRow: 453, startCol: 35, endRow: 453, endCol: 35 }],
+        },
+      ],
     });
 
     mirror.apply(result);
@@ -537,6 +574,7 @@ describe('StateMirror.apply(MutationResult) — single-call dispatch', () => {
       endCol: 4,
     });
     expect(mirror.getScrollPosition(SHEET_A as never)).toEqual({ topRow: 7, leftCol: 2 });
+    expect(mirror.getViewSelection(SHEET_A as never)?.activeCell).toEqual({ row: 453, col: 35 });
   });
 
   it('apply on an empty result is a no-op', () => {

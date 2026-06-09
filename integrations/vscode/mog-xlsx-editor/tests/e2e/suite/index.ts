@@ -29,8 +29,10 @@ type CdpClient = {
   close(): void;
 };
 
+const extensionId = 'FundamentalResearchLabs.mog-xlsx-editor';
+
 async function openFixtureCopy(name: string, destinationName = name): Promise<vscode.Uri> {
-  const extension = vscode.extensions.getExtension('mog.mog-xlsx-editor');
+  const extension = vscode.extensions.getExtension(extensionId);
   assert.ok(extension, 'extension should be registered in VS Code host');
   await extension.activate();
   const workspace = process.env.MOG_VSCODE_TEST_WORKSPACE;
@@ -240,7 +242,7 @@ async function findMogWebviewTarget(): Promise<CdpTarget> {
       if (
         target.type === 'iframe' &&
         target.url?.startsWith('vscode-webview://') &&
-        target.url.includes('extensionId=mog.mog-xlsx-editor') &&
+        target.url.includes(`extensionId=${extensionId}`) &&
         target.webSocketDebuggerUrl
       ) {
         return target;

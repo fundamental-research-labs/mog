@@ -233,6 +233,23 @@ function compatibilityReferences(entry: ApiCompatibilityEntry): string[] {
   return refs;
 }
 
+function getSheetMissingAwaitMatches(stripped: string): Array<{
+  workbookAlias: 'workbook' | 'wb';
+  start: number;
+  end: number;
+}> {
+  const matches: Array<{ workbookAlias: 'workbook' | 'wb'; start: number; end: number }> = [];
+  const pattern = /\b(workbook|wb)\s*\.\s*getSheet\s*\([^)]*\)\s*\.\s*getValue\s*\(/g;
+
+  for (const match of stripped.matchAll(pattern)) {
+    const workbookAlias = match[1] as 'workbook' | 'wb';
+    const start = match.index ?? 0;
+    matches.push({ workbookAlias, start, end: start + match[0].length });
+  }
+
+  return matches;
+}
+
 function spansOverlap(left: SourceSpan | undefined, right: SourceSpan | undefined): boolean {
   if (!left || !right) return false;
   return left.start <= right.end && right.start <= left.end;
@@ -340,6 +357,39 @@ export function diagnosticFromCompatibilityEntry(
   };
 }
 
+function diagnosticFromGetSheetMissingAwait(
+  workbookAlias: 'workbook' | 'wb',
+  span?: SourceSpan,
+): ApiGuidanceDiagnostic {
+  const getSheetPath = `${workbookAlias}.getSheet`;
+  return {
+    code: 'MOG002_MOG_API_USAGE',
+    severity: 'error',
+    dialect: 'mog-version',
+    category: 'workbook',
+    entryId: 'round57.workbook.getSheet.missing-await',
+    matcherId: `compatibility.round57.workbook.getSheet.missing-await.${workbookAlias}`,
+    offendingSymbol: `${getSheetPath}(...).getValue`,
+    message:
+      'getSheet is async, so workbook.getSheet(...).getValue(...) tries to call getValue on a Promise instead of a worksheet.',
+    suggestion:
+      'Await getSheet first: const ws = await wb.getSheet(name); await ws.getValue("A1");',
+    mogReplacements: [
+      {
+        path: getSheetPath,
+        snippet: `const ws = await ${workbookAlias}.getSheet(name);`,
+        note: 'Resolve the worksheet before calling worksheet methods.',
+      },
+      { path: 'ws.getValue', snippet: 'await ws.getValue("A1");' },
+    ],
+    references: [`api.guidance.explain("${getSheetPath}")`, 'api.guidance.explain("ws.getValue")'],
+    confidence: 0.99,
+    blocking: true,
+    compatibilityStatus: 'structured_diagnostic',
+    ...(span ? { span } : {}),
+  };
+}
+
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
   const stripped = stripCommentsAndStrings(code);
   const diagnostics: ApiGuidanceDiagnostic[] = [];
@@ -376,6 +426,14 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
         diagnostics.push(diagnosticFromGuidanceEntry(entry, matcher, matcher.symbol, span));
       }
     }
+  }
+
+  for (const match of getSheetMissingAwaitMatches(stripped)) {
+    const span = spanFor(code, match.start, match.end);
+    const key = `round57.workbook.getSheet.missing-await:${span.start}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    diagnostics.push(diagnosticFromGetSheetMissingAwait(match.workbookAlias, span));
   }
 
   for (const entry of apiCompatibility.entries) {

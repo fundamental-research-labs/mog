@@ -13,6 +13,7 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 import type { CFRuleInput, ConditionalFormat } from '@mog-sdk/contracts/api';
+import { KernelError } from '../../errors';
 
 // ---------------------------------------------------------------------------
 // Mock transitive dependencies to prevent ESM import chain issues
@@ -20,14 +21,14 @@ import type { CFRuleInput, ConditionalFormat } from '@mog-sdk/contracts/api';
 const mockGetConditionalFormat = jest.fn();
 const mockGetConditionalFormats = jest.fn();
 
-jest.mock('../worksheet/operations/cf-operations', () => ({
-  getConditionalFormat: (...args: any[]) => mockGetConditionalFormat(...args),
-  getConditionalFormats: (...args: any[]) => mockGetConditionalFormats(...args),
-  addConditionalFormat: jest.fn(),
-  clearAllConditionalFormats: jest.fn(),
-  clearCFRulesInRanges: jest.fn(),
-  cloneConditionalFormatsForPaste: jest.fn(),
-}));
+jest.mock('../worksheet/operations/cf-operations', () => {
+  const actual = jest.requireActual('../worksheet/operations/cf-operations') as Record<string, any>;
+  return {
+    ...actual,
+    getConditionalFormat: (...args: any[]) => mockGetConditionalFormat(...args),
+    getConditionalFormats: (...args: any[]) => mockGetConditionalFormats(...args),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
@@ -55,6 +56,9 @@ function createMockComputeBridge() {
 function createMockCtx(bridge?: ReturnType<typeof createMockComputeBridge>) {
   return {
     computeBridge: bridge ?? createMockComputeBridge(),
+    writeGate: {
+      assertWritable: jest.fn(),
+    },
   } as any;
 }
 
@@ -88,6 +92,277 @@ function mockBridgeFormats(
   );
   mockGetConditionalFormats.mockResolvedValue(formats);
 }
+
+function expectInvalidArrayDiagnostic(
+  error: unknown,
+  expected: string,
+  path: string[],
+  receivedType: string,
+): void {
+  expect(error).toBeInstanceOf(KernelError);
+  const kernelError = error as KernelError;
+  expect(kernelError.code).toBe('API_INVALID_ARGUMENT');
+  expect(kernelError.path).toEqual(path);
+  expect(kernelError.suggestion).toBeTruthy();
+  expect(kernelError.context).toMatchObject({
+    expected,
+    issueCode: expect.any(String),
+    path,
+    receivedType,
+  });
+}
+
+const formulaRule = {
+  type: 'formula',
+  formula: '=A1>0',
+  style: { backgroundColor: '#00FF00' },
+} as CFRuleInput;
+
+// =============================================================================
+// Tests — public boundary input shape diagnostics
+// =============================================================================
+
+describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () => {
+  let bridge: ReturnType<typeof createMockComputeBridge>;
+  let ctx: any;
+  let cf: WorksheetConditionalFormattingImpl;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    bridge = createMockComputeBridge();
+    ctx = createMockCtx(bridge);
+    cf = new WorksheetConditionalFormattingImpl(ctx, SHEET_ID);
+  });
+
+  it('add rejects a non-array ranges argument before resolving ranges', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.add('A1:A10' as any, [formulaRule]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of range strings or CellRange objects',
+      ['ranges'],
+      'string',
+    );
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('add rejects a non-array rules argument before rule normalization', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.add(['A1:A10'], formulaRule as any);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of conditional format rules',
+      ['rules'],
+      'object',
+    );
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('add preserves valid array inputs', async () => {
+    const result = await cf.add(['A1:A10'], [formulaRule]);
+
+    expect(bridge.addCfRule).toHaveBeenCalledTimes(1);
+    expect(bridge.addCfRule.mock.calls[0][0]).toBe(SHEET_ID);
+    expect(bridge.addCfRule.mock.calls[0][1]).toMatchObject({
+      sheetId: SHEET_ID,
+      ranges: [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }],
+      rules: [expect.objectContaining({ ...formulaRule, priority: 0 })],
+    });
+    expect(result).toMatchObject({
+      ranges: [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }],
+    });
+  });
+
+  it('clearInRanges rejects a non-array ranges argument', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.clearInRanges('A1:A10' as any);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of range strings or CellRange objects',
+      ['ranges'],
+      'string',
+    );
+    expect(bridge.getAllCfRules).not.toHaveBeenCalled();
+  });
+
+  it('clearInRanges preserves valid array inputs', async () => {
+    bridge.getAllCfRules.mockResolvedValue([
+      {
+        id: 'fmt-1',
+        ranges: [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }],
+      },
+    ] as any);
+
+    await cf.clearInRanges(['A1:A10']);
+
+    expect(bridge.getAllCfRules).toHaveBeenCalledWith(SHEET_ID);
+    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1');
+  });
+
+  it('update rejects a non-array updates.ranges field', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.update('fmt-1', { ranges: 'A1:A10' } as any);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of CellRange objects',
+      ['updates', 'ranges'],
+      'string',
+    );
+    expect(bridge.updateCfRanges).not.toHaveBeenCalled();
+    expect(bridge.updateCfRule).not.toHaveBeenCalled();
+  });
+
+  it('update rejects a non-array updates.rules field before applying stopIfTrue', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.update('fmt-1', { rules: formulaRule, stopIfTrue: true } as any);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of conditional format rules',
+      ['updates', 'rules'],
+      'object',
+    );
+    expect(bridge.updateCfRanges).not.toHaveBeenCalled();
+    expect(bridge.updateCfRule).not.toHaveBeenCalled();
+  });
+
+  it('update preserves valid array inputs', async () => {
+    const ranges = [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }];
+
+    await cf.update('fmt-1', { ranges, rules: [formulaRule], stopIfTrue: true } as any);
+
+    expect(bridge.updateCfRanges).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', ranges);
+    expect(bridge.updateCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', {
+      rules: [{ ...formulaRule, stopIfTrue: true }],
+    });
+  });
+
+  it('cloneForPaste rejects a non-array relativeCFs argument', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.cloneForPaste(
+        SHEET_ID,
+        { rules: [], rangeOffsets: [] } as any,
+        { row: 0, col: 0 },
+        false,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of relative conditional format objects',
+      ['relativeCFs'],
+      'object',
+    );
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('cloneForPaste rejects a non-array relative format rules field', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.cloneForPaste(
+        SHEET_ID,
+        [{ rules: formulaRule, rangeOffsets: [] }] as any,
+        { row: 0, col: 0 },
+        false,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of conditional format rules',
+      ['relativeCFs', '0', 'rules'],
+      'object',
+    );
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('cloneForPaste rejects a non-array relative format rangeOffsets field', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.cloneForPaste(
+        SHEET_ID,
+        [{ rules: [formulaRule], rangeOffsets: { startRowOffset: 0 } }] as any,
+        { row: 0, col: 0 },
+        false,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'an array of conditional format range offsets',
+      ['relativeCFs', '0', 'rangeOffsets'],
+      'object',
+    );
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('cloneForPaste preserves valid array inputs', async () => {
+    await cf.cloneForPaste(
+      SHEET_ID,
+      [
+        {
+          rules: [formulaRule],
+          rangeOffsets: [
+            {
+              startRowOffset: 1,
+              startColOffset: 2,
+              endRowOffset: 3,
+              endColOffset: 4,
+            },
+          ],
+        },
+      ],
+      { row: 10, col: 20 },
+      false,
+    );
+
+    expect(bridge.addCfRule).toHaveBeenCalledTimes(1);
+    expect(bridge.addCfRule.mock.calls[0][1]).toMatchObject({
+      sheetId: SHEET_ID,
+      ranges: [{ startRow: 11, startCol: 22, endRow: 13, endCol: 24 }],
+      rules: [expect.objectContaining({ ...formulaRule, priority: 0 })],
+    });
+  });
+});
 
 // =============================================================================
 // Tests — changeRuleType

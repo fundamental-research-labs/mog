@@ -248,6 +248,9 @@ function createMockCtx(): any {
       getSheetName: jest.fn().mockResolvedValue(null),
       setCells: jest.fn(),
       setCellsByPosition: jest.fn().mockResolvedValue(undefined),
+      clearRangeByPosition: jest.fn().mockResolvedValue(undefined),
+      clearRange: jest.fn().mockResolvedValue(undefined),
+      clearHyperlinksInRange: jest.fn().mockResolvedValue(undefined),
       getCellIdAtPosition: jest.fn().mockResolvedValue(null),
       getCellFormat: jest.fn().mockResolvedValue(null),
       getDataBounds: jest.fn().mockResolvedValue(null),
@@ -710,6 +713,41 @@ describe('WorksheetImpl', () => {
 
     it('clearData with invalid A1 range throws', async () => {
       await expect(ws.clearData('invalid')).rejects.toThrow();
+    });
+
+    it('clear("A1:B2", "contents") resolves A1 range and clears contents', async () => {
+      await expect(ws.clear('A1:B2', 'contents')).resolves.toEqual({ cellCount: 4 });
+
+      expect(ctx.computeBridge.clearRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
+      expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
+    });
+
+    it('clear rejects unknown applyTo before pivot deletion', async () => {
+      ctx.pivot = {
+        getAllPivots: jest.fn().mockResolvedValue([]),
+        deletePivot: jest.fn().mockResolvedValue(true),
+      };
+
+      await expect(ws.clear('A1:B2', 'values' as any)).rejects.toMatchObject({
+        code: 'API_INVALID_ARGUMENT',
+        path: ['applyTo'],
+        suggestion: expect.stringContaining('"contents"'),
+        context: {
+          issueCode: 'UNKNOWN_CLEAR_MODE',
+          received: 'values',
+          validValues: ['all', 'contents', 'formats', 'hyperlinks'],
+          suggestion: expect.stringContaining('"contents"'),
+        },
+      });
+
+      expect(ctx.pivot.getAllPivots).not.toHaveBeenCalled();
+      expect(ctx.pivot.deletePivot).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearRange).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
     });
 
     it('getRawCellData("A1") delegates to CellOps and returns raw data', async () => {

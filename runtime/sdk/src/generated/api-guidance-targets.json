@@ -85,7 +85,15 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "observedPath": "ws.addressToIndex",
+          "canonicalPath": "wb.addressToIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -1529,7 +1537,22 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "observedPath": "ws.indexToAddress",
+          "canonicalPath": "wb.indexToAddress",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "observedPath": "ws._colLetter",
+          "canonicalPath": "wb.indexToAddress",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -9007,7 +9030,15 @@
       "asyncModel": "promise",
       "signature": "getDisplayedCellProperties(address: string): Promise<CellFormat>;",
       "typeText": "Promise<CellFormat>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.getFormat.diagnostic",
+          "observedPath": "ws.getFormat",
+          "canonicalPath": "ws.formats.getDisplayedCellProperties",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/formats.ts"
       },
@@ -9991,7 +10022,15 @@
       "asyncModel": "promise",
       "signature": "getRawCellData(address: string, includeFormula?: boolean): Promise<RawCellData>;",
       "typeText": "Promise<RawCellData>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.rawCellData.diagnostic",
+          "observedPath": "ws.rawCellData",
+          "canonicalPath": "ws.getRawCellData",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
       },
@@ -10099,7 +10138,15 @@
       "asyncModel": "promise",
       "signature": "getValue(address: string): Promise<CellValuePrimitive>;",
       "typeText": "Promise<CellValuePrimitive>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.getCellValue.diagnostic",
+          "observedPath": "ws.getCellValue",
+          "canonicalPath": "ws.getValue",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
       },
@@ -17864,7 +17911,15 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "observedPath": "ws.addressToIndex",
+          "canonicalPath": "wb.addressToIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -19308,7 +19363,22 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "observedPath": "ws.indexToAddress",
+          "canonicalPath": "wb.indexToAddress",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "observedPath": "ws._colLetter",
+          "canonicalPath": "wb.indexToAddress",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -26786,7 +26856,15 @@
       "asyncModel": "promise",
       "signature": "getDisplayedCellProperties(address: string): Promise<CellFormat>;",
       "typeText": "Promise<CellFormat>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.getFormat.diagnostic",
+          "observedPath": "ws.getFormat",
+          "canonicalPath": "ws.formats.getDisplayedCellProperties",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/formats.ts"
       },
@@ -27770,7 +27848,15 @@
       "asyncModel": "promise",
       "signature": "getRawCellData(address: string, includeFormula?: boolean): Promise<RawCellData>;",
       "typeText": "Promise<RawCellData>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.rawCellData.diagnostic",
+          "observedPath": "ws.rawCellData",
+          "canonicalPath": "ws.getRawCellData",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
       },
@@ -27878,7 +27964,15 @@
       "asyncModel": "promise",
       "signature": "getValue(address: string): Promise<CellValuePrimitive>;",
       "typeText": "Promise<CellValuePrimitive>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "round57.worksheet.getCellValue.diagnostic",
+          "observedPath": "ws.getCellValue",
+          "canonicalPath": "ws.getValue",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
       },

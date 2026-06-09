@@ -1254,7 +1254,10 @@ export class DocumentLifecycleSystem {
         wasmInitFns: [initTableWasm, initChartWasm],
         getUserTimezone: () => userTimezone,
         ...(this.napiAddon
-          ? { napiAddon: this.napiAddon as Record<string, (...args: unknown[]) => unknown> }
+          ? {
+              explicitRuntime: 'napi',
+              napiAddon: this.napiAddon as Record<string, (...args: unknown[]) => unknown>,
+            }
           : {}),
       });
 

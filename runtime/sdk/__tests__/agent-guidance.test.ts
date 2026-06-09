@@ -180,6 +180,121 @@ describe('SDK agent API guidance', () => {
     );
   });
 
+  it('blocks observed wrong Mog worksheet API paths with structured guidance', () => {
+    const source = `
+      const cellValue = await ws.getCellValue("A1");
+      const raw = await ws.rawCellData("A1");
+      const displayedFormat = await ws.getFormat("A1");
+      const address = ws.indexToAddress(1, 1);
+      const position = ws.addressToIndex("A1");
+      const col = ws._colLetter(1);
+      console.log(cellValue, raw, displayedFormat, address, position, col);
+    `;
+
+    const preflight = preflightMogCode(source);
+    expect(preflight.ok).toBe(false);
+
+    const byId = new Map(
+      preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+    const expectedEntryIds = [
+      'round57.worksheet.getCellValue.diagnostic',
+      'round57.worksheet.rawCellData.diagnostic',
+      'round57.worksheet.getFormat.diagnostic',
+      'round57.worksheet.indexToAddress.diagnostic',
+      'round57.worksheet.addressToIndex.diagnostic',
+      'round57.worksheet.privateColLetter.diagnostic',
+    ];
+
+    for (const entryId of expectedEntryIds) {
+      expect(byId.get(entryId)).toEqual(
+        expect.objectContaining({
+          code: 'MOG002_MOG_API_USAGE',
+          dialect: 'mog-version',
+          compatibilityStatus: 'structured_diagnostic',
+          blocking: true,
+        }),
+      );
+    }
+
+    expect(byId.get('round57.worksheet.getCellValue.diagnostic')?.mogReplacements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'ws.getValue' }),
+        expect.objectContaining({ path: 'ws.getCell' }),
+      ]),
+    );
+    expect(byId.get('round57.worksheet.getFormat.diagnostic')?.mogReplacements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'ws.formats.getDisplayedCellProperties' }),
+        expect.objectContaining({ path: 'ws.formats.get' }),
+      ]),
+    );
+  });
+
+  it('blocks missing await on workbook getSheet before worksheet getValue', () => {
+    const preflight = preflightMogCode(`
+      const a = await workbook.getSheet("Data").getValue("A1");
+      const b = await wb.getSheet("Data").getValue("B1");
+      console.log(a, b);
+    `);
+
+    expect(preflight.ok).toBe(false);
+    expect(preflight.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'MOG002_MOG_API_USAGE',
+          entryId: 'round57.workbook.getSheet.missing-await',
+          matcherId: 'compatibility.round57.workbook.getSheet.missing-await.workbook',
+          blocking: true,
+          message: expect.stringContaining('getSheet is async'),
+          suggestion: expect.stringContaining('const ws = await wb.getSheet(name);'),
+        }),
+        expect.objectContaining({
+          code: 'MOG002_MOG_API_USAGE',
+          entryId: 'round57.workbook.getSheet.missing-await',
+          matcherId: 'compatibility.round57.workbook.getSheet.missing-await.wb',
+          blocking: true,
+        }),
+      ]),
+    );
+  });
+
+  it('does not flag comments, strings, valid Mog calls, or unrelated local helper names for round-57 guidance', () => {
+    const source = `
+      // await ws.getCellValue("A1");
+      const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1")';
+      const helpers = {
+        getCellValue() {},
+        rawCellData() {},
+        getFormat() {},
+        indexToAddress() {},
+        addressToIndex() {},
+        _colLetter() {},
+      };
+      helpers.getCellValue();
+      helpers.rawCellData();
+      helpers.getFormat();
+      helpers.indexToAddress();
+      helpers.addressToIndex();
+      helpers._colLetter();
+      const ws2 = await wb.getSheet("S");
+      await ws.getValue("A1");
+      await ws.getRawCellData("A1");
+      await ws.formats.getDisplayedCellProperties("A1");
+      await ws.formats.get("A1");
+      wb.indexToAddress(1, 1);
+      wb.addressToIndex("A1");
+      const ws3 = await workbook.getSheet("S");
+      await ws3.getValue("A1");
+      console.log(text, helpers, ws2, ws3);
+    `;
+
+    const round57Diagnostics = analyzeMogCode(source).filter((diagnostic) =>
+      diagnostic.entryId.startsWith('round57.'),
+    );
+    expect(round57Diagnostics).toEqual([]);
+  });
+
   it('surfaces pivot handle getInfo in generated API metadata and describe output', () => {
     expect(apiSpec.types.PivotTableHandle?.definition).toContain(
       'getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;',

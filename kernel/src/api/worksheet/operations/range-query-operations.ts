@@ -11,6 +11,7 @@
 import {
   type CellRange,
   type CellValue,
+  type ClearApplyTo,
   type ClearResult,
   CellType,
   CellValueType,
@@ -24,6 +25,7 @@ import { MAX_ROWS, MAX_COLS } from '@mog-sdk/contracts/core';
 import { colToLetter } from '@mog/spreadsheet-utils/a1';
 import { normalizeCellValue, cellValueToString } from '../../internal/value-conversions';
 import { normalizeRange } from '../../internal/utils';
+import { KernelError } from '../../../errors';
 import type { FindInRangeOptions } from '../../../bridges/compute/compute-types.gen';
 import type { CellAddress, DocumentContext } from './shared';
 import { parseRefIdSimple } from './validation-helpers';
@@ -41,35 +43,64 @@ import { parseRefIdSimple } from './validation-helpers';
  * - 'hyperlinks': iterate and remove hyperlinks
  * - 'all': clearRangeByPosition (full wipe) + formats + hyperlinks
  */
-const VALID_CLEAR_MODES: ReadonlySet<string> = new Set([
-  'all',
-  'contents',
-  'formats',
-  'hyperlinks',
-]);
+const VALID_CLEAR_MODES = ['all', 'contents', 'formats', 'hyperlinks'] as const;
+const VALID_CLEAR_MODE_SET: ReadonlySet<string> = new Set(VALID_CLEAR_MODES);
+
+function clearModeSuggestion(applyTo: unknown): string {
+  if (applyTo === 'value' || applyTo === 'values' || applyTo === 'content') {
+    return 'Use "contents" to clear values and formulas while preserving formats and hyperlinks.';
+  }
+
+  if (applyTo === 'valuesAndFormats') {
+    return [
+      '"valuesAndFormats" is ambiguous and is not the same as "all", because "all" also clears hyperlinks.',
+      'Use "contents", "formats", or "all" explicitly.',
+    ].join(' ');
+  }
+
+  return `Use one of: ${VALID_CLEAR_MODES.join(', ')}.`;
+}
+
+export function validateClearApplyTo(applyTo: unknown): ClearApplyTo {
+  if (typeof applyTo === 'string' && VALID_CLEAR_MODE_SET.has(applyTo)) {
+    return applyTo as ClearApplyTo;
+  }
+
+  const suggestion = clearModeSuggestion(applyTo);
+  throw new KernelError(
+    'API_INVALID_ARGUMENT',
+    `Invalid clear mode for applyTo: ${JSON.stringify(applyTo)}.`,
+    {
+      path: ['applyTo'],
+      suggestion,
+      context: {
+        issueCode: 'UNKNOWN_CLEAR_MODE',
+        received: applyTo,
+        validValues: [...VALID_CLEAR_MODES],
+        suggestion,
+      },
+    },
+  );
+}
 
 export async function clearWithMode(
   ctx: DocumentContext,
   sheetId: SheetId,
   range: CellRange,
-  applyTo: 'all' | 'contents' | 'formats' | 'hyperlinks' = 'all',
+  applyTo: unknown = 'all',
 ): Promise<ClearResult> {
-  if (!VALID_CLEAR_MODES.has(applyTo)) {
-    throw new Error(
-      `Invalid clear mode "${applyTo}". Must be one of: ${[...VALID_CLEAR_MODES].join(', ')}`,
-    );
-  }
+  const mode = validateClearApplyTo(applyTo);
 
   const n = normalizeRange(range);
   const promises: Promise<unknown>[] = [];
 
-  if (applyTo === 'all') {
+  if (mode === 'all') {
     // 'all' mode: full cell deletion (values + formulas + formats + hyperlinks).
     // clearRangeByPosition wipes cell properties (including format) along with values.
     promises.push(
       ctx.computeBridge.clearRangeByPosition(sheetId, n.startRow, n.startCol, n.endRow, n.endCol),
     );
-  } else if (applyTo === 'contents') {
+  } else if (mode === 'contents') {
     // 'contents' mode: clear values + formulas, PRESERVE formats and cell identity.
     // Routes to the `clearRange` bridge (Rust `mutation_clear_range`), which uses
     // `clear_properties = false` so the cell's property entry (bold, number format,
@@ -80,7 +111,7 @@ export async function clearWithMode(
     );
   }
 
-  if (applyTo === 'all' || applyTo === 'formats') {
+  if (mode === 'all' || mode === 'formats') {
     promises.push(
       ctx.computeBridge.clearFormatForRanges(sheetId, [
         [n.startRow, n.startCol, n.endRow, n.endCol],
@@ -88,7 +119,7 @@ export async function clearWithMode(
     );
   }
 
-  if (applyTo === 'all' || applyTo === 'hyperlinks') {
+  if (mode === 'all' || mode === 'hyperlinks') {
     // Single bridge call clears all hyperlinks in the range.
     promises.push(
       ctx.computeBridge.clearHyperlinksInRange(sheetId, n.startRow, n.startCol, n.endRow, n.endCol),

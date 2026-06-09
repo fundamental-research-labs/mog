@@ -17,12 +17,113 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { KernelError } from '../../errors';
 import { resolveRange } from '../internal/address-resolver';
 import * as CFOps from './operations/cf-operations';
 
 // ---------------------------------------------------------------------------
 // Style normalization helper (shared between add / update / changeRuleType)
 // ---------------------------------------------------------------------------
+
+function receivedType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+function invalidConditionalFormatArrayError(
+  value: unknown,
+  path: string[],
+  methodName: string,
+  expected: string,
+  issueCode: string,
+  suggestion: string,
+): KernelError {
+  return new KernelError(
+    'API_INVALID_ARGUMENT',
+    `${methodName}: ${path.join('.')} must be ${expected}.`,
+    {
+      context: {
+        issueCode,
+        path,
+        expected,
+        receivedType: receivedType(value),
+      },
+      path,
+      suggestion,
+    },
+  );
+}
+
+function assertCfRangeArray(
+  value: unknown,
+  path: string[],
+  methodName: string,
+  expected = 'an array of range strings or CellRange objects',
+  suggestion = 'Use ["A1:A10"].',
+): asserts value is (string | CellRange)[] {
+  if (!Array.isArray(value)) {
+    throw invalidConditionalFormatArrayError(
+      value,
+      path,
+      methodName,
+      expected,
+      'CF_RANGES_MUST_BE_ARRAY',
+      suggestion,
+    );
+  }
+}
+
+function assertCfRuleArray(
+  value: unknown,
+  path: string[],
+  methodName: string,
+): asserts value is CFRuleInput[] {
+  if (!Array.isArray(value)) {
+    throw invalidConditionalFormatArrayError(
+      value,
+      path,
+      methodName,
+      'an array of conditional format rules',
+      'CF_RULES_MUST_BE_ARRAY',
+      'Use an array of rule objects, for example [{ type: "formula", formula: "=A1>0", style: {} }].',
+    );
+  }
+}
+
+function assertCfRelativeFormatArray(
+  value: unknown,
+  path: string[],
+  methodName: string,
+): asserts value is unknown[] {
+  if (!Array.isArray(value)) {
+    throw invalidConditionalFormatArrayError(
+      value,
+      path,
+      methodName,
+      'an array of relative conditional format objects',
+      'CF_RELATIVE_FORMATS_MUST_BE_ARRAY',
+      'Use an array of relative conditional format objects.',
+    );
+  }
+}
+
+function assertCfRangeOffsetArray(
+  value: unknown,
+  path: string[],
+  methodName: string,
+): asserts value is unknown[] {
+  if (!Array.isArray(value)) {
+    throw invalidConditionalFormatArrayError(
+      value,
+      path,
+      methodName,
+      'an array of conditional format range offsets',
+      'CF_RANGE_OFFSETS_MUST_BE_ARRAY',
+      'Use an array of range offset objects.',
+    );
+  }
+}
 
 /**
  * Flatten nested CF style `{ fill, font, border }` to the flat CFStyle the
@@ -115,6 +216,8 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
 
   async add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat> {
     this._ensureWritable('conditionalFormats.add');
+    assertCfRangeArray(ranges, ['ranges'], 'conditionalFormats.add');
+    assertCfRuleArray(rules, ['rules'], 'conditionalFormats.add');
     const resolved = ranges.map((r) => resolveRange(r));
     const formatId = await CFOps.addConditionalFormat(this.ctx, this.sheetId, resolved, rules);
 
@@ -144,6 +247,19 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
 
   async update(formatId: string, updates: ConditionalFormatUpdate): Promise<void> {
     const { ranges, stopIfTrue, ...ruleUpdates } = updates;
+
+    if (ranges !== undefined) {
+      assertCfRangeArray(
+        ranges,
+        ['updates', 'ranges'],
+        'conditionalFormats.update',
+        'an array of CellRange objects',
+        'Use [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }].',
+      );
+    }
+    if (ruleUpdates.rules !== undefined) {
+      assertCfRuleArray(ruleUpdates.rules, ['updates', 'rules'], 'conditionalFormats.update');
+    }
 
     // If stopIfTrue is provided, apply it to all rules in the update payload
     if (stopIfTrue !== undefined && ruleUpdates.rules) {
@@ -214,6 +330,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
   }
 
   async clearInRanges(ranges: (string | CellRange)[]): Promise<void> {
+    assertCfRangeArray(ranges, ['ranges'], 'conditionalFormats.clearInRanges');
     const resolved = ranges.map((r) => resolveRange(r));
     await CFOps.clearCFRulesInRanges(this.ctx, this.sheetId, resolved);
   }
@@ -236,6 +353,23 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     origin: { row: number; col: number },
     isCut: boolean,
   ): Promise<void> {
+    assertCfRelativeFormatArray(
+      relativeCFs,
+      ['relativeCFs'],
+      'conditionalFormats.cloneForPaste',
+    );
+    relativeCFs.forEach((cf, index) => {
+      assertCfRuleArray(
+        cf?.rules,
+        ['relativeCFs', String(index), 'rules'],
+        'conditionalFormats.cloneForPaste',
+      );
+      assertCfRangeOffsetArray(
+        cf?.rangeOffsets,
+        ['relativeCFs', String(index), 'rangeOffsets'],
+        'conditionalFormats.cloneForPaste',
+      );
+    });
     await CFOps.cloneConditionalFormatsForPaste(
       this.ctx,
       sourceSheetId,

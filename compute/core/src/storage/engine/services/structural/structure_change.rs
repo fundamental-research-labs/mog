@@ -42,13 +42,34 @@ pub(in crate::storage::engine) fn apply_structure_change(
     sheet_id: &SheetId,
     change: &StructureChange,
 ) -> Result<RecalcResult, ComputeError> {
-    let grid =
-        stores
-            .grid_indexes
-            .get_mut(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: sheet_id.to_uuid_string(),
-            })?;
+    let grid = stores
+        .grid_indexes
+        .get(sheet_id)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+
+    match change {
+        StructureChange::DeleteRows { at, count, .. } => {
+            validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
+        }
+        StructureChange::DeleteCols { at, count, .. } => {
+            validation::structure::validate_delete_bounds(*at, *count, grid.col_count())?;
+        }
+        _ => {}
+    }
+
+    // Deferred import/minimal init keeps formula text but postpones AST and
+    // identity formula construction until the first mutation. Structural
+    // changes must force that construction before positions are shifted or
+    // deleted, otherwise references into the deleted band are reparsed against
+    // the post-delete sheet and can silently bind to the shifted survivor.
+    stores.compute.ensure_graph_built(mirror)?;
+
+    let grid = stores
+        .grid_indexes
+        .get_mut(sheet_id)
+        .expect("sheet grid checked before deferred graph build");
 
     let doc = stores.storage.doc();
     let sheets_map = doc.get_or_insert_map("sheets");
@@ -111,14 +132,12 @@ pub(in crate::storage::engine) fn apply_structure_change(
             }
         }
         StructureChange::DeleteRows { at, count, .. } => {
-            validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
             StructuralOps::delete_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::InsertCols { at, count, .. } => {
             StructuralOps::insert_cols(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::DeleteCols { at, count, .. } => {
-            validation::structure::validate_delete_bounds(*at, *count, grid.col_count())?;
             StructuralOps::delete_cols(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
         }
         StructureChange::RemapPositions { updates } => {

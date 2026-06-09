@@ -33,6 +33,7 @@ mod test_sheet_metadata;
 mod test_slicers;
 mod test_sort_filter;
 mod test_sparklines;
+mod test_structural_deferred_formula_graph;
 mod test_structural_viewport;
 mod test_sync_bootstrap;
 mod test_sync_mutation_results;

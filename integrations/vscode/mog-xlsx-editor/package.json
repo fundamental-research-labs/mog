@@ -2,7 +2,7 @@
   "name": "mog-xlsx-editor",
   "displayName": "Mog Spreadsheet",
   "description": "VS Code custom editor for XLSX files powered by Mog Spreadsheet.",
-  "version": "0.0.1",
+  "version": "0.9.1",
   "publisher": "mog",
   "license": "Apache-2.0",
   "type": "module",

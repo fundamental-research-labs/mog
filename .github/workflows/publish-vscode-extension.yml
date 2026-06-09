@@ -1,0 +1,155 @@
+name: Publish VS Code Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact extension version to publish; must match release/vX.Y.Z and package manifests
+        required: false
+        type: string
+        default: ''
+      dry-run:
+        description: Build and upload the VSIX without publishing
+        required: false
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      version:
+        description: Exact extension version to publish; must match release/vX.Y.Z and package manifests
+        required: false
+        type: string
+        default: ''
+      dry-run:
+        description: Build and upload the VSIX without publishing
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      VSCE_PAT:
+        required: false
+    outputs:
+      extension-version:
+        description: Published or packaged VS Code extension version
+        value: ${{ jobs.publish.outputs.version }}
+
+concurrency:
+  group: publish-vscode-extension
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24.16.0'
+  PNPM_VERSION: '11.5.0'
+
+jobs:
+  publish:
+    name: Publish mog-xlsx-editor
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry-run || false }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]_.-]+)?)$ ]]; then
+            RELEASE_VERSION="${BASH_REMATCH[1]}"
+            VERSION="${INPUT_VERSION:-$RELEASE_VERSION}"
+            if [ "$VERSION" != "$RELEASE_VERSION" ]; then
+              echo "::error::Input version ${VERSION} does not match release branch ${GITHUB_REF_NAME} (${RELEASE_VERSION})."
+              exit 1
+            fi
+          elif [ "$DRY_RUN" = "true" ]; then
+            VERSION="${INPUT_VERSION:-$(node -p "require('./integrations/vscode/mog-xlsx-editor/package.json').version")}"
+            echo "Dry-run candidate validation from ${GITHUB_REF_NAME}; using extension package version ${VERSION}."
+          else
+            echo "::error::VS Code extension publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            exit 1
+          fi
+
+          node -e "if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test('$VERSION')) { console.error('Invalid semver:', '$VERSION'); process.exit(1); }"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release package versions
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          manifests=(
+            contracts/package.json
+            views/sheet-view/package.json
+            runtime/spreadsheet-app/package.json
+            runtime/embed/package.json
+            runtime/sdk/package.json
+            cli/package.json
+            compute/napi/npm/darwin-arm64/package.json
+            compute/napi/npm/darwin-x64/package.json
+            compute/napi/npm/linux-x64-gnu/package.json
+            compute/napi/npm/linux-arm64-gnu/package.json
+            compute/napi/npm/linux-x64-musl/package.json
+            compute/napi/npm/linux-arm64-musl/package.json
+            compute/napi/npm/win32-x64-msvc/package.json
+            compute/wasm/npm/package.json
+            compute/chart-render-wasm/npm/package.json
+            integrations/vscode/mog-xlsx-editor/package.json
+          )
+          for manifest in "${manifests[@]}"; do
+            PACKAGE_VERSION=$(node -p "require('./${manifest}').version")
+            if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
+              echo "::error::${manifest} version ${PACKAGE_VERSION} does not match release ${VERSION}"
+              exit 1
+            fi
+          done
+
+      - name: Check extension identity
+        run: |
+          EXTENSION_ID=$(node -p "const p=require('./integrations/vscode/mog-xlsx-editor/package.json'); `${p.publisher}.${p.name}@${p.version}`")
+          if [ "$EXTENSION_ID" != "mog.mog-xlsx-editor@${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Unexpected VS Code extension identity ${EXTENSION_ID}"
+            exit 1
+          fi
+          echo "Packaging ${EXTENSION_ID}"
+
+      - run: pnpm --dir integrations/vscode/mog-xlsx-editor test
+
+      - run: pnpm --dir integrations/vscode/mog-xlsx-editor typecheck
+
+      - run: pnpm --dir integrations/vscode/mog-xlsx-editor package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mog-xlsx-editor-vsix-${{ steps.version.outputs.version }}
+          path: integrations/vscode/mog-xlsx-editor/dist/mog-xlsx-editor.vsix
+          if-no-files-found: error
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ inputs.dry-run == false }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::Repository secret VSCE_PAT is not configured."
+            exit 1
+          fi
+          pnpm --dir integrations/vscode/mog-xlsx-editor exec vsce publish \
+            --no-dependencies \
+            --packagePath dist/mog-xlsx-editor.vsix \
+            --pat "$VSCE_PAT"

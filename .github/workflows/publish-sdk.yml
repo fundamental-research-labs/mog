@@ -134,6 +134,7 @@ jobs:
             compute/napi/npm/win32-x64-msvc/package.json
             compute/wasm/npm/package.json
             compute/chart-render-wasm/npm/package.json
+            integrations/vscode/mog-xlsx-editor/package.json
           )
           for manifest in "${manifests[@]}"; do
             PACKAGE_VERSION=$(node -p "require('./${manifest}').version")

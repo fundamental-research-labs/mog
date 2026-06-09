@@ -42,7 +42,6 @@ permissions:
 env:
   NODE_VERSION: '24.16.0'
   PNPM_VERSION: '11.5.0'
-  WASM_PACK_VERSION: '0.15.0'
 
 jobs:
   publish:
@@ -136,20 +135,16 @@ jobs:
           fi
           echo "Packaging ${EXTENSION_ID}"
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
-
-      - name: Install binaryen and brotli
-        run: sudo apt-get update && sudo apt-get install -y binaryen brotli
-
-      - name: Build WASM package assets
-        run: bash compute/wasm/build.sh --profile release
+      - name: Hydrate WASM package assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TARBALL=$(npm pack "@mog-sdk/wasm@${VERSION}" --pack-destination "$RUNNER_TEMP")
+          mkdir -p "$RUNNER_TEMP/mog-sdk-wasm"
+          tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP/mog-sdk-wasm"
+          cp "$RUNNER_TEMP"/mog-sdk-wasm/package/compute_core_wasm* compute/wasm/npm/
+          test -f compute/wasm/npm/compute_core_wasm.js
+          test -f compute/wasm/npm/compute_core_wasm_bg.wasm
 
       - run: pnpm --dir integrations/vscode/mog-xlsx-editor test
 

@@ -15,6 +15,8 @@
 
 import type { StateCreator } from 'zustand';
 
+import { parseA1Range } from '@mog/spreadsheet-utils/a1';
+
 import type { DialogStackSlice } from '../dialogs/dialog-stack';
 
 // =============================================================================
@@ -25,6 +27,8 @@ import type { DialogStackSlice } from '../dialogs/dialog-stack';
  * Range selection mode state.
  * Active when a dialog input is in "collapsed" mode waiting for range selection.
  */
+export type RangeSelectionInputMode = 'range' | 'single-cell';
+
 export interface RangeSelectionModeState {
   /** Whether range selection mode is currently active */
   active: boolean;
@@ -36,6 +40,8 @@ export interface RangeSelectionModeState {
   currentRange: string;
   /** Whether to allow multiple ranges separated by commas */
   allowMultipleRanges: boolean;
+  /** Whether the source input accepts ranges or auto-completes a single selected cell */
+  inputMode: RangeSelectionInputMode;
   /** Callback to invoke when range selection completes (Enter pressed) */
   onComplete: ((range: string) => void) | null;
   /** Callback to invoke when range selection is cancelled (Escape pressed) */
@@ -65,6 +71,7 @@ export interface RangeSelectionModeSlice {
     initialRange: string,
     options?: {
       allowMultipleRanges?: boolean;
+      inputMode?: RangeSelectionInputMode;
       onComplete?: (range: string) => void;
       onCancel?: () => void;
     },
@@ -101,9 +108,29 @@ const initialRangeSelectionModeState: RangeSelectionModeState = {
   sourceInputId: null,
   currentRange: '',
   allowMultipleRanges: false,
+  inputMode: 'range',
   onComplete: null,
   onCancel: null,
 };
+
+function isSingleCellReference(range: string): boolean {
+  const normalized = range.trim().replace(/^=/, '');
+  if (!normalized || normalized.includes(',') || normalized.includes('!')) {
+    return false;
+  }
+
+  try {
+    const parsed = parseA1Range(normalized);
+    return (
+      parsed.startRow === parsed.endRow &&
+      parsed.startCol === parsed.endCol &&
+      !parsed.isFullRow &&
+      !parsed.isFullColumn
+    );
+  } catch {
+    return false;
+  }
+}
 
 // =============================================================================
 // Slice Creator
@@ -118,13 +145,17 @@ export const createRangeSelectionModeSlice: StateCreator<
   rangeSelectionMode: initialRangeSelectionModeState,
 
   startRangeSelectionMode: (dialogId, inputId, initialRange, options = {}) => {
+    const inputMode = options.inputMode ?? 'range';
+
     set({
       rangeSelectionMode: {
         active: true,
         sourceDialogId: dialogId,
         sourceInputId: inputId,
         currentRange: initialRange,
-        allowMultipleRanges: options.allowMultipleRanges ?? false,
+        allowMultipleRanges:
+          inputMode === 'single-cell' ? false : (options.allowMultipleRanges ?? false),
+        inputMode,
         onComplete: options.onComplete ?? null,
         onCancel: options.onCancel ?? null,
       },
@@ -136,6 +167,12 @@ export const createRangeSelectionModeSlice: StateCreator<
   updateRangeSelection: (range: string) => {
     const state = get().rangeSelectionMode;
     if (!state.active) return;
+    const shouldCompleteSingleCell =
+      state.inputMode === 'single-cell' && isSingleCellReference(range);
+
+    if (state.inputMode === 'single-cell' && !shouldCompleteSingleCell) {
+      return;
+    }
 
     set({
       rangeSelectionMode: {
@@ -143,6 +180,10 @@ export const createRangeSelectionModeSlice: StateCreator<
         currentRange: range,
       },
     });
+
+    if (shouldCompleteSingleCell) {
+      get().completeRangeSelection();
+    }
   },
 
   completeRangeSelection: () => {

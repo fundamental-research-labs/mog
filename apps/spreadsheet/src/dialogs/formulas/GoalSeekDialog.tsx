@@ -9,10 +9,14 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { CollapsibleRangeInput, useDispatch, useUIStore } from '../../internal-api';
-import { useRangeSelectionEnterGuard } from '../../hooks/dialogs/use-range-selection-enter-guard';
+import {
+  CollapsibleRangeInput,
+  MinimizableDialog,
+  useDispatch,
+  useUIStore,
+} from '../../internal-api';
 
-import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, Input } from '@mog/shell';
+import { Button, DialogBody, DialogFooter, DialogHeader, Input } from '@mog/shell';
 import type { GoalSeekStatus } from '../../ui-store/slices/dialogs/goal-seek-dialog';
 
 // =============================================================================
@@ -110,19 +114,18 @@ export function GoalSeekDialog() {
     setValidationError(null);
   }, [resetGoalSeekState]);
 
-  const guardedEnter = useRangeSelectionEnterGuard(handleConfirm);
-
   if (!isOpen) return null;
 
   // Determine which view to show based on status
   const showResults = status === 'completed' || status === 'failed';
 
   return (
-    <Dialog
-      onEnterKeyDown={guardedEnter}
+    <MinimizableDialog
+      onEnterKeyDown={handleConfirm}
       open={isOpen}
       onClose={handleClose}
       dialogId="goal-seek-dialog"
+      title="Goal Seek"
       width="sm"
     >
       <DialogHeader onClose={handleClose}>Goal Seek</DialogHeader>
@@ -144,6 +147,7 @@ export function GoalSeekDialog() {
                   inputId="goal-seek-set-cell"
                   placeholder="e.g., B4"
                   label="Set cell"
+                  rangePickerMode="single-cell"
                 />
                 <span className="text-caption text-ss-text-tertiary">
                   The cell containing the formula you want to equal a specific value
@@ -184,6 +188,7 @@ export function GoalSeekDialog() {
                   inputId="goal-seek-by-changing"
                   placeholder="e.g., B1"
                   label="By changing cell"
+                  rangePickerMode="single-cell"
                 />
                 <span className="text-caption text-ss-text-tertiary">
                   The cell whose value Goal Seek will change to reach the target
@@ -247,7 +252,7 @@ export function GoalSeekDialog() {
           </>
         )}
       </DialogFooter>
-    </Dialog>
+    </MinimizableDialog>
   );
 }
 

@@ -38,6 +38,8 @@ function ExpandIcon() {
 // Component
 // =============================================================================
 
+type RangePickerMode = 'range' | 'single-cell';
+
 interface CollapsibleRangeInputProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
   'size' | 'value' | 'onChange'
@@ -54,6 +56,8 @@ interface CollapsibleRangeInputProps extends Omit<
   label?: string;
   /** Whether to allow multiple ranges separated by commas */
   allowMultipleRanges?: boolean;
+  /** Whether sheet picks should return a range or auto-complete a single selected cell */
+  rangePickerMode?: RangePickerMode;
   /** Show error styling */
   error?: boolean;
 }
@@ -85,6 +89,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
       inputId,
       label,
       allowMultipleRanges = false,
+      rangePickerMode = 'range',
       error = false,
       placeholder,
       className,
@@ -118,7 +123,8 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
     // Handle collapse button click - enter range selection mode
     const handleCollapseClick = useCallback(() => {
       startRangeSelectionMode(dialogId, inputId, value, {
-        allowMultipleRanges,
+        allowMultipleRanges: rangePickerMode === 'single-cell' ? false : allowMultipleRanges,
+        inputMode: rangePickerMode,
         onComplete: (range: string) => {
           onChange(range);
           // Return focus to input after completion
@@ -138,6 +144,7 @@ export const CollapsibleRangeInput = forwardRef<HTMLInputElement, CollapsibleRan
       inputId,
       value,
       allowMultipleRanges,
+      rangePickerMode,
       startRangeSelectionMode,
       onChange,
       inputRefToUse,

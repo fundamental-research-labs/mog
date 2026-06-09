@@ -489,7 +489,10 @@ export type {
 export type { DiagramUIState } from './slices/objects/diagram';
 export type { TextEffectUIState } from './slices/objects/text-effects';
 export type { BackstagePanelType, BackstageState } from './slices/ribbon/backstage';
-export type { RangeSelectionModeState } from './slices/selection/range-selection-mode';
+export type {
+  RangeSelectionInputMode,
+  RangeSelectionModeState,
+} from './slices/selection/range-selection-mode';
 export type { SelectionCheckpoint } from './slices/selection/selection-checkpoint';
 export type {
   CalculatedColumnInfo,

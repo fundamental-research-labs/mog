@@ -37,6 +37,7 @@ describe('context range handlers', () => {
       inputId: 'source-range',
       initialRange: 'Data!A1:B5',
       allowMultipleRanges: true,
+      inputMode: 'single-cell',
       onComplete,
       onCancel,
     });
@@ -48,6 +49,7 @@ describe('context range handlers', () => {
       'Data!A1:B5',
       {
         allowMultipleRanges: true,
+        inputMode: 'single-cell',
         onComplete,
         onCancel,
       },

@@ -19,6 +19,8 @@ import { getUIStore, handled, notHandled } from '../handler-utils';
 // Type Helpers
 // =============================================================================
 
+type RangeSelectionInputMode = 'range' | 'single-cell';
+
 /**
  * Get selection context (active cell and ranges) using the Actor Access Layer.
  *
@@ -99,6 +101,7 @@ export const START_RANGE_SELECTION_MODE: ActionHandler = (
     inputId: string;
     initialRange: string;
     allowMultipleRanges?: boolean;
+    inputMode?: RangeSelectionInputMode;
     onComplete?: (range: string) => void;
     onCancel?: () => void;
   },
@@ -112,6 +115,7 @@ export const START_RANGE_SELECTION_MODE: ActionHandler = (
     .getState()
     .startRangeSelectionMode(payload.dialogId, payload.inputId, payload.initialRange, {
       allowMultipleRanges: payload.allowMultipleRanges,
+      inputMode: payload.inputMode,
       onComplete: payload.onComplete,
       onCancel: payload.onCancel,
     });

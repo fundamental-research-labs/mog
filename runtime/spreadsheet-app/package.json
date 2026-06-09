@@ -23,7 +23,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup --no-dts && node scripts/build-types.mjs && vite build --config vite.css.config.ts && node scripts/finalize-assets.mjs && node scripts/check-boundary.mjs --require-dist",
+    "build": "pnpm --filter @mog/icons ensure-generated && tsup --no-dts && node scripts/build-types.mjs && vite build --config vite.css.config.ts && node scripts/finalize-assets.mjs && node scripts/check-boundary.mjs --require-dist",
     "build:dev": "tsup --no-dts",
     "test": "node scripts/generate-workbook-facade-matrix.mjs --check && node scripts/check-boundary.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",

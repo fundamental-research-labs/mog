@@ -42,6 +42,7 @@ permissions:
 env:
   NODE_VERSION: '24.16.0'
   PNPM_VERSION: '11.5.0'
+  WASM_PACK_VERSION: '0.15.0'
 
 jobs:
   publish:
@@ -134,6 +135,21 @@ jobs:
             exit 1
           fi
           echo "Packaging ${EXTENSION_ID}"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version "$WASM_PACK_VERSION" --locked
+
+      - name: Install binaryen and brotli
+        run: sudo apt-get update && sudo apt-get install -y binaryen brotli
+
+      - name: Build WASM package assets
+        run: bash compute/wasm/build.sh --profile release
 
       - run: pnpm --dir integrations/vscode/mog-xlsx-editor test
 

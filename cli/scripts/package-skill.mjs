@@ -15,7 +15,7 @@ const crcTable = makeCrc32Table();
 const packageVersion = releasePackageVersion();
 
 const skillSource = readFileSync(resolve(skillRoot, 'SKILL.md'), 'utf8');
-assertNoInstallVersionMismatch(skillSource, 'cli/skill/SKILL.md');
+assertNoPinnedInstallVersions(skillSource, 'cli/skill/SKILL.md');
 assertNoForbiddenInstallPaths(skillSource, 'cli/skill/SKILL.md');
 assertSkillRootContract();
 assertApiSpecSynced();
@@ -26,7 +26,7 @@ rmSync(zipPath, { force: true });
 const entries = [
   {
     name: 'SKILL.md',
-    data: Buffer.from(rewriteSkillInstallVersion(skillSource), 'utf8'),
+    data: Buffer.from(skillSource, 'utf8'),
   },
   {
     name: 'references/api-spec.json',
@@ -34,7 +34,7 @@ const entries = [
   },
 ];
 assertEntriesExactly(entries.map((entry) => entry.name));
-assertNoInstallVersionMismatch(entries[0].data.toString('utf8'), 'packaged SKILL.md');
+assertNoPinnedInstallVersions(entries[0].data.toString('utf8'), 'packaged SKILL.md');
 assertNoForbiddenInstallPaths(entries[0].data.toString('utf8'), 'packaged SKILL.md');
 assertPackagedApiSpecVersion(entries[1].data);
 
@@ -88,34 +88,21 @@ function assertApiSpecPackageVersion(spec, label) {
   }
 }
 
-function rewriteSkillInstallVersion(source) {
-  return source
-    .replace(/mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g, `mog-cli-v${packageVersion}`)
-    .replace(
-      /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-      `@mog-sdk/cli@${packageVersion}`,
-    )
-    .replace(
-      /@mog-sdk\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
-      `@mog-sdk/cli@${packageVersion}`,
-    );
-}
-
-function assertNoInstallVersionMismatch(source, label) {
+function assertNoPinnedInstallVersions(source, label) {
   const patterns = [
-    /@mog-sdk\/cli@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
-    /@mog\/cli@([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
-    /mog-cli-v([0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?)/g,
+    /@mog-sdk\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+    /@mog\/cli@[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
+    /mog-cli-v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9_.-]+)?/g,
   ];
-  const mismatches = [];
+  const pinned = [];
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) {
-      if (match[1] !== packageVersion) mismatches.push(match[0]);
+      pinned.push(match[0]);
     }
   }
-  if (mismatches.length > 0) {
+  if (pinned.length > 0) {
     throw new Error(
-      `${label} contains install version(s) that do not match @mog-sdk/cli@${packageVersion}: ${mismatches.join(', ')}`,
+      `${label} must not pin CLI install versions; found ${pinned.join(', ')}`,
     );
   }
 }

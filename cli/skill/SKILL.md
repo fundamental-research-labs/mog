@@ -20,7 +20,7 @@ If missing, install from npm with a user-local prefix:
 
 ```bash
 mkdir -p "$HOME/.mog/npm"
-npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli@0.9.0
+npm install --prefix "$HOME/.mog/npm" @mog-sdk/cli
 export PATH="$HOME/.mog/npm/node_modules/.bin:$PATH"
 mog --help
 ```

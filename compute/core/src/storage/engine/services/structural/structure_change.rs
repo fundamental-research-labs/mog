@@ -95,7 +95,14 @@ pub(in crate::storage::engine) fn apply_structure_change(
             StructuralOps::insert_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
             if let Some(height) = preflight.inherited_insert_row_height {
                 for row in *at..(*at + *count) {
-                    dimensions::set_row_height(doc, &sheets_map, sheet_id, row, height, Some(grid))?;
+                    dimensions::set_row_height(
+                        doc,
+                        &sheets_map,
+                        sheet_id,
+                        row,
+                        height,
+                        Some(grid),
+                    )?;
                 }
             }
         }

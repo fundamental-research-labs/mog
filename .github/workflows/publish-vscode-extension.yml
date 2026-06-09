@@ -81,8 +81,15 @@ jobs:
           elif [ "$DRY_RUN" = "true" ]; then
             VERSION="${INPUT_VERSION:-$(node -p "require('./integrations/vscode/mog-xlsx-editor/package.json').version")}"
             echo "Dry-run candidate validation from ${GITHUB_REF_NAME}; using extension package version ${VERSION}."
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            VERSION="${INPUT_VERSION}"
+            if [ -z "$VERSION" ]; then
+              echo "::error::VS Code extension publishes from main require an explicit version input."
+              exit 1
+            fi
+            echo "Publishing from main with explicit extension version ${VERSION}."
           else
-            echo "::error::VS Code extension publishes must be dispatched from release/vX.Y.Z; got ${GITHUB_REF}."
+            echo "::error::VS Code extension publishes must be dispatched from release/vX.Y.Z or main with an explicit version input; got ${GITHUB_REF}."
             exit 1
           fi
 

@@ -1,6 +1,7 @@
-use cell_types::{SheetId, SheetPos};
+use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
-use value_types::ComputeError;
+use snapshot_types::DataTableRegionDef;
+use value_types::{CellValue, ComputeError};
 
 use crate::snapshot::{
     ChangeKind, MutationResult, RecalcResult, SheetLifecycleRuntimeHint, SortingChange,
@@ -9,7 +10,35 @@ use crate::snapshot::{
 use super::format_inference::is_formula_parse_input;
 use super::mutation::{self, EngineMutation, MutationOutput};
 use super::mutation_coordinator::SheetLifecycleHistoryHint;
+use super::stores::EngineStores;
 use super::{YrsComputeEngine, services, validation};
+
+type RawCellEdit = (SheetId, CellId, u32, u32, CellValue, Option<String>);
+
+fn materialize_data_table_body_edits(
+    stores: &mut EngineStores,
+    mirror: &crate::mirror::CellMirror,
+    sheet_id: &SheetId,
+    region: &DataTableRegionDef,
+) -> Result<Vec<RawCellEdit>, ComputeError> {
+    let mut edits = Vec::new();
+    for row in region.start_row..=region.end_row {
+        for col in region.start_col..=region.end_col {
+            let cell_id =
+                services::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+                    .ok_or_else(|| ComputeError::SheetNotFound {
+                        sheet_id: sheet_id.to_uuid_string(),
+                    })?;
+            let formula = super::data_table_formula::formula_at(mirror, sheet_id, row, col)
+                .ok_or_else(|| ComputeError::InvalidInput {
+                    message: "create_data_table could not synthesize TABLE formula text"
+                        .to_string(),
+                })?;
+            edits.push((*sheet_id, cell_id, row, col, CellValue::Null, Some(formula)));
+        }
+    }
+    Ok(edits)
+}
 
 impl YrsComputeEngine {
     pub(super) fn attach_sheet_lifecycle_runtime_hint(
@@ -189,8 +218,23 @@ impl YrsComputeEngine {
                     self.stores.storage.workbook_map(),
                     &region,
                 );
-                self.mirror.upsert_data_table_region(region);
-                MutationOutput::Plain(MutationResult::empty().with_data(&data)?)
+                self.mirror.upsert_data_table_region(region.clone());
+                let edits = materialize_data_table_body_edits(
+                    &mut self.stores,
+                    &self.mirror,
+                    &input.sheet_id,
+                    &region,
+                )?;
+                let mut recalc = services::mutation_handlers::mutation_set_cells_raw_with_trust(
+                    &mut self.stores,
+                    &mut self.mirror,
+                    &mut self.mutation,
+                    edits,
+                    true,
+                    crate::scheduler::WriteTrust::TrustedReplay,
+                )?;
+                self.prepare_recalc_for_flush(&mut recalc);
+                MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&data)?)
             }
 
             EngineMutation::ApplyScenario { scenario_id } => {

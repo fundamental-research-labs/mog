@@ -19,15 +19,35 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw(
     edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)>,
     skip_cycle_check: bool,
 ) -> Result<RecalcResult, ComputeError> {
+    mutation_set_cells_raw_with_trust(
+        stores,
+        mirror,
+        mutation,
+        edits,
+        skip_cycle_check,
+        crate::scheduler::WriteTrust::UserEdit,
+    )
+}
+
+pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    mutation: &mut MutationCoordinator,
+    edits: Vec<(SheetId, CellId, u32, u32, CellValue, Option<String>)>,
+    skip_cycle_check: bool,
+    trust: crate::scheduler::WriteTrust,
+) -> Result<RecalcResult, ComputeError> {
     let edits = canonicalize_resolved_raw_edits(edits)?;
     validate_edit_bounds(
         edits
             .iter()
             .map(|(sheet_id, _, row, col, _, _)| (*sheet_id, *row, *col)),
     )?;
-    stores
-        .compute
-        .validate_raw_user_edit_region_writes(mirror, &edits)?;
+    if matches!(trust, crate::scheduler::WriteTrust::UserEdit) {
+        stores
+            .compute
+            .validate_raw_user_edit_region_writes(mirror, &edits)?;
+    }
 
     let _suppress = mutation.suppress_guard();
 
@@ -75,16 +95,15 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw(
     //    For formula edits, `process_value_input` owns the mirror update and
     //    will preserve the prior value as a seed when the formula matches.
     //
-    //    Stream A′ trust marker: this is a user-driven path (fill, paste,
-    //    move, import, collab sync). Partial writes into a CSE / Data Table
-    //    region MUST reject; the unified region guard at
-    //    `set_cells_raw_with_trust(WriteTrust::UserEdit)` enforces this.
-    let mut result = stores.compute.set_cells_raw_with_trust(
-        mirror,
-        &edits,
-        skip_cycle_check,
-        crate::scheduler::WriteTrust::UserEdit,
-    )?;
+    //    Stream A′ trust marker: user-driven callers (fill, paste, move,
+    //    import, collab sync) pass `WriteTrust::UserEdit`, so partial writes
+    //    into a CSE / Data Table region still reject. Engine-owned region
+    //    materialization can pass `TrustedReplay` after validating the parent
+    //    operation atomically.
+    let mut result =
+        stores
+            .compute
+            .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)?;
 
     // Patch old_value onto seed changes (direct edits) that don't already have one.
     for change in &mut result.changed_cells {

@@ -109,8 +109,8 @@ pub(crate) fn prepare_data_table_creation(
     }
 
     validate_formula_sources(mirror, &input.sheet_id, layout, table, body)?;
-    validate_body_is_empty(mirror, &input.sheet_id, body)?;
     validate_region_collisions(mirror, &input.sheet_id, table)?;
+    validate_body_is_empty(mirror, &input.sheet_id, body)?;
 
     let region = DataTableRegionDef {
         sheet: input.sheet_id.to_uuid_string(),

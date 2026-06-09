@@ -1,3 +1,4 @@
+use cell_types::{SheetId, SheetPos};
 use compute_core::data_table::CreateDataTableInput;
 use compute_core::storage::engine::YrsComputeEngine;
 use formula_types::CellRef;
@@ -91,6 +92,16 @@ fn expect_invalid_code(err: ComputeError, code: &str) {
     );
 }
 
+fn assert_number_at(engine: &YrsComputeEngine, row: u32, col: u32, expected: f64) {
+    let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet_id, SheetPos::new(row, col)),
+        Some(&CellValue::Number(FiniteF64::must(expected)))
+    );
+}
+
 #[test]
 fn create_data_table_persists_region_to_yrs_and_hydrates_from_state() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
@@ -117,6 +128,50 @@ fn create_data_table_persists_region_to_yrs_and_hydrates_from_state() {
     assert_eq!(hydrated_regions.len(), 1);
     assert_eq!(hydrated_regions[0].start_row, 2);
     assert_eq!(hydrated_regions[0].start_col, 2);
+}
+
+#[test]
+fn create_data_table_materializes_two_variable_body_formulas_and_values() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(two_variable_workbook()).unwrap();
+    let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
+
+    create_two_variable(&mut engine).unwrap();
+
+    assert_eq!(engine.get_raw_value(&sheet_id, 2, 2), "=TABLE($A$2,$A$1)");
+    assert_eq!(engine.get_raw_value(&sheet_id, 3, 3), "=TABLE($A$2,$A$1)");
+    assert_number_at(&engine, 2, 2, 300.0);
+    assert_number_at(&engine, 2, 3, 600.0);
+    assert_number_at(&engine, 3, 2, 400.0);
+    assert_number_at(&engine, 3, 3, 800.0);
+}
+
+#[test]
+fn create_data_table_materializes_one_variable_column_layout() {
+    let snapshot = workbook(vec![
+        number_cell(1, 0, 0, 2.0),       // A1 input ref
+        formula_cell(2, 0, 2, "=A1*10"), // C1 formula source
+        number_cell(3, 1, 1, 3.0),       // B2 left-column value
+        number_cell(4, 2, 1, 4.0),       // B3 left-column value
+    ]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet_id = SheetId::from_uuid_str(SHEET_UUID).unwrap();
+    let input = CreateDataTableInput {
+        sheet_id,
+        table_range: "B1:C3".to_string(),
+        row_input_cell: None,
+        col_input_cell: Some("A1".to_string()),
+    };
+
+    let (_patches, result) = engine
+        .create_data_table(&sheet_id, 0, 1, 2, 2, &input)
+        .unwrap();
+
+    let data = result.data.expect("create result data");
+    assert_eq!(data["bodyRange"], "C2:C3");
+    assert_eq!(engine.get_raw_value(&sheet_id, 1, 2), "=TABLE($A$1,)");
+    assert_eq!(engine.get_raw_value(&sheet_id, 2, 2), "=TABLE($A$1,)");
+    assert_number_at(&engine, 1, 2, 30.0);
+    assert_number_at(&engine, 2, 2, 40.0);
 }
 
 #[test]

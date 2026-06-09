@@ -15,5 +15,7 @@ pub(in crate::storage::engine) use clear::{
 pub(in crate::storage::engine) use position_resolution::{
     mutation_set_cells_by_position, mutation_set_cells_by_position_raw,
 };
-pub(in crate::storage::engine) use raw_edits::mutation_set_cells_raw;
+pub(in crate::storage::engine) use raw_edits::{
+    mutation_set_cells_raw, mutation_set_cells_raw_with_trust,
+};
 pub(in crate::storage::engine) use set_cells::mutation_set_cells;

@@ -144,6 +144,11 @@ jobs:
             fi
           done
 
+      - name: Validate release metadata
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: node tools/check-release-version-metadata.mjs
+
       - name: Check not already published
         run: |
           VERSION="${{ steps.version.outputs.version }}"

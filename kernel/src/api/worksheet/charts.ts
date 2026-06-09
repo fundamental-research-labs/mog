@@ -31,127 +31,25 @@ import type {
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
 import type { ChartLayoutSnapshot } from '@mog-sdk/contracts/bridges';
+import {
+  applyUpdate,
+  assertSupportedNativeXlsxChartConfig,
+  awaitChartReadScope,
+  awaitSheetMaterialized,
+  requireChart,
+  requireChartWithSeries,
+  resolveChartIdInput,
+} from './chart-api-helpers';
 import { orderChartsForList } from '../../domain/charts/chart-list-ordering';
 import {
   chartConfigToInternal,
-  chartUpdatesToInternal,
   serializedChartToChart,
-  unsupportedNativeXlsxChartType,
 } from '../../domain/charts/chart-public-api-converters';
 import { ensurePointsArray } from '../../domain/charts/chart-series-mutations';
+import { withInferredChartTitle } from '../../domain/charts/chart-title-inference';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
-
-function assertSupportedNativeXlsxChartConfig(config: Partial<Pick<ChartConfig, 'type'>>): void {
-  const unsupportedType = unsupportedNativeXlsxChartType(config);
-  if (unsupportedType) {
-    throw invalidChartConfig(
-      `Chart type "${unsupportedType}" is not supported because it has no native Excel XLSX chart representation`,
-    );
-  }
-}
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
-async function awaitSheetMaterialized(ctx: DocumentContext, sheetId: SheetId): Promise<void> {
-  await ctx.awaitMaterialized?.(sheetId);
-}
-
-async function awaitChartReadScope(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  options?: ChartReadOptions,
-): Promise<void> {
-  const materialization = options?.materialization ?? 'sheet';
-  if (materialization === 'available') {
-    return;
-  }
-  if (materialization === 'complete') {
-    await ctx.awaitMaterialized?.('allSheets');
-    return;
-  }
-  if (materialization === 'sheet') {
-    await awaitSheetMaterialized(ctx, sheetId);
-  }
-}
-
-async function resolveChartIdInput(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  chartId: string,
-): Promise<string> {
-  const exact = (await ctx.computeBridge.getChart(sheetId, chartId)) as ChartFloatingObject | null;
-  if (exact) return chartId;
-  if (!/^chart-import-\d+$/.test(chartId)) return chartId;
-
-  const candidate = `${chartId}-${sheetId}`;
-  const scoped = (await ctx.computeBridge.getChart(
-    sheetId,
-    candidate,
-  )) as ChartFloatingObject | null;
-  return scoped ? candidate : chartId;
-}
-
-/**
- * Get a chart as the public Chart type, throwing chartNotFound if absent.
- */
-async function requireChart(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  chartId: string,
-): Promise<Chart> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
-  const raw = (await ctx.computeBridge.getChart(
-    sheetId,
-    resolvedChartId,
-  )) as ChartFloatingObject | null;
-  if (!raw) throw chartNotFound(chartId);
-  return serializedChartToChart(raw);
-}
-
-/**
- * Get a chart and its mutable series array, throwing chartNotFound if absent.
- */
-async function requireChartWithSeries(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  chartId: string,
-): Promise<{ chart: Chart; series: SeriesConfig[] }> {
-  const chart = await requireChart(ctx, sheetId, chartId);
-  const series = [...(chart.series ?? [])];
-  return { chart, series };
-}
-
-/**
- * Validate + apply a chart update via the domain layer.
- * Throws on failure (no OperationResult).
- */
-async function applyUpdate(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  chartId: string,
-  updates: Partial<ChartConfig>,
-): Promise<void> {
-  await awaitSheetMaterialized(ctx, sheetId);
-  const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
-  // Ensure chart exists
-  const existing = (await ctx.computeBridge.getChart(
-    sheetId,
-    resolvedChartId,
-  )) as ChartFloatingObject | null;
-  if (!existing) throw chartNotFound(chartId);
-  const internalUpdates = chartUpdatesToInternal(updates);
-  // Merge partial anchor with existing anchor so the Rust bridge receives a
-  // complete anchor object (it doesn't handle partial anchor merges).
-  if (internalUpdates.anchor && existing.anchor) {
-    internalUpdates.anchor = { ...existing.anchor, ...internalUpdates.anchor };
-  }
-  await ctx.computeBridge.updateChart(sheetId, resolvedChartId, internalUpdates);
-}
 
 // =============================================================================
 // Implementation
@@ -185,7 +83,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     // created within the same millisecond.
     const chartId =
       (config as { id?: string }).id || `chart-${Date.now()}-${WorksheetChartsImpl._idCounter++}`;
-    const configWithId = { ...config, id: chartId } as ChartConfig;
+    const configWithId = (await withInferredChartTitle(this.ctx, this.sheetId, {
+      ...config,
+      id: chartId,
+    } as ChartConfig)) as ChartConfig;
     const internalConfig = chartConfigToInternal(configWithId);
     const result = await this.ctx.computeBridge.createChart(this.sheetId, internalConfig);
     // Extract the actual chart ID assigned by the Rust engine (may differ from our generated ID)

@@ -109,7 +109,7 @@ async function resolveSheetName(ctx: DocumentContext, sheetName: string): Promis
   return names.find((s) => s.name?.toLocaleLowerCase() === folded)?.id ?? null;
 }
 
-async function resolveA1ChartRange(
+export async function resolveA1ChartRange(
   ctx: DocumentContext,
   chartSheetId: SheetId | null,
   kind: ChartRangeKind,

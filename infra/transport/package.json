@@ -1,7 +1,7 @@
 {
   "name": "@mog/transport",
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "files": [
     "dist",

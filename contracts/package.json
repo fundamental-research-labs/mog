@@ -1,7 +1,7 @@
 {
   "name": "@mog-sdk/contracts",
   "version": "0.9.1",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "Apache-2.0",
   "repository": "https://github.com/fundamental-research-labs/mog",
   "private": false,
   "type": "module",

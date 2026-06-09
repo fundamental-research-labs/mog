@@ -90,6 +90,6 @@ Be direct, kind, and concrete. We care about reports from people who are trying
 to get real work done with Mog, even when the report is messy or incomplete.
 
 By contributing, you agree that your contributions will be licensed under the
-same [MIT License](LICENSE) that covers the project. The Mog name and logo are
+same [Apache License 2.0](LICENSE) that covers the project. The Mog name and logo are
 trademarks of Fundamental Research Labs, Inc.; see [TRADEMARKS.md](TRADEMARKS.md)
 for usage guidelines.

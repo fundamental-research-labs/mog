@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Durable Python workflow engine for Data OS - testing infrastructure and runtime"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
+license = "Apache-2.0"
 authors = [
     { name = "Data OS Team", email = "team@dataos.dev" }
 ]
@@ -12,7 +12,7 @@ keywords = ["workflow", "durable-execution", "automation", "testing"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

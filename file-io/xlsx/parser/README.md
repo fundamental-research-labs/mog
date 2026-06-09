@@ -300,4 +300,4 @@ Shared strings are stored sequentially:
 
 ## License
 
-MIT
+Apache-2.0

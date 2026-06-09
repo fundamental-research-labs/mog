@@ -4,7 +4,7 @@
   "description": "VS Code custom editor for XLSX files powered by Mog Spreadsheet.",
   "version": "0.0.1",
   "publisher": "mog",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "vscode": "^1.90.0"

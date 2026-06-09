@@ -308,7 +308,7 @@ function buildCliPublicPackageManifest(manifest, sdkVersion) {
     version: manifest.version,
     description:
       manifest.description ?? 'Command-line interface for operating Mog workbooks with the headless SDK',
-    license: manifest.license ?? 'MIT',
+    license: manifest.license ?? 'Apache-2.0',
     type: 'commonjs',
     bin: {
       mog: './dist/mog.cjs',

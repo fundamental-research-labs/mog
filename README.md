@@ -105,4 +105,4 @@ If you are a coding agent, read [AGENTS.md](AGENTS.md) before editing code.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE).

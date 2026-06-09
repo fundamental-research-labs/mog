@@ -15,7 +15,7 @@
     "compute-core-napi.node"
   ],
   "description": "Native binary for @mog-sdk/sdk Node runtime (Linux ARM64, musl)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">= 18"
   },

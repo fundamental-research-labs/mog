@@ -12,7 +12,7 @@
     "compute-core-napi.node"
   ],
   "description": "Native binary for @mog-sdk/sdk Node runtime (macOS ARM64)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">= 18"
   },

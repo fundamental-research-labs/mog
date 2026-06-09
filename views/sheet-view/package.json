@@ -1,7 +1,7 @@
 {
   "name": "@mog-sdk/sheet-view",
   "version": "0.9.1",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "Apache-2.0",
   "files": [
     "dist/index.js",
     "dist/index.js.map",

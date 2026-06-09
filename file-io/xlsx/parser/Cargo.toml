@@ -5,7 +5,7 @@ publish = false
 edition.workspace = true
 authors = ["Shortcut Team"]
 description = "High-performance XLSX parser in pure Rust"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/fundamental-research-labs/mog"
 
 [lib]

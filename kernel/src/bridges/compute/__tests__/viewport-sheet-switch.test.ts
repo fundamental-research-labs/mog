@@ -572,4 +572,33 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     expect(undoAccessor?.moveTo(0, 0)).toBe(true);
     expect(undoAccessor?.displayText).toBe('plain header');
   });
+
+  it('history replay does not notify forward mutation subscribers', async () => {
+    const notifyForwardMutation = jest.fn(async () => undefined);
+    const ctx = {
+      ...makeMockContext(),
+      services: {
+        undo: {
+          notifyForwardMutation,
+        },
+      },
+    } as unknown as IKernelContext;
+    const transport = {
+      call: jest.fn(async (command: string): Promise<any> => {
+        if (command === 'compute_undo' || command === 'compute_redo') {
+          return [new Uint8Array(), {}];
+        }
+        return undefined;
+      }) as any,
+    } as BridgeTransport & { call: jest.Mock };
+    const core = new ComputeCore(ctx, 'test-doc', transport);
+    (core as any)._phase = 'STARTED';
+
+    await core.undo();
+    await core.redo();
+
+    expect(transport.call).toHaveBeenCalledWith('compute_undo', { docId: 'test-doc' });
+    expect(transport.call).toHaveBeenCalledWith('compute_redo', { docId: 'test-doc' });
+    expect(notifyForwardMutation).not.toHaveBeenCalled();
+  });
 });

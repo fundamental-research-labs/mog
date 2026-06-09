@@ -794,7 +794,21 @@ export function getSelectionViewportFollowCell(
     return activeCell;
   }
 
-  return getMovingEdge(range, anchor);
+  const movingEdge = getMovingEdge(range, anchor);
+  const normalized = normalizeRange(range);
+  const isFullRowRange =
+    range.isFullRow === true && normalized.startCol === 0 && normalized.endCol === MAX_COLS - 1;
+  if (isFullRowRange) {
+    return { row: movingEdge.row, col: activeCell.col };
+  }
+
+  const isFullColumnRange =
+    range.isFullColumn === true && normalized.startRow === 0 && normalized.endRow === MAX_ROWS - 1;
+  if (isFullColumnRange) {
+    return { row: activeCell.row, col: movingEdge.col };
+  }
+
+  return movingEdge;
 }
 
 // =============================================================================

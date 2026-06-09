@@ -32,6 +32,8 @@ import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 import { assign } from 'xstate';
 import {
   clampCell,
+  createFullColumnRangeSpan,
+  createFullRowRangeSpan,
   getMovingEdge,
   moveCellSkipHidden,
   normalizeRange,
@@ -155,6 +157,69 @@ const extendSelection = assign(
     if (event.type !== 'KEY_ARROW') return {};
     // Use existing anchor, or establish it from activeCell on first extend
     const anchor = context.anchor ?? context.activeCell;
+
+    const normalizedRange = normalizeRange(context.pendingRange);
+    const isFullRowRange =
+      context.pendingRange.isFullRow === true &&
+      normalizedRange.startCol === 0 &&
+      normalizedRange.endCol === MAX_COLS - 1;
+    const isFullColumnRange =
+      context.pendingRange.isFullColumn === true &&
+      normalizedRange.startRow === 0 &&
+      normalizedRange.endRow === MAX_ROWS - 1;
+
+    if (isFullRowRange && !isFullColumnRange) {
+      const anchorCell = { row: context.anchorRow ?? anchor.row, col: anchor.col };
+      const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
+      const targetRow =
+        event.direction === 'up' || event.direction === 'down'
+          ? moveCellSkipHidden(
+              movingEdge,
+              event.direction,
+              1,
+              context.isRowHidden,
+              context.isColHidden,
+            ).row
+          : movingEdge.row;
+      const activeCell =
+        context.modes.extend && !event.shiftKey ? { row: targetRow, col: anchorCell.col } : anchorCell;
+
+      return {
+        pendingRange: createFullRowRangeSpan(anchorCell.row, targetRow),
+        activeCell,
+        anchor: anchorCell,
+        anchorRow: anchorCell.row,
+        anchorCol: null,
+        direction: computeDirection(anchorCell, { row: targetRow, col: anchorCell.col }),
+      };
+    }
+
+    if (isFullColumnRange && !isFullRowRange) {
+      const anchorCell = { row: anchor.row, col: context.anchorCol ?? anchor.col };
+      const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
+      const targetCol =
+        event.direction === 'left' || event.direction === 'right'
+          ? moveCellSkipHidden(
+              movingEdge,
+              event.direction,
+              1,
+              context.isRowHidden,
+              context.isColHidden,
+            ).col
+          : movingEdge.col;
+      const activeCell =
+        context.modes.extend && !event.shiftKey ? { row: anchorCell.row, col: targetCol } : anchorCell;
+
+      return {
+        pendingRange: createFullColumnRangeSpan(anchorCell.col, targetCol),
+        activeCell,
+        anchor: anchorCell,
+        anchorRow: null,
+        anchorCol: anchorCell.col,
+        direction: computeDirection(anchorCell, { row: anchorCell.row, col: targetCol }),
+      };
+    }
+
     // Get the "moving edge" - the corner opposite the anchor that should move
     // For first extend (single cell), the moving edge is the activeCell itself
     const movingEdge = getMovingEdge(context.pendingRange, anchor);

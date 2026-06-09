@@ -16,11 +16,21 @@
  * @see ARCHITECTURE.md - Coordinator Pattern
  */
 
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react';
 
 import type { ActionType } from '@mog-sdk/contracts/actions';
 import { objectSelectors } from '../selectors';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
+import type { CellRange } from '@mog-sdk/contracts/core';
+import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
@@ -128,6 +138,8 @@ interface SpreadsheetCoordinatorProviderProps {
   onUIAction?: (action: string) => void;
 }
 
+type PendingSelectionCheckpointRef = MutableRefObject<SelectionCheckpoint | null>;
+
 // =============================================================================
 // Pane Navigation Setup (E1: F6 Pane Navigation)
 // =============================================================================
@@ -175,7 +187,13 @@ function PaneNavigationSetup({ children }: { children: ReactNode }) {
  * - Captures post-operation selection for redo support
  *
  */
-function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
+function UndoSelectionCoordinatorSetup({
+  children,
+  pendingSelectionCheckpointRef,
+}: {
+  children: ReactNode;
+  pendingSelectionCheckpointRef: PendingSelectionCheckpointRef;
+}) {
   const coordinator = useCoordinator();
   const wb = useWorkbook();
   const uiStoreApi = useUIStoreApi();
@@ -188,6 +206,11 @@ function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
       selectionActor: coordinator.grid.access.actors.selection,
       getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
       setActiveSheet: (sheetId) => uiStoreApi.getState().setActiveSheet(sheetId),
+      consumePendingSelectionCheckpoint: () => {
+        const checkpoint = pendingSelectionCheckpointRef.current;
+        pendingSelectionCheckpointRef.current = null;
+        return checkpoint;
+      },
       primeSheetViewState: (sheetId, checkpoint) => {
         const uiStore = uiStoreApi.getState();
         const existing = uiStore.getSheetViewState(sheetId);
@@ -204,7 +227,7 @@ function UndoSelectionCoordinatorSetup({ children }: { children: ReactNode }) {
     });
 
     return cleanup;
-  }, [coordinator, uiStoreApi, wb.history]);
+  }, [coordinator, pendingSelectionCheckpointRef, uiStoreApi, wb.history]);
 
   return <>{children}</>;
 }
@@ -621,6 +644,7 @@ export function SpreadsheetCoordinatorProvider({
   // Consume the unified Workbook from DocumentProvider (created during initialization).
   // Workbook is now created once in DocumentProvider, not here.
   const workbook = useWorkbook();
+  const pendingSelectionCheckpointRef = useRef<SelectionCheckpoint | null>(null);
   const circularReferenceDialog = useCircularReferenceDialog();
   const {
     state: circularReferenceDialogState,
@@ -631,8 +655,52 @@ export function SpreadsheetCoordinatorProvider({
 
   // Create editor dependencies for commit coordination and schema lookup
   // These enable the editor to commit values and resolve editor types from schemas
-  const editorDependencies = useMemo<EditorDependencies>(
-    () => ({
+  const editorDependencies = useMemo<EditorDependencies>(() => {
+    const cellCheckpoint = (
+      sheetId: SelectionCheckpoint['sheetId'],
+      row: number,
+      col: number,
+    ): SelectionCheckpoint => ({
+      sheetId,
+      ranges: [{ startRow: row, startCol: col, endRow: row, endCol: col }],
+      activeCell: { row, col },
+      anchor: null,
+      direction: 'down-right',
+    });
+
+    const rangeCheckpoint = (
+      sheetId: SelectionCheckpoint['sheetId'],
+      range: CellRange,
+    ): SelectionCheckpoint => ({
+      sheetId,
+      ranges: [
+        {
+          startRow: range.startRow,
+          startCol: range.startCol,
+          endRow: range.endRow,
+          endCol: range.endCol,
+        },
+      ],
+      activeCell: { row: range.startRow, col: range.startCol },
+      anchor: null,
+      direction: 'down-right',
+    });
+
+    const withSelectionCheckpoint = async <T,>(
+      checkpoint: SelectionCheckpoint,
+      mutation: () => Promise<T>,
+    ): Promise<T> => {
+      pendingSelectionCheckpointRef.current = checkpoint;
+      try {
+        return await mutation();
+      } finally {
+        if (pendingSelectionCheckpointRef.current === checkpoint) {
+          pendingSelectionCheckpointRef.current = null;
+        }
+      }
+    };
+
+    return {
       // Write cell value to store via unified Worksheet API (ws.setCell).
       // Format preservation is now handled in the Rust viewport patch layer
       // (produce_viewport_patches enriches format_idx from the effective format).
@@ -647,12 +715,16 @@ export function SpreadsheetCoordinatorProvider({
         const tableHeader = await resolveTableHeaderCellContext(sheetId, row, col, workbook);
         if (tableHeader) {
           if (tableHeader.columnName !== value) {
-            await ws.tables.renameColumn(tableHeader.tableName, tableHeader.columnIndex, value);
+            await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
+              ws.tables.renameColumn(tableHeader.tableName, tableHeader.columnIndex, value),
+            );
           }
           return;
         }
 
-        await ws.setCell(row, col, value);
+        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
+          ws.setCell(row, col, value),
+        );
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
           if (autoFill) {
@@ -671,11 +743,15 @@ export function SpreadsheetCoordinatorProvider({
           if (fraction > 0) {
             const { dateComponentsToSerial } = await import('@mog/spreadsheet-utils/datetime');
             const [year, month, day] = isoDate.split('-').map(Number);
-            await ws.setCell(row, col, String(dateComponentsToSerial(year, month, day) + fraction));
+            await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
+              ws.setCell(row, col, String(dateComponentsToSerial(year, month, day) + fraction)),
+            );
             return;
           }
         }
-        await ws.setDateValue(row, col, isoDate);
+        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
+          ws.setDateValue(row, col, isoDate),
+        );
       },
       // Set pending undo description for next action
       setPendingUndoDescription: (description) => {
@@ -791,25 +867,27 @@ export function SpreadsheetCoordinatorProvider({
       // `__dt.getCellValue` monkey-patch.
       setArrayFormula: (sheetId, range, formulaValue) => {
         const ws = workbook.getSheetById(sheetId);
-        return ws.setArrayFormula(
-          {
-            startRow: range.startRow,
-            startCol: range.startCol,
-            endRow: range.endRow,
-            endCol: range.endCol,
-          },
-          formulaValue,
+        return withSelectionCheckpoint(rangeCheckpoint(sheetId, range), () =>
+          ws.setArrayFormula(
+            {
+              startRow: range.startRow,
+              startCol: range.startCol,
+              endRow: range.endRow,
+              endCol: range.endCol,
+            },
+            formulaValue,
+          ),
         );
       },
-    }),
-    [
-      workbook,
-      showCircularReferenceDialog,
-      showFormulaError,
-      showValidationError,
-      showValidationWarning,
-    ],
-  );
+    };
+  }, [
+    workbook,
+    pendingSelectionCheckpointRef,
+    showCircularReferenceDialog,
+    showFormulaError,
+    showValidationError,
+    showValidationWarning,
+  ]);
 
   return (
     <>
@@ -844,7 +922,9 @@ export function SpreadsheetCoordinatorProvider({
         readOnly={readOnly}
       >
         <KeyboardCaptureSetup workbook={workbook}>
-          <UndoSelectionCoordinatorSetup>
+          <UndoSelectionCoordinatorSetup
+            pendingSelectionCheckpointRef={pendingSelectionCheckpointRef}
+          >
             <RangeSelectionCoordinatorSetup>
               <PaneNavigationSetup>
                 <CollabPresenceBridge>{children}</CollabPresenceBridge>

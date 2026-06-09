@@ -10,7 +10,7 @@
  * Selection checkpoints flow through three stages:
  *
  * 1. **Capture**: Before each mutation, the caller captures current selection
- * and stores it via wb.setPendingSelectionCheckpoint
+ * and exposes it through consumePendingSelectionCheckpoint.
  *
  * 2. **Attach**: When the UndoService receives a mutation notification,
  * the pending checkpoint is consumed and stored in a local stack
@@ -57,6 +57,8 @@ export interface UndoSelectionCoordinationConfig {
   setActiveSheet?: (sheetId: SheetId) => void;
   /** Prime per-sheet view state before switching, preventing async restore overwrite */
   primeSheetViewState?: (sheetId: SheetId, checkpoint: SelectionCheckpoint) => void;
+  /** Consume a checkpoint captured before the mutation that produced the history item. */
+  consumePendingSelectionCheckpoint?: () => SelectionCheckpoint | null;
 }
 
 // =============================================================================
@@ -70,7 +72,7 @@ export interface UndoSelectionCoordinationConfig {
  * when undo/redo operations occur.
  *
  * Note: The capture side (storing checkpoints) is handled by callers
- * via wb.setPendingSelectionCheckpoint() before mutations.
+ * via consumePendingSelectionCheckpoint before mutations.
  *
  * @returns Cleanup function to remove subscriptions
  */
@@ -105,11 +107,10 @@ export function setupUndoSelectionCoordination(
         restoreSelectionCheckpoint(checkpoint, config);
       }
     } else if (trigger === 'push') {
-      // Capture current selection as pre-operation checkpoint for the undo stack.
-      // The push event fires synchronously from notifyForwardMutation() before
-      // the action handler continues, so the selection actor still reflects the
-      // position at mutation time — the correct checkpoint for undo restoration.
-      undoSelections.push(captureSelectionCheckpoint(selectionActor, getActiveSheetId));
+      const pendingCheckpoint = config.consumePendingSelectionCheckpoint?.() ?? null;
+      undoSelections.push(
+        pendingCheckpoint ?? captureSelectionCheckpoint(selectionActor, getActiveSheetId),
+      );
 
       // Clear redo selections on new operation (redo path is invalidated)
       redoSelections.length = 0;

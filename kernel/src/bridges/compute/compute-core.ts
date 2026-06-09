@@ -1610,8 +1610,11 @@ export class ComputeCore {
   // ===========================================================================
 
   async undo(): Promise<MutationResult> {
-    const result = await this.mutatePublic('compute_undo', () =>
+    await this.admitPublicMutation('compute_undo');
+    const result = await this.mutateCore(
       this.transport.call<MutationTuple>('compute_undo', { docId: this.docId }),
+      undefined,
+      'compute_undo',
     );
     // History replay can change derived/effective viewport state without
     // Rust emitting the same fine-grained viewport patches as the original
@@ -1622,8 +1625,11 @@ export class ComputeCore {
   }
 
   async redo(): Promise<MutationResult> {
-    const result = await this.mutatePublic('compute_redo', () =>
+    await this.admitPublicMutation('compute_redo');
+    const result = await this.mutateCore(
       this.transport.call<MutationTuple>('compute_redo', { docId: this.docId }),
+      undefined,
+      'compute_redo',
     );
     await this.forceRefreshAllViewports();
     return result;

@@ -127,6 +127,50 @@ describe('setupUndoSelectionCoordination', () => {
     cleanup();
   });
 
+  it('prefers pending checkpoints captured before the mutation', () => {
+    const { history, emit } = createHistory();
+    const { selectionActor, sent } = createSelectionActor(snapshot(0, 0));
+    let activeSheetId = toSheetId('sheet-2');
+    const setActiveSheet = jest.fn((sheetId: SheetId) => {
+      activeSheetId = sheetId;
+    });
+    const pendingCheckpoint: SelectionCheckpoint = {
+      sheetId: toSheetId('sheet-1'),
+      ranges: [{ startRow: 1, startCol: 0, endRow: 1, endCol: 0 }],
+      activeCell: { row: 1, col: 0 },
+      anchor: null,
+      direction: 'down-right',
+    };
+    const consumePendingSelectionCheckpoint = jest
+      .fn<() => SelectionCheckpoint | null>()
+      .mockReturnValueOnce(pendingCheckpoint);
+
+    const cleanup = setupUndoSelectionCoordination({
+      history,
+      selectionActor,
+      getActiveSheetId: () => activeSheetId,
+      setActiveSheet,
+      primeSheetViewState: jest.fn(),
+      consumePendingSelectionCheckpoint,
+    });
+
+    emit('push');
+    emit('undo');
+
+    expect(consumePendingSelectionCheckpoint).toHaveBeenCalledTimes(1);
+    expect(setActiveSheet).toHaveBeenCalledWith(toSheetId('sheet-1'));
+    expect(sent).toEqual([
+      {
+        type: 'SET_SELECTION',
+        ranges: [{ startRow: 1, startCol: 0, endRow: 1, endCol: 0 }],
+        activeCell: { row: 1, col: 0 },
+        anchor: null,
+      },
+    ]);
+
+    cleanup();
+  });
+
   it('reuses the original operation checkpoint for redo instead of the current cursor', () => {
     const { history, emit } = createHistory();
     const { selectionActor, sent, setSnapshot } = createSelectionActor(snapshot(1, 0));

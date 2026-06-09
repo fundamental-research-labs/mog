@@ -128,7 +128,7 @@ jobs:
 
       - name: Check extension identity
         run: |
-          EXTENSION_ID=$(node -p "const p=require('./integrations/vscode/mog-xlsx-editor/package.json'); `${p.publisher}.${p.name}@${p.version}`")
+          EXTENSION_ID=$(node -p "const p=require('./integrations/vscode/mog-xlsx-editor/package.json'); p.publisher + '.' + p.name + '@' + p.version")
           if [ "$EXTENSION_ID" != "mog.mog-xlsx-editor@${{ steps.version.outputs.version }}" ]; then
             echo "::error::Unexpected VS Code extension identity ${EXTENSION_ID}"
             exit 1

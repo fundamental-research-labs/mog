@@ -418,6 +418,7 @@ export interface PasteSpecialOptions {
 export interface ExternalPastePayload {
   text: string;
   targetCell: CellCoord;
+  targetRange?: CellRange | null;
   html?: string;
   options?: PasteSpecialOptions;
 }

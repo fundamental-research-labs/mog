@@ -285,8 +285,32 @@ function TabBarImpl<T extends string>({
 
   return (
     <div className="flex items-center h-[var(--tabbar-height)] px-2 bg-ss-surface-secondary min-w-0 overflow-hidden">
-      {/* Quick access: Undo/Redo - Excel-like compact buttons (gated by capabilities) */}
-      <div className="flex flex-shrink-0 gap-[var(--tabbar-button-group-gap)] mr-[var(--tabbar-section-margin)]">
+      {/* Quick access: Save/Undo/Redo - Excel-like compact buttons (gated by capabilities) */}
+      <div
+        data-testid="tabbar-quick-access"
+        className="flex flex-shrink-0 gap-[var(--tabbar-button-group-gap)] mr-[var(--tabbar-section-margin)]"
+      >
+        {showSave && onSave && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="
+ flex items-center justify-center
+ w-[var(--quick-access-button-size)] h-[var(--quick-access-button-size)]
+ rounded-ss-sm bg-transparent
+ cursor-pointer text-ss-text-secondary text-ribbon font-normal
+ transition-all duration-ss-fast
+ border border-transparent
+ hover:bg-[var(--quick-access-hover-bg)] hover:border-[var(--quick-access-hover-border)]
+ disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-transparent
+ "
+            title="Save (Ctrl+S)"
+            aria-label="Save"
+          >
+            {isSaving ? <SpinnerIcon /> : <SaveIcon />}
+          </button>
+        )}
         {/* Undo button with dropdown */}
         {showUndo && (
           <div className="relative flex">
@@ -467,18 +491,6 @@ function TabBarImpl<T extends string>({
         )}
         <CollaborateButton />
 
-        {showSave && onSave && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={onSave}
-            disabled={isSaving}
-            title="Save (Ctrl+S)"
-            aria-label="Save"
-          >
-            {isSaving ? <SpinnerIcon /> : <SaveIcon />}
-          </Button>
-        )}
         {showPrint && onPrint && (
           <Button
             variant="ghost"

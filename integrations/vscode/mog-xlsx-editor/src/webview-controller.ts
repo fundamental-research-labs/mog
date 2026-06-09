@@ -53,6 +53,7 @@ export class MogXlsxWebviewPanelController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly pending = new Map<string, PendingRequest>();
   private readonly ready = createDeferred<void>();
+  private queuedSave: SaveResultPayload | null = null;
   private disposed = false;
   private initializedDocumentId: string | null = null;
 
@@ -101,8 +102,27 @@ export class MogXlsxWebviewPanelController implements vscode.Disposable {
   }
 
   async requestSaveBytes(token?: vscode.CancellationToken): Promise<SaveResultPayload> {
+    const queued = this.queuedSave;
+    if (queued) {
+      this.queuedSave = null;
+      if (token?.isCancellationRequested) throw new vscode.CancellationError();
+      return queued;
+    }
+
     const payload = await this.requestBytes('request-save', 'save-result', token);
     return payload as SaveResultPayload;
+  }
+
+  queueSaveBytesForNextSave(save: SaveResultPayload): () => boolean {
+    this.queuedSave = {
+      ...save,
+      bytes: bytesToNumberArray(numberArrayToBytes(save.bytes)),
+    };
+    return () => {
+      if (this.queuedSave?.requestId !== save.requestId) return false;
+      this.queuedSave = null;
+      return true;
+    };
   }
 
   async requestBackupBytes(token?: vscode.CancellationToken): Promise<ByteResultPayload> {
@@ -131,6 +151,7 @@ export class MogXlsxWebviewPanelController implements vscode.Disposable {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.queuedSave = null;
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timeout);
       pending.cancellation?.dispose();

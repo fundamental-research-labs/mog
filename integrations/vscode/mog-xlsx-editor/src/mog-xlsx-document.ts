@@ -3,6 +3,7 @@ import type { ByteResultPayload, SaveResultPayload } from './protocol.js';
 
 export interface MogXlsxWebviewController {
   postInit(bytes?: Uint8Array): Promise<void>;
+  queueSaveBytesForNextSave(save: SaveResultPayload): () => boolean;
   requestSaveBytes(token?: vscode.CancellationToken): Promise<SaveResultPayload>;
   requestBackupBytes(token?: vscode.CancellationToken): Promise<ByteResultPayload>;
   requestExportXlsxBytes(token?: vscode.CancellationToken): Promise<ByteResultPayload>;

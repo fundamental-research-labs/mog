@@ -45,6 +45,7 @@ async function openFixtureCopy(name: string, destinationName = name): Promise<vs
 
 export async function run(): Promise<void> {
   await runSaveReopenScenario();
+  await runKeyboardSaveScenario();
   await runRevertScenario();
   await runBackupScenario();
 }
@@ -73,13 +74,15 @@ async function runSaveReopenScenario(): Promise<void> {
       true,
       60000,
     );
-    await vscode.commands.executeCommand('workbench.action.files.save');
+    await waitForActiveTabDirty(true);
+    await clickWebviewSelector(cdp, '[aria-label="Save"]');
     await vscode.commands.executeCommand<ReadyState>(
       'mog.xlsxEditor.test.waitForDirty',
       uri.toString(),
       false,
       60000,
     );
+    await waitForActiveTabDirty(false);
   } finally {
     cdp.close();
   }
@@ -102,6 +105,42 @@ async function runSaveReopenScenario(): Promise<void> {
   } finally {
     reopenedCdp.close();
   }
+  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+}
+
+async function runKeyboardSaveScenario(): Promise<void> {
+  const uri = await openFixtureCopy('edit-save-reopen.xlsx', 'edit-save-reopen-keyboard-save.xlsx');
+  await vscode.commands.executeCommand<ReadyState>(
+    'mog.xlsxEditor.test.waitForReady',
+    uri.toString(),
+    60000,
+  );
+  const cdp = await connectCdpTarget(await findMogWebviewTarget());
+  try {
+    await waitForWebviewReady(cdp);
+    await waitForCanvasReady(cdp);
+    await waitForFormulaBarValue(cdp, 'before');
+    await editFormulaBar(cdp, 'keyboard-after');
+    await vscode.commands.executeCommand<ReadyState>(
+      'mog.xlsxEditor.test.waitForDirty',
+      uri.toString(),
+      true,
+      60000,
+    );
+    await waitForActiveTabDirty(true);
+    await pressSaveShortcut(cdp);
+    await vscode.commands.executeCommand<ReadyState>(
+      'mog.xlsxEditor.test.waitForDirty',
+      uri.toString(),
+      false,
+      60000,
+    );
+    await waitForActiveTabDirty(false);
+  } finally {
+    cdp.close();
+  }
+
+  await assertWorkbookCell(uri.fsPath, 'Sheet1', 'A1', 'keyboard-after');
   await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 }
 
@@ -290,6 +329,21 @@ async function waitForFormulaBarValue(cdp: CdpClient, expected: string): Promise
   );
 }
 
+async function waitForActiveTabDirty(expected: boolean, timeoutMs = 60000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    if (activeTab?.isDirty === expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  assert.equal(
+    activeTab?.isDirty,
+    expected,
+    `Expected active VS Code tab dirty=${expected}, got ${String(activeTab?.isDirty)}`,
+  );
+}
+
 async function getFormulaBarValue(cdp: CdpClient): Promise<string | null> {
   return evaluateInWebview<string | null>(
     cdp,
@@ -373,6 +427,45 @@ async function pressKey(
     code,
     windowsVirtualKeyCode,
     nativeVirtualKeyCode: windowsVirtualKeyCode,
+  });
+}
+
+async function pressSaveShortcut(cdp: CdpClient): Promise<void> {
+  const isMac = process.platform === 'darwin';
+  const modifier = isMac
+    ? { key: 'Meta', code: 'MetaLeft', windowsVirtualKeyCode: 91, modifiers: 4 }
+    : { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifiers: 2 };
+
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: modifier.key,
+    code: modifier.code,
+    windowsVirtualKeyCode: modifier.windowsVirtualKeyCode,
+    nativeVirtualKeyCode: modifier.windowsVirtualKeyCode,
+    modifiers: modifier.modifiers,
+  });
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 's',
+    code: 'KeyS',
+    windowsVirtualKeyCode: 83,
+    nativeVirtualKeyCode: 83,
+    modifiers: modifier.modifiers,
+  });
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 's',
+    code: 'KeyS',
+    windowsVirtualKeyCode: 83,
+    nativeVirtualKeyCode: 83,
+    modifiers: modifier.modifiers,
+  });
+  await cdp.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: modifier.key,
+    code: modifier.code,
+    windowsVirtualKeyCode: modifier.windowsVirtualKeyCode,
+    nativeVirtualKeyCode: modifier.windowsVirtualKeyCode,
   });
 }
 

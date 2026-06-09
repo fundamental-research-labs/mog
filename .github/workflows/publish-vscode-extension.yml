@@ -194,6 +194,19 @@ jobs:
             --packagePath dist/mog-xlsx-editor.vsix \
             --pat "$VSCE_PAT"
 
+      - name: Verify Open VSX namespace
+        if: ${{ inputs.dry-run == false && inputs.publish_open_vsx != false }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::error::Repository secret OVSX_PAT is not configured."
+            exit 1
+          fi
+          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" create-namespace mog || \
+            echo "Open VSX namespace mog may already exist; verifying token access next."
+          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" verify-pat mog
+
       - name: Publish to Open VSX
         if: ${{ inputs.dry-run == false && inputs.publish_open_vsx != false }}
         env:

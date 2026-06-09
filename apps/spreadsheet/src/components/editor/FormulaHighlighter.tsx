@@ -98,7 +98,7 @@ const TOKEN_COLORS: Record<TokenType, string> = {
 
 /** Colors for nested parentheses by depth level */
 const PAREN_NESTING_COLORS = [
-  'var(--formula-paren-0, #000000)', // Level 0: black
+  'var(--formula-paren-0, inherit)', // Level 0: default formula text
   'var(--formula-paren-1, #0066cc)', // Level 1: blue
   'var(--formula-paren-2, #cc6600)', // Level 2: orange
   'var(--formula-paren-3, #006600)', // Level 3: green

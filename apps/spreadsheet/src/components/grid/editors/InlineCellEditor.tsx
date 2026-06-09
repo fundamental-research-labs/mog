@@ -32,6 +32,7 @@ import { editorSelectors } from '../../../selectors';
 import { resolveCellTextStyle } from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellFormat, CellRange, WorkbookSettings } from '@mog-sdk/contracts/core';
 import type { CellFormatChangedEvent } from '@mog-sdk/contracts/events';
+import type { ResolvedSheetViewSkin } from '@mog-sdk/contracts/rendering/sheet-view-skin';
 import type { TextPosition } from '@mog-sdk/contracts/rendering';
 import {
   useCoordinator,
@@ -46,6 +47,7 @@ import {
   InlineCellAutocomplete,
   type InlineCellAutocompleteHandle,
 } from './InlineCellAutocomplete';
+import { resolveInlineEditorDisplayColors } from './editor-display-colors';
 import { FormulaHighlighter, type ReferenceColorRange } from '../../editor/FormulaHighlighter';
 import { extractFormulaRanges } from '../../../domain/editor/formula-range-parser';
 // =============================================================================
@@ -87,13 +89,14 @@ function getMeasurementContext(): CanvasRenderingContext2D | null {
 
 interface InlineCellEditorProps {
   workbookSettings: WorkbookSettings;
+  rendererSkin: ResolvedSheetViewSkin;
 }
 
 // =============================================================================
 // Component
 // =============================================================================
 
-export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
+export function InlineCellEditor({ workbookSettings, rendererSkin }: InlineCellEditorProps) {
   // ===========================================================================
   // GRANULAR HOOKS (Performance Optimization)
   // Using granular hooks instead of full editor/renderer objects to eliminate
@@ -451,6 +454,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
 
   // Get resolved style for font, color, and background
   const style = resolveCellTextStyle(cellFormat, cellValue);
+  const editorColors = resolveInlineEditorDisplayColors(cellFormat, rendererSkin);
 
   // Always use textarea — supports both single-line and multi-line editing
 
@@ -467,7 +471,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
   const cellStyles = getCellDOMStyle(
     cellFormat,
     effectiveCellRect.height,
-    'var(--color-ss-surface, #ffffff)',
+    editorColors.backgroundColor,
     theme,
     undefined,
     undefined,
@@ -537,8 +541,8 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
         // Typography from resolved style - use scaledFont for zoom-correct rendering
         // Canvas uses ctx.scale(zoom) to scale text; DOM needs explicit font size scaling
         ...textTypography,
-        color: style.color,
-        backgroundColor: cellFormat?.backgroundColor || 'var(--color-ss-surface, #ffffff)',
+        color: editorColors.textColor,
+        backgroundColor: editorColors.backgroundColor,
         // Padding matching canvas
         paddingLeft: style.paddingX,
         paddingRight: style.paddingX,
@@ -564,6 +568,8 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
         width: editorWidth,
         height: effectiveCellRect.height,
         ...cellStyles,
+        color: editorColors.textColor,
+        backgroundColor: editorColors.backgroundColor,
         lineHeight: `${scaledLineHeight}px`,
         // Override any flex/alignment from cellStyles — use paddingTop instead
         paddingTop: verticalPaddingTop,
@@ -702,7 +708,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
           // the textarea itself MUST be transparent — otherwise its opaque
           // background would cover the FormulaHighlighter glyphs beneath it.
           backgroundColor: 'transparent',
-          caretColor: style.color,
+          caretColor: editorColors.textColor,
           // Sit ABOVE the highlighter overlay (zIndex:2). The native text caret
           // is painted in this textarea's layer; any element stacked above it —
           // even a transparent one — occludes the caret. Keeping the textarea
@@ -742,7 +748,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
             top: effectiveCellRect.y,
             width: editorWidth,
             height: effectiveCellRect.height,
-            backgroundColor: cellFormat?.backgroundColor || '#ffffff',
+            backgroundColor: editorColors.backgroundColor,
           }}
         >
           <div
@@ -755,6 +761,7 @@ export function InlineCellEditor({ workbookSettings }: InlineCellEditorProps) {
               paddingLeft: style.paddingX,
               paddingRight: style.paddingX,
               paddingTop: verticalPaddingTop,
+              color: editorColors.textColor,
               textAlign: style.textAlign,
               whiteSpace: 'pre-wrap',
               pointerEvents: 'none',

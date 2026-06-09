@@ -63,7 +63,10 @@ function getSystemColorScheme(): DevResolvedColorScheme {
 function readInitialDevColorScheme(): DevColorScheme {
   if (typeof window === "undefined") return "light";
   const value = new URLSearchParams(window.location.search).get("mog-theme");
-  if (value === "dark" || value === "system" || value === "light") return value;
+  if (value === "dark" || value === "system" || value === "light") {
+    persistDevColorScheme(value);
+    return value;
+  }
   try {
     const persisted = window.localStorage.getItem(
       "mog-spreadsheet-display-mode",
@@ -75,6 +78,14 @@ function readInitialDevColorScheme(): DevColorScheme {
       : "light";
   } catch {
     return "light";
+  }
+}
+
+function persistDevColorScheme(mode: DevColorScheme): void {
+  try {
+    window.localStorage.setItem("mog-spreadsheet-display-mode", mode);
+  } catch {
+    // Display preference persistence is best-effort and must not block the app.
   }
 }
 
@@ -372,6 +383,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     (window as any).__MOG_SET_COLOR_SCHEME__ = (next: DevColorScheme) => {
       if (next === "light" || next === "dark" || next === "system") {
+        persistDevColorScheme(next);
         setUiColorScheme(next);
       }
     };
@@ -789,11 +801,7 @@ export function App(): React.JSX.Element {
   }, []);
   const handleAppearanceModeChange = useCallback((mode: DevColorScheme) => {
     setUiColorScheme(mode);
-    try {
-      window.localStorage.setItem("mog-spreadsheet-display-mode", mode);
-    } catch {
-      // Display preference persistence is best-effort and must not block the app.
-    }
+    persistDevColorScheme(mode);
   }, []);
 
   // -------------------------------------------------------------------------

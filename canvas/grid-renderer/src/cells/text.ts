@@ -10,7 +10,10 @@
 
 import type { TextMeasurer } from '@mog/canvas-engine';
 import type { CellTextStyle } from '@mog-sdk/contracts/cell-style';
-import { resolveCellTextStyle } from '@mog/spreadsheet-utils/cells/cell-style';
+import {
+  isAutomaticDefaultFontColor,
+  resolveCellTextStyle,
+} from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import { resolveThemeFonts } from '@mog/spreadsheet-utils/formatting/theme';
@@ -231,10 +234,11 @@ export function getCellStyle(
 ): CellTextStyle {
   // Only resolve theme fonts — colors are pre-resolved hex from the Rust wire.
   const resolvedFormat = resolveThemeFonts(format, theme);
-  const style = resolveCellTextStyle(resolvedFormat);
-  return resolvedFormat?.fontColor || !defaultFontColor
-    ? style
-    : { ...style, color: defaultFontColor };
+  return resolveCellTextStyle(resolvedFormat, undefined, defaultFontColor);
+}
+
+export function hasExplicitFontColor(format: Pick<CellFormat, 'fontColor'> | undefined): boolean {
+  return !!format?.fontColor && !isAutomaticDefaultFontColor(format.fontColor);
 }
 
 // =============================================================================
@@ -385,7 +389,7 @@ export function renderNormalText(
   // Set fill color (CF override > hyperlink blue > resolved font color)
   if (options.fontColorOverride) {
     ctx.fillStyle = options.fontColorOverride;
-  } else if (options.hasHyperlink && !format?.fontColor) {
+  } else if (options.hasHyperlink && !hasExplicitFontColor(format)) {
     ctx.fillStyle = HYPERLINK_COLOR;
   } else {
     ctx.fillStyle = style.color;
@@ -603,7 +607,7 @@ export function renderTextDecorations(
   }
 
   // Use hyperlink color for decoration if applicable
-  if (hasHyperlink && !format?.fontColor) {
+  if (hasHyperlink && !hasExplicitFontColor(format)) {
     ctx.strokeStyle = HYPERLINK_COLOR;
   } else {
     ctx.strokeStyle = style.color;

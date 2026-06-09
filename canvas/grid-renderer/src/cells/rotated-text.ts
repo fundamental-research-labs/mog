@@ -15,7 +15,7 @@
 import type { TextMeasurer } from '@mog/canvas-engine';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
-import { buildCellFont, clipTextToCell, getCellStyle } from './text';
+import { buildCellFont, clipTextToCell, getCellStyle, hasExplicitFontColor } from './text';
 import type { CellRenderInfo } from './types';
 
 // =============================================================================
@@ -71,7 +71,7 @@ export function renderRotatedText(
   // Set fill color (CF override > hyperlink blue > resolved font color)
   if (options.fontColorOverride) {
     ctx.fillStyle = options.fontColorOverride;
-  } else if (options.hasHyperlink && !format?.fontColor) {
+  } else if (options.hasHyperlink && !hasExplicitFontColor(format)) {
     ctx.fillStyle = '#0563C1';
   } else {
     ctx.fillStyle = style.color;

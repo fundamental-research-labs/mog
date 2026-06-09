@@ -16,13 +16,11 @@
 
 import type { TextMeasurer } from '@mog/canvas-engine';
 import type { CellTextStyle } from '@mog-sdk/contracts/cell-style';
-import { resolveCellTextStyle } from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { RichTextSegment, TextFormat } from '@mog-sdk/contracts/rich-text';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
-import { resolveThemeFonts } from '@mog/spreadsheet-utils/formatting/theme';
 import { buildFontFamilyWithFallbacks, getIntrinsicFontWeight } from '../shared/font-utils';
-import { computeBaselineY, mapHorizontalAlign, mapVerticalAlign } from './text';
+import { computeBaselineY, getCellStyle, mapHorizontalAlign, mapVerticalAlign } from './text';
 
 // =============================================================================
 // Types
@@ -133,12 +131,9 @@ export function renderRichText(
 ): void {
   if (!segments || segments.length === 0) return;
 
-  // Get baseline style from cell format (only resolve theme fonts — colors are pre-resolved hex)
-  const resolvedFormat = resolveThemeFonts(format, options.theme);
-  const baseStyle =
-    resolvedFormat?.fontColor || !options.defaultFontColor
-      ? resolveCellTextStyle(resolvedFormat)
-      : { ...resolveCellTextStyle(resolvedFormat), color: options.defaultFontColor };
+  // Get baseline style from cell format. Colors are pre-resolved hex from the Rust wire;
+  // automatic/default black is skin-resolved by getCellStyle.
+  const baseStyle = getCellStyle(format, options.theme, options.defaultFontColor);
   const padding = baseStyle.paddingX;
 
   // Clip to cell bounds if requested
@@ -286,12 +281,9 @@ export function renderRichTextWrapped(
 ): void {
   if (!segments || segments.length === 0) return;
 
-  // Only resolve theme fonts — colors are pre-resolved hex from the Rust wire.
-  const resolvedFormat = resolveThemeFonts(format, options.theme);
-  const baseStyle =
-    resolvedFormat?.fontColor || !options.defaultFontColor
-      ? resolveCellTextStyle(resolvedFormat)
-      : { ...resolveCellTextStyle(resolvedFormat), color: options.defaultFontColor };
+  // Colors are pre-resolved hex from the Rust wire; automatic/default black is
+  // skin-resolved by getCellStyle.
+  const baseStyle = getCellStyle(format, options.theme, options.defaultFontColor);
   const padding = baseStyle.paddingX;
   const availableWidth = width - padding * 2;
   const lineHeight = baseStyle.fontSize * 1.2;

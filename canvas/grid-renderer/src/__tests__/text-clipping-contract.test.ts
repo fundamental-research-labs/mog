@@ -5,7 +5,7 @@ import type { CellFormat } from '@mog-sdk/contracts/core';
 
 import { renderRotatedText } from '../cells/rotated-text';
 import { renderShrinkToFit } from '../cells/shrink-to-fit';
-import { renderNormalText } from '../cells/text';
+import { getCellStyle, hasExplicitFontColor, renderNormalText } from '../cells/text';
 import { renderWrappedText } from '../cells/text-wrap';
 import type { CellRenderInfo } from '../cells/types';
 import { OFFICE_THEME } from '../shared/theme-constants';
@@ -143,6 +143,36 @@ describe('cell text clipping contract', () => {
     expect(clips[0].x).toBeLessThan(-999_000);
     expect(clips[0].width).toBeGreaterThan(2_000_000);
     expect(paints.find((op) => op.kind === 'fillText')?.clips).toContainEqual(clips[0]);
+  });
+
+  it('normal text resolves default black as automatic renderer text color', () => {
+    const { ctx } = createRecordingContext();
+    const format: CellFormat = { fontColor: '#000000' };
+
+    renderNormalText(ctx, cell({ displayText: 'dark' }), format, textMeasurer, {
+      ...baseOptions,
+      defaultFontColor: '#f4f7f5',
+      overflowResult: null,
+    });
+
+    expect(ctx.fillStyle).toBe('#f4f7f5');
+    expect(getCellStyle(format, OFFICE_THEME, '#f4f7f5').color).toBe('#f4f7f5');
+    expect(hasExplicitFontColor(format)).toBe(false);
+  });
+
+  it('normal text preserves non-default explicit renderer text colors', () => {
+    const { ctx } = createRecordingContext();
+    const format: CellFormat = { fontColor: '#123456' };
+
+    renderNormalText(ctx, cell({ displayText: 'explicit' }), format, textMeasurer, {
+      ...baseOptions,
+      defaultFontColor: '#f4f7f5',
+      overflowResult: null,
+    });
+
+    expect(ctx.fillStyle).toBe('#123456');
+    expect(getCellStyle(format, OFFICE_THEME, '#f4f7f5').color).toBe('#123456');
+    expect(hasExplicitFontColor(format)).toBe(true);
   });
 
   it('normal text decorations are inside the same row-vertical clip as glyph paint', () => {

@@ -5,7 +5,11 @@
  * Verifies that resolveCellTextStyle correctly derives complete styles from formats.
  */
 
-import { DEFAULT_CELL_STYLE, resolveCellTextStyle } from '@mog/spreadsheet-utils/cells/cell-style';
+import {
+  DEFAULT_CELL_STYLE,
+  resolveCellTextColor,
+  resolveCellTextStyle,
+} from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellTextStyle } from '@mog-sdk/contracts/cells/cell-style';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 
@@ -176,6 +180,17 @@ describe('Cell Text Style', () => {
         const format: CellFormat = { fontColor: 'rgba(255, 0, 0, 0.5)' };
         const style = resolveCellTextStyle(format);
         expect(style.color).toBe('rgba(255, 0, 0, 0.5)');
+      });
+
+      it('should resolve default black as automatic when a renderer default is provided', () => {
+        for (const fontColor of ['#000000', '#000', 'rgb(0, 0, 0)']) {
+          expect(resolveCellTextColor({ fontColor }, '#f4f7f5')).toBe('#f4f7f5');
+          expect(resolveCellTextStyle({ fontColor }, undefined, '#f4f7f5').color).toBe('#f4f7f5');
+        }
+      });
+
+      it('should preserve non-default explicit font colors with a renderer default', () => {
+        expect(resolveCellTextColor({ fontColor: '#123456' }, '#f4f7f5')).toBe('#123456');
       });
     });
 

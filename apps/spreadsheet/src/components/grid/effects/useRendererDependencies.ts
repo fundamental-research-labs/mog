@@ -23,6 +23,7 @@ import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 import type { CellFormat, SheetId } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
+import type { ResolvedSheetViewSkin } from '@mog-sdk/contracts/rendering/sheet-view-skin';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import type { SheetStateProvider } from '../../../coordinator/types';
 import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
@@ -43,6 +44,8 @@ export interface UseRendererDependenciesOptions {
   activeSheetId: string;
   /** Provider for sheet state (frozen panes, view options) */
   sheetStateProvider: SheetStateProvider;
+  /** Initial renderer skin for first paint. */
+  rendererSkin: ResolvedSheetViewSkin;
   /** UI store API for scroll position restoration */
   uiStoreApi: {
     getState: () => {
@@ -70,7 +73,7 @@ export function useRendererDependencies(options: UseRendererDependenciesOptions)
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const { coordinator, viewport, activeSheetId } = options;
+  const { coordinator, viewport, activeSheetId, rendererSkin } = options;
 
   useEffect(() => {
     lifecycleDebug.effectRun('setRendererDependencies', { activeSheetId });
@@ -84,6 +87,7 @@ export function useRendererDependencies(options: UseRendererDependenciesOptions)
       totalRows: MAX_ROWS,
       totalCols: MAX_COLS,
       sheetStateProvider: optionsRef.current.sheetStateProvider,
+      sheetViewSkin: optionsRef.current.rendererSkin,
       // Per-sheet scroll position restoration from UIStore (pixel-level, session-only).
       // renderer-execution falls back to workbook-persisted cell scroll when this is origin.
       getInitialScrollPosition: (sheetId) => {
@@ -98,5 +102,5 @@ export function useRendererDependencies(options: UseRendererDependenciesOptions)
         coordinator.input.inputCoordinator.resetScrollPosition(position.x, position.y);
       },
     });
-  }, [coordinator, viewport, activeSheetId]);
+  }, [coordinator, viewport, activeSheetId, rendererSkin]);
 }

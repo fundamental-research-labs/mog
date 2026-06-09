@@ -266,6 +266,13 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
         underlyingRenderer =
           (sheetView as SheetViewHandleWithInternalRenderer)[INTERNAL_GRID_RENDERER_KEY] ?? null;
 
+        if (deps.sheetViewSkin) {
+          sheetView.dataSources.update({
+            sheetViewSkin: deps.sheetViewSkin,
+            chromeTheme: deps.sheetViewSkin.chromeTheme,
+          });
+        }
+
         // -------------------------------------------------------------------
         // 3. Configure freeze/split BEFORE attach() so the first computed
         // layout is multi-region when appropriate.

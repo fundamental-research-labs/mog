@@ -20,6 +20,7 @@ import {
   buildCellFont,
   clipTextVertically,
   getCellStyle,
+  hasExplicitFontColor,
   mapHorizontalAlign,
   mapVerticalAlign,
   renderTextDecorations,
@@ -195,7 +196,7 @@ export function renderShrinkToFit(
   // Set fill color (CF override > hyperlink blue > resolved font color)
   if (options.fontColorOverride) {
     ctx.fillStyle = options.fontColorOverride;
-  } else if (options.hasHyperlink && !format?.fontColor) {
+  } else if (options.hasHyperlink && !hasExplicitFontColor(format)) {
     ctx.fillStyle = '#0563C1';
   } else {
     ctx.fillStyle = style.color;

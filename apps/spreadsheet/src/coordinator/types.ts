@@ -20,6 +20,7 @@ import type {
   GridRendererConfig,
   RendererFactory,
 } from '@mog-sdk/contracts/rendering';
+import type { ResolvedSheetViewSkin } from '@mog-sdk/contracts/rendering/sheet-view-skin';
 
 import type { Point } from '@mog-sdk/contracts/viewport';
 import type { SplitViewportConfig } from '@mog-sdk/contracts/viewport-config';
@@ -177,6 +178,8 @@ export interface RendererDependencies {
   totalCols?: number;
   /** Provides sheet state (frozen panes, view options) - required for correct initialization */
   sheetStateProvider: SheetStateProvider;
+  /** Initial renderer skin. Must be available before first paint. */
+  sheetViewSkin?: ResolvedSheetViewSkin;
 
   // ===========================================================================
   // Per-Sheet View State Callbacks (Per-Sheet Selection Memory)

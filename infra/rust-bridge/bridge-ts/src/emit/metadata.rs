@@ -41,10 +41,13 @@ pub fn emit_command_metadata(
             let is_recalc_result = matches!(method.access, MethodAccess::Write)
                 && matches!(&method.return_type, TsType::Named(name) if name == "RecalcResult");
 
-            if pattern == BridgePattern::Mutate {
+            let is_mutation_tuple =
+                pattern == BridgePattern::Mutate || pattern == BridgePattern::SystemMutate;
+
+            if is_mutation_tuple {
                 bytes_tuple.push(command_name.clone());
             }
-            if (pattern == BridgePattern::Mutate || is_recalc_result)
+            if (is_mutation_tuple || is_recalc_result)
                 && !recalc_exclude.contains(command_name.as_str())
             {
                 recalc.push(command_name.clone());

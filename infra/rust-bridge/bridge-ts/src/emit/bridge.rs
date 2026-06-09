@@ -9,8 +9,10 @@ use super::refs::collect_named_from_type;
 /// Classification of how a bridge method should be wrapped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgePattern {
-    /// `core.mutate(transport.call(...))` — binary tuple returns `[Uint8Array, MutationResult]`
+    /// `core.mutatePublic(command, () => transport.call(...))` — public binary mutation tuple.
     Mutate,
+    /// `core.mutateSystem(command, () => transport.call(...))` — lifecycle/system binary mutation tuple.
+    SystemMutate,
     /// `core.query(transport.call(...))` — read methods
     Query,
     /// `transport.call(...)` directly — no docId, no guard
@@ -42,7 +44,11 @@ pub fn classify_bridge_pattern(method: &TsMethod) -> BridgePattern {
         // dispatch as `Write`.
         MethodAccess::Write | MethodAccess::LifecycleSubscribe => {
             if is_binary_mutation_return(&method.return_type) {
-                BridgePattern::Mutate
+                if is_system_mutation(method) {
+                    BridgePattern::SystemMutate
+                } else {
+                    BridgePattern::Mutate
+                }
             } else {
                 // Void, Boolean, Uint8Array, other Named types — use Query
                 // which is generic and preserves the return type.
@@ -53,13 +59,30 @@ pub fn classify_bridge_pattern(method: &TsMethod) -> BridgePattern {
     }
 }
 
+fn is_system_mutation(method: &TsMethod) -> bool {
+    if method.access == MethodAccess::LifecycleSubscribe {
+        return true;
+    }
+
+    matches!(
+        method.rust_name.as_str(),
+        "import_from_xlsx_bytes"
+            | "import_from_xlsx_bytes_deferred"
+            | "complete_deferred_hydration"
+            | "settle_for_mirror"
+            | "import_from_csv_bytes"
+            | "apply_sync_update"
+            | "flush_undo_capture"
+    )
+}
+
 /// Compute the bridge interface return type for a method.
 ///
 /// For `Mutate` pattern, unwraps `[Uint8Array, T]` → `T` (the second tuple element).
 /// For all other patterns, returns the type as-is.
 pub(crate) fn bridge_return_type(method: &TsMethod, pattern: BridgePattern) -> String {
     match pattern {
-        BridgePattern::Mutate => {
+        BridgePattern::Mutate | BridgePattern::SystemMutate => {
             if let TsType::Tuple(elems) = &method.return_type
                 && elems.len() == 2
             {
@@ -88,7 +111,7 @@ pub(crate) fn collect_named_from_bridge(api: &TsApi) -> std::collections::BTreeS
                 collect_named_from_type(&param.ts_type, &mut names);
             }
             match pattern {
-                BridgePattern::Mutate => {
+                BridgePattern::Mutate | BridgePattern::SystemMutate => {
                     // Only collect from the unwrapped type (second tuple element)
                     if let TsType::Tuple(elems) = &method.return_type
                         && elems.len() == 2
@@ -262,7 +285,7 @@ pub fn emit_bridge_class_method(
         .collect();
     let params_str = params.join(", ");
 
-    // Return type: unwrapped for Mutate (core.mutate strips the Uint8Array), raw otherwise
+    // Return type: unwrapped for mutation helpers (they strip the Uint8Array), raw otherwise.
     let return_ts = bridge_return_type(method, pattern);
     // Wire type for transport.call<T>: the actual Rust return type.
     // - Mutate: [Uint8Array, MutationResult] (raw binary tuple)
@@ -290,7 +313,12 @@ pub fn emit_bridge_class_method(
     let call_expr = format!("this.core.transport.call<{wire_type}>('{command_name}', {args_str})");
 
     let body = match pattern {
-        BridgePattern::Mutate => format!("this.core.mutate({})", call_expr),
+        BridgePattern::Mutate => {
+            format!("this.core.mutatePublic('{command_name}', () => {call_expr})")
+        }
+        BridgePattern::SystemMutate => {
+            format!("this.core.mutateSystem('{command_name}', () => {call_expr})")
+        }
         BridgePattern::Query => format!("this.core.query({})", call_expr),
         BridgePattern::Pure => call_expr,
         BridgePattern::Skip => unreachable!(),

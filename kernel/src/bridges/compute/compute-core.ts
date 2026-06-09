@@ -36,6 +36,12 @@ import { ViewportCoordinatorRegistry } from '../wire/viewport-coordinator-regist
 import type { ViewportPrefetchState, ViewportScrollBehavior } from '../wire/viewport-prefetch';
 
 import { ViewportFetchManager } from './viewport-fetch-manager';
+import {
+  admitPublicMutation as admitPublicMutationForCore,
+  type DirectEditPosition,
+  type MutationTuple,
+  runSystemMutation,
+} from './mutation-admission';
 
 import type {
   ColumnSchemaWire,
@@ -116,7 +122,9 @@ export type InitPhase =
  * Public members are accessed by generated passthrough methods:
  * - `docId` — document identifier for Rust IPC calls
  * - `transport` — the BridgeTransport for Rust IPC calls
- * - `mutate()` — unified mutation pipeline (write methods)
+ * - `mutatePublic()` — public write admission + unified mutation pipeline
+ * - `mutateSystem()` — lifecycle/system write admission + unified mutation pipeline
+ * - `mutate()` — low-level unified mutation pipeline once admission has run
  * - `query()` — query pipeline (read methods)
  * - `ensureInitialized()` — phase guard for STARTED phase
  * - `invalidateAllViewportPrefetch()` — invalidate all per-viewport prefetch
@@ -396,6 +404,20 @@ export class ComputeCore {
    */
   get writeGate(): WriteGate | null {
     return this._writeGate;
+  }
+
+  /**
+   * Public-write admission. This is the only place public Rust mutations may
+   * wait for deferred XLSX hydration. The post-barrier writable check matters:
+   * closing/checkpointing/read-only state can arrive while hydration is running.
+   */
+  async admitPublicMutation(operation: string): Promise<void> {
+    await admitPublicMutationForCore(
+      this.ctx,
+      this._writeGate,
+      () => this.ensureInitialized(),
+      operation,
+    );
   }
 
   // ===========================================================================
@@ -812,14 +834,15 @@ export class ComputeCore {
    * Does NOT call notifyForwardMutation() — callers decide whether to notify.
    */
   async mutateCore(
-    promise: Promise<[Uint8Array, MutationResult]>,
-    directEdits?: Array<{ sheetId: string; row: number; col: number }>,
+    promise: Promise<MutationTuple>,
+    directEdits?: DirectEditPosition[],
+    operation = 'mutateCore',
   ): Promise<MutationResult> {
     // Write gate check: if a gate is installed, verify the mutation is
     // allowed before executing. The gate throws WriteGateRejectionError
     // if the document is in a read-only, closing, or closed mode.
     // System operations running inside a bypass scope pass through.
-    this._writeGate?.assertWritable('mutateCore');
+    this._writeGate?.assertWritable(operation);
 
     const [viewportPatchesBinary, result] = await promise;
 
@@ -948,12 +971,81 @@ export class ComputeCore {
    * Calls mutateCore() then notifies the undo service so cached state is refreshed.
    */
   async mutate(
-    promise: Promise<[Uint8Array, MutationResult]>,
-    directEdits?: Array<{ sheetId: string; row: number; col: number }>,
+    promise: Promise<MutationTuple>,
+    directEdits?: DirectEditPosition[],
+    operation = 'mutate',
   ): Promise<MutationResult> {
-    const result = await this.mutateCore(promise, directEdits);
+    const result = await this.mutateCore(promise, directEdits, operation);
     await this.ctx.services?.undo.notifyForwardMutation();
     return result;
+  }
+
+  /**
+   * Public mutation entrypoint. The call thunk is intentionally invoked only
+   * after deferred hydration has completed and writability has been rechecked.
+   */
+  async mutatePublic(
+    operation: string,
+    call: () => Promise<MutationTuple>,
+    directEdits?: DirectEditPosition[],
+  ): Promise<MutationResult> {
+    await this.admitPublicMutation(operation);
+    return this.mutate(call(), directEdits, operation);
+  }
+
+  /**
+   * Public mutation entrypoint for backend calls whose raw return includes
+   * caller-visible data next to the MutationResult.
+   */
+  async mutatePublicResult<T>(
+    operation: string,
+    call: () => Promise<T>,
+    toMutationTuple: (result: T) => MutationTuple,
+    directEdits?: DirectEditPosition[],
+  ): Promise<{ raw: T; mutation: MutationResult }> {
+    await this.admitPublicMutation(operation);
+    const raw = await call();
+    const mutation = await this.mutate(
+      Promise.resolve(toMutationTuple(raw)),
+      directEdits,
+      operation,
+    );
+    return { raw, mutation };
+  }
+
+  /**
+   * System mutation entrypoint. Lifecycle/provider/import work must not wait
+   * on the public materialization barrier, but it still flows through the same
+   * projection/event/undo-state refresh pipeline under the write-gate bypass.
+   */
+  async mutateSystem(
+    operation: string,
+    call: () => Promise<MutationTuple>,
+    directEdits?: DirectEditPosition[],
+  ): Promise<MutationResult> {
+    const run = () => this.mutate(call(), directEdits, operation);
+    return runSystemMutation(this._writeGate, run);
+  }
+
+  /**
+   * System mutation entrypoint for backend calls with caller-visible raw data.
+   */
+  async mutateSystemResult<T>(
+    operation: string,
+    call: () => Promise<T>,
+    toMutationTuple: (result: T) => MutationTuple,
+    directEdits?: DirectEditPosition[],
+  ): Promise<{ raw: T; mutation: MutationResult }> {
+    const run = async () => {
+      const raw = await call();
+      const mutation = await this.mutate(
+        Promise.resolve(toMutationTuple(raw)),
+        directEdits,
+        operation,
+      );
+      return { raw, mutation };
+    };
+    return runSystemMutation(this._writeGate, run);
   }
 
   /**
@@ -1072,20 +1164,19 @@ export class ComputeCore {
     sheetId: SheetId,
     change: StructureChange,
   ): Promise<MutationResult> {
-    this.ensureInitialized();
-    // Mark old prefetch state stale before Rust shifts row/column structure.
-    // The awaited forced refresh below restores fresh buffers and bounds.
-    this.invalidateAllViewportPrefetch();
-
     let result: MutationResult;
     try {
-      result = await this.mutate(
-        this.transport.call<[Uint8Array, MutationResult]>('compute_structure_change', {
+      result = await this.mutatePublic('compute_structure_change', () => {
+        // Mark old prefetch state stale after admission but before Rust shifts
+        // row/column structure. The awaited forced refresh below restores fresh
+        // buffers and bounds.
+        this.invalidateAllViewportPrefetch();
+        return this.transport.call<MutationTuple>('compute_structure_change', {
           docId: this.docId,
           sheetId,
           change,
-        }),
-      );
+        });
+      });
     } catch (error) {
       // Bridge call failed — Rust is truth. Re-read from engine to recover
       // correct VPI and viewport state (async bridge rule #4).
@@ -1519,9 +1610,8 @@ export class ComputeCore {
   // ===========================================================================
 
   async undo(): Promise<MutationResult> {
-    this.ensureInitialized();
-    const result = await this.mutateCore(
-      this.transport.call<[Uint8Array, MutationResult]>('compute_undo', { docId: this.docId }),
+    const result = await this.mutatePublic('compute_undo', () =>
+      this.transport.call<MutationTuple>('compute_undo', { docId: this.docId }),
     );
     // History replay can change derived/effective viewport state without
     // Rust emitting the same fine-grained viewport patches as the original
@@ -1532,9 +1622,8 @@ export class ComputeCore {
   }
 
   async redo(): Promise<MutationResult> {
-    this.ensureInitialized();
-    const result = await this.mutateCore(
-      this.transport.call<[Uint8Array, MutationResult]>('compute_redo', { docId: this.docId }),
+    const result = await this.mutatePublic('compute_redo', () =>
+      this.transport.call<MutationTuple>('compute_redo', { docId: this.docId }),
     );
     await this.forceRefreshAllViewports();
     return result;
@@ -1609,8 +1698,8 @@ export class ComputeCore {
     if (!this.isInitialized && update.length > 0) {
       this.coordinatorRegistry.markHydrationDeficit();
     }
-    const result = await this.mutate(
-      this.transport.call<[Uint8Array, MutationResult]>('compute_apply_sync_update', {
+    const result = await this.mutateSystem('compute_apply_sync_update', () =>
+      this.transport.call<MutationTuple>('compute_apply_sync_update', {
         docId: this.docId,
         update,
       }),

@@ -54,8 +54,8 @@ fn emit_bridge_mutate_method() {
     assert!(ts.contains(
         "setCell(sheetId: string, row: number, input: string): Promise<MutationResult>;"
     ));
-    // Class: should use this.core.mutate() and inject docId
-    assert!(ts.contains("this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell', { docId: this.core.docId, sheetId, row, input }))"));
+    // Class: should use public mutation admission and inject docId
+    assert!(ts.contains("this.core.mutatePublic('compute_set_cell', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell', { docId: this.core.docId, sheetId, row, input }))"));
 }
 
 #[test]
@@ -64,8 +64,8 @@ fn emit_bridge_rename_sheet_uses_mutate() {
     let ts = emit_bridge(&api, None, None);
     // Interface: return type should be unwrapped to MutationResult
     assert!(ts.contains("renameSheet(name: string): Promise<MutationResult>;"));
-    // Class: should use this.core.mutate() (all write methods use mutate now)
-    assert!(ts.contains("this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_sheet', { docId: this.core.docId, name }))"));
+    // Class: should use public mutation admission
+    assert!(ts.contains("this.core.mutatePublic('compute_rename_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_sheet', { docId: this.core.docId, name }))"));
 }
 
 #[test]
@@ -93,11 +93,7 @@ fn emit_bridge_pure_method() {
     assert!(
         !ts.contains("this.core.query(this.core.transport.call<boolean>('compute_schema_validate'")
     );
-    assert!(
-        !ts.contains(
-            "this.core.mutate(this.core.transport.call<boolean>('compute_schema_validate'"
-        )
-    );
+    assert!(!ts.contains("this.core.mutatePublic('compute_schema_validate'"));
 }
 
 #[test]
@@ -282,6 +278,35 @@ fn emit_bridge_mutation_result_unwrap() {
     let ts = emit_bridge(&api, Some(&config), None);
     // Interface should show unwrapped type
     assert!(ts.contains("deleteRows(): Promise<MutationResult>;"));
-    // Class should use this.core.mutate() with wire type
-    assert!(ts.contains("this.core.mutate(this.core.transport.call<[Uint8Array, MutationResult]>('engine_delete_rows'"), "got: {}", ts);
+    // Class should use public mutation admission with wire type
+    assert!(ts.contains("this.core.mutatePublic('engine_delete_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('engine_delete_rows'"), "got: {}", ts);
+}
+
+#[test]
+fn emit_bridge_system_mutation_method() {
+    let api = TsApi {
+        services: vec![TsService {
+            rust_name: "ComputeEngine".into(),
+            key: Some(ServiceKey {
+                param_name: "doc_id".into(),
+            }),
+            fn_prefix: Some("compute".into()),
+            methods: vec![TsMethod {
+                rust_name: "complete_deferred_hydration".into(),
+                access: MethodAccess::Write,
+                params: vec![],
+                return_type: TsType::Tuple(vec![
+                    TsType::Uint8Array,
+                    TsType::Named("MutationResult".into()),
+                ]),
+                is_fallible: true,
+                skip_platforms: vec![],
+            }],
+        }],
+    };
+    let ts = emit_bridge(&api, None, None);
+
+    assert!(ts.contains("completeDeferredHydration(): Promise<MutationResult>;"));
+    assert!(ts.contains("this.core.mutateSystem('compute_complete_deferred_hydration', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_complete_deferred_hydration', { docId: this.core.docId }))"));
+    assert!(!ts.contains("mutatePublic('compute_complete_deferred_hydration'"));
 }

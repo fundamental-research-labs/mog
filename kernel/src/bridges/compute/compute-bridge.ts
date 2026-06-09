@@ -655,7 +655,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
   override completeDeferredHydration(): Promise<MutationResult> {
     const run = () =>
-      this.core.mutate(
+      this.core.mutateSystem('compute_complete_deferred_hydration', () =>
         this.core.transport.call<[Uint8Array, MutationResult]>(
           'compute_complete_deferred_hydration',
           { docId: this.core.docId },
@@ -946,11 +946,13 @@ export class ComputeBridge extends GeneratedBridgeBase {
   // as [Uint8Array, MutationResult]. The WASM begin/endUndoGroup don't return viewport
   // patches, so the destructuring fails with "is not iterable".
   override async beginUndoGroup(): Promise<MutationResult> {
+    await this.core.admitPublicMutation('compute_begin_undo_group');
     await this.core.beginUndoGroup();
     return { recalc: { changedCells: [] } } as unknown as MutationResult;
   }
 
   override async endUndoGroup(): Promise<MutationResult> {
+    await this.core.admitPublicMutation('compute_end_undo_group');
     await this.core.endUndoGroup();
     return { recalc: { changedCells: [] } } as unknown as MutationResult;
   }
@@ -1044,17 +1046,22 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
   /** Copy a sheet and return the new sheet ID. */
   async copySheet(sheetId: SheetId, newName: string): Promise<{ newSheetId: SheetId }> {
-    this.core.ensureInitialized();
     // `compute_copy_sheet` returns `[String, MutationResult]` (not a bytes-tuple).
-    // We capture the new sheet id alongside the MutationResult, then route the
-    // MutationResult through `core.mutate()` (with an empty viewport-patch
-    // payload) so the undo service is notified — without this, the undo cache
-    // stays stale and Cmd+Z is a no-op after copying a sheet.
-    const [rawId, mutationResult] = await this.core.transport.call<[string, MutationResult]>(
+    // We capture the new sheet id alongside the MutationResult, then route it
+    // through public admission and the normal mutation pipeline so the undo
+    // service is notified. Without this, the undo cache stays stale and Cmd+Z
+    // is a no-op after copying a sheet.
+    const { raw } = await this.core.mutatePublicResult<[string, MutationResult]>(
       'compute_copy_sheet',
-      { docId: this.core.docId, sheetId, newName },
+      () =>
+        this.core.transport.call<[string, MutationResult]>('compute_copy_sheet', {
+          docId: this.core.docId,
+          sheetId,
+          newName,
+        }),
+      ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
-    await this.core.mutate(Promise.resolve([new Uint8Array(0), mutationResult]));
+    const [rawId] = raw;
     // `mutation_copy_sheet` in Rust registers formulas in the dep graph and
     // marks the scheduler dirty, but does not run a recalc pass — so copied
     // formula cells have no computed values. Trigger a recalc by calling
@@ -1073,14 +1080,18 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
   /** Create a new sheet and return its ID. */
   async createSheet(name: string): Promise<{ sheetId: SheetId }> {
-    this.core.ensureInitialized();
-    // See `copySheet` above: route through `core.mutate()` so the undo service
-    // refreshes its cached state and Cmd+Z works after creating a sheet.
-    const [rawId, mutationResult] = await this.core.transport.call<[string, MutationResult]>(
+    // See `copySheet` above: route through public admission and the normal
+    // mutation pipeline so the undo service refreshes its cached state.
+    const { raw } = await this.core.mutatePublicResult<[string, MutationResult]>(
       'compute_create_sheet',
-      { docId: this.core.docId, name },
+      () =>
+        this.core.transport.call<[string, MutationResult]>('compute_create_sheet', {
+          docId: this.core.docId,
+          name,
+        }),
+      ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
-    await this.core.mutate(Promise.resolve([new Uint8Array(0), mutationResult]));
+    const [rawId] = raw;
     return { sheetId: toSheetId(rawId) };
   }
 
@@ -1097,18 +1108,22 @@ export class ComputeBridge extends GeneratedBridgeBase {
    * must go through {@link createSheet}.
    */
   async createDefaultSheet(name: string): Promise<{ sheetId: SheetId }> {
-    this.core.ensureInitialized();
-    const [rawId, mutationResult] = await this.core.transport.call<[string, MutationResult]>(
+    const { raw } = await this.core.mutateSystemResult<[string, MutationResult]>(
       'compute_create_default_sheet',
-      { docId: this.core.docId, name },
+      () =>
+        this.core.transport.call<[string, MutationResult]>('compute_create_default_sheet', {
+          docId: this.core.docId,
+          name,
+        }),
+      ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
-    await this.core.mutate(Promise.resolve([new Uint8Array(0), mutationResult]));
+    const [rawId] = raw;
     return { sheetId: toSheetId(rawId) };
   }
 
   /** Remove a sheet. */
   async removeSheet(sheetId: SheetId): Promise<void> {
-    this.core.ensureInitialized();
+    await this.core.admitPublicMutation('compute_delete_sheet');
     // `compute_delete_sheet` is `#[bridge::skip(ts_bridge)]` on the Rust side,
     // so it is absent from the generated BYTES_TUPLE_COMMANDS set and the
     // bytes-tuple normalizing transport does NOT auto-unpack the result. But
@@ -1176,23 +1191,24 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
   /** Rename a sheet. */
   async renameSheet(sheetId: SheetId, name: string): Promise<void> {
-    this.core.ensureInitialized();
     // See `removeSheet` above for the rationale: `compute_rename_compute_sheet`
     // is `#[bridge::skip(ts_bridge)]`, so the bytes-tuple return from Rust is
     // NOT auto-unpacked by the transport. Normalize explicitly, then route
     // through `core.mutate()` so `sheet_changes` reach the event bus
     // (FT-010) AND the undo service refreshes its cached state (Cmd+Z parity).
-
-    const raw = await this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+    await this.core.mutatePublicResult<[Uint8Array, MutationResult] | Uint8Array>(
       'compute_rename_compute_sheet',
-      {
-        docId: this.core.docId,
-        sheetId,
-        name,
-      },
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+          'compute_rename_compute_sheet',
+          {
+            docId: this.core.docId,
+            sheetId,
+            name,
+          },
+        ),
+      (raw) => normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array),
     );
-    const tuple = normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array);
-    await this.core.mutate(Promise.resolve(tuple));
     // Rust's `mutation_rename_sheet` rewrites Yrs formula text and
     // regenerates the `formula_strings` cache — no TS-side mirror needed.
   }
@@ -1202,11 +1218,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     sheetName: string,
     config: Partial<PivotTableConfig>,
   ): Promise<{ sheetId: SheetId; config: PivotTableConfig }> {
-    this.core.ensureInitialized();
-    const [rawId, pivotConfig, mutationResult] = await this.core.transport.call<
-      [string, PivotTableConfig, MutationResult]
-    >('compute_pivot_create_with_sheet', { docId: this.core.docId, sheetName, config });
-    await this.core.mutate(Promise.resolve([new Uint8Array(), mutationResult]));
+    const { raw } = await this.core.mutatePublicResult<[string, PivotTableConfig, MutationResult]>(
+      'compute_pivot_create_with_sheet',
+      () =>
+        this.core.transport.call<[string, PivotTableConfig, MutationResult]>(
+          'compute_pivot_create_with_sheet',
+          { docId: this.core.docId, sheetName, config },
+        ),
+      ([, , mutationResult]) => [new Uint8Array(), mutationResult],
+    );
+    const [rawId, pivotConfig] = raw;
     return { sheetId: toSheetId(rawId), config: pivotConfig };
   }
 
@@ -1227,25 +1248,29 @@ export class ComputeBridge extends GeneratedBridgeBase {
     author: string,
     options?: { authorId?: string; parentId?: string; commentType?: 'note' | 'threadedComment' },
   ): Promise<Comment> {
-    this.core.ensureInitialized();
-    const raw = await this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+    const { mutation: result } = await this.core.mutatePublicResult<
+      [Uint8Array, MutationResult] | Uint8Array
+    >(
       'compute_add_comment',
-      {
-        docId: this.core.docId,
-        sheetId,
-        cellId,
-        text,
-        author,
-        authorId: options?.authorId ?? null,
-        parentId: options?.parentId ?? null,
-        // Replies inherit thread membership; default to 'threadedComment'
-        // since a reply on a noted cell is impossible by construction (the
-        // cell-level XOR invariant rejects it before this call lands).
-        commentType: options?.commentType ?? 'threadedComment',
-      },
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+          'compute_add_comment',
+          {
+            docId: this.core.docId,
+            sheetId,
+            cellId,
+            text,
+            author,
+            authorId: options?.authorId ?? null,
+            parentId: options?.parentId ?? null,
+            // Replies inherit thread membership; default to 'threadedComment'
+            // since a reply on a noted cell is impossible by construction (the
+            // cell-level XOR invariant rejects it before this call lands).
+            commentType: options?.commentType ?? 'threadedComment',
+          },
+        ),
+      (raw) => normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array),
     );
-    const tuple = normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array);
-    const result = await this.core.mutate(Promise.resolve(tuple));
     const comment = extractMutationData<Comment>(result);
     if (!comment) {
       throw new Error('addComment: no comment returned in MutationResult.data');
@@ -1264,8 +1289,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     parentId: string | null,
     commentType: 'note' | 'threadedComment',
   ): Promise<MutationResult> {
-    this.core.ensureInitialized();
-    return this.core.mutate(
+    return this.core.mutatePublic('compute_add_comment_by_position', () =>
       this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', {
         docId: this.core.docId,
         sheetId,
@@ -1606,15 +1630,17 @@ export class ComputeBridge extends GeneratedBridgeBase {
     const tuples: [SheetId, number, number, CellInput][] = normalEdits.map(
       (e) => [sheetId, e.row, e.col, e.input] as [SheetId, number, number, CellInput],
     );
-    const result = await this.core.mutate(
-      this.core.transport.call<[Uint8Array, MutationResult]>(
-        'compute_batch_set_cells_by_position',
-        {
-          docId: this.core.docId,
-          edits: tuples,
-          skipCycleCheck: true,
-        },
-      ),
+    const result = await this.core.mutatePublic(
+      'compute_batch_set_cells_by_position',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>(
+          'compute_batch_set_cells_by_position',
+          {
+            docId: this.core.docId,
+            edits: tuples,
+            skipCycleCheck: true,
+          },
+        ),
       normalEdits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
     );
     return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
@@ -1656,13 +1682,15 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
     if (ranges.length === 0) return result;
 
-    const formatResult = await this.core.mutateCore(
-      this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', {
-        docId: this.core.docId,
-        sheetId,
-        ranges,
-        format: { numberFormat: 'M/d/yyyy' },
-      }),
+    const formatResult = await this.core.mutatePublic(
+      'compute_set_format_for_ranges',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', {
+          docId: this.core.docId,
+          sheetId,
+          ranges,
+          format: { numberFormat: 'M/d/yyyy' },
+        }),
       ranges.map(([row, col]) => ({ sheetId, row, col })),
     );
     return appendPropertyChanges(result, formatResult);

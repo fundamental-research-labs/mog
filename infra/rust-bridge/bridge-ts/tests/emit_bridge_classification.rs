@@ -44,6 +44,25 @@ fn classify_write_with_binary_mutation() {
 }
 
 #[test]
+fn classify_system_write_with_binary_mutation() {
+    let method = TsMethod {
+        rust_name: "complete_deferred_hydration".into(),
+        access: MethodAccess::Write,
+        params: vec![],
+        return_type: TsType::Tuple(vec![
+            TsType::Uint8Array,
+            TsType::Named("MutationResult".into()),
+        ]),
+        is_fallible: false,
+        skip_platforms: vec![],
+    };
+    assert_eq!(
+        classify_bridge_pattern(&method),
+        BridgePattern::SystemMutate
+    );
+}
+
+#[test]
 fn classify_write_without_binary_tuple_uses_query() {
     // Write methods returning bare MutationResult (not wrapped in a binary tuple)
     // are classified as Query. All write methods should return (Vec<u8>, MutationResult)

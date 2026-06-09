@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/wasm",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Mog compute engine for browsers — WASM build of compute-core with full formula, formatting, and XLSX support",
   "type": "module",
   "main": "compute_core_wasm.js",
